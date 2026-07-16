@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","required":["userIds"],"properties":{"userIds":{"type":"array","items":{"type":"string"}},"workspaceId":{"type":"string"}},"title":"GetUsersDto"}}}}}

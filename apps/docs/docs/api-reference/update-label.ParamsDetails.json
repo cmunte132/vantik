@@ -1,0 +1,1 @@
+{"parameters":[{"in":"path","name":"labelId","required":true,"schema":{"type":"string"}}]}

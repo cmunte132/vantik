@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","properties":{"inputs":{"type":"object"}},"required":["inputs"],"title":"UpdateActionInputsDto"}}}}}

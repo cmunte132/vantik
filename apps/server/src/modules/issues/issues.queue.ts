@@ -1,6 +1,6 @@
 import { InjectQueue } from '@nestjs/bull';
 import { Injectable } from '@nestjs/common';
-import { Issue } from '@tegonhq/types';
+import { Issue } from '@vantikhq/types';
 import { Queue } from 'bull';
 
 import { LoggerService } from 'modules/logger/logger.service';

@@ -24,7 +24,7 @@
     "removeComments": true,
     "esModuleInterop": true,
     "paths": {
-      "@tegonhq/sdk": ["./node_modules/@tegonhq/sdk"]
+      "@vantikhq/sdk": ["./node_modules/@vantikhq/sdk"]
     },
     "baseUrl": ".",
     "module": "commonjs",

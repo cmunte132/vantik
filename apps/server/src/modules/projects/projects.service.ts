@@ -4,7 +4,7 @@ import {
   CreateProjectMilestoneDto,
   UpdateProjectDto,
   UpdateProjectMilestoneDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import IssuesService from 'modules/issues/issues.service';

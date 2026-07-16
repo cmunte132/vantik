@@ -1,5 +1,5 @@
-import { DropdownMenuItem } from '@tegonhq/ui/components/dropdown-menu';
-import { ParentIssueLine } from '@tegonhq/ui/icons';
+import { DropdownMenuItem } from '@vantikhq/ui/components/dropdown-menu';
+import { ParentIssueLine } from '@vantikhq/ui/icons';
 
 import type { IssueType } from 'common/types';
 

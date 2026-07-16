@@ -1,9 +1,9 @@
 'use client';
 
-import { Button } from '@tegonhq/ui/components/button';
-import { ScrollArea, ScrollBar } from '@tegonhq/ui/components/scroll-area';
-import { Actions, AI, IssuesLine, TriageFill } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { Button } from '@vantikhq/ui/components/button';
+import { ScrollArea, ScrollBar } from '@vantikhq/ui/components/scroll-area';
+import { Actions, AI, IssuesLine, TriageFill } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 
 const tabs = [
   {

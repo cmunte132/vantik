@@ -1,9 +1,9 @@
 'use client';
 
-import { Button, buttonVariants } from '@tegonhq/ui/components/button';
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
-import { BuildingLine, ChevronLeft, UserLine } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { Button, buttonVariants } from '@vantikhq/ui/components/button';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
+import { BuildingLine, ChevronLeft, UserLine } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'next/router';

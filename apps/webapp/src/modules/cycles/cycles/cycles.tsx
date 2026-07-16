@@ -1,4 +1,4 @@
-import { cn } from '@tegonhq/ui/lib/utils';
+import { cn } from '@vantikhq/ui/lib/utils';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';

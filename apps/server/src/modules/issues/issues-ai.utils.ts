@@ -1,4 +1,4 @@
-import { CreateIssueDto, UpdateIssueDto } from '@tegonhq/types';
+import { CreateIssueDto, UpdateIssueDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';

@@ -1,4 +1,4 @@
-import { createConversationHistory } from '@tegonhq/services';
+import { createConversationHistory } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 import type { ConversationHistoryType } from 'common/types';

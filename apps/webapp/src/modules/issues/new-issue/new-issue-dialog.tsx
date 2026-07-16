@@ -1,4 +1,4 @@
-import { Dialog, DialogContent } from '@tegonhq/ui/components/dialog';
+import { Dialog, DialogContent } from '@vantikhq/ui/components/dialog';
 
 import { NewIssue, type NewIssueProps } from './new-issue';
 

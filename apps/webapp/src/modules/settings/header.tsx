@@ -2,8 +2,8 @@ import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
-} from '@tegonhq/ui/components/breadcrumb';
-import { TeamIcon } from '@tegonhq/ui/components/team-icon';
+} from '@vantikhq/ui/components/breadcrumb';
+import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import { useRouter } from 'next/router';

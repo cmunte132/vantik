@@ -9,7 +9,7 @@
   },
   "packageManager": "pnpm@10.3.0",
   "dependencies": {
-    "@tegonhq/sdk": "0.1.13",
+    "@vantikhq/sdk": "0.1.13",
     "@trigger.dev/sdk": "3.0.0-beta.56",
     "axios": "^1.6.7",
     "form-data": "^4.0.0"

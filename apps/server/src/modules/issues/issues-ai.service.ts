@@ -4,7 +4,7 @@ import {
   CreateIssueRelationDto,
   IssueRelationEnum,
   TeamRequestParamsDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
 

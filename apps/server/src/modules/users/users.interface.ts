@@ -1,4 +1,4 @@
-import { Invite, User } from '@tegonhq/types';
+import { Invite, User } from '@vantikhq/types';
 import { IsArray, IsString } from 'class-validator';
 
 export class UserIdParams {

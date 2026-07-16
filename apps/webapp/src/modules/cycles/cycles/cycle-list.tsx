@@ -1,4 +1,4 @@
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { observer } from 'mobx-react-lite';
 
 import type { CycleType } from 'common/types';

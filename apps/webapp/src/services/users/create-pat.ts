@@ -1,6 +1,6 @@
-import type { Pat } from '@tegonhq/types';
+import type { Pat } from '@vantikhq/types';
 
-import { createPat } from '@tegonhq/services';
+import { createPat } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 interface MutationParams {

@@ -1,10 +1,10 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { Card, CardContent } from '@tegonhq/ui/components/card';
-import { Markdown, useEditor } from '@tegonhq/ui/components/editor/index';
-import { Loader } from '@tegonhq/ui/components/loader';
-import { Skeleton } from '@tegonhq/ui/components/skeleton';
-import { Textarea } from '@tegonhq/ui/components/textarea';
-import { AI, CheckLine, DeleteLine } from '@tegonhq/ui/icons';
+import { Button } from '@vantikhq/ui/components/button';
+import { Card, CardContent } from '@vantikhq/ui/components/card';
+import { Markdown, useEditor } from '@vantikhq/ui/components/editor/index';
+import { Loader } from '@vantikhq/ui/components/loader';
+import { Skeleton } from '@vantikhq/ui/components/skeleton';
+import { Textarea } from '@vantikhq/ui/components/textarea';
+import { AI, CheckLine, DeleteLine } from '@vantikhq/ui/icons';
 import { NodeViewWrapper } from '@tiptap/react';
 import getConfig from 'next/config';
 import React from 'react';

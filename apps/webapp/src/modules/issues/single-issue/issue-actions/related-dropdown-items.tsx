@@ -4,7 +4,7 @@ import {
   DropdownMenuPortal,
   DropdownMenuSubContent,
   DropdownMenuItem,
-} from '@tegonhq/ui/components/dropdown-menu';
+} from '@vantikhq/ui/components/dropdown-menu';
 import {
   RelatedIssueLine,
   ParentIssueLine,
@@ -12,7 +12,7 @@ import {
   BlockedFill,
   DuplicateLine,
   BlocksFill,
-} from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 

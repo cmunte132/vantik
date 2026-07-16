@@ -7,7 +7,7 @@ import {
   AlertDialogAction,
   AlertDialogHeader,
   AlertDialogFooter,
-} from '@tegonhq/ui/components/alert-dialog';
+} from '@vantikhq/ui/components/alert-dialog';
 import React from 'react';
 
 import { useDeleteCommentMutation } from 'services/comments';

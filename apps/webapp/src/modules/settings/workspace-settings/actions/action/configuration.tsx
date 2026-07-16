@@ -1,10 +1,10 @@
 /* eslint-disable react/no-unescaped-entities */
 import type { FieldConfig } from './components/types';
 
-import { Button } from '@tegonhq/ui/components/button';
-import { Form } from '@tegonhq/ui/components/form';
-import { Loader } from '@tegonhq/ui/components/loader';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+import { Button } from '@vantikhq/ui/components/button';
+import { Form } from '@vantikhq/ui/components/form';
+import { Loader } from '@vantikhq/ui/components/loader';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import { useParams } from 'next/navigation';
 import React from 'react';
 import { useForm } from 'react-hook-form';

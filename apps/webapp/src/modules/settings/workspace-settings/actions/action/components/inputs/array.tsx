@@ -1,8 +1,8 @@
 import type { ArrayFieldConfig } from '../types';
 
-import { Button } from '@tegonhq/ui/components/button';
-import { AddLine, DeleteLine } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { Button } from '@vantikhq/ui/components/button';
+import { AddLine, DeleteLine } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import React from 'react';
 import { useFieldArray, type Control } from 'react-hook-form';
 

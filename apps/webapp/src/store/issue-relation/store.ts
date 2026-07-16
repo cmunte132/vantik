@@ -7,7 +7,7 @@ import {
 
 import { IssueRelationEnum, type IssueRelationType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { IssueRelation } from './models';
 
@@ -73,7 +73,7 @@ export const IssueRelationsStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const issueRelations = yield tegonDatabase.issueRelations.toArray();
+      const issueRelations = yield vantikDatabase.issueRelations.toArray();
 
       issueRelations.map((issueRelation: IssueRelationType) => {
         self.issueRelations.set(

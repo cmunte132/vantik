@@ -11,7 +11,7 @@ import {
   IntegrationDefinition,
   IntegrationDefinitionIdDto,
   WorkspaceRequestParamsDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 

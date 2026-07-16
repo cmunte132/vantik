@@ -4,7 +4,7 @@ import {
   Template,
   TemplateIdDto,
   UpdateTemplateDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { RequestIdParams } from './templates.interface';

@@ -1,8 +1,8 @@
-/** Copyright (c) 2024, Tegon, all rights reserved. **/
+/** Copyright (c) 2024, Vantik, all rights reserved. **/
 
 module.exports = {
   reactStrictMode: false,
-  transpilePackages: ['geist', '@tegonhq/ui'],
+  transpilePackages: ['geist', '@vantikhq/ui'],
   async redirects() {
     return [
       {
@@ -62,7 +62,7 @@ module.exports = withSentryConfig(
 
     // Suppresses source map uploading logs during build
     silent: true,
-    org: 'tegon',
+    org: 'vantik',
     project: 'javascript-nextjs',
     // Pass the auth token
     authToken: process.env.SENTRY_AUTH_TOKEN,

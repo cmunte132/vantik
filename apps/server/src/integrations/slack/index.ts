@@ -1,7 +1,7 @@
 import {
   IntegrationEventPayload,
   IntegrationPayloadEventType,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import { LoggerService } from 'modules/logger/logger.service';
 

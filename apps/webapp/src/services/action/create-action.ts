@@ -1,4 +1,4 @@
-import { createAction } from '@tegonhq/services';
+import { createAction } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 import type { ActionType } from 'common/types';

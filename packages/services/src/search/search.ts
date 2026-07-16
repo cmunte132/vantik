@@ -1,5 +1,5 @@
-import { Issue } from '@tegonhq/types';
-import { SearchDto } from '@tegonhq/types';
+import { Issue } from '@vantikhq/types';
+import { SearchDto } from '@vantikhq/types';
 import axios from 'axios';
 
 export async function search({

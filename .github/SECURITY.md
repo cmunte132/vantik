@@ -9,8 +9,8 @@ We encourage responsible disclosure of security vulnerabilities to help keep the
 1. **Do not open a public issue**  
    - Publicly disclosing a vulnerability before a fix is available can put users at risk. Please report the issue privately.  
 
-2. **Contact the Tegon security team**  
-   - Email **`harshith at tegon.ai`** with the subject line: **"Security Vulnerability Report"**.  
+2. **Contact the Vantik security team**  
+   - Email **`harshith at vantik.dev`** with the subject line: **"Security Vulnerability Report"**.  
    - Provide a detailed description, including:  
      - Steps to reproduce  
      - Affected components  
@@ -22,7 +22,7 @@ We encourage responsible disclosure of security vulnerabilities to help keep the
 
 4. **Confidentiality**  
    - Do not publicly disclose the vulnerability until the team has resolved it.  
-   - Tegon will notify you once a fix is available and coordinate a responsible disclosure timeline.  
+   - Vantik will notify you once a fix is available and coordinate a responsible disclosure timeline.  
 
 ## Out-of-Scope Vulnerabilities  
 
@@ -48,7 +48,7 @@ When testing for vulnerabilities, please adhere to the following rules:
 - **Do not attempt to access, modify, or delete** any user data or sensitive information.  
 - **Do not perform aggressive or disruptive testing** that could impact system availability.  
 
-If you wish to conduct in-depth security testing, please contact the Tegon security team first to discuss the scope and obtain permission.  
+If you wish to conduct in-depth security testing, please contact the Vantik security team first to discuss the scope and obtain permission.  
 
 ## What to Expect  
 

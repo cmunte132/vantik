@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { UpsertCompanyDto } from '@tegonhq/types';
+import { UpsertCompanyDto } from '@vantikhq/types';
 import axios from 'axios';
 import { PrismaService } from 'nestjs-prisma';
 

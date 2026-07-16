@@ -1,24 +1,24 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@tegonhq/ui/components/dropdown-menu';
+} from '@vantikhq/ui/components/dropdown-menu';
 import {
   Editor,
   EditorExtensions,
   suggestionItems,
-} from '@tegonhq/ui/components/editor/index';
+} from '@vantikhq/ui/components/editor/index';
 import {
   DeleteLine,
   EditLine,
   MoreLine,
   NewIssueLine,
   SubIssue,
-} from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { Reply } from 'lucide-react';
 import * as React from 'react';
 import ReactTimeAgo from 'react-time-ago';

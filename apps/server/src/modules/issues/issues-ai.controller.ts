@@ -8,7 +8,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { IssueRequestParamsDto, TeamRequestParamsDto } from '@tegonhq/types';
+import { IssueRequestParamsDto, TeamRequestParamsDto } from '@vantikhq/types';
 import { Response } from 'express';
 
 import { AuthGuard } from 'modules/auth/auth.guard';

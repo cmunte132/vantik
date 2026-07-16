@@ -34,7 +34,7 @@ export function useStreamConversationMutation({
         body: JSON.stringify({
           conversation_id: conversationId,
           conversation_history_id: conversationHistoryId,
-          integration_names: ['tegon'],
+          integration_names: ['vantik'],
           workspace_id: workspaceId,
           stream: true,
         }),

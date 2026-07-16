@@ -1,4 +1,4 @@
-import type { Template, TemplateIdDto } from '@tegonhq/types';
+import type { Template, TemplateIdDto } from '@vantikhq/types';
 
 import axios from 'axios';
 

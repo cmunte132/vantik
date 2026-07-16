@@ -1,4 +1,4 @@
-import type { IssueComment, UpdateIssueCommentDto } from '@tegonhq/types';
+import type { IssueComment, UpdateIssueCommentDto } from '@vantikhq/types';
 
 import axios from 'axios';
 

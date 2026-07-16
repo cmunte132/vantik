@@ -1,15 +1,15 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { Input } from '@tegonhq/ui/components/input';
+import { Button } from '@vantikhq/ui/components/button';
+import { Input } from '@vantikhq/ui/components/input';
 import {
   PopoverContent,
   Popover,
   PopoverTrigger,
-} from '@tegonhq/ui/components/popover';
+} from '@vantikhq/ui/components/popover';
 import { Check, Trash } from 'lucide-react';
 import { useEditor } from 'novel';
 import { useEffect, useRef } from 'react';
 
-import { LinkLine } from '@tegonhq/ui/icons';
+import { LinkLine } from '@vantikhq/ui/icons';
 
 export function isValidUrl(url: string) {
   try {

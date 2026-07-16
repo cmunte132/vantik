@@ -8,7 +8,7 @@ import {
 
 import type { TeamType, TemplateType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { Templates } from './models';
 
@@ -41,7 +41,7 @@ export const TemplatesStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const templates = yield tegonDatabase.templates.toArray();
+      const templates = yield vantikDatabase.templates.toArray();
 
       self.templates = Templates.create(
         sort(templates).asc((template: TeamType) => template.createdAt),

@@ -1,13 +1,13 @@
 import './global.css';
-import '@tegonhq/ui/index.css';
-import '@tegonhq/ui/global.css';
+import '@vantikhq/ui/index.css';
+import '@vantikhq/ui/global.css';
 import type { NextComponentType } from 'next';
 import type { AppContext, AppInitialProps, AppLayoutProps } from 'next/app';
 
-import { ThemeProvider } from '@tegonhq/ui/components/theme-provider';
-import { Toaster } from '@tegonhq/ui/components/toaster';
-import { TooltipProvider } from '@tegonhq/ui/components/tooltip';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { ThemeProvider } from '@vantikhq/ui/components/theme-provider';
+import { Toaster } from '@vantikhq/ui/components/toaster';
+import { TooltipProvider } from '@vantikhq/ui/components/tooltip';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { GeistMono } from 'geist/font/mono';
 import { GeistSans } from 'geist/font/sans';
 import React from 'react';

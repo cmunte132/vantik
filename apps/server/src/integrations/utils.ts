@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { CreateIntegrationAccountDto } from '@tegonhq/types';
+import { CreateIntegrationAccountDto } from '@vantikhq/types';
 
 export async function createIntegrationAccount(
   prisma: PrismaClient,

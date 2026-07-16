@@ -6,7 +6,7 @@ sidebarTitle: "Contribute"
 
 ## Introduction
 
-Welcome to the Tegon integration development guide! This guide will walk you through the steps to create a new integration for Tegon.
+Welcome to the Vantik integration development guide! This guide will walk you through the steps to create a new integration for Vantik.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ Welcome to the Tegon integration development guide! This guide will walk you thr
 
 ## Step 1: Set Up Your Environment
 
-1. Navigate to the `/app/integrations` folder in your Tegon project:
+1. Navigate to the `/app/integrations` folder in your Vantik project:
    ```bash
    cd /app/integrations
    ```
@@ -35,14 +35,14 @@ Welcome to the Tegon integration development guide! This guide will walk you thr
 
 ## Step 3: Implement Your Integration
 
-Tegon integrations are built on top of a unified event handler that processes different event types within a single function. The core of your integration lies in how you handle these event types.
+Vantik integrations are built on top of a unified event handler that processes different event types within a single function. The core of your integration lies in how you handle these event types.
 
 ### Handling Events
 
 The `run` function is the main entry point for processing events related to your integration. The event payload will contain a type that determines what action your integration needs to take. Here's a breakdown of how to handle each event type:
 
 - **IntegrationSpec:** When this event is received, your handler should return a specification JSON that defines your integration's capabilities, required authentication details, and configuration options.
-- **IntegrationCreate:** This event is triggered when a user provides authentication details within Tegon. Your handler should process the user's input and handle the creation of the integration, such as saving settings data and establishing necessary connections.
+- **IntegrationCreate:** This event is triggered when a user provides authentication details within Vantik. Your handler should process the user's input and handle the creation of the integration, such as saving settings data and establishing necessary connections.
 - **IntegrationDelete:** This event is triggered when a user deletes the integration account.
 
 ### Example Code
@@ -75,4 +75,4 @@ async function run(eventPayload: IntegrationEventPayload) {
 1. Open the generated `handler.ts` and `spec.ts` files.
 2. Follow the provided TODOs within these files to complete the integration logic.
 
-Questions, comments, or concerns? Let us know in our github: https://github.com/tegonhq/tegon/issues
+Questions, comments, or concerns? Let us know in our github: https://github.com/vantikhq/vantik/issues

@@ -1,4 +1,4 @@
-import { ActionEventPayload } from '@tegonhq/sdk';
+import { ActionEventPayload } from '@vantikhq/sdk';
 import { viewSummary } from 'triggers/view-summary';
 
 export async function run(eventPayload: ActionEventPayload) {

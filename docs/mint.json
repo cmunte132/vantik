@@ -37,16 +37,16 @@
   "topbarLinks": [
     {
       "name": "Sign in",
-      "url": "https://app.tegon.ai/auth"
+      "url": "https://app.vantik.dev/auth"
     },
     {
       "name": "Slack",
-      "url": "https://join.slack.com/t/tegoncommunity/shared_invite/zt-2jvar8p1x-9wqFTL9PP5ICImb76qcjEA"
+      "url": "https://join.slack.com/t/vantikcommunity/shared_invite/zt-2jvar8p1x-9wqFTL9PP5ICImb76qcjEA"
     }
   ],
   "topbarCtaButton": {
     "type": "github",
-    "url": "https://github.com/tegonhq/tegon"
+    "url": "https://github.com/vantikhq/vantik"
   },
   "redirects": [
     {
@@ -169,7 +169,7 @@
     }
   ],
   "footerSocials": {
-    "twitter": "https://x.com/tegonhq",
-    "linkedin": "https://www.linkedin.com/company/tegon-ai"
+    "twitter": "https://x.com/vantikhq",
+    "linkedin": "https://www.linkedin.com/company/vantik-ai"
   }
 }

@@ -1,4 +1,4 @@
-import { deleteTemplate } from '@tegonhq/services';
+import { deleteTemplate } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 interface MutationParams {

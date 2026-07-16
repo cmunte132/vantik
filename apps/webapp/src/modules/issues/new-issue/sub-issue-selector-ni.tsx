@@ -1,4 +1,4 @@
-import { WorkflowCategoryEnum } from '@tegonhq/types';
+import { WorkflowCategoryEnum } from '@vantikhq/types';
 
 import { SubIssueSelector, type IssueContent } from 'common/editor';
 import type { WorkflowType } from 'common/types';

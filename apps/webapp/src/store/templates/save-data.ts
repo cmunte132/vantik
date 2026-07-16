@@ -2,7 +2,7 @@ import type { TemplateStoreType } from './store';
 
 import type { SyncActionRecord } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 export async function saveTemplateData(
   data: SyncActionRecord[],
@@ -23,7 +23,7 @@ export async function saveTemplateData(
 
       switch (record.action) {
         case 'I': {
-          await tegonDatabase.templates.put(template);
+          await vantikDatabase.templates.put(template);
           return (
             templatesStore &&
             (await templatesStore.update(template, record.data.id))
@@ -31,7 +31,7 @@ export async function saveTemplateData(
         }
 
         case 'U': {
-          await tegonDatabase.templates.put(template);
+          await vantikDatabase.templates.put(template);
           return (
             templatesStore &&
             (await templatesStore.update(template, record.data.id))
@@ -39,7 +39,7 @@ export async function saveTemplateData(
         }
 
         case 'D': {
-          await tegonDatabase.templates.delete(record.data.id);
+          await vantikDatabase.templates.delete(record.data.id);
           return (
             templatesStore && (await templatesStore.deleteById(record.data.id))
           );

@@ -1,4 +1,4 @@
-import { cn } from '@tegonhq/ui/lib/utils';
+import { cn } from '@vantikhq/ui/lib/utils';
 import Image from 'next/image';
 
 export function Actions() {
@@ -46,7 +46,7 @@ export function Actions() {
               <h3 className="text-lg">Seamless PR Tracking</h3>
               <p className="text-muted-foreground">
                 Automatically create an issue to track a Pull Request (PR) as
-                soon as it is assigned and linked to a Tegon issue
+                soon as it is assigned and linked to a Vantik issue
               </p>
 
               <div className="flex gap-2"></div>

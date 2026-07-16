@@ -2,15 +2,15 @@
 
 // import type { WorkflowType } from 'common/types'
 
-import { Button } from '@tegonhq/ui/components/button';
-import { Command, CommandInput } from '@tegonhq/ui/components/command';
+import { Button } from '@vantikhq/ui/components/button';
+import { Command, CommandInput } from '@vantikhq/ui/components/command';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@tegonhq/ui/components/popover';
-import { TeamIcon } from '@tegonhq/ui/components/team-icon';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+} from '@vantikhq/ui/components/popover';
+import { TeamIcon } from '@vantikhq/ui/components/team-icon';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 

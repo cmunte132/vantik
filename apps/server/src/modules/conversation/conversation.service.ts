@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Conversation, CreateConversationDto } from '@tegonhq/types';
+import { Conversation, CreateConversationDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 @Injectable()

@@ -7,8 +7,8 @@ import {
   AlertDialogAction,
   AlertDialogHeader,
   AlertDialogFooter,
-} from '@tegonhq/ui/components/alert-dialog';
-import { Button } from '@tegonhq/ui/components/button';
+} from '@vantikhq/ui/components/alert-dialog';
+import { Button } from '@vantikhq/ui/components/button';
 import { useRouter } from 'next/router';
 import React from 'react';
 

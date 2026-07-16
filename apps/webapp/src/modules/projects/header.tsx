@@ -2,9 +2,9 @@ import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
-} from '@tegonhq/ui/components/breadcrumb';
-import { Button } from '@tegonhq/ui/components/button';
-import { AddLine, DocumentLine, IssuesLine } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/breadcrumb';
+import { Button } from '@vantikhq/ui/components/button';
+import { AddLine, DocumentLine, IssuesLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import React from 'react';

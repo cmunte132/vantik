@@ -1,6 +1,6 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { useEditor } from '@tegonhq/ui/components/editor/editor';
-import { uploadFileFn, uploadFn } from '@tegonhq/ui/components/editor/utils';
+import { Button } from '@vantikhq/ui/components/button';
+import { useEditor } from '@vantikhq/ui/components/editor/editor';
+import { uploadFileFn, uploadFn } from '@vantikhq/ui/components/editor/utils';
 import { Paperclip } from 'lucide-react';
 
 interface FileUploadProps {

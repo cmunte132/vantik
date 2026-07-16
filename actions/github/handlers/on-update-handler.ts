@@ -4,7 +4,7 @@ import {
   ModelNameEnum,
   getLinkedIssuesByIssueId,
   logger,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import { onLabelHandler } from './on-label-handler';
 import { issueSync } from 'triggers/issue-sync';
 import { linkIssueSync } from 'triggers/link-issue-sync';

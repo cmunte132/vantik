@@ -4,7 +4,7 @@ import {
   Label,
   LabelRequestParamsDto,
   UpdateLabelDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { RequestIdParams } from './labels.interface';

@@ -1,13 +1,13 @@
 import { RiLoader4Line } from '@remixicon/react';
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Command,
   CommandInput,
   CommandList,
   CommandGroup,
   CommandItem,
-} from '@tegonhq/ui/components/command';
-import { AI, CrossLine } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/command';
+import { AI, CrossLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 

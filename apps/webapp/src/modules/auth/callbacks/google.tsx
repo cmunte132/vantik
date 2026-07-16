@@ -1,4 +1,4 @@
-import { Loader } from '@tegonhq/ui/components/loader';
+import { Loader } from '@vantikhq/ui/components/loader';
 import React from 'react';
 import { thirdPartySignInAndUp } from 'supertokens-auth-react/recipe/thirdpartyemailpassword';
 

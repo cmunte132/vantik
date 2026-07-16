@@ -1,6 +1,6 @@
 import type React from 'react';
 
-import { cn } from '@tegonhq/ui/lib/utils';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 
 import { useIssueData } from 'hooks/issues';

@@ -7,8 +7,8 @@ import {
   AlertDialogAction,
   AlertDialogHeader,
   AlertDialogFooter,
-} from '@tegonhq/ui/components/alert-dialog';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+} from '@vantikhq/ui/components/alert-dialog';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import { useRouter } from 'next/router';
 
 import { useCurrentTeam } from 'hooks/teams';

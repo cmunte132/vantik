@@ -1,4 +1,4 @@
-import { WorkflowCategoryEnum } from '@tegonhq/types';
+import { WorkflowCategoryEnum } from '@vantikhq/types';
 import {
   BacklogLine,
   CanceledLine,
@@ -8,7 +8,7 @@ import {
   TodoLine,
   TriageFill,
   UnscopedLine,
-} from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/icons';
 
 import { type WorkflowType } from './types';
 

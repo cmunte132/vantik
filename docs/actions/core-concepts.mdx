@@ -3,11 +3,11 @@ title: 'Core Concepts'
 sidebarTitle: "Core Concepts"
 ---
 
-Tegon Actions enables you to create workflows to automate your work. This page describes the concepts you need to know to use Tegon Actions.
+Vantik Actions enables you to create workflows to automate your work. This page describes the concepts you need to know to use Vantik Actions.
 
 ## Trigger
 
-A Trigger can be an event from an integration (e.g., Slack, Discord, GitHub, Zendesk) or a Tegon-specific event (e.g., a comment on an issue, assigning or labeling an issue). 
+A Trigger can be an event from an integration (e.g., Slack, Discord, GitHub, Zendesk) or a Vantik-specific event (e.g., a comment on an issue, assigning or labeling an issue). 
 Triggers are configured in a `config.json` file using the `triggers` field.
 
 Here’s an example configuration:
@@ -26,22 +26,22 @@ Here’s an example configuration:
 ```
 
 In this example, the action is set to trigger when:
-- An issue is created in Tegon.
+- An issue is created in Vantik.
 - A webhook event is received from Slack.
 
 This flexible configuration allows you to define when your actions should run, 
-whether it's based on internal events within Tegon or external events from integrated platforms.
+whether it's based on internal events within Vantik or external events from integrated platforms.
 
 ## Entity
 
-An Entity typically refers to either an integration or a model within Tegon. For example, it could be `Issue` or `IssueComment` for Tegon models, or `slack` and `github` when the type is set to `source_webhook`.
+An Entity typically refers to either an integration or a model within Vantik. For example, it could be `Issue` or `IssueComment` for Vantik models, or `slack` and `github` when the type is set to `source_webhook`.
 
 
 ## Integrations
 
-Integrations are the superpower behind Tegon Actions. They allow you to both receive events from external tools (like Slack, GitHub, Zendesk, etc.) and interact with these platforms by making API calls.
+Integrations are the superpower behind Vantik Actions. They allow you to both receive events from external tools (like Slack, GitHub, Zendesk, etc.) and interact with these platforms by making API calls.
 
-To enable this, you must request access to the integrations you've configured. Tegon checks which integrations are specified for an action and provides the necessary tokens, ensuring seamless communication with these external services.
+To enable this, you must request access to the integrations you've configured. Vantik checks which integrations are specified for an action and provides the necessary tokens, ensuring seamless communication with these external services.
 
 Integrations are defined in the config.json file using the integrations field:
 
@@ -69,4 +69,4 @@ export async function run(eventPayload: ActionEventPayload) {
 }
 ```
 
-In the above example the run function is configured to receive a `on_create` event from Tegon entities. 
+In the above example the run function is configured to receive a `on_create` event from Vantik entities. 

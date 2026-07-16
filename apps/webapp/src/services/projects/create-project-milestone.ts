@@ -1,6 +1,6 @@
-import type { ProjectMilestone } from '@tegonhq/types';
+import type { ProjectMilestone } from '@vantikhq/types';
 
-import { createProjectMilestone } from '@tegonhq/services';
+import { createProjectMilestone } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 interface MutationParams {

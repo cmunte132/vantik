@@ -1,6 +1,6 @@
 import { logger } from './logger';
 
-type VariableNames = 'TEGON_LOG_LEVEL';
+type VariableNames = 'VANTIK_LOG_LEVEL';
 
 type DeprecatedNames = '';
 

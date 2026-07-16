@@ -1,6 +1,6 @@
-import { AvatarText } from '@tegonhq/ui/components/avatar';
-import { Button } from '@tegonhq/ui/components/button';
-import { BookMark } from '@tegonhq/ui/icons';
+import { AvatarText } from '@vantikhq/ui/components/avatar';
+import { Button } from '@vantikhq/ui/components/button';
+import { BookMark } from '@vantikhq/ui/icons';
 import dayjs from 'dayjs';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';

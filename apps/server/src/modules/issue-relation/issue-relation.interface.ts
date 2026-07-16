@@ -1,4 +1,4 @@
-import { Issue, IssueRelation } from '@tegonhq/types';
+import { Issue, IssueRelation } from '@vantikhq/types';
 
 export enum ReverseIssueRelationType {
   BLOCKS = 'BLOCKED',

@@ -11,7 +11,7 @@ export const program = new Command();
 
 program
   .name(COMMAND_NAME)
-  .description('Cli to run tegon actions')
+  .description('Cli to run vantik actions')
   .version(getVersion(), '-v, --version', 'Display the version number');
 
 configureDeployCommand(program);

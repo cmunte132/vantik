@@ -1,7 +1,7 @@
 import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
-import { IssueHistory } from '@tegonhq/types';
+import { IssueHistory } from '@vantikhq/types';
 import { PrismaModule, PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';

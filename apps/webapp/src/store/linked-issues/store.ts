@@ -7,7 +7,7 @@ import {
 
 import type { LinkedIssueType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { LinkedIssueArray } from './models';
 
@@ -55,7 +55,7 @@ export const LinkedIssuesStore: IAnyStateTreeNode = types
 
     const load = flow(function* (issueId: string) {
       const linkedIssues = issueId
-        ? yield tegonDatabase.linkedIssues
+        ? yield vantikDatabase.linkedIssues
             .where({
               issueId,
             })

@@ -13,7 +13,7 @@ export function configureInitCommand(program: Command) {
   return commonOptions(
     program
       .command('init')
-      .description('Init a tegon action')
+      .description('Init a vantik action')
       .option(
         '-a, --action <name>',
         'Name of the action folder to initialize',
@@ -25,7 +25,7 @@ export function configureInitCommand(program: Command) {
       await printInitialBanner();
 
       const { action } = options;
-      const repoUrl = `tegonhq/tegon/actions/${action}`;
+      const repoUrl = `vantikhq/vantik/actions/${action}`;
       const actionFolderPath = path.join(process.cwd(), action);
 
       // Start loading prompt

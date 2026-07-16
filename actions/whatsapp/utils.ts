@@ -6,7 +6,7 @@ import {
   LinkedIssue,
   LLMMappings,
   Workflow,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import { CREATE_TICKET_PROMPT } from 'prompts/create-ticket-prompt';
 import { GROUP_COMPANY_PROMPT } from 'prompts/group-company-prompt';
 

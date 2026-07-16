@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Injectable } from '@nestjs/common';
-import { IssueHistory, IssueHistoryData } from '@tegonhq/types';
+import { IssueHistory, IssueHistoryData } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 @Injectable()

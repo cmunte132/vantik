@@ -8,7 +8,7 @@ import {
 
 import type { ActionType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { ActionsArray } from './models';
 
@@ -48,7 +48,7 @@ export const ActionsStore: IAnyStateTreeNode = types
       }
     };
     const load = flow(function* () {
-      const actions = yield tegonDatabase.actions.toArray();
+      const actions = yield vantikDatabase.actions.toArray();
 
       self.actions = ActionsArray.create(
         sort(actions).asc((action: ActionType) => action.createdAt),

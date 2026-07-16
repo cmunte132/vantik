@@ -4,7 +4,7 @@ import {
   getIssueMessageModal,
   sendSlackMessage,
 } from '../utils';
-import { createIssue, getTeamById, logger } from '@tegonhq/sdk';
+import { createIssue, getTeamById, logger } from '@vantikhq/sdk';
 
 export const slackIssueCreate = async (payload: SlackCreateIssuePayload) => {
   const { integrationAccount, sessionData, issueData } = payload;

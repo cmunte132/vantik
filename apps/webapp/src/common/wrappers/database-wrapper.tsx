@@ -1,4 +1,4 @@
-import { Loader } from '@tegonhq/ui/components/loader';
+import { Loader } from '@vantikhq/ui/components/loader';
 import getConfig from 'next/config';
 import * as React from 'react';
 

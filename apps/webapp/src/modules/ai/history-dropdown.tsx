@@ -1,16 +1,16 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Command,
   CommandGroup,
   CommandInput,
   CommandItem,
-} from '@tegonhq/ui/components/command';
+} from '@vantikhq/ui/components/command';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@tegonhq/ui/components/popover';
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
+} from '@vantikhq/ui/components/popover';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { sort } from 'fast-sort';
 import { HistoryIcon, MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';

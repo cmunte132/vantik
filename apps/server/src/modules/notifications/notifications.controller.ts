@@ -10,7 +10,7 @@ import {
   Notification,
   NotificationIdRequestParams,
   updateNotificationBody,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 

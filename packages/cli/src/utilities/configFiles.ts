@@ -8,7 +8,7 @@ import { readJSONFileSync } from './fileSystem.js';
 import { logger } from './logger.js';
 
 function getGlobalConfigFolderPath() {
-  const configDir = xdgAppPaths('tegon').config();
+  const configDir = xdgAppPaths('vantik').config();
 
   return configDir;
 }

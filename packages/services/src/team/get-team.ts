@@ -3,7 +3,7 @@ import type {
   Team,
   TeamRequestParamsDto,
   WorkspaceRequestParamsDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import axios from 'axios';
 

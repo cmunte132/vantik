@@ -1,4 +1,4 @@
-import { Badge } from '@tegonhq/ui/components/badge';
+import { Badge } from '@vantikhq/ui/components/badge';
 import { observer } from 'mobx-react-lite';
 import { useParams } from 'next/navigation';
 

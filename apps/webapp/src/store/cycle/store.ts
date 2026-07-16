@@ -8,7 +8,7 @@ import {
 
 import type { CycleType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { Cycles } from './models';
 
@@ -42,7 +42,7 @@ export const CyclesStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const cycles = yield tegonDatabase.cycles.toArray();
+      const cycles = yield vantikDatabase.cycles.toArray();
 
       self.cycles = Cycles.create(
         sort(cycles).asc((cycle: CycleType) => cycle.createdAt),

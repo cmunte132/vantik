@@ -1,4 +1,4 @@
-import { LinkedIssue } from '@tegonhq/types';
+import { LinkedIssue } from '@vantikhq/types';
 
 import { IssueWithRelations } from 'modules/issues/issues.interface';
 

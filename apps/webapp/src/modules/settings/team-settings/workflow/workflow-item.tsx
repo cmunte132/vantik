@@ -1,8 +1,8 @@
 import type { DraggableProvided } from '@hello-pangea/dnd';
-import type { WorkflowCategoryEnum } from '@tegonhq/types';
+import type { WorkflowCategoryEnum } from '@vantikhq/types';
 
-import { Button } from '@tegonhq/ui/components/button';
-import { EditLine } from '@tegonhq/ui/icons';
+import { Button } from '@vantikhq/ui/components/button';
+import { EditLine } from '@vantikhq/ui/icons';
 import React from 'react';
 
 import { getWorkflowColor } from 'common/status-color';

@@ -2,7 +2,7 @@ import type { ConversationHistoryStoreType } from './models';
 
 import type { SyncActionRecord } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 export async function saveConversationHistorytData(
   data: SyncActionRecord[],
@@ -24,7 +24,7 @@ export async function saveConversationHistorytData(
 
       switch (record.action) {
         case 'I': {
-          await tegonDatabase.conversationHistory.put(conversationHistory);
+          await vantikDatabase.conversationHistory.put(conversationHistory);
           return (
             conversationHistoryStore &&
             (await conversationHistoryStore.update(
@@ -35,7 +35,7 @@ export async function saveConversationHistorytData(
         }
 
         case 'U': {
-          await tegonDatabase.conversationHistory.put(conversationHistory);
+          await vantikDatabase.conversationHistory.put(conversationHistory);
           return (
             conversationHistoryStore &&
             (await conversationHistoryStore.update(
@@ -46,7 +46,7 @@ export async function saveConversationHistorytData(
         }
 
         case 'D': {
-          await tegonDatabase.conversationHistory.delete(record.data.id);
+          await vantikDatabase.conversationHistory.delete(record.data.id);
           return (
             conversationHistoryStore &&
             (await conversationHistoryStore.deleteById(record.data.id))

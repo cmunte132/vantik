@@ -1,17 +1,17 @@
-import { buttonVariants } from '@tegonhq/ui/components/button';
+import { buttonVariants } from '@vantikhq/ui/components/button';
 import {
   Editor,
   EditorExtensions,
   suggestionItems,
-} from '@tegonhq/ui/components/editor/index';
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
+} from '@vantikhq/ui/components/editor/index';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from '@tegonhq/ui/components/tabs';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/components/tabs';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { useParams } from 'next/navigation';
 
 import { Header } from 'modules/settings/header';

@@ -1,6 +1,6 @@
-import type { Cycle } from '@tegonhq/types';
+import type { Cycle } from '@vantikhq/types';
 
-import { updateCycle } from '@tegonhq/services';
+import { updateCycle } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 interface MutationParams {

@@ -1,4 +1,4 @@
-import { ActionEventPayload, logger } from '@tegonhq/sdk';
+import { ActionEventPayload, logger } from '@vantikhq/sdk';
 import { whatsappTriage } from 'triggers/triage';
 
 export const webhookHandler = async (payload: ActionEventPayload) => {

@@ -1,11 +1,11 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { Calendar } from '@tegonhq/ui/components/calendar';
+import { Button } from '@vantikhq/ui/components/button';
+import { Calendar } from '@vantikhq/ui/components/calendar';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@tegonhq/ui/components/popover';
-import { CalendarLine } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/popover';
+import { CalendarLine } from '@vantikhq/ui/icons';
 import { format } from 'date-fns';
 import * as React from 'react';
 

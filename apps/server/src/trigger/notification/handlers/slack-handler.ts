@@ -8,7 +8,7 @@ import {
   NotificationActionType,
   User,
   Workspace,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import axios from 'axios';
 
 import {
@@ -315,7 +315,7 @@ function getIssueIdentifier(
   const displayText = title
     ? `${baseIdentifier} ${issue.title}`
     : baseIdentifier;
-  return `<https://app.tegon.ai/${workspace.slug}/issue/${baseIdentifier}|${displayText}>`;
+  return `<https://app.vantik.dev/${workspace.slug}/issue/${baseIdentifier}|${displayText}>`;
 }
 
 interface MessageMetadata {

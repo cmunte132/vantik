@@ -21,7 +21,7 @@ export function configureDeployCommand(program: Command) {
   return commonOptions(
     program
       .command('deploy')
-      .description('deploy tegon actions to tegon servers'),
+      .description('deploy vantik actions to vantik servers'),
   )
     .version(getVersion(), '-v, --version', 'Display the version number')
     .action(async () => {

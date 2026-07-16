@@ -1,4 +1,4 @@
-import type { EventBody, IntegrationAccount } from '@tegonhq/sdk';
+import type { EventBody, IntegrationAccount } from '@vantikhq/sdk';
 
 import {
   logger,
@@ -6,7 +6,7 @@ import {
   getWorkflowsByTeam,
   updateIssue,
   getTeamById,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 
 import { slackIssueCreate } from './issue-create';
 import {
@@ -257,7 +257,7 @@ async function sendNullTitleEphermal(
   await sendEphemeralMessage(
     integrationAccount,
     channelId,
-    `Got empty Title, please provide some text after @Tegon`,
+    `Got empty Title, please provide some text after @Vantik`,
     mainTs,
     slackUserId,
   );

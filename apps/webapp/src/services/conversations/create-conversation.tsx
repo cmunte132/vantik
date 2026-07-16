@@ -1,4 +1,4 @@
-import { createConversation } from '@tegonhq/services';
+import { createConversation } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 import type { ConversationType } from 'common/types';

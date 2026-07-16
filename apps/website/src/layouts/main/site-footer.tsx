@@ -1,9 +1,9 @@
 import { GitHubLogoIcon } from '@radix-ui/react-icons';
 import { RiGithubFill } from '@remixicon/react';
-import { buttonVariants } from '@tegonhq/ui/components/button';
-import { Separator } from '@tegonhq/ui/components/separator';
-import { BookLine, CodingLine, SlackIcon } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { buttonVariants } from '@vantikhq/ui/components/button';
+import { Separator } from '@vantikhq/ui/components/separator';
+import { BookLine, CodingLine, SlackIcon } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
@@ -79,21 +79,21 @@ export function SiteFooter() {
           <h4 className="font-medium">Docs</h4>
 
           <a
-            href="https://docs.tegon.ai"
+            href="https://docs.vantik.dev"
             className="text-muted-foreground flex gap-1 items-center hover:text-foreground"
           >
             <BookLine size={14} />
             Introduction
           </a>
           <a
-            href="https://docs.tegon.ai/quickstart"
+            href="https://docs.vantik.dev/quickstart"
             className="text-muted-foreground flex gap-1 items-center hover:text-foreground"
           >
             <BookLine size={14} />
             Quick start guide
           </a>
           <a
-            href="https://docs.tegon.ai/oss/self-deployment"
+            href="https://docs.vantik.dev/oss/self-deployment"
             className="text-muted-foreground flex gap-1 items-center hover:text-foreground"
           >
             <BookLine size={14} />
@@ -104,28 +104,28 @@ export function SiteFooter() {
           <h4 className="font-medium">Developers</h4>
 
           <a
-            href="https://docs.tegon.ai"
+            href="https://docs.vantik.dev"
             className="text-muted-foreground flex gap-1 items-center hover:text-foreground"
           >
             <BookLine size={14} />
             Docs
           </a>
           <a
-            href="https://github.com/tegonhq/tegon/blob/main/.github/CONTRIBUTING.md"
+            href="https://github.com/vantikhq/vantik/blob/main/.github/CONTRIBUTING.md"
             className="text-muted-foreground flex gap-1 items-center hover:text-foreground"
           >
             <CodingLine size={14} />
             Contributing
           </a>
           <a
-            href="https://github.com/tegonhq/tegon/blob/main/LICENSE"
+            href="https://github.com/vantikhq/vantik/blob/main/LICENSE"
             className="text-muted-foreground flex gap-1 items-center hover:text-foreground"
           >
             <CodingLine size={14} />
             Opensource
           </a>
           <a
-            href="https://github.com/tegonhq/tegon"
+            href="https://github.com/vantikhq/vantik"
             className="text-muted-foreground flex gap-1 items-center hover:text-foreground"
           >
             <GitHubLogoIcon className="h-3 w-3 mr- hover:text-foreground1" />
@@ -143,7 +143,7 @@ export function SiteFooter() {
             rel="noreferrer"
             className="font-medium underline underline-offset-4 pl-1"
           >
-            Tegon
+            Vantik
           </a>
           .
         </p>

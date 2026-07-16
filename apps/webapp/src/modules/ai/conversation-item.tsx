@@ -1,7 +1,7 @@
-import { UserTypeEnum } from '@tegonhq/types';
-import { Button } from '@tegonhq/ui/components/button';
-import { defaultExtensions } from '@tegonhq/ui/components/editor/editor-extensions';
-import { AI } from '@tegonhq/ui/icons';
+import { UserTypeEnum } from '@vantikhq/types';
+import { Button } from '@vantikhq/ui/components/button';
+import { defaultExtensions } from '@vantikhq/ui/components/editor/editor-extensions';
+import { AI } from '@vantikhq/ui/icons';
 import { Editor } from '@tiptap/core';
 import { observer } from 'mobx-react-lite';
 import getConfig from 'next/config';

@@ -1,11 +1,11 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@tegonhq/ui/components/dropdown-menu';
-import { TeamIcon } from '@tegonhq/ui/components/team-icon';
+} from '@vantikhq/ui/components/dropdown-menu';
+import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import * as React from 'react';
 
 import type { TeamType } from 'common/types';

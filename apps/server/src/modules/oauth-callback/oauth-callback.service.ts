@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   IntegrationEventPayload,
   IntegrationPayloadEventType,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 import * as simpleOauth2 from 'simple-oauth2';
 

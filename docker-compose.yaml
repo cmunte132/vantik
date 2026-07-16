@@ -6,27 +6,27 @@ services:
     build:
       context: .
       dockerfile: ./apps/webapp/Dockerfile
-    image: tegonhq/tegon-webapp:0.3.11-alpha
+    image: vantikhq/vantik-webapp:0.3.11-alpha
     restart: always
     ports:
       - 3000:3000
     networks:
-      - tegon
+      - vantik
 
   server:
     container_name: server
     build:
       context: .
       dockerfile: ./apps/server/Dockerfile
-    image: tegonhq/tegon-server:0.3.11-alpha
+    image: vantikhq/vantik-server:0.3.11-alpha
     restart: always
     ports:
       - 3001:3001
     networks:
-      - tegon
+      - vantik
 
 # Define a network, which allows containers to communicate
 # with each other, by using their container name as a hostname
 networks:
-  tegon:
+  vantik:
     external: true

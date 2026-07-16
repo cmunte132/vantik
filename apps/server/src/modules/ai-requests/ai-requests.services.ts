@@ -2,7 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AIStreamResponse, GetAIRequestDTO } from '@tegonhq/types';
+import { AIStreamResponse, GetAIRequestDTO } from '@vantikhq/types';
 import {
   CoreMessage,
   CoreUserMessage,

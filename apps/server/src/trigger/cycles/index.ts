@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { CycleStatusEnum } from '@tegonhq/types';
+import { CycleStatusEnum } from '@vantikhq/types';
 import { logger, schedules } from '@trigger.dev/sdk/v3';
 
 interface Payload {

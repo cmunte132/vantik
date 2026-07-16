@@ -9,7 +9,7 @@ import {
   UpdateWorkflowDTO,
   Workflow,
   WorkflowRequestParamsDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { LoggerService } from 'modules/logger/logger.service';

@@ -1,7 +1,7 @@
 import {
   IntegrationAccount,
   IntegrationPayloadEventType,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { generateKeyForUserId } from 'common/authentication';

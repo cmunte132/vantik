@@ -1,4 +1,4 @@
-import { LLMModelEnum, LLMModelType } from '@tegonhq/types';
+import { LLMModelEnum, LLMModelType } from '@vantikhq/types';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
 
 export class PromptInput {

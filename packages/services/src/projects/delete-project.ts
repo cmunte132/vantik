@@ -1,4 +1,4 @@
-import type { Project } from '@tegonhq/types';
+import type { Project } from '@vantikhq/types';
 
 import axios from 'axios';
 

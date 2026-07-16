@@ -1,5 +1,5 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { BoardLine, ListLine } from '@tegonhq/ui/icons';
+import { Button } from '@vantikhq/ui/components/button';
+import { BoardLine, ListLine } from '@vantikhq/ui/icons';
 import { Grid3X3 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 

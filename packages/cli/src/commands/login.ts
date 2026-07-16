@@ -26,7 +26,7 @@ export function configureLoginCommand(program: Command) {
   return commonOptions(
     program
       .command('login')
-      .description('Login with Tegon so you can perform authenticated actions'),
+      .description('Login with Vantik so you can perform authenticated actions'),
   )
     .version(getVersion(), '-v, --version', 'Display the version number')
     .action(async () => {
@@ -41,11 +41,11 @@ async function loginCommand() {
 
 export async function login(embedded: boolean) {
   const opts = {
-    defaultApiUrl: 'https://app.tegon.ai',
+    defaultApiUrl: 'https://app.vantik.dev',
   };
 
   if (embedded) {
-    intro('Logging in to Tegon');
+    intro('Logging in to Vantik');
   }
 
   const accessTokenFromEnv = env.ACCESS_TOKEN;

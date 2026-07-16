@@ -7,7 +7,7 @@ import axios from 'axios';
 // Create a temporary directory within the OS's temp directory
 export async function createTempDir(): Promise<string> {
   // Generate a unique temp directory path
-  const tempDirPath: string = pathModule.join(tmpdir(), 'tegon-temp-');
+  const tempDirPath: string = pathModule.join(tmpdir(), 'vantik-temp-');
 
   // Create the temp directory synchronously and return the path
   const directory = await fsModule.mkdtemp(tempDirPath);
@@ -17,7 +17,7 @@ export async function createTempDir(): Promise<string> {
 
 export async function getExternalActions() {
   const actionsUrl =
-    'https://raw.githubusercontent.com/tegonhq/tegon/main/actions/actions.json';
+    'https://raw.githubusercontent.com/vantikhq/vantik/main/actions/actions.json';
   const response = await axios.get(actionsUrl);
   const actions = response.data;
 
@@ -28,7 +28,7 @@ export async function getExternalActions() {
       description: 'Create issues from Slack messages and sync threads',
       version: '0.1.0',
       icon: 'slack',
-      url: 'https://app.tegon.ai/api/v1/attachment/actions/slack-0.1.0',
+      url: 'https://app.vantik.dev/api/v1/attachment/actions/slack-0.1.0',
       triggers: [
         {
           type: 'on_create',
@@ -60,7 +60,7 @@ export async function getExternalActions() {
 
 export async function getExternalActionWithSlug(slug: string) {
   const actionsUrl =
-    'https://raw.githubusercontent.com/tegonhq/tegon/main/actions/actions.json';
+    'https://raw.githubusercontent.com/vantikhq/vantik/main/actions/actions.json';
   const response = await axios.get(actionsUrl);
   const actions = response.data;
   const action = actions.find(
@@ -75,7 +75,7 @@ export async function getExternalActionWithSlug(slug: string) {
 export async function getActionConfig(slug: string) {
   try {
     const actionsDir =
-      'https://raw.githubusercontent.com/tegonhq/tegon/main/actions';
+      'https://raw.githubusercontent.com/vantikhq/vantik/main/actions';
     const configUrl = `${actionsDir}/${slug}/config.json`;
     const response = await axios.get(configUrl);
     return response.data;
@@ -87,7 +87,7 @@ export async function getActionConfig(slug: string) {
 export async function getActionReadme(slug: string) {
   try {
     const actionsDir =
-      'https://raw.githubusercontent.com/tegonhq/tegon/main/actions';
+      'https://raw.githubusercontent.com/vantikhq/vantik/main/actions';
     const configUrl = `${actionsDir}/${slug}/README.md`;
     const response = await axios.get(configUrl);
     return response.data;

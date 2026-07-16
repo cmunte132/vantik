@@ -2,11 +2,11 @@ import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
-} from '@tegonhq/ui/components/breadcrumb';
-import { buttonVariants } from '@tegonhq/ui/components/button';
-import { TeamIcon } from '@tegonhq/ui/components/team-icon';
-import { AddLine } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/components/breadcrumb';
+import { buttonVariants } from '@vantikhq/ui/components/button';
+import { TeamIcon } from '@vantikhq/ui/components/team-icon';
+import { AddLine } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import { useRouter } from 'next/router';

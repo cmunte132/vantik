@@ -1,4 +1,4 @@
-import { CreateIssueCommentDto, IssueComment } from '@tegonhq/types';
+import { CreateIssueCommentDto, IssueComment } from '@vantikhq/types';
 import axios from 'axios';
 
 export class CreateIssueCommentProps extends CreateIssueCommentDto {

@@ -1,4 +1,4 @@
-import type { RoleEnum } from '@tegonhq/types';
+import type { RoleEnum } from '@vantikhq/types';
 
 import { useMutation } from 'react-query';
 

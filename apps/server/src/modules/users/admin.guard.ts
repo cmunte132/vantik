@@ -1,5 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
-import { RoleEnum } from '@tegonhq/types';
+import { RoleEnum } from '@vantikhq/types';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 @Injectable()

@@ -7,7 +7,7 @@ import {
 
 import type { SupportType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { Support } from './models';
 
@@ -38,7 +38,7 @@ export const SupportStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const supportMetadataArray = yield tegonDatabase.support.toArray();
+      const supportMetadataArray = yield vantikDatabase.support.toArray();
 
       supportMetadataArray.forEach((metadata: SupportType) => {
         self.supportMetadata.set(metadata.issueId, Support.create(metadata));

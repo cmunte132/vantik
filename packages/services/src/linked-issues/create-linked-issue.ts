@@ -3,7 +3,7 @@ import type {
   IssueRequestParamsDto,
   LinkedIssue,
   TeamRequestParamsDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import axios from 'axios';
 

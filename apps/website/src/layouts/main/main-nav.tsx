@@ -1,5 +1,5 @@
-import { buttonVariants } from '@tegonhq/ui/components/button';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { buttonVariants } from '@vantikhq/ui/components/button';
+import { cn } from '@vantikhq/ui/lib/utils';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
@@ -30,7 +30,7 @@ export function MainNav() {
       </Link>
       <nav className="flex items-center gap-4 lg:gap-6">
         <a
-          href="https://docs.tegon.ai/actions/overview"
+          href="https://docs.vantik.dev/actions/overview"
           target="_blank"
           className={cn(
             'flex items-center',
@@ -40,7 +40,7 @@ export function MainNav() {
           Actions
         </a>
         <a
-          href="https://docs.tegon.ai"
+          href="https://docs.vantik.dev"
           target="_blank"
           className={cn(
             'flex items-center',
@@ -50,7 +50,7 @@ export function MainNav() {
           Docs
         </a>
         <a
-          href="https://github.com/tegonhq/tegon/releases"
+          href="https://github.com/vantikhq/vantik/releases"
           target="_blank"
           className={cn(
             'flex items-center',

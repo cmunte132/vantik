@@ -14,7 +14,7 @@ import {
   TeamRequestParamsDto,
   UpdateIssueDto,
   WorkflowCategoryEnum,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { tasks } from '@trigger.dev/sdk/v3';
 import { createObjectCsvStringifier } from 'csv-writer';
 import { PrismaService } from 'nestjs-prisma';

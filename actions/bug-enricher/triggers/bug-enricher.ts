@@ -5,7 +5,7 @@ import {
   Label,
   getIssueById,
   getAIRequest,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 
 import {
   convertMarkdownToTiptapJson,

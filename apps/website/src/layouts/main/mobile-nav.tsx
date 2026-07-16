@@ -1,13 +1,13 @@
 'use client';
 
-import { Button } from '@tegonhq/ui/components/button';
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
+import { Button } from '@vantikhq/ui/components/button';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
-} from '@tegonhq/ui/components/sheet';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/components/sheet';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 

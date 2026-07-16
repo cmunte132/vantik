@@ -1,6 +1,6 @@
-import { Input } from '@tegonhq/ui/components/input';
-import { Separator } from '@tegonhq/ui/components/separator';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+import { Input } from '@vantikhq/ui/components/input';
+import { Separator } from '@vantikhq/ui/components/separator';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 

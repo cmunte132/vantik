@@ -19,7 +19,7 @@ import {
   PatIdDto,
   PublicUser,
   User,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 

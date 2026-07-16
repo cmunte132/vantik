@@ -3,7 +3,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
-} from '@tegonhq/ui/components/tabs';
+} from '@vantikhq/ui/components/tabs';
 import { observer } from 'mobx-react-lite';
 
 import { useCycle } from 'hooks/cycles';

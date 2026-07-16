@@ -4,8 +4,8 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from '@tegonhq/ui/components/tooltip';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/components/tooltip';
+import { cn } from '@vantikhq/ui/lib/utils';
 
 interface TooltipWrapperProps {
   tooltip: string;

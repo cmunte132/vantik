@@ -1,4 +1,4 @@
-import type { EventBody, IntegrationAccount, JsonObject } from '@tegonhq/sdk';
+import type { EventBody, IntegrationAccount, JsonObject } from '@vantikhq/sdk';
 
 import {
   getWorkflowsByTeam,
@@ -6,7 +6,7 @@ import {
   createIssueComment,
   updateLinkedIssueBySource,
   getLinkedIssueBySource,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 
 import { getCompanyId, getStateId, isCreateTicket } from '../utils';
 import axios from 'axios';

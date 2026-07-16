@@ -19,7 +19,7 @@ export type CommonCommandOptions = z.infer<typeof CommonCommandOptions>;
 export function commonOptions(command: Command) {
   return command.option(
     '-l, --log-level <level>',
-    'The CLI log level to use (debug, info, log, warn, error, none). This does not effect the log level of your tegon actions',
+    'The CLI log level to use (debug, info, log, warn, error, none). This does not effect the log level of your vantik actions',
     'log',
   );
 }

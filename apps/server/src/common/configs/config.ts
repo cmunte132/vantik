@@ -6,7 +6,7 @@ export const config: Config = {
   },
   superToken: {
     appInfo: {
-      appName: 'Tegon',
+      appName: 'Vantik',
       apiDomain: process.env.BACKEND_HOST,
       websiteDomain: process.env.FRONTEND_HOST,
       apiBasePath: '/auth',

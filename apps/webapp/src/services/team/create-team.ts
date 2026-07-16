@@ -1,6 +1,6 @@
-import type { Team } from '@tegonhq/types';
+import type { Team } from '@vantikhq/types';
 
-import { createTeam } from '@tegonhq/services';
+import { createTeam } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 export interface MutationParams {

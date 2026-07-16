@@ -7,7 +7,7 @@ import {
   getPersonalIntegrationAccount,
   getUsers,
   RoleEnum,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 import { getGithubHeaders } from 'utils';
 
@@ -87,7 +87,7 @@ export const commentSync = async (actionPayload: ActionEventPayload) => {
 
   const body = userGithubPersonalAccount
     ? issueComment.bodyMarkdown
-    : `>${user.fullname}  commented from Tegon \n\n ${issueComment.bodyMarkdown}`;
+    : `>${user.fullname}  commented from Vantik \n\n ${issueComment.bodyMarkdown}`;
 
   const githubIssueComment = (
     await axios.post(

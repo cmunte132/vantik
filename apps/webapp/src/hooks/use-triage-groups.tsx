@@ -1,4 +1,4 @@
-import { WorkflowCategoryEnum } from '@tegonhq/types';
+import { WorkflowCategoryEnum } from '@vantikhq/types';
 import { sort } from 'fast-sort';
 import React from 'react';
 

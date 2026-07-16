@@ -4,7 +4,7 @@ import {
   getWorkflowsByTeam,
   Issue,
   Label,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 
 import { parseExpression } from 'cron-parser';

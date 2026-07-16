@@ -1,12 +1,12 @@
 {
-  "name": "@tegonhq/cli",
+  "name": "@vantikhq/cli",
   "version": "0.1.15",
   "description": "A Command-Line Deploying actions",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tegonhq/tegon.git",
+    "url": "https://github.com/vantikhq/vantik.git",
     "directory": "packages/cli"
   },
   "publishConfig": {
@@ -21,11 +21,11 @@
   "type": "module",
   "exports": "./dist/index.js",
   "bin": {
-    "tegon": "./dist/index.js"
+    "vantik": "./dist/index.js"
   },
   "devDependencies": {
-    "@tegonhq/eslint-config": "workspace:*",
-    "@tegonhq/typescript-config": "workspace:*",
+    "@vantikhq/eslint-config": "workspace:*",
+    "@vantikhq/typescript-config": "workspace:*",
     "@types/degit": "^2.8.6",
     "@types/gradient-string": "^1.1.2",
     "@types/node": "18",

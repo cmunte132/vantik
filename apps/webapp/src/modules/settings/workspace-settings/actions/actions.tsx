@@ -1,13 +1,13 @@
-import type { ActionConfig } from '@tegonhq/types';
+import type { ActionConfig } from '@vantikhq/types';
 
 import {
   Card,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@tegonhq/ui/components/card';
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
-import { AddLine } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/card';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
+import { AddLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { Header } from 'modules/settings/header';
@@ -43,7 +43,7 @@ export const Actions = observer(() => {
         <Card
           className="cursor-pointer"
           onClick={() => {
-            window.open('https://docs.tegon.ai/actions/overview', '_blank');
+            window.open('https://docs.vantik.dev/actions/overview', '_blank');
           }}
         >
           <CardHeader>

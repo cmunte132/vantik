@@ -1,7 +1,7 @@
-import { AvatarText } from '@tegonhq/ui/components/avatar';
-import { Button } from '@tegonhq/ui/components/button';
-import { Loader } from '@tegonhq/ui/components/loader';
-import { AssigneeLine } from '@tegonhq/ui/icons';
+import { AvatarText } from '@vantikhq/ui/components/avatar';
+import { Button } from '@vantikhq/ui/components/button';
+import { Loader } from '@vantikhq/ui/components/loader';
+import { AssigneeLine } from '@vantikhq/ui/icons';
 import { sort } from 'fast-sort';
 import { observer } from 'mobx-react-lite';
 

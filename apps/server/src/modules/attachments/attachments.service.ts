@@ -8,7 +8,7 @@ import {
   AttachmentResponse,
   AttachmentStatusEnum,
   SignedURLBody,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 import { v4 as uuidv4 } from 'uuid'; // Add this import at the top with other imports
 

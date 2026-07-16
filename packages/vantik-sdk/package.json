@@ -1,7 +1,7 @@
 {
-  "name": "@tegonhq/sdk",
+  "name": "@vantikhq/sdk",
   "version": "0.1.15",
-  "description": "Tegon Node.JS SDK",
+  "description": "Vantik Node.JS SDK",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "module": "./dist/index.mjs",
@@ -42,9 +42,9 @@
   },
   "devDependencies": {
     "@trigger.dev/sdk": "3.3.13",
-    "@tegonhq/services": "workspace:*",
-    "@tegonhq/types": "workspace:*",
-    "@tegonhq/typescript-config": "workspace:*",
+    "@vantikhq/services": "workspace:*",
+    "@vantikhq/types": "workspace:*",
+    "@vantikhq/typescript-config": "workspace:*",
     "@types/configstore": "^6.0.2",
     "@types/debug": "^4.1.7",
     "@types/node": "18",

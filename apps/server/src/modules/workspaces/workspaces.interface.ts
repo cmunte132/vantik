@@ -1,5 +1,5 @@
 import { LLMModels } from '@prisma/client';
-import { RoleEnum, WorkspaceStatusEnum } from '@tegonhq/types';
+import { RoleEnum, WorkspaceStatusEnum } from '@vantikhq/types';
 import {
   filterPrompt,
   issueDescriptionPrompt,
@@ -8,7 +8,7 @@ import {
   issueTitlePrompt,
   subIssuesPrompt,
   viewNameDescriptionPrompt,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { IsOptional, IsString } from 'class-validator';
 
 export class CreateWorkspaceInput {

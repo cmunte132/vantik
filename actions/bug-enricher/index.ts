@@ -1,4 +1,4 @@
-import { ActionEventPayload, ActionTypesEnum } from '@tegonhq/sdk';
+import { ActionEventPayload, ActionTypesEnum } from '@vantikhq/sdk';
 import { bugEnricher } from 'triggers/bug-enricher';
 import { getInputs } from 'triggers/get-inputs';
 export async function run(eventPayload: ActionEventPayload) {

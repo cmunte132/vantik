@@ -1,12 +1,12 @@
-import { AvatarText } from '@tegonhq/ui/components/avatar';
-import { Button } from '@tegonhq/ui/components/button';
+import { AvatarText } from '@vantikhq/ui/components/avatar';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Editor,
   EditorExtensions,
   suggestionItems,
-} from '@tegonhq/ui/components/editor/index';
-import { useToast } from '@tegonhq/ui/components/use-toast';
-import { SendLine } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/editor/index';
+import { useToast } from '@vantikhq/ui/components/use-toast';
+import { SendLine } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import { getTiptapJSON } from 'common';

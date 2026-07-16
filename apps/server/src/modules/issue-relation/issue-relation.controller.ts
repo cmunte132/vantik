@@ -1,5 +1,5 @@
 import { Controller, Delete, Param, UseGuards } from '@nestjs/common';
-import { IssueRelation, IssueRelationIdRequestDto } from '@tegonhq/types';
+import { IssueRelation, IssueRelationIdRequestDto } from '@vantikhq/types';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';

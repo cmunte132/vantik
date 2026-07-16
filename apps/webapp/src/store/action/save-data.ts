@@ -2,7 +2,7 @@ import type { ActionsStoreType } from './store';
 
 import type { SyncActionRecord } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 export async function saveActionData(
   data: SyncActionRecord[],
@@ -32,21 +32,21 @@ export async function saveActionData(
 
       switch (record.action) {
         case 'I': {
-          await tegonDatabase.actions.put(action);
+          await vantikDatabase.actions.put(action);
           return (
             actionsStore && (await actionsStore.update(action, record.data.id))
           );
         }
 
         case 'U': {
-          await tegonDatabase.actions.put(action);
+          await vantikDatabase.actions.put(action);
           return (
             actionsStore && (await actionsStore.update(action, record.data.id))
           );
         }
 
         case 'D': {
-          await tegonDatabase.actions.delete(record.data.id);
+          await vantikDatabase.actions.delete(record.data.id);
           return (
             actionsStore && (await actionsStore.deleteById(record.data.id))
           );

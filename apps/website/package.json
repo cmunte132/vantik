@@ -13,7 +13,7 @@
     "@hookform/resolvers": "3.9.0",
     "@radix-ui/react-icons": "^1.3.0",
     "@remixicon/react": "^4.2.0",
-    "@tegonhq/ui": "workspace:*",
+    "@vantikhq/ui": "workspace:*",
     "@typeform/embed-react": "^3.17.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
@@ -33,8 +33,8 @@
     "zod": "3.23.8"
   },
   "devDependencies": {
-    "@tegonhq/eslint-config": "workspace:*",
-    "@tegonhq/typescript-config": "workspace:*",
+    "@vantikhq/eslint-config": "workspace:*",
+    "@vantikhq/typescript-config": "workspace:*",
     "@types/node": "^20.11.5",
     "@types/qs": "^6.9.12",
     "@types/react": "^18",

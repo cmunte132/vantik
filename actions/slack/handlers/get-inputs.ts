@@ -3,7 +3,7 @@ import {
   getTeams,
   IntegrationAccount,
   Team,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 import { getSlackHeaders } from 'utils';
 

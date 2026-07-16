@@ -1,4 +1,4 @@
-import type { Role } from '@tegonhq/types';
+import type { Role } from '@vantikhq/types';
 
 interface Workspace {
   name: string;

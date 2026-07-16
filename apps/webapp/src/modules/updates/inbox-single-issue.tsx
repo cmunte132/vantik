@@ -4,7 +4,7 @@ import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from '@tegonhq/ui/components/resizable';
+} from '@vantikhq/ui/components/resizable';
 
 import { LeftSide } from 'modules/issues/single-issue/left-side/left-side';
 import { RightSide } from 'modules/issues/single-issue/right-side/right-side';

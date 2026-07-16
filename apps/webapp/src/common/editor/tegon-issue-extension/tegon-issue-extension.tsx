@@ -1,10 +1,10 @@
 import { mergeAttributes, Node } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 
-import { TegonIssueComponent } from './tegon-issue-component';
+import { VantikIssueComponent } from './vantik-issue-component';
 
-export const tegonIssueExtension = Node.create({
-  name: 'tegonIssueExtension',
+export const vantikIssueExtension = Node.create({
+  name: 'vantikIssueExtension',
   group: 'inline',
   inline: true,
   atom: true,
@@ -20,17 +20,17 @@ export const tegonIssueExtension = Node.create({
   parseHTML() {
     return [
       {
-        tag: 'tegon-issue-extension',
+        tag: 'vantik-issue-extension',
       },
     ];
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['tegon-issue-extension', mergeAttributes(HTMLAttributes)];
+    return ['vantik-issue-extension', mergeAttributes(HTMLAttributes)];
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(TegonIssueComponent, {
+    return ReactNodeViewRenderer(VantikIssueComponent, {
       contentDOMElementTag: 'span',
       as: 'span',
     });

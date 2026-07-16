@@ -1,4 +1,4 @@
-import type { IssueRelation, IssueRelationIdRequestDto } from '@tegonhq/types';
+import type { IssueRelation, IssueRelationIdRequestDto } from '@vantikhq/types';
 
 import axios from 'axios';
 

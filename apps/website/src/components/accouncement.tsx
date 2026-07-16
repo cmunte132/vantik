@@ -1,7 +1,7 @@
 import { ArrowRightIcon } from '@radix-ui/react-icons';
-import { Button } from '@tegonhq/ui/components/button';
-import { Separator } from '@tegonhq/ui/components/separator';
-import { Actions } from '@tegonhq/ui/icons';
+import { Button } from '@vantikhq/ui/components/button';
+import { Separator } from '@vantikhq/ui/components/separator';
+import { Actions } from '@vantikhq/ui/icons';
 
 export function Announcement() {
   return (
@@ -9,7 +9,7 @@ export function Announcement() {
       variant="secondary"
       className="inline-flex items-center font-medium"
       onClick={() => {
-        window.location.href = 'https://docs.tegon.ai/actions/overview';
+        window.location.href = 'https://docs.vantik.dev/actions/overview';
       }}
     >
       <Actions className="h-4 w-4" />

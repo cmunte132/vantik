@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { Prompt } from '@tegonhq/types';
+import { Prompt } from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 

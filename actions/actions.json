@@ -4,7 +4,7 @@
     "description": "Create issues from Slack messages and sync threads",
     "version": "0.1.0",
     "icon": "slack",
-    "url": "https://app.tegon.ai/api/v1/attachment/actions/slack-0.1.0",
+    "url": "https://app.vantik.dev/api/v1/attachment/actions/slack-0.1.0",
     "triggers": [
       {
         "type": "on_create",

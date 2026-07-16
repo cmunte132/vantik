@@ -2,14 +2,14 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@tegonhq/ui/components/collapsible';
+} from '@vantikhq/ui/components/collapsible';
 import {
   Editor,
   EditorExtensions,
   suggestionItems,
-} from '@tegonhq/ui/components/editor/index';
-import { TimelineItem } from '@tegonhq/ui/components/timeline';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/components/editor/index';
+import { TimelineItem } from '@vantikhq/ui/components/timeline';
+import { cn } from '@vantikhq/ui/lib/utils';
 import * as React from 'react';
 import ReactTimeAgo from 'react-time-ago';
 

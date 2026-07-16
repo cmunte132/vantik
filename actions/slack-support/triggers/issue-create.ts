@@ -9,7 +9,7 @@ import {
   createIssueComment,
   getTeamById,
   logger,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 
 export const slackIssueCreate = async (payload: SlackCreateIssuePayload) => {
   const { integrationAccount, sessionData, issueData } = payload;

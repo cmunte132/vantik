@@ -1,4 +1,4 @@
-import type { UpdateProjectDto, Project } from '@tegonhq/types';
+import type { UpdateProjectDto, Project } from '@vantikhq/types';
 
 import axios from 'axios';
 

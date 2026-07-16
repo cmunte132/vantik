@@ -1,6 +1,6 @@
-import { Checkbox } from '@tegonhq/ui/components/checkbox';
-import { CommandGroup } from '@tegonhq/ui/components/command';
-import { Cycle } from '@tegonhq/ui/icons';
+import { Checkbox } from '@vantikhq/ui/components/checkbox';
+import { CommandGroup } from '@vantikhq/ui/components/command';
+import { Cycle } from '@vantikhq/ui/icons';
 
 import type { CycleType } from 'common/types';
 

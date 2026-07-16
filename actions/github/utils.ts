@@ -7,7 +7,7 @@ import {
   updateLinkedIssue,
   updateLinkedIssueBySource,
   UpdateLinkedIssueDto,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 
 export function getGithubHeaders(token: string) {
@@ -43,7 +43,7 @@ export async function createLinkIssueComment(
 ) {
   const team = await getTeamById({ teamId: issue.teamId });
   // Create the GitHub comment body with a link to the issue
-  const githubCommentBody = `[${team.identifier}-${issue.number} ${issue.title}](https://app.tegon.ai/${team.workspace.slug}/issue/${team.identifier}-${issue.number})`;
+  const githubCommentBody = `[${team.identifier}-${issue.number} ${issue.title}](https://app.vantik.dev/${team.workspace.slug}/issue/${team.identifier}-${issue.number})`;
 
   // Send the comment to GitHub
   const commentResponse = await sendGithubComment(

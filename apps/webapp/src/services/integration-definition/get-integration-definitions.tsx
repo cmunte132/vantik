@@ -1,6 +1,6 @@
-import type { IntegrationDefinition } from '@tegonhq/types';
+import type { IntegrationDefinition } from '@vantikhq/types';
 
-import { getIntegrationDefinitions } from '@tegonhq/services';
+import { getIntegrationDefinitions } from '@vantikhq/services';
 import { type UseQueryResult, useQuery } from 'react-query';
 
 import { type XHRErrorResponse } from 'services/utils';

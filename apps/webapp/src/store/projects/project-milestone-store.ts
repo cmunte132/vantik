@@ -7,7 +7,7 @@ import {
 
 import type { LinkedIssueType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { ProjectMilestone } from './models';
 
@@ -40,7 +40,7 @@ export const ProjectMilestonesStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const milestones = yield tegonDatabase.projectMilestones.toArray();
+      const milestones = yield vantikDatabase.projectMilestones.toArray();
 
       self.milestones = milestones;
     });

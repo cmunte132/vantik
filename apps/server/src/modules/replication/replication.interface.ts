@@ -1,4 +1,4 @@
-import { ModelNameEnum } from '@tegonhq/types';
+import { ModelNameEnum } from '@vantikhq/types';
 
 export interface logChangeType {
   kind: string;

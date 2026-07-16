@@ -9,7 +9,7 @@ import {
   IssuesLine,
   NumberedListLine,
   TextLine,
-} from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/icons';
 
 import { Button } from '../../button';
 import { PopoverContent, PopoverTrigger, Popover } from '../../popover';

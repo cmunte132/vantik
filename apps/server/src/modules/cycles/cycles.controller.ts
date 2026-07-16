@@ -1,5 +1,5 @@
 import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
-import { UpdateCycleDto } from '@tegonhq/types';
+import { UpdateCycleDto } from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { AdminGuard } from 'modules/users/admin.guard';

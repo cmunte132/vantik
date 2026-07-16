@@ -1,4 +1,4 @@
-import { CreateConversationDto } from '@tegonhq/types';
+import { CreateConversationDto } from '@vantikhq/types';
 import axios from 'axios';
 
 export async function createConversation(

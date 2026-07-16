@@ -22,7 +22,7 @@ const backendPlugins = [
 export default [
   {
     input: './index.ts',
-    external: ['axios', '@tegonhq/sdk'],
+    external: ['axios', '@vantikhq/sdk'],
     output: [
       {
         file: 'dist/index.js',

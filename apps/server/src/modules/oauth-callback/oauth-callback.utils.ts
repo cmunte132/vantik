@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { IntegrationDefinition, OAuth2Params } from '@tegonhq/types';
+import { IntegrationDefinition, OAuth2Params } from '@vantikhq/types';
 
 import {
   OAuthAuthorizationMethod,

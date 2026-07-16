@@ -1,5 +1,5 @@
-import { Badge } from '@tegonhq/ui/components/badge';
-import { Cycle } from '@tegonhq/ui/icons';
+import { Badge } from '@vantikhq/ui/components/badge';
+import { Cycle } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useContextStore } from 'store/global-context-provider';

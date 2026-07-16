@@ -1,4 +1,4 @@
-import { IntegrationAccount, JsonObject, Workflow } from '@tegonhq/sdk';
+import { IntegrationAccount, JsonObject, Workflow } from '@vantikhq/sdk';
 import axios from 'axios';
 import { GmailAttachment, GmailHeaders } from 'types';
 

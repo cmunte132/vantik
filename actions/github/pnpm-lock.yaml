@@ -8,9 +8,9 @@ importers:
 
   .:
     dependencies:
-      '@tegonhq/sdk':
-        specifier: file:../../packages/tegon-sdk/dist
-        version: dist@file:../../packages/tegon-sdk/dist
+      '@vantikhq/sdk':
+        specifier: file:../../packages/vantik-sdk/dist
+        version: dist@file:../../packages/vantik-sdk/dist
       '@trigger.dev/sdk':
         specifier: 3.0.0-beta.56
         version: 3.0.0-beta.56(typescript@5.5.4)
@@ -672,8 +672,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  dist@file:../../packages/tegon-sdk/dist:
-    resolution: {directory: ../../packages/tegon-sdk/dist, type: directory}
+  dist@file:../../packages/vantik-sdk/dist:
+    resolution: {directory: ../../packages/vantik-sdk/dist, type: directory}
 
   doctrine@2.1.0:
     resolution: {integrity: sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw==}
@@ -2420,7 +2420,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  dist@file:../../packages/tegon-sdk/dist: {}
+  dist@file:../../packages/vantik-sdk/dist: {}
 
   doctrine@2.1.0:
     dependencies:

@@ -6,7 +6,7 @@ import {
   NotificationActionType,
   User,
   Workspace,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import nodemailer from 'nodemailer';
 import SMTPTransport from 'nodemailer/lib/smtp-transport';
 
@@ -61,7 +61,7 @@ class MailService {
     html: string;
   }) {
     await this.transporter.sendMail({
-      from: `Tegon <notification@tegon.ai>`,
+      from: `Vantik <notification@vantik.dev>`,
       to,
       subject,
       html,
@@ -281,7 +281,7 @@ function getIssueIdentifier(
     ? `${baseIdentifier} ${issue.title}`
     : baseIdentifier;
   return {
-    url: `https://app.tegon.ai/${workspace.slug}/issue/${baseIdentifier}`,
+    url: `https://app.vantik.dev/${workspace.slug}/issue/${baseIdentifier}`,
     identifier: displayText,
   };
 }

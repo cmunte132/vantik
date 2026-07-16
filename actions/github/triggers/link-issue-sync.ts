@@ -8,7 +8,7 @@ import {
   JsonObject,
   logger,
   RoleEnum,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -197,11 +197,11 @@ async function onUpdateLinkedIssue(actionPayload: ActionEventPayload) {
     const issueIdentifier = `${teamIdentifier}-${issueNumber}`;
 
     // Create the issue URL using the workspace slug and issue identifier
-    const issueUrl = `https://app.tegon.ai/${integrationAccount.workspace.slug}/issue/${issueIdentifier}`;
+    const issueUrl = `https://app.vantik.dev/${integrationAccount.workspace.slug}/issue/${issueIdentifier}`;
 
-    let body = `Stopping sync with Tegon issue [${issueIdentifier}](${issueUrl})`;
+    let body = `Stopping sync with Vantik issue [${issueIdentifier}](${issueUrl})`;
     if (changedData.sync) {
-      body = `This thread is syncing with a Tegon issue [${issueIdentifier}](${issueUrl})`;
+      body = `This thread is syncing with a Vantik issue [${issueIdentifier}](${issueUrl})`;
     }
 
     await axios.post(

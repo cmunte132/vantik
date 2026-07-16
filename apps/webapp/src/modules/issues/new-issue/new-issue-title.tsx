@@ -1,17 +1,17 @@
-import { AdjustableTextArea } from '@tegonhq/ui/components/adjustable-textarea';
-import { Button } from '@tegonhq/ui/components/button';
+import { AdjustableTextArea } from '@vantikhq/ui/components/adjustable-textarea';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   FormControl,
   FormField,
   FormItem,
   FormMessage,
-} from '@tegonhq/ui/components/form';
+} from '@vantikhq/ui/components/form';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from '@tegonhq/ui/components/tooltip';
-import { AI } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/tooltip';
+import { AI } from '@vantikhq/ui/icons';
 import { useWatch, type UseFormReturn } from 'react-hook-form';
 
 import { useCurrentWorkspace } from 'hooks/workspace';

@@ -4,7 +4,7 @@ import {
   IntegrationAccount,
   JsonObject,
   logger,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import { Client, EmbedBuilder, TextChannel } from 'discord.js';
 import { createLinkIssueComment } from 'utils';
 
@@ -43,19 +43,19 @@ export const discordIssueCreate = async (
 
   const issueIdentifier = `${team.identifier}-${createdIssue.number}`;
   const thread = await message.startThread({
-    name: `Tegon issue #${issueIdentifier}: ${createdIssue.title}`,
+    name: `Vantik issue #${issueIdentifier}: ${createdIssue.title}`,
   });
 
   logger.info(`Thread created successfully ${thread.id}`);
 
-  const issueUrl = `https://app.tegon.ai/${team.workspace.slug}/issue/${issueIdentifier}`;
+  const issueUrl = `https://app.vantik.dev/${team.workspace.slug}/issue/${issueIdentifier}`;
 
   const issueTitle = `${issueIdentifier} ${createdIssue.title}`;
 
   const messageEmbed = new EmbedBuilder()
     .setTitle(`${issueTitle}`)
     .setURL(issueUrl)
-    .setFooter({ text: 'This thread is in sync with Tegon' });
+    .setFooter({ text: 'This thread is in sync with Vantik' });
 
   const threadResponse = await thread.send({
     content: `<@${sessionData.discordUserId}> created a Issue`,

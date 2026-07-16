@@ -1,4 +1,4 @@
-import { WorkflowCategoryEnum } from '@tegonhq/types';
+import { WorkflowCategoryEnum } from '@vantikhq/types';
 
 import { workflowSort } from 'common/sorting';
 import type { IssueRelationType, IssueType, WorkflowType } from 'common/types';

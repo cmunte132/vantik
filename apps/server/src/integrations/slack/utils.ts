@@ -8,7 +8,7 @@ import {
   UpdateLinkedIssueDto,
   User,
   Workflow,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import axios from 'axios';
 
 import IssueCommentsService from 'modules/issue-comments/issue-comments.service';
@@ -205,7 +205,7 @@ export function convertTemplateToBlocks(
   return {
     title: {
       type: 'plain_text',
-      text: 'Tegon',
+      text: 'Vantik',
       emoji: true,
     },
     submit: {
@@ -360,7 +360,7 @@ export async function getIssueMessageModal(
   const issueIdentifier = `${issue.team.identifier}-${issue.number}`;
 
   // Construct the issue URL using the workspace slug and issue identifier
-  const issueUrl = `https://app.tegon.ai/${workspaceSlug}/issue/${issueIdentifier}`;
+  const issueUrl = `https://app.vantik.dev/${workspaceSlug}/issue/${issueIdentifier}`;
 
   // Generate the issue title by combining the issue identifier and title
   const issueTitle = `${issueIdentifier} ${issue.title}`;
@@ -385,7 +385,7 @@ export async function getIssueMessageModal(
           elements: [
             {
               type: 'plain_text',
-              text: ':slack: This slack thread is synced with Tegon',
+              text: ':slack: This slack thread is synced with Vantik',
               emoji: true,
             },
           ],

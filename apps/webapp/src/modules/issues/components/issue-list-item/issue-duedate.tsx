@@ -2,8 +2,8 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from '@tegonhq/ui/components/tooltip';
-import { CalendarLine, Fire } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/tooltip';
+import { CalendarLine, Fire } from '@vantikhq/ui/icons';
 import { differenceInDays, format } from 'date-fns';
 
 interface IssueDueDateProps {

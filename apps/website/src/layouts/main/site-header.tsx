@@ -1,8 +1,8 @@
 import { ArrowTopRightIcon } from '@radix-ui/react-icons';
 import { RiGithubFill } from '@remixicon/react';
-import { buttonVariants } from '@tegonhq/ui/components/button';
-import { SlackIcon } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { buttonVariants } from '@vantikhq/ui/components/button';
+import { SlackIcon } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { useState } from 'react';
 import React from 'react';
 
@@ -20,7 +20,7 @@ export function SiteHeader() {
     const fetchRepoData = async () => {
       try {
         const response = await fetch(
-          `https://api.github.com/repos/tegonhq/tegon`,
+          `https://api.github.com/repos/vantikhq/vantik`,
         );
         if (!response.ok) {
           throw new Error(`Error: ${response.status}`);

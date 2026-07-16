@@ -1,4 +1,4 @@
-import type { IntegrationAccount } from '@tegonhq/types';
+import type { IntegrationAccount } from '@vantikhq/types';
 
 import React from 'react';
 

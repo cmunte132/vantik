@@ -25,19 +25,19 @@ export const docsConfig: DocsConfig = {
   mainNav: [
     {
       title: 'Actions',
-      href: 'https://docs.tegon.ai/actions/overview',
+      href: 'https://docs.vantik.dev/actions/overview',
     },
     {
       title: 'Documentation',
-      href: 'https://docs.tegon.ai',
+      href: 'https://docs.vantik.dev',
     },
     {
       title: 'Releases',
-      href: 'https://github.com/tegonhq/tegon/releases',
+      href: 'https://github.com/vantikhq/vantik/releases',
     },
     {
       title: 'Company',
-      href: 'https://tegon.ai/company',
+      href: 'https://vantik.dev/company',
     },
   ],
   sidebarNav: [],

@@ -5,8 +5,8 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@tegonhq/ui/components/form';
-import { Input } from '@tegonhq/ui/components/input';
+} from '@vantikhq/ui/components/form';
+import { Input } from '@vantikhq/ui/components/input';
 import {
   Select,
   SelectContent,
@@ -14,7 +14,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@tegonhq/ui/components/select';
+} from '@vantikhq/ui/components/select';
 import { type Control } from 'react-hook-form';
 
 import { Array } from './inputs/array';

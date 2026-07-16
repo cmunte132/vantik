@@ -1,6 +1,6 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { Separator } from '@tegonhq/ui/components/separator';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+import { Button } from '@vantikhq/ui/components/button';
+import { Separator } from '@vantikhq/ui/components/separator';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import isEqual from 'lodash.isequal';
 import { observer } from 'mobx-react-lite';
 

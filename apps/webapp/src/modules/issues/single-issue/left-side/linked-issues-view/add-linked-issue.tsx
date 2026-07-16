@@ -1,20 +1,20 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@tegonhq/ui/components/dialog';
+} from '@vantikhq/ui/components/dialog';
 import {
   Form,
   FormControl,
   FormField,
   FormItem,
   FormMessage,
-} from '@tegonhq/ui/components/form';
-import { Input } from '@tegonhq/ui/components/input';
+} from '@vantikhq/ui/components/form';
+import { Input } from '@vantikhq/ui/components/input';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 

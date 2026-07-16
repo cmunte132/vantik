@@ -7,7 +7,7 @@ import {
   UsersOnWorkspaces,
   Workspace,
   WorkspaceStatusEnum,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { Request, Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
 import supertokens from 'supertokens-node';

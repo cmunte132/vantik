@@ -7,16 +7,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@tegonhq/ui/components/alert-dialog';
-import { Button } from '@tegonhq/ui/components/button';
+} from '@vantikhq/ui/components/alert-dialog';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@tegonhq/ui/components/dropdown-menu';
-import { Input } from '@tegonhq/ui/components/input';
+} from '@vantikhq/ui/components/dropdown-menu';
+import { Input } from '@vantikhq/ui/components/input';
 import {
   AddLine,
   CheckLine,
@@ -25,7 +25,7 @@ import {
   EditLine,
   LabelLine,
   MoreLine,
-} from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 

@@ -12,7 +12,7 @@ import {
   LinkedIssue,
   LinkedIssueRequestParamsDto,
   UpdateLinkedIssueDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';

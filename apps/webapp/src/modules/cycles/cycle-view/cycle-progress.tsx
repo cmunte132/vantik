@@ -1,5 +1,5 @@
-import { WorkflowCategory } from '@tegonhq/types';
-import { Progress } from '@tegonhq/ui/components/progress';
+import { WorkflowCategory } from '@vantikhq/types';
+import { Progress } from '@vantikhq/ui/components/progress';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 

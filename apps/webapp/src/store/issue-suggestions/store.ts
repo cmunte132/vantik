@@ -7,7 +7,7 @@ import {
 
 import type { IssueSuggestionType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { IssueSuggestion, IssueSuggestionMap } from './models';
 
@@ -25,7 +25,7 @@ export const IssueSuggestionsStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const issueSuggestions = yield tegonDatabase.issueSuggestions.toArray();
+      const issueSuggestions = yield vantikDatabase.issueSuggestions.toArray();
 
       issueSuggestions.forEach((issueSuggestion: IssueSuggestionType) => {
         self.issueSuggestionsMap.set(

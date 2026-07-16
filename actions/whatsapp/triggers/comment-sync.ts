@@ -4,7 +4,7 @@ import {
   getLinkedIssuesByIssueId,
   JsonObject,
   updateIssueComment,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 
 export const commentSync = async (actionPayload: ActionEventPayload) => {

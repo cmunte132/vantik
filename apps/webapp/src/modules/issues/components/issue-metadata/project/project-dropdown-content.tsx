@@ -1,6 +1,6 @@
-import { Checkbox } from '@tegonhq/ui/components/checkbox';
-import { CommandGroup } from '@tegonhq/ui/components/command';
-import { Project } from '@tegonhq/ui/icons';
+import { Checkbox } from '@vantikhq/ui/components/checkbox';
+import { CommandGroup } from '@vantikhq/ui/components/command';
+import { Project } from '@vantikhq/ui/icons';
 
 import type { ProjectType } from 'common/types';
 

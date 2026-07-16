@@ -1,5 +1,5 @@
-import { Loader } from '@tegonhq/ui/components/loader';
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
+import { Loader } from '@vantikhq/ui/components/loader';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 

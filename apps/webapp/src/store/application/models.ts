@@ -17,7 +17,7 @@ export const FiltersModel = types.model({
   project: types.union(types.undefined, FilterModel),
   cycle: types.union(types.undefined, FilterModel),
 
-  // For issues coming from Slack, Github
+  // For issues coming from Github
   source: types.union(types.undefined, FilterModel),
 
   isParent: types.union(types.undefined, FilterBooleanModel),

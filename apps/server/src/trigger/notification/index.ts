@@ -2,16 +2,14 @@ import { ActionEventPayload } from '@vantikhq/types';
 import { task } from '@trigger.dev/sdk/v3';
 
 import { emailHandler } from './handlers/email-handler';
-import { slackHandler } from './handlers/slack-handler';
 import { vantikHandler } from './handlers/vantik-handler';
 
 export async function run(eventPayload: ActionEventPayload) {
-  const [slackResponse, vantikResponse] = await Promise.all([
-    slackHandler(eventPayload),
+  const [vantikResponse] = await Promise.all([
     vantikHandler(eventPayload),
     emailHandler(eventPayload),
   ]);
-  return { slackResponse, vantikResponse };
+  return { vantikResponse };
 }
 
 export const notificationHandler = task({ id: 'notification', run });

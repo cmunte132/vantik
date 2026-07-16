@@ -46,7 +46,7 @@ export interface FiltersModelType {
   priority?: FilterModelType;
   project?: FilterModelType;
 
-  // For issues coming from Slack, Github
+  // For issues coming from Github
   source?: FilterModelType;
 
   isParent?: FilterModelBooleanType;

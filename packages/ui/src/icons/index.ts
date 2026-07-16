@@ -91,7 +91,6 @@ export * from './blocked-fill';
 export * from './focus-line';
 export * from './projects-line';
 export * from './duplicate-line-2';
-export * from './slack-icon';
 export * from './stack-line';
 export * from './bar-fill';
 export * from './sentry-icon';

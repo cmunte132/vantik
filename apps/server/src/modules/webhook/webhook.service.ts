@@ -124,19 +124,4 @@ export default class WebhookService {
     return { status: 200 };
   }
 
-  async slackEvent(
-    eventHeaders: EventHeaders,
-    eventBody: EventBody,
-    eventType: string,
-  ) {
-    return await this.integrations.loadIntegration('slack', {
-      event: IntegrationPayloadEventType.PLATFORM_EVENT,
-      platformEventType: eventType,
-      eventBody,
-      eventHeaders,
-      issuesService: this.issuesService,
-      issueCommentsService: this.issueCommentsService,
-      linkedIssueService: this.linkedIssueService,
-    });
-  }
 }

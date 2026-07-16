@@ -1,8 +1,7 @@
 import { RiDiscordFill, RiGithubFill, RiMailFill } from '@remixicon/react';
-import { Actions, SlackIcon, StackLine, Whatsapp } from '@vantikhq/ui/icons';
+import { Actions, StackLine, Whatsapp } from '@vantikhq/ui/icons';
 
 export const ICON_MAPPING = {
-  slack: SlackIcon,
   email: RiMailFill,
   discord: RiDiscordFill,
   github: RiGithubFill,

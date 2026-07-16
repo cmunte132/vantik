@@ -27,7 +27,7 @@ export enum IntegrationPayloadEventType {
 
   /**
    * Generic event type for platform-specific actions
-   * Example: Slack slash commands, GitHub specific events, etc.
+   * Example: GitHub specific events, etc.
    */
   PLATFORM_EVENT = 'platform_event',
 }

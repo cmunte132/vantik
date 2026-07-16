@@ -1,4 +1,4 @@
-import { Switch } from '@tegonhq/ui/components/switch';
+import { Switch } from '@vantikhq/ui/components/switch';
 
 interface ViewOptionItemProps {
   id: string;

@@ -1,12 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { RoleEnum } from '@tegonhq/types';
-import { Button } from '@tegonhq/ui/components/button';
+import { RoleEnum } from '@vantikhq/types';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   DialogContent,
   Dialog,
   DialogHeader,
   DialogTitle,
-} from '@tegonhq/ui/components/dialog';
+} from '@vantikhq/ui/components/dialog';
 import {
   Form,
   FormControl,
@@ -14,8 +14,8 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@tegonhq/ui/components/form';
-import { MultiSelect } from '@tegonhq/ui/components/multi-select';
+} from '@vantikhq/ui/components/form';
+import { MultiSelect } from '@vantikhq/ui/components/multi-select';
 import {
   Select,
   SelectContent,
@@ -23,9 +23,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@tegonhq/ui/components/select';
-import { Textarea } from '@tegonhq/ui/components/textarea';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+} from '@vantikhq/ui/components/select';
+import { Textarea } from '@vantikhq/ui/components/textarea';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';

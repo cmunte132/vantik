@@ -1,5 +1,5 @@
 {
-  "extends": "@tegonhq/typescript-config/node.json",
+  "extends": "@vantikhq/typescript-config/node.json",
   "include": ["./src/**/*.ts", "tsup.config.ts"],
   "compilerOptions": {
     "experimentalDecorators": true,

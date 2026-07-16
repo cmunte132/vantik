@@ -8,7 +8,7 @@ import {
 import * as SelectPrimitive from '@radix-ui/react-select';
 import * as React from 'react';
 
-import { ChevronDown } from '@tegonhq/ui/icons';
+import { ChevronDown } from '@vantikhq/ui/icons';
 
 import { cn } from '../../lib/utils';
 

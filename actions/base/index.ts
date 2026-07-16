@@ -1,4 +1,4 @@
-import { ActionEventPayload, ActionTypesEnum } from '@tegonhq/sdk';
+import { ActionEventPayload, ActionTypesEnum } from '@vantikhq/sdk';
 
 export async function run(eventPayload: ActionEventPayload) {
   switch (eventPayload.event) {

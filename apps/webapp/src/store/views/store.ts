@@ -8,7 +8,7 @@ import {
 
 import type { ViewType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { Views } from './models';
 
@@ -42,7 +42,7 @@ export const ViewsStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const views = yield tegonDatabase.views.toArray();
+      const views = yield vantikDatabase.views.toArray();
 
       self.views = Views.create(
         sort(views).asc((view: ViewType) => new Date(view.createdAt)),

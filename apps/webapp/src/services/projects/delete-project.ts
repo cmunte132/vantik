@@ -1,4 +1,4 @@
-import { deleteProject } from '@tegonhq/services';
+import { deleteProject } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 interface MutationParams {

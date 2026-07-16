@@ -113,7 +113,7 @@ export const generateEmailTemplate = ({
     </head>
     <body>
       <div class="container">
-        <img src="https://app.tegon.ai/logo.png" alt="Logo" class="logo">
+        <img src="https://app.vantik.dev/logo.png" alt="Logo" class="logo">
         
         <div class="notification-text">
           You have got a notification on ${workspaceName}
@@ -134,13 +134,13 @@ export const generateEmailTemplate = ({
           </div>
         </div>
   
-        <a href="https://app.tegon.ai/${workspaceSlug}/inbox" class="action-button">
+        <a href="https://app.vantik.dev/${workspaceSlug}/inbox" class="action-button">
           Open Your Inbox
         </a>
   
         <div class="footer">
-          <a href="https://app.tegon.ai" class="unsubscribe">
-            Tegon
+          <a href="https://app.vantik.dev" class="unsubscribe">
+            Vantik
           </a>
         </div>
       </div>

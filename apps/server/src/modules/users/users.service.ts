@@ -12,7 +12,7 @@ import {
   PublicUser,
   RoleEnum,
   User,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
 import supertokens from 'supertokens-node';

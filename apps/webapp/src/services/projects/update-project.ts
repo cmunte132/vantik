@@ -1,6 +1,6 @@
-import type { Project } from '@tegonhq/types';
+import type { Project } from '@vantikhq/types';
 
-import { updateProject } from '@tegonhq/services';
+import { updateProject } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 interface MutationParams {

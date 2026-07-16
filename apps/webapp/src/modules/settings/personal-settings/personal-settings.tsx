@@ -1,5 +1,5 @@
-import { Loader } from '@tegonhq/ui/components/loader';
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
+import { Loader } from '@vantikhq/ui/components/loader';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { useRouter } from 'next/router';
 import * as React from 'react';
 

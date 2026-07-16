@@ -7,7 +7,7 @@ import {
 
 import type { ProjectType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { Project } from './models';
 
@@ -41,7 +41,7 @@ export const ProjectsStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const projects = yield tegonDatabase.projects.toArray();
+      const projects = yield vantikDatabase.projects.toArray();
 
       self.projects = projects;
     });

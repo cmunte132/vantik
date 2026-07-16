@@ -1,17 +1,17 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Editor,
   EditorExtensions,
   suggestionItems,
-} from '@tegonhq/ui/components/editor/index';
+} from '@vantikhq/ui/components/editor/index';
 import {
   FormControl,
   FormField,
   FormItem,
   FormMessage,
-} from '@tegonhq/ui/components/form';
-import { Textarea } from '@tegonhq/ui/components/textarea';
-import { Project } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/form';
+import { Textarea } from '@vantikhq/ui/components/textarea';
+import { Project } from '@vantikhq/ui/icons';
 import React from 'react';
 import { type UseFormReturn } from 'react-hook-form';
 

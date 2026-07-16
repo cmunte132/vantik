@@ -8,7 +8,7 @@ import {
   Query,
   Get,
 } from '@nestjs/common';
-import { EventBody, EventHeaders } from '@tegonhq/types';
+import { EventBody, EventHeaders } from '@vantikhq/types';
 import { Response } from 'express';
 
 import WebhookService from './webhook.service';

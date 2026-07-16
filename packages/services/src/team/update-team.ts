@@ -1,4 +1,4 @@
-import { UpdateTeamDto } from '@tegonhq/types';
+import { UpdateTeamDto } from '@vantikhq/types';
 import axios from 'axios';
 
 export interface UpdateTeamDtoWithTeamId extends UpdateTeamDto {

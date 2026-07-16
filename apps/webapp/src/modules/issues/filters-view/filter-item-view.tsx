@@ -1,6 +1,6 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { Separator } from '@tegonhq/ui/components/separator';
-import { Close } from '@tegonhq/ui/icons';
+import { Button } from '@vantikhq/ui/components/button';
+import { Separator } from '@vantikhq/ui/components/separator';
+import { Close } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useCurrentTeam } from 'hooks/teams';

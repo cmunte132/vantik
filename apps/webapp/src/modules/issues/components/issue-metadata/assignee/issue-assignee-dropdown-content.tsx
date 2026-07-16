@@ -1,7 +1,7 @@
-import { AvatarText } from '@tegonhq/ui/components/avatar';
-import { Checkbox } from '@tegonhq/ui/components/checkbox';
-import { CommandGroup } from '@tegonhq/ui/components/command';
-import { AssigneeLine } from '@tegonhq/ui/icons';
+import { AvatarText } from '@vantikhq/ui/components/avatar';
+import { Checkbox } from '@vantikhq/ui/components/checkbox';
+import { CommandGroup } from '@vantikhq/ui/components/command';
+import { AssigneeLine } from '@vantikhq/ui/icons';
 
 import type { User } from 'common/types';
 import { getUserFromUsersData } from 'common/user-util';

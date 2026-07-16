@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ModelNameEnum } from '@tegonhq/types';
+import { ModelNameEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 import { Client } from 'pg';
 import {
@@ -30,7 +30,7 @@ export default class ReplicationService {
   private readonly logger: LoggerService = new LoggerService(
     'ReplicationService',
   );
-  private replicationSlotName = `tegon_replication_slot_${uuidv4().replace(/-/g, '')}`;
+  private replicationSlotName = `vantik_replication_slot_${uuidv4().replace(/-/g, '')}`;
 
   constructor(
     private configService: ConfigService,

@@ -1,4 +1,4 @@
-import { ActionEventPayload, logger } from '@tegonhq/sdk';
+import { ActionEventPayload, logger } from '@vantikhq/sdk';
 
 import { slackThread } from '../triggers/thread';
 import { slackTriage } from '../triggers/triage';

@@ -14,7 +14,7 @@ export class SupertokensService {
   ) {
     supertokens.init({
       appInfo: {
-        appName: 'Tegon',
+        appName: 'Vantik',
         apiDomain: process.env.BACKEND_HOST,
         websiteDomain: process.env.FRONTEND_HOST.split(',')[0] || '',
         apiBasePath: '/auth',

@@ -1,5 +1,5 @@
-import { Badge } from '@tegonhq/ui/components/badge';
-import { LabelLine, Project } from '@tegonhq/ui/icons';
+import { Badge } from '@vantikhq/ui/components/badge';
+import { LabelLine, Project } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useContextStore } from 'store/global-context-provider';

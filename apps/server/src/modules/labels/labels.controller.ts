@@ -13,7 +13,7 @@ import {
   Label,
   LabelRequestParamsDto,
   UpdateLabelDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 

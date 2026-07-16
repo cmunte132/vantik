@@ -1,6 +1,6 @@
-import { UserTypeEnum } from '@tegonhq/types';
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { UserTypeEnum } from '@vantikhq/types';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import getConfig from 'next/config';
 import React from 'react';

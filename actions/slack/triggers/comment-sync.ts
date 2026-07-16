@@ -5,7 +5,7 @@ import {
   ActionEventPayload,
   RoleEnum,
   getLinkedIssuesByIssueId,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 
 import { convertTiptapJsonToSlackBlocks, getSlackHeaders } from '../utils';
@@ -81,7 +81,7 @@ export const commentSync = async (actionPayload: ActionEventPayload) => {
       channel: parentSourceData.channelId,
       thread_ts: parentSourceData.parentTs || parentSourceData.idTs,
       blocks: convertTiptapJsonToSlackBlocks(issueComment.body),
-      username: `${user.fullname} (via Tegon)`,
+      username: `${user.fullname} (via Vantik)`,
       // TODO(Manoj): Add User Icon
     },
     getSlackHeaders(integrationAccount),

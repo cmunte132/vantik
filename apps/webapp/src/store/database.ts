@@ -31,7 +31,7 @@ import type { UsersOnWorkspaceType, WorkspaceType } from 'common/types';
 
 import { MODELS } from './models';
 
-export class TegonDatabase extends Dexie {
+export class VantikDatabase extends Dexie {
   actions: Dexie.Table<ActionType, string>;
   workspaces: Dexie.Table<WorkspaceType, string>;
   labels: Dexie.Table<LabelType, string>;
@@ -136,16 +136,16 @@ export class TegonDatabase extends Dexie {
   }
 }
 
-export let tegonDatabase: TegonDatabase;
+export let vantikDatabase: VantikDatabase;
 
 export function initDatabase(hash: number) {
-  tegonDatabase = new TegonDatabase(`Tegon_${hash}`);
+  vantikDatabase = new VantikDatabase(`Vantik_${hash}`);
 }
 
 export async function resetDatabase() {
   localStorage.removeItem('lastSequenceId');
 
-  if (tegonDatabase) {
-    await tegonDatabase.delete();
+  if (vantikDatabase) {
+    await vantikDatabase.delete();
   }
 }

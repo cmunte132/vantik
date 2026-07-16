@@ -9,7 +9,7 @@ import {
   RoleEnum,
   ActionTypesEnum,
   getLinkedIssueBySource,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 
 import { slackLinkRegex } from '../types';
 import {
@@ -117,7 +117,7 @@ async function onCreateLinkedIssue(actionPayload: ActionEventPayload) {
   logger.debug(`Sending Slack message for linked issue: ${issueIdentifier}`);
 
   // Create the issue URL using the workspace slug and issue identifier
-  const issueUrl = `https://app.tegon.ai/${integrationAccount.workspace.slug}/issue/${issueIdentifier}`;
+  const issueUrl = `https://app.vantik.dev/${integrationAccount.workspace.slug}/issue/${issueIdentifier}`;
 
   // Create the message payload with the issue URL and thread details
   const messagePayload: EventBody = {
@@ -128,7 +128,7 @@ async function onCreateLinkedIssue(actionPayload: ActionEventPayload) {
         elements: [
           {
             type: 'mrkdwn',
-            text: `This thread is linked with a Tegon issue <${issueUrl}|${issueIdentifier}>`,
+            text: `This thread is linked with a Vantik issue <${issueUrl}|${issueIdentifier}>`,
           },
         ],
       },
@@ -198,11 +198,11 @@ async function onUpdateLinkedIssue(actionPayload: ActionEventPayload) {
     const issueIdentifier = `${teamIdentifier}-${issueNumber}`;
 
     // Create the issue URL using the workspace slug and issue identifier
-    const issueUrl = `https://app.tegon.ai/${integrationAccount.workspace.slug}/issue/${issueIdentifier}`;
+    const issueUrl = `https://app.vantik.dev/${integrationAccount.workspace.slug}/issue/${issueIdentifier}`;
 
-    let messageText = `Stopping sync with Tegon issue <${issueUrl}|${issueIdentifier}>`;
+    let messageText = `Stopping sync with Vantik issue <${issueUrl}|${issueIdentifier}>`;
     if (changedData.sync) {
-      messageText = `This thread is syncing with a Tegon issue <${issueUrl}|${issueIdentifier}>`;
+      messageText = `This thread is syncing with a Vantik issue <${issueUrl}|${issueIdentifier}>`;
     }
 
     // Create the message payload with the issue URL and thread details

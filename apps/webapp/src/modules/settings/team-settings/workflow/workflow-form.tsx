@@ -1,7 +1,7 @@
-import type { WorkflowCategoryEnum } from '@tegonhq/types';
+import type { WorkflowCategoryEnum } from '@vantikhq/types';
 
-import { Button } from '@tegonhq/ui/components/button';
-import { Input } from '@tegonhq/ui/components/input';
+import { Button } from '@vantikhq/ui/components/button';
+import { Input } from '@vantikhq/ui/components/input';
 import * as React from 'react';
 
 import { getWorkflowColorWithNumber } from 'common/status-color';

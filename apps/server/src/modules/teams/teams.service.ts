@@ -6,7 +6,7 @@ import {
   UpdateTeamDto,
   UpdateTeamPreferencesDto,
   UsersOnWorkspaces,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { UserIdParams } from 'modules/users/users.interface';

@@ -1,7 +1,7 @@
 import { RiFileTransferLine } from '@remixicon/react';
-import { TimelineItem } from '@tegonhq/ui/components/timeline';
-import { BlockedFill, BlocksFill, DuplicateLine } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { TimelineItem } from '@vantikhq/ui/components/timeline';
+import { BlockedFill, BlocksFill, DuplicateLine } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { useRouter } from 'next/router';
 
 import { IssueRelationEnum } from 'common/types';

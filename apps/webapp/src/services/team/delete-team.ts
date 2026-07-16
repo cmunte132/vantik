@@ -1,4 +1,4 @@
-import { deleteTeam } from '@tegonhq/services';
+import { deleteTeam } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 import type { TeamType } from 'common/types';

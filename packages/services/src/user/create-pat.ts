@@ -1,4 +1,4 @@
-import type { CreatePatDto } from '@tegonhq/types';
+import type { CreatePatDto } from '@vantikhq/types';
 
 import axios from 'axios';
 

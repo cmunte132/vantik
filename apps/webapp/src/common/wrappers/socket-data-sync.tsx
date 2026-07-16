@@ -1,4 +1,4 @@
-import { Loader } from '@tegonhq/ui/components/loader';
+import { Loader } from '@vantikhq/ui/components/loader';
 import { observer } from 'mobx-react-lite';
 import getConfig from 'next/config';
 import * as React from 'react';

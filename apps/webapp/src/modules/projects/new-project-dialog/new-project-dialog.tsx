@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Dialog, DialogContent } from '@tegonhq/ui/components/dialog';
-import { Form } from '@tegonhq/ui/components/form';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+import { Dialog, DialogContent } from '@vantikhq/ui/components/dialog';
+import { Form } from '@vantikhq/ui/components/form';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { useHotkeys } from 'react-hotkeys-hook';

@@ -1,4 +1,4 @@
-import { IntegrationAccount, JsonObject } from '@tegonhq/sdk';
+import { IntegrationAccount, JsonObject } from '@vantikhq/sdk';
 
 export function getSlackHeaders(integrationAccount: IntegrationAccount) {
   const integrationConfig =

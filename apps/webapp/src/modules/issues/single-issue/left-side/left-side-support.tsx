@@ -1,9 +1,9 @@
-import { WorkflowCategoryEnum } from '@tegonhq/types';
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
+import { WorkflowCategoryEnum } from '@vantikhq/types';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import {
   Editor,
   EditorExtensions,
-} from '@tegonhq/ui/components/ui/editor/editor';
+} from '@vantikhq/ui/components/ui/editor/editor';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 import { useDebouncedCallback } from 'use-debounce';
@@ -11,7 +11,7 @@ import { useDebouncedCallback } from 'use-debounce';
 import { useEditorSuggestionItems } from 'modules/issues/components/use-editor-suggestion-items';
 
 import { getTiptapJSON } from 'common';
-import { tegonIssueExtension } from 'common/editor/tegon-issue-extension';
+import { vantikIssueExtension } from 'common/editor/vantik-issue-extension';
 import { type WorkflowType } from 'common/types';
 
 import { useIssueData } from 'hooks/issues';
@@ -81,7 +81,7 @@ export const LeftSideSupport = observer(() => {
               value={issue.description}
               onChange={onDescriptionChange}
               handlePaste={handlePaste}
-              extensions={[tegonIssueExtension]}
+              extensions={[vantikIssueExtension]}
               className="min-h-[50px] mb-8 px-6 mt-3 text-md"
             >
               <FileUpload />

@@ -1,12 +1,12 @@
 # Contributor Code of Conduct
 
-## Tegon's Pledge
+## Vantik's Pledge
 
 The contributors and maintainers of this project pledge to ensure a harassment-free experience for everyone in the community. This commitment applies to individuals of all backgrounds, including age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity, experience, education, socio-economic status, nationality, appearance, race, religion. It also applies to individuals of all sexual identities and orientations.
 
 The focus of both contributors and maintainers is on acting and interacting in ways that promote an open, welcoming, friendly, diverse, inclusive, and healthy community.
 
-## Tegon's Standards
+## Vantik's Standards
 
 Examples of behavior that contributes to a positive environment for this
 community include:
@@ -31,7 +31,7 @@ Examples of unacceptable behavior include:
 
 ## Enforcement Responsibilities
 
-Community leaders and maintainers of this repository are responsible for clarifying and enforcing Tegon's standards of acceptable behavior. They will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
+Community leaders and maintainers of this repository are responsible for clarifying and enforcing Vantik's standards of acceptable behavior. They will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
 
 Community leaders and maintainers of this repository have the right and responsibility to remove, edit, or reject comments, commits, code, issues, and other contributions that aren't aligned with this Code of Conduct. They will also communicate reasons for moderation decisions when appropriate.
 

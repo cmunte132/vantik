@@ -1,4 +1,4 @@
-import { AttachmentResponse } from '@tegonhq/types';
+import { AttachmentResponse } from '@vantikhq/types';
 import axios from 'axios';
 
 export async function uploadAttachment(

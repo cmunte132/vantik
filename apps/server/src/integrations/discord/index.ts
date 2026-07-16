@@ -1,7 +1,7 @@
 import {
   IntegrationEventPayload,
   IntegrationPayloadEventType,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import { integrationCreate } from './account-create';
 import { getToken } from './get-token';

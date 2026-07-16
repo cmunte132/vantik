@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { EventBody } from '@tegonhq/types';
+import { EventBody } from '@vantikhq/types';
 import axios from 'axios';
 
 import { CacheService } from 'modules/cache/cache.service';
@@ -80,7 +80,7 @@ export const slashCommand = async (
     type: 'modal',
     title: {
       type: 'plain_text',
-      text: 'Create a Tegon issue',
+      text: 'Create a Vantik issue',
       emoji: true,
     },
     submit: {

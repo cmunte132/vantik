@@ -1,4 +1,4 @@
-import { GetLinkedCommentDto, LinkedComment } from '@tegonhq/types';
+import { GetLinkedCommentDto, LinkedComment } from '@vantikhq/types';
 import axios from 'axios';
 
 export async function getLinkedComment({

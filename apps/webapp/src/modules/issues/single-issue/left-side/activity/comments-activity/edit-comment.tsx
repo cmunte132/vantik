@@ -1,10 +1,10 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Editor,
   EditorExtensions,
   suggestionItems,
-} from '@tegonhq/ui/components/editor/index';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+} from '@vantikhq/ui/components/editor/index';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import React from 'react';
 
 import { getTiptapJSON } from 'common';

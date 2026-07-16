@@ -1,11 +1,11 @@
-import type { ActionConfig } from '@tegonhq/types';
+import type { ActionConfig } from '@vantikhq/types';
 
 import {
   Card,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@tegonhq/ui/components/card';
+} from '@vantikhq/ui/components/card';
 import Link from 'next/link';
 
 import { useCurrentWorkspace } from 'hooks/workspace';

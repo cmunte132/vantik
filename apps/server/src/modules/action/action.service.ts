@@ -15,7 +15,7 @@ import {
   ActionScheduleStatusEnum,
   ActionScheduleDto,
   User,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { tasks } from '@trigger.dev/sdk/v3';
 import { PrismaService } from 'nestjs-prisma';
 import { actionRun } from 'trigger/action-run';
@@ -208,7 +208,7 @@ export default class ActionService {
     workspaceId: string,
     icon?: string,
   ) {
-    const email = `${username}_${workspaceId}@tegon.ai`;
+    const email = `${username}_${workspaceId}@vantik.dev`;
     return await prisma.user.upsert({
       where: { email },
       create: {

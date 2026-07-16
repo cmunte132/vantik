@@ -1,4 +1,4 @@
-import { ActionEventPayload, ModelNameEnum, logger } from '@tegonhq/sdk';
+import { ActionEventPayload, ModelNameEnum, logger } from '@vantikhq/sdk';
 import { commentSync } from 'triggers/comment-sync';
 
 export const onCreateHandler = async (actionPayload: ActionEventPayload) => {

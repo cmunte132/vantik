@@ -1,4 +1,4 @@
-import { cn } from '@tegonhq/ui/lib/utils';
+import { cn } from '@vantikhq/ui/lib/utils';
 import Image from 'next/image';
 
 export function Triage() {

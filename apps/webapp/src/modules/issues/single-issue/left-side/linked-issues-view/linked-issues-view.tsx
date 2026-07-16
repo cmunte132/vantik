@@ -1,10 +1,10 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@tegonhq/ui/components/collapsible';
-import { AddLine, ChevronDown, ChevronRight } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/collapsible';
+import { AddLine, ChevronDown, ChevronRight } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 

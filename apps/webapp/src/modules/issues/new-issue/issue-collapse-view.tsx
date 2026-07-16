@@ -1,7 +1,7 @@
-import { AvatarText } from '@tegonhq/ui/components/avatar';
-import { Button } from '@tegonhq/ui/components/button';
-import { ArrowDownRight, DeleteLine, IssuesLine } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { AvatarText } from '@vantikhq/ui/components/avatar';
+import { Button } from '@vantikhq/ui/components/button';
+import { ArrowDownRight, DeleteLine, IssuesLine } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import {

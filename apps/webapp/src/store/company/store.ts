@@ -7,7 +7,7 @@ import {
 
 import type { CompanyType, PeopleType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { Company } from './models';
 
@@ -36,7 +36,7 @@ export const CompanyStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const people = yield tegonDatabase.company.toArray();
+      const people = yield vantikDatabase.company.toArray();
 
       people.forEach((metadata: PeopleType) => {
         self.companies.set(metadata.id, Company.create(metadata));

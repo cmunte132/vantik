@@ -8,7 +8,7 @@ import {
 
 import type { NotificationType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { Notifications } from './models';
 
@@ -45,7 +45,7 @@ export const NotificationsStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const notifications = yield tegonDatabase.notifications.toArray();
+      const notifications = yield vantikDatabase.notifications.toArray();
 
       self.notifications = Notifications.create(
         sort(notifications).desc(

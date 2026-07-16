@@ -4,7 +4,7 @@ import {
   getLinkedIssuesByIssueId,
   getWorkflowsByTeam,
   JsonObject,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 
 export const issueSync = async (actionPayload: ActionEventPayload) => {

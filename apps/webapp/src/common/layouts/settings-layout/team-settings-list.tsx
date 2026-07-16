@@ -4,16 +4,16 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from '@tegonhq/ui/components/accordion';
-import { buttonVariants } from '@tegonhq/ui/components/button';
-import { TeamIcon } from '@tegonhq/ui/components/team-icon';
+} from '@vantikhq/ui/components/accordion';
+import { buttonVariants } from '@vantikhq/ui/components/button';
+import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from '@tegonhq/ui/components/tooltip';
-import { ChevronRight, TeamLine } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/components/tooltip';
+import { ChevronRight, TeamLine } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import { useRouter } from 'next/router';

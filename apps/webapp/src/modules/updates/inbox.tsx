@@ -2,7 +2,7 @@ import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from '@tegonhq/ui/components/resizable';
+} from '@vantikhq/ui/components/resizable';
 import React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';

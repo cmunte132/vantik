@@ -1,4 +1,4 @@
-import type { CodeDtoWithWorkspace } from '@tegonhq/types';
+import type { CodeDtoWithWorkspace } from '@vantikhq/types';
 
 import axios from 'axios';
 

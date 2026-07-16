@@ -1,7 +1,7 @@
 import { RiClipboardLine } from '@remixicon/react';
-import { Button } from '@tegonhq/ui/components/button';
-import { Input } from '@tegonhq/ui/components/input';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+import { Button } from '@vantikhq/ui/components/button';
+import { Input } from '@vantikhq/ui/components/input';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import copy from 'copy-to-clipboard';
 import { observer } from 'mobx-react-lite';
 
@@ -13,7 +13,7 @@ export const Preferences = observer(() => {
   const team = useCurrentTeam();
   const { toast } = useToast();
 
-  const teamEmail = `triage+${team?.id}@tegon.ai`;
+  const teamEmail = `triage+${team?.id}@vantik.dev`;
 
   return (
     <SettingSection

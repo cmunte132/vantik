@@ -9,7 +9,7 @@ import {
   logger,
   updateIssue,
   uploadAttachment,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 import { GmailAttachment, Part, PartHeader } from 'types';
 import {

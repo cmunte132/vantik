@@ -6,8 +6,8 @@ import {
   CommandList,
   CommandDialog as CommandDialogC,
   CommandGroup,
-} from '@tegonhq/ui/components/command';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/components/command';
+import { cn } from '@vantikhq/ui/lib/utils';
 import React from 'react';
 
 import { useContextStore } from 'store/global-context-provider';

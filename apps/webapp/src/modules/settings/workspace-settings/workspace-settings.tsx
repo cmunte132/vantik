@@ -1,4 +1,4 @@
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { useRouter } from 'next/router';
 
 import { ContentBox } from 'common/layouts/content-box';

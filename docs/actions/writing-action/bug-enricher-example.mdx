@@ -3,13 +3,13 @@ title: "Action: Bug Enricher Example"
 sidebarTitle: "Bug Enricher Example"
 ---
 
-Below is an example to help you understand how you can create a action on any Tegon event.
+Below is an example to help you understand how you can create a action on any Vantik event.
 
 ## Example Action
 
 #### Bug Enricher
 
-Whenever an issue is created in Tegon and labeled as `bug` then create an action which call OpenAI to search for possible solution and put the solution as a comment of that issue.
+Whenever an issue is created in Vantik and labeled as `bug` then create an action which call OpenAI to search for possible solution and put the solution as a comment of that issue.
 
 1.  Create a new folder for this action
 
@@ -17,19 +17,19 @@ Whenever an issue is created in Tegon and labeled as `bug` then create an action
 mkdir bug-resolution
 ```
 
-2. Now run our cli command, this will login the cli into Tegon.
+2. Now run our cli command, this will login the cli into Vantik.
 
 ```bash
-npx @tegonhq/cli login
+npx @vantikhq/cli login
 ```
 
 3. Let's now initialize the project, this will create the basic folder structure for action.
 
 ```bash
-npx @tegonhq/cli init && npm install
+npx @vantikhq/cli init && npm install
 ```
 
-4. Let's edit the config.json as below to tell Tegon to trigger the function when issue is created.
+4. Let's edit the config.json as below to tell Vantik to trigger the function when issue is created.
 
 ```json bug-resolution/config.json
 {
@@ -48,7 +48,7 @@ npx @tegonhq/cli init && npm install
 5. Then let's edit the `index.ts` with the below content
 
 ```ts bug-resolution/index.ts
-import { ActionEventPayload } from "@tegonhq/sdk";
+import { ActionEventPayload } from "@vantikhq/sdk";
 import {
   ActionEventPayload,
   createIssueComment,
@@ -56,7 +56,7 @@ import {
   Label,
   getIssueById,
   getAIRequest,
-} from "@tegonhq/sdk";
+} from "@vantikhq/sdk";
 import axios from "axios";
 
 export async function run(eventPayload: ActionEventPayload) {
@@ -223,15 +223,15 @@ Here’s an example assuming you are using Laravel Mail:
 `;
 ```
 
-You can check full prompt [here](https://github.com/tegonhq/tegon/blob/main/actions/bug-enricher/utils.ts).
+You can check full prompt [here](https://github.com/vantikhq/vantik/blob/main/actions/bug-enricher/utils.ts).
 
 7. Run the action in dev mode and create a issue with bug as label
 
 ```bash
-npx @tegonhq/cli dev
+npx @vantikhq/cli dev
 ```
 
 <Tip>
   You can find the whole code for this example action
-  [here](https://github.com/tegonhq/tegon/tree/main/actions/bug-enricher)
+  [here](https://github.com/vantikhq/vantik/tree/main/actions/bug-enricher)
 </Tip>

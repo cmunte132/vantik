@@ -20,7 +20,7 @@ import {
   UpdateIssueDto,
   GetIssuesByFilterDTO,
   LinkedIssue,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 

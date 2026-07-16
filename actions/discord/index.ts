@@ -1,4 +1,4 @@
-import { ActionEventPayload, ActionTypesEnum } from '@tegonhq/sdk';
+import { ActionEventPayload, ActionTypesEnum } from '@vantikhq/sdk';
 
 import { getInputs } from 'handlers/get-inputs';
 import { webhookHandler } from 'handlers/webhook_handler';

@@ -1,4 +1,4 @@
-import { ActionEventPayload, ModelNameEnum, logger } from '@tegonhq/sdk';
+import { ActionEventPayload, ModelNameEnum, logger } from '@vantikhq/sdk';
 import { issueSync } from 'triggers/update-issue';
 
 export const onUpdateHandler = async (actionPayload: ActionEventPayload) => {

@@ -6,7 +6,7 @@ import {
   getLinkedIssueBySource,
   ActionEventPayload,
   JsonObject,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import { Client, TextChannel } from 'discord.js';
 
 export const discordMessage = async (payload: ActionEventPayload) => {
@@ -27,9 +27,9 @@ export const discordMessage = async (payload: ActionEventPayload) => {
     author: { username: userDisplayName },
   } = eventData;
 
-  if (userDisplayName && userDisplayName.includes('Tegon')) {
-    logger.log('Ignoring message from Tegon bot');
-    return { message: 'Ignoring message from Tegon bot' };
+  if (userDisplayName && userDisplayName.includes('Vantik')) {
+    logger.log('Ignoring message from Vantik bot');
+    return { message: 'Ignoring message from Vantik bot' };
   }
 
   const linkedIssue = await getLinkedIssueBySource({

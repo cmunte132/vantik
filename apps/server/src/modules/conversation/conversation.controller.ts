@@ -11,7 +11,7 @@ import {
   Conversation,
   ConversationParamsDto,
   CreateConversationDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { UserId, Workspace } from 'modules/auth/session.decorator';

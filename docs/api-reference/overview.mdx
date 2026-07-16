@@ -1,25 +1,25 @@
 ---
 title: Overview & Authentication
 sidebarTitle: Overview & Authentication
-description: Using the Tegon API
+description: Using the Vantik API
 ---
 
 ## Installation
 
-The API is available to run CRUD operations on Tegon.
+The API is available to run CRUD operations on Vantik.
 
 <CodeGroup>
 
 ```bash npm
-npm i @tegonhq/sdk@0.1.3
+npm i @vantikhq/sdk@0.1.3
 ```
 
 ```bash pnpm
-pnpm add @tegonhq/sdk@0.1.3
+pnpm add @vantikhq/sdk@0.1.3
 ```
 
 ```bash yarn
-yarn add @tegonhq/sdk@0.1.3
+yarn add @vantikhq/sdk@0.1.3
 ```
 
 </CodeGroup>
@@ -27,10 +27,10 @@ yarn add @tegonhq/sdk@0.1.3
 ## Usage
 
 ```ts
-import { configure, createIssue } from "@tegonhq/sdk";
+import { configure, createIssue } from "@vantikhq/sdk";
 
 configure({
-  // this is the default and if the `TEGON_TOKEN` environment variable is set, can omit calling configure
+  // this is the default and if the `VANTIK_TOKEN` environment variable is set, can omit calling configure
   token: <token>>,
 });
 

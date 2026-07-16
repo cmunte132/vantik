@@ -1,11 +1,11 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { Command, CommandInput } from '@tegonhq/ui/components/command';
+import { Button } from '@vantikhq/ui/components/button';
+import { Command, CommandInput } from '@vantikhq/ui/components/command';
 import {
   Popover,
   PopoverContent,
   PopoverPortal,
   PopoverTrigger,
-} from '@tegonhq/ui/components/popover';
+} from '@vantikhq/ui/components/popover';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 

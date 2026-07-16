@@ -1,7 +1,7 @@
 import {
   IntegrationEventPayload,
   IntegrationPayloadEventType,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { integrationCreate } from 'integrations/slack/account-create';
 import { getToken } from 'integrations/slack/get-token';
 import { spec } from 'integrations/slack/spec';

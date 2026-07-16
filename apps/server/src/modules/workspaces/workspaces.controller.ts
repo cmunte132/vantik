@@ -14,7 +14,7 @@ import {
   Workspace,
   WorkspaceRequestParamsDto,
   UpdateWorkspacePreferencesDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { Request, Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 

@@ -8,7 +8,7 @@ import {
   getLinkedComment,
   getLinkedIssueBySource,
   uploadAttachment,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 
 import {
   convertSlackMessageToTiptapJson,
@@ -27,7 +27,7 @@ export const slackThread = async (
   // Get the message from the event body based on the subtype
   const message = event.subtype === 'message_changed' ? event.message : event;
 
-  if (message.username && message.username.includes('(via Tegon)')) {
+  if (message.username && message.username.includes('(via Vantik)')) {
     return undefined;
   }
 

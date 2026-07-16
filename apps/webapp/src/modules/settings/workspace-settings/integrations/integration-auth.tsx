@@ -1,6 +1,6 @@
-import type { IntegrationDefinition } from '@tegonhq/types';
+import type { IntegrationDefinition } from '@vantikhq/types';
 
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import { observer } from 'mobx-react-lite';
 
 import { useCurrentWorkspace } from 'hooks/workspace';

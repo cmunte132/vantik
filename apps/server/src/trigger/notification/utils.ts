@@ -5,7 +5,7 @@ import {
   NotificationActionTypeEnum,
   NotificationData,
   NotificationEventFrom,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { Blockquote } from '@tiptap/extension-blockquote';
 import { BulletList } from '@tiptap/extension-bullet-list';
 import { CodeBlock } from '@tiptap/extension-code-block';

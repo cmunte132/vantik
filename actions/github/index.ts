@@ -1,4 +1,4 @@
-import { ActionEventPayload, ActionTypesEnum } from '@tegonhq/sdk';
+import { ActionEventPayload, ActionTypesEnum } from '@vantikhq/sdk';
 import { getInputs } from 'handlers/get-inputs';
 import { onCreateHandler } from 'handlers/on-create-handler';
 import { onUpdateHandler } from 'handlers/on-update-handler';

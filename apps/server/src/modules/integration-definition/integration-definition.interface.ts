@@ -1,4 +1,4 @@
-import { Spec, WorkspaceRequestParamsDto } from '@tegonhq/types';
+import { Spec, WorkspaceRequestParamsDto } from '@vantikhq/types';
 import { IsObject, IsOptional, IsString } from 'class-validator';
 
 export class IntegrationDefinitionSpec {

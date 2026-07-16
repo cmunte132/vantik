@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { CreateWebhookSubscriptionDto } from '@tegonhq/types';
+import { CreateWebhookSubscriptionDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 // import { LoggerService } from 'modules/logger/logger.service';

@@ -1,4 +1,4 @@
-import { deleteIssueComment } from '@tegonhq/services';
+import { deleteIssueComment } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 interface MutationParams {

@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import Error from 'next/error';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

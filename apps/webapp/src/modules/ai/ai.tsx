@@ -1,6 +1,6 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { AddLine } from '@tegonhq/ui/icons';
-import { AI as AII } from '@tegonhq/ui/icons';
+import { Button } from '@vantikhq/ui/components/button';
+import { AddLine } from '@vantikhq/ui/icons';
+import { AI as AII } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useContextStore } from 'store/global-context-provider';
@@ -16,7 +16,7 @@ export const AI = observer(() => {
       <div className="flex justify-between items-center gap-2 p-3 px-5 font-mono">
         <div className="flex gap-2">
           <AII />
-          Tegon AI
+          Vantik AI
         </div>
 
         <div className="flex gap-1 items-center">

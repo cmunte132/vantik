@@ -1,6 +1,6 @@
-import type { Template } from '@tegonhq/types';
+import type { Template } from '@vantikhq/types';
 
-import { updateTemplate } from '@tegonhq/services';
+import { updateTemplate } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 interface MutationParams {

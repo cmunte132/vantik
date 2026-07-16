@@ -1,4 +1,4 @@
-import { WorkflowCategoryEnum } from '@tegonhq/types';
+import { WorkflowCategoryEnum } from '@vantikhq/types';
 import { IsString } from 'class-validator';
 
 export class TeamRequestParams {

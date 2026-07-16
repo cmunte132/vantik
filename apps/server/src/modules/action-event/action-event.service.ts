@@ -4,7 +4,7 @@ import {
   ActionEvent,
   ActionStatusEnum,
   ActionTypesEnum,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { tasks } from '@trigger.dev/sdk/v3';
 import { PrismaService } from 'nestjs-prisma';
 import { actionRun } from 'trigger/action-run';

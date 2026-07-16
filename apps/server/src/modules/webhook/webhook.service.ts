@@ -7,7 +7,7 @@ import {
   EventHeaders,
   EventQueryParams,
   IntegrationPayloadEventType,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { tasks } from '@trigger.dev/sdk/v3';
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';

@@ -1,6 +1,6 @@
-import { AdjustableTextArea } from '@tegonhq/ui/components/adjustable-textarea';
-import { Button } from '@tegonhq/ui/components/button';
-import { SendLine } from '@tegonhq/ui/icons';
+import { AdjustableTextArea } from '@vantikhq/ui/components/adjustable-textarea';
+import { Button } from '@vantikhq/ui/components/button';
+import { SendLine } from '@vantikhq/ui/icons';
 import { useState } from 'react';
 
 interface ConversationTextareaProps {

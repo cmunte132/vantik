@@ -28,18 +28,18 @@ Let’s take a look at a basic config.json file. This file is used to configure 
 
 ## `config.json` Documentation
 
-The `config.json` file is used to configure actions in Tegon. Each action has a unique set of properties that define how it behaves, when it is triggered, and which integrations it interacts with. Below is an explanation of the fields used in the configuration file:
+The `config.json` file is used to configure actions in Vantik. Each action has a unique set of properties that define how it behaves, when it is triggered, and which integrations it interacts with. Below is an explanation of the fields used in the configuration file:
 
 ### Fields Overview
 
 #### `slug`
 - **Type:** `string`
-- **Description:** A unique identifier for each action. This is used internally by Tegon to trigger the corresponding action when specific conditions are met.
+- **Description:** A unique identifier for each action. This is used internally by Vantik to trigger the corresponding action when specific conditions are met.
 - **Example:** `"slug": "slack"`
 
 #### `name`
 - **Type:** `string`
-- **Description:** The display name of the action. This name is shown in various places within Tegon where the action has made changes, such as when an issue is created or commented on.
+- **Description:** The display name of the action. This name is shown in various places within Vantik where the action has made changes, such as when an issue is created or commented on.
 - **Example:** `"name": "Slack"`
 
 ### `triggers`
@@ -61,7 +61,7 @@ The `triggers` field defines the conditions under which the action is executed. 
 
 #### `entities`
 - **Type:** array of strings
-- **Description:** Specifies the entities that the trigger applies to. Entities represent different objects or records within Tegon, such as issues or comments. Common entities include:
+- **Description:** Specifies the entities that the trigger applies to. Entities represent different objects or records within Vantik, such as issues or comments. Common entities include:
   - `Issue`: Refers to an issue in the project management system.
   - `IssueComment`: Refers to a comment made on an issue.
   - `LinkedIssue`: Refers to an when a url is linked to an issue.

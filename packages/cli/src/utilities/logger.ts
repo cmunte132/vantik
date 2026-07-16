@@ -30,7 +30,7 @@ const LOGGER_LEVEL_FORMAT_TYPE_MAP = {
 } as const;
 
 const getLogLevelFromEnv = getEnvironmentVariableFactory({
-  variableName: 'TEGON_LOG_LEVEL',
+  variableName: 'VANTIK_LOG_LEVEL',
 });
 
 function getLoggerLevel(): LoggerLevel {

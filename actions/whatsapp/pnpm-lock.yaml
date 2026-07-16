@@ -8,7 +8,7 @@ importers:
 
   .:
     dependencies:
-      '@tegonhq/sdk':
+      '@vantikhq/sdk':
         specifier: 0.1.13
         version: 0.1.13(typescript@5.5.4)
       '@trigger.dev/sdk':
@@ -375,7 +375,7 @@ packages:
   '@socket.io/component-emitter@3.1.2':
     resolution: {integrity: sha512-9BCxFwvbGg/RsZK9tjXd8s4UcwR0MWeFQ1XEKIQVVvAGJyINdrqKMcTRyLoK8Rse1GjzLV9cwjWV1olXRWEXVA==}
 
-  '@tegonhq/sdk@0.1.13':
+  '@vantikhq/sdk@0.1.13':
     resolution: {integrity: sha512-7UDcXsN9F+g7c1IRFuHR1ZSM8IIR8dhy2M/nara1JMpcWYHWg5zVYN8F49w4mwzqIOEjIIwI7rmEIuyupylndA==}
     engines: {node: '>=18.0.0'}
 
@@ -2069,7 +2069,7 @@ snapshots:
 
   '@socket.io/component-emitter@3.1.2': {}
 
-  '@tegonhq/sdk@0.1.13(typescript@5.5.4)':
+  '@vantikhq/sdk@0.1.13(typescript@5.5.4)':
     dependencies:
       '@trigger.dev/sdk': 3.0.0-beta.56(typescript@5.5.4)
       axios: 1.7.5(debug@4.3.6)

@@ -1,5 +1,5 @@
-import { TimelineItem } from '@tegonhq/ui/components/timeline';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { TimelineItem } from '@vantikhq/ui/components/timeline';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 

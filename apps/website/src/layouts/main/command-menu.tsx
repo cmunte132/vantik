@@ -6,7 +6,7 @@ import {
   MoonIcon,
   SunIcon,
 } from '@radix-ui/react-icons';
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   CommandDialog,
   CommandEmpty,
@@ -15,8 +15,8 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from '@tegonhq/ui/components/command';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/components/command';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import * as React from 'react';

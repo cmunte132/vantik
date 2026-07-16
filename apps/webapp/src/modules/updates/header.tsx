@@ -2,8 +2,8 @@ import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
-} from '@tegonhq/ui/components/breadcrumb';
-import { Inbox } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/breadcrumb';
+import { Inbox } from '@vantikhq/ui/icons';
 
 import { HeaderLayout } from 'common/header-layout';
 

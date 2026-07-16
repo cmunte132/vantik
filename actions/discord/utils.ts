@@ -4,7 +4,7 @@ import {
   updateLinkedIssueBySource,
   UpdateLinkedIssueDto,
   Workflow,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import { Message } from 'discord.js';
 
 export function getStateId(action: string, workflowStates: Workflow[]) {

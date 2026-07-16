@@ -1,6 +1,6 @@
-import type { Workflow } from '@tegonhq/types';
+import type { Workflow } from '@vantikhq/types';
 
-import { createWorkflow } from '@tegonhq/services';
+import { createWorkflow } from '@vantikhq/services';
 import { useMutation } from 'react-query';
 
 interface MutationParams {

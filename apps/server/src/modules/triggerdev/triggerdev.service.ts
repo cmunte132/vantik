@@ -1,5 +1,5 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { ActionScheduleStatusEnum } from '@tegonhq/types';
+import { ActionScheduleStatusEnum } from '@vantikhq/types';
 import axios from 'axios';
 import Knex, { Knex as KnexT } from 'knex';
 import { v4 as uuidv4 } from 'uuid'; // Import uuid for generating unique identifiers

@@ -3,7 +3,7 @@ import {
   IntegrationAccountIdDto,
   PersonalAccountDto,
   UpdateIntegrationAccountDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { IntegrationAccountSelect } from './integration-account.interface';

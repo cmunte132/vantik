@@ -6,13 +6,13 @@ import {
   NotificationActionType,
   NotificationActionTypeEnum,
   NotificationEventFrom,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import { getNotificationCreateData } from '../utils';
 
 const prisma = new PrismaClient();
 
-export const tegonHandler = async (payload: ActionEventPayload) => {
+export const vantikHandler = async (payload: ActionEventPayload) => {
   const {
     notificationData: {
       issueId,

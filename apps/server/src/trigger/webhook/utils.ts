@@ -1,4 +1,4 @@
-import { ActionTypesEnum } from '@tegonhq/types';
+import { ActionTypesEnum } from '@vantikhq/types';
 
 export function getEventType(eventType: ActionTypesEnum) {
   switch (eventType) {

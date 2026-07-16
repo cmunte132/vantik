@@ -1,5 +1,5 @@
-import { Checkbox } from '@tegonhq/ui/components/checkbox';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { Checkbox } from '@vantikhq/ui/components/checkbox';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React, { Suspense } from 'react';
 

@@ -8,7 +8,7 @@ import {
   RoleEnum,
   updateIssue,
   WorkflowCategory,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 import { createLinkIssueComment, getGithubHeaders } from 'utils';
 
@@ -86,7 +86,7 @@ export const issueSync = async (actionPayload: ActionEventPayload) => {
   const issueBody: any = {
     title: issue.title,
     ...(issue.description ? { body: issue.descriptionMarkdown } : {}),
-    labels: [...issueLabels, 'Tegon'],
+    labels: [...issueLabels, 'Vantik'],
     state:
       stateCategory === WorkflowCategory.COMPLETED ||
       stateCategory === WorkflowCategory.CANCELED

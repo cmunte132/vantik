@@ -1,12 +1,12 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { Command, CommandInput } from '@tegonhq/ui/components/command';
+import { Button } from '@vantikhq/ui/components/button';
+import { Command, CommandInput } from '@vantikhq/ui/components/command';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@tegonhq/ui/components/popover';
-import { Cycle } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/components/popover';
+import { Cycle } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 

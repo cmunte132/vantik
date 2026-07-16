@@ -1,9 +1,9 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@tegonhq/ui/components/collapsible';
+} from '@vantikhq/ui/components/collapsible';
 import {
   BlockedFill,
   BlocksFill,
@@ -11,7 +11,7 @@ import {
   ChevronRight,
   IssuesLine,
   RelatedIssueLine,
-} from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 

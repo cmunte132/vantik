@@ -104,7 +104,7 @@ export function safeDeleteFileSync(path: string) {
 // Create a temporary directory within the OS's temp directory
 export async function createTempDir(): Promise<string> {
   // Generate a unique temp directory path
-  const tempDirPath: string = pathModule.join(tmpdir(), 'tegon-temp-');
+  const tempDirPath: string = pathModule.join(tmpdir(), 'vantik-temp-');
 
   // Create the temp directory synchronously and return the path
   const directory = await fsModule.mkdtemp(tempDirPath);

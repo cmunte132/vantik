@@ -33,7 +33,7 @@ export default function Company() {
             turn when we were accepted into Y Combinator. While we entered Y
             Combinator with a different open-source project, the experience was
             invaluable. We learned a lot, iterated on our ideas, and ultimately
-            decided to pivot towards Tegon.
+            decided to pivot towards Vantik.
           </p>
         </div>
       </div>
@@ -49,10 +49,10 @@ export default function Company() {
             act as a burden for engineers. With the advent of AI - we thought
             what project management and issue tracking will look like 5-10 years
             down the line, the current tools were nowhere close to our
-            imagination which got us excited and began the journey of Tegon. We
+            imagination which got us excited and began the journey of Vantik. We
             want to reimagine project management, by taking an AI-first approach
             and starting with a simplified issue tracker built by and for
-            engineers. Be open-source, be community-driven. That&apos;s Tegon.
+            engineers. Be open-source, be community-driven. That&apos;s Vantik.
           </p>
         </div>
       </div>

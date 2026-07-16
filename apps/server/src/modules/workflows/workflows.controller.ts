@@ -12,7 +12,7 @@ import {
   UpdateWorkflowDTO,
   Workflow,
   WorkflowRequestParamsDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 

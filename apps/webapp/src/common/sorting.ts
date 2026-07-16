@@ -1,5 +1,5 @@
 import type { WorkflowType } from './types';
-import type { WorkflowCategoryEnum } from '@tegonhq/types';
+import type { WorkflowCategoryEnum } from '@vantikhq/types';
 
 export function workflowSort(
   a: WorkflowType,

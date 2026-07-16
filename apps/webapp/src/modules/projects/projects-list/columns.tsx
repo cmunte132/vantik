@@ -1,7 +1,7 @@
 'use client';
 
 import { type ColumnDef } from '@tanstack/react-table';
-import { Project } from '@tegonhq/ui/icons';
+import { Project } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import type { ProjectType } from 'common/types';

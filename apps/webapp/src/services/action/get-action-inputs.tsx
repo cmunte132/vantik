@@ -1,6 +1,6 @@
-import type { ActionConfig } from '@tegonhq/types';
+import type { ActionConfig } from '@vantikhq/types';
 
-import { getActionInputs } from '@tegonhq/services';
+import { getActionInputs } from '@vantikhq/services';
 import { type UseQueryResult, useQuery } from 'react-query';
 
 import { type XHRErrorResponse } from 'services/utils';

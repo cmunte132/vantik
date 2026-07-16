@@ -1,1 +1,1 @@
-export * from './tegon-issue-extension';
+export * from './vantik-issue-extension';

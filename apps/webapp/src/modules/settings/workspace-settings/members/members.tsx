@@ -1,6 +1,6 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { Input } from '@tegonhq/ui/components/input';
-import { Loader } from '@tegonhq/ui/components/loader';
+import { Button } from '@vantikhq/ui/components/button';
+import { Input } from '@vantikhq/ui/components/input';
+import { Loader } from '@vantikhq/ui/components/loader';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 

@@ -3,7 +3,7 @@ import type { ProjectsStoreType } from './store';
 
 import type { SyncActionRecord } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 export async function saveProjectData(
   data: SyncActionRecord[],
@@ -28,7 +28,7 @@ export async function saveProjectData(
 
       switch (record.action) {
         case 'I': {
-          await tegonDatabase.projects.put(project);
+          await vantikDatabase.projects.put(project);
           return (
             projectsStore &&
             (await projectsStore.update(project, record.data.id))
@@ -36,7 +36,7 @@ export async function saveProjectData(
         }
 
         case 'U': {
-          await tegonDatabase.projects.put(project);
+          await vantikDatabase.projects.put(project);
           return (
             projectsStore &&
             (await projectsStore.update(project, record.data.id))
@@ -44,7 +44,7 @@ export async function saveProjectData(
         }
 
         case 'D': {
-          await tegonDatabase.projects.delete(record.data.id);
+          await vantikDatabase.projects.delete(record.data.id);
           return (
             projectsStore && (await projectsStore.deleteById(record.data.id))
           );
@@ -73,7 +73,7 @@ export async function saveProjectMilestoneData(
 
       switch (record.action) {
         case 'I': {
-          await tegonDatabase.projectMilestones.put(projectMilestone);
+          await vantikDatabase.projectMilestones.put(projectMilestone);
           return (
             projectMilestonesStore &&
             (await projectMilestonesStore.update(
@@ -84,7 +84,7 @@ export async function saveProjectMilestoneData(
         }
 
         case 'U': {
-          await tegonDatabase.projectMilestones.put(projectMilestone);
+          await vantikDatabase.projectMilestones.put(projectMilestone);
           return (
             projectMilestonesStore &&
             (await projectMilestonesStore.update(
@@ -95,7 +95,7 @@ export async function saveProjectMilestoneData(
         }
 
         case 'D': {
-          await tegonDatabase.projectMilestones.delete(record.data.id);
+          await vantikDatabase.projectMilestones.delete(record.data.id);
           return (
             projectMilestonesStore &&
             (await projectMilestonesStore.deleteById(record.data.id))

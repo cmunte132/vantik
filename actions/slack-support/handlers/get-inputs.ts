@@ -1,5 +1,5 @@
-import { getLabels, getTeams, Label } from '@tegonhq/sdk';
-import { ActionEventPayload, IntegrationAccount } from '@tegonhq/sdk';
+import { getLabels, getTeams, Label } from '@vantikhq/sdk';
+import { ActionEventPayload, IntegrationAccount } from '@vantikhq/sdk';
 import axios from 'axios';
 import { getSlackHeaders } from 'utils';
 

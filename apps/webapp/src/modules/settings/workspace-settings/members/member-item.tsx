@@ -1,5 +1,5 @@
-import { AvatarText } from '@tegonhq/ui/components/avatar';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { AvatarText } from '@vantikhq/ui/components/avatar';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 

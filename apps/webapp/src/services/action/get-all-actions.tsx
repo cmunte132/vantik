@@ -1,4 +1,4 @@
-import type { ActionConfig } from '@tegonhq/types';
+import type { ActionConfig } from '@vantikhq/types';
 
 import { type UseQueryResult, useQuery } from 'react-query';
 

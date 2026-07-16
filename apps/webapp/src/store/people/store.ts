@@ -7,7 +7,7 @@ import {
 
 import type { PeopleType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { People } from './models';
 
@@ -36,7 +36,7 @@ export const PeopleStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const people = yield tegonDatabase.people.toArray();
+      const people = yield vantikDatabase.people.toArray();
 
       people.forEach((metadata: PeopleType) => {
         self.people.set(metadata.id, People.create(metadata));

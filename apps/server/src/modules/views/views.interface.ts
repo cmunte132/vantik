@@ -1,4 +1,4 @@
-import { FilterTypeEnum } from '@tegonhq/types';
+import { FilterTypeEnum } from '@vantikhq/types';
 import { Type } from 'class-transformer';
 import {
   IsArray,

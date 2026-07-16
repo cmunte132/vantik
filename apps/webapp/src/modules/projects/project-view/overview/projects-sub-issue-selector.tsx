@@ -1,5 +1,5 @@
-import { WorkflowCategoryEnum } from '@tegonhq/types';
-import { useEditor } from '@tegonhq/ui/components/editor/index';
+import { WorkflowCategoryEnum } from '@vantikhq/types';
+import { useEditor } from '@vantikhq/ui/components/editor/index';
 import { useRouter } from 'next/router';
 
 import { SubIssueSelector, type IssueContent } from 'common/editor';
@@ -27,7 +27,7 @@ export const ProjectSubIssueSelector = () => {
   );
   const { mutate: createIssue } = useCreateIssueMutation({
     onSuccess: (data, variables) => {
-      const url = `https://app.tegon.ai/${query.workspaceSlug}/issue/${team.identifier}-${data.number}`;
+      const url = `https://app.vantik.dev/${query.workspaceSlug}/issue/${team.identifier}-${data.number}`;
 
       editor
         .chain()
@@ -38,7 +38,7 @@ export const ProjectSubIssueSelector = () => {
             to: variables.end,
           },
           {
-            type: 'tegonIssueExtension',
+            type: 'vantikIssueExtension',
             attrs: {
               url,
             },

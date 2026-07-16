@@ -37,7 +37,7 @@ export default defineConfig({
         };
       }),
       additionalPackages({
-        packages: ['@tegonhq/types'],
+        packages: ['@vantikhq/types'],
       }),
       prismaExtension({
         schema: 'prisma/schema.prisma',

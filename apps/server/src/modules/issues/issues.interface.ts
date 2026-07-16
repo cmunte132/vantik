@@ -6,7 +6,7 @@ import {
   IssueRelationType,
   Team,
   User,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
 
 export interface ApiResponse {

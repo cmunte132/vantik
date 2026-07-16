@@ -1,4 +1,4 @@
-import { ActionEventPayload, getTeams, logger, Team } from '@tegonhq/sdk';
+import { ActionEventPayload, getTeams, logger, Team } from '@vantikhq/sdk';
 import { Client } from 'discord.js';
 
 export const getInputs = async (payload: ActionEventPayload) => {

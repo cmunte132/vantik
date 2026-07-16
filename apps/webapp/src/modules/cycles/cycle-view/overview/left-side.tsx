@@ -1,5 +1,5 @@
-import { Editor, EditorExtensions } from '@tegonhq/ui/components/editor/index';
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
+import { Editor, EditorExtensions } from '@vantikhq/ui/components/editor/index';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useDebouncedCallback } from 'use-debounce';
@@ -8,7 +8,7 @@ import { useEditorSuggestionItems } from 'modules/issues/components/use-editor-s
 
 import { getTiptapJSON } from 'common';
 import { AiWritingExtension } from 'common/editor';
-import { tegonIssueExtension } from 'common/editor/tegon-issue-extension';
+import { vantikIssueExtension } from 'common/editor/vantik-issue-extension';
 
 import { useCycle } from 'hooks/cycles';
 import { useEditorPasteHandler } from 'hooks/use-editor-paste-handler';
@@ -45,7 +45,7 @@ export const LeftSide = observer(() => {
               value={cycle?.description}
               onChange={onDescriptionChange}
               handlePaste={handlePaste}
-              extensions={[tegonIssueExtension, AiWritingExtension]}
+              extensions={[vantikIssueExtension, AiWritingExtension]}
               className="min-h-[50px] mb-8 px-6 mt-3 text-md"
             >
               <EditorExtensions suggestionItems={suggestionItems}>

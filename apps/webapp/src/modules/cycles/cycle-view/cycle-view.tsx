@@ -1,10 +1,10 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from '@tegonhq/ui/components/resizable';
-import { RightSidebarClosed, RightSidebarOpen } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/resizable';
+import { RightSidebarClosed, RightSidebarOpen } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { ListView } from 'modules/issues/all/list-view';

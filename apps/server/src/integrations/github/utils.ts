@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { IntegrationAccount, IntegrationDefinition } from '@tegonhq/types';
+import { IntegrationAccount, IntegrationDefinition } from '@vantikhq/types';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 

@@ -4,7 +4,7 @@ import {
   ActionTypesEnum,
   ModelNameEnum,
   WebhookSubscription,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import axios from 'axios';
 
 import { getEventType } from './utils';
@@ -109,7 +109,7 @@ async function issueHandler(
     id: issue.id,
     title: issue.title,
     number: issue.number,
-    url: `https://app.tegon.ai/${workspace.slug}/issue/${issue.team.identifier}-${issue.number}`,
+    url: `https://app.vantik.dev/${workspace.slug}/issue/${issue.team.identifier}-${issue.number}`,
     description: issue.description,
     priority: issue.priority,
     dueDate: issue.dueDate,

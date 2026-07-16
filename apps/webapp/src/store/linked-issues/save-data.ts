@@ -2,7 +2,7 @@ import type { LinkedIssuesStoreType } from './store';
 
 import type { SyncActionRecord } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 export async function saveLinkedIssueData(
   data: SyncActionRecord[],
@@ -25,7 +25,7 @@ export async function saveLinkedIssueData(
 
       switch (record.action) {
         case 'I': {
-          await tegonDatabase.linkedIssues.put(linkedIssue);
+          await vantikDatabase.linkedIssues.put(linkedIssue);
           return (
             linkedIssuesStore &&
             (await linkedIssuesStore.update(linkedIssue, record.data.id))
@@ -33,7 +33,7 @@ export async function saveLinkedIssueData(
         }
 
         case 'U': {
-          await tegonDatabase.linkedIssues.put(linkedIssue);
+          await vantikDatabase.linkedIssues.put(linkedIssue);
           return (
             linkedIssuesStore &&
             (await linkedIssuesStore.update(linkedIssue, record.data.id))
@@ -41,7 +41,7 @@ export async function saveLinkedIssueData(
         }
 
         case 'D': {
-          await tegonDatabase.linkedIssues.delete(record.data.id);
+          await vantikDatabase.linkedIssues.delete(record.data.id);
           return (
             linkedIssuesStore &&
             (await linkedIssuesStore.deleteById(record.data.id))

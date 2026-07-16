@@ -1,11 +1,11 @@
 openapi: 3.0.0
 info:
-  title: Tegon
+  title: Vantik
   description: AI First Project Management Tool
   version: 0.3.10
 
 servers:
-  - url: https://app.tegon.ai
+  - url: https://app.vantik.dev
 
 paths:
   /api/v1/action/{slug}/run:

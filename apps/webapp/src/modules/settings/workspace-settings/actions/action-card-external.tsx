@@ -1,11 +1,11 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Card,
   CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@tegonhq/ui/components/card';
+} from '@vantikhq/ui/components/card';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 

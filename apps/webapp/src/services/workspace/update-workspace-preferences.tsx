@@ -1,4 +1,4 @@
-import { updateWorkspacePreferences } from '@tegonhq/services';
+import { updateWorkspacePreferences } from '@vantikhq/services';
 import { useMutation, useQueryClient } from 'react-query';
 
 import type { WorkspaceType } from 'common/types';

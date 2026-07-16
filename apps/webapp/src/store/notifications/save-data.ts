@@ -2,7 +2,7 @@ import type { NotificationsStoreType } from './store';
 
 import type { SyncActionRecord } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 export async function saveNotificationData(
   data: SyncActionRecord[],
@@ -28,7 +28,7 @@ export async function saveNotificationData(
 
       switch (record.action) {
         case 'I': {
-          await tegonDatabase.notifications.put(notification);
+          await vantikDatabase.notifications.put(notification);
           return (
             notificationsStore &&
             (await notificationsStore.update(notification, record.data.id))
@@ -36,7 +36,7 @@ export async function saveNotificationData(
         }
 
         case 'U': {
-          await tegonDatabase.notifications.put(notification);
+          await vantikDatabase.notifications.put(notification);
           return (
             notificationsStore &&
             (await notificationsStore.update(notification, record.data.id))
@@ -44,7 +44,7 @@ export async function saveNotificationData(
         }
 
         case 'D': {
-          await tegonDatabase.notifications.delete(record.data.id);
+          await vantikDatabase.notifications.delete(record.data.id);
           return (
             notificationsStore &&
             (await notificationsStore.deleteById(record.data.id))

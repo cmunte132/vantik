@@ -2,7 +2,7 @@ import { type IAnyStateTreeNode, types, flow } from 'mobx-state-tree';
 
 import type { ConversationHistoryType } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 import { ConversationHistory } from './models';
 
@@ -41,7 +41,7 @@ export const ConversationHistoryStore: IAnyStateTreeNode = types
 
     const load = flow(function* () {
       const conversationHistory =
-        yield tegonDatabase.conversationHistory.toArray();
+        yield vantikDatabase.conversationHistory.toArray();
 
       self.conversationHistory = conversationHistory;
     });

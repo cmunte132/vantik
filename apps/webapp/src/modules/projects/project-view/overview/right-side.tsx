@@ -1,5 +1,5 @@
-import { Separator } from '@tegonhq/ui/components/separator';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+import { Separator } from '@vantikhq/ui/components/separator';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 

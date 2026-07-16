@@ -9,7 +9,7 @@ import {
   IssueRelationType,
   NotificationData,
   NotificationEventFrom,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { tasks } from '@trigger.dev/sdk/v3';
 import { PrismaService } from 'nestjs-prisma';
 import { notificationHandler } from 'trigger/notification';

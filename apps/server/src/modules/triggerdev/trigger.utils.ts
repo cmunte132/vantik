@@ -197,7 +197,7 @@ export async function createOrg(knex: KnexT, logger: LoggerService) {
         admin: true,
         authenticationMethod: 'MAGIC_LINK',
         displayName: 'Harshith',
-        email: 'harshith@tegon.ai',
+        email: 'harshith@vantik.dev',
         name: 'Harshith',
         confirmedBasicDetails: true,
         updatedAt: new Date(),
@@ -206,8 +206,8 @@ export async function createOrg(knex: KnexT, logger: LoggerService) {
       // Create Organization
       await trx('Organization').insert({
         id: commonId,
-        slug: 'tegon',
-        title: 'Tegon',
+        slug: 'vantik',
+        title: 'Vantik',
         v3Enabled: true,
         updatedAt: new Date(),
       });
@@ -263,7 +263,7 @@ async function getProject(
 }
 
 // Create personal token taking from the .env
-// Used to deploy the tegon backgrounds
+// Used to deploy the vantik backgrounds
 export async function createPersonalToken(knex: KnexT) {
   const commonId = process.env.TRIGGER_COMMON_ID;
   const id = uuidv4().replace(/-/g, ''); // Generate a unique ID for the personal access token

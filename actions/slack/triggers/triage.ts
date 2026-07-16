@@ -1,10 +1,10 @@
-import type { EventBody, IntegrationAccount } from '@tegonhq/sdk';
+import type { EventBody, IntegrationAccount } from '@vantikhq/sdk';
 
 import {
   logger,
   getLinkedIssueBySource,
   getWorkflowsByTeam,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 
 import { slackIssueCreate } from './issue-create';
 import {

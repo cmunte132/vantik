@@ -1,6 +1,6 @@
-import { buttonVariants } from '@tegonhq/ui/components/button';
-import { BlockedFill, BlocksFill, SubIssue } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { buttonVariants } from '@vantikhq/ui/components/button';
+import { BlockedFill, BlocksFill, SubIssue } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import React from 'react';

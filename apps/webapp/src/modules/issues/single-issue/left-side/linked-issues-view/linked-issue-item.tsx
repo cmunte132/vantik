@@ -1,5 +1,5 @@
 import { RiLink } from '@remixicon/react';
-import { RoleEnum } from '@tegonhq/types';
+import { RoleEnum } from '@vantikhq/types';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,16 +9,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@tegonhq/ui/components/alert-dialog';
-import { Button } from '@tegonhq/ui/components/button';
+} from '@vantikhq/ui/components/alert-dialog';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@tegonhq/ui/components/dropdown-menu';
-import { DeleteLine, EditLine, LinkLine, MoreLine } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/dropdown-menu';
+import { DeleteLine, EditLine, LinkLine, MoreLine } from '@vantikhq/ui/icons';
 import React from 'react';
 
 import { getBotIcon } from 'common';

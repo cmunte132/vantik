@@ -5,7 +5,7 @@ import {
   getLinkedIssueBySource,
   JsonObject,
   logger,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 
 export const commentEvent = async (actionPayload: ActionEventPayload) => {
   const {

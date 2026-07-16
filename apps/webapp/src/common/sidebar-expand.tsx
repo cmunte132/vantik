@@ -1,5 +1,5 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { SidebarLine } from '@tegonhq/ui/icons';
+import { Button } from '@vantikhq/ui/components/button';
+import { SidebarLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useContextStore } from 'store/global-context-provider';

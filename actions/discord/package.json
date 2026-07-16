@@ -9,7 +9,7 @@
   },
   "packageManager": "pnpm@10.3.0",
   "dependencies": {
-    "@tegonhq/sdk": "file:../../packages/tegon-sdk/dist",
+    "@vantikhq/sdk": "file:../../packages/vantik-sdk/dist",
     "@trigger.dev/sdk": "3.0.0-beta.56",
     "@types/turndown": "^5.0.5",
     "axios": "^1.6.7",

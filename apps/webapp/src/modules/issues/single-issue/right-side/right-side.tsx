@@ -1,5 +1,5 @@
-import { ScrollArea } from '@tegonhq/ui/components/scroll-area';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 

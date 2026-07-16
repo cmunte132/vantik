@@ -1,17 +1,17 @@
-import { ActionEventPayload } from '@tegonhq/types';
+import { ActionEventPayload } from '@vantikhq/types';
 import { task } from '@trigger.dev/sdk/v3';
 
 import { emailHandler } from './handlers/email-handler';
 import { slackHandler } from './handlers/slack-handler';
-import { tegonHandler } from './handlers/tegon-handler';
+import { vantikHandler } from './handlers/vantik-handler';
 
 export async function run(eventPayload: ActionEventPayload) {
-  const [slackResponse, tegonResponse] = await Promise.all([
+  const [slackResponse, vantikResponse] = await Promise.all([
     slackHandler(eventPayload),
-    tegonHandler(eventPayload),
+    vantikHandler(eventPayload),
     emailHandler(eventPayload),
   ]);
-  return { slackResponse, tegonResponse };
+  return { slackResponse, vantikResponse };
 }
 
 export const notificationHandler = task({ id: 'notification', run });

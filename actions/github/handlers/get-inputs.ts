@@ -4,7 +4,7 @@ import {
   getTeams,
   Label,
   Team,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 import { getGithubHeaders } from 'utils';
 

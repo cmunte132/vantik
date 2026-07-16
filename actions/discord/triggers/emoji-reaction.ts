@@ -5,7 +5,7 @@ import {
   getWorkflowsByTeam,
   JsonObject,
   logger,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import { Client, TextChannel } from 'discord.js';
 import { getStateId } from 'utils';
 import { discordIssueCreate } from './issue-create';
@@ -83,7 +83,7 @@ export const emojiReaction = async (payload: ActionEventPayload) => {
     const team = await getTeamById({ teamId });
     const issueIdentifier = `${team.identifier}-${linkedIssue.issue.number}`;
 
-    const issueUrl = `https://app.tegon.ai/${team.workspace.slug}/issue/${issueIdentifier}`;
+    const issueUrl = `https://app.vantik.dev/${team.workspace.slug}/issue/${issueIdentifier}`;
 
     const issueTitle = `${issueIdentifier} ${linkedIssue.issue.title}`;
 

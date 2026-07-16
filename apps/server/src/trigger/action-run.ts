@@ -1,7 +1,7 @@
 import createLoadRemoteModule, {
   createRequires,
 } from '@paciolan/remote-module-loader';
-import * as tegonSDK from '@tegonhq/sdk';
+import * as vantikSDK from '@vantikhq/sdk';
 import { logger, task } from '@trigger.dev/sdk/v3';
 import axios from 'axios';
 
@@ -49,7 +49,7 @@ export const actionRun = task({
       fetcher,
       requires: createRequires({
         axios: createAxiosInstance(accessToken),
-        '@tegonhq/sdk': tegonSDK,
+        '@vantikhq/sdk': vantikSDK,
       }),
     });
 

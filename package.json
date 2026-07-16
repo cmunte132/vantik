@@ -1,10 +1,10 @@
 {
-  "name": "tegon",
+  "name": "vantik",
   "version": "0.3.10",
-  "description": "Tegon is an open-source, AI-first alternative to Jira, Linear",
+  "description": "Vantik is an open-source, AI-first alternative to Jira, Linear",
   "main": "index.js",
-  "repository": "https://github.com/tegonhq/tegon.git",
-  "author": "Tegon <support@tegon.ai>",
+  "repository": "https://github.com/vantikhq/vantik.git",
+  "author": "Vantik <support@vantik.dev>",
   "scripts": {
     "dev-website": "dotenv -- turbo run dev --filter=website",
     "dev": "dotenv -- turbo run migrate dev --parallel --filter=!website",

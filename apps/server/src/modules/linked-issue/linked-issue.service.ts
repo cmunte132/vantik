@@ -5,7 +5,7 @@ import {
   LinkedIssue,
   LinkedIssueRequestParamsDto,
   UpdateLinkedIssueDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { ApiResponse } from 'modules/issues/issues.interface';

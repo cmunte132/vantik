@@ -1,12 +1,12 @@
 'use client';
 
-import { Loader } from '@tegonhq/ui/components/loader';
+import { Loader } from '@vantikhq/ui/components/loader';
 import { useParams } from 'next/navigation';
 import React from 'react';
 
 import { IssueViewContext } from 'components/side-issue-view';
 
-import { tegonDatabase } from './database';
+import { vantikDatabase } from './database';
 import { useContextStore } from './global-context-provider';
 
 export const IssueStoreInit = ({
@@ -33,16 +33,16 @@ export const IssueStoreInit = ({
       const teamIdentifier = (issueId as string).split('-')[0];
       const id = (issueId as string).split('-')[1];
 
-      const team = await tegonDatabase.teams.get({
+      const team = await vantikDatabase.teams.get({
         identifier: teamIdentifier,
       });
 
-      issueData = await tegonDatabase.issues.get({
+      issueData = await vantikDatabase.issues.get({
         number: parseInt(id),
         teamId: team.id,
       });
     } else {
-      issueData = await tegonDatabase.issues.get({
+      issueData = await vantikDatabase.issues.get({
         id: issueId,
       });
     }

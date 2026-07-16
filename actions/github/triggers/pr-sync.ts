@@ -11,7 +11,7 @@ import {
   logger,
   updateIssue,
   updateLinkedIssue,
-} from '@tegonhq/sdk';
+} from '@vantikhq/sdk';
 import axios from 'axios';
 import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 import { getGithubHeaders, getState, sendGithubComment } from 'utils';
@@ -114,7 +114,7 @@ export const prSync = async (actionPayload: ActionEventPayload) => {
 
       // Sending linked message to the PR
       // Create the GitHub comment body with a link to the issue
-      const githubCommentBody = `[${team.identifier}-${issue.number} ${issue.title}](https://app.tegon.ai/${team.workspace.slug}/issue/${team.identifier}-${issue.number})`;
+      const githubCommentBody = `[${team.identifier}-${issue.number} ${issue.title}](https://app.vantik.dev/${team.workspace.slug}/issue/${team.identifier}-${issue.number})`;
 
       // Send the comment to GitHub
       await sendGithubComment(
@@ -286,7 +286,7 @@ async function handleCommits(
 
       // Sending linked message to the PR
       // Create the GitHub comment body with a link to the issue
-      const githubCommentBody = `[${team.identifier}-${issue.number} ${issue.title}](https://app.tegon.ai/${team.workspace.slug}/issue/${team.identifier}-${issue.number})`;
+      const githubCommentBody = `[${team.identifier}-${issue.number} ${issue.title}](https://app.vantik.dev/${team.workspace.slug}/issue/${team.identifier}-${issue.number})`;
 
       // Send the comment to GitHub
       await sendGithubComment(

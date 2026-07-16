@@ -1,4 +1,4 @@
-import type { Issue, IssueCommentRequestParamsDto } from '@tegonhq/types';
+import type { Issue, IssueCommentRequestParamsDto } from '@vantikhq/types';
 
 import axios from 'axios';
 

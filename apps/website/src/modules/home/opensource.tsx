@@ -1,8 +1,8 @@
 import { ArrowTopRightIcon, StarFilledIcon } from '@radix-ui/react-icons';
 import { RiGithubFill } from '@remixicon/react';
-import { buttonVariants } from '@tegonhq/ui/components/button';
-import { CodingLine } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { buttonVariants } from '@vantikhq/ui/components/button';
+import { CodingLine } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import Link from 'next/link';
 import React from 'react';
 
@@ -16,7 +16,7 @@ export function Opensource() {
     const fetchRepoData = async () => {
       try {
         const response = await fetch(
-          `https://api.github.com/repos/tegonhq/tegon`,
+          `https://api.github.com/repos/vantikhq/vantik`,
         );
         if (!response.ok) {
           throw new Error(`Error: ${response.status}`);
@@ -37,7 +37,7 @@ export function Opensource() {
             <RiGithubFill size={40} />
           </div>
           <div className="text-center">
-            We love opensource. Tegon is AGPL-3.0 licensed so you can view
+            We love opensource. Vantik is AGPL-3.0 licensed so you can view
             source code, contribute and self host
           </div>
           <div className="flex gap-2">

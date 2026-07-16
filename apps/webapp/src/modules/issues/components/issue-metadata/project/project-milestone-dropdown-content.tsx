@@ -1,6 +1,6 @@
-import { Checkbox } from '@tegonhq/ui/components/checkbox';
-import { CommandGroup } from '@tegonhq/ui/components/command';
-import { LabelLine } from '@tegonhq/ui/icons';
+import { Checkbox } from '@vantikhq/ui/components/checkbox';
+import { CommandGroup } from '@vantikhq/ui/components/command';
+import { LabelLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import type { ProjectMilestoneType } from 'common/types';

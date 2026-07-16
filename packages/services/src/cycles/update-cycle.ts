@@ -1,4 +1,4 @@
-import type { UpdateCycleDto, Cycle } from '@tegonhq/types';
+import type { UpdateCycleDto, Cycle } from '@vantikhq/types';
 
 import axios from 'axios';
 

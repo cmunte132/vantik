@@ -1,4 +1,4 @@
-import { ActionEventPayload, logger } from '@tegonhq/sdk';
+import { ActionEventPayload, logger } from '@vantikhq/sdk';
 import { emojiReaction } from 'triggers/emoji-reaction';
 import { discordMessage } from 'triggers/message';
 

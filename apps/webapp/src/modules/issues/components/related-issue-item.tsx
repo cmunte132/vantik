@@ -1,6 +1,6 @@
 import { RiCloseLine } from '@remixicon/react';
-import { Button } from '@tegonhq/ui/components/button';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { Button } from '@vantikhq/ui/components/button';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 

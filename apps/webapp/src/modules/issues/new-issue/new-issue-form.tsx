@@ -1,9 +1,9 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { Editor, EditorExtensions } from '@tegonhq/ui/components/editor/index';
-import { FormControl, FormField, FormItem } from '@tegonhq/ui/components/form';
-import { Loader } from '@tegonhq/ui/components/loader';
-import { DeleteLine } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+import { Button } from '@vantikhq/ui/components/button';
+import { Editor, EditorExtensions } from '@vantikhq/ui/components/editor/index';
+import { FormControl, FormField, FormItem } from '@vantikhq/ui/components/form';
+import { Loader } from '@vantikhq/ui/components/loader';
+import { DeleteLine } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import { usePathname } from 'next/navigation';
 import React from 'react';

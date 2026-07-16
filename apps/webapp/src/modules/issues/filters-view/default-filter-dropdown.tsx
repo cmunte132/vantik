@@ -1,5 +1,5 @@
-import { CommandGroup, CommandItem } from '@tegonhq/ui/components/command';
-import { Separator } from '@tegonhq/ui/components/separator';
+import { CommandGroup, CommandItem } from '@vantikhq/ui/components/command';
+import { Separator } from '@vantikhq/ui/components/separator';
 import {
   AssigneeLine,
   BlockedFill,
@@ -11,7 +11,7 @@ import {
   Project,
   SubIssue,
   UnscopedLine,
-} from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 

@@ -2,7 +2,7 @@ import type { CompanyStoreType } from './store';
 
 import type { SyncActionRecord } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 export async function saveCompanyData(
   data: SyncActionRecord[],
@@ -29,21 +29,21 @@ export async function saveCompanyData(
 
       switch (record.action) {
         case 'I': {
-          await tegonDatabase.company.put(company);
+          await vantikDatabase.company.put(company);
           return (
             companyStore && (await companyStore.update(company, record.data.id))
           );
         }
 
         case 'U': {
-          await tegonDatabase.company.put(company);
+          await vantikDatabase.company.put(company);
           return (
             companyStore && (await companyStore.update(company, record.data.id))
           );
         }
 
         case 'D': {
-          await tegonDatabase.company.delete(record.data.id);
+          await vantikDatabase.company.delete(record.data.id);
           return (
             companyStore && (await companyStore.deleteById(record.data.id))
           );

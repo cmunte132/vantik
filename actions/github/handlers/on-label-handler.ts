@@ -1,4 +1,4 @@
-import { ActionEventPayload, getIssueById, logger } from '@tegonhq/sdk';
+import { ActionEventPayload, getIssueById, logger } from '@vantikhq/sdk';
 import { issueSync } from 'triggers/issue-sync';
 
 export const onLabelHandler = async (actionPayload: ActionEventPayload) => {

@@ -1,5 +1,5 @@
-import { AvatarText } from '@tegonhq/ui/components/avatar';
-import { Button } from '@tegonhq/ui/components/button';
+import { AvatarText } from '@vantikhq/ui/components/avatar';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@tegonhq/ui/components/dropdown-menu';
+} from '@vantikhq/ui/components/dropdown-menu';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import posthog from 'posthog-js';

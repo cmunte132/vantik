@@ -1,4 +1,4 @@
-import { OAuth2Params } from '@tegonhq/types';
+import { OAuth2Params } from '@vantikhq/types';
 import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export interface RedirectURLParams {

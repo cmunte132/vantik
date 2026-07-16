@@ -1,6 +1,6 @@
-import { Button } from '@tegonhq/ui/components/button';
-import { Logo } from '@tegonhq/ui/components/dynamic-logo';
-import { Loader } from '@tegonhq/ui/components/loader';
+import { Button } from '@vantikhq/ui/components/button';
+import { Logo } from '@vantikhq/ui/components/dynamic-logo';
+import { Loader } from '@vantikhq/ui/components/loader';
 import { useRouter } from 'next/router';
 import posthog from 'posthog-js';
 import * as React from 'react';

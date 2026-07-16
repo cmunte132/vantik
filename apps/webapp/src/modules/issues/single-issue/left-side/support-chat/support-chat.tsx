@@ -3,7 +3,7 @@ import {
   ChatBubble,
   ChatBubbleMessage,
   ChatBubbleAvatar,
-} from '@tegonhq/ui/components/chat/index';
+} from '@vantikhq/ui/components/chat/index';
 import { observer } from 'mobx-react-lite';
 
 import { IssueComment } from '../activity/comments-activity/issue-comment';

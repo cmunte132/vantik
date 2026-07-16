@@ -1,126 +1,61 @@
-
 <br>
+<h1 align="center">Vantik</h1>
+<h3 align="center">A dev-first, agent-native issue tracker.</h3>
+
 <p align="center">
-  <a href="https://tegon.ai">
-    <img src="https://github.com/tegonhq/tegon/assets/17528887/07036ee1-774d-4dff-a56b-8050041f36ce" width="200px" alt="Tegon logo" />
-  </a>
+Self-hosted. Open-source. Built for agents to plan, track, and audit their own work — with a real UI for humans to review it.
 </p>
 
-<h2 align="center" >The dev-first issue tracking tool. Open-source, customisable and lightweight. </h3>
-
-<p align="center"><a href="https://www.tegon.ai"> Website</a> · <a href="https://docs.tegon.ai/introduction"> Documentation</a> ·  <a href="https://join.slack.com/t/tegoncommunity/shared_invite/zt-2jvar8p1x-9wqFTL9PP5ICImb76qcjEA"> Join our Slack</a>
-<br />
-
-</div>
-
-<p align="center">
-    <a href="https://www.tegon.ai">
-      <picture>
-        <img src= "https://github.com/tegonhq/tegon/assets/36505468/888ebcaa-29fb-4f33-833f-9652bdd37711" />
-        <picture>
-    </a>
-</p>
-<br>
-          
-Issue tracking isn't just another software—it's a critical category in B2B solutions. However, existing tools often fall short. They either become bloated by trying to cater to every company's unique processes or are too simplistic, failing to handle complex use cases effectively.
-
-Current issue tracking tools function primarily as systems of record, lacking the deeper integration of context and actions that truly drive productivity.
-
-At Tegon, our goal is to build an issue tracking tool that serves as a system of record, context, and action. Beyond just tracking progress, Tegon will provide full context on ongoing work through seamless integration with other tools, and act as a system of actions to elevate organizational productivity.
-
 <br>
 
-# Quickstart
+## What this is
 
-🚀 [Self-hosting](https://docs.tegon.ai/oss/self-deployment) 
+Vantik is a fork of [Tegon](https://github.com/RedPlanetHQ/tegon), an open-source, dev-first
+alternative to Jira/Linear that was archived by its original maintainers (RedPlanetHQ) in
+June 2025. The original project nailed the core data model — projects, issues, workflows,
+Kanban and list views, triage — but was built around human teams using AI as an assist
+feature, not agents as the primary actor.
 
-🖥️ [Local Setup](https://docs.tegon.ai/oss/local-setup)
+This fork exists to invert that: agents create, plan, and update work here as their default
+mode of operation, with the UI serving as a human review/audit layer rather than the primary
+interface.
 
-# Demo Video:
-https://www.loom.com/share/b664b01e9b064a02be5791c12b77a107?sid=d4146365-1597-4ff5-88fd-a07b08ddb9f4
+**Status:** early-stage personal fork. Expect breaking changes, incomplete rebranding in
+places, and a codebase that hasn't been built or run yet since the rename. See
+[Getting Started](#getting-started) below before assuming anything works out of the box.
 
+## Attribution & license
 
-# Tegon Cloud
+Vantik is a derivative work of [RedPlanetHQ/tegon](https://github.com/RedPlanetHQ/tegon),
+licensed under [AGPL-3.0](./LICENSE). All credit for the original architecture, data model,
+and implementation goes to the Tegon team. This fork is maintained independently and is not
+affiliated with or endorsed by RedPlanetHQ or Tegon.
 
-We offer a managed cloud version of Tegon that allows you to run Tegon without having to manage the infrastructure. 
-If you'd like to try it out,
-1. Navigate to [app.tegon.ai](https://app.tegon.ai/)
-2. Create an account
-3. Kick off by creating your first issue
+## Getting started
 
-# Tegon Actions
-Tegon Actions is a powerful framework designed to automate repetitive tasks in issue tracking, streamlining your workflow. With Tegon Actions, you can effortlessly automate workflows like:
- - Automatically assigning labels when issues are created
- - Generating sub-issues for PR reviews as soon as a PR is opened
- - Creating issues directly from Slack with the 👀 emoji
- - Sending weekly summaries and changelogs of completed issues on Slack
+This repo hasn't been built or verified since the rebrand. Before relying on anything below,
+treat it as a starting point to debug, not a working quickstart:
 
-Check out the [Actions Docs](https://docs.tegon.ai/actions/overview) for more information.
+```bash
+cp .env.example .env
+# fill in required values — check docker-compose.yaml and apps/server for what's needed
+docker compose up
+```
 
-# What You Can Do With Tegon
-We're currently in the development phase of Tegon's alpha version. Please expect some breaking changes.  
+Expect dependency rot given the ~1 year gap since the original project's last release
+(0.3.11-alpha, March 2025) — package versions, Trigger.dev integration, and auth flows are
+the most likely things to need attention first.
 
-Please feel free to flag any specific need you have need by creating an issue.   
+## Roadmap (planned direction, not yet built)
 
-Below are some features we have implemented to date:
+- [ ] Get the existing stack building and running self-hosted under this fork
+- [ ] MCP server for agent-driven issue/project CRUD
+- [ ] Rework the automation framework (originally "Tegon Actions") around agent-primary
+      workflows rather than human-triggered automations
+- [ ] Multi-repo/multi-project navigation for a single human reviewer across several
+      agent-managed codebases
 
-+ [Add, filter, sort, edit and track issues](#add-filter-sort-edit-and-track-issues)
-+ [Use Kanban view to track your progress](#use-kanban-view-to-track-your-progress)
-+ [Automatically create issues from slack using :eyes: emoji](#automatically-create-issues-from-slack-using-eyes-emoji)
-+ [Manage all incoming requests at one place in Triage](#manage-all-incoming-requests-at-one-place-in-triage)
-+ [Create custom views tailored to your needs](#create-custom-views-tailored-to-your-needs)
+## Contributing
 
-## Add, filter, sort, edit and track issues:
-
-<p align="center">
-    <picture>
-      <img src="https://github.com/user-attachments/assets/ccc717e4-7103-4458-8270-35b0481b0faa" alt="List view" />  
-    </picture>
-</p> 
-
-## Use Kanban view to track your progress:
-
-<p align="center">
-    <picture>
-      <img src="https://github.com/user-attachments/assets/2ecc9429-8bb4-4016-84bd-1cb83596cab8" alt="Kanban view" />  
-    </picture>
-</p> 
-
-## Automatically create issues from slack using :eyes: emoji:
-
-<p align="center">
-    <picture>
-      <img src="https://github.com/user-attachments/assets/d7e3c939-b93f-4b5a-b9ee-c7ba24c7bad8" alt="Slack Integration" />  
-    </picture>
-</p> 
-
-## Manage all incoming requests at one place in Triage:
-
-<p align="center">
-    <picture>
-      <img src="https://github.com/user-attachments/assets/d2e352d2-f22c-4586-a2e7-289575d62916" alt="Triage" />  
-    </picture>
-</p> 
-
-## Create custom views tailored to your needs:
-
-<p align="center">
-    <picture>
-      <img src="https://github.com/user-attachments/assets/6aa541cc-4418-496e-96e3-67c14f63a413" alt="Custom Views" />  
-    </picture>
-</p> 
-
-# What's In Store
-Here’s what you can look forward to:
-
-⏳ Frequent updates: We’re shipping fast! Expect regular updates and new features that enhance your experience.
-
-🔗 Custom Workflows: We’re putting the power in your hands. Soon, you’ll have the tools to extend and customize Tegon with workflows and more.
-
-# Join the community
-
-- Star the repo
-- Check out our [documentation](https://docs.tegon.ai/introduction)
-- Follow us on [Twitter](https://twitter.com/tegonhq) or [LinkedIn](https://www.linkedin.com/company/tegon-ai)
-- Join our [Slack](https://join.slack.com/t/tegoncommunity/shared_invite/zt-2jvar8p1x-9wqFTL9PP5ICImb76qcjEA)
-- [Contributions](https://github.com/tegonhq/tegon/contribute) are, of course, most welcome!
+This is currently a personal project. Issues and PRs may be considered but there's no
+formal process yet.

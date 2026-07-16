@@ -1,4 +1,4 @@
-import { suspendUser } from '@tegonhq/services';
+import { suspendUser } from '@vantikhq/services';
 import { useMutation, useQueryClient } from 'react-query';
 
 import type { WorkspaceType } from 'common/types';

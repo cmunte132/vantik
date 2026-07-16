@@ -1,4 +1,4 @@
-/** Copyright (c) 2024, Tegon, all rights reserved. **/
+/** Copyright (c) 2024, Vantik, all rights reserved. **/
 
 module.exports = {
   plugins: {

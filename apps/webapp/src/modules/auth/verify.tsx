@@ -1,5 +1,5 @@
-import { Loader } from '@tegonhq/ui/components/loader';
-import { useToast } from '@tegonhq/ui/components/use-toast';
+import { Loader } from '@vantikhq/ui/components/loader';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import { useRouter } from 'next/router';
 import posthog from 'posthog-js';
 import React from 'react';

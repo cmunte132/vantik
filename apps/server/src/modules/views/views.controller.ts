@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { View } from '@tegonhq/types';
+import { View } from '@vantikhq/types';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';

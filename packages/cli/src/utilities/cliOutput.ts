@@ -46,7 +46,7 @@ export function chalkRun(text: string) {
 }
 
 export function logo() {
-  return `${chalk.hex(purple).bold('Tegon')}`;
+  return `${chalk.hex(purple).bold('Vantik')}`;
 }
 
 // Mar 27 09:17:25.653

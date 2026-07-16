@@ -1,5 +1,5 @@
-import { getTeams } from '@tegonhq/sdk';
-import { ActionEventPayload } from '@tegonhq/sdk';
+import { getTeams } from '@vantikhq/sdk';
+import { ActionEventPayload } from '@vantikhq/sdk';
 
 export const getInputs = async (payload: ActionEventPayload) => {
   const { workspaceId } = payload;

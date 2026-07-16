@@ -1,10 +1,10 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from '@tegonhq/ui/components/tooltip';
-import { HelpLine } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/tooltip';
+import { HelpLine } from '@vantikhq/ui/icons';
 import React from 'react';
 
 interface BottomBarButtonProps {
@@ -44,7 +44,7 @@ export function BottomBar() {
         icon={<HelpLine size={20} />}
         tooltip="Help from docs"
         onClick={() => {
-          window.open('https://docs.tegon.ai', '_blank');
+          window.open('https://docs.vantik.dev', '_blank');
         }}
       />
     </div>

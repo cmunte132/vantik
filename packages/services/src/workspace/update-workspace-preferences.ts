@@ -1,4 +1,4 @@
-import { UpdateWorkspacePreferencesDto } from '@tegonhq/types';
+import { UpdateWorkspacePreferencesDto } from '@vantikhq/types';
 import axios from 'axios';
 
 export async function updateWorkspacePreferences(

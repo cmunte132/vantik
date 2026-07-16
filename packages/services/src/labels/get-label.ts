@@ -1,4 +1,4 @@
-import type { GetLabelsDTO, Label } from '@tegonhq/types';
+import type { GetLabelsDTO, Label } from '@vantikhq/types';
 
 import axios from 'axios';
 

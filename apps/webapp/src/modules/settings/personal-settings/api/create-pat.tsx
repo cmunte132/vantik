@@ -1,6 +1,6 @@
 import { RiClipboardLine } from '@remixicon/react';
-import { Button } from '@tegonhq/ui/components/button';
-import { Input } from '@tegonhq/ui/components/input';
+import { Button } from '@vantikhq/ui/components/button';
+import { Input } from '@vantikhq/ui/components/input';
 import copy from 'copy-to-clipboard';
 import * as React from 'react';
 

@@ -1,6 +1,6 @@
-import { Checkbox } from '@tegonhq/ui/components/checkbox';
-import { CommandGroup } from '@tegonhq/ui/components/command';
-import { TeamLine } from '@tegonhq/ui/icons';
+import { Checkbox } from '@vantikhq/ui/components/checkbox';
+import { CommandGroup } from '@vantikhq/ui/components/command';
+import { TeamLine } from '@vantikhq/ui/icons';
 
 import { DropdownItem } from 'modules/issues/components/issue-metadata/dropdown-item';
 

@@ -16,7 +16,7 @@ export function ActionAccessGuard(props: Props): React.ReactElement {
 
   return (
     <h2 className="p-3">
-      Currently Actions is in beta. Reachout to support (harshith@tegon.ai) for
+      Currently Actions is in beta. Reachout to support (harshith@vantik.dev) for
       access
     </h2>
   );

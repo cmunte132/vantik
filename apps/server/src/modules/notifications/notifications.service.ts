@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Notification, updateNotificationBody } from '@tegonhq/types';
+import { Notification, updateNotificationBody } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 @Injectable()

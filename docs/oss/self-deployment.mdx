@@ -1,13 +1,13 @@
 ---
 title: "Self-hosting"
-description: "You can self-host Tegon on your own infrastructure."
+description: "You can self-host Vantik on your own infrastructure."
 ---
 
 ## Caveats
 
-This guide outlines a quick way to start self-hosting Tegon. Scaling, security, and reliability concerns are not fully addressed here. It's unlikely to result in a production-ready deployment on its own, but it's a good starting point.
+This guide outlines a quick way to start self-hosting Vantik. Scaling, security, and reliability concerns are not fully addressed here. It's unlikely to result in a production-ready deployment on its own, but it's a good starting point.
 
-Should the burden ever get too much, we'd be happy to see you on [Tegon.ai cloud](https://app.tegon.ai) where we deal with these concerns for you.
+Should the burden ever get too much, we'd be happy to see you on [Vantik.ai cloud](https://app.vantik.dev) where we deal with these concerns for you.
 
 <Accordion title="Please consider these additional warnings">
   - We use trigger.dev for the background jobs, but there is a little bit of
@@ -94,7 +94,7 @@ Your bucket needs the following CORS configuration:
   {
     "AllowedHeaders": ["*"],
     "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-    "AllowedOrigins": ["https://app.tegon.ai", "http://localhost:3000"],
+    "AllowedOrigins": ["https://app.vantik.dev", "http://localhost:3000"],
     "ExposeHeaders": ["ETag"],
     "MaxAgeSeconds": 3000
   }
@@ -153,7 +153,7 @@ COHERE_API_KEY=your-cohere-key
 
 ```bash
 LOCAL_MODEL=gemma2:2b  # or other models like phi3, llama3, mistral
-OLLAMA_HOST=http://tegon-ollama:11434
+OLLAMA_HOST=http://vantik-ollama:11434
 ```
 
 ## Instructions
@@ -163,11 +163,11 @@ OLLAMA_HOST=http://tegon-ollama:11434
 2. Run the following commands in your terminal:
 
 ```bash
-git clone https://github.com/tegonhq/docker.git
+git clone https://github.com/vantikhq/docker.git
 cd docker
 ```
 
-3. Create a `.env` file. This file contains configuration for all the services used to run Tegon. Please fill in or modify the configurations as needed.
+3. Create a `.env` file. This file contains configuration for all the services used to run Vantik. Please fill in or modify the configurations as needed.
 
 ```bash
 cp .env.example .env
@@ -216,7 +216,7 @@ cp .env.example .env
 
    # Local AI fallback settings (optional)
    LOCAL_MODEL=gemma2:2b
-   OLLAMA_HOST=http://tegon-ollama:11434
+   OLLAMA_HOST=http://vantik-ollama:11434
    ```
 
    #### Trigger.dev Configuration
@@ -232,13 +232,13 @@ cp .env.example .env
    );
    ```
 
-5. Run the start script and follow the prompts, We handle 2 major steps in start script setting up trigger.dev and setting up tegon for you.
+5. Run the start script and follow the prompts, We handle 2 major steps in start script setting up trigger.dev and setting up vantik for you.
 
 ```bash
 ./start.sh
 ```
 
-6. You can now check tegon at `http://localhost:8000`
+6. You can now check vantik at `http://localhost:8000`
 
 ## FAQ
 
@@ -257,17 +257,17 @@ A: You can use any SMTP provider (Gmail, Amazon SES, SendGrid, etc.) that suppor
 
 ### Trigger.dev Configuration
 
-**Q: What is trigger.dev used for in Tegon?**
+**Q: What is trigger.dev used for in Vantik?**
 A: We use trigger.dev for managing background jobs, specifically:
 
 - Sending notifications to users
 - Automating cycle transitions and updates
 - Running scheduled tasks
 
-**Q: Can I run Tegon without trigger.dev?**
-A: While the core functionality of Tegon will work, features like notifications and automated cycle transitions will not be available without trigger.dev properly configured.
+**Q: Can I run Vantik without trigger.dev?**
+A: While the core functionality of Vantik will work, features like notifications and automated cycle transitions will not be available without trigger.dev properly configured.
 
 **Q: Are there any limitations with trigger.dev?**
 A: Yes, we are bound by trigger.dev's open-source scaling limitations. You can review these in their [documentation](https://trigger.dev/docs/v3/open-source-self-hosting#caveats).
 
-If there are any questions that we couldn't answer here, we'd love to help you get started. [Join our Slack](https://join.slack.com/t/tegoncommunity/shared_invite/zt-2i1e781ip-zwauijRV9TRtRKoJi3tqng) and feel free to ask your questions in the #support channel.
+If there are any questions that we couldn't answer here, we'd love to help you get started. [Join our Slack](https://join.slack.com/t/vantikcommunity/shared_invite/zt-2i1e781ip-zwauijRV9TRtRKoJi3tqng) and feel free to ask your questions in the #support channel.

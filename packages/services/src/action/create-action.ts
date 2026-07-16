@@ -1,4 +1,4 @@
-import type { CreateActionDto } from '@tegonhq/types';
+import type { CreateActionDto } from '@vantikhq/types';
 
 import axios from 'axios';
 

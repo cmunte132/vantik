@@ -13,7 +13,7 @@ import {
   UpdateTeamDto,
   UpdateTeamPreferencesDto,
   UsersOnWorkspaces,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { UserId, Workspace } from 'modules/auth/session.decorator';

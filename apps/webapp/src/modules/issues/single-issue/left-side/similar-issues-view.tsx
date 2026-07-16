@@ -1,11 +1,11 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@tegonhq/ui/components/collapsible';
-import { ChevronDown, ChevronRight, DuplicateLine2 } from '@tegonhq/ui/icons';
-import { cn } from '@tegonhq/ui/lib/utils';
+} from '@vantikhq/ui/components/collapsible';
+import { ChevronDown, ChevronRight, DuplicateLine2 } from '@vantikhq/ui/icons';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { useRouter } from 'next/router';
 import React from 'react';
 

@@ -6,8 +6,8 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from '@tegonhq/ui/components/select';
-import { BulletListLine, StackLine } from '@tegonhq/ui/icons';
+} from '@vantikhq/ui/components/select';
+import { BulletListLine, StackLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useProject } from 'hooks/projects';

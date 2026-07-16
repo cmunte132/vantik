@@ -13,7 +13,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { SignedURLBody } from '@tegonhq/types';
+import { SignedURLBody } from '@vantikhq/types';
 import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 

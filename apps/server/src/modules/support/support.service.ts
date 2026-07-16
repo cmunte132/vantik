@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { SupportDto, UpdatePersonDto } from '@tegonhq/types';
+import { SupportDto, UpdatePersonDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import PeopleService from 'modules/people/people.service';

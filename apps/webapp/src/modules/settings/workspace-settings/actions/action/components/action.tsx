@@ -1,4 +1,4 @@
-import { cn } from '@tegonhq/ui/lib/utils';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { useParams } from 'next/navigation';
 import { useRouter } from 'next/router';
 import ReactTimeAgo from 'react-time-ago';

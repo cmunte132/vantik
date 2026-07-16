@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { CreatePersonDto, UpdatePersonDto } from '@tegonhq/types';
+import { CreatePersonDto, UpdatePersonDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import CompanyService from 'modules/company/company.service';

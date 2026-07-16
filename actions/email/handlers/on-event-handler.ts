@@ -1,4 +1,4 @@
-import { ActionEventPayload } from '@tegonhq/sdk';
+import { ActionEventPayload } from '@vantikhq/sdk';
 import { emailTriage } from 'triggers/triage';
 
 export const onEventHandler = async (payload: ActionEventPayload) => {

@@ -2,7 +2,7 @@ import type { IssueSuggestionsStoreType } from './store';
 
 import type { SyncActionRecord } from 'common/types';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 
 export async function saveIssueSuggestionData(
   data: SyncActionRecord[],
@@ -21,7 +21,7 @@ export async function saveIssueSuggestionData(
 
       switch (record.action) {
         case 'I': {
-          await tegonDatabase.issueSuggestions.put(issueSuggestion);
+          await vantikDatabase.issueSuggestions.put(issueSuggestion);
           return (
             issueSuggestionsStore &&
             (await issueSuggestionsStore.update(
@@ -32,7 +32,7 @@ export async function saveIssueSuggestionData(
         }
 
         case 'U': {
-          await tegonDatabase.issueSuggestions.put(issueSuggestion);
+          await vantikDatabase.issueSuggestions.put(issueSuggestion);
           return (
             issueSuggestionsStore &&
             (await issueSuggestionsStore.update(
@@ -43,7 +43,7 @@ export async function saveIssueSuggestionData(
         }
 
         case 'D': {
-          await tegonDatabase.issueSuggestions.delete(record.data.id);
+          await vantikDatabase.issueSuggestions.delete(record.data.id);
           return (
             issueSuggestionsStore &&
             (await issueSuggestionsStore.deleteById(record.data.id))

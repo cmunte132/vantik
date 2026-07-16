@@ -1,4 +1,4 @@
-import { Textarea } from '@tegonhq/ui/components/textarea';
+import { Textarea } from '@vantikhq/ui/components/textarea';
 import * as React from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 

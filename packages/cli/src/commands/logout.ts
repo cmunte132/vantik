@@ -19,7 +19,7 @@ type LogoutCommandOptions = z.infer<typeof LogoutCommandOptions>;
 
 export function configureLogoutCommand(program: Command) {
   return commonOptions(
-    program.command('logout').description('Logout of Tegon'),
+    program.command('logout').description('Logout of Vantik'),
   ).action(async (options) => {
     await printInitialBanner();
     await logoutCommand(options);
@@ -47,5 +47,5 @@ export async function logout() {
 
   deleteAuthConfigProfile();
 
-  logger.info(`Logged out of Tegon`);
+  logger.info(`Logged out of Vantik`);
 }

@@ -1,4 +1,4 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 import Image from 'next/image';
 import { useState } from 'react';
 
@@ -32,7 +32,7 @@ export function Home() {
             size="xl"
             className="text-md"
             onClick={() => {
-              window.location.href = 'https://app.tegon.ai';
+              window.location.href = 'https://app.vantik.dev';
             }}
           >
             Get started for free

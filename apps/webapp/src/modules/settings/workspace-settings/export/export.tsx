@@ -1,4 +1,4 @@
-import { Button } from '@tegonhq/ui/components/button';
+import { Button } from '@vantikhq/ui/components/button';
 
 import { SettingSection } from 'modules/settings/setting-section';
 

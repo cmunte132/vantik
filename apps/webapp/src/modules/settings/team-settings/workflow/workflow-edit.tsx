@@ -1,4 +1,4 @@
-import type { WorkflowCategoryEnum } from '@tegonhq/types';
+import type { WorkflowCategoryEnum } from '@vantikhq/types';
 
 import type { WorkflowType } from 'common/types';
 

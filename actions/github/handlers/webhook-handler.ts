@@ -1,4 +1,4 @@
-import { ActionEventPayload, logger } from '@tegonhq/sdk';
+import { ActionEventPayload, logger } from '@vantikhq/sdk';
 import { commentEvent } from 'triggers/comment-event';
 import { prSync } from 'triggers/pr-sync';
 
@@ -10,7 +10,7 @@ export const webhookHandler = async (
 
   const eventType = eventHeaders['x-github-event'];
   if (
-    ['tegon-bot[bot]', 'tegon-bot-dev[bot]'].includes(eventBody.sender.login)
+    ['vantik-bot[bot]', 'vantik-bot-dev[bot]'].includes(eventBody.sender.login)
   ) {
     logger.log('Ignoring BOT message from Github');
     return undefined;

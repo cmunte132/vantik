@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader } from '@tegonhq/ui/components/loader';
+import { Loader } from '@vantikhq/ui/components/loader';
 import * as React from 'react';
 
 import { hash } from 'common/common-utils';
@@ -10,7 +10,7 @@ import { useCurrentWorkspace } from 'hooks/workspace';
 
 import { useBootstrapRecords, useDeltaRecords } from 'services/sync';
 
-import { tegonDatabase } from 'store/database';
+import { vantikDatabase } from 'store/database';
 import { useContextStore } from 'store/global-context-provider';
 import { MODELS } from 'store/models';
 import { UserContext } from 'store/user-context';
@@ -119,7 +119,7 @@ export function BootstrapWrapper({ children }: Props) {
   });
 
   const initStore = async () => {
-    const storeWorkspace = await tegonDatabase.workspaces.get({
+    const storeWorkspace = await vantikDatabase.workspaces.get({
       id: workspace.id,
     });
 

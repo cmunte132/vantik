@@ -1,8 +1,8 @@
-# Contributing to Tegon
+# Contributing to Vantik
 
-Thank you for considering contributing to Tegon! All community contributions are welcome.
+Thank you for considering contributing to Vantik! All community contributions are welcome.
 
-This guide outlines the process for contributing to this project. Please make sure to go through the [documentation](https://docs.tegon.ai) before making your contribution.
+This guide outlines the process for contributing to this project. Please make sure to go through the [documentation](https://docs.vantik.dev) before making your contribution.
 
 > And if you like the project, but just don't have time to contribute, that's fine. There are other easy ways to support the project and show your appreciation:
 >
@@ -15,8 +15,8 @@ This guide outlines the process for contributing to this project. Please make su
 
 Good first issues are a great way to start contributing to the project and get familiar with the codebase. Here's how to find them:
 
-1. Visit the "[Issues](https://github.com/tegonhq/tegon/issues)" tab on the main [repository](https://github.com/tegonhq/tegon).
-2. Use the "Labels" filter and select "[Good First Issue](https://github.com/tegonhq/tegon/labels/good%20first%20issue)" to see a list of beginner-friendly tasks.
+1. Visit the "[Issues](https://github.com/vantikhq/vantik/issues)" tab on the main [repository](https://github.com/vantikhq/vantik).
+2. Use the "Labels" filter and select "[Good First Issue](https://github.com/vantikhq/vantik/labels/good%20first%20issue)" to see a list of beginner-friendly tasks.
 3. Choose an issue that interests you, fork the project, and start working on it. Once you solve and test the issue, open a PR for review.
 
 Note: We are aware that having multiple contributors address the same issue can cause frustration. To prevent this, we adhere to a specific guideline: if a core team member has assigned an issue to a contributor, either as the issue assignee or through explicit assignment in the issue comments within the past three days, that contributor's pull request takes precedence. Otherwise, the first PR submitted will be given priority. This delay is reduced to one day for PR tagged with "size: minutes" and extended to a week for PR tagged "size: days".
@@ -32,11 +32,11 @@ Therefore, ensure you are assigned to an issue before beginning work on it.
 2. **Clone the Repository:** Clone your forked repository to your local machine using `git clone`.
 
 ```shell
-git clone https://github.com/yourusername/tegon.git
-cd tegon
+git clone https://github.com/yourusername/vantik.git
+cd vantik
 ```
 
-3. **Make Changes:** Make your desired changes and ensure that your code adheres to Tegon's coding standards.
+3. **Make Changes:** Make your desired changes and ensure that your code adheres to Vantik's coding standards.
 
 4. **Test Locally:** Test your changes locally to ensure they work as expected.
 
@@ -52,7 +52,7 @@ git commit -m "Add your detailed description here"
 git push origin branch-name
 ```
 
-7. **Create a Pull Request:** Go to the original Tegon repository and create a pull request. Please provide a detailed description of your changes. To have your pull request accepted, you must sign a CLA.
+7. **Create a Pull Request:** Go to the original Vantik repository and create a pull request. Please provide a detailed description of your changes. To have your pull request accepted, you must sign a CLA.
 
 8. **Code Review:** Your pull request will undergo a code review. Note that you might need to make any necessary adjustments based on feedback.
 
@@ -62,14 +62,14 @@ git push origin branch-name
 
 ## Code of Conduct
 
-Please note that by contributing to this project, you're expected to follow Tegon's [Code of Conduct](./CODE_OF_CONDUCT.md). All maintainers strive to maintain a welcoming, friendly, and inclusive community for all contributors.
+Please note that by contributing to this project, you're expected to follow Vantik's [Code of Conduct](./CODE_OF_CONDUCT.md). All maintainers strive to maintain a welcoming, friendly, and inclusive community for all contributors.
 
 <br>
 
 ## Reporting Issues
 
-If you encounter any issues or have suggestions for improvements, please feel free to [create an issue on Tegon's GitHub repository](https://github.com/tegonhq/tegon/issues/new). When reporting issues, please provide as much detail as possible to help in understanding and addressing the problem effectively.
+If you encounter any issues or have suggestions for improvements, please feel free to [create an issue on Vantik's GitHub repository](https://github.com/vantikhq/vantik/issues/new). When reporting issues, please provide as much detail as possible to help in understanding and addressing the problem effectively.
 
 ---
 
-Thank you for considering contributing to Tegon. Your contributions help make Tegon's Project management platform even better!
+Thank you for considering contributing to Vantik. Your contributions help make Vantik's Project management platform even better!

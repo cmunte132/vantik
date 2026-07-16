@@ -14,7 +14,7 @@ import {
   ProjectRequestParamsDto,
   UpdateProjectDto,
   UpdateProjectMilestoneDto,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { Workspace } from 'modules/auth/session.decorator';

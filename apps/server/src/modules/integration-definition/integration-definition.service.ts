@@ -4,7 +4,7 @@ import {
   IntegrationDefinitionIdDto,
   IntegrationEventPayload,
   IntegrationPayloadEventType,
-} from '@tegonhq/types';
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { IntegrationsService } from 'modules/integrations/integrations.service';

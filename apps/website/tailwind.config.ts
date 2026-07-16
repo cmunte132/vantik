@@ -1,5 +1,5 @@
 /* eslint-disable import/no-anonymous-default-export */
-import config from '@tegonhq/ui/tailwind.config';
+import config from '@vantikhq/ui/tailwind.config';
 
 export default {
   ...config,

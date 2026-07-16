@@ -38,10 +38,6 @@
     {
       "name": "Sign in",
       "url": "https://app.vantik.dev/auth"
-    },
-    {
-      "name": "Slack",
-      "url": "https://join.slack.com/t/vantikcommunity/shared_invite/zt-2jvar8p1x-9wqFTL9PP5ICImb76qcjEA"
     }
   ],
   "topbarCtaButton": {

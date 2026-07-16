@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","properties":{"messages":{"type":"array","items":{"type":"object"}},"model":{"type":"string"},"workspaceId":{"type":"string"},"llmModel":{"type":"string"}},"required":["messages","model","workspaceId","llmModel"],"title":"GetAIRequestDTO"}}}}}

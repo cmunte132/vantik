@@ -1,0 +1,1 @@
+{"parameters":[{"name":"integrationAccountId","in":"path","required":true,"schema":{"type":"string"}}]}

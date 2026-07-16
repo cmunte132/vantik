@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","required":["name","color","workspaceId"],"properties":{"name":{"type":"string"},"color":{"type":"string"},"description":{"type":"string"},"groupId":{"type":"string"},"workspaceId":{"type":"string"},"teamId":{"type":"string"}},"title":"CreateLabelDto"}}}}}

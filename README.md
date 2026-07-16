@@ -46,6 +46,27 @@ Expect dependency rot given the ~1 year gap since the original project's last re
 (0.3.11-alpha, March 2025) — package versions, Trigger.dev integration, and auth flows are
 the most likely things to need attention first.
 
+## Documentation
+
+Docs live in `apps/docs` (Docusaurus) and are deployed to GitHub Pages on every push to
+`main` that touches that directory — see `.github/workflows/deploy-docs.yml`. Once
+`vantik.dev`'s DNS is pointed at GitHub Pages (see `apps/docs/static/CNAME` and
+[GitHub's custom domain guide](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site)),
+they'll be live there. Until then, GitHub will still build and serve them at
+`https://cmunte132.github.io/vantik/`.
+
+To work on docs locally:
+
+```bash
+cd apps/docs
+pnpm install
+pnpm run gen-api-docs vantik   # regenerate API reference from openapi/openapi.yml
+pnpm start                     # local dev server with hot reload
+```
+
+One-time repo setup still needed: in GitHub repo Settings → Pages, set the source to
+"GitHub Actions" (not "Deploy from a branch") for the workflow above to work.
+
 ## Roadmap (planned direction, not yet built)
 
 - [ ] Get the existing stack building and running self-hosted under this fork
@@ -54,6 +75,11 @@ the most likely things to need attention first.
       workflows rather than human-triggered automations
 - [ ] Multi-repo/multi-project navigation for a single human reviewer across several
       agent-managed codebases
+
+Done:
+- [x] Rebrand from Tegon, remove Slack integration and Cloud marketing content
+- [x] Docs migrated off Mintlify to a self-hosted Docusaurus site on GitHub Pages,
+      replacing the old `apps/website` marketing app entirely
 
 ## Contributing
 

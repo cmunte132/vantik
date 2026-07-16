@@ -1,0 +1,56 @@
+---
+title: Overview & Authentication
+sidebar_label: Overview & Authentication
+description: Using the Vantik API
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+## Installation
+
+The API is available to run CRUD operations on Vantik.
+
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash
+npm i @vantikhq/sdk@0.1.3
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm add @vantikhq/sdk@0.1.3
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @vantikhq/sdk@0.1.3
+```
+
+</TabItem>
+</Tabs>
+
+## Usage
+
+```ts
+import { configure, createIssue } from "@vantikhq/sdk";
+
+configure({
+  // this is the default and if the `VANTIK_TOKEN` environment variable is set, can omit calling configure
+  token: <token>,
+});
+
+async function main() {
+  const runs = await createIssue({
+    title: "Issue title",
+    description: "Issue description",
+  });
+}
+
+main().catch(console.error);
+```

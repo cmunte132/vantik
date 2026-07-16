@@ -6,8 +6,8 @@
   "repository": "https://github.com/vantikhq/vantik.git",
   "author": "Vantik <support@vantik.dev>",
   "scripts": {
-    "dev-website": "dotenv -- turbo run dev --filter=website",
-    "dev": "dotenv -- turbo run migrate dev --parallel --filter=!website",
+    "dev-docs": "turbo run start --filter=docs",
+    "dev": "dotenv -- turbo run migrate dev --parallel --filter=!docs",
     "build": "dotenv -- turbo run build",
     "lint": "turbo run lint",
     "prune": "turbo prune",

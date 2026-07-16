@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","properties":{"workspaceId":{"type":"string"},"payload":{"type":"object"}},"required":["workspaceId","payload"],"title":"RunAction"}}}}}

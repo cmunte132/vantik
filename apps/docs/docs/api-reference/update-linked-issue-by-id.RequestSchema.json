@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","properties":{"url":{"type":"string"},"sourceId":{"type":"string"},"title":{"type":"string"},"sourceData":{"type":"object","additionalProperties":{"type":"string"}},"createdById":{"type":"string"}},"title":"UpdateLinkedIssueDto"}}}}}

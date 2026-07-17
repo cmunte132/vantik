@@ -2,7 +2,10 @@
 
 module.exports = {
   reactStrictMode: false,
-  transpilePackages: ['geist', '@vantikhq/ui'],
+  transpilePackages: ['geist', '@vantikhq/ui', 'react-day-picker', 'date-fns'],
+  experimental: {
+    esmExternals: 'loose',
+  },
   async redirects() {
     return [
       {
@@ -66,6 +69,9 @@ module.exports = withSentryConfig(
     project: 'javascript-nextjs',
     // Pass the auth token
     authToken: process.env.SENTRY_AUTH_TOKEN,
+    // Skip release creation/source map upload entirely when no token is
+    // configured (e.g. self-hosted docker builds) instead of failing the build
+    dryRun: !process.env.SENTRY_AUTH_TOKEN,
   },
   {
     // For all available options, see:

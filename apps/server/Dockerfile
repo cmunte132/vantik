@@ -1,12 +1,12 @@
-FROM node:18-alpine3.20 AS pruner
+FROM node:22-alpine AS pruner
 WORKDIR /app
 
 COPY --chown=node:node . .
-RUN npx -q turbo@1.10.9 prune --scope=server --docker
+RUN npx -q turbo@2 prune server --docker
 RUN find . -name "node_modules" -type d -prune -exec rm -rf '{}' +
 
 # Base strategy to have layer caching
-FROM node:18-alpine3.20 AS base
+FROM node:22-alpine AS base
 RUN apk add openssl dumb-init libc6-compat
 WORKDIR /app
 COPY --chown=node:node .gitignore .gitignore
@@ -16,16 +16,14 @@ COPY --from=pruner --chown=node:node /app/out/pnpm-workspace.yaml ./pnpm-workspa
 ## Dev deps
 FROM base AS dev-deps
 WORKDIR /app
-# Corepack is used to install pnpm
-RUN npm install -g corepack && corepack enable
+RUN npm install -g pnpm@10.3.0
 ENV NODE_ENV development
 RUN pnpm install --ignore-scripts --no-frozen-lockfile
 
 ## Production deps
 FROM base AS production-deps
 WORKDIR /app
-# Corepack is used to install pnpm
-RUN npm install -g corepack && corepack enable
+RUN npm install -g pnpm@10.3.0
 ENV NODE_ENV production
 RUN pnpm install --prod --no-frozen-lockfile
 COPY --from=pruner --chown=node:node /app/apps/server/prisma/schema.prisma /app/apps/server/prisma/schema.prisma
@@ -35,8 +33,7 @@ ENV NPM_CONFIG_IGNORE_WORKSPACE_ROOT_CHECK true
 ## Builder (builds the server)
 FROM base AS builder
 WORKDIR /app
-# Corepack is used to install pnpm
-RUN npm install -g corepack && corepack enable
+RUN npm install -g pnpm@10.3.0
 
 COPY --from=pruner --chown=node:node /app/out/full/ .
 COPY --from=dev-deps --chown=node:node /app/ .
@@ -45,14 +42,14 @@ COPY --from=pruner --chown=node:node /app/apps/server/prisma/schema.prisma /app/
 RUN pnpm run build --filter=server...
 
 # Runner
-FROM node:18-alpine3.20 AS runner
+FROM node:22-alpine AS runner
 RUN apk update \
   && apk add --no-cache openssl\
   && rm -rf /var/lib/apt/lists/* \
   && rm -rf /var/cache/apk/*
 RUN apk add --no-cache dumb-init bash
 WORKDIR /app
-RUN npm install -g corepack && corepack enable
+RUN npm install -g pnpm@10.3.0
 ENV NODE_ENV production
 
 COPY --from=pruner --chown=node:node /app/out/full/ .

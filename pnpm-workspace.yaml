@@ -3,3 +3,17 @@ packages:
   - "packages/*"
   - "tooling/*"
   - "!actions/"
+
+onlyBuiltDependencies:
+  - "@nestjs/core"
+  - "@prisma/client"
+  - "@prisma/engines"
+  - "@sentry/cli"
+  - bcrypt
+  - browser-tabs-lock
+  - esbuild
+  - msgpackr-extract
+  - prisma
+  - protobufjs
+  - sharp
+  - unrs-resolver

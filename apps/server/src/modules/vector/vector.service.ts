@@ -32,8 +32,17 @@ export class VectorService implements OnModuleInit {
   private readonly logger: LoggerService = new LoggerService('VectorService');
 
   async onModuleInit() {
-    // await this.typesenseClient.collections('issues').delete();
-    await this.createIssuesCollection();
+    // Search must not block server boot — typesense may still be starting
+    // (or be entirely absent); collection setup is retried implicitly on the
+    // next boot and errors are logged inside createIssuesCollection.
+    try {
+      await this.createIssuesCollection();
+    } catch (error) {
+      this.logger.error({
+        message: `Unable to initialise typesense issues collection: ${error.message}`,
+        where: `VectorService.onModuleInit`,
+      });
+    }
   }
 
   async createIssuesCollection() {
@@ -49,7 +58,15 @@ export class VectorService implements OnModuleInit {
           this.isCohere ? cohereEmbedding : typesenseEmbedding,
         );
 
-        await this.typesenseClient.collections().create(issueSchema);
+        try {
+          await this.typesenseClient.collections().create(issueSchema);
+        } catch (createError) {
+          // A previous create attempt may have succeeded server-side after the
+          // client timed out — a duplicate-collection 409 is fine.
+          if (createError.httpStatus !== 409) {
+            throw createError;
+          }
+        }
         this.logger.info({
           message: 'Created an issue collection',
           where: `VectorService.createIssuesCollection`,

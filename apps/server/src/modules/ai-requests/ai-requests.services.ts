@@ -28,7 +28,12 @@ export default class AIRequestsService {
       !configService.get('ANTHROPIC_API_KEY')
     ) {
       const ollama = new Ollama({ host: process.env['OLLAMA_HOST'] });
-      ollama.pull({ model: process.env['LOCAL_MODEL'] });
+      ollama.pull({ model: process.env['LOCAL_MODEL'] }).catch((error) => {
+        this.logger.error({
+          message: `Unable to pull local model from ollama: ${error.message}`,
+          where: `AIRequestsService.constructor`,
+        });
+      });
     }
   }
 

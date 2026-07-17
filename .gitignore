@@ -12,3 +12,5 @@ docker-compose.prod.yaml
 *.tsbuildinfo
 
 dist
+# Claude Code local config
+.claude/

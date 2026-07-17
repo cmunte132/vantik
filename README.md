@@ -20,9 +20,11 @@ This fork exists to invert that: agents create, plan, and update work here as th
 mode of operation, with the UI serving as a human review/audit layer rather than the primary
 interface.
 
-**Status:** early-stage personal fork. Expect breaking changes, incomplete rebranding in
-places, and a codebase that hasn't been built or run yet since the rename. See
-[Getting Started](#getting-started) below before assuming anything works out of the box.
+**Status:** early-stage personal fork. Expect breaking changes and incomplete rebranding in
+places. The codebase builds and runs locally (see [Getting Started](#getting-started));
+dependencies were brought up to date in July 2026 (latest within each major, plus NestJS 11
+and Prisma 6 — the React 19 / Next 16 / Tiptap 3 / AI SDK / trigger.dev 4 majors are still
+pending).
 
 ## Attribution & license
 
@@ -31,20 +33,58 @@ licensed under [AGPL-3.0](./LICENSE). All credit for the original architecture, 
 and implementation goes to the Tegon team. This fork is maintained independently and is not
 affiliated with or endorsed by RedPlanetHQ or Tegon.
 
-## Getting started
+## Getting started (self-hosting)
 
-This repo hasn't been built or verified since the rebrand. Before relying on anything below,
-treat it as a starting point to debug, not a working quickstart:
+Prerequisites: Docker (or Podman with the compose provider). The compose stack is
+turn-key — it runs the webapp, API server, and all backing services (postgres, redis,
+SuperTokens, Typesense), and the server applies database migrations
+on startup.
+
+```bash
+cp .env.example .env   # defaults work out of the box; change secrets for real deployments
+docker compose up -d
+```
+
+Open http://localhost:3000 and sign in with any email address — without SMTP configured,
+the magic login link is printed to the server log instead of emailed:
+
+```bash
+docker compose logs server | grep -A5 "magic link"
+```
+
+For a non-localhost deployment, set `FRONTEND_HOST` / `BACKEND_HOST` in `.env` to your
+domain and change `POSTGRES_PASSWORD`, `TYPESENSE_API_KEY`, and `TRIGGER_TOKEN`.
+
+Optional services (the server logs an error and continues without them):
+
+- **trigger.dev** — powers background actions/automations;
+  [self-hosting guide](https://trigger.dev/docs/self-hosting). Point `TRIGGER_API_URL` /
+  `TRIGGER_DATABASE_URL` at your trigger.dev deployment and its database.
+- **ollama** — local LLM for AI features when `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` are unset.
+- **SMTP** — set the `SMTP_*` variables to send real emails.
+
+## Local development
+
+Prerequisites: Node.js ≥ 20, pnpm 10 (`npm i -g pnpm@10`), and Docker/Podman.
+For hot reload, run only the backing services in containers and the apps on the
+host (the backing services publish their ports on localhost for exactly this):
 
 ```bash
 cp .env.example .env
-# fill in required values — check docker-compose.yaml and apps/server for what's needed
-docker compose up
+
+# 1. Backing services only (skips the webapp/server containers)
+docker compose up -d postgres redis supertokens typesense
+
+# 2. Dependencies + database schema
+pnpm install
+pnpm migrate
+
+# 3. Run the server (:3001) and webapp (:3000) with hot reload
+pnpm dev
 ```
 
-Expect dependency rot given the ~1 year gap since the original project's last release
-(0.3.11-alpha, March 2025) — package versions, Trigger.dev integration, and auth flows are
-the most likely things to need attention first.
+If the full stack is already running in containers, free the app ports first
+with `docker compose stop webapp server`.
 
 ## Documentation
 

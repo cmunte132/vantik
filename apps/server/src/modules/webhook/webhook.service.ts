@@ -15,9 +15,6 @@ import { actionRun } from 'trigger/action-run';
 
 import { prepareTriggerPayload } from 'modules/action-event/action-event.utils';
 import { IntegrationsService } from 'modules/integrations/integrations.service';
-import IssueCommentsService from 'modules/issue-comments/issue-comments.service';
-import IssuesService from 'modules/issues/issues.service';
-import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
 @Injectable()
@@ -27,9 +24,6 @@ export default class WebhookService {
   constructor(
     private prisma: PrismaService,
     private integrations: IntegrationsService,
-    private issuesService: IssuesService,
-    private issueCommentsService: IssueCommentsService,
-    private linkedIssueService: LinkedIssueService,
   ) {}
 
   async handleEvents(

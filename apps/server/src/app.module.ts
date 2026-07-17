@@ -1,13 +1,12 @@
 import { CacheModule } from '@nestjs/cache-manager';
-import { Logger, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { MailerModule } from '@nestjs-modules/mailer';
-import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
+import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { PrismaModule } from 'nestjs-prisma';
 
 import config from 'common/configs/config';
-import { loggingMiddleware } from 'common/middleware/logging.middleware';
 
 import { ActionModule } from 'modules/action/action.module';
 import { AIRequestsModule } from 'modules/ai-requests/ai-requests.module';
@@ -66,9 +65,6 @@ import { AppService } from './app.service';
     ConfigModule.forRoot({ envFilePath: '.env' }),
     PrismaModule.forRoot({
       isGlobal: true,
-      prismaServiceOptions: {
-        middlewares: [loggingMiddleware(new Logger('PrismaMiddleware'))], // configure your prisma middleware
-      },
     }),
 
     MailerModule.forRoot({

@@ -19,6 +19,16 @@ import { AppModule } from './app.module';
   return this.toString();
 };
 
+// Several services fire-and-forget calls to optional integrations
+// (trigger.dev, ollama, SMTP). A rejected promise from one of those must not
+// take down the whole server, so log instead of crashing.
+process.on('unhandledRejection', (reason) => {
+  new LoggerService('UnhandledRejection').error({
+    message: `Unhandled promise rejection: ${reason instanceof Error ? reason.message : reason}`,
+    where: 'process.unhandledRejection',
+  });
+});
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: new LoggerService('Vantik'),
@@ -66,4 +76,12 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT || 3001);
 }
-bootstrap();
+bootstrap().catch((error) => {
+  // A failed boot must exit (rather than linger half-initialised) so the
+  // container restart policy can retry it.
+  new LoggerService('Bootstrap').error({
+    message: `Fatal error during bootstrap: ${error instanceof Error ? error.stack : error}`,
+    where: 'bootstrap',
+  });
+  process.exit(1);
+});

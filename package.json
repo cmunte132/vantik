@@ -20,12 +20,18 @@
     "migrate": "dotenv -- turbo run migrate --filter=server"
   },
   "packageManager": "pnpm@10.3.0",
+  "pnpm": {
+    "overrides": {
+      "react": "^18.3.1",
+      "react-dom": "^18.3.1",
+      "@types/react": "^18.3.31",
+      "@types/react-dom": "^18.3.7"
+    }
+  },
   "dependencies": {
     "dotenv-cli": "^7.4.4",
-    "date-fns": "^3.6.0",
-    "react-day-picker": "^8.9.1",
     "turbo": "^2.0.9",
-    "typescript": "5.4.3",
-    "zod": "3.23.8"
+    "typescript": "^5.4.3",
+    "zod": "^3.23.8"
   }
 }

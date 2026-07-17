@@ -1,18 +1,14 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 
-import { AppService } from './app.service';
+import { AppService, ServerInfo } from './app.service';
 
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
+  // Root doubles as a liveness/health endpoint for docker/k8s probes.
   @Get()
-  getHello(): string {
-    return this.appService.getHello();
-  }
-
-  @Get('hello/:name')
-  getHelloName(@Param('name') name: string): string {
-    return this.appService.getHelloName(name);
+  getInfo(): ServerInfo {
+    return this.appService.getInfo();
   }
 }

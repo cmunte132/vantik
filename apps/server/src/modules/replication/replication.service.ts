@@ -5,7 +5,8 @@ import { PrismaService } from 'nestjs-prisma';
 import { Client } from 'pg';
 import {
   LogicalReplicationService,
-  Wal2JsonPlugin,
+  Pgoutput,
+  PgoutputPlugin,
 } from 'pg-logical-replication';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -16,13 +17,14 @@ import SyncActionsService from 'modules/sync-actions/sync-actions.service';
 import { getWorkspaceId } from 'modules/sync-actions/sync-actions.utils';
 
 import {
-  logChangeType,
-  logType,
   tablesToSendMessagesFor,
   tablesToTrigger,
 } from './replication.interface';
 
-const REPLICATION_SLOT_PLUGIN = 'wal2json';
+// pgoutput is postgres' built-in logical decoder, so any stock postgres
+// image works — no wal2json extension required.
+const REPLICATION_SLOT_PLUGIN = 'pgoutput';
+const PUBLICATION_NAME = 'vantik_publication';
 
 @Injectable()
 export default class ReplicationService {
@@ -60,8 +62,8 @@ export default class ReplicationService {
     try {
       // Query to find all inactive replication slots
       const findInactiveSlotsQuery = `
-        SELECT slot_name 
-        FROM pg_replication_slots 
+        SELECT slot_name
+        FROM pg_replication_slots
         WHERE active = false;
       `;
 
@@ -115,9 +117,27 @@ export default class ReplicationService {
     }
   }
 
+  async ensurePublication() {
+    const publicationExists = await this.client.query(
+      `SELECT 1 FROM pg_publication WHERE pubname = '${PUBLICATION_NAME}'`,
+    );
+
+    if (publicationExists.rows.length === 0) {
+      await this.client.query(
+        `CREATE PUBLICATION ${PUBLICATION_NAME} FOR ALL TABLES`,
+      );
+      this.logger.info({
+        message: `Publication ${PUBLICATION_NAME} created.`,
+        where: `ReplicationService.ensurePublication`,
+      });
+    }
+  }
+
   async createReplicationSlot() {
     try {
       await this.setReplicaIdentityFull();
+
+      await this.ensurePublication();
 
       await this.checkForSlot();
 
@@ -168,32 +188,23 @@ export default class ReplicationService {
     }
   }
 
-  getChangedData(change: logChangeType) {
+  getChangedData(log: Pgoutput.MessageInsert | Pgoutput.MessageUpdate) {
     // eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style, @typescript-eslint/no-explicit-any
     const changedData: { [key: string]: any } = {};
-    const keyNames = change.oldkeys?.keynames || [];
-    const oldValues = change.oldkeys?.keyvalues || [];
-    const columnNames = change.columnnames || [];
-    const newValues = change.columnvalues || [];
+    const newRow = log.new ?? {};
+    const oldRow = (log.tag === 'update' ? log.old : null) ?? {};
 
-    // Create a map of old values by key name
-    // eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style, @typescript-eslint/no-explicit-any
-    const oldValueMap: { [key: string]: any } = {};
-    keyNames.forEach((keyName, index) => {
-      oldValueMap[keyName] = oldValues[index];
-    });
+    // Values are decoded (dates, json, arrays...), so normalise before
+    // comparing to avoid reporting identical objects as changes.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const normalise = (value: any) =>
+      value instanceof Object ? JSON.stringify(value) : value;
 
-    // Compare each column to see if the value has changed
-    columnNames.forEach((columnName, index) => {
-      const oldValue = oldValueMap[columnName];
-      const newValue = newValues[index];
+    Object.keys(newRow).forEach((columnName) => {
+      const oldValue = oldRow[columnName];
+      const newValue = newRow[columnName];
 
-      // Check if the old value and new value are different
-      if (
-        oldValue !== newValue &&
-        oldValue !== 'undefined' &&
-        newValue !== null
-      ) {
+      if (normalise(oldValue) !== normalise(newValue) && newValue !== null) {
         changedData[columnName] = newValue;
       }
     });
@@ -211,7 +222,10 @@ export default class ReplicationService {
       port: this.configService.get('DB_PORT'),
     };
     const service = new LogicalReplicationService(clientConfig);
-    const plugin = new Wal2JsonPlugin({});
+    const plugin = new PgoutputPlugin({
+      protoVersion: 1,
+      publicationNames: [PUBLICATION_NAME],
+    });
     service
       .subscribe(plugin, this.replicationSlotName)
       .catch((e) => {
@@ -224,65 +238,56 @@ export default class ReplicationService {
         });
       });
 
-    service.on('data', (_lsn: string, log: logType) => {
-      // log contains change data in JSON format
-      if (log.change) {
-        log.change.forEach(async (change: logChangeType) => {
-          if (change.schema !== dbSchema || change.kind === 'delete') {
-            return;
-          }
+    service.on('data', async (_lsn: string, log: Pgoutput.Message) => {
+      // pgoutput emits one event per message (begin/commit/relation/DML);
+      // deletes are ignored because the app soft-deletes via the `deleted` column
+      if (log.tag !== 'insert' && log.tag !== 'update') {
+        return;
+      }
 
-          // Log or process the changed data
-          const { columnvalues, columnnames } = change;
-          const modelName = change.table as ModelNameEnum;
-          const deletedIndex = columnnames?.indexOf('deleted');
-          const isDeleted = deletedIndex !== -1 && !!columnvalues[deletedIndex];
-          const idIndex = columnnames.indexOf('id');
-          const modelId = columnvalues[idIndex];
+      if (log.relation.schema !== dbSchema) {
+        return;
+      }
 
-          if (tablesToSendMessagesFor.has(modelName)) {
-            const syncActionData =
-              await this.syncActionsService.upsertSyncAction(
-                _lsn,
-                isDeleted ? 'delete' : change.kind,
-                modelName,
-                modelId,
-              );
+      const modelName = log.relation.name as ModelNameEnum;
+      const newRow = log.new ?? {};
+      const isDeleted = !!newRow.deleted;
+      const modelId = newRow.id;
 
-            const recipientId = [
-              ModelNameEnum.Notification,
-              ModelNameEnum.Conversation,
-              ModelNameEnum.ConversationHistory,
-            ].includes(modelName)
-              ? (syncActionData.data.recipientId ?? syncActionData.data.userId)
-              : syncActionData.workspaceId;
+      if (tablesToSendMessagesFor.has(modelName)) {
+        const syncActionData = await this.syncActionsService.upsertSyncAction(
+          _lsn,
+          isDeleted ? 'delete' : log.tag,
+          modelName,
+          modelId,
+        );
 
-            this.syncGateway.wss
-              .to(recipientId)
-              .emit('message', JSON.stringify(syncActionData));
-          }
+        const recipientId = [
+          ModelNameEnum.Notification,
+          ModelNameEnum.Conversation,
+          ModelNameEnum.ConversationHistory,
+        ].includes(modelName)
+          ? (syncActionData.data.recipientId ?? syncActionData.data.userId)
+          : syncActionData.workspaceId;
 
-          if (tablesToTrigger.has(modelName)) {
-            const changedData = this.getChangedData(change);
+        this.syncGateway.wss
+          .to(recipientId)
+          .emit('message', JSON.stringify(syncActionData));
+      }
 
-            const workspaceId = await getWorkspaceId(
-              this.prisma,
-              modelName,
-              modelId,
-            );
+      if (tablesToTrigger.has(modelName)) {
+        const changedData = this.getChangedData(log);
 
-            await this.actionEventService.createEvent({
-              modelName,
-              modelId,
-              eventType: isDeleted ? 'delete' : change.kind,
-              eventData: changedData,
-              workspaceId,
-              sequenceId: _lsn,
-            });
-          }
+        const workspaceId = await getWorkspaceId(this.prisma, modelName, modelId);
+
+        await this.actionEventService.createEvent({
+          modelName,
+          modelId,
+          eventType: isDeleted ? 'delete' : log.tag,
+          eventData: changedData,
+          workspaceId,
+          sequenceId: _lsn,
         });
-      } else {
-        this.logger.info({ message: 'No change data in log' });
       }
     });
   }

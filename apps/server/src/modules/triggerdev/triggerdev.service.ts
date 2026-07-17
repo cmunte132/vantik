@@ -37,29 +37,37 @@ export class TriggerdevService {
   }
 
   async initCommonProject() {
-    await createOrg(this.knex, this.logger);
+    try {
+      await createOrg(this.knex, this.logger);
 
-    const commonProjectExists = await checkIfProjectExist(
-      {
-        slug: 'common', // Check if a project with the slug 'common' exists
-      },
-      this.knex,
-    );
-
-    createPersonalToken(this.knex); // Create a personal access token
-
-    if (!commonProjectExists) {
-      this.logger.info({
-        message: `Common project doesn't exist`,
-        where: `TriggerdevService.initCommonProject`,
-      }); // Log a message if the common project doesn't exist
-      await createProject(
-        'Common',
-        'common',
-        uuidv4().replace(/-/g, ''),
+      const commonProjectExists = await checkIfProjectExist(
+        {
+          slug: 'common', // Check if a project with the slug 'common' exists
+        },
         this.knex,
-        this.logger,
-      ); // Create the common project
+      );
+
+      await createPersonalToken(this.knex); // Create a personal access token
+
+      if (!commonProjectExists) {
+        this.logger.info({
+          message: `Common project doesn't exist`,
+          where: `TriggerdevService.initCommonProject`,
+        }); // Log a message if the common project doesn't exist
+        await createProject(
+          'Common',
+          'common',
+          uuidv4().replace(/-/g, ''),
+          this.knex,
+          this.logger,
+        ); // Create the common project
+      }
+    } catch (error) {
+      this.logger.error({
+        message: `Unable to initialise the trigger.dev common project. Is trigger.dev running and TRIGGER_DATABASE_URL set correctly?`,
+        where: `TriggerdevService.initCommonProject`,
+        error,
+      });
     }
   }
 

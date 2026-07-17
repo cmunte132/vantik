@@ -1,32 +1,174 @@
-version: "3"
+# Turn-key self-hosted Vantik.
+#
+#   cp .env.example .env      # defaults work out of the box; change secrets for real deployments
+#   docker compose up -d
+#
+# Webapp on :3000, API on :3001. The server applies database migrations on startup.
+#
+# For local development (apps on the host via pnpm, infra only in containers),
+# use docker-compose.dev.yaml instead.
+#
+# Values in `environment:` blocks override .env where the in-container network
+# differs from the host view (service names instead of localhost).
+#
+# Not included (optional — the server logs an error and continues without them):
+#   - trigger.dev (background actions/automations) — https://trigger.dev/docs/self-hosting
+#   - ollama (local LLM fallback when no OPENAI/ANTHROPIC key is set)
+#   - SMTP — without it, magic-link login emails are printed to the server log
+#     (docker compose logs server | grep -A5 "magic link")
+
+name: vantik
 
 services:
   webapp:
-    container_name: webapp
+    container_name: vantik-webapp
     build:
       context: .
       dockerfile: ./apps/webapp/Dockerfile
-    image: vantikhq/vantik-webapp:0.3.11-alpha
-    restart: always
+    image: vantikhq/vantik-webapp:${VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # The Next.js server proxies /api/* to the backend from inside the
+      # container network; browser-facing NEXT_PUBLIC_* values keep the host view.
+      BACKEND_URL: http://server:3001
+      NEXT_PUBLIC_VERSION: ${VERSION:-}
+      NEXT_PUBLIC_BASE_HOST: ${FRONTEND_HOST:-http://localhost:3000}
+      NEXT_PUBLIC_BACKEND_HOST: ${BACKEND_HOST:-http://localhost:3001}
     ports:
-      - 3000:3000
+      - "3000:3000"
     networks:
       - vantik
 
   server:
-    container_name: server
+    container_name: vantik-server
     build:
       context: .
       dockerfile: ./apps/server/Dockerfile
-    image: vantikhq/vantik-server:0.3.11-alpha
-    restart: always
+    image: vantikhq/vantik-server:${VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      supertokens:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      REDIS_URL: redis
+      TYPESENSE_HOST: typesense
+      SUPERTOKEN_CONNECTION_URI: http://supertokens:3567
+      DATABASE_URL: postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${POSTGRES_DB:-vantik}?schema=${DB_SCHEMA:-vantik}&sslmode=prefer
+      REPLICATION_DATABASE_URL: postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${POSTGRES_DB:-vantik}
+      TRIGGER_DATABASE_URL: postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${TRIGGER_DB:-trigger}
+      OAUTH_CALLBACK_URL: ${FRONTEND_HOST:-http://localhost:3000}/api/v1/oauth/callback
+      TRIGGER_ACCESS_TOKEN: tr_pat_${TRIGGER_TOKEN:-}
     ports:
-      - 3001:3001
+      - "3001:3001"
     networks:
       - vantik
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ | grep -q '\"status\":\"ok\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 
-# Define a network, which allows containers to communicate
-# with each other, by using their container name as a hostname
+  postgres:
+    container_name: vantik-postgres
+    image: postgres:18-alpine
+    restart: unless-stopped
+    # wal_level=logical enables the built-in pgoutput logical decoding the
+    # sync engine subscribes to; no postgres extensions are required.
+    command: ["postgres", "-c", "wal_level=logical"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-docker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-docker}
+      POSTGRES_DB: ${POSTGRES_DB:-vantik}
+    ports:
+      # bound to localhost only — for running the apps on the host during
+      # development (see "Local development" in README.md)
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    networks:
+      - vantik
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-docker} -d ${POSTGRES_DB:-vantik}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    container_name: vantik-redis
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - vantik
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  supertokens:
+    container_name: vantik-supertokens
+    image: supertokens/supertokens-postgresql:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRESQL_CONNECTION_URI: "postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${POSTGRES_DB:-vantik}"
+    ports:
+      - "127.0.0.1:3567:3567"
+    networks:
+      - vantik
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ': > /dev/tcp/127.0.0.1/3567'"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  typesense:
+    container_name: vantik-typesense
+    image: typesense/typesense:27.1
+    restart: unless-stopped
+    command:
+      ["--data-dir", "/data", "--api-key", "${TYPESENSE_API_KEY:-random_API_key}"]
+    ports:
+      - "127.0.0.1:8108:8108"
+    volumes:
+      - typesense-data:/data
+    networks:
+      - vantik
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "exec 3<>/dev/tcp/127.0.0.1/8108 && printf 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q ok <&3",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 networks:
   vantik:
-    external: true
+
+volumes:
+  postgres-data:
+  redis-data:
+  typesense-data:

@@ -16,7 +16,7 @@ import posthog from 'posthog-js';
 import { PostHogProvider } from 'posthog-js/react';
 import React from 'react';
 import { HotkeysProvider } from 'react-hotkeys-hook';
-import { Hydrate, QueryClientProvider } from 'react-query';
+import { HydrationBoundary, QueryClientProvider } from '@tanstack/react-query';
 import { SuperTokensWrapper } from 'supertokens-auth-react';
 
 import { initPosthog, initSuperTokens } from 'common/init-config';
@@ -54,7 +54,7 @@ export const MyApp: NextComponentType<
             <TooltipProvider delayDuration={500}>
               <StoreContext.Provider value={storeContextStore}>
                 <QueryClientProvider client={queryClientRef.current}>
-                  <Hydrate state={dehydratedState}>
+                  <HydrationBoundary state={dehydratedState}>
                     <div
                       className={cn(
                         'min-h-screen font-sans antialiased flex',
@@ -66,7 +66,7 @@ export const MyApp: NextComponentType<
                     </div>
 
                     <Toaster />
-                  </Hydrate>
+                  </HydrationBoundary>
                 </QueryClientProvider>
               </StoreContext.Provider>
             </TooltipProvider>

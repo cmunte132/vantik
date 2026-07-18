@@ -1,6 +1,6 @@
 import type { RoleEnum } from '@vantikhq/types';
 
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import { ajaxPost } from 'services/utils';
 
@@ -49,9 +49,10 @@ export function useInviteUsersMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(inviteUsers, {
+  return useMutation({
+    mutationFn: inviteUsers,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

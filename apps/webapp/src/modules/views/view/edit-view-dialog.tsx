@@ -45,7 +45,7 @@ export function EditViewDialog({ open, setOpen, view }: EditViewDialogProps) {
     },
   });
 
-  const { mutate: updateView, isLoading } = useUpdateViewMutation({
+  const { mutate: updateView, isPending: isLoading } = useUpdateViewMutation({
     onSuccess: () => {
       toast({
         title: `Your view was successfully updated`,

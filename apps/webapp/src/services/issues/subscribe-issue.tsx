@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { SubscribeType } from 'common/types';
 
@@ -47,9 +47,10 @@ export function useUpdateIssueSubscribeMutation({
     onSuccess && onSuccess();
   };
 
-  return useMutation(updateIssueSubscribe, {
+  return useMutation({
+    mutationFn: updateIssueSubscribe,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

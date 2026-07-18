@@ -22,9 +22,11 @@ interface.
 
 **Status:** early-stage personal fork. Expect breaking changes and incomplete rebranding in
 places. The codebase builds and runs locally (see [Getting Started](#getting-started));
-dependencies were brought up to date in July 2026 (latest within each major, plus NestJS 11
-and Prisma 6 — the React 19 / Next 16 / Tiptap 3 / AI SDK / trigger.dev 4 majors are still
-pending).
+dependencies were brought up to date in July 2026: NestJS 11, Prisma 6, React 19,
+Next 15, TanStack Query 5, Tiptap 3, AI SDK 7, and zod 4. Still pending: trigger.dev 4
+(the whole automations subsystem is being rethought first) and Next 16 (it removes
+`publicRuntimeConfig`, which self-hosted deployments rely on for runtime `NEXT_PUBLIC_*`
+configuration — needs a replacement mechanism before upgrading).
 
 ## Attribution & license
 

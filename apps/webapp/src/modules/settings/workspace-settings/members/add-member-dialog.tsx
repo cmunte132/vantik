@@ -65,7 +65,7 @@ export function AddMemberDialog({ setDialogOpen }: AddMemberDialogProps) {
     setDialogOpen(false);
   };
 
-  const { mutate: inviteUsers, isLoading } = useInviteUsersMutation({
+  const { mutate: inviteUsers, isPending: isLoading } = useInviteUsersMutation({
     onSuccess: () => {
       toast({
         title: 'Invites sent',

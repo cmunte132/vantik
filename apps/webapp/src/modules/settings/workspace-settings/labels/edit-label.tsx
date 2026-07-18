@@ -14,7 +14,7 @@ interface NewLabelProps {
 export function EditLabel({ onCancel, label }: NewLabelProps) {
   const [labelName, setLabelName] = React.useState(label.name);
 
-  const { mutate: updateLabel, isLoading } = useUpdateLabelMutation({
+  const { mutate: updateLabel, isPending: isLoading } = useUpdateLabelMutation({
     onSuccess: () => {
       onCancel();
     },

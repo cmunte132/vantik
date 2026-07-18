@@ -10,7 +10,11 @@ import { Separator } from '@vantikhq/ui/components/separator';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import { cn } from '@vantikhq/ui/lib/utils';
 import React from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import {
+  type UseFormReturn,
+  useFieldArray,
+  useForm,
+} from 'react-hook-form';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { Key } from 'ts-key-enum';
 import { z } from 'zod';
@@ -48,14 +52,18 @@ export function NewIssue({
   // The form has a array of issues where first issue is the parent and the later sub issues
   const form = useForm<z.infer<typeof NewIssueSchema>>({
     resolver: zodResolver(
-      createOutsideFunction ? NewIssueTemplateSchema : NewIssueSchema,
+      // The template schema only loosens `title`; typing the resolver off the
+      // stricter schema keeps the form generics stable across both.
+      (createOutsideFunction
+        ? NewIssueTemplateSchema
+        : NewIssueSchema) as typeof NewIssueSchema,
     ),
     defaultValues: {
       issues: [defaultValues],
     },
   });
 
-  const { mutate: createIssue, isLoading } = useCreateIssueMutation({
+  const { mutate: createIssue, isPending: isLoading } = useCreateIssueMutation({
     onSuccess: (data: IssueType) => {
       form.reset();
       toast({
@@ -85,8 +93,8 @@ export function NewIssue({
 
   const [collapseId, setCollapseId] = React.useState(fields[0].id);
 
-  const onSubmit = (values: { issues: CreateIssueParams[] }) => {
-    const issues = [...values.issues];
+  const onSubmit = (values: z.infer<typeof NewIssueSchema>) => {
+    const issues = [...(values.issues as CreateIssueParams[])];
     const parentIssue = issues.shift();
 
     const { json: parentDescription } = getTiptapJSON(parentIssue.description);
@@ -159,7 +167,7 @@ export function NewIssue({
                       <Separator />
                       <IssueCollapseView
                         index={index}
-                        form={form}
+                        form={form as unknown as UseFormReturn}
                         isSubIssue={index > 0}
                         // Sub issue controllers
                         subIssueOperations={{
@@ -177,7 +185,7 @@ export function NewIssue({
                   <NewIssueForm
                     key={field.id}
                     isSubIssue={index > 0}
-                    form={form}
+                    form={form as unknown as UseFormReturn}
                     index={index}
                     defaultValues={defaultValues}
                     isTemplate={!!createOutsideFunction}

@@ -116,7 +116,8 @@ export const AssigneeList = observer(({ users }: AssigneeListProps) => {
         parent={parent}
         rowIndex={index}
       >
-        <div style={style} key={key}>
+        {({ registerChild }) => (
+        <div style={style} key={key} ref={registerChild}>
           {row.type === 'header' ? (
             getHeaderRow(row, index)
           ) : (
@@ -127,6 +128,7 @@ export const AssigneeList = observer(({ users }: AssigneeListProps) => {
             />
           )}
         </div>
+      )}
       </CellMeasurer>
     );
   };

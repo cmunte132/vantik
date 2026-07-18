@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { LinkedIssueType } from 'common/types';
 
@@ -47,9 +47,10 @@ export function useUpdateLinkedIssueMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(updateLinkedIssue, {
+  return useMutation({
+    mutationFn: updateLinkedIssue,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

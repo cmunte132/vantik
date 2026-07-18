@@ -19,7 +19,7 @@ export const CreateNewTemplate = observer(
     const [name, setName] = React.useState('');
     const { toast } = useToast();
 
-    const { mutate: createTemplate, isLoading } = useCreateTemplateMutation({});
+    const { mutate: createTemplate, isPending: isLoading } = useCreateTemplateMutation({});
 
     const onTemplateCreate = ({ teamId, ...data }: CreateIssueParams) => {
       if (!isLoading) {

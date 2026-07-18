@@ -119,7 +119,8 @@ export const ProjectList = observer(({ projects }: ProjectListProps) => {
         parent={parent}
         rowIndex={index}
       >
-        <div style={style} key={key}>
+        {({ registerChild }) => (
+        <div style={style} key={key} ref={registerChild}>
           {row.type === 'header' ? (
             getHeaderRow(row, index)
           ) : (
@@ -130,6 +131,7 @@ export const ProjectList = observer(({ projects }: ProjectListProps) => {
             />
           )}
         </div>
+      )}
       </CellMeasurer>
     );
   };

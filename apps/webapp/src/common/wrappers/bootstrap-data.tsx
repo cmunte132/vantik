@@ -8,7 +8,7 @@ import type { BootstrapResponse } from 'common/types';
 
 import { useCurrentWorkspace } from 'hooks/workspace';
 
-import { useBootstrapRecords, useDeltaRecords } from 'services/sync';
+import { getBootstrapRecords, getDeltaRecords } from 'services/sync';
 
 import { vantikDatabase } from 'store/database';
 import { useContextStore } from 'store/global-context-provider';
@@ -90,44 +90,46 @@ export function BootstrapWrapper({ children }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { refetch: bootstrapRecords } = useBootstrapRecords({
-    modelNames: Object.values(MODELS),
-    workspaceId: workspace?.id,
-    userId: user.id,
-    onSuccess: async (data: BootstrapResponse) => {
-      await saveSocketData(data.syncActions, MODEL_STORE_MAP);
+  const saveRecords = async (data: BootstrapResponse) => {
+    await saveSocketData(data.syncActions, MODEL_STORE_MAP);
+    localStorage.setItem(
+      `lastSequenceId_${hash(hashKey)}`,
+      `${data.lastSequenceId}`,
+    );
+  };
 
-      localStorage.setItem(
-        `lastSequenceId_${hash(hashKey)}`,
-        `${data.lastSequenceId}`,
-      );
-    },
-  });
+  const bootstrapRecords = async () => {
+    await saveRecords(
+      await getBootstrapRecords(workspace?.id, Object.values(MODELS), user.id),
+    );
+  };
 
-  const { refetch: syncRecords } = useDeltaRecords({
-    modelNames: Object.values(MODELS),
-    workspaceId: workspace?.id,
-    lastSequenceId,
-    userId: user.id,
-    onSuccess: async (data: BootstrapResponse) => {
-      await saveSocketData(data.syncActions, MODEL_STORE_MAP);
-      localStorage.setItem(
-        `lastSequenceId_${hash(hashKey)}`,
-        `${data.lastSequenceId}`,
-      );
-    },
-  });
+  const syncRecords = async () => {
+    await saveRecords(
+      await getDeltaRecords(
+        workspace?.id,
+        Object.values(MODELS),
+        lastSequenceId,
+        user.id,
+      ),
+    );
+  };
 
   const initStore = async () => {
     const storeWorkspace = await vantikDatabase.workspaces.get({
       id: workspace.id,
     });
 
-    if (storeWorkspace?.id && lastSequenceId) {
-      setLoading(false);
-      await syncRecords();
-    } else {
-      await bootstrapRecords();
+    // A failed sync must not wedge the loader — the socket connection will
+    // catch the store up once the server is reachable again.
+    try {
+      if (storeWorkspace?.id && lastSequenceId) {
+        setLoading(false);
+        await syncRecords();
+      } else {
+        await bootstrapRecords();
+      }
+    } finally {
       setLoading(false);
     }
   };

@@ -1,6 +1,6 @@
 import type { ActionConfig } from '@vantikhq/types';
 
-import { type UseQueryResult, useQuery } from 'react-query';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
 import { type XHRErrorResponse, ajaxGet } from 'services/utils';
 
@@ -10,7 +10,7 @@ import { type XHRErrorResponse, ajaxGet } from 'services/utils';
 const GetExternalActionData = 'getExternalActionData';
 
 export function getExternalActionData(actionSlug: string) {
-  return ajaxGet({
+  return ajaxGet<ActionConfig>({
     url: `/api/v1/action/external/${actionSlug}`,
   });
 }
@@ -18,13 +18,13 @@ export function getExternalActionData(actionSlug: string) {
 export function useGetExternalActionDataQuery(
   actionSlug: string,
 ): UseQueryResult<ActionConfig, XHRErrorResponse> {
-  return useQuery(
-    [GetExternalActionData, actionSlug],
-    () => getExternalActionData(actionSlug),
-    {
-      retry: 1,
-      staleTime: 10000,
-      refetchOnWindowFocus: false, // Frequency of Change would be Low
-    },
-  );
+  return useQuery({
+    queryKey: [GetExternalActionData, actionSlug],
+    queryFn: () => getExternalActionData(actionSlug),
+    retry: 1,
+    staleTime: 10000,
+
+    // Frequency of Change would be Low
+    refetchOnWindowFocus: false
+  });
 }

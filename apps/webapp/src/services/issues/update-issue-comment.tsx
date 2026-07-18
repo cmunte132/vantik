@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { IssueCommentType } from 'common/types';
 
@@ -47,9 +47,10 @@ export function useUpdateIssueCommentMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(updateIssueComment, {
+  return useMutation({
+    mutationFn: updateIssueComment,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

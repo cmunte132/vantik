@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { IssueType, IssueRelationEnum } from 'common/types';
 
@@ -79,9 +79,10 @@ export function useUpdateIssueMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(update, {
+  return useMutation({
+    mutationFn: update,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

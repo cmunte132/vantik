@@ -1,4 +1,8 @@
-import { type UseQueryResult, useQuery } from 'react-query';
+import {
+  type UseQueryResult,
+  keepPreviousData,
+  useQuery,
+} from '@tanstack/react-query';
 
 import type { IssueType } from 'common/types';
 
@@ -17,7 +21,7 @@ export interface SearchIssuesParams {
 }
 
 export function searchIssue(data: SearchIssuesParams) {
-  return ajaxGet({
+  return ajaxGet<IssueType[]>({
     url: `/api/v1/search`,
     query: {
       limit: 10,
@@ -30,11 +34,16 @@ export function useGetSearchIssuesQuery(
   data: SearchIssuesParams,
   enabled = false,
 ): UseQueryResult<IssueType[], XHRErrorResponse> {
-  return useQuery([SearchIssuesQuery, data.query], () => searchIssue(data), {
+  return useQuery({
+    queryKey: [SearchIssuesQuery, data.query],
+    queryFn: () => searchIssue(data),
     retry: 1,
     staleTime: 1,
-    refetchOnWindowFocus: false, // Frequency of Change would be Low
+
+    // Frequency of Change would be Low
+    refetchOnWindowFocus: false,
+
     enabled,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 }

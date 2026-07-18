@@ -6,7 +6,7 @@ import {
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
 import { Check, Trash } from 'lucide-react';
-import { useEditor } from 'novel';
+import { useEditor } from '../primitives';
 import { useEffect, useRef } from 'react';
 
 import { LinkLine } from '@vantikhq/ui/icons';

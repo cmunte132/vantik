@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { IntegrationAccountType } from 'common/types';
 
@@ -44,9 +44,10 @@ export function useUpdateIntegrationAccountMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(updateIntegrationAccount, {
+  return useMutation({
+    mutationFn: updateIntegrationAccount,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

@@ -3,7 +3,7 @@ import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import {
   Editor,
   EditorExtensions,
-} from '@vantikhq/ui/components/ui/editor/editor';
+} from '@vantikhq/ui/components/editor/editor';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 import { useDebouncedCallback } from 'use-debounce';

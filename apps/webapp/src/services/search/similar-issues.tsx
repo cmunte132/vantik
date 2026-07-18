@@ -1,4 +1,4 @@
-import { type UseQueryResult, useQuery } from 'react-query';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
 import type { IssueType } from 'common/types';
 
@@ -16,7 +16,7 @@ export interface SimilarIssuesParams {
 }
 
 export function similarIssues(data: SimilarIssuesParams) {
-  return ajaxGet({
+  return ajaxGet<IssueType[]>({
     url: `/api/v1/search/similar_issues`,
     query: {
       limit: 3,
@@ -29,14 +29,15 @@ export function useGetSimilarIssuesQuery(
   data: SimilarIssuesParams,
   enabled = false,
 ): UseQueryResult<IssueType[], XHRErrorResponse> {
-  return useQuery(
-    [SimilarIssuesQuery, data.issueId],
-    () => similarIssues(data),
-    {
-      retry: 1,
-      staleTime: 1,
-      refetchOnWindowFocus: false, // Frequency of Change would be Low
-      enabled,
-    },
-  );
+  return useQuery({
+    queryKey: [SimilarIssuesQuery, data.issueId],
+    queryFn: () => similarIssues(data),
+    retry: 1,
+    staleTime: 1,
+
+    // Frequency of Change would be Low
+    refetchOnWindowFocus: false,
+
+    enabled
+  });
 }

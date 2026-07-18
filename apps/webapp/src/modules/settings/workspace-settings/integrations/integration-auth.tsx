@@ -25,8 +25,7 @@ export const IntegrationAuth = observer(
       personal,
     );
 
-    const { mutate: createRedirectURL, isLoading: redirectURLLoading } =
-      useCreateRedirectURLMutation({
+    const { mutate: createRedirectURL, isPending: redirectURLLoading } = useCreateRedirectURLMutation({
         onSuccess: (data) => {
           const redirectURL = data.redirectURL;
 
@@ -34,7 +33,7 @@ export const IntegrationAuth = observer(
         },
       });
 
-    const { mutate: deleteIntegrationAccount, isLoading: deleting } =
+    const { mutate: deleteIntegrationAccount, isPending: deleting } =
       useDeleteIntegrationAccount({});
 
     return (

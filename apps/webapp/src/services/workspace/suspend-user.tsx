@@ -1,5 +1,5 @@
 import { suspendUser } from '@vantikhq/services';
-import { useMutation, useQueryClient } from 'react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { WorkspaceType } from 'common/types';
 
@@ -35,9 +35,10 @@ export function useSuspendUserMutation({
     onSuccess && onSuccess(team);
   };
 
-  return useMutation(suspendUser, {
+  return useMutation({
+    mutationFn: suspendUser,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

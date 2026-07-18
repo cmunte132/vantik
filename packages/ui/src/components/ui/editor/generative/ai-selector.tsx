@@ -4,8 +4,8 @@ import { Command, CommandInput } from '@vantikhq/ui/components/command';
 import { Loader } from '@vantikhq/ui/components/loader';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { useCompletion } from 'ai/react';
-import { useEditor } from 'novel';
-import { addAIHighlight } from 'novel/extensions';
+import { useEditor } from '../primitives';
+import { addAIHighlight } from '../primitives';
 import { useState } from 'react';
 import Markdown from 'react-markdown';
 

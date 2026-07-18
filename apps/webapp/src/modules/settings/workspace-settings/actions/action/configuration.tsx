@@ -40,8 +40,7 @@ export const Configuration = () => {
     action.workspaceId,
   );
 
-  const { mutate: updateActionInputs, isLoading } =
-    useUpdateActionInputsMutation({
+  const { mutate: updateActionInputs, isPending: isLoading } = useUpdateActionInputsMutation({
       onSuccess: () => {
         toast({
           variant: 'success',

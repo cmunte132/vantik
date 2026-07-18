@@ -1,7 +1,7 @@
 import type { IntegrationDefinition } from '@vantikhq/types';
 
 import { getIntegrationDefinition } from '@vantikhq/services';
-import { type UseQueryResult, useQuery } from 'react-query';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
 import { type XHRErrorResponse } from 'services/utils';
 
@@ -13,13 +13,13 @@ const GetIntegrationDefinition = 'getIntegrationDefinition';
 export function useGetIntegrationDefinition(
   integrationDefinitionId: string,
 ): UseQueryResult<IntegrationDefinition, XHRErrorResponse> {
-  return useQuery(
-    [GetIntegrationDefinition, integrationDefinitionId],
-    () => getIntegrationDefinition({ integrationDefinitionId }),
-    {
-      retry: 1,
-      staleTime: 1000000,
-      refetchOnWindowFocus: false, // Frequency of Change would be Low
-    },
-  );
+  return useQuery({
+    queryKey: [GetIntegrationDefinition, integrationDefinitionId],
+    queryFn: () => getIntegrationDefinition({ integrationDefinitionId }),
+    retry: 1,
+    staleTime: 1000000,
+
+    // Frequency of Change would be Low
+    refetchOnWindowFocus: false
+  });
 }

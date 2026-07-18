@@ -1,7 +1,7 @@
 import { CommandItem, CommandList } from '@vantikhq/ui/components/command';
 import { StepForward } from 'lucide-react';
-import { useEditor } from 'novel';
-import { getPrevText } from 'novel/utils';
+import { useEditor } from '../primitives';
+import { getPrevText } from '../primitives';
 
 import { SubIssue } from '@vantikhq/ui/icons';
 

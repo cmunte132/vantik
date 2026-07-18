@@ -2,17 +2,16 @@ import { Extension, mergeAttributes } from '@tiptap/core';
 import CodeBlock from '@tiptap/extension-code-block';
 import Heading from '@tiptap/extension-heading';
 import { cx } from 'class-variance-authority';
-import {
-  TiptapLink,
-  TaskList,
-  TaskItem,
-  HorizontalRule,
-  StarterKit,
-  Placeholder,
-  HighlightExtension,
-  AIHighlight,
-  MarkdownExtension,
-} from 'novel/extensions';
+import HighlightExtension from '@tiptap/extension-highlight';
+import HorizontalRule from '@tiptap/extension-horizontal-rule';
+import TiptapLink from '@tiptap/extension-link';
+import Placeholder from '@tiptap/extension-placeholder';
+import TaskItem from '@tiptap/extension-task-item';
+import TaskList from '@tiptap/extension-task-list';
+import StarterKit from '@tiptap/starter-kit';
+import { Markdown as MarkdownExtension } from 'tiptap-markdown';
+
+import { AIHighlight } from './primitives';
 
 import { fileExtension } from './file-extension';
 import { imageExtension } from './image-extension';
@@ -63,6 +62,8 @@ const heading = Heading.extend({
 const starterKit = StarterKit.configure({
   heading: false,
   codeBlock: false,
+  // StarterKit bundles Link in v3; we add our own configured instance below
+  link: false,
   bulletList: {
     HTMLAttributes: {
       class: cx('list-disc list-outside leading-3 pl-4'),

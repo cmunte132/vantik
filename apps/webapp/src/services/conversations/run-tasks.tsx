@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -56,9 +56,10 @@ export function useRunTasksMutation({
     onSuccess && onSuccess();
   };
 
-  return useMutation(runTasks, {
+  return useMutation({
+    mutationFn: runTasks,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

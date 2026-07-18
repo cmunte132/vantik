@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { ViewType, FiltersModelType } from 'common/types';
 
@@ -47,9 +47,10 @@ export function useUpdateViewMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(updateView, {
+  return useMutation({
+    mutationFn: updateView,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

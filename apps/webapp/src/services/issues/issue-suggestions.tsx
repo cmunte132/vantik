@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { LabelType, User } from 'common/types';
 
@@ -52,9 +52,10 @@ export function useSuggestionIssueMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(suggestionIssue, {
+  return useMutation({
+    mutationFn: suggestionIssue,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import { ajaxPost } from 'services/utils';
 
@@ -46,9 +46,10 @@ export function useSentryConnectMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(connectSentry, {
+  return useMutation({
+    mutationFn: connectSentry,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

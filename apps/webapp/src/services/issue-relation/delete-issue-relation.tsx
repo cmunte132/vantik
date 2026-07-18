@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import { ajaxDelete } from 'services/utils';
 
@@ -40,9 +40,10 @@ export function useDeleteIssueRelationMutation({
     onSuccess && onSuccess();
   };
 
-  return useMutation(deleteIssueRelation, {
+  return useMutation({
+    mutationFn: deleteIssueRelation,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

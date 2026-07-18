@@ -1,4 +1,4 @@
-import { type UseQueryResult, useQuery } from 'react-query';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
 import type { User } from 'common/types';
 
@@ -10,7 +10,7 @@ import { type XHRErrorResponse, ajaxGet } from 'services/utils';
 export const GetSignedURL = 'getSignedURLQuery';
 
 export function getSignedURL(attachmentId: string) {
-  return ajaxGet({
+  return ajaxGet<User>({
     url: `/api/v1/attachment/get-signed-url/${attachmentId}`,
   });
 }
@@ -18,9 +18,13 @@ export function getSignedURL(attachmentId: string) {
 export function useGetSignedURLQuery(
   attachmentId: string,
 ): UseQueryResult<User, XHRErrorResponse> {
-  return useQuery([GetSignedURL], () => getSignedURL(attachmentId), {
+  return useQuery({
+    queryKey: [GetSignedURL],
+    queryFn: () => getSignedURL(attachmentId),
     retry: 1,
     staleTime: Infinity,
-    refetchOnWindowFocus: false, // Frequency of Change would be Low
+
+    // Frequency of Change would be Low
+    refetchOnWindowFocus: false
   });
 }

@@ -4,7 +4,7 @@ import {
   CommandSeparator,
 } from '@vantikhq/ui/components/command';
 import { Check, TextQuote, TrashIcon } from 'lucide-react';
-import { useEditor } from 'novel';
+import { useEditor } from '../primitives';
 
 const AICompletionCommands = ({
   completion,

@@ -6,7 +6,4 @@ export * from './issue-status-dropdown-content';
 export const LazyIssueStatusDropdown = dynamic(
   () =>
     import('./issue-status-dropdown').then((mod) => mod.IssueStatusDropdown),
-  {
-    suspense: true,
-  },
 );

@@ -18,7 +18,7 @@ export const DeleteTeamButton = observer(() => {
   const team = useCurrentTeam();
   const { issuesStore } = useContextStore();
   const issues = issuesStore.getIssuesForTeam({ teamId: team.id });
-  const { mutate: deleteTeamMutation, isLoading } = useDeleteTeamMutation({});
+  const { mutate: deleteTeamMutation, isPending: isLoading } = useDeleteTeamMutation({});
 
   const deleteTeam = () => {
     deleteTeamMutation({

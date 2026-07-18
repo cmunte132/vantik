@@ -1,4 +1,4 @@
-import { type UseQueryResult, useQuery } from 'react-query';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
 import type { User, UsersOnWorkspaceType } from 'common/types';
 
@@ -12,7 +12,7 @@ import { useContextStore } from 'store/global-context-provider';
 const GetUsersQuery = 'getUsersQuery';
 
 export function getUsers(userIds: string[]) {
-  return ajaxGet({
+  return ajaxGet<User[]>({
     url: '/api/v1/users',
     query: {
       userIds: userIds.join(','),
@@ -25,14 +25,16 @@ export function useGetUsersQuery(): UseQueryResult<User[], XHRErrorResponse> {
 
   const usersOnWorkspace = workspaceStore.usersOnWorkspaces;
 
-  return useQuery(
-    [GetUsersQuery, usersOnWorkspace],
-    () =>
+  return useQuery({
+    queryKey: [GetUsersQuery, usersOnWorkspace],
+
+    queryFn: () =>
       getUsers(usersOnWorkspace.map((uOW: UsersOnWorkspaceType) => uOW.userId)),
-    {
-      retry: 1,
-      staleTime: 1000000,
-      refetchOnWindowFocus: false, // Frequency of Change would be Low
-    },
-  );
+
+    retry: 1,
+    staleTime: 1000000,
+
+    // Frequency of Change would be Low
+    refetchOnWindowFocus: false
+  });
 }

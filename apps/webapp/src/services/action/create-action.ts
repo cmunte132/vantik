@@ -1,5 +1,5 @@
 import { createAction } from '@vantikhq/services';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { ActionType } from 'common/types';
 
@@ -29,9 +29,10 @@ export function useCreateActionMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(createAction, {
+  return useMutation({
+    mutationFn: createAction,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

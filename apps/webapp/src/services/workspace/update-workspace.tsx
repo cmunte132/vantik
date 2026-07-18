@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { WorkspaceType } from 'common/types';
 
@@ -41,9 +41,10 @@ export function useUpdateWorkspaceMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(updateWorkspace, {
+  return useMutation({
+    mutationFn: updateWorkspace,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

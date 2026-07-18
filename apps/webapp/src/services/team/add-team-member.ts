@@ -1,5 +1,5 @@
 import { addTeamMember } from '@vantikhq/services';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -27,9 +27,10 @@ export function useAddTeamMemberMutation({
     onSuccess && onSuccess();
   };
 
-  return useMutation(addTeamMember, {
+  return useMutation({
+    mutationFn: addTeamMember,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

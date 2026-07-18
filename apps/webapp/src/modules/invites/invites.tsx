@@ -18,7 +18,7 @@ export function Invites() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const { mutate: inviteAction, isLoading } = useInviteActionMutation({
+  const { mutate: inviteAction, isPending: isLoading } = useInviteActionMutation({
     onSuccess: (data: Invite) => {
       if (data.status === 'ACCEPTED') {
         toast({

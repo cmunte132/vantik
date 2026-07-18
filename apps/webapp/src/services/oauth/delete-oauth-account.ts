@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { IntegrationAccountType } from 'common/types';
 
@@ -40,9 +40,10 @@ export function useDeleteIntegrationAccount({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(deleteIntegrationAccount, {
+  return useMutation({
+    mutationFn: deleteIntegrationAccount,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

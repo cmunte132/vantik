@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import { ajaxPost } from 'services/utils';
 
@@ -40,9 +40,10 @@ export function useImpersonateMutation({
     onSuccess && onSuccess();
   };
 
-  return useMutation(impersonate, {
+  return useMutation({
+    mutationFn: impersonate,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

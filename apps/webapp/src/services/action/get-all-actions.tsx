@@ -1,6 +1,6 @@
 import type { ActionConfig } from '@vantikhq/types';
 
-import { type UseQueryResult, useQuery } from 'react-query';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
 import { type XHRErrorResponse, ajaxGet } from 'services/utils';
 
@@ -14,7 +14,7 @@ export interface ActionExternalConfig extends ActionConfig {
 const GetAllActions = 'getAllActions';
 
 export function getAllActions() {
-  return ajaxGet({
+  return ajaxGet<ActionExternalConfig[]>({
     url: '/api/v1/action/external',
   });
 }
@@ -23,9 +23,13 @@ export function useGetAllActionsQuery(): UseQueryResult<
   ActionExternalConfig[],
   XHRErrorResponse
 > {
-  return useQuery([GetAllActions], () => getAllActions(), {
+  return useQuery({
+    queryKey: [GetAllActions],
+    queryFn: () => getAllActions(),
     retry: 1,
     staleTime: 1,
-    refetchOnWindowFocus: false, // Frequency of Change would be Low
+
+    // Frequency of Change would be Low
+    refetchOnWindowFocus: false
   });
 }

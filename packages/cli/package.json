@@ -71,7 +71,7 @@
     "import-meta-resolve": "^4.0.0",
     "ink": "^4.4.1",
     "node-fetch": "^3.3.0",
-    "react": "^18.3.1",
+    "react": "^19.2.7",
     "semver": "^7.5.0",
     "std-env": "^3.7.0",
     "terminal-link": "^3.0.0",
@@ -80,8 +80,8 @@
     "typescript": "^5.4.0",
     "url": "^0.11.1",
     "xdg-app-paths": "^8.3.0",
-    "zod": "^3.25.76",
-    "zod-validation-error": "^1.5.0"
+    "zod": "^4.4.3",
+    "zod-validation-error": "^5.0.0"
   },
   "engines": {
     "node": ">=18.0.0"

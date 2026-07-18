@@ -1,5 +1,5 @@
 import { authorizeCode } from '@vantikhq/services';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -27,9 +27,10 @@ export function useAuthorizeMutation({
     onSuccess && onSuccess();
   };
 
-  return useMutation(authorizeCode, {
+  return useMutation({
+    mutationFn: authorizeCode,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

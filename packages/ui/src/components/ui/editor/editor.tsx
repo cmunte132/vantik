@@ -1,11 +1,13 @@
 import type { Editor as EditorT, Extension, Mark, Node } from '@tiptap/core';
 
-import { EditorInstance, EditorContent, EditorBubble, useEditor } from 'novel';
 import {
-  ImageResizer,
+  type EditorInstance,
+  EditorContent,
+  EditorBubble,
+  useEditor,
   handleCommandNavigation,
   type SuggestionItem,
-} from 'novel/extensions';
+} from './primitives';
 import * as React from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -63,9 +65,7 @@ export const EditorExtensions = ({
       </EditorCommand>
 
       <EditorBubble
-        tippyOptions={{
-          placement: 'top',
-        }}
+        placement="top"
         className="flex w-fit items-center max-w-[90vw] overflow-hidden rounded bg-background-2 shadow-1 border-[#ffffff38] p-1"
       >
         <Separator orientation="vertical" />
@@ -219,7 +219,6 @@ export const Editor = ({
           onUpdate={({ editor }) => {
             debouncedUpdates(editor);
           }}
-          slotAfter={<ImageResizer />}
         >
           {children}
         </EditorContent>

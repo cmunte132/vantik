@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from 'react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { WorkspaceType } from 'common/types';
 
@@ -54,9 +54,10 @@ export function useCreateInitialResourcesMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(createInitialResources, {
+  return useMutation({
+    mutationFn: createInitialResources,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

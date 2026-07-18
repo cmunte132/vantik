@@ -1,9 +1,9 @@
 import type { Editor } from '@tiptap/core';
 
 import axios from 'axios';
-import { type ImageUploadOptions } from 'novel/plugins';
 
-interface ImageUploadOptionsExtend extends ImageUploadOptions {
+interface ImageUploadOptionsExtend {
+  validateFn?: (file: File) => void;
   onUpload: (
     file: File,
     callback?: (progress: number) => void,

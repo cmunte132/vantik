@@ -53,7 +53,7 @@ export function AddLinkedIssue({
       url: '',
     },
   });
-  const { mutate: createLinkedIssue, isLoading } = useCreateLinkedIssueMutation(
+  const { mutate: createLinkedIssue, isPending: isLoading } = useCreateLinkedIssueMutation(
     {
       onError: (error: string) => {
         form.setError('url', { message: error });

@@ -4,15 +4,15 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AIStreamResponse, GetAIRequestDTO } from '@vantikhq/types';
 import {
-  CoreMessage,
-  CoreUserMessage,
   generateText,
-  LanguageModelV1,
+  type LanguageModel,
+  type ModelMessage,
   streamText,
+  type UserModelMessage,
 } from 'ai';
 import { PrismaService } from 'nestjs-prisma';
 import { Ollama } from 'ollama';
-import { ollama } from 'ollama-ai-provider';
+import { ollama } from 'ollama-ai-provider-v2';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
@@ -62,7 +62,7 @@ export default class AIRequestsService {
   ) {
     const messages = reqBody.messages;
     const userMessages = reqBody.messages.filter(
-      (message: CoreMessage) => message.role === 'user',
+      (message: ModelMessage) => message.role === 'user',
     );
     const model = reqBody.llmModel;
     this.logger.info({
@@ -99,7 +99,7 @@ export default class AIRequestsService {
   async makeModelCall(
     stream: boolean,
     model: string,
-    messages: CoreMessage[],
+    messages: ModelMessage[],
     onFinish: (text: string, model: string) => void,
   ) {
     let modelInstance;
@@ -145,7 +145,7 @@ export default class AIRequestsService {
 
     if (stream) {
       return await streamText({
-        model: modelInstance as LanguageModelV1,
+        model: modelInstance as LanguageModel,
         messages,
         onFinish: async ({ text }) => {
           onFinish(text, finalModel);
@@ -154,7 +154,7 @@ export default class AIRequestsService {
     }
 
     const { text } = await generateText({
-      model: modelInstance as LanguageModelV1,
+      model: modelInstance as LanguageModel,
       messages,
     });
 
@@ -165,7 +165,7 @@ export default class AIRequestsService {
 
   async createRecord(
     message: string,
-    userMessages: CoreUserMessage[],
+    userMessages: UserModelMessage[],
     model: string,
     serviceModel: string,
     workspaceId: string,

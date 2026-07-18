@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { IssueType } from 'common/types';
 
@@ -43,9 +43,10 @@ export function useAIFilterIssuesMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(aiFilterIssues, {
+  return useMutation({
+    mutationFn: aiFilterIssues,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

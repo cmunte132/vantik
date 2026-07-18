@@ -1,5 +1,5 @@
 import { deleteAction } from '@vantikhq/services';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { ActionType } from 'common/types';
 
@@ -29,9 +29,10 @@ export function useDeleteActionMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(deleteAction, {
+  return useMutation({
+    mutationFn: deleteAction,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

@@ -22,16 +22,16 @@
   "packageManager": "pnpm@10.3.0",
   "pnpm": {
     "overrides": {
-      "react": "^18.3.1",
-      "react-dom": "^18.3.1",
-      "@types/react": "^18.3.31",
-      "@types/react-dom": "^18.3.7"
+      "react": "^19.2.7",
+      "react-dom": "^19.2.7",
+      "@types/react": "^19.2.14",
+      "@types/react-dom": "^19.2.3"
     }
   },
   "dependencies": {
     "dotenv-cli": "^7.4.4",
     "turbo": "^2.0.9",
     "typescript": "^5.4.3",
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   }
 }

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { IssueType } from 'common/types';
 
@@ -70,9 +70,10 @@ export function useCreateIssueMutation({
     onSuccess && onSuccess(data, variables, context);
   };
 
-  return useMutation(createIssue, {
+  return useMutation({
+    mutationFn: createIssue,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

@@ -28,8 +28,7 @@ export const OnboardingSchema = z.object({
 export function OnboardingForm() {
   const { toast } = useToast();
 
-  const { mutate: createInitialResources, isLoading } =
-    useCreateInitialResourcesMutation({
+  const { mutate: createInitialResources, isPending: isLoading } = useCreateInitialResourcesMutation({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       onError: (e: any) => {
         toast({

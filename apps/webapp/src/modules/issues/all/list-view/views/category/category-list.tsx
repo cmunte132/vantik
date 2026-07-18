@@ -102,7 +102,8 @@ export const CategoryList = observer(() => {
         parent={parent}
         rowIndex={index}
       >
-        <div style={style} key={key}>
+        {({ registerChild }) => (
+        <div style={style} key={key} ref={registerChild}>
           {row.type === 'header' ? (
             getHeaderRow(row, index)
           ) : (
@@ -113,6 +114,7 @@ export const CategoryList = observer(() => {
             />
           )}
         </div>
+      )}
       </CellMeasurer>
     );
   };

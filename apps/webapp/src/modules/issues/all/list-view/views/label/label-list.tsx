@@ -1,5 +1,5 @@
 import { Button } from '@vantikhq/ui/components/button';
-import { BadgeColor } from '@vantikhq/ui/components/ui/badge';
+import { BadgeColor } from '@vantikhq/ui/components/badge';
 import { LabelLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
@@ -122,7 +122,8 @@ export const LabelList = observer(({ labels }: LabelListProps) => {
         parent={parent}
         rowIndex={index}
       >
-        <div style={style} key={key}>
+        {({ registerChild }) => (
+        <div style={style} key={key} ref={registerChild}>
           {row.type === 'header' ? (
             getHeaderRow(row, index)
           ) : (
@@ -133,6 +134,7 @@ export const LabelList = observer(({ labels }: LabelListProps) => {
             />
           )}
         </div>
+      )}
       </CellMeasurer>
     );
   };

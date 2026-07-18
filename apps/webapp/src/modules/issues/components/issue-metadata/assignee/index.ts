@@ -9,7 +9,4 @@ export const LazyIssueAssigneeDropdown = dynamic(
     import('./issue-assignee-dropdown').then(
       (mod) => mod.IssueAssigneeDropdown,
     ),
-  {
-    suspense: true,
-  },
 );

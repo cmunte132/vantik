@@ -13,8 +13,7 @@ export const useSuggestionItems = (
   subIssueOperations: Partial<UseFieldArrayReturn>,
 ) => {
   const workspace = useCurrentWorkspace();
-  const { mutate: generateSubIssues, isLoading } =
-    useSubIssueGenerationMutation({
+  const { mutate: generateSubIssues, isPending: isLoading } = useSubIssueGenerationMutation({
       onSuccess: (data: string[]) => {
         if (data && data.length > 0) {
           data.forEach((issueTitle: string) => {

@@ -1,4 +1,4 @@
-import { type UseQueryResult, useQuery } from 'react-query';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
 import { type XHRErrorResponse, ajaxGet } from 'services/utils';
 
@@ -8,7 +8,7 @@ import { type XHRErrorResponse, ajaxGet } from 'services/utils';
 export const SummarizeIssue = 'summarizeIssue';
 
 export function getSummarizeIssue(issueId: string) {
-  return ajaxGet({
+  return ajaxGet<string[]>({
     url: `/api/v1/issues/ai/${issueId}/summarize`,
   });
 }
@@ -16,9 +16,13 @@ export function getSummarizeIssue(issueId: string) {
 export function useSummarizeIssue(
   issueId: string,
 ): UseQueryResult<string[], XHRErrorResponse> {
-  return useQuery([SummarizeIssue], () => getSummarizeIssue(issueId), {
+  return useQuery({
+    queryKey: [SummarizeIssue],
+    queryFn: () => getSummarizeIssue(issueId),
     retry: 1,
     staleTime: 1,
-    refetchOnWindowFocus: false, // Frequency of Change would be Low
+
+    // Frequency of Change would be Low
+    refetchOnWindowFocus: false
   });
 }

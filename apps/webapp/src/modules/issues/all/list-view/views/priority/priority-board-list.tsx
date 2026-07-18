@@ -8,7 +8,6 @@ import {
 } from '@hello-pangea/dnd';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
-import ReactDOM from 'react-dom';
 import {
   AutoSizer,
   CellMeasurer,
@@ -85,7 +84,8 @@ export const PriorityBoardList = observer(
               parent={parent}
               rowIndex={index}
             >
-              <div style={style} key={key}>
+              {({ registerChild }) => (
+              <div style={style} key={key} ref={registerChild}>
                 <BoardIssueItem
                   issueId={issue.id}
                   isDragging={dragSnapshot.isDragging}
@@ -93,6 +93,7 @@ export const PriorityBoardList = observer(
                   key={key}
                 />
               </div>
+            )}
             </CellMeasurer>
           )}
         </Draggable>
@@ -141,14 +142,12 @@ export const PriorityBoardList = observer(
                   {({ width, height }) => (
                     <List
                       ref={(ref) => {
-                        // react-virtualized has no way to get the list's ref that I can so
-                        // So we use the `ReactDOM.findDOMNode(ref)` escape hatch to get the ref
-                        if (ref) {
-                          // eslint-disable-next-line react/no-find-dom-node
-                          const whatHasMyLifeComeTo = ReactDOM.findDOMNode(ref);
-                          if (whatHasMyLifeComeTo instanceof HTMLElement) {
-                            droppableProvided.innerRef(whatHasMyLifeComeTo);
-                          }
+                        // react-virtualized has no public handle to its scroll container
+                        // and findDOMNode is gone in React 19, so reach into the Grid.
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const container = (ref as any)?.Grid?._scrollingContainer;
+                        if (container instanceof HTMLElement) {
+                          droppableProvided.innerRef(container);
                         }
                       }}
                       height={height}

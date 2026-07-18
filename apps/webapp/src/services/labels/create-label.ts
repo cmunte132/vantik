@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { LabelType } from 'common/types';
 
@@ -46,9 +46,10 @@ export function useCreateLabelMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(createLabel, {
+  return useMutation({
+    mutationFn: createLabel,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

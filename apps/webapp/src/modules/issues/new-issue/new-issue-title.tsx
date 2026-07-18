@@ -55,7 +55,7 @@ export function NewIssueTitle({ form, index }: NewIssueTitleProps) {
 
   const descriptionString = getDescription(description);
   const workspace = useCurrentWorkspace();
-  const { mutate, isLoading } = useAITitleMutation({
+  const { mutate, isPending: isLoading } = useAITitleMutation({
     onSuccess: (data) => {
       if (data) {
         if (data === 'null') {

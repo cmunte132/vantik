@@ -21,7 +21,7 @@ export function WorkflowEdit({
 }: WorkflowEditProps) {
   const team = useCurrentTeam();
 
-  const { mutate: updateWorkflow, isLoading } = useUpdateWorkflowMutation({
+  const { mutate: updateWorkflow, isPending: isLoading } = useUpdateWorkflowMutation({
     onSuccess: () => {
       onCancel();
     },

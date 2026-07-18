@@ -1,5 +1,5 @@
 import { Check, ChevronDown } from 'lucide-react';
-import { EditorBubbleItem, useEditor } from 'novel';
+import { EditorBubbleItem, useEditor } from '../primitives';
 import React from 'react';
 
 import {

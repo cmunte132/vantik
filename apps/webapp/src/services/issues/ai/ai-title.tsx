@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import { ajaxPost } from 'services/utils';
 
@@ -43,9 +43,10 @@ export function useAITitleMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(aiTitleIssues, {
+  return useMutation({
+    mutationFn: aiTitleIssues,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

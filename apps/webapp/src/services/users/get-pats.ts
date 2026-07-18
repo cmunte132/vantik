@@ -1,7 +1,7 @@
 import type { Pat } from '@vantikhq/types';
 
 import { getPats } from '@vantikhq/services';
-import { type UseQueryResult, useQuery } from 'react-query';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
 import { type XHRErrorResponse } from 'services/utils';
 
@@ -11,9 +11,13 @@ import { type XHRErrorResponse } from 'services/utils';
 export const GetPats = 'getPats';
 
 export function useGetPatsQuery(): UseQueryResult<Pat[], XHRErrorResponse> {
-  return useQuery([GetPats], () => getPats(), {
+  return useQuery({
+    queryKey: [GetPats],
+    queryFn: () => getPats(),
     retry: 1,
     staleTime: 1,
-    refetchOnWindowFocus: false, // Frequency of Change would be Low
+
+    // Frequency of Change would be Low
+    refetchOnWindowFocus: false
   });
 }

@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { User } from 'common/types';
 
@@ -45,9 +45,10 @@ export function useUpdateUserMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(updateUser, {
+  return useMutation({
+    mutationFn: updateUser,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

@@ -17,7 +17,7 @@ export function NewLabel({ onCancel, teamId }: NewLabelProps) {
   const [labelName, setLabelName] = React.useState('');
   const workspace = useCurrentWorkspace();
   const color = React.useMemo(() => generateOklchColor(), []);
-  const { mutate: createLabel, isLoading } = useCreateLabelMutation({
+  const { mutate: createLabel, isPending: isLoading } = useCreateLabelMutation({
     onSuccess: () => {
       onCancel();
     },

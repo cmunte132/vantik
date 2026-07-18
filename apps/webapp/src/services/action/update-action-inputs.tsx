@@ -1,5 +1,5 @@
 import { updateActionInputs } from '@vantikhq/services';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { ActionType } from 'common/types';
 
@@ -29,9 +29,10 @@ export function useUpdateActionInputsMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(updateActionInputs, {
+  return useMutation({
+    mutationFn: updateActionInputs,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

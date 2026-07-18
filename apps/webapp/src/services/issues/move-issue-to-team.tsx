@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { IssueType } from 'common/types';
 
@@ -44,9 +44,10 @@ export function useMoveIssueToTeamMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(moveIssueToTeam, {
+  return useMutation({
+    mutationFn: moveIssueToTeam,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

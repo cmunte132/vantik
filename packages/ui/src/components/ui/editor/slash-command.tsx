@@ -1,6 +1,5 @@
 import { ImageIcon } from 'lucide-react';
-import { createSuggestionItems } from 'novel/extensions';
-import { Command } from 'novel/extensions';
+import { Command, createSuggestionItems } from './primitives';
 
 import {
   BulletListLine,
@@ -152,7 +151,6 @@ export const suggestionItems = createSuggestionItems([
 ]);
 
 export const slashCommand = Command.configure({
-  parent: 'tiptap',
   suggestion: {
     items: () => suggestionItems,
     render: renderItems,

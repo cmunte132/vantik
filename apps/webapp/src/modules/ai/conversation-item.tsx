@@ -41,8 +41,9 @@ export const ConversationItem = observer(
         });
         editorRef.current = editor;
 
-        editor.commands.setContent(conversationHistory.message, false, {
-          preserveWhitespace: true,
+        editor.commands.setContent(conversationHistory.message, {
+          emitUpdate: false,
+          parseOptions: { preserveWhitespace: true },
         });
       }
       // Clean up on unmount

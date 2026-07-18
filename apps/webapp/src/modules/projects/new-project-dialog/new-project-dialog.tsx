@@ -3,7 +3,7 @@ import { Dialog, DialogContent } from '@vantikhq/ui/components/dialog';
 import { Form } from '@vantikhq/ui/components/form';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import React from 'react';
-import { useForm } from 'react-hook-form';
+import { type UseFormReturn, useForm } from 'react-hook-form';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { Key } from 'ts-key-enum';
 import { z } from 'zod';
@@ -82,7 +82,7 @@ export function NewProjectDialog({ open, setOpen }: NewProjectProps) {
               onSubmit={form.handleSubmit(onSubmit)}
             >
               <NewProjectForm
-                form={form}
+                form={form as unknown as UseFormReturn}
                 onClose={() => setOpen(false)}
                 isLoading={false}
               />

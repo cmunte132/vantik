@@ -1,6 +1,4 @@
-import { EditorBubble, useEditor } from 'novel';
-import { removeAIHighlight } from 'novel/extensions';
-import {} from 'novel/plugins';
+import { EditorBubble, useEditor, removeAIHighlight } from '../primitives';
 import { Fragment, type ReactNode, useEffect } from 'react';
 
 import { AISelector } from './ai-selector';
@@ -25,11 +23,9 @@ const GenerativeMenuSwitch = ({
 
   return (
     <EditorBubble
-      tippyOptions={{
-        placement: 'top',
-        onHidden: () => {
-          onOpenChange(false);
-        },
+      placement="top"
+      onHidden={() => {
+        onOpenChange(false);
       }}
       className="flex w-fit items-center max-w-[90vw] overflow-hidden rounded bg-background-2 shadow-2"
     >

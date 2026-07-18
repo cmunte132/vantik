@@ -1,5 +1,13 @@
 import type request from 'superagent';
-import type { Primitive } from 'zod';
+
+export type Primitive =
+  | string
+  | number
+  | boolean
+  | bigint
+  | symbol
+  | null
+  | undefined;
 
 /**
  * Integration of Native Promise Interface.

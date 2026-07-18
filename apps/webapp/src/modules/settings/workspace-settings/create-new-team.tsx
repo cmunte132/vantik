@@ -35,9 +35,7 @@ export const CreateNewTeamSchema = z.object({
     .max(50),
   identifier: z.string().min(3).max(3),
   teamType: z.enum(['engineering', 'support'], {
-    errorMap: () => ({
-      message: 'Team type must be either engineering or support',
-    }),
+    error: 'Team type must be either engineering or support',
   }),
 });
 

@@ -62,7 +62,7 @@ export const NewViewDialog = observer(
       },
     });
 
-    const { mutate: createView, isLoading } = useCreateViewMutation({
+    const { mutate: createView, isPending: isLoading } = useCreateViewMutation({
       onSuccess: (data: ViewType) => {
         toast({
           title: `Your view was successfully created`,

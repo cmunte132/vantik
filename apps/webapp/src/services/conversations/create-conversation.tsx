@@ -1,5 +1,5 @@
 import { createConversation } from '@vantikhq/services';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { ConversationType } from 'common/types';
 
@@ -30,9 +30,10 @@ export function useCreateConversationMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(createConversation, {
+  return useMutation({
+    mutationFn: createConversation,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

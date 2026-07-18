@@ -1,4 +1,4 @@
-import { type UseQueryResult, useQuery } from 'react-query';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
 import type { IssueType } from 'common/types';
 
@@ -17,7 +17,7 @@ export interface DuplicateIssuesParams {
 }
 
 export function duplicateIssues(data: DuplicateIssuesParams) {
-  return ajaxGet({
+  return ajaxGet<IssueType[]>({
     url: `/api/v1/search`,
     query: {
       limit: 3,
@@ -31,14 +31,15 @@ export function useGetDuplicateIssuesQuery(
   data: DuplicateIssuesParams,
   enabled = false,
 ): UseQueryResult<IssueType[], XHRErrorResponse> {
-  return useQuery(
-    [DuplicateIssuesQuery, data.query],
-    () => duplicateIssues(data),
-    {
-      retry: 1,
-      staleTime: 1,
-      refetchOnWindowFocus: false, // Frequency of Change would be Low
-      enabled,
-    },
-  );
+  return useQuery({
+    queryKey: [DuplicateIssuesQuery, data.query],
+    queryFn: () => duplicateIssues(data),
+    retry: 1,
+    staleTime: 1,
+
+    // Frequency of Change would be Low
+    refetchOnWindowFocus: false,
+
+    enabled
+  });
 }

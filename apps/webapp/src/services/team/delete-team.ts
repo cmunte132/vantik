@@ -1,5 +1,5 @@
 import { deleteTeam } from '@vantikhq/services';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { TeamType } from 'common/types';
 
@@ -29,9 +29,10 @@ export function useDeleteTeamMutation({
     onSuccess && onSuccess(team);
   };
 
-  return useMutation(deleteTeam, {
+  return useMutation({
+    mutationFn: deleteTeam,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

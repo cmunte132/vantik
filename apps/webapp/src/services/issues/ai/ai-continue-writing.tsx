@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 export function useAIContinueWritingMutation({
   baseHost,
@@ -8,7 +8,7 @@ export function useAIContinueWritingMutation({
 }) {
   const [responses, setResponses] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { mutate, isLoading: apiloading } = useMutation({
+  const { mutate, isPending: apiloading } = useMutation({
     mutationFn: async ({
       description,
       workspaceId,

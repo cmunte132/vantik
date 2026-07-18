@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import { useContextStore } from 'store/global-context-provider';
 
@@ -13,7 +13,7 @@ export function useStreamConversationMutation({
   const [isLoading, setIsLoading] = useState(false);
   const { commonStore } = useContextStore();
 
-  const { mutate, isLoading: apiloading } = useMutation({
+  const { mutate, isPending: apiloading } = useMutation({
     mutationFn: async ({
       conversationId,
       conversationHistoryId,

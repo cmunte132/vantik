@@ -111,7 +111,8 @@ export const PriorityList = observer(() => {
         parent={parent}
         rowIndex={index}
       >
-        <div style={style} key={key}>
+        {({ registerChild }) => (
+        <div style={style} key={key} ref={registerChild}>
           {row.type === 'header' ? (
             getHeaderRow(row, index)
           ) : (
@@ -122,6 +123,7 @@ export const PriorityList = observer(() => {
             />
           )}
         </div>
+      )}
       </CellMeasurer>
     );
   };

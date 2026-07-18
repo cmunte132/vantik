@@ -1,4 +1,4 @@
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type { NotificationType } from 'common/types';
 
@@ -45,9 +45,10 @@ export function useUpdateNotificationMutation({
     onSuccess && onSuccess(data);
   };
 
-  return useMutation(updateNotification, {
+  return useMutation({
+    mutationFn: updateNotification,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+    onSuccess: onMutationSuccess
   });
 }

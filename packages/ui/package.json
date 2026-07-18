@@ -9,17 +9,17 @@
     "lint": "eslint . --fix"
   },
   "peerDependencies": {
-    "react": "^18",
-    "react-dom": "^18"
+    "react": "^19",
+    "react-dom": "^19"
   },
   "devDependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "@vantikhq/eslint-config": "workspace:*",
     "@vantikhq/typescript-config": "workspace:*",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^20",
-    "@types/react": "^18",
+    "@types/react": "^19.2.14",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
     "postcss-load-config": "^6.0.1",
@@ -52,13 +52,13 @@
     "@radix-ui/react-tooltip": "^1.0.7",
     "@remixicon/react": "^4.2.0",
     "@tanstack/react-table": "^8.20.5",
-    "@tiptap/core": "^2.11.5",
-    "@tiptap/extension-code-block": "^2.11.5",
-    "@tiptap/extension-heading": "^2.11.5",
-    "@tiptap/extension-placeholder": "^2.11.5",
-    "@tiptap/extension-text": "^2.11.5",
-    "@tiptap/pm": "^2.11.5",
-    "@tiptap/react": "^2.11.5",
+    "@tiptap/core": "^3.28.0",
+    "@tiptap/extension-code-block": "^3.28.0",
+    "@tiptap/extension-heading": "^3.28.0",
+    "@tiptap/extension-placeholder": "^3.28.0",
+    "@tiptap/extension-text": "^3.28.0",
+    "@tiptap/pm": "^3.28.0",
+    "@tiptap/react": "^3.28.0",
     "@vidstack/react": "^1.12.12",
     "ai": "^3.2.37",
     "axios": "^1.6.7",
@@ -72,9 +72,8 @@
     "jotai": "^2.9.1",
     "lucide-react": "^0.395.0",
     "markdown-it": "^14.1.0",
-    "next": "^14.2.35",
-    "next-themes": "^0.2.1",
-    "novel": "^0.5.0",
+    "next": "^15.5.20",
+    "next-themes": "^0.4.6",
     "prosemirror-state": "^1.4.3",
     "prosemirror-view": "^1.42.1",
     "react-day-picker": "8.10.1",
@@ -89,25 +88,33 @@
     "tunnel-rat": "^0.1.2",
     "use-debounce": "^10.0.0",
     "vaul": "^0.8.9",
-    "yet-another-react-lightbox": "^3.21.7"
+    "yet-another-react-lightbox": "^3.21.7",
+    "@tiptap/starter-kit": "^3.28.0",
+    "@tiptap/extension-link": "^3.28.0",
+    "@tiptap/extension-task-list": "^3.28.0",
+    "@tiptap/extension-task-item": "^3.28.0",
+    "@tiptap/extension-highlight": "^3.28.0",
+    "@tiptap/extension-horizontal-rule": "^3.28.0",
+    "@tiptap/suggestion": "^3.28.0",
+    "tiptap-markdown": "^0.9.0"
   },
   "exports": {
     "./index.css": "./dist/index.css",
     "./global.css": "./src/global.css",
     "./postcss.config": "./postcss.config.js",
     "./tailwind.config": "./tailwind.config.ts",
-    "./lib/*": "./src/lib/*.tsx",
+    "./lib/utils": "./src/lib/utils.tsx",
+    "./lib/color-utils": "./src/lib/color-utils.ts",
     "./components": "./src/components/ui/index.ts",
-    "./components/*": [
-      "./src/components/*.tsx",
-      "./src/components/*.ts",
-      "./src/components/ui/*.tsx",
-      "./src/components/ui/*.ts"
-    ],
-    "./icons": "./src/icons/index.ts",
-    "./hooks": [
-      "./src/hooks/*.tsx",
-      "./src/hooks/*.ts"
-    ]
+    "./components/theme-provider": "./src/components/theme-provider.tsx",
+    "./components/logo": "./src/components/logo.tsx",
+    "./components/dynamic-logo": "./src/components/dynamic-logo.tsx",
+    "./components/use-toast": "./src/components/ui/use-toast.ts",
+    "./components/chat/index": "./src/components/ui/chat/index.ts",
+    "./components/editor/index": "./src/components/ui/editor/index.ts",
+    "./components/editor/editor-extensions": "./src/components/ui/editor/editor-extensions.ts",
+    "./components/editor/utils": "./src/components/ui/editor/utils.ts",
+    "./components/*": "./src/components/ui/*.tsx",
+    "./icons": "./src/icons/index.ts"
   }
 }

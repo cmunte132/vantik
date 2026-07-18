@@ -23,7 +23,7 @@ export const UserAuthConfigSchema = z.object({
 
 export type UserAuthConfig = z.infer<typeof UserAuthConfigSchema>;
 
-const UserAuthConfigFileSchema = z.record(UserAuthConfigSchema);
+const UserAuthConfigFileSchema = z.record(z.string(), UserAuthConfigSchema);
 
 type UserAuthConfigFile = z.infer<typeof UserAuthConfigFileSchema>;
 

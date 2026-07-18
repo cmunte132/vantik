@@ -9,8 +9,8 @@ Let’s take a look at a basic config.json file. This file is used to configure 
 
 ```json
 {
-  "slug": "slack",
-  "name": "Slack",
+  "slug": "discord",
+  "name": "Discord",
   "triggers": [
     {
       "type": "on_create",
@@ -18,10 +18,10 @@ Let’s take a look at a basic config.json file. This file is used to configure 
     },
     {
       "type": "source_webhook",
-      "entities": [ "slack" ]
+      "entities": [ "discord" ]
     }
   ],
-  "integrations": [ "slack" ]
+  "integrations": [ "discord" ]
 }
 ```
 
@@ -35,12 +35,12 @@ The `config.json` file is used to configure actions in Vantik. Each action has a
 #### `slug`
 - **Type:** `string`
 - **Description:** A unique identifier for each action. This is used internally by Vantik to trigger the corresponding action when specific conditions are met.
-- **Example:** `"slug": "slack"`
+- **Example:** `"slug": "discord"`
 
 #### `name`
 - **Type:** `string`
 - **Description:** The display name of the action. This name is shown in various places within Vantik where the action has made changes, such as when an issue is created or commented on.
-- **Example:** `"name": "Slack"`
+- **Example:** `"name": "Discord"`
 
 ### `triggers`
 
@@ -52,7 +52,7 @@ The `triggers` field defines the conditions under which the action is executed. 
   - `on_create`: Triggered when an entity is created.
   - `on_update`: Triggered when an entity is updated.
   - `on_delete`: Triggered when an entity is deleted.
-  - `source_webhook`: Used when the action should be triggered by an external event, typically received from an integration like Slack or GitHub.
+  - `source_webhook`: Used when the action should be triggered by an external event, typically received from an integration like Discord or GitHub.
 - **Example:**
   ```json
   {
@@ -72,9 +72,9 @@ Entities when used `source_webhook` as type are integrations
 
 The integrations field lists the external systems that the action interacts with. These are the integrations that the action will require access to in order to perform its tasks.
 - **Type:** `array of string`
-- **Description:** Specifies which integrations the action will utilize. For example, if the action is meant to post updates to Slack, slack would be listed here.
+- **Description:** Specifies which integrations the action will utilize. For example, if the action is meant to post updates to Discord, discord would be listed here.
 - **Example:**
   ```json
   {
-    "integrations": [ "slack" ]
+    "integrations": [ "discord" ]
   }

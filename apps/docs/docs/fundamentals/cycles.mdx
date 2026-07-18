@@ -3,6 +3,31 @@ title: 'Cycles'
 sidebar_label: "Cycles"
 ---
 
-:::note
-This feature is planned and will be implemented soon.
-:::
+## Overview
+
+Cycles are fixed time windows (sprints) that help a team focus on a slice of
+work. Issues assigned to the active cycle show up in the team's cycle view,
+with progress tracked as issues move through the workflow.
+
+![](/img/docs/cycles.png)
+
+## Enable cycles
+
+Cycles are opt-in per team:
+
+1. Go to **Settings → your team → Overview**.
+2. Under **Team preferences**, enable cycles.
+
+Once enabled, a **Cycles** entry appears in the team's sidebar and issues gain
+a cycle property.
+
+## Working with cycles
+
+- **Assign issues:** Set the cycle from the issue's right-side properties
+  panel, or in bulk from the list/board views.
+- **Track progress:** The active cycle view groups its issues by status, so
+  you can see remaining work at a glance.
+- **Transitions:** Automated cycle transitions (closing a finished cycle and
+  rolling unfinished issues into the next one) run as a background job and
+  require [trigger.dev](/docs/oss/self-deployment#background-jobs-triggerdev)
+  to be configured. Without it, you manage cycle boundaries manually.

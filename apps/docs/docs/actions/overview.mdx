@@ -3,20 +3,33 @@ title: 'Actions: Overview'
 sidebar_label: "Overview"
 ---
 
-**Vantik Actions** is a powerful framework designed to automate repetitive tasks in issue tracking, streamlining your workflow. 
-Whether it’s automatically labeling issues or creating sub-issues for PR reviews, Vantik Actions helps you eliminate manual processes.
+**Vantik Actions** is a framework for automating repetitive issue-tracking
+work. Whether it's automatically labeling issues or creating sub-issues for PR
+reviews, Actions help you eliminate manual processes — and they integrate with
+external tools you already use.
 
-But Vantik Actions doesn’t just stop at basic workflows—it integrates seamlessly with other tools you use in issue tracking.
+:::note
+Actions run on [trigger.dev](https://trigger.dev), which is an optional part
+of a Vantik deployment — see
+[background jobs](/docs/oss/self-deployment#background-jobs-triggerdev).
+Without it, everything documented in this section is unavailable. The
+automation subsystem is also being reworked in this fork, so expect this area
+to change.
+:::
 
-![](/img/docs/actions.png)
+![](/img/docs/actions.svg)
 
-As seen in the image above, actions are initiated based on triggers. A trigger can either be a Vantik event or an event from an external integration you've connected. Examples of triggers include:
-1. An **emoji reaction** to a message in Slack.
-2. A **message** posted in a Discord channel.
-3. An **issue** created in GitHub.
+Actions are initiated based on triggers. A trigger can either be a Vantik
+event or an event from an external integration you've connected. Examples of
+triggers include:
+
+1. A **message** posted in a Discord channel.
+2. An **issue** created in GitHub.
+3. An **email** sent to your triage address.
 4. A **comment** added to a Vantik issue.
 
-When an event occurs, a Vantik Action is called—this is a piece of TypeScript code that processes the event. 
-There are several pre-built actions that you can install, but you're also free to customize or create new actions and deploy them on the platform. 
-To simplify this process, we provide a CLI that guides you from action creation to deployment.
-
+When an event occurs, a Vantik Action is called — a piece of TypeScript code
+that processes the event. There are several pre-built actions in the
+repository's `actions/` directory that you can install, and you're free to
+customize them or create new ones. A CLI guides you from action creation to
+deployment.

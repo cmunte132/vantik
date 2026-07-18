@@ -1,17 +1,36 @@
 ---
 title: 'Quickstart'
-description: 'This section helps you get started with Vantik'
+description: 'Get a running Vantik instance in a few minutes'
 ---
 
 ## Overview
 
-Vantik is the dev-first issue tracking software powered by the open-source community. It is simple, light-weight and customisable.
-### Cloud
+Vantik is a self-hosted, dev-first, agent-native issue tracker. There is no
+hosted cloud offering — you run it yourself. The Docker Compose stack in the
+main repository is turn-key: it starts the webapp, the API server, and all
+backing services (PostgreSQL, Redis, SuperTokens, Typesense) with working
+defaults.
 
-Vantik cloud is currently in public beta, you can signup [here](https://app.vantik.dev/auth)
+## Run it
 
-### Self-hosted
+Prerequisites: Docker (or Podman with the compose provider).
 
-If you prefer to self-host Vantik on your own machine, you can do so using Docker. However note that you will need to add configurations for email, AI and storage services. 
-Please refer to the documentation [here](/docs/oss/self-deployment)
+```bash
+git clone https://github.com/cmunte132/vantik.git
+cd vantik
+cp .env.example .env   # defaults work out of the box
+docker compose up -d
+```
 
+Open [http://localhost:3000](http://localhost:3000) and sign in with any email
+address. Without SMTP configured, the magic login link is printed to the server
+log instead of emailed:
+
+```bash
+docker compose logs server | grep -A5 "magic link"
+```
+
+For production-style deployments (custom domain, secrets, optional services
+like SMTP, AI providers, and trigger.dev), see
+[Self-hosting](/docs/oss/self-deployment). To run the apps from source with hot
+reload, see [Local Setup](/docs/oss/local-setup).

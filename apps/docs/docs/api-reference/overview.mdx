@@ -4,53 +4,45 @@ sidebar_label: Overview & Authentication
 description: Using the Vantik API
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+## Overview
 
-## Installation
+The Vantik REST API supports CRUD operations on issues, comments, labels,
+linked issues, and more — everything an agent or script needs to plan and
+track work. The full endpoint reference is in the sidebar.
 
-The API is available to run CRUD operations on Vantik.
+The API is served by your own instance under `/api` (e.g.
+`http://localhost:3001/api` in local development, or
+`https://your-domain.com/api` behind the webapp proxy).
 
-<Tabs>
-<TabItem value="npm" label="npm">
+## Authentication
 
-```bash
-npm i @vantikhq/sdk@0.1.3
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
+Create a **personal access token (PAT)** in the webapp under
+**Settings → My Account → Api**, and send it with each request:
 
 ```bash
-pnpm add @vantikhq/sdk@0.1.3
+curl -H "Authorization: Bearer $VANTIK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Issue title", "description": "Issue description", "teamId": "..."}' \
+  https://your-domain.com/api/v1/issues
 ```
 
-</TabItem>
-<TabItem value="yarn" label="yarn">
+## TypeScript SDK
 
-```bash
-yarn add @vantikhq/sdk@0.1.3
-```
-
-</TabItem>
-</Tabs>
-
-## Usage
+The repository contains a typed Node.js SDK in
+[`packages/vantik-sdk`](https://github.com/cmunte132/vantik/tree/main/packages/vantik-sdk).
+It is **not published to npm** — use it from the workspace (or build it from
+source) if you're developing inside the monorepo:
 
 ```ts
 import { configure, createIssue } from "@vantikhq/sdk";
 
 configure({
-  // this is the default and if the `VANTIK_TOKEN` environment variable is set, can omit calling configure
-  token: <token>,
+  // Optional if the VANTIK_TOKEN environment variable is set
+  token: "<token>",
 });
 
-async function main() {
-  const runs = await createIssue({
-    title: "Issue title",
-    description: "Issue description",
-  });
-}
-
-main().catch(console.error);
+await createIssue({
+  title: "Issue title",
+  description: "Issue description",
+});
 ```

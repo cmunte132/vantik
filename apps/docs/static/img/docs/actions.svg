@@ -1,0 +1,61 @@
+<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f2937"/>
+    </marker>
+  </defs>
+
+  <!-- background -->
+  <rect x="0" y="0" width="1200" height="480" rx="16" fill="#e8f3ed"/>
+
+  <!-- left: external integrations -->
+  <g>
+    <rect x="70" y="70" width="220" height="96" rx="14" fill="#ffffff"/>
+    <text x="180" y="108" text-anchor="middle" font-size="17" font-weight="600" fill="#111827">External events</text>
+    <text x="180" y="140" text-anchor="middle" font-size="15" fill="#4b5563">GitHub · Discord · Email</text>
+  </g>
+
+  <!-- left: vantik events -->
+  <g>
+    <rect x="70" y="250" width="220" height="160" rx="14" fill="#ffffff"/>
+    <g transform="translate(90,278)">
+      <circle cx="6" cy="10" r="5" fill="#3cad6e"/>
+      <rect x="14" y="-2" width="7" height="26" rx="3.5" fill="#2e8555" transform="rotate(28 17 11)"/>
+      <text x="34" y="16" font-size="16" font-weight="600" fill="#111827">Vantik events</text>
+    </g>
+    <text x="100" y="330" font-size="14" fill="#4b5563">Issue created · Commented</text>
+    <text x="100" y="356" font-size="14" fill="#4b5563">Assigned · Label added</text>
+    <text x="100" y="382" font-size="14" fill="#4b5563">Link attached</text>
+  </g>
+
+  <!-- center: vantik actions -->
+  <g>
+    <rect x="490" y="180" width="220" height="120" rx="14" fill="#ffffff"/>
+    <g transform="translate(578,208)">
+      <circle cx="8" cy="12" r="7" fill="#3cad6e"/>
+      <rect x="20" y="-4" width="9" height="34" rx="4.5" fill="#2e8555" transform="rotate(28 24.5 13)"/>
+    </g>
+    <text x="600" y="272" text-anchor="middle" font-size="19" font-weight="600" fill="#111827">Vantik actions</text>
+  </g>
+
+  <!-- right: outcomes -->
+  <g>
+    <rect x="910" y="60" width="220" height="64" rx="14" fill="#ffffff"/>
+    <text x="1020" y="99" text-anchor="middle" font-size="16" font-weight="500" fill="#111827">Comment on issue</text>
+
+    <rect x="910" y="208" width="220" height="64" rx="14" fill="#ffffff"/>
+    <text x="1020" y="247" text-anchor="middle" font-size="16" font-weight="500" fill="#111827">Create a GitHub issue</text>
+
+    <rect x="910" y="356" width="220" height="64" rx="14" fill="#ffffff"/>
+    <text x="1020" y="395" text-anchor="middle" font-size="16" font-weight="500" fill="#111827">Send an email</text>
+  </g>
+
+  <!-- arrows in -->
+  <path d="M 290 118 C 400 118, 420 200, 488 222" fill="none" stroke="#1f2937" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M 290 330 C 400 330, 420 280, 488 258" fill="none" stroke="#1f2937" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- arrows out -->
+  <path d="M 710 218 C 800 190, 820 120, 908 96" fill="none" stroke="#1f2937" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M 710 240 L 908 240" fill="none" stroke="#1f2937" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M 710 262 C 800 290, 820 360, 908 384" fill="none" stroke="#1f2937" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>

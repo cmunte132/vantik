@@ -1,276 +1,160 @@
 ---
 title: "Self-hosting"
-description: "You can self-host Vantik on your own infrastructure."
+description: "Run Vantik on your own infrastructure."
 ---
 
-## Caveats
+## Overview
 
-This guide outlines a quick way to start self-hosting Vantik. Scaling, security, and reliability concerns are not fully addressed here. It's unlikely to result in a production-ready deployment on its own, but it's a good starting point.
+Vantik ships as a single Docker Compose stack in the main repository. It runs
+the webapp, the API server, and all backing services (PostgreSQL, Redis,
+SuperTokens, Typesense), and the server applies database migrations on
+startup — no separate deployment repo or setup script is needed.
 
-Should the burden ever get too much, we'd be happy to see you on [Vantik.ai cloud](https://app.vantik.dev) where we deal with these concerns for you.
-
-<details>
-<summary>Please consider these additional warnings</summary>
-
-- We use trigger.dev for the background jobs, but there is a little bit of
-  extra work to deploy them - We are also restricted by the limitations of
-  trigger.dev in scaling. You can check those in their
-  [documentation](https://trigger.dev/docs/v3/open-source-self-hosting#caveats).
-
-</details>
+This guide gets you a working deployment quickly. Scaling, backups, and
+hardening beyond the basics are up to you.
 
 ## Requirements
 
-- 4 CPU
-- 8 GB RAM
-- Debian or derivative
-- Optional: A separate machine for the worker components
+- Docker, or Podman with the compose provider (a Podman VM needs at least
+  8 GB of memory to build the images)
+- 4 CPU / 8 GB RAM is a comfortable baseline
 
-## Important Notes
+## Instructions
 
-### Storage
+1. Clone the repository and create your `.env`:
 
-- We support both Google Cloud Storage and Amazon S3 for file attachments
-- Default storage provider is Google Cloud Storage
-- To configure your preferred storage provider, set in `.env`:
+```bash
+git clone https://github.com/cmunte132/vantik.git
+cd vantik
+cp .env.example .env
+```
 
-  #### Google Cloud Storage Configuration
+2. For anything beyond a localhost test, edit `.env`:
 
-  - Create a Google Cloud project if you haven't already
-  - Create a storage bucket in Google Cloud
-  - Create a service account and download the JSON key file
-  - Place your service account JSON file in the `certs` directory
-  - Add to your `.env` file:
+   - Set `FRONTEND_HOST` and `BACKEND_HOST` to your domain
+   - Change `POSTGRES_PASSWORD`, `TYPESENSE_API_KEY`, and `TRIGGER_TOKEN`
 
-  ```bash
-  STORAGE_PROVIDER=GCP
-  BUCKET_NAME=your-bucket-name
-  GCP_SERVICE_ACCOUNT_FILE=/path/to/service-account.json
-  PUBLIC_ATTACHMENT_URL=https://your-domain.com/api
-  ```
+3. Start the stack:
 
-  Your service account needs Storage Object Admin (`roles/storage.objectAdmin`) permissions.
+```bash
+docker compose up -d
+```
 
-  #### Amazon S3 Configuration
+4. Open the webapp (http://localhost:3000 by default, or your
+   `FRONTEND_HOST`) and sign in with your email address. Without SMTP
+   configured, the magic login link is printed to the server log:
 
-  - Create an S3 bucket in your AWS account
-  - Create an IAM user with the following policy:
+```bash
+docker compose logs server | grep -A5 "magic link"
+```
 
-  ```json
-  {
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Effect": "Allow",
-        "Action": [
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:DeleteObject",
-          "s3:ListBucket",
-          "s3:GetObjectAttributes",
-          "s3:HeadObject"
-        ],
-        "Resource": [
-          "arn:aws:s3:::your-bucket-name/",
-          "arn:aws:s3:::your-bucket-name"
-        ]
-      }
-    ]
-  }
-  ```
+## Optional services
 
-  - Add to your `.env` file:
+Everything below is optional. The server logs an error and continues if a
+service is not configured.
 
-  ```bash
-  STORAGE_PROVIDER=AWS
-  BUCKET_NAME=your-bucket-name
-  AWS_REGION=your-region
-  AWS_ACCESS_KEY_ID=your-access-key
-  AWS_SECRET_ACCESS_KEY=your-secret-key
-  PUBLIC_ATTACHMENT_URL=https://your-domain.com/api
-  ```
+### Email (SMTP)
 
-Your bucket needs the following CORS configuration:
+Magic-link logins and notification emails are sent via SMTP when configured;
+otherwise login links land in the server log. Any provider that supports SMTP
+authentication works (Gmail, Amazon SES, SendGrid, ...):
+
+```bash
+SMTP_HOST=your-smtp-host
+SMTP_PORT=587
+SMTP_USER=your-smtp-username
+SMTP_PASSWORD=your-smtp-password
+SMTP_DEFAULT_FROM=noreply@yourdomain.com
+```
+
+### AI features
+
+AI features (title generation, description elaboration, breaking issues into
+sub-issues, filter suggestions) use the first configured provider:
+
+```bash
+# Hosted providers (either one)
+OPENAI_API_KEY=your-openai-key
+ANTHROPIC_API_KEY=your-anthropic-key
+
+# Or a local model via ollama
+LOCAL_MODEL=gemma2:2b
+OLLAMA_HOST=http://your-ollama-host:11434
+```
+
+Semantic search re-ranking can additionally use Cohere
+(`COHERE_API_KEY`); without it, Typesense's built-in ranking is used.
+
+### File attachments
+
+Issue attachments are stored in Google Cloud Storage or Amazon S3. Without a
+configured provider, attachment uploads are unavailable — everything else
+works.
+
+```bash
+# Google Cloud Storage
+STORAGE_PROVIDER=GCP
+BUCKET_NAME=your-bucket-name
+GCP_SERVICE_ACCOUNT_FILE=/path/to/service-account.json  # Storage Object Admin role
+PUBLIC_ATTACHMENT_URL=https://your-domain.com/api
+
+# Amazon S3
+STORAGE_PROVIDER=AWS
+BUCKET_NAME=your-bucket-name
+AWS_REGION=your-region
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+PUBLIC_ATTACHMENT_URL=https://your-domain.com/api
+```
+
+Your bucket needs a CORS configuration allowing your frontend origin:
 
 ```json
 [
   {
     "AllowedHeaders": ["*"],
     "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-    "AllowedOrigins": ["https://app.vantik.dev", "http://localhost:3000"],
+    "AllowedOrigins": ["https://your-domain.com"],
     "ExposeHeaders": ["ETag"],
     "MaxAgeSeconds": 3000
   }
 ]
 ```
 
-### Email
+### Background jobs (trigger.dev)
 
-- SMTP configuration is required for user authentication
-- Compatible with most SMTP providers (Gmail, Amazon SES, SendGrid, etc.)
-- Used for sending magic links during login and email notifications
+[Actions](/docs/actions/overview) — the automation framework — and some
+background jobs (user notifications, automated cycle transitions, scheduled
+tasks) run on [trigger.dev](https://trigger.dev). Core issue tracking works
+without it.
 
-### Background Jobs
-
-- We use trigger.dev for notifications and automation
-- Core features work without trigger.dev, but you'll miss:
-  - User notifications
-  - Automated cycle transitions
-  - Scheduled tasks
-- Note: trigger.dev has some scaling limitations in self-hosted environments
-
-### AI Features
-
-#### OpenAI Integration
-
-- Used for enhanced AI features:
-  - Auto-generating issue titles
-  - Elaborating descriptions
-  - Breaking issues into sub-issues
-  - Smart filtering suggestions
-- Optional: Will fallback to local models if not configured
-- Configure by adding to `.env`:
+To enable, deploy trigger.dev yourself
+([self-hosting guide](https://trigger.dev/docs/self-hosting)) and point
+Vantik at it in `.env`:
 
 ```bash
-OPENAI_API_KEY=your-openai-key
+TRIGGER_API_URL=https://your-trigger-instance
+TRIGGER_DATABASE_URL=postgresql://user:pass@host/trigger
 ```
 
-#### Cohere Integration
-
-- Used for semantic search and issue management:
-  - Finding duplicate issues
-  - Semantic search capabilities
-  - Re-ranking search results
-- Optional: Will fallback to Typesense embeddings if not configured
-- Configure by adding to `.env`:
-
-```bash
-COHERE_API_KEY=your-cohere-key
-```
-
-#### Local AI Alternative
-
-- Uses Ollama with open-source models as fallback
-- Decent performance but may not match OpenAI/Cohere quality
-- Configure preferred model in `.env`:
-
-```bash
-LOCAL_MODEL=gemma2:2b  # or other models like phi3, llama3, mistral
-OLLAMA_HOST=http://vantik-ollama:11434
-```
-
-## Instructions
-
-1. Install Docker on your workstation (see [instructions](https://docs.docker.com/get-docker/)). Make sure you're on the latest version of docker-compose.
-
-2. Run the following commands in your terminal:
-
-```bash
-git clone https://github.com/vantikhq/docker.git
-cd docker
-```
-
-3. Create a `.env` file. This file contains configuration for all the services used to run Vantik. Please fill in or modify the configurations as needed.
-
-```bash
-cp .env.example .env
-```
-
-4. Configure the required services:
-
-   #### Storage Configuration
-
-   You'll need to set up Google Cloud Storage for file attachments:
-
-   1. Create a Google Cloud project if you haven't already
-   2. Create a storage bucket in Google Cloud
-   3. Create a service account and download the JSON key file
-   4. Place your service account JSON file in the `certs` directory (this will be mounted to the server container)
-   5. Add the following to your `.env` file:
-
-   ```bash
-   GCP_BUCKET_NAME=your-bucket-name
-   GCP_SERVICE_ACCOUNT_FILE=/path/to/service-account.json
-   PUBLIC_ATTACHMENT_URL=https://your-domain.com/api
-   ```
-
-   #### Email Configuration
-
-   Configure SMTP settings for authentication emails:
-
-   ```bash
-   SMTP_HOST=your-smtp-host
-   SMTP_PORT=587  # or your SMTP port
-   SMTP_USER=your-smtp-username
-   SMTP_PASSWORD=your-smtp-password
-   SMTP_DEFAULT_FROM=noreply@yourdomain.com
-   ```
-
-   #### AI Services Configuration
-
-   Configure AI services for enhanced features:
-
-   ```bash
-   # OpenAI for issue management features
-   OPENAI_API_KEY=your-openai-key
-
-   # Cohere for semantic search
-   COHERE_API_KEY=your-cohere-key
-
-   # Local AI fallback settings (optional)
-   LOCAL_MODEL=gemma2:2b
-   OLLAMA_HOST=http://vantik-ollama:11434
-   ```
-
-   #### Trigger.dev Configuration
-
-   1. Open `init-trigger.sh` in your editor
-   2. Update the following lines with your information:
-
-   ```bash
-   INSERT INTO \"User\" (
-     id, admin, \"authenticationMethod\", \"displayName\", email, name, \"confirmedBasicDetails\", \"updatedAt\"
-   ) VALUES (
-     '$TRIGGER_COMMON_ID', true, 'MAGIC_LINK', 'YourName', 'your-email@domain.com', 'YourName', true, CURRENT_TIMESTAMP
-   );
-   ```
-
-5. Run the start script and follow the prompts, We handle 2 major steps in start script setting up trigger.dev and setting up vantik for you.
-
-```bash
-./start.sh
-```
-
-6. You can now check vantik at `http://localhost:8000`
+:::note
+The automation subsystem is being reworked in this fork (see the
+[roadmap](https://github.com/cmunte132/vantik#roadmap-planned-direction-not-yet-built)),
+so treat trigger.dev integration as legacy-supported rather than the
+long-term direction.
+:::
 
 ## FAQ
 
-### Storage Configuration
-
-**Q: Can I use a different storage provider?**
-A: Currently, we only support Google Cloud Storage. We're working on adding support for other providers.
-
-**Q: What permissions does the service account need?**
-A: The service account needs Storage Object Admin (`roles/storage.objectAdmin`) permissions on the bucket.
-
-### Email Configuration
-
-**Q: Which SMTP providers can I use?**
-A: You can use any SMTP provider (Gmail, Amazon SES, SendGrid, etc.) that supports SMTP authentication.
-
-### Trigger.dev Configuration
-
-**Q: What is trigger.dev used for in Vantik?**
-A: We use trigger.dev for managing background jobs, specifically:
-
-- Sending notifications to users
-- Automating cycle transitions and updates
-- Running scheduled tasks
+**Q: Is there a hosted cloud version?**
+A: No. Vantik is self-hosted only.
 
 **Q: Can I run Vantik without trigger.dev?**
-A: While the core functionality of Vantik will work, features like notifications and automated cycle transitions will not be available without trigger.dev properly configured.
+A: Yes — all core issue tracking works. You lose Actions, user notifications,
+and automated cycle transitions.
 
-**Q: Are there any limitations with trigger.dev?**
-A: Yes, we are bound by trigger.dev's open-source scaling limitations. You can review these in their [documentation](https://trigger.dev/docs/v3/open-source-self-hosting#caveats).
+**Q: Which storage providers are supported for attachments?**
+A: Google Cloud Storage and Amazon S3.
 
-If there are any questions that we couldn't answer here, feel free to open an issue on GitHub.
+If there are any questions that we couldn't answer here, feel free to open an
+issue on [GitHub](https://github.com/cmunte132/vantik/issues).

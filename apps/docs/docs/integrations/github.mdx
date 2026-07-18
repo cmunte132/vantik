@@ -1,29 +1,42 @@
 ---
-title: 'Github'
-sidebar_label: "Github"
+title: 'GitHub'
+sidebar_label: "GitHub"
 ---
 
 ## Overview
 
-Vantik seamlessly integrates with GitHub to keep your development process in sync:
+Vantik integrates with GitHub to keep your development process in sync:
 
-- Effortless Linking: Connect your pull requests (PRs) to related Vantik issues. Once a PR is closed, the linked Vantik issue automatically updates to "done."
-- Automated Issue Creation: New GitHub issues automatically create corresponding Vantik issues in triage, saving you time and effort.
-- Bidirectional Sync: Changes made in either platform (Vantik or GitHub) automatically reflect in the other. This includes issue closure, comments, and other updates, ensuring everyone stays on the same page.
+- **Effortless linking:** Connect your pull requests (PRs) to related Vantik
+  issues. Once a PR is closed, the linked Vantik issue automatically moves to
+  "Done".
+- **Automated issue creation:** New GitHub issues automatically create
+  corresponding Vantik issues in triage.
+- **Bidirectional sync:** Changes made in either platform (issue closure,
+  comments, and other updates) automatically reflect in the other.
 
+:::note
+The GitHub integration ships as an [Action](/docs/actions/overview), so it
+requires trigger.dev to be configured — see
+[background jobs](/docs/oss/self-deployment#background-jobs-triggerdev).
+:::
 
-## Configure - cloud version
+## Configure
 
-### For PR Linking
+### Connect GitHub
 
-1. Navigate to Settings -> Workspace -> Integrations -> GitHub.
-2. Connect your personal GitHub account to Vantik.
-3. Select the desired GitHub organisation you want to connect.
-4. Choose to connect all repositories or select specific ones you want to sync.
-5. Click the Install and Authorise button to finalise the connection. 
+1. Navigate to **Settings → Overview → Integrations → GitHub**.
+2. Grant Vantik access to your GitHub account.
+3. Select the GitHub organisation you want to connect, and choose all
+   repositories or specific ones to sync.
 
-### For Automated issue creation
+### Configure the action
 
-1. After completing steps 1-5, select the specific GitHub repository you want to link with your Vantik team. This enables automatic creation of Vantik issues when new issues are created in GitHub.
-2. For two-way synchronization (changes reflected in both Vantik and GitHub), enable bi-directional sync. Otherwise, only GitHub issues will sync to Vantik. 
+1. Go to **Settings → Overview → Actions → GitHub → Configuration**.
+2. Specify the repository, the Vantik team, and the label that triggers
+   creating a GitHub issue from a Vantik issue.
 
+Notes:
+
+- Only one GitHub repository can be linked to each Vantik team.
+- A single trigger label is used across all linked repositories and teams.

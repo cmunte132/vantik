@@ -105,8 +105,6 @@ export default class IssuesAIService {
     // Map assignee IDs to assignee objects with scores
     const assignees = Array.from(assigneeIds).map((assigneeId) => ({
       id: assigneeId,
-      // Search hits carry `relevanceScore` when reranking is enabled; there is
-      // no score at all when it isn't.
       score:
         similarIssues.find((issue) => issue.assigneeId === assigneeId)
           ?.relevanceScore ?? 0,

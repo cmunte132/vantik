@@ -134,6 +134,10 @@ Embeddings are refreshed asynchronously whenever an issue or one of its
 comments changes, so a freshly posted comment becomes searchable within
 seconds rather than instantly.
 
+Search runs entirely inside your deployment: Typesense generates the embeddings
+in-process with a built-in model, and no issue title, description or comment is
+sent to any external service.
+
 ## Keeping list payloads small
 
 ```

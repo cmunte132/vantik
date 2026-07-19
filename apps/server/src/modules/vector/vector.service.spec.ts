@@ -3,6 +3,7 @@ import { Client as TypesenseClient } from 'typesense';
 
 import { IssueWithRelations } from 'modules/issues/issues.interface';
 
+import { SIMILAR_ISSUE_DISTANCE_THRESHOLD } from './vector.interface';
 import { VectorService } from './vector.service';
 
 const tiptap = (text: string) =>
@@ -72,18 +73,6 @@ function buildDeps(overrides: { comments?: unknown[]; completedAt?: Date }) {
 }
 
 describe('VectorService', () => {
-  // These tests exercise the typesense-only path; a developer with Cohere
-  // configured must not end up making real embedding calls.
-  const cohereKey = process.env.COHERE_API_KEY;
-  beforeAll(() => {
-    delete process.env.COHERE_API_KEY;
-  });
-  afterAll(() => {
-    if (cohereKey) {
-      process.env.COHERE_API_KEY = cohereKey;
-    }
-  });
-
   describe('createIssueEmbedding', () => {
     it('indexes the state category and every comment body', async () => {
       const { prisma, typesense, upsert } = buildDeps({});
@@ -120,6 +109,16 @@ describe('VectorService', () => {
       );
 
       expect(upsert.mock.calls[0][0].resolutionText).toBe('');
+    });
+
+    it('never sends a precomputed embedding — typesense generates it locally', async () => {
+      const { prisma, typesense, upsert } = buildDeps({});
+
+      await new VectorService(prisma, typesense).createIssueEmbedding(
+        issue as IssueWithRelations,
+      );
+
+      expect(upsert.mock.calls[0][0]).not.toHaveProperty('embeddings');
     });
 
     it('handles issues with no comments', async () => {
@@ -171,6 +170,22 @@ describe('VectorService', () => {
       };
     }
 
+    it('sends the query text to typesense rather than a wildcard', async () => {
+      const { prisma, typesense, perform } = buildSearchDeps();
+
+      await new VectorService(prisma, typesense).searchEmbeddings(
+        'workspace-1',
+        'pg pool',
+        10,
+      );
+
+      // A wildcard `q` makes typesense skip both the keyword match and the
+      // query embedding, returning the whole workspace unranked.
+      const search = perform.mock.calls[0][0].searches[0];
+      expect(search.q).toBe('pg pool');
+      expect(search.query_by).toContain('embeddings');
+    });
+
     it('filters by workspace only when no categories are given', async () => {
       const { prisma, typesense, perform } = buildSearchDeps();
 
@@ -201,6 +216,19 @@ describe('VectorService', () => {
       );
     });
 
+    it('derives a relevance score from the vector distance', async () => {
+      const { prisma, typesense } = buildSearchDeps();
+
+      const hits = await new VectorService(prisma, typesense).searchEmbeddings(
+        'workspace-1',
+        'pg pool',
+        10,
+      );
+
+      expect(hits[0].distance).toBe(0.2);
+      expect(hits[0].relevanceScore).toBeCloseTo(0.8);
+    });
+
     it('returns the state category and a resolution snippet on each hit', async () => {
       const { prisma, typesense } = buildSearchDeps();
 
@@ -216,6 +244,29 @@ describe('VectorService', () => {
         resolutionSnippet: 'Fixed by bumping the pg pool size',
       });
     });
+  });
+});
+
+describe('VectorService.similarIssues', () => {
+  it('uses a distance ceiling the built-in model can actually reach', async () => {
+    const perform = jest.fn().mockResolvedValue({ results: [{ hits: [] }] });
+    const typesense = {
+      multiSearch: { perform },
+    } as unknown as TypesenseClient;
+
+    await new VectorService({} as PrismaService, typesense).similarIssues(
+      'workspace-1',
+      'issue-1',
+    );
+
+    // The previous 0.5 ceiling was tuned for a different embedding model and
+    // matched nothing at all with the built-in one.
+    const vectorQuery = perform.mock.calls[0][0].searches[0].vector_query;
+    expect(vectorQuery).toContain('id:issue-1');
+    expect(vectorQuery).toContain(
+      `distance_threshold:${SIMILAR_ISSUE_DISTANCE_THRESHOLD}`,
+    );
+    expect(SIMILAR_ISSUE_DISTANCE_THRESHOLD).toBeGreaterThan(0.5);
   });
 });
 

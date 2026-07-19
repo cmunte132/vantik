@@ -1,0 +1,168 @@
+---
+title: Working with agents
+sidebar_label: Working with agents
+description: Endpoints and conventions for LLM agents using the Vantik API
+---
+
+Agents are just another API client — there is no separate "agent API". This
+page collects the endpoints and conventions that matter most when the caller is
+an LLM: reading a task's full context in one request, keeping payloads small,
+exchanging markdown instead of rich-text JSON, and searching past work to find
+out whether a problem was already solved.
+
+Everything here uses the same [personal access token
+authentication](./overview.mdx) as the rest of the API.
+
+## Markdown, not Tiptap JSON
+
+Rich-text fields (issue descriptions, comment bodies) are stored as Tiptap
+JSON. The API converts at the edge so agents never have to touch that format:
+
+| Direction | Issue field | Comment field |
+| --- | --- | --- |
+| Read | `descriptionMarkdown` | `bodyMarkdown` |
+| Write | `descriptionMarkdown` | `bodyMarkdown` |
+
+Reads return the markdown field alongside the raw `description` / `body`.
+Writes accept either — **if both the raw field and the markdown field are sent,
+the raw Tiptap field wins**, so send only `descriptionMarkdown` /
+`bodyMarkdown` unless you are deliberately writing Tiptap.
+
+## Read a task's full context in one call
+
+```
+GET /v1/issues/:issueId/context
+```
+
+Returns everything needed to start work on an issue, with every id already
+resolved to a human-readable name — no follow-up call is needed to translate a
+UUID, and no raw Tiptap JSON appears anywhere in the response.
+
+```jsonc
+{
+  "id": "…",
+  "key": "ENG-42",
+  "title": "Connections exhausted under load",
+  "descriptionMarkdown": "…",
+  "state": { "id": "…", "name": "In Progress", "category": "STARTED" },
+  "assignee": { "id": "…", "fullname": "Jane Doe" },
+  "team": { "id": "…", "identifier": "ENG", "name": "Engineering" },
+  "labels": [{ "id": "…", "name": "bug" }],
+  "priority": 2,
+  "estimate": null,
+  "dueDate": null,
+  "project": null,
+  "cycle": null,
+  "parent": { "id": "…", "key": "ENG-40", "title": "…" },
+  "subIssues": [{ "id": "…", "key": "ENG-43", "title": "…", "stateCategory": "COMPLETED" }],
+  "relations": [{ "type": "BLOCKED", "issue": { "id": "…", "key": "ENG-12", "title": "…" } }],
+  "linkedIssues": [{ "id": "…", "url": "https://github.com/…", "title": "PR #12" }],
+  "comments": [
+    {
+      "id": "…",
+      "author": { "id": "…", "fullname": "Jane Doe" },
+      "createdAt": "…",
+      "bodyMarkdown": "…",
+      "replies": []
+    }
+  ],
+  "history": [
+    { "at": "…", "actor": "Jane Doe", "change": "state", "from": "Todo", "to": "In Progress" }
+  ],
+  "createdAt": "…",
+  "updatedAt": "…"
+}
+```
+
+Notes:
+
+- Deleted comments, relations and sub-issues are excluded.
+- `relations[].type` is always written from the perspective of the requested
+  issue: a stored `ENG-50 BLOCKS ENG-42` row reads as `BLOCKED` when you ask
+  for ENG-42's context.
+- `history` is condensed: one entry per readable change (`state`, `assignee`,
+  `priority`, `estimate`, `team`, `project`, `cycle`, `parent`, `label`), with
+  ids resolved to names. Rows where nothing readable changed are dropped.
+
+Two slices of the same data are available on their own when that is all you
+need:
+
+```
+GET /v1/issues/:issueId/comments   # chronological, replies nested one level
+GET /v1/issues/:issueId/history    # the condensed history array
+```
+
+## Closing an issue with a resolution
+
+There is no dedicated "close" endpoint. Closing means moving the issue to a
+workflow state whose `category` is `COMPLETED`:
+
+1. `GET /v1/:teamId/workflows` and pick the state with
+   `category: "COMPLETED"`.
+2. Post the explanation as a comment
+   (`POST /v1/issue_comments?issueId=…` with `bodyMarkdown`).
+3. `POST /v1/issues/:issueId?teamId=…` with `{ "stateId": "<completed state>" }`.
+
+Posting the comment before the state change matters: the last top-level comment
+at or before the transition into `COMPLETED` is what search returns as the
+issue's resolution (see below).
+
+## Finding out whether something was fixed before
+
+```
+GET /v1/search?workspaceId=…&query=pg+pool&stateCategory=COMPLETED
+```
+
+The search index covers issue titles, descriptions **and comment bodies**, so a
+fix described only in a comment is findable. Parameters:
+
+| Param | Description |
+| --- | --- |
+| `query` | Free text. |
+| `workspaceId` | Required. |
+| `limit` | Max hits, default 10. |
+| `threshold` | Vector distance threshold, default 0.8. |
+| `stateCategory` | Comma-separated workflow categories to restrict to, e.g. `COMPLETED` or `STARTED,COMPLETED`. |
+
+Each hit carries `stateCategory` and `resolutionSnippet` — the first 500
+characters of the comment that explains how the issue was resolved — so
+"a similar issue exists **and** here is how it was fixed" is a single call.
+`GET /v1/search/similar_issues?workspaceId=…&issueId=…` returns the same
+fields.
+
+Embeddings are refreshed asynchronously whenever an issue or one of its
+comments changes, so a freshly posted comment becomes searchable within
+seconds rather than instantly.
+
+## Keeping list payloads small
+
+```
+POST /v1/issues/filter
+```
+
+By default this endpoint returns every matching issue as a full row, which is
+expensive for a context window. Sending any of `page`, `perPage`, `orderBy` or
+`view` switches it to a paginated envelope:
+
+```jsonc
+{
+  "filters": { "state": { "filterType": "IS", "value": ["<stateId>"] } },
+  "workspaceId": "…",
+  "page": 1,        // default 1
+  "perPage": 50,    // default 50, max 200
+  "orderBy": "updatedAt", // updatedAt (default) | createdAt | number | priority, always descending
+  "view": "list"    // list (default) | full
+}
+```
+
+```jsonc
+{ "issues": [ … ], "page": 1, "perPage": 50, "total": 123 }
+```
+
+- `view: "list"` returns `id`, `key`, `title`, `stateId`, `stateCategory`,
+  `assigneeId`, `priority`, `labelIds`, `projectId` and `updatedAt` — no
+  description at all.
+- `view: "full"` returns every issue column plus `descriptionMarkdown`.
+
+Omitting all four parameters keeps the original behaviour — a bare array of
+full issues — so existing clients are unaffected.

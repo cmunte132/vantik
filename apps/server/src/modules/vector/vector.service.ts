@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
+import { WorkflowCategoryEnum } from '@vantikhq/types';
 import { CohereClient } from 'cohere-ai';
 import { PrismaService } from 'nestjs-prisma';
 import { Client as TypesenseClient } from 'typesense';
@@ -9,8 +10,12 @@ import { IssueWithRelations } from 'modules/issues/issues.interface';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import {
+  IssueSearchHit,
+  MAX_COMMENTS_TEXT_LENGTH,
+  RESOLUTION_SNIPPET_LENGTH,
   cohereEmbedding,
   issueSchema,
+  requiredIssueFields,
   typesenseEmbedding,
 } from './vector.interface';
 
@@ -18,6 +23,8 @@ import {
 export class VectorService implements OnModuleInit {
   private readonly cohereClient: CohereClient;
   private readonly isCohere: boolean;
+  private readonly embedModel: string;
+  private readonly rerankModel: string;
 
   constructor(
     private prisma: PrismaService,
@@ -27,6 +34,8 @@ export class VectorService implements OnModuleInit {
       token: process.env.COHERE_API_KEY,
     });
     this.isCohere = process.env.COHERE_API_KEY ? true : false;
+    this.embedModel = process.env.COHERE_EMBED_MODEL || 'embed-english-v3.0';
+    this.rerankModel = process.env.COHERE_RERANK_MODEL || 'rerank-english-v3.0';
   }
 
   private readonly logger: LoggerService = new LoggerService('VectorService');
@@ -45,66 +54,123 @@ export class VectorService implements OnModuleInit {
     }
   }
 
+  /**
+   * The schema is not versioned server-side, so a collection created by an
+   * older build is detected by the fields it is missing. Typesense's alter
+   * endpoint cannot backfill values for new fields, so a stale collection is
+   * dropped and rebuilt from Postgres instead — `prefillIssuesData` is
+   * idempotent and is how the very first fill already works.
+   */
   async createIssuesCollection() {
+    let existing;
     try {
-      await this.typesenseClient.collections('issues').retrieve();
-      this.logger.info({
-        message: 'Issues collection already exists',
-        where: `VectorService.createIssuesCollection`,
-      });
+      existing = await this.typesenseClient.collections('issues').retrieve();
     } catch (error) {
-      if (error.httpStatus === 404) {
-        issueSchema.fields.push(
-          this.isCohere ? cohereEmbedding : typesenseEmbedding,
-        );
-
-        try {
-          await this.typesenseClient.collections().create(issueSchema);
-        } catch (createError) {
-          // A previous create attempt may have succeeded server-side after the
-          // client timed out — a duplicate-collection 409 is fine.
-          if (createError.httpStatus !== 409) {
-            throw createError;
-          }
-        }
-        this.logger.info({
-          message: 'Created an issue collection',
-          where: `VectorService.createIssuesCollection`,
-        });
-        const workspaces = await this.prisma.workspace.findMany({
-          where: { deleted: null },
-          select: { id: true },
-        });
-        await Promise.all(
-          workspaces.map((workspace) => this.prefillIssuesData(workspace.id)),
-        );
-        this.logger.info({
-          message: 'Prefilled data for all workspaces',
-          where: `VectorService.createIssuesCollection`,
-        });
-      } else {
+      if (error.httpStatus !== 404) {
         this.logger.error({
-          message: 'Error creating issues collection:',
+          message: 'Error retrieving issues collection:',
           where: `VectorService.createIssuesCollection`,
           error,
         });
+        return;
       }
     }
+
+    if (existing) {
+      const presentFields = new Set(
+        existing.fields.map((field: { name: string }) => field.name),
+      );
+      const missingFields = requiredIssueFields.filter(
+        (field) => !presentFields.has(field),
+      );
+
+      if (missingFields.length === 0) {
+        this.logger.info({
+          message: 'Issues collection already exists',
+          where: `VectorService.createIssuesCollection`,
+        });
+        return;
+      }
+
+      this.logger.info({
+        message: `Issues collection is missing ${missingFields.join(', ')} — recreating and re-indexing`,
+        where: `VectorService.createIssuesCollection`,
+      });
+      await this.typesenseClient.collections('issues').delete();
+    }
+
+    try {
+      await this.typesenseClient.collections().create(this.buildIssueSchema());
+    } catch (createError) {
+      // A previous create attempt may have succeeded server-side after the
+      // client timed out — a duplicate-collection 409 is fine.
+      if (createError.httpStatus !== 409) {
+        this.logger.error({
+          message: 'Error creating issues collection:',
+          where: `VectorService.createIssuesCollection`,
+          error: createError,
+        });
+        return;
+      }
+    }
+
+    this.logger.info({
+      message: 'Created an issue collection',
+      where: `VectorService.createIssuesCollection`,
+    });
+
+    await this.reindexAllWorkspaces();
+  }
+
+  /** Re-indexes every workspace. Safe to call at any time. */
+  async reindexAllWorkspaces() {
+    const workspaces = await this.prisma.workspace.findMany({
+      where: { deleted: null },
+      select: { id: true },
+    });
+
+    await Promise.all(
+      workspaces.map((workspace) => this.prefillIssuesData(workspace.id)),
+    );
+
+    this.logger.info({
+      message: 'Prefilled data for all workspaces',
+      where: `VectorService.reindexAllWorkspaces`,
+    });
+  }
+
+  /**
+   * A fresh copy of the schema each time — the embedding field is appended, so
+   * mutating the shared object would double it on a second call.
+   */
+  private buildIssueSchema() {
+    return {
+      ...issueSchema,
+      fields: [
+        ...issueSchema.fields,
+        this.isCohere ? cohereEmbedding : typesenseEmbedding,
+      ],
+    };
   }
 
   async createIssueEmbedding(issue: IssueWithRelations) {
     // Generate the issue number by combining team identifier and issue number
     const issueNumber = `${issue.team.identifier}-${issue.number}`;
 
-    // Prepare the input text for embedding by concatenating issue number, title, and description
-    const inputText = `${issueNumber}_${issue.title}_${convertTiptapJsonToText(issue.description)}`;
+    const [stateCategory, { commentsText, resolutionText }] = await Promise.all(
+      [this.getStateCategory(issue.stateId), this.getCommentTexts(issue)],
+    );
+
+    // Prepare the input text for embedding by concatenating issue number,
+    // title, description and the discussion that followed
+    const inputText = `${issueNumber}_${issue.title}_${convertTiptapJsonToText(issue.description)}_${commentsText}`;
 
     let embedding: Record<string, Float32Array>;
     if (this.isCohere) {
       // Generate embeddings using Cohere API
       const cohereEmbed = await this.cohereClient.embed({
         texts: [inputText],
-        model: 'embed-english-v3.0',
+        model: this.embedModel,
         inputType: 'search_query',
         embeddingTypes: ['float'],
       });
@@ -127,6 +193,9 @@ export class VectorService implements OnModuleInit {
         description: issue.description ?? '',
         descriptionString: convertTiptapJsonToText(issue.description),
         stateId: issue.stateId,
+        stateCategory,
+        commentsText,
+        resolutionText,
         workspaceId: issue.team.workspaceId,
         assigneeId: issue.assigneeId ?? '',
         // Include the float embeddings in the document if using Cohere
@@ -134,18 +203,102 @@ export class VectorService implements OnModuleInit {
       });
   }
 
+  private async getStateCategory(stateId: string): Promise<string> {
+    if (!stateId) {
+      return '';
+    }
+
+    const state = await this.prisma.workflow.findUnique({
+      where: { id: stateId },
+      select: { category: true },
+    });
+
+    return state?.category ?? '';
+  }
+
+  /**
+   * Builds the searchable comment text for an issue, plus a best guess at the
+   * comment that explains the resolution: the last top-level comment posted at
+   * or before the issue's most recent transition into a COMPLETED state.
+   */
+  private async getCommentTexts(issue: IssueWithRelations) {
+    const comments = await this.prisma.issueComment.findMany({
+      where: { issueId: issue.id, deleted: null },
+      orderBy: { createdAt: 'asc' },
+      select: { body: true, createdAt: true, parentId: true },
+    });
+
+    if (comments.length === 0) {
+      return { commentsText: '', resolutionText: '' };
+    }
+
+    const texts = comments.map((comment) => ({
+      ...comment,
+      text: convertTiptapJsonToText(comment.body),
+    }));
+
+    // Keep the newest comments when the cap is hit — recent discussion is
+    // where a resolution is most likely to be described.
+    let commentsText = texts.map(({ text }) => text).join('\n\n');
+    if (commentsText.length > MAX_COMMENTS_TEXT_LENGTH) {
+      commentsText = commentsText.slice(-MAX_COMMENTS_TEXT_LENGTH);
+    }
+
+    const completedAt = await this.getLastCompletedAt(issue);
+    const resolutionComment = completedAt
+      ? texts
+          .filter(
+            (comment) => !comment.parentId && comment.createdAt <= completedAt,
+          )
+          .pop()
+      : undefined;
+
+    return { commentsText, resolutionText: resolutionComment?.text ?? '' };
+  }
+
+  private async getLastCompletedAt(
+    issue: IssueWithRelations,
+  ): Promise<Date | null> {
+    const completedStates = await this.prisma.workflow.findMany({
+      where: {
+        teamId: issue.teamId,
+        category: WorkflowCategoryEnum.COMPLETED,
+        deleted: null,
+      },
+      select: { id: true },
+    });
+
+    if (completedStates.length === 0) {
+      return null;
+    }
+
+    const transition = await this.prisma.issueHistory.findFirst({
+      where: {
+        issueId: issue.id,
+        deleted: null,
+        toStateId: { in: completedStates.map((state) => state.id) },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+
+    return transition?.createdAt ?? null;
+  }
+
   async searchEmbeddings(
     workspaceId: string,
     searchQuery: string,
     limit: number,
     vectorDistance: number = 0.8,
+    stateCategories: string[] = [],
   ) {
     // Set a default value of 0.8 for vectorDistance if it is NaN
     if (isNaN(vectorDistance)) {
       vectorDistance = 0.8;
     }
 
-    let queryBy = 'numberString,issueNumber,title,descriptionString,embeddings';
+    let queryBy =
+      'numberString,issueNumber,title,descriptionString,commentsText,embeddings';
     let embedding: Record<string, Float32Array>;
     let vectorQuery = `embeddings:([], distance_threshold:${vectorDistance})`;
     // Set a relevance threshold to filter out low-relevance results
@@ -155,13 +308,13 @@ export class VectorService implements OnModuleInit {
     if (this.isCohere) {
       const cohereEmbed = await this.cohereClient.embed({
         texts: [searchQuery],
-        model: 'embed-english-v3.0',
+        model: this.embedModel,
         inputType: 'search_query',
         embeddingTypes: ['float'],
       });
 
       embedding = cohereEmbed.embeddings as Record<string, Float32Array>;
-      queryBy = 'numberString,issueNumber,title,descriptionString,';
+      queryBy = 'numberString,issueNumber,title,descriptionString,commentsText';
       vectorQuery = `embeddings:([${embedding.float[0]}])`;
     }
 
@@ -172,7 +325,7 @@ export class VectorService implements OnModuleInit {
           collection: 'issues',
           q: '*',
           query_by: queryBy,
-          filter_by: `workspaceId:=${workspaceId}`,
+          filter_by: buildFilterBy(workspaceId, stateCategories),
           sort_by: '_text_match:desc',
           vector_query: vectorQuery,
           exclude_fields: 'embeddings',
@@ -187,41 +340,7 @@ export class VectorService implements OnModuleInit {
       await this.typesenseClient.multiSearch.perform(searchParameters);
 
     // Extract relevant fields from search results
-    const hits = searchResults.results
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map(({ hits }: any) =>
-        hits?.map(
-          ({
-            document: {
-              id,
-              title,
-              description,
-              stateId,
-              teamId,
-              number,
-              issueNumber,
-              descriptionString,
-              workspaceId,
-              assigneeId,
-            },
-            vector_distance,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          }: any) => ({
-            id,
-            title,
-            description,
-            descriptionString,
-            stateId,
-            teamId,
-            number,
-            issueNumber,
-            workspaceId,
-            assigneeId,
-            distance: vector_distance,
-          }),
-        ),
-      )
-      .flat();
+    const hits = mapSearchHits(searchResults);
 
     // If using Cohere and there are multiple hits, rerank the results
     if (this.isCohere && hits.length > 1 && searchQuery) {
@@ -235,7 +354,7 @@ export class VectorService implements OnModuleInit {
         documents,
         query: searchQuery,
         topN: hits.length,
-        model: 'rerank-english-v3.0',
+        model: this.rerankModel,
       });
 
       // Filter and map the reranked results based on the relevance threshold
@@ -272,41 +391,7 @@ export class VectorService implements OnModuleInit {
       await this.typesenseClient.multiSearch.perform(searchRequests);
 
     // Extract the relevant fields from the search results
-    const hits = searchResults.results
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map(({ hits }: any) =>
-        hits?.map(
-          ({
-            document: {
-              id,
-              title,
-              description,
-              stateId,
-              teamId,
-              number,
-              issueNumber,
-              descriptionString,
-              workspaceId,
-              assigneeId,
-            },
-            vector_distance,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          }: any) => ({
-            id,
-            title,
-            description,
-            descriptionString,
-            stateId,
-            teamId,
-            number,
-            issueNumber,
-            workspaceId,
-            assigneeId,
-            distance: vector_distance,
-          }),
-        ),
-      )
-      .flat();
+    const hits = mapSearchHits(searchResults);
 
     // If using Cohere and there are search hits, perform reranking
     if (this.isCohere && hits.length > 0) {
@@ -332,7 +417,7 @@ export class VectorService implements OnModuleInit {
         documents,
         query: similarQuery,
         topN: hits.length,
-        model: 'rerank-english-v3.0',
+        model: this.rerankModel,
       });
 
       // Filter and map the reranked results based on relevance score
@@ -365,4 +450,64 @@ export class VectorService implements OnModuleInit {
       where: `VectorService.prefillIssuesData`,
     });
   }
+}
+
+function buildFilterBy(workspaceId: string, stateCategories: string[]): string {
+  const filters = [`workspaceId:=${workspaceId}`];
+
+  if (stateCategories.length > 0) {
+    filters.push(`stateCategory:=[${stateCategories.join(',')}]`);
+  }
+
+  return filters.join(' && ');
+}
+
+/** Flattens a Typesense multiSearch response into plain issue hits. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapSearchHits(searchResults: any): IssueSearchHit[] {
+  return (
+    searchResults.results
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map(({ hits }: any) =>
+        hits?.map(
+          ({
+            document: {
+              id,
+              title,
+              description,
+              stateId,
+              stateCategory,
+              resolutionText,
+              teamId,
+              number,
+              issueNumber,
+              descriptionString,
+              workspaceId,
+              assigneeId,
+            },
+            vector_distance,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          }: any) => ({
+            id,
+            title,
+            description,
+            descriptionString,
+            stateId,
+            stateCategory: stateCategory ?? '',
+            resolutionSnippet: (resolutionText ?? '').slice(
+              0,
+              RESOLUTION_SNIPPET_LENGTH,
+            ),
+            teamId,
+            number,
+            issueNumber,
+            workspaceId,
+            assigneeId,
+            distance: vector_distance,
+          }),
+        ),
+      )
+      .flat()
+      .filter(Boolean)
+  );
 }

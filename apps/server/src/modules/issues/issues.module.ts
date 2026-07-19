@@ -12,6 +12,7 @@ import { SupportModule } from 'modules/support/support.module';
 import { UsersService } from 'modules/users/users.service';
 import { VectorModule } from 'modules/vector/vector.module';
 
+import IssueContextService from './issue-context.service';
 import { IssuesAIController } from './issues-ai.controller';
 import IssuesAIService from './issues-ai.service';
 import { IssuesController } from './issues.controller';
@@ -40,7 +41,8 @@ import IssuesService from './issues.service';
     AIRequestsService,
     UsersService,
     IssuesAIService,
+    IssueContextService,
   ],
-  exports: [IssuesService, IssuesQueue],
+  exports: [IssuesService, IssuesQueue, IssueContextService],
 })
 export class IssuesModule {}

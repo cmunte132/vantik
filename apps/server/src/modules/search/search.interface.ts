@@ -14,6 +14,14 @@ export class SearchInputData {
   @IsOptional()
   @IsString()
   threshold?: string;
+
+  /**
+   * Comma-separated workflow categories (TRIAGE, BACKLOG, UNSTARTED, STARTED,
+   * COMPLETED, CANCELED). Lets a caller search only resolved work.
+   */
+  @IsOptional()
+  @IsString()
+  stateCategory?: string;
 }
 
 export class SimilarIssueData {
@@ -26,4 +34,15 @@ export class SimilarIssueData {
   @IsOptional()
   @IsString()
   limit?: string;
+}
+
+export function parseStateCategories(stateCategory?: string): string[] {
+  if (!stateCategory) {
+    return [];
+  }
+
+  return stateCategory
+    .split(',')
+    .map((category) => category.trim().toUpperCase())
+    .filter(Boolean);
 }

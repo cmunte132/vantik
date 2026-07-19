@@ -70,11 +70,12 @@ const sidebars: SidebarsConfig = {
   ],
   // Auto-generated entries come from docusaurus-plugin-openapi-docs
   // (npm run gen-api-docs vantik) - don't hand-edit docs/api-reference/sidebar.ts,
-  // it's overwritten every time that command runs. 'api-reference/overview' is
-  // the one hand-written page in this section and needs re-adding here if it
-  // ever gets wiped out by a regen.
+  // it's overwritten every time that command runs. 'api-reference/overview' and
+  // 'api-reference/agents' are the hand-written pages in this section and need
+  // re-adding here if they ever get wiped out by a regen.
   apiSidebar: [
     {type: 'doc', id: 'api-reference/overview', label: 'Overview & Authentication'},
+    {type: 'doc', id: 'api-reference/agents', label: 'Working with agents'},
     ...apiSidebar,
   ],
 };

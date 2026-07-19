@@ -2,7 +2,11 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 
-import { SearchInputData, SimilarIssueData } from './search.interface';
+import {
+  SearchInputData,
+  SimilarIssueData,
+  parseStateCategories,
+} from './search.interface';
 import SearchService from './search.service';
 
 @Controller({
@@ -20,6 +24,7 @@ export class SearchController {
       searchData.query,
       parseInt(searchData.limit),
       Number(searchData.threshold),
+      parseStateCategories(searchData.stateCategory),
     );
   }
 

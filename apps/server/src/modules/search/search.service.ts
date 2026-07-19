@@ -11,12 +11,14 @@ export default class SearchService {
     query: string,
     limit: number = 10,
     vectorDistance: number,
+    stateCategories: string[] = [],
   ) {
     const searchData = await this.vectorService.searchEmbeddings(
       workspaceId,
       query,
       limit,
       vectorDistance,
+      stateCategories,
     );
 
     return searchData;

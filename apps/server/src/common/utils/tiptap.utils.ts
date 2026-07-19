@@ -14,7 +14,10 @@ import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
 import { Text } from '@tiptap/extension-text';
 import { Underline } from '@tiptap/extension-underline';
-import { generateHTML, generateJSON } from '@tiptap/html';
+// The default `@tiptap/html` entry point is the browser build and throws in
+// Node ("generateHTML can only be used in a browser environment"). The /server
+// entry point runs the same conversion on happy-dom instead.
+import { generateHTML, generateJSON } from '@tiptap/html/server';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 

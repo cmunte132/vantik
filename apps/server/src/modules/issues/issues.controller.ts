@@ -19,7 +19,9 @@ import {
   TeamRequestParamsDto,
   UpdateIssueDto,
   GetIssuesByFilterDTO,
+  IssueListItem,
   LinkedIssue,
+  PaginatedIssues,
 } from '@vantikhq/types';
 import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
@@ -32,6 +34,12 @@ import {
 import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { AdminGuard } from 'modules/users/admin.guard';
 
+import {
+  ContextComment,
+  ContextHistoryEntry,
+  IssueContext,
+} from './issue-context.interface';
+import IssueContextService from './issue-context.service';
 import { ApiResponse, SubscribeIssueInput } from './issues.interface';
 import IssuesService from './issues.service';
 
@@ -42,6 +50,7 @@ import IssuesService from './issues.service';
 export class IssuesController {
   constructor(
     private issuesService: IssuesService,
+    private issueContextService: IssueContextService,
     private linkedIssueService: LinkedIssueService,
   ) {}
 
@@ -103,7 +112,7 @@ export class IssuesController {
   @UseGuards(AuthGuard)
   async getIssuesByFilter(
     @Body() filterData: GetIssuesByFilterDTO,
-  ): Promise<Issue[]> {
+  ): Promise<Issue[] | PaginatedIssues<Issue | IssueListItem>> {
     return await this.issuesService.getIssuesByFilter(filterData);
   }
 
@@ -212,6 +221,30 @@ export class IssuesController {
       issueNumber,
       teamParams.teamId,
     );
+  }
+
+  @Get(':issueId/context')
+  @UseGuards(AuthGuard)
+  async getIssueContext(
+    @Param() issueParams: IssueRequestParamsDto,
+  ): Promise<IssueContext> {
+    return await this.issueContextService.getIssueContext(issueParams.issueId);
+  }
+
+  @Get(':issueId/comments')
+  @UseGuards(AuthGuard)
+  async getIssueComments(
+    @Param() issueParams: IssueRequestParamsDto,
+  ): Promise<ContextComment[]> {
+    return await this.issueContextService.getIssueComments(issueParams.issueId);
+  }
+
+  @Get(':issueId/history')
+  @UseGuards(AuthGuard)
+  async getIssueHistory(
+    @Param() issueParams: IssueRequestParamsDto,
+  ): Promise<ContextHistoryEntry[]> {
+    return await this.issueContextService.getIssueHistory(issueParams.issueId);
   }
 
   @Get(':issueId')

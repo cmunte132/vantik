@@ -1,15 +1,20 @@
 import { Blockquote } from '@tiptap/extension-blockquote';
+import { Bold } from '@tiptap/extension-bold';
 import { BulletList } from '@tiptap/extension-bullet-list';
 import { CodeBlock } from '@tiptap/extension-code-block';
 import { Document } from '@tiptap/extension-document';
 import { HardBreak } from '@tiptap/extension-hard-break';
 import { Heading } from '@tiptap/extension-heading';
+import { Highlight } from '@tiptap/extension-highlight';
 import { HorizontalRule } from '@tiptap/extension-horizontal-rule';
 import { Image } from '@tiptap/extension-image';
+import { Italic } from '@tiptap/extension-italic';
 import { Link } from '@tiptap/extension-link';
 import { ListItem } from '@tiptap/extension-list-item';
+import { Mention } from '@tiptap/extension-mention';
 import { OrderedList } from '@tiptap/extension-ordered-list';
 import { Paragraph } from '@tiptap/extension-paragraph';
+import { Strike } from '@tiptap/extension-strike';
 import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
 import { Text } from '@tiptap/extension-text';
@@ -26,6 +31,67 @@ import {
   TiptapMarks,
   TiptapNode,
 } from 'common/common.interface';
+
+/**
+ * The schema used to convert between Tiptap JSON, HTML and markdown.
+ *
+ * This must stay in step with the editor's extension list in
+ * `packages/ui/src/components/ui/editor/editor-extensions.ts`: Tiptap throws
+ * on any mark or node it has no extension for ("There is no mark type bold in
+ * this schema"), and `convertTiptapJsonToMarkdown` swallows that into an empty
+ * string, so a missing extension silently blanks the content rather than
+ * failing loudly. The marks below come from the editor's StarterKit.
+ *
+ * `Code` is deliberately absent — the editor configures StarterKit with
+ * `code: false`, so registering it here would let the API store inline code
+ * marks the editor cannot render.
+ */
+const tiptapExtensions = [
+  Document,
+  Text,
+  Paragraph,
+  Heading,
+  Blockquote,
+  ListItem,
+  OrderedList,
+  BulletList,
+  TaskList,
+  TaskItem,
+  Image,
+  CodeBlock,
+  HardBreak,
+  HorizontalRule,
+  Link,
+  Underline,
+  Bold,
+  Italic,
+  Strike,
+  Highlight,
+  Mention,
+];
+
+/**
+ * Turndown defaults to setext headings (`Title` underlined with `---`, which
+ * only expresses two levels) and indented code blocks. Both are legal markdown
+ * but awkward for the API's consumers, so the output is pinned to the ATX and
+ * fenced styles everything else in the product writes.
+ */
+function buildTurndownService(): TurndownService {
+  const service = new TurndownService({
+    headingStyle: 'atx',
+    codeBlockStyle: 'fenced',
+    bulletListMarker: '-',
+  });
+
+  // Turndown ships no rule for strikethrough, so tiptap's <s> would come back
+  // as bare text and a ~~struck~~ round-trip would quietly lose its marker.
+  service.addRule('strikethrough', {
+    filter: ['del', 's'],
+    replacement: (content) => (content ? `~~${content}~~` : ''),
+  });
+
+  return service;
+}
 
 export function convertTiptapJsonToText(
   tiptapJson: string | null | undefined,
@@ -45,31 +111,74 @@ export function convertTiptapJsonToText(
   }
 }
 
+/**
+ * Flattens a block of nodes to plain text, one line per block.
+ *
+ * This feeds the search index, so anything dropped here is content nobody can
+ * search for. Node names are matched in tiptap's camelCase — an earlier
+ * snake_case spelling (`bullet_list`) matched nothing, which silently kept
+ * every list out of the index.
+ */
 function extractTextFromNodes(nodes: TiptapNode[]): string {
+  return nodes
+    .map((node) => extractTextFromNode(node))
+    .filter((text) => text !== '')
+    .join('\n');
+}
+
+function extractTextFromNode(node: TiptapNode): string {
+  switch (node.type) {
+    case 'text':
+      return node.text || '';
+    case 'paragraph':
+    case 'heading':
+    case 'codeBlock':
+      return extractInlineText(node.content || []);
+    case 'blockquote':
+      return extractTextFromNodes(node.content || []);
+    case 'bulletList':
+    case 'orderedList':
+    case 'taskList':
+      return (node.content || [])
+        .map(
+          (item) =>
+            `- ${extractTextFromNodes(item.content || []).replace(/\n/g, ' ')}`,
+        )
+        .join('\n');
+    case 'listItem':
+    case 'taskItem':
+      return extractTextFromNodes(node.content || []);
+    case 'image':
+      return node.attrs?.alt || '';
+    default:
+      // Unknown block: recurse rather than drop, so a node type added to the
+      // editor later is still searchable before anyone updates this switch.
+      return node.content ? extractTextFromNodes(node.content) : '';
+  }
+}
+
+/**
+ * Text inside a single block. Marked runs (bold, links, code) are separate
+ * text nodes, so these must be concatenated — joining them with newlines
+ * breaks sentences apart mid-phrase.
+ */
+function extractInlineText(nodes: TiptapNode[]): string {
   return nodes
     .map((node) => {
       switch (node.type) {
         case 'text':
-          return node.text;
-        case 'paragraph':
-        case 'heading':
-        case 'blockquote':
-        case 'list_item':
-          return extractTextFromNodes(node.content || []);
-        case 'ordered_list':
-        case 'bullet_list':
-          return (
-            node.content
-              ?.map((item) => `- ${extractTextFromNodes(item.content || [])}`)
-              .join('\n') || ''
-          );
+          return node.text || '';
+        case 'hardBreak':
+          return '\n';
+        case 'mention':
+          return node.attrs?.label ? `@${node.attrs.label}` : '';
         case 'image':
           return node.attrs?.alt || '';
         default:
-          return '';
+          return extractInlineText(node.content || []);
       }
     })
-    .join('\n');
+    .join('');
 }
 
 export function convertMarkdownToTiptapJsonOld(markdown: string): string {
@@ -356,57 +465,26 @@ export function convertTiptapJsonToMarkdownOld(tiptapJson: string): string {
 }
 
 export function convertHtmlToTiptapJson(html: string) {
-  const extensions = [
-    Document,
-    Text,
-    Paragraph,
-    Heading,
-    Blockquote,
-    ListItem,
-    OrderedList,
-    BulletList,
-    TaskList,
-    TaskItem,
-    Image,
-    CodeBlock,
-    HardBreak,
-    HorizontalRule,
-    Link,
-    Underline,
-  ];
-  const tiptapJson = generateJSON(html, extensions);
+  const tiptapJson = generateJSON(html, tiptapExtensions);
   return tiptapJson;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function convertTiptapJsonToHtml(tiptapJson: Record<string, any>) {
-  const extensions = [
-    Document,
-    Text,
-    Paragraph,
-    Heading,
-    Blockquote,
-    ListItem,
-    OrderedList,
-    BulletList,
-    TaskList,
-    TaskItem,
-    Image,
-    CodeBlock,
-    HardBreak,
-    HorizontalRule,
-    Link,
-    Underline,
-  ];
-  return generateHTML(tiptapJson, extensions);
+  return generateHTML(tiptapJson, tiptapExtensions);
 }
 
 export function convertMarkdownToTiptapJson(markdown: string) {
-  const tokens = marked.lexer(markdown, {});
-  const htmlText = marked.parser(tokens, {
+  // Both options are tokenizer-level: `gfm` is what turns ~~text~~ into <del>
+  // and `breaks` is what turns a single newline into <br>. Passing them only
+  // to `parser` — as this used to — leaves them inert, because by then the
+  // markdown has already been tokenized with the defaults.
+  const markedOptions = {
     gfm: true, // Enable GitHub Flavored Markdown
     breaks: true, // Render line breaks as <br>
-  });
+  };
+  const tokens = marked.lexer(markdown, markedOptions);
+  const htmlText = marked.parser(tokens, markedOptions);
 
   return convertHtmlToTiptapJson(htmlText);
 }
@@ -420,8 +498,7 @@ export function convertTiptapJsonToMarkdown(tiptapJson: string) {
       finalJson = parsedTiptapJson.json;
     }
     const htmlText = convertTiptapJsonToHtml(finalJson);
-    const turndownService = new TurndownService();
-    return turndownService.turndown(htmlText);
+    return buildTurndownService().turndown(htmlText);
   } catch (e) {
     return '';
   }

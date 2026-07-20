@@ -215,21 +215,26 @@ export class VectorService implements OnModuleInit {
       commentsText = commentsText.slice(-MAX_COMMENTS_TEXT_LENGTH);
     }
 
-    const completedAt = await this.getLastCompletedAt(issue);
-    const resolutionComment = completedAt
-      ? texts
-          .filter(
-            (comment) => !comment.parentId && comment.createdAt <= completedAt,
-          )
-          .pop()
-      : undefined;
+    const { completedAt, isCompleted } = await this.getCompletion(issue);
+    const topLevel = texts.filter((comment) => !comment.parentId);
+
+    // Prefer the last comment written at or before the issue was closed, so
+    // chatter added afterwards does not masquerade as the resolution. When the
+    // issue is closed but nothing qualifies — the explanation landed moments
+    // after the state change, which is the common way of working — fall back
+    // to the latest comment rather than reporting no resolution at all.
+    const resolutionComment =
+      (completedAt
+        ? topLevel.filter((comment) => comment.createdAt <= completedAt).pop()
+        : undefined) ??
+      (isCompleted ? topLevel[topLevel.length - 1] : undefined);
 
     return { commentsText, resolutionText: resolutionComment?.text ?? '' };
   }
 
-  private async getLastCompletedAt(
+  private async getCompletion(
     issue: IssueWithRelations,
-  ): Promise<Date | null> {
+  ): Promise<{ completedAt: Date | null; isCompleted: boolean }> {
     const completedStates = await this.prisma.workflow.findMany({
       where: {
         teamId: issue.teamId,
@@ -240,20 +245,28 @@ export class VectorService implements OnModuleInit {
     });
 
     if (completedStates.length === 0) {
-      return null;
+      return { completedAt: null, isCompleted: false };
     }
+
+    const completedStateIds = completedStates.map((state) => state.id);
 
     const transition = await this.prisma.issueHistory.findFirst({
       where: {
         issueId: issue.id,
         deleted: null,
-        toStateId: { in: completedStates.map((state) => state.id) },
+        toStateId: { in: completedStateIds },
       },
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
+      orderBy: { updatedAt: 'desc' },
+      // `upsertIssueHistory` folds consecutive changes by the same user into
+      // one row, so `createdAt` is when that group of changes started — often
+      // issue creation — while `updatedAt` is when the state actually moved.
+      select: { updatedAt: true },
     });
 
-    return transition?.createdAt ?? null;
+    return {
+      completedAt: transition?.updatedAt ?? null,
+      isCompleted: completedStateIds.includes(issue.stateId),
+    };
   }
 
   async searchEmbeddings(

@@ -43,7 +43,11 @@ const comments: any[] = [
   },
 ];
 
-function buildDeps(overrides: { comments?: unknown[]; completedAt?: Date }) {
+function buildDeps(overrides: {
+  comments?: unknown[];
+  completedAt?: Date;
+  stateId?: string;
+}) {
   const upsert = jest.fn().mockResolvedValue({});
 
   const prisma = {
@@ -59,8 +63,10 @@ function buildDeps(overrides: { comments?: unknown[]; completedAt?: Date }) {
         .fn()
         .mockResolvedValue(
           overrides.completedAt === undefined
-            ? { createdAt: new Date('2026-01-03T10:00:00Z') }
-            : { createdAt: overrides.completedAt },
+            ? { updatedAt: new Date('2026-01-03T10:00:00Z') }
+            : overrides.completedAt === null
+              ? null
+              : { updatedAt: overrides.completedAt },
         ),
     },
   } as unknown as PrismaService;
@@ -104,11 +110,28 @@ describe('VectorService', () => {
     it('leaves the resolution empty when the issue never completed', async () => {
       const { prisma, typesense, upsert } = buildDeps({ completedAt: null });
 
+      await new VectorService(prisma, typesense).createIssueEmbedding({
+        ...issue,
+        stateId: 'state-open',
+      } as IssueWithRelations);
+
+      expect(upsert.mock.calls[0][0].resolutionText).toBe('');
+    });
+
+    it('falls back to the latest comment when the fix was posted just after closing', async () => {
+      // upsertIssueHistory folds changes into one row, so the recorded
+      // transition can predate the comment explaining the fix.
+      const { prisma, typesense, upsert } = buildDeps({
+        completedAt: new Date('2026-01-01T00:00:00Z'),
+      });
+
       await new VectorService(prisma, typesense).createIssueEmbedding(
         issue as IssueWithRelations,
       );
 
-      expect(upsert.mock.calls[0][0].resolutionText).toBe('');
+      expect(upsert.mock.calls[0][0].resolutionText).toBe(
+        'Posted after the issue was closed',
+      );
     });
 
     it('never sends a precomputed embedding — typesense generates it locally', async () => {

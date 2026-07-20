@@ -85,7 +85,9 @@ describe('IssuesService.getIssuesByFilter', () => {
     expect(query.orderBy).toEqual({ updatedAt: 'desc' });
   });
 
-  it('caps perPage at the documented maximum', async () => {
+  // Over-large values are rejected with a 400 by the DTO's @Max before they
+  // ever reach the service; this clamp only guards non-HTTP callers.
+  it('clamps perPage for callers that bypass DTO validation', async () => {
     const { service } = buildService();
 
     const result = (await service.getIssuesByFilter({

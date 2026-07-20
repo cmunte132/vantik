@@ -3,7 +3,10 @@ import { WorkflowCategoryEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 import { Client as TypesenseClient } from 'typesense';
 
-import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
+import {
+  convertTiptapJsonToMarkdown,
+  convertTiptapJsonToText,
+} from 'common/utils/tiptap.utils';
 
 import { IssueWithRelations } from 'modules/issues/issues.interface';
 import { LoggerService } from 'modules/logger/logger.service';
@@ -174,6 +177,31 @@ export class VectorService implements OnModuleInit {
       });
   }
 
+  /**
+   * Removes an issue from the search index.
+   *
+   * Issues are soft-deleted in postgres, but the index has no notion of that,
+   * so without this a deleted issue stays permanently searchable and an agent
+   * looking for prior art gets told a problem was solved by an issue that no
+   * longer exists.
+   */
+  async deleteIssueEmbedding(issueId: string) {
+    try {
+      await this.typesenseClient
+        .collections('issues')
+        .documents(issueId)
+        .delete();
+    } catch (error) {
+      // A missing document is the desired end state, not a failure: an issue
+      // deleted before it was ever indexed would otherwise fail the job and be
+      // retried forever.
+      if (error.httpStatus === 404) {
+        return;
+      }
+      throw error;
+    }
+  }
+
   private async getStateCategory(stateId: string): Promise<string> {
     if (!stateId) {
       return '';
@@ -305,7 +333,41 @@ export class VectorService implements OnModuleInit {
     const searchResults =
       await this.typesenseClient.multiSearch.perform(searchParameters);
 
-    return mapSearchHits(searchResults);
+    return this.dropDeletedIssues(mapSearchHits(searchResults));
+  }
+
+  /**
+   * Drops hits whose issue no longer exists.
+   *
+   * The index is a cache and postgres is the truth. Removal is queued when an
+   * issue is deleted, but a failed job, a restore from an older snapshot, or a
+   * reindex against a stale collection all leave documents behind — and a
+   * search that confidently reports a deleted issue is worse than one that
+   * misses it. One indexed lookup per search is a cheap guarantee.
+   */
+  private async dropDeletedIssues(
+    hits: IssueSearchHit[],
+  ): Promise<IssueSearchHit[]> {
+    if (hits.length === 0) {
+      return hits;
+    }
+
+    const liveIssues = await this.prisma.issue.findMany({
+      where: { id: { in: hits.map((hit) => hit.id) }, deleted: null },
+      select: { id: true },
+    });
+    const liveIds = new Set(liveIssues.map((issue) => issue.id));
+
+    const live = hits.filter((hit) => liveIds.has(hit.id));
+
+    if (live.length !== hits.length) {
+      this.logger.info({
+        message: `Search index is stale: dropped ${hits.length - live.length} hit(s) for deleted issues`,
+        where: `VectorService.dropDeletedIssues`,
+      });
+    }
+
+    return live;
   }
 
   async similarIssues(workspaceId: string, issueId: string) {
@@ -331,7 +393,7 @@ export class VectorService implements OnModuleInit {
 
     // The vector query already excludes anything past the distance threshold,
     // so the hits come back ranked by similarity.
-    return mapSearchHits(searchResults);
+    return this.dropDeletedIssues(mapSearchHits(searchResults));
   }
 
   async prefillIssuesData(workspaceId: string) {
@@ -390,6 +452,10 @@ function mapSearchHits(searchResults: any): IssueSearchHit[] {
             id,
             title,
             description,
+            // Search results are part of the same markdown boundary as the
+            // issue endpoints: a caller should never have to parse tiptap JSON
+            // out of `description` to read what a hit actually says.
+            descriptionMarkdown: convertTiptapJsonToMarkdown(description ?? ''),
             descriptionString,
             stateId,
             stateCategory: stateCategory ?? '',

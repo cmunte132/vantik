@@ -492,6 +492,10 @@ export default class IssuesService {
       where: `IssueService.updateIssueApi`,
     });
 
+    // The index does not model soft deletes, so the document has to go or the
+    // issue stays searchable forever.
+    this.issuesQueue.removeIssueFromVector(deleteIssue.id);
+
     // Delete the issue history associated with the deleted issue
     await this.deleteIssueHistory(deleteIssue.id);
 

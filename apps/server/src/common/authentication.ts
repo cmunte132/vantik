@@ -24,6 +24,15 @@ export async function getKey(jwt: string) {
   return key!.getPublicKey();
 }
 
+/**
+ * Exchanges a personal access token for a freshly minted access token.
+ *
+ * The PAT itself is the credential and stays valid until it is revoked. The
+ * `jwt` column recorded at creation time is deliberately *not* consulted: it
+ * holds a supertokens access token, which expires an hour after it is issued,
+ * so verifying it here made every PAT die an hour after being created and no
+ * amount of re-authenticating could revive it.
+ */
 export async function hasValidPat(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   request: any,
@@ -36,17 +45,16 @@ export async function hasValidPat(
       : authHeaderValue.split('Bearer ')[1];
 
   if (authHeaderValue !== undefined) {
-    const jwt = await usersService.getJwtFromPat(authHeaderValue);
+    const userId = await usersService.getUserIdFromPat(authHeaderValue);
 
-    if (jwt) {
-      const publicKey = await getKey(jwt);
-      const data = verify(jwt, publicKey, {});
-
-      request.session = await createNewSessionWithoutRequestResponse(
+    if (userId) {
+      const session = await createNewSessionWithoutRequestResponse(
         'public',
-        supertokens.convertToRecipeUserId(data.sub as string),
+        supertokens.convertToRecipeUserId(userId),
       );
-      return `Bearer ${jwt}`;
+
+      request.session = session;
+      return `Bearer ${session.getAccessToken()}`;
     }
   }
 

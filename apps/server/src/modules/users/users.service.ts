@@ -240,12 +240,20 @@ export class UsersService {
     });
   }
 
-  async getJwtFromPat(token: string) {
+  /**
+   * Resolves a personal access token to the user it was issued for.
+   *
+   * Returns null for an unknown or revoked token — `findFirst` yields null and
+   * the caller must not dereference it, which is how a bad token used to
+   * surface as a 500 instead of a 401.
+   */
+  async getUserIdFromPat(token: string): Promise<string | null> {
     const pat = await this.prisma.personalAccessToken.findFirst({
       where: { token, deleted: null },
+      select: { userId: true },
     });
 
-    return pat.jwt;
+    return pat ? pat.userId : null;
   }
 
   // Authorization code

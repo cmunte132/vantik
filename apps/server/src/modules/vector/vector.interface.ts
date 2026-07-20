@@ -66,6 +66,7 @@ export interface IssueSearchHit {
   id: string;
   title: string;
   description: string;
+  descriptionMarkdown: string;
   descriptionString: string;
   stateId: string;
   stateCategory: string;

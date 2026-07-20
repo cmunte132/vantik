@@ -120,13 +120,17 @@ fix described only in a comment is findable. Parameters:
 | --- | --- |
 | `query` | Free text. |
 | `workspaceId` | Required. |
-| `limit` | Max hits, default 10. |
+| `limit` | Max hits, default 10, clamped to 100. |
 | `threshold` | Vector distance threshold, default 0.8. |
 | `stateCategory` | Comma-separated workflow categories to restrict to, e.g. `COMPLETED` or `STARTED,COMPLETED`. |
 
-Each hit carries `stateCategory` and `resolutionSnippet` — the first 500
-characters of the comment that explains how the issue was resolved — so
-"a similar issue exists **and** here is how it was fixed" is a single call.
+Only `query` and `workspaceId` are required; the numeric parameters fall back to
+their defaults when omitted or unparseable rather than failing the request.
+
+Each hit carries `descriptionMarkdown`, `stateCategory` and `resolutionSnippet`
+— the first 500 characters of the comment that explains how the issue was
+resolved — so "a similar issue exists **and** here is how it was fixed" is a
+single call.
 `GET /v1/search/similar_issues?workspaceId=…&issueId=…` returns the same
 fields.
 

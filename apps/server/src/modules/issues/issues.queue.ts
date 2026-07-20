@@ -18,6 +18,14 @@ export class IssuesQueue {
     await this.issuesQueue.add('addIssueToVector', { issue });
   }
 
+  async removeIssueFromVector(issueId: string) {
+    this.logger.info({
+      message: `Removing issue from vector queue ${issueId}`,
+      where: `IssuesQueue.removeIssueFromVector`,
+    });
+    await this.issuesQueue.add('removeIssueFromVector', { issueId });
+  }
+
   async handleTriageIssue(issue: Issue, isDeleted: boolean) {
     this.logger.info({
       message: `Handling Triage issue ${issue.id}`,

@@ -5,7 +5,9 @@ import { AuthGuard } from 'modules/auth/auth.guard';
 import {
   SearchInputData,
   SimilarIssueData,
+  parseSearchLimit,
   parseStateCategories,
+  parseVectorDistance,
 } from './search.interface';
 import SearchService from './search.service';
 
@@ -22,8 +24,8 @@ export class SearchController {
     return await this.searchService.searchData(
       searchData.workspaceId,
       searchData.query,
-      parseInt(searchData.limit),
-      Number(searchData.threshold),
+      parseSearchLimit(searchData.limit),
+      parseVectorDistance(searchData.threshold),
       parseStateCategories(searchData.stateCategory),
     );
   }

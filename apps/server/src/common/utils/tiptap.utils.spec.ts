@@ -40,7 +40,10 @@ describe('convertTiptapJsonToMarkdown', () => {
     },
   );
 
-  it('does not blank content containing a mention', () => {
+  // The editor stores `id` as the mention's identity and `label` only as a
+  // snapshot of the name. Tiptap renders `label ?? id`, so an unlabelled
+  // mention serialises as a raw UUID — see mention-list.tsx.
+  it('renders a mention as the name, not the user id', () => {
     const markdown = convertTiptapJsonToMarkdown(
       doc({
         type: 'paragraph',
@@ -51,8 +54,8 @@ describe('convertTiptapJsonToMarkdown', () => {
       }),
     );
 
-    expect(markdown).not.toBe('');
-    expect(markdown).toContain('ping');
+    expect(markdown).toContain('@Jane Doe');
+    expect(markdown).not.toContain('user-1');
   });
 
   it('renders structural nodes', () => {
@@ -84,9 +87,44 @@ describe('convertTiptapJsonToMarkdown', () => {
     expect(markdown).toContain('pool too small');
   });
 
+  it('preserves inline code verbatim instead of escaping it as prose', () => {
+    const markdown = convertTiptapJsonToMarkdown(
+      doc({
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Set ' },
+          {
+            type: 'text',
+            text: 'max_connections',
+            marks: [{ type: 'code' }],
+          },
+        ],
+      }),
+    );
+
+    // Without the Code mark registered the underscore came back escaped
+    // (`max\_connections`), which is what an agent would have had to parse.
+    expect(markdown).toContain('`max_connections`');
+    expect(markdown).not.toContain('max\\_connections');
+  });
+
   it('returns an empty string for empty input rather than throwing', () => {
     expect(convertTiptapJsonToMarkdown('')).toBe('');
-    expect(convertTiptapJsonToMarkdown('not json')).toBe('');
+  });
+
+  // Returning '' on failure is indistinguishable from an issue with no
+  // description, which is how several schema faults went unnoticed. Degrade to
+  // plain text instead so the caller loses formatting, never content.
+  it('falls back to plain text when the document cannot be converted', () => {
+    expect(convertTiptapJsonToMarkdown('not json')).toBe('not json');
+
+    const unknownMark = doc({
+      type: 'paragraph',
+      content: [
+        { type: 'text', text: 'keep me', marks: [{ type: 'unknownMark' }] },
+      ],
+    });
+    expect(convertTiptapJsonToMarkdown(unknownMark)).toBe('keep me');
   });
 });
 

@@ -184,12 +184,17 @@ describe('VectorService', () => {
         ],
       });
 
+      // Hits are checked against postgres before being returned, so the stub
+      // has to report which of them still exist.
+      const findMany = jest.fn().mockResolvedValue([{ id: 'issue-1' }]);
+
       return {
-        prisma: {} as PrismaService,
+        prisma: { issue: { findMany } } as unknown as PrismaService,
         typesense: {
           multiSearch: { perform },
         } as unknown as TypesenseClient,
         perform,
+        findMany,
       };
     }
 
@@ -267,6 +272,72 @@ describe('VectorService', () => {
         resolutionSnippet: 'Fixed by bumping the pg pool size',
       });
     });
+
+    // Issues are soft-deleted in postgres but the index has no notion of that,
+    // so a stale document would otherwise be reported as live prior art.
+    it('drops hits whose issue has been deleted', async () => {
+      const { prisma, typesense, findMany } = buildSearchDeps();
+      findMany.mockResolvedValue([]);
+
+      const hits = await new VectorService(prisma, typesense).searchEmbeddings(
+        'workspace-1',
+        'pg pool',
+        10,
+      );
+
+      expect(hits).toEqual([]);
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: { in: ['issue-1'] }, deleted: null },
+        }),
+      );
+    });
+  });
+});
+
+describe('VectorService.deleteIssueEmbedding', () => {
+  function buildDeleteDeps(deleteImpl: jest.Mock) {
+    return {
+      typesense: {
+        collections: () => ({ documents: () => ({ delete: deleteImpl }) }),
+      } as unknown as TypesenseClient,
+    };
+  }
+
+  it('removes the document from the index', async () => {
+    const remove = jest.fn().mockResolvedValue({});
+    const { typesense } = buildDeleteDeps(remove);
+
+    await new VectorService(
+      {} as PrismaService,
+      typesense,
+    ).deleteIssueEmbedding('issue-1');
+
+    expect(remove).toHaveBeenCalled();
+  });
+
+  // An issue deleted before it was ever indexed must not fail the queue job,
+  // or bull retries it forever against a document that will never exist.
+  it('treats a missing document as success', async () => {
+    const remove = jest.fn().mockRejectedValue({ httpStatus: 404 });
+    const { typesense } = buildDeleteDeps(remove);
+
+    await expect(
+      new VectorService({} as PrismaService, typesense).deleteIssueEmbedding(
+        'issue-1',
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it('surfaces any other failure', async () => {
+    const remove = jest.fn().mockRejectedValue({ httpStatus: 503 });
+    const { typesense } = buildDeleteDeps(remove);
+
+    await expect(
+      new VectorService({} as PrismaService, typesense).deleteIssueEmbedding(
+        'issue-1',
+      ),
+    ).rejects.toMatchObject({ httpStatus: 503 });
   });
 });
 

@@ -1,6 +1,8 @@
+import { Logger } from '@nestjs/common';
 import { Blockquote } from '@tiptap/extension-blockquote';
 import { Bold } from '@tiptap/extension-bold';
 import { BulletList } from '@tiptap/extension-bullet-list';
+import { Code } from '@tiptap/extension-code';
 import { CodeBlock } from '@tiptap/extension-code-block';
 import { Document } from '@tiptap/extension-document';
 import { HardBreak } from '@tiptap/extension-hard-break';
@@ -32,19 +34,17 @@ import {
   TiptapNode,
 } from 'common/common.interface';
 
+const logger = new Logger('TiptapUtils');
+
 /**
  * The schema used to convert between Tiptap JSON, HTML and markdown.
  *
  * This must stay in step with the editor's extension list in
- * `packages/ui/src/components/ui/editor/editor-extensions.ts`: Tiptap throws
- * on any mark or node it has no extension for ("There is no mark type bold in
- * this schema"), and `convertTiptapJsonToMarkdown` swallows that into an empty
- * string, so a missing extension silently blanks the content rather than
- * failing loudly. The marks below come from the editor's StarterKit.
- *
- * `Code` is deliberately absent — the editor configures StarterKit with
- * `code: false`, so registering it here would let the API store inline code
- * marks the editor cannot render.
+ * `packages/ui/src/components/ui/editor/editor-extensions.ts`. Tiptap throws on
+ * any mark or node it has no extension for ("There is no mark type bold in this
+ * schema"), so an extension missing here degrades every conversion for that
+ * document. Anything registered here that the editor lacks is the mirror-image
+ * bug: the API would accept content the editor silently drops on load.
  */
 const tiptapExtensions = [
   Document,
@@ -58,6 +58,7 @@ const tiptapExtensions = [
   TaskList,
   TaskItem,
   Image,
+  Code,
   CodeBlock,
   HardBreak,
   HorizontalRule,
@@ -107,6 +108,12 @@ export function convertTiptapJsonToText(
     }
     return extractTextFromNodes(parsedJson.content);
   } catch (error) {
+    // Not valid JSON: legacy rows stored plain strings here, so the input is
+    // very likely already the text we want. Logged at debug because this is an
+    // expected shape, not a fault.
+    logger.debug(
+      `Tiptap JSON did not parse, treating it as plain text: ${error.message}`,
+    );
     return tiptapJson;
   }
 }
@@ -489,8 +496,21 @@ export function convertMarkdownToTiptapJson(markdown: string) {
   return convertHtmlToTiptapJson(htmlText);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function convertTiptapJsonToMarkdown(tiptapJson: string) {
+/**
+ * Serialises stored Tiptap JSON to markdown for the API.
+ *
+ * A conversion failure must never come back as an empty string. Returning ''
+ * is indistinguishable from an issue with no description, which is how three
+ * separate schema faults — unregistered marks, a browser-only build, and
+ * mis-scoped marked options — sat here unnoticed while every markdown read in
+ * the product returned nothing. On failure this logs the reason and degrades
+ * to plain text, so the caller loses formatting rather than the content.
+ */
+export function convertTiptapJsonToMarkdown(tiptapJson: string): string {
+  if (!tiptapJson) {
+    return '';
+  }
+
   try {
     const parsedTiptapJson = JSON.parse(tiptapJson);
     let finalJson = parsedTiptapJson;
@@ -499,7 +519,12 @@ export function convertTiptapJsonToMarkdown(tiptapJson: string) {
     }
     const htmlText = convertTiptapJsonToHtml(finalJson);
     return buildTurndownService().turndown(htmlText);
-  } catch (e) {
-    return '';
+  } catch (error) {
+    const fallback = convertTiptapJsonToText(tiptapJson);
+    logger.error(
+      `Failed to convert tiptap JSON to markdown, falling back to plain text (${fallback.length} chars): ${error.message}`,
+      error.stack,
+    );
+    return fallback;
   }
 }

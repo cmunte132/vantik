@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
+import { resolveWorkspaceId } from 'common/workspace-access';
+
 import {
   CreateViewsRequestBody,
   UpdateViewsRequestBody,
@@ -10,7 +12,18 @@ import {
 export class ViewsService {
   constructor(private prismaService: PrismaService) {}
 
-  async getViews(workspaceId: string) {
+  async getViews(
+    sessionWorkspaceId: string,
+    userId: string,
+    requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await resolveWorkspaceId(
+      this.prismaService,
+      userId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
     return await this.prismaService.view.findMany({
       where: {
         workspaceId,
@@ -19,9 +32,25 @@ export class ViewsService {
   }
 
   async createView(
-    { workspaceId, filters, teamId, name, description }: CreateViewsRequestBody,
+    {
+      workspaceId: requestedWorkspaceId,
+      filters,
+      teamId,
+      name,
+      description,
+    }: CreateViewsRequestBody,
     createdById: string,
+    sessionWorkspaceId: string,
   ) {
+    // A write is worse than a read here: an unchecked workspaceId let a caller
+    // create views inside a workspace they have no part in.
+    const workspaceId = await resolveWorkspaceId(
+      this.prismaService,
+      createdById,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
     return await this.prismaService.view.create({
       data: {
         name,

@@ -12,7 +12,7 @@ import { View } from '@vantikhq/types';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
-import { Session } from 'modules/auth/session.decorator';
+import { Session, UserId, Workspace } from 'modules/auth/session.decorator';
 
 import {
   CreateViewsRequestBody,
@@ -35,10 +35,16 @@ export class ViewsController {
   @Get()
   @UseGuards(AuthGuard)
   async getViews(
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
     @Query()
     viewsRequestBody: ViewsRequestBody,
   ): Promise<View[]> {
-    return await this.viewsService.getViews(viewsRequestBody.workspaceId);
+    return await this.viewsService.getViews(
+      sessionWorkspaceId,
+      userId,
+      viewsRequestBody.workspaceId,
+    );
   }
 
   /**
@@ -89,11 +95,16 @@ export class ViewsController {
   @UseGuards(AuthGuard)
   async createView(
     @Session() session: SessionContainer,
+    @Workspace() sessionWorkspaceId: string,
     @Body()
     createViewBody: CreateViewsRequestBody,
   ): Promise<View> {
     const userId = session.getUserId();
 
-    return await this.viewsService.createView(createViewBody, userId);
+    return await this.viewsService.createView(
+      createViewBody,
+      userId,
+      sessionWorkspaceId,
+    );
   }
 }

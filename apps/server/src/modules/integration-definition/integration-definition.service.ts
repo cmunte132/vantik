@@ -7,6 +7,8 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { resolveWorkspaceId } from 'common/workspace-access';
+
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 
 import { IntegrationDefinitionUpdateBody } from './integration-definition.interface';
@@ -19,8 +21,17 @@ export class IntegrationDefinitionService {
   ) {}
 
   async getIntegrationDefinitions(
-    workspaceId: string,
+    sessionWorkspaceId: string,
+    userId: string,
+    requestedWorkspaceId?: string,
   ): Promise<IntegrationDefinition[]> {
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
     return await this.prisma.integrationDefinitionV2.findMany({
       where: {
         OR: [

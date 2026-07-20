@@ -10,12 +10,15 @@ import {
 import {
   IntegrationDefinition,
   IntegrationDefinitionIdDto,
-  WorkspaceRequestParamsDto,
 } from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { UserId, Workspace } from 'modules/auth/session.decorator';
 
-import { IntegrationDefinitionUpdateBody } from './integration-definition.interface';
+import {
+  IntegrationDefinitionListQuery,
+  IntegrationDefinitionUpdateBody,
+} from './integration-definition.interface';
 import { IntegrationDefinitionService } from './integration-definition.service';
 
 @Controller({
@@ -33,10 +36,14 @@ export class IntegrationDefinitionController {
   @Get()
   @UseGuards(AuthGuard)
   async getIntegrationDefinitionsByWorkspace(
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
     @Query()
-    workspaceDto: WorkspaceRequestParamsDto,
+    workspaceDto: IntegrationDefinitionListQuery,
   ) {
     return await this.integrationDefinitionService.getIntegrationDefinitions(
+      sessionWorkspaceId,
+      userId,
       workspaceDto.workspaceId,
     );
   }

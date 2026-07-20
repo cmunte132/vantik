@@ -6,6 +6,9 @@ import { IssueWithRelations } from 'modules/issues/issues.interface';
 import { SIMILAR_ISSUE_DISTANCE_THRESHOLD } from './vector.interface';
 import { VectorService } from './vector.service';
 
+// Workspace IDs must be valid UUIDs — buildFilterBy validates the format.
+const TEST_WORKSPACE_ID = '00000000-0000-0000-0000-000000000001';
+
 const tiptap = (text: string) =>
   JSON.stringify({
     type: 'doc',
@@ -202,7 +205,7 @@ describe('VectorService', () => {
       const { prisma, typesense, perform } = buildSearchDeps();
 
       await new VectorService(prisma, typesense).searchEmbeddings(
-        'workspace-1',
+        TEST_WORKSPACE_ID,
         'pg pool',
         10,
       );
@@ -218,13 +221,13 @@ describe('VectorService', () => {
       const { prisma, typesense, perform } = buildSearchDeps();
 
       await new VectorService(prisma, typesense).searchEmbeddings(
-        'workspace-1',
+        TEST_WORKSPACE_ID,
         'pg pool',
         10,
       );
 
       expect(perform.mock.calls[0][0].searches[0].filter_by).toBe(
-        'workspaceId:=`workspace-1`',
+        `workspaceId:=\`${TEST_WORKSPACE_ID}\``,
       );
     });
 
@@ -232,7 +235,7 @@ describe('VectorService', () => {
       const { prisma, typesense, perform } = buildSearchDeps();
 
       await new VectorService(prisma, typesense).searchEmbeddings(
-        'workspace-1',
+        TEST_WORKSPACE_ID,
         'pg pool',
         10,
         0.8,
@@ -240,7 +243,7 @@ describe('VectorService', () => {
       );
 
       expect(perform.mock.calls[0][0].searches[0].filter_by).toBe(
-        'workspaceId:=`workspace-1` && stateCategory:=[`COMPLETED`,`CANCELED`]',
+        `workspaceId:=\`${TEST_WORKSPACE_ID}\` && stateCategory:=[\`COMPLETED\`,\`CANCELED\`]`,
       );
     });
 
@@ -248,7 +251,7 @@ describe('VectorService', () => {
       const { prisma, typesense } = buildSearchDeps();
 
       const hits = await new VectorService(prisma, typesense).searchEmbeddings(
-        'workspace-1',
+        TEST_WORKSPACE_ID,
         'pg pool',
         10,
       );
@@ -261,7 +264,7 @@ describe('VectorService', () => {
       const { prisma, typesense } = buildSearchDeps();
 
       const hits = await new VectorService(prisma, typesense).searchEmbeddings(
-        'workspace-1',
+        TEST_WORKSPACE_ID,
         'pg pool',
         10,
       );
@@ -280,7 +283,7 @@ describe('VectorService', () => {
       findMany.mockResolvedValue([]);
 
       const hits = await new VectorService(prisma, typesense).searchEmbeddings(
-        'workspace-1',
+        TEST_WORKSPACE_ID,
         'pg pool',
         10,
       );
@@ -349,7 +352,7 @@ describe('VectorService.similarIssues', () => {
     } as unknown as TypesenseClient;
 
     await new VectorService({} as PrismaService, typesense).similarIssues(
-      'workspace-1',
+      TEST_WORKSPACE_ID,
       'issue-1',
     );
 

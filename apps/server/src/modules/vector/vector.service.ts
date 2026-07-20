@@ -415,11 +415,16 @@ export class VectorService implements OnModuleInit {
 
 const ALLOWED_STATE_CATEGORIES = new Set(Object.values(WorkflowCategoryEnum));
 
+// Matches the standard UUID v4 format produced by the database.
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function buildFilterBy(workspaceId: string, stateCategories: string[]): string {
-  // Strip backticks from workspaceId to prevent escaping out of the backtick
-  // quoting. Workspace IDs are UUIDs so this is purely defensive.
-  const safeWorkspaceId = workspaceId.replace(/`/g, '');
-  const filters = [`workspaceId:=\`${safeWorkspaceId}\``];
+  if (!UUID_REGEX.test(workspaceId)) {
+    throw new Error(`Invalid workspaceId format: ${workspaceId}`);
+  }
+
+  const filters = [`workspaceId:=\`${workspaceId}\``];
 
   const allowedCategories = stateCategories.filter((c) =>
     ALLOWED_STATE_CATEGORIES.has(c as WorkflowCategoryEnum),

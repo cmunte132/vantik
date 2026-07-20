@@ -22,6 +22,15 @@ describe('SearchInputData', () => {
     const errors = await validate(input);
     expect(errors.filter((e) => e.property === 'query')).toHaveLength(0);
   });
+
+  // @IsNotEmpty() checks `value !== ''` and does not trim, so whitespace-only
+  // strings pass DTO validation. Typesense handles them as near-empty queries
+  // rather than rejecting them.
+  it('passes a whitespace-only query through DTO validation', async () => {
+    const input = Object.assign(new SearchInputData(), { query: '   ' });
+    const errors = await validate(input);
+    expect(errors.filter((e) => e.property === 'query')).toHaveLength(0);
+  });
 });
 
 describe('parseSearchLimit', () => {

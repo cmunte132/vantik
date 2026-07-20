@@ -9,7 +9,9 @@ export const config: Config = {
       appName: 'Vantik',
       apiDomain: process.env.BACKEND_HOST,
       websiteDomain: process.env.FRONTEND_HOST,
-      apiBasePath: '/auth',
+      // Keep in sync with supertokens.service.ts, which is what actually
+      // initialises SuperTokens.
+      apiBasePath: '/api/auth',
       websiteBasePath: '/auth',
     },
     connectionURI: process.env.SUPERTOKEN_CONNECTION_URI,

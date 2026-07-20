@@ -10,13 +10,19 @@ import { VerifySessionOptions } from 'supertokens-node/recipe/session';
 import { createNewSessionWithoutRequestResponse } from 'supertokens-node/recipe/session';
 import { verifySession } from 'supertokens-node/recipe/session/framework/express';
 
+import { config } from 'common/configs/config';
+
 import { UsersService } from 'modules/users/users.service';
 
 export async function getKey(jwt: string) {
   const decoded = decode(jwt, { complete: true });
 
+  // SuperTokens serves JWKS under its apiBasePath. That path moved to
+  // '/api/auth' to match where the browser reaches the auth routes; deriving the
+  // URI from the same config value keeps this verifier from drifting away from
+  // it again the way a hardcoded '/auth' did.
   const client = new JwksClient({
-    jwksUri: `${process.env.BACKEND_HOST}/auth/jwt/jwks.json`,
+    jwksUri: `${process.env.BACKEND_HOST}${config.superToken.appInfo.apiBasePath}/jwt/jwks.json`,
   });
 
   const key = await client.getSigningKey(decoded.header.kid);

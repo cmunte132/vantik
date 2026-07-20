@@ -31,7 +31,16 @@ export default (req, res) => {
     // For example, '/api/login' would become '/login'.
     // ️You might want to adjust this depending
     // on the base path of your API.
-    req.url = req.url.replace(/^\/api/, '');
+    //
+    // Auth routes are the exception: SuperTokens is mounted at /api/auth on
+    // the server so that the refresh token cookie it sets is scoped to the
+    // same path the browser requests. Stripping '/api' here would put the
+    // cookie on /auth/session/refresh while the browser asks for
+    // /api/auth/session/refresh, so it would never be sent and sessions would
+    // end as soon as the access token expired.
+    if (!req.url.startsWith('/api/auth')) {
+      req.url = req.url.replace(/^\/api/, '');
+    }
 
     // Don't forget to handle errors:
     proxy.once('error', reject);

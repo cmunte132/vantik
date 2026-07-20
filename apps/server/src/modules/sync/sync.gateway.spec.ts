@@ -28,7 +28,9 @@ function buildClient(query: Record<string, string>) {
   };
 }
 
-function buildGateway(memberships: Array<{ userId: string; workspaceId: string }>) {
+function buildGateway(
+  memberships: Array<{ userId: string; workspaceId: string }>,
+) {
   const prisma = {
     usersOnWorkspaces: {
       findUnique: jest.fn(async ({ where }) => {

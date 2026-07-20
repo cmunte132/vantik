@@ -28,12 +28,12 @@ import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
-import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 import {
   Session as SessionDecorator,
   UserId,
   Workspace,
 } from 'modules/auth/session.decorator';
+import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { AdminGuard } from 'modules/users/admin.guard';
 

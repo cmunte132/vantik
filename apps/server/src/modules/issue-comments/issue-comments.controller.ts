@@ -19,8 +19,8 @@ import {
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
-import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 import { Session as SessionDecorator } from 'modules/auth/session.decorator';
+import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
 import {
   ReactionInput,
@@ -55,7 +55,7 @@ export class IssueCommentsController {
   }
 
   @Post()
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createIssueComment(
     @SessionDecorator() session: SessionContainer,
     @Query() issueParams: CreateIssueCommentRequestParamsDto,

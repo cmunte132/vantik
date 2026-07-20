@@ -99,6 +99,22 @@ describe('WorkspaceResourceGuard', () => {
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 
+  it('rejects a foreign issueId passed as a query param', async () => {
+    // Comment creation is POST /issue_comments?issueId=…, so the issue it
+    // writes to never appears in the path.
+    const ctx = buildContext({ query: { issueId: FOREIGN_ISSUE } });
+
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('allows a query issueId in the caller-s workspace', async () => {
+    const ctx = buildContext({ query: { issueId: OWN_ISSUE } });
+
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+  });
+
   it('rejects a foreign teamId passed as a query param', async () => {
     const ctx = buildContext({ query: { teamId: FOREIGN_TEAM } });
 

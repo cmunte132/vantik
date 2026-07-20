@@ -27,13 +27,12 @@ import { createObjectCsvStringifier } from 'csv-writer';
 import { PrismaService } from 'nestjs-prisma';
 import { notificationHandler } from 'trigger/notification';
 
-import { resolveWorkspaceId } from 'common/workspace-access';
-
 import {
   convertMarkdownToTiptapJson,
   convertTiptapJsonToMarkdown,
   convertTiptapJsonToText,
 } from 'common/utils/tiptap.utils';
+import { resolveWorkspaceId } from 'common/workspace-access';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
 import IssuesHistoryService from 'modules/issue-history/issue-history.service';
@@ -98,7 +97,11 @@ export default class IssuesService {
   async getIssues(
     sessionWorkspaceId: string,
     userId: string,
-    { issueIds, teamId, workspaceId: requestedWorkspaceId }: GetIssuesQueryDto = {},
+    {
+      issueIds,
+      teamId,
+      workspaceId: requestedWorkspaceId,
+    }: GetIssuesQueryDto = {},
   ): Promise<Issue[]> {
     const workspaceId = await resolveWorkspaceId(
       this.prisma,

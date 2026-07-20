@@ -51,8 +51,12 @@ export class WorkspaceResourceGuard implements CanActivate {
       ? request.body.issues
       : [];
 
+    // Comment creation names its issue in the query rather than the path, so
+    // a guard reading only params would let a caller comment on an issue in
+    // another workspace.
     const issueIds = unique([
       issueId,
+      request.query?.issueId,
       ...bulkIssues.map((issue: { issueId?: string }) => issue?.issueId),
     ]);
 

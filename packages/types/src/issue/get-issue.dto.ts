@@ -54,10 +54,18 @@ export class GetIssuesQueryDto {
   @IsString({ each: true })
   issueIds?: string[];
 
-  /** Restrict to one team. A team outside the session workspace matches nothing. */
+  /** Restrict to one team. A team outside the resolved workspace matches nothing. */
   @IsOptional()
   @IsString()
   teamId?: string;
+
+  /**
+   * Optional. Honoured only if the caller is an active member of it, otherwise
+   * the request is rejected. Falls back to the session's workspace when absent.
+   */
+  @IsOptional()
+  @IsString()
+  workspaceId?: string;
 }
 
 export class GetIssuesByFilterDTO {
@@ -67,11 +75,12 @@ export class GetIssuesByFilterDTO {
   };
 
   /**
-   * @deprecated Ignored. The workspace is taken from the caller's session.
+   * Optional. Honoured only if the caller is an active member of it, otherwise
+   * the request is rejected. Falls back to the session's workspace when absent.
    *
-   * Previously this scoped the query, which let any authenticated caller read
-   * another workspace's issues by passing its id. Still accepted so existing
-   * clients keep working, but the value is never read.
+   * A user can belong to several workspaces, so the client names the one it
+   * wants — but this value used to be trusted outright, which let any
+   * authenticated caller read another workspace's issues.
    */
   @IsOptional()
   @IsString()

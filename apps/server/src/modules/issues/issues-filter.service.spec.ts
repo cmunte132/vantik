@@ -36,6 +36,9 @@ function buildService(overrides: Record<string, unknown> = {}) {
       findMany: jest.fn().mockResolvedValue(issueRows),
       count: jest.fn().mockResolvedValue(123),
     },
+    usersOnWorkspaces: {
+      findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE' }),
+    },
     workflow: {
       findMany: jest
         .fn()
@@ -58,7 +61,7 @@ describe('IssuesService.getIssuesByFilter', () => {
   it('keeps returning a bare array when no pagination params are sent', async () => {
     const { service, prisma } = buildService();
 
-    const result = await service.getIssuesByFilter(baseFilter, 'workspace-1');
+    const result = await service.getIssuesByFilter(baseFilter, 'workspace-1', 'user-1');
 
     expect(Array.isArray(result)).toBe(true);
     expect(
@@ -74,7 +77,7 @@ describe('IssuesService.getIssuesByFilter', () => {
       page: 2,
       perPage: 25,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }, 'workspace-1')) as PaginatedIssues<any>;
+    }, 'workspace-1', 'user-1')) as PaginatedIssues<any>;
 
     expect(result.page).toBe(2);
     expect(result.perPage).toBe(25);
@@ -94,7 +97,7 @@ describe('IssuesService.getIssuesByFilter', () => {
       ...baseFilter,
       perPage: 5000,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }, 'workspace-1')) as PaginatedIssues<any>;
+    }, 'workspace-1', 'user-1')) as PaginatedIssues<any>;
 
     expect(result.perPage).toBe(200);
   });
@@ -106,7 +109,7 @@ describe('IssuesService.getIssuesByFilter', () => {
       ...baseFilter,
       page: 1,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }, 'workspace-1')) as PaginatedIssues<any>;
+    }, 'workspace-1', 'user-1')) as PaginatedIssues<any>;
 
     expect(result.issues[0]).toEqual({
       id: 'issue-1',
@@ -130,7 +133,7 @@ describe('IssuesService.getIssuesByFilter', () => {
       page: 1,
       view: IssueViewEnum.FULL,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }, 'workspace-1')) as PaginatedIssues<any>;
+    }, 'workspace-1', 'user-1')) as PaginatedIssues<any>;
 
     expect(result.issues[0].descriptionMarkdown).toContain(
       'Nightly job saturates the pool',

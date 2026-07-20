@@ -30,6 +30,7 @@ import { SessionContainer } from 'supertokens-node/recipe/session';
 import { AuthGuard } from 'modules/auth/auth.guard';
 import {
   Session as SessionDecorator,
+  UserId,
   Workspace,
 } from 'modules/auth/session.decorator';
 import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
@@ -112,10 +113,15 @@ export class IssuesController {
   @Post('filter')
   @UseGuards(AuthGuard)
   async getIssuesByFilter(
-    @Workspace() workspaceId: string,
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
     @Body() filterData: GetIssuesByFilterDTO,
   ): Promise<Issue[] | PaginatedIssues<Issue | IssueListItem>> {
-    return await this.issuesService.getIssuesByFilter(filterData, workspaceId);
+    return await this.issuesService.getIssuesByFilter(
+      filterData,
+      sessionWorkspaceId,
+      userId,
+    );
   }
 
   @Post(':issueId')
@@ -258,9 +264,14 @@ export class IssuesController {
   @Get()
   @UseGuards(AuthGuard)
   async getIssues(
-    @Workspace() workspaceId: string,
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
     @Query() query: GetIssuesQueryDto,
   ): Promise<Issue[]> {
-    return await this.issuesService.getIssues(workspaceId, query);
+    return await this.issuesService.getIssues(
+      sessionWorkspaceId,
+      userId,
+      query,
+    );
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Prisma, Issue as PrismaIssue } from '@prisma/client';
 import { tasks } from '@trigger.dev/sdk/v3';
 import {
@@ -26,6 +26,8 @@ import {
 import { createObjectCsvStringifier } from 'csv-writer';
 import { PrismaService } from 'nestjs-prisma';
 import { notificationHandler } from 'trigger/notification';
+
+import { resolveWorkspaceId } from 'common/workspace-access';
 
 import {
   convertMarkdownToTiptapJson,
@@ -94,16 +96,16 @@ export default class IssuesService {
   }
 
   async getIssues(
-    workspaceId: string,
-    { issueIds, teamId }: GetIssuesQueryDto = {},
+    sessionWorkspaceId: string,
+    userId: string,
+    { issueIds, teamId, workspaceId: requestedWorkspaceId }: GetIssuesQueryDto = {},
   ): Promise<Issue[]> {
-    // Without this guard an absent workspaceId drops out of the `where` below
-    // and the query returns every issue in the deployment.
-    if (!workspaceId) {
-      throw new UnauthorizedException({
-        message: 'No workspace is associated with this session',
-      });
-    }
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
 
     // Nesting teamId under `team` means a teamId from another workspace simply
     // matches nothing, rather than widening the scope.
@@ -874,11 +876,18 @@ export default class IssuesService {
    */
   async getIssuesByFilter(
     getIssuesByFilterData: GetIssuesByFilterDTO,
-    workspaceId: string,
+    sessionWorkspaceId: string,
+    userId: string,
   ): Promise<Issue[] | PaginatedIssues<Issue | IssueListItem>> {
     const { page, perPage, orderBy, view } = getIssuesByFilterData;
-    // workspaceId comes from the session, not from getIssuesByFilterData — any
-    // workspaceId in the body is ignored.
+    // A workspaceId in the body is honoured only if the caller is a member of
+    // it; otherwise this throws rather than falling back to a wider scope.
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      getIssuesByFilterData.workspaceId,
+    );
     const where = getFilterWhere(
       getIssuesByFilterData,
       workspaceId,

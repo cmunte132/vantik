@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma, Issue as PrismaIssue } from '@prisma/client';
 import { tasks } from '@trigger.dev/sdk/v3';
 import {
@@ -7,6 +7,7 @@ import {
   CreateIssueRelationDto,
   DEFAULT_ISSUES_PER_PAGE,
   GetIssuesByFilterDTO,
+  GetIssuesQueryDto,
   Issue,
   IssueHistoryData,
   IssueListItem,
@@ -92,12 +93,24 @@ export default class IssuesService {
     return { descriptionMarkdown, ...issue };
   }
 
-  async getIssues(issueIds: string[]): Promise<Issue[]> {
+  async getIssues(
+    workspaceId: string,
+    { issueIds, teamId }: GetIssuesQueryDto = {},
+  ): Promise<Issue[]> {
+    // Without this guard an absent workspaceId drops out of the `where` below
+    // and the query returns every issue in the deployment.
+    if (!workspaceId) {
+      throw new UnauthorizedException({
+        message: 'No workspace is associated with this session',
+      });
+    }
+
+    // Nesting teamId under `team` means a teamId from another workspace simply
+    // matches nothing, rather than widening the scope.
     const issues = await this.prisma.issue.findMany({
       where: {
-        id: {
-          in: issueIds,
-        },
+        team: { workspaceId, ...(teamId && { id: teamId }) },
+        ...(issueIds?.length && { id: { in: issueIds } }),
       },
       include: { team: true },
     });
@@ -861,10 +874,14 @@ export default class IssuesService {
    */
   async getIssuesByFilter(
     getIssuesByFilterData: GetIssuesByFilterDTO,
+    workspaceId: string,
   ): Promise<Issue[] | PaginatedIssues<Issue | IssueListItem>> {
     const { page, perPage, orderBy, view } = getIssuesByFilterData;
+    // workspaceId comes from the session, not from getIssuesByFilterData — any
+    // workspaceId in the body is ignored.
     const where = getFilterWhere(
       getIssuesByFilterData,
+      workspaceId,
     ) as Prisma.IssueWhereInput;
 
     const isPaginated =

@@ -1,5 +1,6 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsEnum,
   IsInt,
   IsNumber,
@@ -29,14 +30,52 @@ export enum IssueOrderByEnum {
 export const DEFAULT_ISSUES_PER_PAGE = 50;
 export const MAX_ISSUES_PER_PAGE = 200;
 
+/**
+ * Query params for `GET /v1/issues`.
+ *
+ * Both fields narrow the result set; neither widens it. The workspace is always
+ * taken from the caller's session, so an unfiltered request returns that
+ * workspace's issues and nothing else.
+ */
+export class GetIssuesQueryDto {
+  /**
+   * Repeated (`?issueIds=a&issueIds=b`) or comma-separated. A single value
+   * arrives as a bare string, so normalise to an array before validating.
+   */
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null
+      ? undefined
+      : (Array.isArray(value) ? value : String(value).split(','))
+          .map((id: string) => id.trim())
+          .filter(Boolean),
+  )
+  @IsArray()
+  @IsString({ each: true })
+  issueIds?: string[];
+
+  /** Restrict to one team. A team outside the session workspace matches nothing. */
+  @IsOptional()
+  @IsString()
+  teamId?: string;
+}
+
 export class GetIssuesByFilterDTO {
   @IsObject()
   filters: {
     [K in FilterKey]?: FilterValue;
   };
 
+  /**
+   * @deprecated Ignored. The workspace is taken from the caller's session.
+   *
+   * Previously this scoped the query, which let any authenticated caller read
+   * another workspace's issues by passing its id. Still accepted so existing
+   * clients keep working, but the value is never read.
+   */
+  @IsOptional()
   @IsString()
-  workspaceId: string;
+  workspaceId?: string;
 
   /**
    * Pagination and lean payloads are opt-in: with none of `page`, `perPage`,

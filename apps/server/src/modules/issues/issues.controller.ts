@@ -19,6 +19,7 @@ import {
   TeamRequestParamsDto,
   UpdateIssueDto,
   GetIssuesByFilterDTO,
+  GetIssuesQueryDto,
   IssueListItem,
   LinkedIssue,
   PaginatedIssues,
@@ -111,9 +112,10 @@ export class IssuesController {
   @Post('filter')
   @UseGuards(AuthGuard)
   async getIssuesByFilter(
+    @Workspace() workspaceId: string,
     @Body() filterData: GetIssuesByFilterDTO,
   ): Promise<Issue[] | PaginatedIssues<Issue | IssueListItem>> {
-    return await this.issuesService.getIssuesByFilter(filterData);
+    return await this.issuesService.getIssuesByFilter(filterData, workspaceId);
   }
 
   @Post(':issueId')
@@ -255,7 +257,10 @@ export class IssuesController {
 
   @Get()
   @UseGuards(AuthGuard)
-  async getIssues(@Query('issueIds') issueIds: string[]): Promise<Issue[]> {
-    return await this.issuesService.getIssues(issueIds);
+  async getIssues(
+    @Workspace() workspaceId: string,
+    @Query() query: GetIssuesQueryDto,
+  ): Promise<Issue[]> {
+    return await this.issuesService.getIssues(workspaceId, query);
   }
 }

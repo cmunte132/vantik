@@ -380,7 +380,7 @@ export class VectorService implements OnModuleInit {
           // Anchored on an existing document, so the wildcard `q` is correct
           // here — the vector comes from the issue, not from query text.
           vector_query: `embeddings:([], id:${issueId}, distance_threshold:${SIMILAR_ISSUE_DISTANCE_THRESHOLD})`,
-          filter_by: `workspaceId:=${workspaceId}`,
+          filter_by: buildFilterBy(workspaceId, []),
           exclude_fields: 'embeddings',
           page: 1,
         },
@@ -413,11 +413,19 @@ export class VectorService implements OnModuleInit {
   }
 }
 
-function buildFilterBy(workspaceId: string, stateCategories: string[]): string {
-  const filters = [`workspaceId:=${workspaceId}`];
+const ALLOWED_STATE_CATEGORIES = new Set(Object.values(WorkflowCategoryEnum));
 
-  if (stateCategories.length > 0) {
-    filters.push(`stateCategory:=[${stateCategories.join(',')}]`);
+function buildFilterBy(workspaceId: string, stateCategories: string[]): string {
+  const filters = [`workspaceId:=\`${workspaceId}\``];
+
+  const allowedCategories = stateCategories.filter((c) =>
+    ALLOWED_STATE_CATEGORIES.has(c as WorkflowCategoryEnum),
+  );
+
+  if (allowedCategories.length > 0) {
+    filters.push(
+      `stateCategory:=[${allowedCategories.map((c) => `\`${c}\``).join(',')}]`,
+    );
   }
 
   return filters.join(' && ');

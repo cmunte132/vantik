@@ -224,7 +224,7 @@ describe('VectorService', () => {
       );
 
       expect(perform.mock.calls[0][0].searches[0].filter_by).toBe(
-        'workspaceId:=workspace-1',
+        'workspaceId:=`workspace-1`',
       );
     });
 
@@ -240,7 +240,7 @@ describe('VectorService', () => {
       );
 
       expect(perform.mock.calls[0][0].searches[0].filter_by).toBe(
-        'workspaceId:=workspace-1 && stateCategory:=[COMPLETED,CANCELED]',
+        'workspaceId:=`workspace-1` && stateCategory:=[`COMPLETED`,`CANCELED`]',
       );
     });
 

@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 /**
  * `workspaceId` is optional and checked against the caller's memberships. It
@@ -7,6 +7,7 @@ import { IsOptional, IsString } from 'class-validator';
  */
 export class SearchInputData {
   @IsString()
+  @IsNotEmpty()
   query: string;
 
   @IsOptional()

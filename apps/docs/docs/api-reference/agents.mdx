@@ -119,12 +119,12 @@ fix described only in a comment is findable. Parameters:
 | Param | Description |
 | --- | --- |
 | `query` | Free text. |
-| `workspaceId` | Required. |
+| `workspaceId` | Optional. Defaults to the workspace from your session. |
 | `limit` | Max hits, default 10, clamped to 100. |
 | `threshold` | Vector distance threshold, default 0.8. |
 | `stateCategory` | Comma-separated workflow categories to restrict to, e.g. `COMPLETED` or `STARTED,COMPLETED`. |
 
-Only `query` and `workspaceId` are required; the numeric parameters fall back to
+Only `query` is required; `workspaceId` defaults to the workspace from your session, and the numeric parameters fall back to
 their defaults when omitted or unparseable rather than failing the request.
 
 Each hit carries `descriptionMarkdown`, `stateCategory` and `resolutionSnippet`

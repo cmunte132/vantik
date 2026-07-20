@@ -415,13 +415,13 @@ export class VectorService implements OnModuleInit {
 
 const ALLOWED_STATE_CATEGORIES = new Set(Object.values(WorkflowCategoryEnum));
 
-// Matches the standard UUID v4 format produced by the database.
+// Matches the standard UUID format (e.g. UUID v4) produced by the database.
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function buildFilterBy(workspaceId: string, stateCategories: string[]): string {
   if (!UUID_REGEX.test(workspaceId)) {
-    throw new Error(`Invalid workspaceId format: ${workspaceId}`);
+    throw new Error('Invalid workspaceId format');
   }
 
   const filters = [`workspaceId:=\`${workspaceId}\``];

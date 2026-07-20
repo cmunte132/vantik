@@ -1,11 +1,28 @@
+import { validate } from 'class-validator';
+
 import {
   DEFAULT_SEARCH_LIMIT,
   DEFAULT_VECTOR_DISTANCE,
   MAX_SEARCH_LIMIT,
+  SearchInputData,
   parseSearchLimit,
   parseStateCategories,
   parseVectorDistance,
 } from './search.interface';
+
+describe('SearchInputData', () => {
+  it('rejects an empty query with a validation error', async () => {
+    const input = Object.assign(new SearchInputData(), { query: '' });
+    const errors = await validate(input);
+    expect(errors.some((e) => e.property === 'query')).toBe(true);
+  });
+
+  it('accepts a non-empty query', async () => {
+    const input = Object.assign(new SearchInputData(), { query: 'pg pool' });
+    const errors = await validate(input);
+    expect(errors.filter((e) => e.property === 'query')).toHaveLength(0);
+  });
+});
 
 describe('parseSearchLimit', () => {
   // `limit` is optional, and parseInt(undefined) is NaN. A NaN reaching the

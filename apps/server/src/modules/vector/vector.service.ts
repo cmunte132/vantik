@@ -416,7 +416,10 @@ export class VectorService implements OnModuleInit {
 const ALLOWED_STATE_CATEGORIES = new Set(Object.values(WorkflowCategoryEnum));
 
 function buildFilterBy(workspaceId: string, stateCategories: string[]): string {
-  const filters = [`workspaceId:=\`${workspaceId}\``];
+  // Strip backticks from workspaceId to prevent escaping out of the backtick
+  // quoting. Workspace IDs are UUIDs so this is purely defensive.
+  const safeWorkspaceId = workspaceId.replace(/`/g, '');
+  const filters = [`workspaceId:=\`${safeWorkspaceId}\``];
 
   const allowedCategories = stateCategories.filter((c) =>
     ALLOWED_STATE_CATEGORIES.has(c as WorkflowCategoryEnum),

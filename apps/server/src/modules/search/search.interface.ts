@@ -1,11 +1,17 @@
 import { IsOptional, IsString } from 'class-validator';
 
+/**
+ * `workspaceId` is optional and checked against the caller's memberships. It
+ * used to be trusted, which let any authenticated caller search any workspace —
+ * and search hits carry title, description and comment text.
+ */
 export class SearchInputData {
   @IsString()
   query: string;
 
+  @IsOptional()
   @IsString()
-  workspaceId: string;
+  workspaceId?: string;
 
   @IsOptional()
   @IsString()
@@ -26,10 +32,11 @@ export class SearchInputData {
 
 export class SimilarIssueData {
   @IsString()
-  workspaceId: string;
-
-  @IsString()
   issueId: string;
+
+  @IsOptional()
+  @IsString()
+  workspaceId?: string;
 
   @IsOptional()
   @IsString()

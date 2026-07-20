@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { UserId, Workspace } from 'modules/auth/session.decorator';
 
 import {
   SearchInputData,
@@ -20,8 +21,14 @@ export class SearchController {
 
   @Get()
   @UseGuards(AuthGuard)
-  async search(@Query() searchData: SearchInputData) {
+  async search(
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
+    @Query() searchData: SearchInputData,
+  ) {
     return await this.searchService.searchData(
+      sessionWorkspaceId,
+      userId,
       searchData.workspaceId,
       searchData.query,
       parseSearchLimit(searchData.limit),
@@ -32,8 +39,14 @@ export class SearchController {
 
   @Get('similar_issues')
   @UseGuards(AuthGuard)
-  async similarIssue(@Query() similarIssueData: SimilarIssueData) {
+  async similarIssue(
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
+    @Query() similarIssueData: SimilarIssueData,
+  ) {
     return await this.searchService.similarData(
+      sessionWorkspaceId,
+      userId,
       similarIssueData.workspaceId,
       similarIssueData.issueId,
     );

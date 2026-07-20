@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 
 import { UnauthorizedException } from '@nestjs/common';
-import { verify, decode } from 'jsonwebtoken';
+import { verify, decode, JwtPayload } from 'jsonwebtoken';
 import { JwksClient } from 'jwks-rsa';
 import { Error as STError } from 'supertokens-node';
 import supertokens from 'supertokens-node';
@@ -59,6 +59,35 @@ export async function hasValidPat(
   }
 
   return undefined;
+}
+
+/**
+ * Verifies an access token and returns its payload, or null if it is missing or
+ * fails verification.
+ *
+ * `hasValidHeader` answers only "was this signed by us", which is not enough
+ * for the websocket handshake: that needs the caller's identity to decide which
+ * rooms the socket may join. Returning the payload lets the caller bind the
+ * socket to the token's own subject rather than to a query parameter.
+ */
+export async function verifyAccessToken(
+  authHeaderValue: string,
+): Promise<JwtPayload | null> {
+  const token = authHeaderValue?.split('Bearer ')[1];
+
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const publicKey = await getKey(token);
+    const payload = verify(token, publicKey, {});
+
+    // A string payload carries no claims, so it cannot identify anyone.
+    return typeof payload === 'string' ? null : payload;
+  } catch (e) {
+    return null;
+  }
 }
 
 export async function hasValidHeader(

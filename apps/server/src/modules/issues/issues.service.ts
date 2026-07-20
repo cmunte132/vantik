@@ -1,12 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Issue as PrismaIssue } from '@prisma/client';
+import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionTypesEnum,
   CreateIssueDto,
   CreateIssueRelationDto,
+  DEFAULT_ISSUES_PER_PAGE,
   GetIssuesByFilterDTO,
+  GetIssuesQueryDto,
   Issue,
   IssueHistoryData,
+  IssueListItem,
+  IssueOrderByEnum,
+  IssueViewEnum,
+  MAX_ISSUES_PER_PAGE,
+  PaginatedIssues,
   IssueRequestParamsDto,
   LinkedIssue,
   NotificationData,
@@ -15,7 +23,6 @@ import {
   UpdateIssueDto,
   WorkflowCategoryEnum,
 } from '@vantikhq/types';
-import { tasks } from '@trigger.dev/sdk/v3';
 import { createObjectCsvStringifier } from 'csv-writer';
 import { PrismaService } from 'nestjs-prisma';
 import { notificationHandler } from 'trigger/notification';
@@ -25,6 +32,7 @@ import {
   convertTiptapJsonToMarkdown,
   convertTiptapJsonToText,
 } from 'common/utils/tiptap.utils';
+import { resolveWorkspaceId } from 'common/workspace-access';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
 import IssuesHistoryService from 'modules/issue-history/issue-history.service';
@@ -86,15 +94,36 @@ export default class IssuesService {
     return { descriptionMarkdown, ...issue };
   }
 
-  async getIssues(issueIds: string[]): Promise<Issue[]> {
-    return this.prisma.issue.findMany({
+  async getIssues(
+    sessionWorkspaceId: string,
+    userId: string,
+    {
+      issueIds,
+      teamId,
+      workspaceId: requestedWorkspaceId,
+    }: GetIssuesQueryDto = {},
+  ): Promise<Issue[]> {
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
+    // Nesting teamId under `team` means a teamId from another workspace simply
+    // matches nothing, rather than widening the scope.
+    const issues = await this.prisma.issue.findMany({
       where: {
-        id: {
-          in: issueIds,
-        },
+        team: { workspaceId, ...(teamId && { id: teamId }) },
+        ...(issueIds?.length && { id: { in: issueIds } }),
       },
       include: { team: true },
     });
+
+    return issues.map((issue) => ({
+      ...issue,
+      descriptionMarkdown: convertTiptapJsonToMarkdown(issue.description),
+    }));
   }
 
   /**
@@ -481,6 +510,10 @@ export default class IssuesService {
       where: `IssueService.updateIssueApi`,
     });
 
+    // The index does not model soft deletes, so the document has to go or the
+    // issue stays searchable forever.
+    this.issuesQueue.removeIssueFromVector(deleteIssue.id);
+
     // Delete the issue history associated with the deleted issue
     await this.deleteIssueHistory(deleteIssue.id);
 
@@ -838,16 +871,105 @@ export default class IssuesService {
     return updatedIssue;
   }
 
+  /**
+   * Filters issues. Callers that pass none of `page`, `perPage`, `orderBy` or
+   * `view` get the historical response: every match, as full issue rows.
+   * Passing any of them opts into the paginated envelope, which defaults to the
+   * lean `list` view.
+   */
   async getIssuesByFilter(
     getIssuesByFilterData: GetIssuesByFilterDTO,
-  ): Promise<Issue[]> {
-    const where = getFilterWhere(getIssuesByFilterData);
+    sessionWorkspaceId: string,
+    userId: string,
+  ): Promise<Issue[] | PaginatedIssues<Issue | IssueListItem>> {
+    const { page, perPage, orderBy, view } = getIssuesByFilterData;
+    // A workspaceId in the body is honoured only if the caller is a member of
+    // it; otherwise this throws rather than falling back to a wider scope.
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      getIssuesByFilterData.workspaceId,
+    );
+    const where = getFilterWhere(
+      getIssuesByFilterData,
+      workspaceId,
+    ) as Prisma.IssueWhereInput;
 
-    return this.prisma.issue.findMany({
-      where: where as Prisma.IssueWhereInput,
-      include: {
-        team: true,
-      },
+    const isPaginated =
+      page !== undefined ||
+      perPage !== undefined ||
+      orderBy !== undefined ||
+      view !== undefined;
+
+    if (!isPaginated) {
+      return this.prisma.issue.findMany({
+        where,
+        include: { team: true },
+      });
+    }
+
+    const resolvedPage = page ?? 1;
+    const resolvedPerPage = Math.min(
+      perPage ?? DEFAULT_ISSUES_PER_PAGE,
+      MAX_ISSUES_PER_PAGE,
+    );
+    const resolvedView = view ?? IssueViewEnum.LIST;
+
+    const [total, issues] = await Promise.all([
+      this.prisma.issue.count({ where }),
+      this.prisma.issue.findMany({
+        where,
+        include: { team: true },
+        orderBy: { [orderBy ?? IssueOrderByEnum.updatedAt]: 'desc' },
+        skip: (resolvedPage - 1) * resolvedPerPage,
+        take: resolvedPerPage,
+      }),
+    ]);
+
+    return {
+      issues:
+        resolvedView === IssueViewEnum.FULL
+          ? issues.map((issue) => ({
+              ...issue,
+              descriptionMarkdown: convertTiptapJsonToMarkdown(
+                issue.description,
+              ),
+            }))
+          : await this.toIssueListItems(issues),
+      page: resolvedPage,
+      perPage: resolvedPerPage,
+      total,
+    };
+  }
+
+  /**
+   * Strips issues down to what a list view needs, resolving each issue's state
+   * category so a caller can tell open from closed without a second call.
+   */
+  private async toIssueListItems(
+    issues: Array<PrismaIssue & { team: { identifier: string } }>,
+  ): Promise<IssueListItem[]> {
+    const stateIds = [...new Set(issues.map((issue) => issue.stateId))];
+    const states = await this.prisma.workflow.findMany({
+      where: { id: { in: stateIds } },
+      select: { id: true, category: true },
     });
+    const categoryByStateId = new Map(
+      states.map((state) => [state.id, state.category]),
+    );
+
+    return issues.map((issue) => ({
+      id: issue.id,
+      key: `${issue.team.identifier}-${issue.number}`,
+      title: issue.title,
+      stateId: issue.stateId,
+      stateCategory: categoryByStateId.get(issue.stateId) ?? null,
+      assigneeId: issue.assigneeId,
+      priority: issue.priority,
+      labelIds: issue.labelIds,
+      projectId: issue.projectId,
+      updatedAt: issue.updatedAt,
+    }));
   }
 }

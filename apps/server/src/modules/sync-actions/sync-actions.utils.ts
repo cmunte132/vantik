@@ -198,6 +198,29 @@ export async function getWorkspaceId(
   }
 }
 
+/**
+ * Resolves the row behind a sync action.
+ *
+ * `userId` is what scopes the three per-user models — Conversation,
+ * ConversationHistory and Notification. When it is absent each of those falls
+ * back to a bare `findUnique` on the id alone, which returns the row whoever
+ * it belongs to. That is the same "an absent value widens the scope" shape that
+ * caused the cross-workspace leaks in the issue, search and sync reads.
+ *
+ * The HTTP paths no longer reach that fallback: `getBootstrap` and `getDelta`
+ * take the user from the session and always pass one. The remaining caller is
+ * `upsertSyncAction`, driven by postgres replication, which has no user context
+ * by nature — it reacts to a row changing, not to someone asking for it.
+ *
+ * The broadcast side has since been traced (ENG-23) and is sound: the three
+ * per-user models are emitted to the owner's own room, and the gateway now
+ * joins a client only to the user id its access token carries, so a row cannot
+ * reach a room other than its owner's.
+ *
+ * Do not "harden" this by making userId required — the replication path has no
+ * user to supply, and narrowing the fallback would blank out rows it
+ * legitimately needs to publish.
+ */
 export async function getModelData(
   prisma: PrismaService,
   modelName: ModelName,

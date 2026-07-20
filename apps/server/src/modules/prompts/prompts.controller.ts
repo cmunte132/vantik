@@ -11,10 +11,17 @@ import {
 import { Prompt } from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { UserId, Workspace } from 'modules/auth/session.decorator';
 
 import { PromptInput } from './prompts.interface';
 import PromptsService from './prompts.service';
 
+/**
+ * Note: `PromptsModule` is not registered in `app.module.ts`, so none of these
+ * routes are currently reachable — a request to /v1/prompts returns 404. The
+ * workspace scoping below is still correct-by-construction so that registering
+ * the module later does not reintroduce a cross-tenant read and write.
+ */
 @Controller({
   version: '1',
   path: 'prompts',
@@ -25,18 +32,31 @@ export class PromptsController {
   @Get()
   @UseGuards(AuthGuard)
   async getAllPrompts(
-    @Query('workspaceId') workspaceId: string,
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
+    @Query('workspaceId') requestedWorkspaceId?: string,
   ): Promise<Prompt[]> {
-    return await this.promptsService.getAllPrompts(workspaceId);
+    return await this.promptsService.getAllPrompts(
+      sessionWorkspaceId,
+      userId,
+      requestedWorkspaceId,
+    );
   }
 
   @Post()
   @UseGuards(AuthGuard)
   async createPrompt(
-    @Query('workspaceId') workspaceId: string,
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
     @Body() promptInput: PromptInput,
+    @Query('workspaceId') requestedWorkspaceId?: string,
   ): Promise<Prompt> {
-    return await this.promptsService.createPrompt(workspaceId, promptInput);
+    return await this.promptsService.createPrompt(
+      sessionWorkspaceId,
+      userId,
+      promptInput,
+      requestedWorkspaceId,
+    );
   }
 
   @Post(':promptId')

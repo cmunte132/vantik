@@ -1,3 +1,4 @@
+import { UnauthorizedException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import {
   ActionTypesEnum,
@@ -291,8 +292,29 @@ export async function getCreateIssueInput(
   };
 }
 
-export function getFilterWhere(getIssuesByFilter: GetIssuesByFilterDTO) {
-  const { filters: filterData, workspaceId } = getIssuesByFilter;
+/**
+ * Builds the Prisma `where` for an issue filter query.
+ *
+ * `workspaceId` is passed separately and deliberately *not* read from
+ * `getIssuesByFilter`: tenancy must come from the caller's session, never from
+ * the request body. Taking it as its own required argument means a caller
+ * cannot forget to scope the query, and cannot be tricked into scoping it to
+ * someone else's workspace.
+ */
+export function getFilterWhere(
+  getIssuesByFilter: GetIssuesByFilterDTO,
+  workspaceId: string,
+) {
+  const { filters: filterData } = getIssuesByFilter;
+
+  // An empty workspaceId would drop out of the Prisma `where` and turn this
+  // into an unscoped query over every issue in the deployment, so refuse it.
+  if (!workspaceId) {
+    throw new UnauthorizedException({
+      message: 'No workspace is associated with this session',
+    });
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: Record<string, any> = { team: { workspaceId } };
 

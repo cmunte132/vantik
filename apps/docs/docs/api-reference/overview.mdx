@@ -26,6 +26,10 @@ curl -H "Authorization: Bearer $VANTIK_TOKEN" \
   https://your-domain.com/api/v1/issues
 ```
 
+A PAT stays valid until you delete it under the same settings page, which is
+what makes it usable for long-running agents and scheduled jobs. Treat it as a
+password: it carries the full permissions of the user who created it.
+
 ## TypeScript SDK
 
 The repository contains a typed Node.js SDK in

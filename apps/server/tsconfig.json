@@ -3,7 +3,13 @@
   "compilerOptions": {
     "baseUrl": "src",
     "module": "commonjs",
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "paths": {
+      // moduleResolution is node10, which cannot read the package's "exports"
+      // map. Node resolves this subpath fine at runtime; TypeScript needs the
+      // types pointed at explicitly.
+      "@tiptap/html/server": ["../node_modules/@tiptap/html/dist/server"]
+    }
   },
   "exclude": ["node_modules", ".trigger"],
   "include": [

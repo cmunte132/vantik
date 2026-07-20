@@ -3,6 +3,8 @@ import { ModelName } from '@prisma/client';
 import { ModelNameEnum, SyncAction } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { resolveWorkspaceId } from 'common/workspace-access';
+
 import {
   convertLsnToInt,
   convertToActionType,
@@ -53,7 +55,19 @@ export default class SyncActionsService {
     };
   }
 
-  async getBootstrap(modelNames: string, workspaceId: string, userId: string) {
+  async getBootstrap(
+    modelNames: string,
+    sessionWorkspaceId: string,
+    userId: string,
+    requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
     let syncActions = await this.prisma.syncAction.findMany({
       where: {
         workspaceId,
@@ -87,9 +101,17 @@ export default class SyncActionsService {
   async getDelta(
     modelNames: string,
     lastSequenceId: bigint,
-    workspaceId: string,
+    sessionWorkspaceId: string,
     userId: string,
+    requestedWorkspaceId?: string,
   ) {
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
     const syncActions = await this.prisma.syncAction.findMany({
       where: {
         workspaceId,

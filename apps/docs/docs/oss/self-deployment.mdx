@@ -82,8 +82,22 @@ LOCAL_MODEL=gemma2:2b
 OLLAMA_HOST=http://your-ollama-host:11434
 ```
 
-Semantic search re-ranking can additionally use Cohere
-(`COHERE_API_KEY`); without it, Typesense's built-in ranking is used.
+Search needs no API key and no external service. Typesense generates the
+embeddings in-process with its built-in `ts/all-MiniLM-L12-v2` model, so issue
+titles, descriptions and comments never leave your deployment.
+
+To rebuild the search index, delete the Typesense `issues` collection and
+restart the server — on boot the server recreates the collection and re-indexes
+every workspace from Postgres:
+
+```bash
+curl -X DELETE \
+  -H "X-TYPESENSE-API-KEY: $TYPESENSE_API_KEY" \
+  http://localhost:8108/collections/issues
+```
+
+The same rebuild happens automatically when a server upgrade adds fields to the
+search schema — the collection is detected as stale, dropped and refilled.
 
 ### File attachments
 

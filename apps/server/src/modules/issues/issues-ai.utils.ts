@@ -1,8 +1,11 @@
+import { Logger } from '@nestjs/common';
 import { CreateIssueDto, UpdateIssueDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
 import { LLMMappings } from 'modules/prompts/prompts.interface';
+
+const logger = new Logger('IssuesAIUtils');
 
 export async function getIssueTitle(
   prisma: PrismaService,
@@ -60,6 +63,12 @@ export async function getAiFilter(
     );
     return JSON.parse(response);
   } catch (error) {
+    // An empty filter matches everything, so a silent {} looks to the caller
+    // like the model simply found nothing to constrain on.
+    logger.error(
+      `AI filter generation failed, returning an empty filter: ${error.message}`,
+      error.stack,
+    );
     return {};
   }
 }

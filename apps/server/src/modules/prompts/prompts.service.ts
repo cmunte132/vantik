@@ -1,5 +1,7 @@
 import { PrismaService } from 'nestjs-prisma';
 
+import { resolveWorkspaceId } from 'common/workspace-access';
+
 import { LoggerService } from 'modules/logger/logger.service';
 
 import { PromptInput } from './prompts.interface';
@@ -8,7 +10,18 @@ export default class PromptsService {
   private readonly logger: LoggerService = new LoggerService('PromptsService');
   constructor(private prisma: PrismaService) {}
 
-  async getAllPrompts(workspaceId: string) {
+  async getAllPrompts(
+    sessionWorkspaceId: string,
+    userId: string,
+    requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
     this.logger.debug({
       message: `Fetching all prompts for this workspace ${workspaceId}`,
       where: `PromptsService.getAllPrompts`,
@@ -16,7 +29,19 @@ export default class PromptsService {
     return await this.prisma.prompt.findMany({ where: { workspaceId } });
   }
 
-  async createPrompt(workspaceId: string, promptInput: PromptInput) {
+  async createPrompt(
+    sessionWorkspaceId: string,
+    userId: string,
+    promptInput: PromptInput,
+    requestedWorkspaceId?: string,
+  ) {
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
     return await this.prisma.prompt.create({
       data: { workspaceId, ...promptInput },
     });

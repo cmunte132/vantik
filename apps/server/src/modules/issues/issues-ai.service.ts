@@ -105,8 +105,9 @@ export default class IssuesAIService {
     // Map assignee IDs to assignee objects with scores
     const assignees = Array.from(assigneeIds).map((assigneeId) => ({
       id: assigneeId,
-      score: similarIssues.find((issue) => issue.assigneeId === assigneeId)
-        .score,
+      score:
+        similarIssues.find((issue) => issue.assigneeId === assigneeId)
+          ?.relevanceScore ?? 0,
     }));
 
     return { labels: suggestedLabels, assignees };

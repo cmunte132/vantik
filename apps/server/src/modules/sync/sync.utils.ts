@@ -1,22 +1,42 @@
 import * as cookie from 'cookie';
 
-import { hasValidHeader } from 'common/authentication';
+import { verifyAccessToken } from 'common/authentication';
 
-export async function isValidAuthentication(
+import { SocketIdentity } from './sync.interface';
+
+/**
+ * Identifies the caller behind a websocket handshake, or returns null when the
+ * handshake carries no usable session.
+ *
+ * This deliberately returns the identity rather than a boolean. The gateway
+ * used to ask only whether *some* valid token was present and then join the
+ * socket to rooms named by the query string, so a caller could name any
+ * workspace and any user. The caller's own subject is the only safe basis for
+ * that decision, so it has to come back out of here.
+ */
+export async function getAuthenticatedIdentity(
   headers: Record<string, string | string[]>,
-) {
+): Promise<SocketIdentity | null> {
   if (!headers.cookie) {
-    return false;
+    return null;
   }
 
   const cookies = cookie.parse(headers.cookie as string);
 
-  if (!cookies) {
-    return false;
-  }
-  if (!cookies.sAccessToken) {
-    return false;
+  if (!cookies?.sAccessToken) {
+    return null;
   }
 
-  return await hasValidHeader(`Bearer ${cookies.sAccessToken}`, false);
+  const payload = await verifyAccessToken(`Bearer ${cookies.sAccessToken}`);
+
+  if (!payload?.sub) {
+    return null;
+  }
+
+  return {
+    userId: payload.sub as string,
+    // The session's own workspace, used as the fallback when the handshake
+    // does not name one. Membership is still checked before it is trusted.
+    workspaceId: payload.workspaceId as string | undefined,
+  };
 }

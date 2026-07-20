@@ -25,6 +25,16 @@ export class IssuesProcessor {
     await this.vectorService.createIssueEmbedding(issue);
   }
 
+  @Process('removeIssueFromVector')
+  async handleRemoveIssueFromVector(job: Job<{ issueId: string }>) {
+    const { issueId } = job.data;
+    this.logger.info({
+      message: `Removing issue from Vector ${issueId}`,
+      where: `IssuesProcessor.handleRemoveIssueFromVector`,
+    });
+    await this.vectorService.deleteIssueEmbedding(issueId);
+  }
+
   @Process('handleTriageIssue')
   async handleTriageIssue(
     job: Job<{ issue: IssueWithRelations; isDeleted: boolean }>,

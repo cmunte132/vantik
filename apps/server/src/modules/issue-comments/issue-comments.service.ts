@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionTypesEnum,
   CreateIssueCommentDto,
@@ -9,7 +10,6 @@ import {
   NotificationEventFrom,
   UpdateIssueCommentDto,
 } from '@vantikhq/types';
-import { tasks } from '@trigger.dev/sdk/v3';
 import { PrismaService } from 'nestjs-prisma';
 import { notificationHandler } from 'trigger/notification';
 
@@ -18,6 +18,7 @@ import {
   convertTiptapJsonToMarkdown,
 } from 'common/utils/tiptap.utils';
 
+import { IssuesQueue } from 'modules/issues/issues.queue';
 import IssuesService from 'modules/issues/issues.service';
 
 import {
@@ -32,6 +33,7 @@ export default class IssueCommentsService {
   constructor(
     private prisma: PrismaService,
     private issuesService: IssuesService,
+    private issuesQueue: IssuesQueue,
   ) {}
 
   async getIssueComment(issueCommentParams: IssueCommentRequestParamsDto) {
@@ -123,6 +125,10 @@ export default class IssueCommentsService {
       },
     });
 
+    // Comments are part of the issue's search document, so the embedding has
+    // to be refreshed whenever they change.
+    this.issuesQueue.addIssueToVector(issueComment.issue);
+
     const newBodyMarkdown = convertTiptapJsonToMarkdown(issueComment.body);
     return { ...issueComment, bodyMarkdown: newBodyMarkdown };
   }
@@ -149,6 +155,8 @@ export default class IssueCommentsService {
       },
     });
 
+    this.issuesQueue.addIssueToVector(issueComment.issue);
+
     const newBodyMarkdown = convertTiptapJsonToMarkdown(issueComment.body);
     return { ...issueComment, bodyMarkdown: newBodyMarkdown };
   }
@@ -168,6 +176,8 @@ export default class IssueCommentsService {
         parent: true,
       },
     });
+
+    this.issuesQueue.addIssueToVector(issueComment.issue);
 
     return issueComment;
   }
@@ -281,10 +291,22 @@ export default class IssueCommentsService {
   }
 
   async getLinkedCommentBySource(sourceId: string): Promise<LinkedComment> {
-    return this.prisma.linkedComment.findFirst({
+    const linkedComment = await this.prisma.linkedComment.findFirst({
       where: { sourceId },
       include: { comment: true },
     });
+
+    if (!linkedComment?.comment) {
+      return linkedComment;
+    }
+
+    return {
+      ...linkedComment,
+      comment: {
+        ...linkedComment.comment,
+        bodyMarkdown: convertTiptapJsonToMarkdown(linkedComment.comment.body),
+      },
+    };
   }
 
   async createLinkedComment(

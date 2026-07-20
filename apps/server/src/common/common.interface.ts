@@ -12,6 +12,9 @@ export interface TiptapAttrs {
   language?: string;
   level?: number;
   checked?: boolean;
+  /** Mention nodes: the display name and the referenced user id. */
+  label?: string;
+  id?: string;
 }
 
 export interface TiptapMarks {

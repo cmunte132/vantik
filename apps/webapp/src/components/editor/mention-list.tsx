@@ -10,7 +10,7 @@ import type { User } from 'common/types';
 
 interface MentionListProps {
   items: User[];
-  command: (args: { id: string }) => void;
+  command: (args: { id: string; label: string }) => void;
 }
 
 export const MentionList = forwardRef(
@@ -22,7 +22,12 @@ export const MentionList = forwardRef(
       const item = props.items[index];
 
       if (item) {
-        props.command({ id: item.id });
+        // `id` is the identity — MentionComponent resolves the live name from
+        // it, so a renamed user still renders correctly. `label` is a snapshot
+        // kept only for consumers that cannot query users: without it the API
+        // serialises a mention as its raw UUID and the search index drops it
+        // entirely, because tiptap's Mention falls back to `label ?? id`.
+        props.command({ id: item.id, label: item.fullname });
       }
     };
 

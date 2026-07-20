@@ -84,7 +84,17 @@ const starterKit = StarterKit.configure({
       class: cx('border-l-4 border-gray-400 dark:border-gray-500'),
     },
   },
-  code: false,
+  // Inline code is on because the API is a markdown boundary: an agent writing
+  // `max_connections` must get it back verbatim. With the mark disabled the
+  // editor's schema dropped it on ingest and the identifier came back as
+  // escaped prose (`max\_connections`).
+  code: {
+    HTMLAttributes: {
+      class: cx(
+        'rounded-sm bg-grayAlpha-100 text-[#BF4594] px-1 py-0.5 font-mono font-medium text-sm box-decoration-clone',
+      ),
+    },
+  },
   horizontalRule: false,
   dropcursor: {
     color: 'oklch(60% 0.13 240)',

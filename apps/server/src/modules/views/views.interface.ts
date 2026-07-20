@@ -13,7 +13,11 @@ import {
 } from 'class-validator';
 
 export interface ViewsRequestBody {
-  workspaceId: string;
+  /**
+   * Optional. Honoured only if the caller is an active member of it, otherwise
+   * the request is rejected. Falls back to the session's workspace when absent.
+   */
+  workspaceId?: string;
 }
 export class FilterModelType {
   @IsArray()
@@ -36,8 +40,14 @@ export class CreateViewsRequestBody {
   @Type(() => FiltersModelType)
   filters: FiltersModelType;
 
+  /**
+   * Optional. Checked against the caller's memberships before the view is
+   * created — this used to be trusted, which let a caller create views inside
+   * a workspace they have no part in.
+   */
   @IsString()
-  workspaceId: string;
+  @IsOptional()
+  workspaceId?: string;
 
   @IsString()
   @IsOptional()

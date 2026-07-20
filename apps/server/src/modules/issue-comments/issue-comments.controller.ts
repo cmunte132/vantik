@@ -19,6 +19,7 @@ import {
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 import { Session as SessionDecorator } from 'modules/auth/session.decorator';
 
 import {
@@ -69,7 +70,7 @@ export class IssueCommentsController {
   }
 
   @Get(':issueCommentId/replies')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getReplyComment(
     @Param() issueCommentParams: IssueCommentRequestParamsDto,
   ): Promise<IssueComment[]> {
@@ -77,7 +78,7 @@ export class IssueCommentsController {
   }
 
   @Get(':issueCommentId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getIssueComment(
     @Param() issueCommentParams: IssueCommentRequestParamsDto,
   ): Promise<IssueComment> {
@@ -85,7 +86,7 @@ export class IssueCommentsController {
   }
 
   @Post(':issueCommentId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateIssueComment(
     @Param() issueCommentParams: IssueCommentRequestParamsDto,
     @Body() commentData: UpdateIssueCommentDto,
@@ -97,7 +98,7 @@ export class IssueCommentsController {
   }
 
   @Delete(':issueCommentId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async deleteIssueComment(
     @Param() issueCommentParams: IssueCommentRequestParamsDto,
   ): Promise<IssueComment> {
@@ -107,7 +108,7 @@ export class IssueCommentsController {
   }
 
   @Post(':issueCommentId/reaction')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createCommentReaction(
     @SessionDecorator() session: SessionContainer,
     @Param() issueCommentParams: IssueCommentRequestParamsDto,
@@ -122,7 +123,7 @@ export class IssueCommentsController {
   }
 
   @Delete(':issueCommentId/reaction/:reactionId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async deleteCommentReaction(
     @Param() reactionParams: ReactionRequestParams,
   ): Promise<IssueComment> {

@@ -28,6 +28,7 @@ import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 import {
   Session as SessionDecorator,
   UserId,
@@ -57,7 +58,7 @@ export class IssuesController {
   ) {}
 
   @Post()
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createIssue(
     @SessionDecorator() session: SessionContainer,
     @Body() issueData: CreateIssueDto,
@@ -67,7 +68,7 @@ export class IssuesController {
   }
 
   @Post('bulk/update')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async bulkUpdateIssues(
     @SessionDecorator() session: SessionContainer,
     @Query() teamParams: TeamRequestParamsDto,
@@ -91,7 +92,7 @@ export class IssuesController {
   }
 
   @Post('bulk')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async bulkCreateIssues(
     @SessionDecorator() session: SessionContainer,
     @Body() issueData: { issues: CreateIssueDto[] },
@@ -125,7 +126,7 @@ export class IssuesController {
   }
 
   @Post(':issueId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateIssue(
     @SessionDecorator() session: SessionContainer,
     @Param() issueParams: IssueRequestParamsDto,
@@ -142,7 +143,7 @@ export class IssuesController {
   }
 
   @Delete(':issueId')
-  @UseGuards(AuthGuard, AdminGuard)
+  @UseGuards(AuthGuard, AdminGuard, WorkspaceResourceGuard)
   async deleteIssue(
     @Param() issueParams: IssueRequestParamsDto,
     @Query() teamParams: TeamRequestParamsDto,
@@ -151,7 +152,7 @@ export class IssuesController {
   }
 
   @Post(':issueId/link')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async linkIssue(
     @SessionDecorator() session: SessionContainer,
     @Param() issueParams: IssueRequestParamsDto,
@@ -166,7 +167,7 @@ export class IssuesController {
   }
 
   @Post(':issueId/subscribe')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async subscribeIssue(
     @SessionDecorator() session: SessionContainer,
     @Param() issueParams: IssueRequestParamsDto,
@@ -181,7 +182,7 @@ export class IssuesController {
   }
 
   @Post(':issueId/move')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async moveIssue(
     @SessionDecorator() session: SessionContainer,
     @Param() issueParams: IssueRequestParamsDto,
@@ -220,7 +221,7 @@ export class IssuesController {
   }
 
   @Get('number/:issueNumber')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getIssueByNumber(
     @Query() teamParams: TeamRequestParamsDto,
     @Param('issueNumber') issueNumber: string,
@@ -232,7 +233,7 @@ export class IssuesController {
   }
 
   @Get(':issueId/context')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getIssueContext(
     @Param() issueParams: IssueRequestParamsDto,
   ): Promise<IssueContext> {
@@ -240,7 +241,7 @@ export class IssuesController {
   }
 
   @Get(':issueId/comments')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getIssueComments(
     @Param() issueParams: IssueRequestParamsDto,
   ): Promise<ContextComment[]> {
@@ -248,7 +249,7 @@ export class IssuesController {
   }
 
   @Get(':issueId/history')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getIssueHistory(
     @Param() issueParams: IssueRequestParamsDto,
   ): Promise<ContextHistoryEntry[]> {
@@ -256,7 +257,7 @@ export class IssuesController {
   }
 
   @Get(':issueId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getIssue(@Param() issueParams: IssueRequestParamsDto): Promise<Issue> {
     return await this.issuesService.getIssueById(issueParams);
   }

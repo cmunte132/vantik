@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
 /**
@@ -49,4 +49,70 @@ export async function resolveWorkspaceId(
   }
 
   return workspaceId;
+}
+
+/**
+ * Proves an issue belongs to the given workspace.
+ *
+ * Not-found rather than forbidden is deliberate: a foreign id and a
+ * non-existent one should be indistinguishable, or the error itself confirms
+ * which ids exist in other workspaces.
+ */
+export async function assertIssueInWorkspace(
+  prisma: PrismaService,
+  issueId: string,
+  workspaceId: string,
+): Promise<void> {
+  const issue = await prisma.issue.findFirst({
+    where: { id: issueId, deleted: null, team: { workspaceId } },
+    select: { id: true },
+  });
+
+  if (!issue) {
+    throw new NotFoundException({ message: `Issue ${issueId} not found` });
+  }
+}
+
+/** Proves an issue comment's issue belongs to the given workspace. */
+export async function assertIssueCommentInWorkspace(
+  prisma: PrismaService,
+  issueCommentId: string,
+  workspaceId: string,
+): Promise<void> {
+  const comment = await prisma.issueComment.findFirst({
+    where: {
+      id: issueCommentId,
+      deleted: null,
+      issue: { team: { workspaceId } },
+    },
+    select: { id: true },
+  });
+
+  if (!comment) {
+    throw new NotFoundException({
+      message: `Issue comment ${issueCommentId} not found`,
+    });
+  }
+}
+
+/**
+ * Proves a team belongs to the given workspace.
+ *
+ * A teamId arrives as a query or body parameter on the create, update and move
+ * paths, where it selects the team an issue lands in — so an unchecked one is a
+ * cross-workspace write, not just a read.
+ */
+export async function assertTeamInWorkspace(
+  prisma: PrismaService,
+  teamId: string,
+  workspaceId: string,
+): Promise<void> {
+  const team = await prisma.team.findFirst({
+    where: { id: teamId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!team) {
+    throw new NotFoundException({ message: `Team ${teamId} not found` });
+  }
 }

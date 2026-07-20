@@ -12,6 +12,7 @@ import { IssueRequestParamsDto, TeamRequestParamsDto } from '@vantikhq/types';
 import { Response } from 'express';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
 import IssuesAIService from './issues-ai.service';
 import {
@@ -68,7 +69,7 @@ export class IssuesAIController {
   }
 
   @Get(':issueId/summarize')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async summarizeIssue(@Param() issueParams: IssueRequestParamsDto) {
     return await this.issuesAiService.summarizeIssue(issueParams.issueId);
   }

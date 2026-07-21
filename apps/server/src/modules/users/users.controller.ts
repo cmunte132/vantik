@@ -24,6 +24,7 @@ import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
 import {
   Session as SessionDecorator,
   UserId,
@@ -58,7 +59,7 @@ export class UsersController {
       }
     } catch (e) {}
 
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     const user = await this.users.getUser(userId);
 
     return user;
@@ -91,7 +92,7 @@ export class UsersController {
     @Body()
     createPatDto: CreatePatDto,
   ) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     const user = await this.users.createPersonalAccessToken(
       createPatDto.name,
       userId,
@@ -114,7 +115,7 @@ export class UsersController {
   @Get('pats')
   @UseGuards(AuthGuard)
   async getPats(@SessionDecorator() session: SessionContainer) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.users.getPats(userId);
   }
 
@@ -136,7 +137,7 @@ export class UsersController {
     @Body()
     codeBody: CodeDtoWithWorkspace,
   ) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return this.users.authorizeCode(userId, codeBody);
   }
 

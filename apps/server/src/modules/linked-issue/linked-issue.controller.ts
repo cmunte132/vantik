@@ -16,6 +16,7 @@ import {
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
 import { Session as SessionDecorator } from 'modules/auth/session.decorator';
 import { ApiResponse } from 'modules/issues/issues.interface';
 
@@ -57,7 +58,7 @@ export class LinkedIssueController {
     @Param() linkedIssueIdParams: LinkedIssueRequestParamsDto,
     @Body() linkedIssueData: UpdateLinkedIssueDto,
   ): Promise<LinkedIssue | ApiResponse> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
 
     return await this.linkedIssueService.updateLinkIssue(
       linkedIssueIdParams,
@@ -74,7 +75,7 @@ export class LinkedIssueController {
     @Param('sourceId') sourceId: string,
     @Body() linkedIssueData: UpdateLinkedIssueDto,
   ) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
 
     return await this.linkedIssueService.updateLinkIssueBySource(
       sourceId,

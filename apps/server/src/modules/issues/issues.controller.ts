@@ -28,6 +28,7 @@ import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
 import {
   Session as SessionDecorator,
   UserId,
@@ -63,7 +64,7 @@ export class IssuesController {
     @SessionDecorator() session: SessionContainer,
     @Body() issueData: CreateIssueDto,
   ): Promise<Issue> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.issuesService.createIssueAPI(issueData, userId);
   }
 
@@ -74,7 +75,7 @@ export class IssuesController {
     @Query() teamParams: TeamRequestParamsDto,
     @Body() issueData: { issues: UpdateIssueDto[] },
   ): Promise<string[]> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     const issues = [];
 
     for (const issue of issueData.issues) {
@@ -97,7 +98,7 @@ export class IssuesController {
     @SessionDecorator() session: SessionContainer,
     @Body() issueData: { issues: CreateIssueDto[] },
   ): Promise<string[]> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     const issues = [];
 
     for (const issue of issueData.issues) {
@@ -133,7 +134,7 @@ export class IssuesController {
     @Query() teamParams: TeamRequestParamsDto,
     @Body() issueData: UpdateIssueDto,
   ): Promise<Issue | ApiResponse> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.issuesService.updateIssueApi(
       teamParams,
       issueData,
@@ -158,7 +159,7 @@ export class IssuesController {
     @Param() issueParams: IssueRequestParamsDto,
     @Body() linkData: CreateLinkedIssueDto,
   ): Promise<LinkedIssue | ApiResponse> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.linkedIssueService.createLinkIssue(
       linkData,
       issueParams,
@@ -173,7 +174,7 @@ export class IssuesController {
     @Param() issueParams: IssueRequestParamsDto,
     @Body() subscriberData: SubscribeIssueInput,
   ) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.issuesService.handleSubscription(
       userId,
       issueParams.issueId,
@@ -188,7 +189,7 @@ export class IssuesController {
     @Param() issueParams: IssueRequestParamsDto,
     @Body() moveData: TeamRequestParamsDto,
   ): Promise<Issue> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.issuesService.moveIssue(
       userId,
       issueParams.issueId,

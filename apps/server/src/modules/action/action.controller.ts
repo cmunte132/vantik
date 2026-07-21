@@ -18,6 +18,7 @@ import {
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
 import {
   Session as SessionDecorator,
   UserId,
@@ -47,7 +48,7 @@ export class ActionController {
     @Workspace() workspaceId: string,
     @Body() actionCreateResource: CreateActionDto,
   ) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
 
     return await this.actionService.createAction(
       actionCreateResource,

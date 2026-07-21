@@ -19,6 +19,7 @@ import Session from 'supertokens-node/recipe/session';
 
 import { createMagicLink } from 'common/utils/login';
 
+import { getAppUserId } from 'modules/auth/session-user';
 import { LoggerService } from 'modules/logger/logger.service';
 import { workflowSeedData } from 'modules/teams/teams.interface';
 import { UsersService } from 'modules/users/users.service';
@@ -268,7 +269,7 @@ export default class WorkspacesService {
   ): Promise<Record<string, string>> {
     const { emailIds, teamIds, role } = inviteUsersBody;
     const workspace = await this.getWorkspace(workspaceId);
-    const iniviter = await this.usersService.getUser(session.getUserId());
+    const iniviter = await this.usersService.getUser(getAppUserId(session));
 
     const emails = emailIds.split(',');
     const responseRecord: Record<string, string> = {};

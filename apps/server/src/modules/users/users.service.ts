@@ -41,6 +41,85 @@ export class UsersService {
     private config: ConfigService,
   ) {}
 
+  /**
+   * Records a way in to an account, creating the account if this is the first
+   * one.
+   *
+   * `supertokensUserId` is a credential, not an identity: the same person
+   * signing in with a login code and a passkey arrives with two of them. The
+   * account is keyed on email, which is what makes the second credential
+   * attach to the existing person instead of inventing a new one.
+   */
+  async upsertUserForIdentity(
+    supertokensUserId: string,
+    provider: string,
+    email: string,
+    fullname: string,
+    username?: string,
+  ) {
+    try {
+      const user = await this.prisma.user.upsert({
+        where: { email },
+        create: {
+          email,
+          fullname,
+          username: username ?? email.split('@')[0],
+        },
+        update: {},
+      });
+
+      await this.prisma.authIdentity.upsert({
+        where: { supertokensUserId },
+        create: { userId: user.id, provider, supertokensUserId },
+        update: {},
+      });
+
+      return user;
+    } catch (error) {
+      this.logger.error({
+        message: `Error while upserting the user for identity: ${supertokensUserId}`,
+        where: `UsersService.upsertUserForIdentity`,
+        error,
+      });
+      throw new InternalServerErrorException(
+        error,
+        `Error while upserting the user for identity: ${supertokensUserId}`,
+      );
+    }
+  }
+
+  /**
+   * The account a SuperTokens session belongs to.
+   *
+   * Sessions carry a recipe user id, which is not an account id and has not
+   * been one since identity moved into this database.
+   */
+  async getUserIdForSupertokensId(
+    supertokensUserId: string,
+  ): Promise<string | null> {
+    const identity = await this.prisma.authIdentity.findUnique({
+      where: { supertokensUserId },
+      select: { userId: true },
+    });
+
+    return identity ? identity.userId : null;
+  }
+
+  /**
+   * Any credential belonging to an account, for the paths that have to hand a
+   * recipe user id back to SuperTokens — minting a session for a personal
+   * access token, above all.
+   */
+  async getSupertokensIdForUser(userId: string): Promise<string | null> {
+    const identity = await this.prisma.authIdentity.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      select: { supertokensUserId: true },
+    });
+
+    return identity ? identity.supertokensUserId : null;
+  }
+
   async upsertUser(
     id: string,
     email: string,

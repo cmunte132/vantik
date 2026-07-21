@@ -18,6 +18,7 @@ import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
 import {
   Session as SessionDecorator,
   UserId,
@@ -46,7 +47,7 @@ export class AttachmentController {
     @UploadedFiles() files: Express.Multer.File[],
     @Body() attachmentBody: AttachmentBody,
   ) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
 
     const sourceMetadata = attachmentBody.sourceMetadata
       ? JSON.parse(attachmentBody.sourceMetadata)

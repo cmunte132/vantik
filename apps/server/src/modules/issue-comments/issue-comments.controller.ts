@@ -19,6 +19,7 @@ import {
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
 import { Session as SessionDecorator } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
@@ -61,7 +62,7 @@ export class IssueCommentsController {
     @Query() issueParams: CreateIssueCommentRequestParamsDto,
     @Body() commentData: CreateIssueCommentDto,
   ): Promise<IssueComment> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.issueCommentsService.createIssueComment(
       issueParams,
       userId,
@@ -114,7 +115,7 @@ export class IssueCommentsController {
     @Param() issueCommentParams: IssueCommentRequestParamsDto,
     @Body() reactionData: ReactionInput,
   ): Promise<IssueComment> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.issueCommentsService.createCommentReaction(
       userId,
       issueCommentParams,

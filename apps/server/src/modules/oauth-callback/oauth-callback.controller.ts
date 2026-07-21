@@ -10,6 +10,7 @@ import {
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
 import { Session as SessionDecorator } from 'modules/auth/session.decorator';
 
 import {
@@ -32,7 +33,7 @@ export class OAuthCallbackController {
     @SessionDecorator() session: SessionContainer,
     @Body() body: OAuthBodyInterface,
   ) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.oAuthCallbackService.getRedirectURL(body, userId);
   }
 
@@ -42,7 +43,7 @@ export class OAuthCallbackController {
     @SessionDecorator() session: SessionContainer,
     @Body() callbackBody: SentryCallbackBody,
   ) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.oAuthCallbackService.sentryCallbackHandler(
       userId,
       callbackBody,

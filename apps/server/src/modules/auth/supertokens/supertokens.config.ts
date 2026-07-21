@@ -89,10 +89,24 @@ export const recipeList = (
           return {
             ...originalImplementation,
             async createNewSession(input) {
+              // `input.userId` is a SuperTokens recipe user id — a credential,
+              // not an account. The account it belongs to is looked up here
+              // once and carried in the token, so the rest of the API never
+              // has to know that distinction exists.
+              const appUserId = await usersService.getUserIdForSupertokensId(
+                input.userId,
+              );
+
+              if (!appUserId) {
+                throw new Error(
+                  `No account is registered for SuperTokens user ${input.userId}`,
+                );
+              }
+
               // since frontend needs workspaces we converted usersOnWorkspaces
               // To workspaces
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const user = (await usersService.getUser(input.userId)) as any;
+              const user = (await usersService.getUser(appUserId)) as any;
               const workspace = user.workspaces[0];
 
               const workspaceData = workspace
@@ -101,6 +115,7 @@ export const recipeList = (
 
               input.accessTokenPayload = {
                 ...input.accessTokenPayload,
+                appUserId,
                 ...workspaceData,
               };
 
@@ -157,23 +172,20 @@ export const recipeList = (
               // First we call the original implementation of consumeCode.
               const response = await originalImplementation.consumeCode(input);
 
-              // Post sign up response, we check if it was successful
+              // Recorded on every sign-in, not just the first. The account is
+              // keyed on email and the identity row on the recipe user id, so
+              // repeating this is a no-op for someone who already has both,
+              // and the one thing that heals an account whose row went missing.
               if (response.status === 'OK') {
-                const { id, emails } = response.user;
+                const { emails } = response.user;
                 const email = emails[0];
 
-                if (input.session === undefined) {
-                  if (
-                    response.createdNewRecipeUser &&
-                    response.user.loginMethods.length === 1
-                  ) {
-                    await usersService.upsertUser(
-                      id,
-                      email,
-                      email.split('@')[0],
-                    );
-                  }
-                }
+                await usersService.upsertUserForIdentity(
+                  response.recipeUserId.getAsString(),
+                  'passwordless',
+                  email,
+                  email.split('@')[0],
+                );
               }
               return response;
             },
@@ -197,19 +209,26 @@ export const recipeList = (
             generateRecoverAccountTokenPOST: undefined,
             recoverAccountPOST: undefined,
             registerOptionsPOST: async (input) => {
-              // Without account linking, a passkey registered against an email
-              // that already has an account becomes a *second* SuperTokens
-              // user sharing one address. The session it mints then carries an
-              // id no `User` row has, and `createNewSession` dies looking it
-              // up. Refusing here stops that before the browser even asks for
-              // a fingerprint.
               const email = 'email' in input ? input.email : undefined;
 
               if (email && (await usersService.getUserByEmail(email))) {
-                return {
-                  status: 'INVALID_EMAIL_ERROR',
-                  err: 'That email already has an account. Sign in with a login code instead.',
-                };
+                // The address is spoken for. Holding a session for it is what
+                // separates someone adding a second way in to their own
+                // account from someone claiming a stranger's — the identity
+                // row attaches to the existing account either way, so this
+                // check is the whole defence.
+                const session = await Session.getSession(
+                  input.options.req,
+                  input.options.res,
+                  { sessionRequired: false },
+                );
+
+                if (session === undefined) {
+                  return {
+                    status: 'INVALID_EMAIL_ERROR',
+                    err: 'That email already has an account. Sign in with a login code first, then add a passkey from settings.',
+                  };
+                }
               }
 
               return originalImplementation.registerOptionsPOST!(input);
@@ -237,19 +256,20 @@ export const recipeList = (
             signUp: async (input) => {
               const response = await originalImplementation.signUp(input);
 
-              // Mirrors the passwordless path: SuperTokens owns the login
-              // method, we own the row the rest of the product reads. Guarding
-              // on a single login method keeps a passkey added to an existing
-              // account from being mistaken for a new signup, and `user.id` is
-              // the primary user id, so a linked account resolves to the row
-              // it already had.
+              // Mirrors the passwordless path. Upserting on email is what
+              // makes a passkey added from settings attach to the account that
+              // already exists rather than start a second one — the job
+              // account linking would have been charged for.
               if (response.status === 'OK') {
-                const { id, emails, loginMethods } = response.user;
+                const { emails } = response.user;
                 const email = emails[0];
 
-                if (input.session === undefined && loginMethods.length === 1) {
-                  await usersService.upsertUser(id, email, email.split('@')[0]);
-                }
+                await usersService.upsertUserForIdentity(
+                  response.recipeUserId.getAsString(),
+                  'webauthn',
+                  email,
+                  email.split('@')[0],
+                );
               }
 
               return response;

@@ -3,6 +3,7 @@ import { IssueRelation, IssueRelationIdRequestDto } from '@vantikhq/types';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
 import { Session as SessionDecorator } from 'modules/auth/session.decorator';
 
 import IssuesRelationService from './issue-relation.service';
@@ -21,7 +22,7 @@ export class IssueRelationController {
     @Param()
     issueRelationId: IssueRelationIdRequestDto,
   ): Promise<IssueRelation> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.issueRelation.deleteIssueRelation(
       userId,
       issueRelationId,

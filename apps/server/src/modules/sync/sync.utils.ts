@@ -29,12 +29,15 @@ export async function getAuthenticatedIdentity(
 
   const payload = await verifyAccessToken(`Bearer ${cookies.sAccessToken}`);
 
-  if (!payload?.sub) {
+  // `sub` is the credential the session was minted for, not the account. The
+  // account id rides in the payload, and binding a socket to anything else
+  // would put someone in rooms keyed on an id no `User` row has.
+  if (!payload?.appUserId) {
     return null;
   }
 
   return {
-    userId: payload.sub as string,
+    userId: payload.appUserId as string,
     // The session's own workspace, used as the fallback when the handshake
     // does not name one. Membership is still checked before it is trusted.
     workspaceId: payload.workspaceId as string | undefined,

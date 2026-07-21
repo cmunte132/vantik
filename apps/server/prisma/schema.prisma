@@ -744,7 +744,11 @@ model Template {
 }
 
 model User {
-  id String @id @unique
+  // Its own key. This used to be whatever id SuperTokens minted, which made
+  // identity and credentials the same column and meant one person could hold
+  // exactly one credential: a passkey and a login code for the same address
+  // are two SuperTokens users, and only one of them could be this value.
+  id String @id @default(uuid())
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -757,6 +761,7 @@ model User {
 
   image String?
 
+  authIdentities      AuthIdentity[]
   usersOnWorkspaces   UsersOnWorkspaces[]
   template            Template[]
   integrationAccount  IntegrationAccount[]
@@ -764,6 +769,29 @@ model User {
   personalAccessToken PersonalAccessToken[]
   Conversation        Conversation[]
   ConversationHistory ConversationHistory[]
+}
+
+/// One way in to an account: a login code, a passkey, whatever comes later.
+/// SuperTokens owns the credential and issues a recipe user id per method, so
+/// somebody with both a passkey and a login code has two rows here pointing at
+/// one User. This is the table account linking would have been paying for.
+model AuthIdentity {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  /// SuperTokens recipe id: `passwordless`, `webauthn`.
+  provider String
+
+  /// The recipe user id SuperTokens issued. Sessions arrive carrying this, and
+  /// minting one for a personal access token needs it back.
+  supertokensUserId String @unique
+
+  @@unique([userId, provider])
+  @@index([userId])
 }
 
 model UsersOnWorkspaces {

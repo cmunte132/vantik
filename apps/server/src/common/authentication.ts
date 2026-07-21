@@ -54,9 +54,20 @@ export async function hasValidPat(
     const userId = await usersService.getUserIdFromPat(authHeaderValue);
 
     if (userId) {
+      // A token belongs to an account, but SuperTokens mints sessions for
+      // credentials, so one of the account's ways in has to be named here.
+      // Any of them will do — the session resolves back to this same account
+      // through the identity it carries.
+      const supertokensUserId =
+        await usersService.getSupertokensIdForUser(userId);
+
+      if (!supertokensUserId) {
+        return undefined;
+      }
+
       const session = await createNewSessionWithoutRequestResponse(
         'public',
-        supertokens.convertToRecipeUserId(userId),
+        supertokens.convertToRecipeUserId(supertokensUserId),
       );
 
       request.session = session;

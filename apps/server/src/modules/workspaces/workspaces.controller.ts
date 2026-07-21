@@ -19,6 +19,7 @@ import { Request, Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
 import { Session as SessionDecorator } from 'modules/auth/session.decorator';
 import { Workspace as WorkspaceD } from 'modules/auth/session.decorator';
 import { AdminGuard } from 'modules/users/admin.guard';
@@ -47,7 +48,7 @@ export class WorkspacesController {
     @Res() res: Response,
     @Req() req: Request,
   ) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     await this.workspacesService.createInitialResources(
       userId,
       workspaceData,
@@ -61,7 +62,7 @@ export class WorkspacesController {
   async getAllWorkspaces(
     @SessionDecorator() session: SessionContainer,
   ): Promise<Workspace[]> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     return await this.workspacesService.getAllWorkspaces(userId);
   }
 
@@ -73,7 +74,7 @@ export class WorkspacesController {
     @Res() response: Response,
     @Req() request: Request,
   ) {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
 
     return await this.workspacesService.inviteAction(
       request,

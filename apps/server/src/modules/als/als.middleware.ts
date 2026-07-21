@@ -3,6 +3,8 @@ import { Request, Response, NextFunction } from 'express';
 import Session from 'supertokens-node/recipe/session';
 import { v4 as uuidv4 } from 'uuid';
 
+import { getAppUserId } from 'modules/auth/session-user';
+
 import { ALSService } from './als.service';
 
 @Injectable()
@@ -28,7 +30,7 @@ export class ALSMiddleware implements NestMiddleware {
     store.set('ipAddress', req.headers['x-forwarded-for']);
     store.set('requestId', requestId);
     if (session) {
-      store.set('actorId', session.getUserId());
+      store.set('actorId', getAppUserId(session));
       store.set('workspaceId', session.getTenantId());
     }
 

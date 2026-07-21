@@ -9,6 +9,8 @@ import {
   resolveWorkspaceId,
 } from 'common/workspace-access';
 
+import { getAppUserId } from 'modules/auth/session-user';
+
 /**
  * Proves that the issue, comment or team named in a request belongs to a
  * workspace the caller is a member of.
@@ -35,7 +37,7 @@ export class WorkspaceResourceGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const session = request.session as SessionContainer;
 
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
     const workspaceId = await resolveWorkspaceId(
       this.prisma,
       userId,

@@ -12,6 +12,7 @@ import { View } from '@vantikhq/types';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
 import { Session, UserId, Workspace } from 'modules/auth/session.decorator';
 
 import {
@@ -99,7 +100,7 @@ export class ViewsController {
     @Body()
     createViewBody: CreateViewsRequestBody,
   ): Promise<View> {
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
 
     return await this.viewsService.createView(
       createViewBody,

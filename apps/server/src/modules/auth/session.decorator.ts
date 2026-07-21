@@ -1,6 +1,8 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
+import { getAppUserId } from 'modules/auth/session-user';
+
 export const Session = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest();
@@ -14,7 +16,7 @@ export const UserId = createParamDecorator(
     const request = ctx.switchToHttp().getRequest();
 
     const session = request.session as SessionContainer;
-    const userId = session.getUserId();
+    const userId = getAppUserId(session);
 
     return userId;
   },

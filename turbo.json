@@ -4,6 +4,7 @@
     "VERSION",
     "NEXT_PUBLIC_VERSION",
     "NODE_ENV",
+    "NEXT_RUNTIME",
     "LOG_LEVEL",
     "CREATE_LOG_FILE",
     "POSTGRES_USER",

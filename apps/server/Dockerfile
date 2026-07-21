@@ -16,16 +16,16 @@ COPY --from=pruner --chown=node:node /app/out/pnpm-workspace.yaml ./pnpm-workspa
 ## Dev deps
 FROM base AS dev-deps
 WORKDIR /app
-RUN npm install -g pnpm@10.3.0
+RUN npm install -g pnpm@10.34.5
 ENV NODE_ENV development
-RUN pnpm install --ignore-scripts --no-frozen-lockfile
+RUN pnpm install --ignore-scripts --frozen-lockfile
 
 ## Production deps
 FROM base AS production-deps
 WORKDIR /app
-RUN npm install -g pnpm@10.3.0
+RUN npm install -g pnpm@10.34.5
 ENV NODE_ENV production
-RUN pnpm install --prod --no-frozen-lockfile
+RUN pnpm install --prod --frozen-lockfile
 COPY --from=pruner --chown=node:node /app/apps/server/prisma/schema.prisma /app/apps/server/prisma/schema.prisma
 ENV NPM_CONFIG_IGNORE_WORKSPACE_ROOT_CHECK true
 # RUN pnpx prisma@5.4.1 generate --schema /app/apps/server/prisma/schema.prisma
@@ -33,7 +33,7 @@ ENV NPM_CONFIG_IGNORE_WORKSPACE_ROOT_CHECK true
 ## Builder (builds the server)
 FROM base AS builder
 WORKDIR /app
-RUN npm install -g pnpm@10.3.0
+RUN npm install -g pnpm@10.34.5
 
 COPY --from=pruner --chown=node:node /app/out/full/ .
 COPY --from=dev-deps --chown=node:node /app/ .
@@ -49,7 +49,7 @@ RUN apk update \
   && rm -rf /var/cache/apk/*
 RUN apk add --no-cache dumb-init bash
 WORKDIR /app
-RUN npm install -g pnpm@10.3.0
+RUN npm install -g pnpm@10.34.5
 ENV NODE_ENV production
 
 COPY --from=pruner --chown=node:node /app/out/full/ .

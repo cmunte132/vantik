@@ -1,5 +1,7 @@
 // This file configures the initialization of Sentry on the client.
-// The config you add here will be used whenever a users loads a page in their browser.
+// The config you add here will be used whenever a user loads a page in their browser.
+// Next.js loads it as the client instrumentation hook; the old
+// `sentry.client.config.ts` name stops working under Turbopack.
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from '@sentry/nextjs';
@@ -24,3 +26,6 @@ Sentry.init({
   // in development and sample at a lower rate in production
   replaysSessionSampleRate: 0.1,
 });
+
+// Lets Sentry tie spans to client-side route changes.
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

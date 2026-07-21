@@ -4,8 +4,10 @@ module.exports = {
   extends: [
     "prettier",
     "plugin:prettier/recommended",
+    // `next/core-web-vitals` already pulls in `plugin:@next/next/recommended`.
+    // Extending @vercel/style-guide/eslint/next as well loads a second copy of
+    // @next/eslint-plugin-next and ESLint aborts with a plugin conflict.
     "next/core-web-vitals",
-    require.resolve("@vercel/style-guide/eslint/next"),
     "turbo",
   ],
   plugins: [

@@ -72,9 +72,13 @@ module.exports = withSentryConfig(module.exports, {
     disable: !process.env.SENTRY_AUTH_TOKEN,
   },
 
-  // Automatically tree-shake Sentry logger statements to reduce bundle size
-  disableLogger: true,
+  webpack: {
+    // Automatically tree-shake Sentry logger statements to reduce bundle size
+    treeshake: {
+      removeDebugLogging: true,
+    },
 
-  // Enables automatic instrumentation of Vercel Cron Monitors.
-  automaticVercelMonitors: true,
+    // Enables automatic instrumentation of Vercel Cron Monitors.
+    automaticVercelMonitors: true,
+  },
 });

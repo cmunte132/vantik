@@ -18,17 +18,17 @@ COPY --from=pruner --chown=node:node /app/out/pnpm-workspace.yaml ./pnpm-workspa
 FROM base AS dev-deps
 WORKDIR /app
 
-RUN npm install -g pnpm@10.3.0
+RUN npm install -g pnpm@10.34.5
 ENV NODE_ENV development
-RUN pnpm install --ignore-scripts --no-frozen-lockfile
+RUN pnpm install --ignore-scripts --frozen-lockfile
 
 ## Production deps
 FROM base AS production-deps
 WORKDIR /app
 
-RUN npm install -g pnpm@10.3.0
+RUN npm install -g pnpm@10.34.5
 ENV NODE_ENV production
-RUN pnpm install --prod --no-frozen-lockfile
+RUN pnpm install --prod --frozen-lockfile
 
 ## Builder (builds the webapp)
 FROM base AS builder
@@ -36,7 +36,7 @@ WORKDIR /app
 ARG SENTRY_AUTH_TOKEN
 
 
-RUN npm install -g pnpm@10.3.0
+RUN npm install -g pnpm@10.34.5
 
 COPY --from=pruner --chown=node:node /app/out/full/ .
 COPY --from=dev-deps --chown=node:node /app/ .
@@ -55,7 +55,7 @@ RUN pnpm run build --filter=webapp...
 FROM node:22-alpine AS runner
 RUN apk add --no-cache dumb-init bash
 WORKDIR /app
-RUN npm install -g pnpm@10.3.0
+RUN npm install -g pnpm@10.34.5
 ENV NODE_ENV production
 
 COPY --from=builder  --chown=node:node /app/apps/webapp/.next/standalone ./

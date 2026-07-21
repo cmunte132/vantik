@@ -12,9 +12,15 @@ import {
 import { Input } from '@vantikhq/ui/components/input';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import { ArrowLeft, Inbox } from '@vantikhq/ui/icons';
+import { useRouter } from 'next/router';
+import posthog from 'posthog-js';
 import React from 'react';
 import { useForm } from 'react-hook-form';
-import { createCode } from 'supertokens-web-js/recipe/passwordless';
+import {
+  createCode,
+  consumeCode,
+  clearLoginAttemptInfo,
+} from 'supertokens-web-js/recipe/passwordless';
 import { z } from 'zod';
 
 import { AuthLayout } from 'common/layouts/auth-layout';
@@ -33,7 +39,11 @@ export function Auth() {
   });
   const [emailSent, setEmailSent] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
+  const [code, setCode] = React.useState('');
+  const [verifying, setVerifying] = React.useState(false);
   const { toast } = useToast();
+  const router = useRouter();
+  const redirectToPath = router.query.redirectToPath;
 
   const onSubmit = async ({ email }: { email: string }) => {
     setLoading(true);
@@ -76,23 +86,110 @@ export function Auth() {
     setLoading(false);
   };
 
+  // Consume the one-time code the user types in. This keeps login inside the
+  // current browser context, which is what lets it work in an installed PWA:
+  // on iOS a tapped magic link opens in Safari, a separate context from the
+  // standalone app, so the code path is the only way to finish signing in
+  // without leaving the app.
+  const onVerifyCode = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setVerifying(true);
+    try {
+      const response = await consumeCode({ userInputCode: code.trim() });
+
+      if (response.status === 'OK') {
+        await clearLoginAttemptInfo();
+        if (
+          response.createdNewRecipeUser &&
+          response.user.loginMethods.length === 1
+        ) {
+          posthog.capture('user_signed_up', { email: response.user.emails[0] });
+        }
+        router.replace(redirectToPath ? (redirectToPath as string) : '/');
+      } else if (response.status === 'INCORRECT_USER_INPUT_CODE_ERROR') {
+        const left =
+          response.maximumCodeInputAttempts -
+          response.failedCodeInputAttemptCount;
+        toast({
+          variant: 'destructive',
+          title: 'Incorrect code',
+          description: `Please try again. ${left} attempt${
+            left === 1 ? '' : 's'
+          } left.`,
+        });
+      } else if (response.status === 'EXPIRED_USER_INPUT_CODE_ERROR') {
+        toast({
+          variant: 'destructive',
+          title: 'Code expired',
+          description: 'Re-enter your email to get a new code.',
+        });
+      } else {
+        // RESTART_FLOW_ERROR / SIGN_IN_UP_NOT_ALLOWED: send them back to start.
+        await clearLoginAttemptInfo();
+        toast({
+          variant: 'destructive',
+          title: 'Error!',
+          description: 'Login failed. Please try again.',
+        });
+        setCode('');
+        setEmailSent(false);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Error!',
+        description: err.isSuperTokensGeneralError
+          ? err.message
+          : 'Oops! Something went wrong.',
+      });
+    }
+    setVerifying(false);
+  };
+
   if (emailSent) {
     return (
       <AuthLayout>
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col w-[360px] gap-4 items-center">
-            <h1 className="text-lg text-center">We've sent you a magic link</h1>
+        <div className="flex flex-col w-[360px] gap-6">
+          <div className="flex flex-col gap-4 items-center">
             <Inbox size={32} />
+            <h1 className="text-lg text-center">Check your email</h1>
             <div className="text-center text-muted-foreground">
-              We sent you an email which contains a magic link that will log you
-              in to your account.
+              We sent a login code and a magic link to your email. Enter the
+              code below, or open the link on this device.
             </div>
           </div>
+
+          <form onSubmit={onVerifyCode} className="flex flex-col gap-2">
+            <Input
+              placeholder="Enter login code"
+              className="h-9 text-center tracking-[0.3em]"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              autoFocus
+            />
+            <Button
+              size="xl"
+              full
+              type="submit"
+              isLoading={verifying}
+              variant="secondary"
+              disabled={!code.trim()}
+            >
+              Verify code
+            </Button>
+          </form>
+
           <div className="flex justify-start items-center">
             <Button
               variant="ghost"
               className="flex items-center gap-1"
-              onClick={() => setEmailSent(false)}
+              onClick={() => {
+                setCode('');
+                setEmailSent(false);
+              }}
             >
               <ArrowLeft size={14} />
               Re-enter email

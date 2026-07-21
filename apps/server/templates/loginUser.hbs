@@ -43,17 +43,46 @@
     .button:hover {
       background-color: #004a98;
     }
+    .code-container {
+      text-align: center;
+      margin: 20px 0;
+    }
+    .code {
+      display: inline-block;
+      padding: 12px 24px;
+      background-color: #ffffff;
+      border: 1px solid #cacaca;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 28px;
+      font-weight: bold;
+      letter-spacing: 6px;
+      color: #000000;
+    }
+    .divider {
+      text-align: center;
+      color: #6e6e6e;
+      font-size: 12px;
+      margin: 16px 0;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <p>Hey {{userName}}!</p>
-    <p>To log in to your account, please click the button below:</p>
+    {{#if loginCode}}
+    <p>To log in on the device you started from, enter this code in the app:</p>
+    <div class="code-container">
+      <span class="code">{{loginCode}}</span>
+    </div>
+    <div class="divider">— or —</div>
+    {{/if}}
+    <p>Click the button below to log in with a magic link:</p>
     <div class="button-container">
       <a href="{{magicLink}}" class="button">Login</a>
     </div>
-    <p>This link expires in {{linkExpiresIn}} minutes.</p>
-    <p>If you did not request this login link, please ignore this email.</p>
+    <p>This code and link expire in {{linkExpiresIn}} minutes.</p>
+    <p>If you did not request this login, please ignore this email.</p>
     <p>Best regards,<br>Vantik Team</p>
   </div>
 </body>

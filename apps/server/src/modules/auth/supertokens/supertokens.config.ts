@@ -10,12 +10,15 @@ import { UsersService } from 'modules/users/users.service';
 
 const logger = new LoggerService('Supertokens');
 
-function logEmail(email: string, link: string) {
+function logEmail(email: string, link?: string, code?: string) {
   const message = `##### sendEmail to ${email}, subject: Login email
 
 Log in to Vantik.ai
 
-Click here to log in with this magic link:
+Enter this login code in the app:
+${code}
+
+Or click here to log in with this magic link:
 ${link}\n\n`;
 
   if (process.env.NODE_ENV !== 'production') {
@@ -77,9 +80,10 @@ export const recipeList = (
             async sendEmail({
               email,
               urlWithLinkCode,
+              userInputCode,
               codeLifetime,
             }: TypePasswordlessEmailDeliveryInput) {
-              logEmail(email, urlWithLinkCode);
+              logEmail(email, urlWithLinkCode, userInputCode);
 
               try {
                 await mailerService.sendMail({
@@ -89,6 +93,7 @@ export const recipeList = (
                   context: {
                     userName: email.split('@')[0],
                     magicLink: urlWithLinkCode,
+                    loginCode: userInputCode,
                     linkExpiresIn: Math.floor(codeLifetime / 60000),
                   },
                 });

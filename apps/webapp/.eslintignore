@@ -1,0 +1,3 @@
+# `next lint` knew to skip these; the ESLint CLI has to be told.
+.next/
+next-env.d.ts

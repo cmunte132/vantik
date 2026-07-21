@@ -13,14 +13,8 @@ import { loadClientConfig } from 'common/lib/client-config';
 // hundred milliseconds of boot go uncaptured; catching those would mean
 // inlining the DSN into the document, which is the build-time coupling this
 // change exists to remove.
+// An empty DSN disables the SDK, which is the default for self-hosted.
 void loadClientConfig().then(({ sentryDsn }) => {
-  // A DSN always carries a key before the host. Older .env.example shipped a
-  // plain host here, and passing that to init only produces console noise on
-  // every page load, so treat anything malformed as "Sentry is off".
-  if (!sentryDsn || !sentryDsn.includes('@')) {
-    return;
-  }
-
   Sentry.init({
     dsn: sentryDsn,
 

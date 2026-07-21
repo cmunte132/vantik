@@ -3,9 +3,6 @@
 module.exports = {
   reactStrictMode: false,
   transpilePackages: ['geist', '@vantikhq/ui', 'react-day-picker', 'date-fns'],
-  experimental: {
-    esmExternals: 'loose',
-  },
   async redirects() {
     return [
       {

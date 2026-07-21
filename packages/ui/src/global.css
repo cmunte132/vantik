@@ -1,6 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* @import must precede every other rule per the CSS spec. Tailwind expands the
+   directives below into thousands of rules, so keeping the imports underneath
+   them left the imports thousands of lines deep in the generated stylesheet -
+   which PostCSS tolerated and Turbopack's parser rejects. */
 @import './palette.css';
 @import './custom.css';
 @import './theme.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

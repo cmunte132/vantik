@@ -38,6 +38,6 @@ export function useGetSimilarIssuesQuery(
     // Frequency of Change would be Low
     refetchOnWindowFocus: false,
 
-    enabled
+    enabled,
   });
 }

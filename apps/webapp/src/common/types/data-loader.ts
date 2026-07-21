@@ -1,7 +1,7 @@
 const enum Action {
-  'I' = 'I',
-  'U' = 'U',
-  'D' = 'D',
+  I = 'I',
+  U = 'U',
+  D = 'D',
 }
 
 export interface SyncActionRecord {

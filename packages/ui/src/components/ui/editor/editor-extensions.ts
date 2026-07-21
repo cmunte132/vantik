@@ -1,7 +1,6 @@
 import { Extension, mergeAttributes } from '@tiptap/core';
 import CodeBlock from '@tiptap/extension-code-block';
 import Heading from '@tiptap/extension-heading';
-import { cx } from 'class-variance-authority';
 import HighlightExtension from '@tiptap/extension-highlight';
 import HorizontalRule from '@tiptap/extension-horizontal-rule';
 import TiptapLink from '@tiptap/extension-link';
@@ -9,12 +8,12 @@ import Placeholder from '@tiptap/extension-placeholder';
 import TaskItem from '@tiptap/extension-task-item';
 import TaskList from '@tiptap/extension-task-list';
 import StarterKit from '@tiptap/starter-kit';
+import { cx } from 'class-variance-authority';
 import { Markdown as MarkdownExtension } from 'tiptap-markdown';
-
-import { AIHighlight } from './primitives';
 
 import { fileExtension } from './file-extension';
 import { imageExtension } from './image-extension';
+import { AIHighlight } from './primitives';
 
 const tiptapLink = TiptapLink.configure({
   HTMLAttributes: {

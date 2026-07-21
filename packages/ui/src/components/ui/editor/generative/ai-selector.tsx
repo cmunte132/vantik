@@ -1,16 +1,16 @@
 'use client';
 
-import { Command, CommandInput } from '@vantikhq/ui/components/command';
-import { Loader } from '@vantikhq/ui/components/loader';
-import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { useCompletion } from 'ai/react';
-import { useEditor } from '../primitives';
-import { addAIHighlight } from '../primitives';
 import { useState } from 'react';
 import Markdown from 'react-markdown';
 
+import { Command, CommandInput } from '@vantikhq/ui/components/command';
+import { Loader } from '@vantikhq/ui/components/loader';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { AI } from '@vantikhq/ui/icons';
 
+import { useEditor } from '../primitives';
+import { addAIHighlight } from '../primitives';
 import AICompletionCommands from './ai-completion-command';
 import AISelectorCommands from './ai-selector-commands';
 

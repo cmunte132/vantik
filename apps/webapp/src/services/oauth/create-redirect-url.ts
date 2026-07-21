@@ -51,6 +51,6 @@ export function useCreateRedirectURLMutation({
     mutationFn: createRedirectURL,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

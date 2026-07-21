@@ -1,5 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionTypesEnum,
   CreateIssueDto,
@@ -14,7 +15,6 @@ import {
   NotificationEventFrom,
   WorkflowCategory,
 } from '@vantikhq/types';
-import { tasks } from '@trigger.dev/sdk/v3';
 import { PrismaService } from 'nestjs-prisma';
 import { notificationHandler } from 'trigger/notification';
 

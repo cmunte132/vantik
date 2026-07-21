@@ -21,7 +21,8 @@ export const UpdateTemplate = observer(
     const [name, setName] = React.useState(template.name);
     const { toast } = useToast();
 
-    const { mutate: updateTemplate, isPending: isLoading } = useUpdateTemplateMutation({});
+    const { mutate: updateTemplate, isPending: isLoading } =
+      useUpdateTemplateMutation({});
 
     const onTemplateCreate = (data: CreateIssueParams) => {
       if (!isLoading) {

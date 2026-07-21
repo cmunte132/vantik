@@ -18,18 +18,20 @@ export function Invites() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const { mutate: inviteAction, isPending: isLoading } = useInviteActionMutation({
-    onSuccess: (data: Invite) => {
-      if (data.status === 'ACCEPTED') {
-        toast({
-          title: 'Invitation accepted',
-          description: 'Current invitation for the workspace has been accepted',
-        });
+  const { mutate: inviteAction, isPending: isLoading } =
+    useInviteActionMutation({
+      onSuccess: (data: Invite) => {
+        if (data.status === 'ACCEPTED') {
+          toast({
+            title: 'Invitation accepted',
+            description:
+              'Current invitation for the workspace has been accepted',
+          });
 
-        window.location.reload();
-      }
-    },
-  });
+          window.location.reload();
+        }
+      },
+    });
 
   React.useEffect(() => {
     if (context?.workspaces.length > 0) {

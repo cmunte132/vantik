@@ -1,8 +1,8 @@
 import createLoadRemoteModule, {
   createRequires,
 } from '@paciolan/remote-module-loader';
-import * as vantikSDK from '@vantikhq/sdk';
 import { logger, task } from '@trigger.dev/sdk/v3';
+import * as vantikSDK from '@vantikhq/sdk';
 import axios from 'axios';
 
 const fetcher = async (url: string) => {

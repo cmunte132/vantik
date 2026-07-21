@@ -2,11 +2,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/ban-types */
 
-import type {
-  AjaxBaseConfig,
-  Primitive,
-  XHRErrorResponse,
-} from './ajaxBase';
+import type { AjaxBaseConfig, Primitive, XHRErrorResponse } from './ajaxBase';
 
 import qs, { type ParsedQs } from 'qs';
 import request from 'superagent';

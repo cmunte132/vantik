@@ -74,6 +74,6 @@ export function useCreateIssueMutation({
     mutationFn: createIssue,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

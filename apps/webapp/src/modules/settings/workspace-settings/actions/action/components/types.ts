@@ -45,10 +45,7 @@ export interface ArrayFieldConfig extends BaseFieldConfig {
 }
 
 export type FieldConfig =
-  | TextFieldConfig
-  | NumberFieldConfig
-  | ArrayFieldConfig
-  | SelectFieldConfig;
+  TextFieldConfig | NumberFieldConfig | ArrayFieldConfig | SelectFieldConfig;
 
 export interface FormSchema {
   title: string;

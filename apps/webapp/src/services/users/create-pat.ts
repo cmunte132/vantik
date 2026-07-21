@@ -1,7 +1,7 @@
 import type { Pat } from '@vantikhq/types';
 
-import { createPat } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { createPat } from '@vantikhq/services';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -33,6 +33,6 @@ export function useCreatePatMutation({
     mutationFn: createPat,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

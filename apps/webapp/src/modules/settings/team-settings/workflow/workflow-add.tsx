@@ -17,11 +17,12 @@ export function WorkflowAdd({ category, onCancel }: WorkflowAddProps) {
   const team = useCurrentTeam();
   const { workflowsStore } = useContextStore();
 
-  const { mutate: createWorkflow, isPending: isLoading } = useCreateWorkflowMutation({
-    onSuccess: () => {
-      onCancel();
-    },
-  });
+  const { mutate: createWorkflow, isPending: isLoading } =
+    useCreateWorkflowMutation({
+      onSuccess: () => {
+        onCancel();
+      },
+    });
 
   const onSubmit = async (name: string, description: string, color: string) => {
     createWorkflow({

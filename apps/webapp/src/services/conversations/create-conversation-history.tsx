@@ -1,5 +1,5 @@
-import { createConversationHistory } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { createConversationHistory } from '@vantikhq/services';
 
 import type { ConversationHistoryType } from 'common/types';
 
@@ -34,6 +34,6 @@ export function useCreateConversationHistoryMutation({
     mutationFn: createConversationHistory,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

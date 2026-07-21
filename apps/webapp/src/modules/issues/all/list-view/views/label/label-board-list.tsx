@@ -84,15 +84,15 @@ export const LabelBoardList = observer(({ label }: LabelBoardItemProps) => {
             rowIndex={index}
           >
             {({ registerChild }) => (
-            <div style={style} key={key} ref={registerChild}>
-              <BoardIssueItem
-                issueId={issue.id}
-                isDragging={dragSnapshot.isDragging}
-                provided={dragProvided}
-                key={key}
-              />
-            </div>
-          )}
+              <div style={style} key={key} ref={registerChild}>
+                <BoardIssueItem
+                  issueId={issue.id}
+                  isDragging={dragSnapshot.isDragging}
+                  provided={dragProvided}
+                  key={key}
+                />
+              </div>
+            )}
           </CellMeasurer>
         )}
       </Draggable>
@@ -225,15 +225,15 @@ export const NoLabelBoardList = observer(() => {
             rowIndex={index}
           >
             {({ registerChild }) => (
-            <div style={style} key={key} ref={registerChild}>
-              <BoardIssueItem
-                issueId={issue.id}
-                isDragging={dragSnapshot.isDragging}
-                provided={dragProvided}
-                key={key}
-              />
-            </div>
-          )}
+              <div style={style} key={key} ref={registerChild}>
+                <BoardIssueItem
+                  issueId={issue.id}
+                  isDragging={dragSnapshot.isDragging}
+                  provided={dragProvided}
+                  key={key}
+                />
+              </div>
+            )}
           </CellMeasurer>
         )}
       </Draggable>

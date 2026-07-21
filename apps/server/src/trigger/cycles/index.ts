@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import { CycleStatusEnum } from '@vantikhq/types';
 import { logger, schedules } from '@trigger.dev/sdk/v3';
+import { CycleStatusEnum } from '@vantikhq/types';
 
 interface Payload {
   type: 'DECLARATIVE' | 'IMPERATIVE';

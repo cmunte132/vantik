@@ -47,6 +47,6 @@ export function useAITitleMutation({
     mutationFn: aiTitleIssues,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

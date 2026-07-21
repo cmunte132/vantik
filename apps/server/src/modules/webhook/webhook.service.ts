@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionEntity,
   ActionStatusEnum,
@@ -8,7 +9,6 @@ import {
   EventQueryParams,
   IntegrationPayloadEventType,
 } from '@vantikhq/types';
-import { tasks } from '@trigger.dev/sdk/v3';
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
 import { actionRun } from 'trigger/action-run';
@@ -117,5 +117,4 @@ export default class WebhookService {
 
     return { status: 200 };
   }
-
 }

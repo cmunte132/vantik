@@ -1,6 +1,6 @@
-import { EditorBubble, useEditor, removeAIHighlight } from '../primitives';
 import { Fragment, type ReactNode, useEffect } from 'react';
 
+import { EditorBubble, useEditor, removeAIHighlight } from '../primitives';
 import { AISelector } from './ai-selector';
 
 interface GenerativeMenuSwitchProps {

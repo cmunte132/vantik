@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionEntity,
   ActionEvent,
   ActionStatusEnum,
   ActionTypesEnum,
 } from '@vantikhq/types';
-import { tasks } from '@trigger.dev/sdk/v3';
 import { PrismaService } from 'nestjs-prisma';
 import { actionRun } from 'trigger/action-run';
 

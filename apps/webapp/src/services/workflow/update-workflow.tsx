@@ -1,7 +1,7 @@
 import type { Workflow } from '@vantikhq/types';
 
-import { updateWorkflow, type UpdateWorkflowInput } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { updateWorkflow, type UpdateWorkflowInput } from '@vantikhq/services';
 
 import { useContextStore } from 'store/global-context-provider';
 
@@ -53,6 +53,6 @@ export function useUpdateWorkflowMutation({
     mutationFn: update,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

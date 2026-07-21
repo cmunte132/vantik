@@ -50,6 +50,6 @@ export function useCreateLabelMutation({
     mutationFn: createLabel,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

@@ -11,9 +11,9 @@ import { useLocalState } from 'hooks/use-local-state';
 
 import { ProjectIssues } from './issues';
 import { Overview } from './overview';
+import { Header } from '../header';
 import { RightSide } from './overview/right-side';
 import { ProjectProgress } from './project-progress';
-import { Header } from '../header';
 
 export const Project = observer(({ view }: { view: 'overview' | 'issues' }) => {
   const project = useProject();

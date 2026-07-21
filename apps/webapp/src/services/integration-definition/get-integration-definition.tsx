@@ -1,7 +1,7 @@
 import type { IntegrationDefinition } from '@vantikhq/types';
 
-import { getIntegrationDefinition } from '@vantikhq/services';
 import { type UseQueryResult, useQuery } from '@tanstack/react-query';
+import { getIntegrationDefinition } from '@vantikhq/services';
 
 import { type XHRErrorResponse } from 'services/utils';
 
@@ -20,6 +20,6 @@ export function useGetIntegrationDefinition(
     staleTime: 1000000,
 
     // Frequency of Change would be Low
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
 }

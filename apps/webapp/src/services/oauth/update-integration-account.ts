@@ -48,6 +48,6 @@ export function useUpdateIntegrationAccountMutation({
     mutationFn: updateIntegrationAccount,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

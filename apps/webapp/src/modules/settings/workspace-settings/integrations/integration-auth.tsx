@@ -25,7 +25,8 @@ export const IntegrationAuth = observer(
       personal,
     );
 
-    const { mutate: createRedirectURL, isPending: redirectURLLoading } = useCreateRedirectURLMutation({
+    const { mutate: createRedirectURL, isPending: redirectURLLoading } =
+      useCreateRedirectURLMutation({
         onSuccess: (data) => {
           const redirectURL = data.redirectURL;
 

@@ -1,7 +1,7 @@
 import type { Pat } from '@vantikhq/types';
 
-import { deletePat } from '@vantikhq/services';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { deletePat } from '@vantikhq/services';
 
 import { GetPats } from './get-pats';
 
@@ -38,6 +38,6 @@ export function useDeletePatMutation({
     mutationFn: deletePat,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

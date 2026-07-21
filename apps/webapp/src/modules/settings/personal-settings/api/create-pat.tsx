@@ -14,7 +14,11 @@ interface NewLabelProps {
 export function CreatePat({ onCancel }: NewLabelProps) {
   const [labelName, setLabelName] = React.useState('');
 
-  const { mutate: createPat, data, isPending: isLoading } = useCreatePatMutation({});
+  const {
+    mutate: createPat,
+    data,
+    isPending: isLoading,
+  } = useCreatePatMutation({});
 
   const onSubmit = async () => {
     createPat({

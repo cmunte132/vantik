@@ -1,7 +1,7 @@
 import type { Team } from '@vantikhq/types';
 
-import { createTeam } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { createTeam } from '@vantikhq/services';
 
 export interface MutationParams {
   onMutate?: () => void;
@@ -33,6 +33,6 @@ export function useCreateTeamMutation({
     mutationFn: createTeam,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

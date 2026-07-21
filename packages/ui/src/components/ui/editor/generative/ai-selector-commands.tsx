@@ -1,9 +1,10 @@
-import { CommandItem, CommandList } from '@vantikhq/ui/components/command';
 import { StepForward } from 'lucide-react';
+
+import { CommandItem, CommandList } from '@vantikhq/ui/components/command';
+import { SubIssue } from '@vantikhq/ui/icons';
+
 import { useEditor } from '../primitives';
 import { getPrevText } from '../primitives';
-
-import { SubIssue } from '@vantikhq/ui/icons';
 
 const options = [
   {

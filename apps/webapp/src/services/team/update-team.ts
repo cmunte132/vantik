@@ -1,5 +1,5 @@
-import { updateTeam, type UpdateTeamDtoWithTeamId } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { updateTeam, type UpdateTeamDtoWithTeamId } from '@vantikhq/services';
 
 import type { TeamType } from 'common/types';
 
@@ -51,6 +51,6 @@ export function useUpdateTeamMutation({
     mutationFn: update,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

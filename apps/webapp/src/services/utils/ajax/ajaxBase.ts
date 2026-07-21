@@ -1,13 +1,7 @@
 import type request from 'superagent';
 
 export type Primitive =
-  | string
-  | number
-  | boolean
-  | bigint
-  | symbol
-  | null
-  | undefined;
+  string | number | boolean | bigint | symbol | null | undefined;
 
 /**
  * Integration of Native Promise Interface.

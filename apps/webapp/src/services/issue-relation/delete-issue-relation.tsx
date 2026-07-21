@@ -44,6 +44,6 @@ export function useDeleteIssueRelationMutation({
     mutationFn: deleteIssueRelation,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

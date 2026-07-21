@@ -1,7 +1,7 @@
 import type { ActionConfig } from '@vantikhq/types';
 
-import { getActionInputs } from '@vantikhq/services';
 import { type UseQueryResult, useQuery } from '@tanstack/react-query';
+import { getActionInputs } from '@vantikhq/services';
 
 import { type XHRErrorResponse } from 'services/utils';
 
@@ -21,6 +21,6 @@ export function useGetActionInputsQuery(
     staleTime: 10000,
 
     // Frequency of Change would be Low
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
 }

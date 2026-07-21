@@ -1,7 +1,7 @@
 import type { Template } from '@vantikhq/types';
 
-import { updateTemplate } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { updateTemplate } from '@vantikhq/services';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -33,6 +33,6 @@ export function useUpdateTemplateMutation({
     mutationFn: updateTemplate,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

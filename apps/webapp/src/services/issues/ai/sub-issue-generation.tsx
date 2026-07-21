@@ -51,6 +51,6 @@ export function useSubIssueGenerationMutation({
     mutationFn: aiSubIssueGeneration,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

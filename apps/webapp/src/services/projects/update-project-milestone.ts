@@ -1,7 +1,7 @@
 import type { ProjectMilestone } from '@vantikhq/types';
 
-import { updateProjectMilestone } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { updateProjectMilestone } from '@vantikhq/services';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -33,6 +33,6 @@ export function useUpdateProjectMilestoneMutation({
     mutationFn: updateProjectMilestone,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

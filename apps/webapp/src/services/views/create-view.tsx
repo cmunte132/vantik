@@ -52,6 +52,6 @@ export function useCreateViewMutation({
     mutationFn: createView,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

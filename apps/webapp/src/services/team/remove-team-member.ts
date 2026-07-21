@@ -1,5 +1,5 @@
-import { removeTeamMember } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { removeTeamMember } from '@vantikhq/services';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -39,6 +39,6 @@ export function useRemoveTeamMemberMutation({
     mutationFn: removeTeamMember,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

@@ -1,9 +1,11 @@
+import { Check, TextQuote, TrashIcon } from 'lucide-react';
+
 import {
   CommandGroup,
   CommandItem,
   CommandSeparator,
 } from '@vantikhq/ui/components/command';
-import { Check, TextQuote, TrashIcon } from 'lucide-react';
+
 import { useEditor } from '../primitives';
 
 const AICompletionCommands = ({

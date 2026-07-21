@@ -42,6 +42,6 @@ export function useDeleteLabelMutation({
     mutationFn: deleteLabel,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

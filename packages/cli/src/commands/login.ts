@@ -26,7 +26,9 @@ export function configureLoginCommand(program: Command) {
   return commonOptions(
     program
       .command('login')
-      .description('Login with Vantik so you can perform authenticated actions'),
+      .description(
+        'Login with Vantik so you can perform authenticated actions',
+      ),
   )
     .version(getVersion(), '-v, --version', 'Display the version number')
     .action(async () => {

@@ -1,7 +1,7 @@
 import type { Cycle } from '@vantikhq/types';
 
-import { updateCycle } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { updateCycle } from '@vantikhq/services';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -33,6 +33,6 @@ export function useUpdateCycleMutation({
     mutationFn: updateCycle,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

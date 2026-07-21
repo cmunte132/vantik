@@ -42,6 +42,6 @@ export function useDeleteLinkedIssueMutation({
     mutationFn: deleteLinkedIssue,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

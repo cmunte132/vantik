@@ -53,6 +53,6 @@ export function useCreateLinkedIssueMutation({
     mutationFn: createLinkedIssue,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

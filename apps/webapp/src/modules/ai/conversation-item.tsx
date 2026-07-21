@@ -1,8 +1,8 @@
+import { Editor } from '@tiptap/core';
 import { UserTypeEnum } from '@vantikhq/types';
 import { Button } from '@vantikhq/ui/components/button';
 import { defaultExtensions } from '@vantikhq/ui/components/editor/editor-extensions';
 import { AI } from '@vantikhq/ui/icons';
-import { Editor } from '@tiptap/core';
 import { observer } from 'mobx-react-lite';
 import getConfig from 'next/config';
 import React, { useEffect, useRef } from 'react';

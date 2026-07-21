@@ -25,6 +25,6 @@ export function useGetExternalActionDataQuery(
     staleTime: 10000,
 
     // Frequency of Change would be Low
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
 }

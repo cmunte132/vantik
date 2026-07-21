@@ -28,6 +28,6 @@ export function useGetLinkedIssueDetailsQuery(
     staleTime: 1,
 
     // Frequency of Change would be Low
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
 }

@@ -20,7 +20,8 @@ interface ActionCardProps {
 
 export const ActionCardExternal = observer(({ action }: ActionCardProps) => {
   const workspace = useCurrentWorkspace();
-  const { isPending: isLoading, mutate: createActionAPI } = useCreateActionMutation({});
+  const { isPending: isLoading, mutate: createActionAPI } =
+    useCreateActionMutation({});
   const { push } = useRouter();
 
   const createAction = () => {

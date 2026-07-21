@@ -48,6 +48,6 @@ export function useUpdateLabelMutation({
     mutationFn: updateLabel,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

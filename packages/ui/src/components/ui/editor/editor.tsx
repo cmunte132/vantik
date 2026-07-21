@@ -1,5 +1,9 @@
 import type { Editor as EditorT, Extension, Mark, Node } from '@tiptap/core';
 
+import * as React from 'react';
+import { useDebouncedCallback } from 'use-debounce';
+
+import { defaultExtensions, getPlaceholder } from './editor-extensions';
 import {
   type EditorInstance,
   EditorContent,
@@ -8,21 +12,17 @@ import {
   handleCommandNavigation,
   type SuggestionItem,
 } from './primitives';
-import * as React from 'react';
-import { useDebouncedCallback } from 'use-debounce';
-
-import { defaultExtensions, getPlaceholder } from './editor-extensions';
 import { LinkSelector, NodeSelector, TextButtons } from './selectors';
 import { slashCommand } from './slash-command';
 import { handleDrop, handleMarkAndImagePaste, uploadFn } from './utils';
+import { cn } from '../../../lib/utils';
+import { Separator } from '../separator';
 import {
   EditorRoot,
   EditorCommand,
   EditorCommandItem,
   EditorCommandEmpty,
 } from './utils/index';
-import { cn } from '../../../lib/utils';
-import { Separator } from '../separator';
 
 interface EditorExtensionsProps {
   suggestionItems: SuggestionItem[];

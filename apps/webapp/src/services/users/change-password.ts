@@ -49,6 +49,6 @@ export function useChangePasswordMutation({
     mutationFn: updateUser,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

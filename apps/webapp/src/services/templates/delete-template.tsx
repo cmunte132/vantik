@@ -1,5 +1,5 @@
-import { deleteTemplate } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { deleteTemplate } from '@vantikhq/services';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -31,6 +31,6 @@ export function useDeleteTemplateMutation({
     mutationFn: deleteTemplate,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

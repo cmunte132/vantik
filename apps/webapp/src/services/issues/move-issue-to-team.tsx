@@ -48,6 +48,6 @@ export function useMoveIssueToTeamMutation({
     mutationFn: moveIssueToTeam,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

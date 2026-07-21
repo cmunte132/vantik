@@ -1,4 +1,3 @@
-import { cn } from '@vantikhq/ui/lib/utils';
 import Mention from '@tiptap/extension-mention';
 import {
   mergeAttributes,
@@ -6,6 +5,7 @@ import {
   NodeViewWrapper,
   ReactNodeViewRenderer,
 } from '@tiptap/react';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 
 import type { User } from 'common/types';

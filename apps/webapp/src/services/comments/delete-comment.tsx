@@ -1,5 +1,5 @@
-import { deleteIssueComment } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { deleteIssueComment } from '@vantikhq/services';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -31,6 +31,6 @@ export function useDeleteCommentMutation({
     mutationFn: deleteIssueComment,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

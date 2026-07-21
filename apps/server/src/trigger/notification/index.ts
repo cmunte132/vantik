@@ -1,5 +1,5 @@
-import { ActionEventPayload } from '@vantikhq/types';
 import { task } from '@trigger.dev/sdk/v3';
+import { ActionEventPayload } from '@vantikhq/types';
 
 import { emailHandler } from './handlers/email-handler';
 import { vantikHandler } from './handlers/vantik-handler';

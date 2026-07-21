@@ -83,6 +83,6 @@ export function useUpdateIssueMutation({
     mutationFn: update,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

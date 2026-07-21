@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { tasks } from '@trigger.dev/sdk/v3';
 import {
   RoleEnum,
   CreateActionDto,
@@ -16,7 +17,6 @@ import {
   ActionScheduleDto,
   User,
 } from '@vantikhq/types';
-import { tasks } from '@trigger.dev/sdk/v3';
 import { PrismaService } from 'nestjs-prisma';
 import { actionRun } from 'trigger/action-run';
 import { v4 as uuidv4 } from 'uuid';

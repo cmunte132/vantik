@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import { ActionEventPayload } from '@vantikhq/types';
 import { task } from '@trigger.dev/sdk/v3';
+import { ActionEventPayload } from '@vantikhq/types';
 
 import { subscriptionHandler } from './subscription-handler';
 

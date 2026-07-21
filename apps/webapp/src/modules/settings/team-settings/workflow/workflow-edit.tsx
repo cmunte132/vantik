@@ -21,11 +21,12 @@ export function WorkflowEdit({
 }: WorkflowEditProps) {
   const team = useCurrentTeam();
 
-  const { mutate: updateWorkflow, isPending: isLoading } = useUpdateWorkflowMutation({
-    onSuccess: () => {
-      onCancel();
-    },
-  });
+  const { mutate: updateWorkflow, isPending: isLoading } =
+    useUpdateWorkflowMutation({
+      onSuccess: () => {
+        onCancel();
+      },
+    });
 
   const onSubmit = async (name: string, description: string, color: string) => {
     updateWorkflow({

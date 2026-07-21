@@ -67,7 +67,7 @@ export function NewIssueTitle({ form, index }: NewIssueTitleProps) {
   });
 
   useDescriptionChange(touched, descriptionString, (description: string) => {
-    mutate({ description, workspaceId: workspace.id }), 100, 40;
+    (mutate({ description, workspaceId: workspace.id }), 100, 40);
   });
 
   return (

@@ -44,6 +44,6 @@ export function useDeleteIntegrationAccount({
     mutationFn: deleteIntegrationAccount,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

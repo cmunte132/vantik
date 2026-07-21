@@ -44,6 +44,6 @@ export function useImpersonateMutation({
     mutationFn: impersonate,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

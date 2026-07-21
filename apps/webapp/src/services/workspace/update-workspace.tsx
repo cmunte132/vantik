@@ -45,6 +45,6 @@ export function useUpdateWorkspaceMutation({
     mutationFn: updateWorkspace,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

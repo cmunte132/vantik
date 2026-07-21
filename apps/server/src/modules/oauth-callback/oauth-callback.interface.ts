@@ -52,7 +52,7 @@ export interface ProviderConfig {
 }
 
 const enum ProviderAuthModes {
-  'OAuth2' = 'OAuth2',
+  OAuth2 = 'OAuth2',
 }
 
 export interface ProviderTemplate extends OAuth2Params {

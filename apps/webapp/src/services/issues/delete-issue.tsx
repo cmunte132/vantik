@@ -43,6 +43,6 @@ export function useDeleteIssueMutation({
     mutationFn: deleteIssue,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

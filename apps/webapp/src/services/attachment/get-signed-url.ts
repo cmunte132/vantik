@@ -25,6 +25,6 @@ export function useGetSignedURLQuery(
     staleTime: Infinity,
 
     // Frequency of Change would be Low
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
 }

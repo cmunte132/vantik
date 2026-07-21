@@ -1,5 +1,4 @@
 import { ImageIcon } from 'lucide-react';
-import { Command, createSuggestionItems } from './primitives';
 
 import {
   BulletListLine,
@@ -11,6 +10,7 @@ import {
   TextLine,
 } from '@vantikhq/ui/icons';
 
+import { Command, createSuggestionItems } from './primitives';
 import { uploadFileFn, uploadFn } from './utils';
 import { renderItems } from './utils/render-items';
 

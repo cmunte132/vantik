@@ -42,6 +42,6 @@ export function useDeleteViewMutation({
     mutationFn: deleteView,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

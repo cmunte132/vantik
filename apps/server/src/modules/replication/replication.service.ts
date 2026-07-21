@@ -278,7 +278,11 @@ export default class ReplicationService {
       if (tablesToTrigger.has(modelName)) {
         const changedData = this.getChangedData(log);
 
-        const workspaceId = await getWorkspaceId(this.prisma, modelName, modelId);
+        const workspaceId = await getWorkspaceId(
+          this.prisma,
+          modelName,
+          modelId,
+        );
 
         await this.actionEventService.createEvent({
           modelName,

@@ -56,6 +56,6 @@ export function useSuggestionIssueMutation({
     mutationFn: suggestionIssue,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

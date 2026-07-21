@@ -1,7 +1,7 @@
 import type { Project } from '@vantikhq/types';
 
-import { createProject } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { createProject } from '@vantikhq/services';
 
 export interface MutationParams {
   onMutate?: () => void;
@@ -33,6 +33,6 @@ export function useCreateProjectMutation({
     mutationFn: createProject,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

@@ -103,18 +103,18 @@ export const TeamList = observer(({ teams }: TeamListProps) => {
         rowIndex={index}
       >
         {({ registerChild }) => (
-        <div style={style} key={key} ref={registerChild}>
-          {row.type === 'header' ? (
-            getHeaderRow(row, index)
-          ) : (
-            <IssueListItem
-              issueId={row.issueId}
-              key={index}
-              changeHeight={(issueCount) => changeHeight(issueCount, index)}
-            />
-          )}
-        </div>
-      )}
+          <div style={style} key={key} ref={registerChild}>
+            {row.type === 'header' ? (
+              getHeaderRow(row, index)
+            ) : (
+              <IssueListItem
+                issueId={row.issueId}
+                key={index}
+                changeHeight={(issueCount) => changeHeight(issueCount, index)}
+              />
+            )}
+          </div>
+        )}
       </CellMeasurer>
     );
   };

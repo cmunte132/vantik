@@ -51,6 +51,6 @@ export function useUpdateIssueSubscribeMutation({
     mutationFn: updateIssueSubscribe,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

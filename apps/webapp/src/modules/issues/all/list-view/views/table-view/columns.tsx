@@ -1,7 +1,7 @@
 'use client';
 
-import type { Row } from '@tanstack/react-table';
 import type { UseMutateFunction } from '@tanstack/react-query';
+import type { Row } from '@tanstack/react-table';
 
 import Link from 'next/link';
 import React from 'react';

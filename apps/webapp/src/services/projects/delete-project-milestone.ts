@@ -1,5 +1,5 @@
-import { deleteProjectMilestone } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { deleteProjectMilestone } from '@vantikhq/services';
 
 interface MutationParams {
   onMutate?: () => void;
@@ -31,6 +31,6 @@ export function useDeleteProjectMilestoneMutation({
     mutationFn: deleteProjectMilestone,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

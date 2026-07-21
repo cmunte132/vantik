@@ -1,7 +1,7 @@
 import type { Template } from '@vantikhq/types';
 
-import { createTemplate } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { createTemplate } from '@vantikhq/services';
 
 export interface MutationParams {
   onMutate?: () => void;
@@ -33,6 +33,6 @@ export function useCreateTemplateMutation({
     mutationFn: createTemplate,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

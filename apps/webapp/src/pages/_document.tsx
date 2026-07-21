@@ -11,7 +11,12 @@ export default function Document() {
         <meta name="theme-color" content="#1a89c5" />
         <meta name="application-name" content="Vantik" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" type="image/png" href="/icon-192.png" sizes="192x192" />
+        <link
+          rel="icon"
+          type="image/png"
+          href="/icon-192.png"
+          sizes="192x192"
+        />
         {/* iOS: no manifest install support, needs these for Add to Home Screen */}
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

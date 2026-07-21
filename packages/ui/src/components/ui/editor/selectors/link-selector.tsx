@@ -1,3 +1,6 @@
+import { Check, Trash } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+
 import { Button } from '@vantikhq/ui/components/button';
 import { Input } from '@vantikhq/ui/components/input';
 import {
@@ -5,11 +8,9 @@ import {
   Popover,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { Check, Trash } from 'lucide-react';
-import { useEditor } from '../primitives';
-import { useEffect, useRef } from 'react';
-
 import { LinkLine } from '@vantikhq/ui/icons';
+
+import { useEditor } from '../primitives';
 
 export function isValidUrl(url: string) {
   try {

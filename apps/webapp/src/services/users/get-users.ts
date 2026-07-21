@@ -35,6 +35,6 @@ export function useGetUsersQuery(): UseQueryResult<User[], XHRErrorResponse> {
     staleTime: 1000000,
 
     // Frequency of Change would be Low
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
 }

@@ -1,9 +1,9 @@
 import { WorkflowCategoryEnum } from '@vantikhq/types';
-import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import {
   Editor,
   EditorExtensions,
 } from '@vantikhq/ui/components/editor/editor';
+import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 import { useDebouncedCallback } from 'use-debounce';

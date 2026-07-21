@@ -51,6 +51,6 @@ export function useUpdateIssueCommentMutation({
     mutationFn: updateIssueComment,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

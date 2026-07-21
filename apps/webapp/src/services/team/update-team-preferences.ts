@@ -1,5 +1,5 @@
-import { updateTeamPreferences } from '@vantikhq/services';
 import { useMutation } from '@tanstack/react-query';
+import { updateTeamPreferences } from '@vantikhq/services';
 
 import type { TeamType } from 'common/types';
 
@@ -33,6 +33,6 @@ export function useUpdateTeamPreferencesMutation({
     mutationFn: updateTeamPreferences,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

@@ -82,15 +82,15 @@ export const CategoryBoardList = observer(
               rowIndex={index}
             >
               {({ registerChild }) => (
-              <div style={style} key={key} ref={registerChild}>
-                <BoardIssueItem
-                  issueId={issue.id}
-                  isDragging={dragSnapshot.isDragging}
-                  provided={dragProvided}
-                  key={key}
-                />
-              </div>
-            )}
+                <div style={style} key={key} ref={registerChild}>
+                  <BoardIssueItem
+                    issueId={issue.id}
+                    isDragging={dragSnapshot.isDragging}
+                    provided={dragProvided}
+                    key={key}
+                  />
+                </div>
+              )}
             </CellMeasurer>
           )}
         </Draggable>
@@ -147,7 +147,8 @@ export const CategoryBoardList = observer(
                         // react-virtualized has no public handle to its scroll container
                         // and findDOMNode is gone in React 19, so reach into the Grid.
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        const container = (ref as any)?.Grid?._scrollingContainer;
+                        const container = (ref as any)?.Grid
+                          ?._scrollingContainer;
                         if (container instanceof HTMLElement) {
                           droppableProvided.innerRef(container);
                         }

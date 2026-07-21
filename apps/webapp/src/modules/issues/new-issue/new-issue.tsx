@@ -10,11 +10,7 @@ import { Separator } from '@vantikhq/ui/components/separator';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import { cn } from '@vantikhq/ui/lib/utils';
 import React from 'react';
-import {
-  type UseFormReturn,
-  useFieldArray,
-  useForm,
-} from 'react-hook-form';
+import { type UseFormReturn, useFieldArray, useForm } from 'react-hook-form';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { Key } from 'ts-key-enum';
 import { z } from 'zod';

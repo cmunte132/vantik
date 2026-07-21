@@ -49,6 +49,6 @@ export function useUpdateNotificationMutation({
     mutationFn: updateNotification,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

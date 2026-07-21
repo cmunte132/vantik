@@ -50,6 +50,6 @@ export function useSentryConnectMutation({
     mutationFn: connectSentry,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

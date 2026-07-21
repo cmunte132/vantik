@@ -49,6 +49,6 @@ export function useInviteActionMutation({
     mutationFn: inviteAction,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

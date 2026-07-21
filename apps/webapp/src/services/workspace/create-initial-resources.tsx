@@ -58,6 +58,6 @@ export function useCreateInitialResourcesMutation({
     mutationFn: createInitialResources,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

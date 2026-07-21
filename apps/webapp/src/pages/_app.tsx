@@ -4,6 +4,7 @@ import '@vantikhq/ui/global.css';
 import type { NextComponentType } from 'next';
 import type { AppContext, AppInitialProps, AppLayoutProps } from 'next/app';
 
+import { HydrationBoundary, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@vantikhq/ui/components/theme-provider';
 import { Toaster } from '@vantikhq/ui/components/toaster';
 import { TooltipProvider } from '@vantikhq/ui/components/tooltip';
@@ -16,7 +17,6 @@ import posthog from 'posthog-js';
 import { PostHogProvider } from 'posthog-js/react';
 import React from 'react';
 import { HotkeysProvider } from 'react-hotkeys-hook';
-import { HydrationBoundary, QueryClientProvider } from '@tanstack/react-query';
 import { SuperTokensWrapper } from 'supertokens-auth-react';
 
 import { initPosthog, initSuperTokens } from 'common/init-config';

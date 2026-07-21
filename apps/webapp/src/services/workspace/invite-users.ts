@@ -53,6 +53,6 @@ export function useInviteUsersMutation({
     mutationFn: inviteUsers,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

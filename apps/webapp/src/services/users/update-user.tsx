@@ -49,6 +49,6 @@ export function useUpdateUserMutation({
     mutationFn: updateUser,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

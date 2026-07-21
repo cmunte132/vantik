@@ -78,15 +78,15 @@ export const TeamBoardList = observer(({ team }: TeamBoardListProps) => {
             rowIndex={index}
           >
             {({ registerChild }) => (
-            <div style={style} key={key} ref={registerChild}>
-              <BoardIssueItem
-                issueId={issue.id}
-                isDragging={dragSnapshot.isDragging}
-                provided={dragProvided}
-                key={key}
-              />
-            </div>
-          )}
+              <div style={style} key={key} ref={registerChild}>
+                <BoardIssueItem
+                  issueId={issue.id}
+                  isDragging={dragSnapshot.isDragging}
+                  provided={dragProvided}
+                  key={key}
+                />
+              </div>
+            )}
           </CellMeasurer>
         )}
       </Draggable>

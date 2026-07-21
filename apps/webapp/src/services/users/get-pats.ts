@@ -1,7 +1,7 @@
 import type { Pat } from '@vantikhq/types';
 
-import { getPats } from '@vantikhq/services';
 import { type UseQueryResult, useQuery } from '@tanstack/react-query';
+import { getPats } from '@vantikhq/services';
 
 import { type XHRErrorResponse } from 'services/utils';
 
@@ -18,6 +18,6 @@ export function useGetPatsQuery(): UseQueryResult<Pat[], XHRErrorResponse> {
     staleTime: 1,
 
     // Frequency of Change would be Low
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
   });
 }

@@ -47,6 +47,6 @@ export function useAIFilterIssuesMutation({
     mutationFn: aiFilterIssues,
     onError: onMutationError,
     onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess
+    onSuccess: onMutationSuccess,
   });
 }

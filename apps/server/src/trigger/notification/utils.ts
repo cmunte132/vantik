@@ -1,11 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import {
-  Issue,
-  NotificationActionType,
-  NotificationActionTypeEnum,
-  NotificationData,
-  NotificationEventFrom,
-} from '@vantikhq/types';
 import { Blockquote } from '@tiptap/extension-blockquote';
 import { BulletList } from '@tiptap/extension-bullet-list';
 import { CodeBlock } from '@tiptap/extension-code-block';
@@ -23,6 +16,13 @@ import { TaskList } from '@tiptap/extension-task-list';
 import { Text } from '@tiptap/extension-text';
 import { Underline } from '@tiptap/extension-underline';
 import { generateHTML } from '@tiptap/html';
+import {
+  Issue,
+  NotificationActionType,
+  NotificationActionTypeEnum,
+  NotificationData,
+  NotificationEventFrom,
+} from '@vantikhq/types';
 import TurndownService from 'turndown';
 
 async function handleIssueAssignment(

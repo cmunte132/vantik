@@ -128,7 +128,7 @@ export class UsersService {
     }));
   }
 
-  async getUserByEmail(email: string): Promise<User> {
+  async getUserByEmail(email: string): Promise<User | null> {
     const user = await this.prisma.user.findUnique({
       where: {
         email,
@@ -142,7 +142,10 @@ export class UsersService {
       },
     });
 
-    return userSerializer(user);
+    // An unknown address is an answer, not a fault. The serializer reads
+    // straight through the record, so handing it a miss threw a TypeError and
+    // made "is this email taken" impossible to ask.
+    return user ? userSerializer(user) : null;
   }
   async updateUser(id: string, updateData: UpdateUserBody) {
     const user = await this.prisma.user.update({

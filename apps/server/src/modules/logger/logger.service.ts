@@ -167,7 +167,38 @@ export class LoggerService {
     this.logger.info(input);
   }
 
-  error(input: LogInput) {
+  /**
+   * Nest does not call this the way the rest of the codebase does. Its own
+   * internals — the exception handler above all — pass `(message, stack)` as
+   * two plain strings, which arrived here as an object whose `.message` was
+   * undefined and printed as a bare `ERROR Vantik undefined`, throwing away
+   * the one thing worth logging. Unhandled exceptions are exactly when the
+   * stack matters, so both shapes are accepted.
+   */
+  error(input: LogInput | string | Error, stack?: string) {
+    // Nest does not call this the way the rest of the codebase does. Its
+    // exception handler hands over the Error itself, or a message and a stack
+    // as two plain strings. Both arrived here as a `LogInput` whose `.message`
+    // was undefined and printed as a bare `ERROR Vantik undefined`, throwing
+    // away the only part worth reading. Unhandled exceptions are exactly when
+    // the stack matters.
+    if (input instanceof Error) {
+      this.logger.error({
+        message: input.message,
+        error: input,
+        payload: { stack: input.stack },
+      });
+      return;
+    }
+
+    if (typeof input === 'string') {
+      this.logger.error({
+        message: input,
+        ...(stack ? { payload: { stack } } : {}),
+      });
+      return;
+    }
+
     this.logger.error(input);
   }
 

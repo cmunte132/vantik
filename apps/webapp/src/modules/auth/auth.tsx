@@ -1,6 +1,6 @@
 /* eslint-disable react/no-unescaped-entities */
 import { zodResolver } from '@hookform/resolvers/zod';
-import { RiMailFill } from '@remixicon/react';
+import { RiFingerprintFill, RiMailFill } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Form,
@@ -21,6 +21,11 @@ import {
   consumeCode,
   clearLoginAttemptInfo,
 } from 'supertokens-web-js/recipe/passwordless';
+import {
+  authenticateCredentialWithSignIn,
+  doesBrowserSupportWebAuthn,
+  registerCredentialWithSignUp,
+} from 'supertokens-web-js/recipe/webauthn';
 import { z } from 'zod';
 
 import { AuthLayout } from 'common/layouts/auth-layout';
@@ -41,9 +46,107 @@ export function Auth() {
   const [loading, setLoading] = React.useState(false);
   const [code, setCode] = React.useState('');
   const [verifying, setVerifying] = React.useState(false);
+  const [passkeySupported, setPasskeySupported] = React.useState(false);
+  const [passkeyLoading, setPasskeyLoading] = React.useState(false);
   const { toast } = useToast();
   const router = useRouter();
   const redirectToPath = router.query.redirectToPath;
+
+  // Asked rather than assumed: the passkey controls stay hidden on browsers
+  // that would only fail once pressed.
+  React.useEffect(() => {
+    doesBrowserSupportWebAuthn({ userContext: {} })
+      .then((response) => {
+        setPasskeySupported(
+          response.status === 'OK' && response.browserSupportsWebauthn,
+        );
+      })
+      .catch(() => setPasskeySupported(false));
+  }, []);
+
+  const onAuthenticated = () => {
+    router.replace(redirectToPath ? (redirectToPath as string) : '/');
+  };
+
+  const passkeyError = (description: string) => {
+    toast({ variant: 'destructive', title: 'Error!', description });
+  };
+
+  // No email is asked for here. The browser already knows which passkeys it
+  // holds for this site and prompts the user to pick one, so a returning user
+  // types nothing at all.
+  const onPasskeySignIn = async () => {
+    setPasskeyLoading(true);
+    try {
+      const response = await authenticateCredentialWithSignIn({
+        userContext: {},
+      });
+
+      if (response.status === 'OK') {
+        onAuthenticated();
+      } else if (response.status === 'SIGN_IN_NOT_ALLOWED') {
+        passkeyError(response.reason);
+      } else if (response.status === 'WEBAUTHN_NOT_SUPPORTED') {
+        passkeyError('This browser cannot use passkeys. Use your email.');
+      } else if (response.status !== 'FAILED_TO_AUTHENTICATE_USER') {
+        // FAILED_TO_AUTHENTICATE_USER is what a cancelled system prompt looks
+        // like, and someone who dismissed the dialog does not need telling.
+        passkeyError('That passkey did not work. Try your email instead.');
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      passkeyError(
+        err.isSuperTokensGeneralError
+          ? err.message
+          : 'Oops! Something went wrong.',
+      );
+    }
+    setPasskeyLoading(false);
+  };
+
+  // Creating an account with a passkey and nothing else. This is the only way
+  // in on an install with no mail server, since there is no inbox to send a
+  // code to.
+  const onPasskeySignUp = async ({ email }: { email: string }) => {
+    setPasskeyLoading(true);
+    try {
+      const response = await registerCredentialWithSignUp({
+        email,
+        userContext: {},
+      });
+
+      if (response.status === 'OK') {
+        posthog.capture('user_signed_up', { email });
+        onAuthenticated();
+      } else if (response.status === 'SIGN_UP_NOT_ALLOWED') {
+        passkeyError(response.reason);
+      } else if (
+        response.status === 'EMAIL_ALREADY_EXISTS_ERROR' ||
+        response.status === 'INVALID_CREDENTIALS_ERROR'
+      ) {
+        // The account exists but this passkey is not attached to it, and an
+        // unproven email address is not enough to attach one. Proving the
+        // inbox first is the way through.
+        passkeyError(
+          'That email already has an account. Sign in with a login code, then add a passkey from settings.',
+        );
+      } else if (response.status === 'AUTHENTICATOR_ALREADY_REGISTERED') {
+        passkeyError('That passkey is already registered. Sign in with it.');
+      } else if (response.status === 'INVALID_EMAIL_ERROR') {
+        passkeyError(response.err);
+      } else if (response.status !== 'FAILED_TO_REGISTER_USER') {
+        passkeyError('Could not create that passkey. Try your email instead.');
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      passkeyError(
+        err.isSuperTokensGeneralError
+          ? err.message
+          : 'Oops! Something went wrong.',
+      );
+    }
+    setPasskeyLoading(false);
+  };
 
   const onSubmit = async ({ email }: { email: string }) => {
     setLoading(true);
@@ -209,6 +312,27 @@ export function Auth() {
         </div>
 
         <div className="flex flex-col gap-2">
+          {passkeySupported && (
+            <>
+              <Button
+                className="flex gap-2"
+                size="xl"
+                full
+                variant="secondary"
+                isLoading={passkeyLoading}
+                onClick={onPasskeySignIn}
+              >
+                <RiFingerprintFill size={18} /> Sign in with a passkey
+              </Button>
+
+              <div className="flex items-center gap-3 my-2 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />
+                or
+                <span className="h-px flex-1 bg-border" />
+              </div>
+            </>
+          )}
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
               <FormField
@@ -220,6 +344,7 @@ export function Auth() {
                       <Input
                         placeholder="Email address"
                         className="h-9"
+                        autoComplete="username webauthn"
                         {...field}
                       />
                     </FormControl>
@@ -229,7 +354,7 @@ export function Auth() {
                 )}
               />
 
-              <div className="flex justify-end">
+              <div className="flex flex-col gap-2">
                 <Button
                   className="flex gap-2"
                   size="xl"
@@ -240,6 +365,20 @@ export function Auth() {
                 >
                   <RiMailFill size={18} /> Send a magic link
                 </Button>
+
+                {passkeySupported && (
+                  <Button
+                    className="flex gap-2"
+                    size="xl"
+                    full
+                    type="button"
+                    variant="ghost"
+                    isLoading={passkeyLoading}
+                    onClick={form.handleSubmit(onPasskeySignUp)}
+                  >
+                    Create an account with a passkey
+                  </Button>
+                )}
               </div>
             </form>
           </Form>

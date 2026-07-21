@@ -133,7 +133,7 @@
     "simple-oauth2": "^5.0.0",
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.7.4",
-    "supertokens-node": "^21.0.0",
+    "supertokens-node": "^24.0.2",
     "turndown": "^7.2.0",
     "typesense": "^1.7.2",
     "uuid": "^10.0.0",

@@ -9,6 +9,7 @@ overrides:
   react-dom: ^19.2.7
   '@types/react': ^19.2.14
   '@types/react-dom': ^19.2.3
+  '@types/express': ^5.0.6
 
 importers:
 
@@ -358,8 +359,8 @@ importers:
         specifier: ^4.7.4
         version: 4.8.3
       supertokens-node:
-        specifier: ^21.0.0
-        version: 21.1.2(encoding@0.1.13)
+        specifier: ^24.0.2
+        version: 24.0.2(encoding@0.1.13)
       turndown:
         specifier: ^7.2.0
         version: 7.2.4
@@ -407,7 +408,7 @@ importers:
         specifier: ^0.6.0
         version: 0.6.0
       '@types/express':
-        specifier: ^5.0.0
+        specifier: ^5.0.6
         version: 5.0.6
       '@types/jest':
         specifier: ^29.5.11
@@ -614,11 +615,11 @@ importers:
         specifier: ^8.1.2
         version: 8.1.2
       supertokens-auth-react:
-        specifier: ^0.36.1
-        version: 0.36.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supertokens-web-js@0.8.0)
+        specifier: ^0.51.2
+        version: 0.51.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supertokens-web-js@0.16.0)
       supertokens-web-js:
-        specifier: ^0.8.0
-        version: 0.8.0
+        specifier: ^0.16.0
+        version: 0.16.0
       tippy.js:
         specifier: ^6.3.7
         version: 6.3.7
@@ -5939,6 +5940,13 @@ packages:
   '@sideway/pinpoint@2.0.0':
     resolution: {integrity: sha512-RNiOoTPkptFtSVzQevY/yWtZwf/RxyVnPy/OcA9HBM3MlGDnBEYL5B41H0MTn0Uec8Hi+2qUtTfG2WWZBmMejQ==}
 
+  '@simplewebauthn/browser@13.3.0':
+    resolution: {integrity: sha512-BE/UWv6FOToAdVk0EokzkqQQDOWtNydYlY6+OrmiZ5SCNmb41VehttboTetUM3T/fr6EAFYVXjz4My2wg230rQ==}
+
+  '@simplewebauthn/types@12.0.0':
+    resolution: {integrity: sha512-q6y8MkoV8V8jB4zzp18Uyj2I7oFp2/ONL8c3j8uT06AOWu3cIChc1au71QYHrP2b+xDapkGTiv+9lX7xkTlAsA==}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+
   '@sinclair/typebox@0.27.12':
     resolution: {integrity: sha512-hhyNJ+nbR6ZR7pToHvllEFun9TL0sbL+tk/ON75lo+Xas054uez98qRbsuNt7MBCyZKK4+8Yli/OAGZhmfBZ/g==}
 
@@ -6673,9 +6681,6 @@ packages:
 
   '@types/express-serve-static-core@5.1.2':
     resolution: {integrity: sha512-d3KvEXBSo/lOAMc2u6fkyDHBvetBHeqD7wm/AcXfLpSOQwlmG9D/aQ0SFswVjv05p7ullQS7Mjohj6/VdbZuTg==}
-
-  '@types/express@4.17.25':
-    resolution: {integrity: sha512-dVd04UKsfpINUnK0yBoYHDF3xu7xVH4BuDotC/xGuycx4CgbP48X/KF/586bcObxT0HENHXEU8Nqtu6NR+eKhw==}
 
   '@types/express@5.0.6':
     resolution: {integrity: sha512-sKYVuV7Sv9fbPIt/442koC7+IIwK5olP1KWeD88e/idgoJqDm3JV/YUiPwkoKK92ylff2MGxSz1CSjsXelx0YA==}
@@ -8546,8 +8551,8 @@ packages:
     deprecated: Non-backwards compatible Breaking changes
     hasBin: true
 
-  cross-fetch@3.2.0:
-    resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
+  cross-fetch@4.1.0:
+    resolution: {integrity: sha512-uKm5PU+MHTootlWEY+mZ4vvXoCn4fLQxT9dSc1sXVMSFkINTJVN8cAQROpwcKm8bJ/c7rgZVIBWzH5T78sNZZw==}
 
   cross-spawn@5.1.0:
     resolution: {integrity: sha512-pTgQJ5KC0d2hcY8eyL1IzlBPYjTkyH72XRZPnLyKus2mBfNjQs3klqbJU2VILqZryAZUt9JOb3h/mWMy23/f5A==}
@@ -10425,7 +10430,7 @@ packages:
     resolution: {integrity: sha512-RKzRWNPxUZqbuk3BC5mGVJbBnWgr+diEnjJexIOytFbBzDy88Fbh/YvBr3DsNrl1jYAfjWfpATEv0NO35FDuPQ==}
     engines: {node: '>=12.0.0'}
     peerDependencies:
-      '@types/express': ^4.17.13
+      '@types/express': ^5.0.6
     peerDependenciesMeta:
       '@types/express':
         optional: true
@@ -12439,10 +12444,6 @@ packages:
     resolution: {integrity: sha512-wRNIrw4DmVLKQlbgOMdkMx27Wrpzes2hh5Jtbi2bjPd+4wJstWIqP5A+lscnqbm0xxmT5Bpg8Lec5ItEBwx6BQ==}
     engines: {node: '>=18'}
 
-  nodemailer@6.10.1:
-    resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
-    engines: {node: '>=6.0.0'}
-
   nodemailer@8.0.5:
     resolution: {integrity: sha512-0PF8Yb1yZuQfQbq+5/pZJrtF6WQcjTd5/S4JOHs9PGFxuTqoB/icwuB44pOdURHJbRKX1PPoJZtY7R4VUoCC8w==}
     engines: {node: '>=6.0.0'}
@@ -13887,6 +13888,9 @@ packages:
     resolution: {integrity: sha512-KTqnxsgGiQ6ZAzZCVlJH5eOjSnvlyEgx1m8bkRJfOhmGRqfo5KLvmAlACQkrjEtOQ4B7wF9TdSLIs9O90MX9xA==}
     engines: {node: '>=16.0.0'}
 
+  qrcode-generator@2.0.4:
+    resolution: {integrity: sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==}
+
   qs@6.15.3:
     resolution: {integrity: sha512-O9gl3zCl5h5blw1KGUzQKhA5oUXSl8rwUIM5o0S3nCXMliSvy5Dzx7/DJcI+SwgICv+IneSZwhBh1oSyEHA71A==}
     engines: {node: '>=0.6'}
@@ -14008,6 +14012,11 @@ packages:
     peerDependencies:
       react: ^19.2.7
       react-dom: ^19.2.7
+
+  react-qr-code@2.2.0:
+    resolution: {integrity: sha512-e5nS0UUN22K3Nf8KBRUzemfdJ6OmnN5w+kbnj1lvJaol9RyVRFeGl05bCkxSN2ZegbLxjjYjX1+mmAoX9+fAhw==}
+    peerDependencies:
+      react: ^19.2.7
 
   react-reconciler@0.29.2:
     resolution: {integrity: sha512-zZQqIiYgDCTP/f1N/mAR10nJGrPD2ZR+jDSEsKWJHYC7Cm2wodlwbR3upZRdC3cjIjSlTLNVyO7Iu0Yy7t2AYg==}
@@ -15088,25 +15097,25 @@ packages:
     engines: {node: '>=6.4.0'}
     deprecated: Please upgrade to supertest v7.1.3+, see release notes at https://github.com/forwardemail/supertest/releases/tag/v7.1.3 - maintenance is supported by Forward Email @ https://forwardemail.net
 
-  supertokens-auth-react@0.36.1:
-    resolution: {integrity: sha512-ZVN4GOFOm52B4RIO1Hn+hs9AwANIa9+edx8T34pDhjkeDlL/yn+a2FS4bOQroLjnvxJ3qhn7Uv5lQ9KlAMiQKw==}
+  supertokens-auth-react@0.51.2:
+    resolution: {integrity: sha512-nOFPqY2OHTZ0CaKDc88V7GxA780jmmu1jJ+KoNk1WW4KOiPMVPXSbJIbAnME9KByXeUkO1ZsEBk2c1xmDZUFzQ==}
     engines: {node: '>=16.0.0', npm: '>=8'}
     peerDependencies:
       react: ^19.2.7
       react-dom: ^19.2.7
-      supertokens-web-js: ^0.8.0
+      supertokens-web-js: ^0.16.0
 
   supertokens-js-override@0.0.4:
     resolution: {integrity: sha512-r0JFBjkMIdep3Lbk3JA+MpnpuOtw4RSyrlRAbrzMcxwiYco3GFWl/daimQZ5b1forOiUODpOlXbSOljP/oyurg==}
 
-  supertokens-node@21.1.2:
-    resolution: {integrity: sha512-YX5qxT/cP/qsuvsH9j8oSsOdkvJhOk4eM+pGpJ0YToj4LZMa8FIUFnh4SDuAO/AC4SuTeIyhysMG4DdDUJdz8Q==}
+  supertokens-node@24.0.2:
+    resolution: {integrity: sha512-L4n0zchL3K36aMgUWT5WVuNCw7KWWGtZq//Ti+jWcyRphb/sVaKM76fI8I2/JBqTIGXre9dAQx3myETRSA+etQ==}
 
-  supertokens-web-js@0.8.0:
-    resolution: {integrity: sha512-kkvuPbdy1I0e7nejVJAhpPJhR5h7EUHdn7Fh1YqfSjZfSJh46J3JU2qWGCgSDVZuD1hSuUKb6skF9CQnltHWrQ==}
+  supertokens-web-js@0.16.0:
+    resolution: {integrity: sha512-wuIdlVJtOsx4ZX0kCyl8lxmmAodXLlMAniZEHyVhsH2fhersh7bMrHpvgN9WoC470HYNC22qpHdlJngvyh/cSA==}
 
-  supertokens-website@17.0.5:
-    resolution: {integrity: sha512-NBOiKO3NV2VBAFgO+ZEmpOPVde2BwOjB6T0qjj2XaZX4jh+6yDGhrckJMwF5R0ucpTgOQXmBrpDnUJ5kFZlgiQ==}
+  supertokens-website@20.1.6:
+    resolution: {integrity: sha512-WSehco2PsrFp4WY7h6tDutYyi2nPgJS8lahUadcL/cpBqgEuZ3pjnvN1NDASSNSTfXeO1smm3HrvvLZG5C7qHA==}
 
   supports-color@5.5.0:
     resolution: {integrity: sha512-QjVjwdXIt408MIiAqCX4oUKsgU2EqAGzs2Ppkm4aQYbjm+ZEWEcW4SfFNTr4uMNZma0ey4f5lgLrkB0aX0QMow==}
@@ -22272,6 +22281,10 @@ snapshots:
 
   '@sideway/pinpoint@2.0.0': {}
 
+  '@simplewebauthn/browser@13.3.0': {}
+
+  '@simplewebauthn/types@12.0.0': {}
+
   '@sinclair/typebox@0.27.12': {}
 
   '@sinclair/typebox@0.34.52': {}
@@ -22991,7 +23004,7 @@ snapshots:
 
   '@types/connect-history-api-fallback@1.5.4':
     dependencies:
-      '@types/express-serve-static-core': 4.19.9
+      '@types/express-serve-static-core': 5.1.2
       '@types/node': 20.19.43
 
   '@types/connect@3.4.38':
@@ -23046,13 +23059,6 @@ snapshots:
       '@types/qs': 6.15.1
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
-
-  '@types/express@4.17.25':
-    dependencies:
-      '@types/body-parser': 1.19.6
-      '@types/express-serve-static-core': 4.19.9
-      '@types/qs': 6.15.1
-      '@types/serve-static': 1.15.10
 
   '@types/express@5.0.6':
     dependencies:
@@ -25164,7 +25170,7 @@ snapshots:
 
   cronstrue@2.61.0: {}
 
-  cross-fetch@3.2.0(encoding@0.1.13):
+  cross-fetch@4.1.0(encoding@0.1.13):
     dependencies:
       node-fetch: 2.7.0(encoding@0.1.13)
     transitivePeerDependencies:
@@ -27679,7 +27685,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  http-proxy-middleware@2.0.10(@types/express@4.17.25):
+  http-proxy-middleware@2.0.10(@types/express@5.0.6):
     dependencies:
       '@types/http-proxy': 1.17.17
       http-proxy: 1.18.1
@@ -27687,7 +27693,7 @@ snapshots:
       is-plain-obj: 3.0.0
       micromatch: 4.0.8
     optionalDependencies:
-      '@types/express': 4.17.25
+      '@types/express': 5.0.6
     transitivePeerDependencies:
       - debug
 
@@ -30479,10 +30485,7 @@ snapshots:
 
   node-releases@2.0.51: {}
 
-  nodemailer@6.10.1: {}
-
-  nodemailer@8.0.5:
-    optional: true
+  nodemailer@8.0.5: {}
 
   nodemailer@9.0.3: {}
 
@@ -32171,6 +32174,8 @@ snapshots:
 
   pvutils@1.1.5: {}
 
+  qrcode-generator@2.0.4: {}
+
   qs@6.15.3:
     dependencies:
       es-define-property: 1.0.1
@@ -32311,6 +32316,12 @@ snapshots:
       react-dom: 19.2.7(react@19.2.7)
       react-lifecycles-compat: 3.0.4
       warning: 4.0.3
+
+  react-qr-code@2.2.0(react@19.2.7):
+    dependencies:
+      prop-types: 15.8.1
+      qrcode-generator: 2.0.4
+      react: 19.2.7
 
   react-reconciler@0.29.2(react@19.2.7):
     dependencies:
@@ -33693,27 +33704,29 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  supertokens-auth-react@0.36.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supertokens-web-js@0.8.0):
+  supertokens-auth-react@0.51.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supertokens-web-js@0.16.0):
     dependencies:
+      '@simplewebauthn/types': 12.0.0
       intl-tel-input: 17.0.21
       prop-types: 15.8.1
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
+      react-qr-code: 2.2.0(react@19.2.7)
       supertokens-js-override: 0.0.4
-      supertokens-web-js: 0.8.0
+      supertokens-web-js: 0.16.0
 
   supertokens-js-override@0.0.4: {}
 
-  supertokens-node@21.1.2(encoding@0.1.13):
+  supertokens-node@24.0.2(encoding@0.1.13):
     dependencies:
       buffer: 6.0.3
       content-type: 1.0.5
       cookie: 0.7.2
-      cross-fetch: 3.2.0(encoding@0.1.13)
+      cross-fetch: 4.1.0(encoding@0.1.13)
       debug: 4.4.3(supports-color@5.5.0)
       jose: 4.15.9
       libphonenumber-js: 1.13.8
-      nodemailer: 6.10.1
+      nodemailer: 8.0.5
       pako: 2.2.0
       pkce-challenge: 3.1.0
       process: 0.11.10
@@ -33725,12 +33738,13 @@ snapshots:
       - encoding
       - supports-color
 
-  supertokens-web-js@0.8.0:
+  supertokens-web-js@0.16.0:
     dependencies:
+      '@simplewebauthn/browser': 13.3.0
       supertokens-js-override: 0.0.4
-      supertokens-website: 17.0.5
+      supertokens-website: 20.1.6
 
-  supertokens-website@17.0.5:
+  supertokens-website@20.1.6:
     dependencies:
       browser-tabs-lock: 1.3.0
       supertokens-js-override: 0.0.4
@@ -34739,7 +34753,7 @@ snapshots:
     dependencies:
       '@types/bonjour': 3.5.13
       '@types/connect-history-api-fallback': 1.5.4
-      '@types/express': 4.17.25
+      '@types/express': 5.0.6
       '@types/express-serve-static-core': 4.19.9
       '@types/serve-index': 1.9.4
       '@types/serve-static': 1.15.10
@@ -34753,7 +34767,7 @@ snapshots:
       connect-history-api-fallback: 2.0.0
       express: 4.22.2
       graceful-fs: 4.2.11
-      http-proxy-middleware: 2.0.10(@types/express@4.17.25)
+      http-proxy-middleware: 2.0.10(@types/express@5.0.6)
       ipaddr.js: 2.4.0
       launch-editor: 2.14.1
       open: 10.2.0

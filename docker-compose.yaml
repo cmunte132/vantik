@@ -122,7 +122,10 @@ services:
 
   supertokens:
     container_name: vantik-supertokens
-    image: supertokens/supertokens-postgresql:latest
+    # Pinned deliberately. An auth core that moves under us on every pull is a
+    # liability, and the SDKs speak a specific CDI version: supertokens-node 24
+    # needs CDI 5.3, which this core serves.
+    image: supertokens/supertokens-postgresql:12.0.6
     restart: unless-stopped
     depends_on:
       postgres:

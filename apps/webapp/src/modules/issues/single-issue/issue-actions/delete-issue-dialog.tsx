@@ -8,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogFooter,
 } from '@vantikhq/ui/components/alert-dialog';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import { useRouter } from 'next/router';
 import React from 'react';
 
@@ -28,17 +29,31 @@ export function DeleteIssueDialog({
   setDeleteIssueDialog,
   issue,
 }: DeleteIssueDialogProps) {
-  const { mutate: deleteIssue } = useDeleteIssueMutation({});
+  const { toast } = useToast();
   const currentTeam = useCurrentTeam();
   const {
     query: { workspaceSlug },
     push,
   } = useRouter();
 
+  // Navigating away before the request lands hides its outcome: a failed
+  // delete looked exactly like a successful one, with the issue still there.
+  const { mutate: deleteIssue } = useDeleteIssueMutation({
+    onSuccess: () => {
+      setDeleteIssueDialog(false);
+      push(`/${workspaceSlug}/team/${currentTeam.identifier}/all`);
+    },
+    onError: (error: string) => {
+      setDeleteIssueDialog(false);
+      toast({
+        title: 'Could not delete the issue',
+        description: error,
+      });
+    },
+  });
+
   const onDeleteIssue = () => {
     deleteIssue({ issueId: issue.id, teamId: currentTeam.id });
-    setDeleteIssueDialog(false);
-    push(`/${workspaceSlug}/team/${currentTeam.identifier}/all`);
   };
 
   return (

@@ -68,25 +68,30 @@ export default class SyncActionsService {
       requestedWorkspaceId,
     );
 
-    let syncActions = await this.prisma.syncAction.findMany({
+    // One row per model, and it has to be the *latest* one. A soft delete
+    // leaves both an 'I' and a 'D' row for the same modelId (upsertSyncAction
+    // keys on modelId+action), so deduplicating in ascending order keeps the
+    // insert and discards the delete — the bootstrap then hands a deleted
+    // record back to the client as an insert. Those resurrected rows are
+    // undeletable: the client shows them, but every write against them 404s at
+    // WorkspaceResourceGuard, which only matches `deleted: null`.
+    const latestPerModel = await this.prisma.syncAction.findMany({
       where: {
         workspaceId,
         modelName: { in: modelNames.split(',') as ModelName[] },
       },
       orderBy: {
-        sequenceId: 'asc',
+        sequenceId: 'desc',
       },
       distinct: ['modelId'],
     });
-    const deleteModelIds = new Set(
-      syncActions
-        .filter((action) => action.action === 'D')
-        .map((action) => action.modelId),
-    );
 
-    syncActions = syncActions.filter(
-      (action) => !deleteModelIds.has(action.modelId),
-    );
+    // A bootstrap describes the world as it stands, so deleted records are
+    // dropped rather than sent as deletes. Applied oldest first, as the client
+    // expects.
+    const syncActions = latestPerModel
+      .filter((action) => action.action !== 'D')
+      .reverse();
 
     return {
       syncActions: await getSyncActionsData(

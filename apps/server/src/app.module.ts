@@ -15,6 +15,7 @@ import { AttachmentModule } from 'modules/attachments/attachments.module';
 import { AuthModule } from 'modules/auth/auth.module';
 import { BullConfigModule } from 'modules/bull/bull.module';
 import { CachceModule } from 'modules/cache/cache.module';
+import { ClientConfigModule } from 'modules/client-config/client-config.module';
 import { CompanyModule } from 'modules/company/company.modules';
 import { ConversationModule } from 'modules/conversation/conversation.module';
 import { ConversationHistoryModule } from 'modules/conversation-history/conversation-history.module';
@@ -130,6 +131,7 @@ import { AppService } from './app.service';
     ConversationHistoryModule,
 
     CachceModule,
+    ClientConfigModule,
 
     CompanyModule,
     PeopleModule,

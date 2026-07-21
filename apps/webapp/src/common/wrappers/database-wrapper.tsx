@@ -1,5 +1,4 @@
 import { Loader } from '@vantikhq/ui/components/loader';
-import getConfig from 'next/config';
 import * as React from 'react';
 
 import { hash } from 'common/common-utils';
@@ -8,7 +7,10 @@ import { useCurrentWorkspace } from 'hooks/workspace';
 
 import { initDatabase } from 'store/database';
 import { UserContext } from 'store/user-context';
-const { publicRuntimeConfig } = getConfig();
+
+// Baked in at build time on purpose: the version identifies the bundle the
+// browser is running, so it must not follow the container's environment.
+const APP_VERSION = process.env.NEXT_PUBLIC_VERSION;
 
 interface Props {
   children: React.ReactElement;
@@ -24,11 +26,8 @@ export function DatabaseWrapper(props: Props): React.ReactElement {
   React.useEffect(() => {
     if (workspace) {
       const version = localStorage.getItem('version');
-      if (version !== publicRuntimeConfig.NEXT_PUBLIC_VERSION) {
-        localStorage.setItem(
-          'version',
-          publicRuntimeConfig.NEXT_PUBLIC_VERSION,
-        );
+      if (version !== APP_VERSION) {
+        localStorage.setItem('version', APP_VERSION);
       }
 
       initDatabase(hash(hashKey));

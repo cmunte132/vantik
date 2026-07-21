@@ -26,7 +26,8 @@ import { SCOPES } from 'common/scopes';
 import { StoreContext, storeContextStore } from 'store/global-context-provider';
 
 initSuperTokens();
-initPosthog();
+// Analytics config is fetched, so this settles a beat after the app mounts.
+void initPosthog();
 
 TimeAgo.addDefaultLocale(en);
 

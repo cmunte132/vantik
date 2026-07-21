@@ -1,10 +1,10 @@
 import { Loader } from '@vantikhq/ui/components/loader';
 import { observer } from 'mobx-react-lite';
-import getConfig from 'next/config';
 import * as React from 'react';
 import { Socket, io } from 'socket.io-client';
 
 import { hash } from 'common/common-utils';
+import { loadClientConfig } from 'common/lib/client-config';
 
 import { useCurrentWorkspace } from 'hooks/workspace';
 
@@ -54,8 +54,6 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
 
     const [socket, setSocket] = React.useState<Socket | undefined>(undefined);
 
-    const { publicRuntimeConfig } = getConfig();
-
     React.useEffect(() => {
       if (!socket && workspaceStore.workspace?.id) {
         initSocket();
@@ -69,7 +67,11 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
     }, [workspaceStore.workspace]);
 
     async function initSocket() {
-      const socket = io(publicRuntimeConfig.NEXT_PUBLIC_BACKEND_HOST, {
+      // The gateway is mounted on the server's own port and is not proxied
+      // through this app, so it needs an absolute origin rather than a path.
+      const { socketHost } = await loadClientConfig();
+
+      const socket = io(socketHost, {
         query: {
           workspaceId: workspaceStore.workspace.id,
           userId: user.id,

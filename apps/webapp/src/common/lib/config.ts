@@ -1,19 +1,21 @@
-import getConfig from 'next/config';
 import Router from 'next/router';
 import Passwordless from 'supertokens-auth-react/recipe/passwordless';
 import SessionReact from 'supertokens-auth-react/recipe/session';
 
-const { publicRuntimeConfig } = getConfig();
-
 export const frontendConfig = () => {
+  // The API is proxied through this same origin at /api, and the auth UI is
+  // served from it too, so both domains are just wherever the page was loaded
+  // from. Deriving them keeps SuperTokens init synchronous and correct for any
+  // hostname an install is reached on.
+  const origin = typeof window === 'undefined' ? '' : window.location.origin;
+
   const appInfo = {
     appName: 'Vantik',
-    apiDomain: publicRuntimeConfig.NEXT_PUBLIC_BASE_HOST,
-    websiteDomain: publicRuntimeConfig.NEXT_PUBLIC_BASE_HOST,
+    apiDomain: origin,
+    websiteDomain: origin,
     apiBasePath: '/api/auth',
     websiteBasePath: '/auth',
   };
-  const isProd = publicRuntimeConfig.NEXT_PUBLIC_NODE_ENV === 'production';
 
   return {
     appInfo,
@@ -21,13 +23,11 @@ export const frontendConfig = () => {
       Passwordless.init({
         contactMethod: 'EMAIL',
       }),
-      SessionReact.init(
-        isProd
-          ? {
-              sessionTokenBackendDomain: '.vantik.dev',
-            }
-          : {},
-      ),
+      // Session cookies are same-origin now that apiDomain matches the page
+      // origin, so there is no backend domain to pin. The previous build
+      // hardcoded '.vantik.dev' whenever NODE_ENV was production, which broke
+      // sessions for every self-hosted install on its own domain.
+      SessionReact.init(),
     ],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     windowHandler: (oI: any) => {

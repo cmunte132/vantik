@@ -39,17 +39,9 @@ module.exports = {
   devIndicators: {
     position: 'bottom-right',
   },
-  publicRuntimeConfig: {
-    // Will be available on both server and client
-    NEXT_PUBLIC_VERSION: process.env.NEXT_PUBLIC_VERSION,
-    NEXT_PUBLIC_NODE_ENV: process.env.NEXT_PUBLIC_NODE_ENV,
-    NEXT_PUBLIC_BASE_HOST: process.env.NEXT_PUBLIC_BASE_HOST,
-    NEXT_PUBLIC_BACKEND_HOST: process.env.NEXT_PUBLIC_BACKEND_HOST,
-    NEXT_PUBLIC_AI_HOST: process.env.NEXT_PUBLIC_AI_HOST,
-    NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
-    NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
-    NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
-  },
+  // Runtime settings are served from /api/v1/config, not baked in here.
+  // publicRuntimeConfig is removed in Next 16 and required a sed pass over the
+  // built bundle to work at all in a container.
   output: 'standalone',
 };
 

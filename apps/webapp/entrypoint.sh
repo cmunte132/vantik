@@ -1,27 +1,10 @@
 #!/usr/bin/env bash
 
-# The first part wrapped in a function
-makeSedCommands() {
-  printenv | \
-      grep  '^NEXT_PUBLIC' | \
-      sed -r "s/=/ /g" | \
-      xargs -n 2 bash -c 'echo "sed -i \"s#PROD_$0#$1#g\""'
-}
-
-# Set the delimiter to newlines (needed for looping over the function output)
-IFS=$'\n'
-# For each sed command
-for c in $(makeSedCommands); do
-  # For each file in the .next directory
-  for f in $(find apps/webapp/.next -type f); do
-    # Execute the command against the file
-    COMMAND="$c $f"
-    eval $COMMAND
-  done
-done
+# Runtime settings used to be rewritten into the built bundle here, by seding
+# every PROD_NEXT_PUBLIC_* placeholder in .next with the container's
+# environment. The browser now fetches them from /api/v1/config instead, so
+# there is nothing to patch and the image starts as built.
 
 echo "Starting Nextjs"
-# Run any arguments passed to this script
-exec "$@"
 
 exec dumb-init node --max-old-space-size=8192 apps/webapp/server.js

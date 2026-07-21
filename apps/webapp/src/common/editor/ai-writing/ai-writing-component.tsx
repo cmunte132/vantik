@@ -6,21 +6,18 @@ import { Loader } from '@vantikhq/ui/components/loader';
 import { Skeleton } from '@vantikhq/ui/components/skeleton';
 import { Textarea } from '@vantikhq/ui/components/textarea';
 import { AI, CheckLine, DeleteLine } from '@vantikhq/ui/icons';
-import getConfig from 'next/config';
 import React from 'react';
 
 import { useCurrentWorkspace } from 'hooks/workspace';
 
 import { useAIContinueWritingMutation } from 'services/issues';
 
-const { publicRuntimeConfig } = getConfig();
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const AIWritingComponent = (props: any) => {
   const { editor } = useEditor();
   const [prompt, setPrompt] = React.useState('Continue writing');
   const { responses, mutate, isLoading } = useAIContinueWritingMutation({
-    baseHost: publicRuntimeConfig.NEXT_PUBLIC_BACKEND_HOST,
+    baseHost: '/api',
   });
   const workspace = useCurrentWorkspace();
 

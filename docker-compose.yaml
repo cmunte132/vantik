@@ -33,11 +33,9 @@ services:
     env_file: .env
     environment:
       # The Next.js server proxies /api/* to the backend from inside the
-      # container network; browser-facing NEXT_PUBLIC_* values keep the host view.
+      # container network. Browser-facing settings are not needed here: the
+      # browser fetches them from the server at /api/v1/config.
       BACKEND_URL: http://server:3001
-      NEXT_PUBLIC_VERSION: ${VERSION:-}
-      NEXT_PUBLIC_BASE_HOST: ${FRONTEND_HOST:-http://localhost:3000}
-      NEXT_PUBLIC_BACKEND_HOST: ${BACKEND_HOST:-http://localhost:3001}
     ports:
       - "3000:3000"
     networks:

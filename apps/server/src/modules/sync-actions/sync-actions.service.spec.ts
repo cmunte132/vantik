@@ -31,7 +31,12 @@ interface FakeSyncAction {
  * the first row of each distinct group is kept. That interaction is the whole
  * bug, so the fake has to reproduce it rather than paper over it.
  */
-function findMany(rows: FakeSyncAction[], args: any) {
+interface FindManyArgs {
+  orderBy: { sequenceId: 'asc' | 'desc' };
+  distinct: string[];
+}
+
+function findMany(rows: FakeSyncAction[], args: FindManyArgs) {
   const direction = args.orderBy.sequenceId === 'desc' ? -1 : 1;
   const ordered = [...rows].sort(
     (a, b) => direction * Number(a.sequenceId - b.sequenceId),

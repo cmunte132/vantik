@@ -2,7 +2,6 @@ import { UserTypeEnum } from '@vantikhq/types';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import getConfig from 'next/config';
 import React from 'react';
 
 import type { ConversationHistoryType } from 'common/types';
@@ -22,8 +21,6 @@ import { UserContext } from 'store/user-context';
 import { ConversationItem } from './conversation-item';
 import { ConversationTextarea } from './conversation-textarea';
 
-const { publicRuntimeConfig } = getConfig();
-
 export const Conversation = observer(() => {
   const { commonStore } = useContextStore();
 
@@ -37,7 +34,7 @@ export const Conversation = observer(() => {
     isLoading,
     thoughts,
   } = useStreamConversationMutation({
-    baseHost: publicRuntimeConfig.NEXT_PUBLIC_AI_HOST,
+    baseHost: '/api',
   });
   const { mutate: createConversationHistory } =
     useCreateConversationHistoryMutation({});

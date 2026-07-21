@@ -4,7 +4,6 @@ import { Button } from '@vantikhq/ui/components/button';
 import { defaultExtensions } from '@vantikhq/ui/components/editor/editor-extensions';
 import { AI } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
-import getConfig from 'next/config';
 import React, { useEffect, useRef } from 'react';
 
 import type { ConversationHistoryType } from 'common/types';
@@ -18,8 +17,6 @@ import { useRunTasksMutation } from 'services/conversations';
 interface AIConversationItemProps {
   conversationHistory: ConversationHistoryType;
 }
-
-const { publicRuntimeConfig } = getConfig();
 
 export const ConversationItem = observer(
   ({ conversationHistory }: AIConversationItemProps) => {
@@ -76,7 +73,7 @@ export const ConversationItem = observer(
                 variant="secondary"
                 onClick={() => {
                   runTasks({
-                    baseHost: publicRuntimeConfig.NEXT_PUBLIC_AI_HOST,
+                    baseHost: '/api',
                     conversationId: conversationHistory.conversationId,
                     conversationHistoryId: conversationHistory.id,
                     workspaceId: workspace.id,

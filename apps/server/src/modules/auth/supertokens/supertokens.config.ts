@@ -234,11 +234,24 @@ export const recipeList = (
               return originalImplementation.registerOptionsPOST!(input);
             },
             signUpPOST: async (input) => {
+              // Read off the request rather than `input.session`, which is
+              // undefined here by design: every passkey registration is a
+              // first factor, because asking SuperTokens to link one to the
+              // session user needs the licensed recipe. Somebody adding a
+              // second way in to their own account still arrives holding a
+              // session, and that is what separates them from a stranger
+              // creating an account.
+              const session = await Session.getSession(
+                input.options.req,
+                input.options.res,
+                { sessionRequired: false },
+              );
+
               // A passkey belonging to nobody yet means account creation. An
               // install that funnels people through invites can refuse that
               // while still allowing a passkey to be added to an existing
-              // account, which arrives here carrying a session.
-              if (input.session === undefined && !passkeySignupEnabled()) {
+              // account.
+              if (session === undefined && !passkeySignupEnabled()) {
                 return {
                   status: 'SIGN_UP_NOT_ALLOWED',
                   reason:

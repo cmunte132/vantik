@@ -61,8 +61,13 @@ export function Passkeys() {
             userContext: {},
           })
         : await registerCredentialWithSignUp({
+            // Registered as a first factor on purpose. Asking SuperTokens to
+            // link this credential to the session user is what MFA does, and
+            // it throws without the licensed account linking recipe. We do not
+            // need it to: the credential is attached to the account by email
+            // on the server, in our own identity table.
+            shouldTryLinkingWithSessionUser: false,
             email: user.email,
-            shouldTryLinkingWithSessionUser: true,
             userContext: {},
           });
 

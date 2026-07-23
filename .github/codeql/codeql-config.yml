@@ -1,0 +1,34 @@
+name: Vantik CodeQL config
+
+# Shared by every language in .github/workflows/codeql.yml.
+
+paths-ignore:
+  # Dependencies and build output. Not checked in, and the workflow runs with
+  # build-mode: none so they should never exist in CI — listed defensively so a
+  # future build step cannot silently flood the results.
+  - "**/node_modules"
+  - "**/dist"
+  - "**/build"
+  - "**/.next"
+  - "**/.docusaurus"
+  # Generated from apps/docs/openapi.yml by the docusaurus-plugin-openapi-docs
+  # plugin; edits belong in the spec, not here.
+  - "apps/docs/docs/api-reference"
+
+# Query suite. The default "security" suite runs when nothing is specified.
+# Once the first runs on main have produced a clean baseline, raise this to
+# security-extended for lower-severity and lower-precision security queries:
+#
+# queries:
+#   - uses: security-extended
+#
+# security-and-quality goes further still, but the extra queries are
+# maintainability rather than security and will dominate the alert list.
+
+# Noisy individual queries can be suppressed here rather than by widening
+# paths-ignore, which would hide real code along with the noise. Later filters
+# take precedence over earlier ones. For example:
+#
+# query-filters:
+#   - exclude:
+#       id: js/unused-local-variable

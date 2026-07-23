@@ -3,9 +3,7 @@ import {
   BreadcrumbItem,
   BreadcrumbLink,
 } from '@vantikhq/ui/components/breadcrumb';
-import { buttonVariants } from '@vantikhq/ui/components/button';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
-import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -25,21 +23,8 @@ export const Header = observer(({ title }: HeaderProps) => {
     query: { workspaceSlug },
   } = useRouter();
 
-  const actions = (
-    <Link
-      href={
-        team
-          ? `/${workspaceSlug}/team/${team?.identifier}/all`
-          : `/${workspaceSlug}/all`
-      }
-      className={cn(buttonVariants({ variant: 'secondary' }))}
-    >
-      New view
-    </Link>
-  );
-
   return (
-    <HeaderLayout actions={actions}>
+    <HeaderLayout>
       <Breadcrumb>
         {team && (
           <BreadcrumbItem>

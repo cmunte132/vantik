@@ -80,10 +80,37 @@ export function ViewItem({ view }: ViewItemProps) {
 export const ViewsList = observer(() => {
   const { viewsStore } = useContextStore();
   const team = useCurrentTeam();
+  const { workspaceSlug } = useParams();
 
   const views = team
     ? viewsStore.getViewsForTeam(team.id)
     : viewsStore.getWorkspaceViews();
+
+  if (views.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-16 px-4 text-center">
+        <BookMark size={20} className="text-muted-foreground" />
+
+        <div className="font-medium">No views yet</div>
+
+        <div className="text-muted-foreground max-w-[420px]">
+          A view is a saved set of filters. Filter{' '}
+          <Link
+            className="underline"
+            href={
+              team
+                ? `/${workspaceSlug}/team/${team.identifier}/all`
+                : `/${workspaceSlug}/all`
+            }
+          >
+            your issues
+          </Link>{' '}
+          the way you want them, then use <b>Save as view</b> to keep that
+          filter here.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col">

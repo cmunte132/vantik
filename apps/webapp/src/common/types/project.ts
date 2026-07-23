@@ -16,7 +16,7 @@ export interface ProjectType {
   description?: string;
   startDate?: string;
   endDate?: string;
-  status: string;
+  status: string | null;
   leadUserId?: string;
   teams: string[];
   workspaceId: string;

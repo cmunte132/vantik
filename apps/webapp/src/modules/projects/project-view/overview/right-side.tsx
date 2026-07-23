@@ -63,7 +63,7 @@ export const RightSide = observer(() => {
         <div className="flex flex-col items-start px-6">
           <label className="text-xs">Status</label>
           <ProjectStatusDropdown
-            value={project.status}
+            value={project.status ?? undefined}
             variant={ProjectDropdownVariant.LINK}
             onChange={onStatusUpdate}
           />

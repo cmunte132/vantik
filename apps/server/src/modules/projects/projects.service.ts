@@ -9,6 +9,9 @@ import { PrismaService } from 'nestjs-prisma';
 
 import IssuesService from 'modules/issues/issues.service';
 
+// Matches the first entry of the status list the webapp offers.
+const DEFAULT_PROJECT_STATUS = 'Backlog';
+
 @Injectable()
 export class ProjectsService {
   constructor(
@@ -28,6 +31,9 @@ export class ProjectsService {
     return await this.prisma.project.create({
       data: {
         ...createProjectDto,
+        // The dialog always picks one, but an API caller need not, and a
+        // project with no status reads as a broken row everywhere downstream.
+        status: createProjectDto.status ?? DEFAULT_PROJECT_STATUS,
         workspace: { connect: { id: workspaceId } },
       },
     });

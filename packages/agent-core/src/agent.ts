@@ -552,9 +552,9 @@ export class VantikAgent {
   async listPages(): Promise<
     Array<KnowledgePageRef & { parentId: string | null; entryPolicy: EntryPolicy }>
   > {
-    const pages = await this.client.get<RawPage[]>('/pages');
+    const pages = await this.pageIndex();
 
-    return (pages ?? []).map((page) => ({
+    return pages.map((page) => ({
       id: page.id,
       title: page.title,
       parentId: page.parentId ?? null,
@@ -795,6 +795,33 @@ export class VantikAgent {
     return (entries ?? []).map((entry) => toEntry(entry));
   }
 
+  /**
+   * Corrects a fact in place.
+   *
+   * A correction rather than a new claim: the entry keeps its id, its
+   * provenance and its retrieval count, which is what a person editing the
+   * wording of something already true is asking for. A fact that has *changed*
+   * is a different thing and wants `remember` with `supersedes`.
+   */
+  async updateEntry(
+    entryId: string,
+    changes: { content?: string; scope?: string | null },
+  ): Promise<KnowledgeEntry> {
+    const entry = await this.client.post<RawEntry>(
+      `/page_entries/${entryId}`,
+      {
+        body: {
+          ...(changes.content !== undefined
+            ? { content: changes.content }
+            : {}),
+          ...(changes.scope !== undefined ? { scope: changes.scope } : {}),
+        },
+      },
+    );
+
+    return toEntry(entry);
+  }
+
   /** Applies one triage decision to a set of entries. */
   async triageEntries(
     input: TriageInput,
@@ -820,13 +847,16 @@ export class VantikAgent {
    * a model has to carry between turns, and it will not.
    */
   private async resolvePage(reference: string): Promise<KnowledgePageRef> {
-    const found = await this.findPage(reference);
+    const pages = await this.pageIndex();
+    const found = matchPage(pages, reference);
 
     if (!found) {
-      const pages = await this.client.get<RawPage[]>('/pages');
+      // Built from the list already in hand. Fetching it again to write the
+      // error message was a second copy of every page in the workspace, on the
+      // path that had just failed.
       throw new VantikNotFoundError(
         `No page "${reference}". Pages in this workspace: ${
-          (pages ?? []).map((page) => page.title).join(', ') || 'none yet'
+          pages.map((page) => page.title).join(', ') || 'none yet'
         }.`,
       );
     }
@@ -837,23 +867,22 @@ export class VantikAgent {
   private async findPage(
     reference: string,
   ): Promise<KnowledgePageRef | undefined> {
-    const trimmed = reference.trim();
-    const pages = await this.client.get<RawPage[]>('/pages');
-    const needle = trimmed.toLowerCase();
+    return matchPage(await this.pageIndex(), reference);
+  }
 
-    const matches = (pages ?? []).filter(
-      (page) => page.id === trimmed || page.title.toLowerCase() === needle,
+  /**
+   * The page list, without the bodies.
+   *
+   * Everything here resolves titles to ids through this, and a full list hands
+   * back every document in the bank — each one converted from the editor's JSON
+   * to markdown on the way out — to answer a question about names.
+   */
+  private async pageIndex(): Promise<RawPage[]> {
+    return (
+      (await this.client.get<RawPage[]>('/pages', {
+        query: { summary: 'true' },
+      })) ?? []
     );
-
-    if (matches.length > 1) {
-      throw new VantikAmbiguousError(
-        `"${reference}" matches ${matches.length} pages; use the page id.`,
-      );
-    }
-
-    return matches[0]
-      ? { id: matches[0].id, title: matches[0].title }
-      : undefined;
   }
 
   /** Accepts an issue key ("ENG-42") or a raw issue id. */
@@ -1065,6 +1094,29 @@ export class VantikAgent {
 
 function toArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
+}
+
+/** One page out of a list, by id or by title. */
+function matchPage(
+  pages: RawPage[],
+  reference: string,
+): KnowledgePageRef | undefined {
+  const trimmed = reference.trim();
+  const needle = trimmed.toLowerCase();
+
+  const matches = pages.filter(
+    (page) => page.id === trimmed || page.title.toLowerCase() === needle,
+  );
+
+  if (matches.length > 1) {
+    throw new VantikAmbiguousError(
+      `"${reference}" matches ${matches.length} pages; use the page id.`,
+    );
+  }
+
+  return matches[0]
+    ? { id: matches[0].id, title: matches[0].title }
+    : undefined;
 }
 
 /** Server-side knowledge shapes. Kept local so agent-core stays standalone. */

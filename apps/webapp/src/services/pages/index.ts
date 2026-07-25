@@ -238,6 +238,12 @@ export interface PageLink {
   entityId: string;
   label: string;
   teamId?: string;
+  /**
+   * How the target is addressed in a URL when that is not its id — an issue key
+   * ("ENG-42"), a team identifier ("ENG"). Both routes are keyed that way, so
+   * pushing the raw uuid lands on a page that resolves nothing.
+   */
+  key?: string;
 }
 
 /**

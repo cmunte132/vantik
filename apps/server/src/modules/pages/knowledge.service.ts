@@ -121,7 +121,11 @@ export default class KnowledgeService {
       estimatedTokens += cost;
     }
 
-    await this.recordDemand(workspaceId, query, items);
+    // Counted against what the search *found*, not against what fit. A pack
+    // that matched fifty things and could afford none of them answered the
+    // question; recording it as a gap would put questions the bank handles well
+    // at the top of the list of things nobody has written down.
+    await this.recordDemand(workspaceId, query, items, hits.length);
 
     return {
       items,
@@ -177,10 +181,12 @@ export default class KnowledgeService {
   private async recordDemand(
     workspaceId: string,
     query: string,
-    hits: KnowledgeSearchHit[],
+    served: KnowledgeSearchHit[],
+    /** What the search matched, which is not always what was served. */
+    found = served.length,
   ): Promise<void> {
     try {
-      const entryIds = hits
+      const entryIds = served
         .map((hit) => hit.entryId)
         .filter((id): id is string => Boolean(id));
 
@@ -188,7 +194,7 @@ export default class KnowledgeService {
         await this.pageEntriesService.recordServed(entryIds);
       }
 
-      if (hits.length === 0) {
+      if (found === 0) {
         await this.recordKnowledgeGap(workspaceId, query);
       }
     } catch {

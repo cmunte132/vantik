@@ -58,7 +58,9 @@ export class PagesController {
       query.workspaceId,
     );
 
-    return this.pagesService.getPages(workspaceId, query.parentId);
+    return this.pagesService.getPages(workspaceId, query.parentId, {
+      summary: query.summary === 'true',
+    });
   }
 
   /**

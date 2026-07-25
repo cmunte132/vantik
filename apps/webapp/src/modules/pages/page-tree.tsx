@@ -101,17 +101,27 @@ const TreeNode = observer(
     pagesStore,
   }: NodeProps & { page: PageType }) => {
     const hasChildren = pagesStore.getChildren(page.id).length > 0;
-    // Ancestors of the open page start expanded, so deep-linking to a nested
-    // page does not land the reader in a tree that hides where they are.
-    const [expanded, setExpanded] = React.useState(
+
+    const holdsActivePage =
       hasChildren &&
-        (page.id === activePageId ||
-          (activePageId
-            ? pagesStore
-                .getAncestors(activePageId)
-                .some((ancestor: PageType) => ancestor.id === page.id)
-            : false)),
-    );
+      Boolean(activePageId) &&
+      (page.id === activePageId ||
+        pagesStore
+          .getAncestors(activePageId)
+          .some((ancestor: PageType) => ancestor.id === page.id));
+
+    const [expanded, setExpanded] = React.useState(holdsActivePage);
+
+    // Ancestors of the open page expand, so following a link into a nested page
+    // does not leave the reader in a tree that hides where they are. As an
+    // effect rather than an initial value because the tree stays mounted beside
+    // the page while they move around it — computing this once at mount meant
+    // it only ever worked for the page that happened to be open on first paint.
+    React.useEffect(() => {
+      if (holdsActivePage) {
+        setExpanded(true);
+      }
+    }, [holdsActivePage]);
 
     return (
       <>

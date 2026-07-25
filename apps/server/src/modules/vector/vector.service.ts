@@ -12,6 +12,7 @@ import { IssueWithRelations } from 'modules/issues/issues.interface';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import {
+  INDEXED_STATUSES,
   ISSUE_QUERY_BY,
   IssueSearchHit,
   KNOWLEDGE_FACET_BY,
@@ -544,6 +545,8 @@ export class VectorService implements OnModuleInit {
     options: {
       limit?: number;
       scope?: string;
+      /** Restrict to one page. Filtered in the query, not after it. */
+      pageId?: string;
       /** Include statuses other than STANDING. Triage surfaces only. */
       includeStatuses?: string[];
       vectorDistance?: number;
@@ -597,13 +600,22 @@ export class VectorService implements OnModuleInit {
     const { hits } = await this.searchKnowledge(workspaceId, content, {
       limit: 5,
       vectorDistance: KNOWLEDGE_NEAR_MATCH_DISTANCE,
+      // Narrowed in the query rather than afterwards. Grouping caps each page
+      // at three documents and this asks for five groups, so a page-scoped
+      // filter applied in Node returns nothing at all whenever five other pages
+      // happen to rank above the one being written to — which is silently no
+      // dedup check on exactly the busiest workspaces.
+      pageId,
+      // Proposed entries are indexed for this query and served by no other:
+      // ten agents appending the same untriaged fact is the flood this exists
+      // to catch, and every one of those claims is PROPOSED.
       includeStatuses: [
         PageEntryStatusEnum.STANDING,
         PageEntryStatusEnum.PROPOSED,
       ],
     });
 
-    return hits.filter((hit) => hit.pageId === pageId && hit.entryId);
+    return hits.filter((hit) => hit.entryId);
   }
 
   /**
@@ -662,10 +674,12 @@ export class VectorService implements OnModuleInit {
       await this.indexPage(page);
     }
 
+    // The same statuses the incremental path indexes, or a rebuild would
+    // quietly narrow the collection and take the duplicate check with it.
     const entries = await this.prisma.pageEntry.findMany({
       where: {
         deleted: null,
-        status: PageEntryStatusEnum.STANDING,
+        status: { in: INDEXED_STATUSES },
         page: { workspaceId, deleted: null },
       },
       include: { page: { select: { title: true, workspaceId: true } } },
@@ -676,7 +690,7 @@ export class VectorService implements OnModuleInit {
     }
 
     this.logger.info({
-      message: `Prefilled ${pages.length} pages and ${entries.length} standing entries for workspaceId: ${workspaceId}`,
+      message: `Prefilled ${pages.length} pages and ${entries.length} entries for workspaceId: ${workspaceId}`,
       where: `VectorService.prefillPagesData`,
     });
   }
@@ -739,10 +753,14 @@ function buildFilterBy(workspaceId: string, stateCategories: string[]): string {
  */
 function buildKnowledgeFilterBy(
   workspaceId: string,
-  options: { scope?: string; includeStatuses?: string[] } = {},
+  options: { scope?: string; pageId?: string; includeStatuses?: string[] } = {},
 ): string {
   if (!UUID_REGEX.test(workspaceId)) {
     throw new Error('Invalid workspaceId format');
+  }
+
+  if (options.pageId && !UUID_REGEX.test(options.pageId)) {
+    throw new Error('Invalid pageId format');
   }
 
   const statuses = (
@@ -757,6 +775,10 @@ function buildKnowledgeFilterBy(
     `workspaceId:=\`${workspaceId}\``,
     `status:=[${statuses.map((status) => `\`${status}\``).join(',')}]`,
   ];
+
+  if (options.pageId) {
+    filters.push(`pageId:=\`${options.pageId}\``);
+  }
 
   if (options.scope) {
     // Backticks quote the value, so a scope containing `&&` or a colon cannot

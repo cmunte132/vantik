@@ -21,6 +21,13 @@ export interface ResolvedLink {
   label: string;
   /** Present for issues, so a caller can build a route without another read. */
   teamId?: string;
+  /**
+   * How the target is addressed in a URL, when that is not its id: an issue
+   * key ("ENG-42"), a team identifier ("ENG"). Sent because the routes for
+   * those are keyed that way, and a caller left to reconstruct it from `label`
+   * is a caller parsing a display string.
+   */
+  key?: string;
 }
 
 export interface RelatedPage {
@@ -194,7 +201,7 @@ export default class PageLinksService {
     const [teams, projects, issues, pages] = await Promise.all([
       this.prisma.team.findMany({
         where: { id: { in: idsOf(PageLinkTypeEnum.TEAM) }, workspaceId, deleted: null },
-        select: { id: true, name: true },
+        select: { id: true, name: true, identifier: true },
       }),
       this.prisma.project.findMany({
         where: { id: { in: idsOf(PageLinkTypeEnum.PROJECT) }, workspaceId, deleted: null },
@@ -220,11 +227,17 @@ export default class PageLinksService {
       }),
     ]);
 
-    const labels = new Map<string, { label: string; teamId?: string }>();
+    const labels = new Map<
+      string,
+      { label: string; teamId?: string; key?: string }
+    >();
     const key = (type: PageLinkTypeEnum, id: string) => `${type}:${id}`;
 
     teams.forEach((team) =>
-      labels.set(key(PageLinkTypeEnum.TEAM, team.id), { label: team.name }),
+      labels.set(key(PageLinkTypeEnum.TEAM, team.id), {
+        label: team.name,
+        key: team.identifier,
+      }),
     );
     projects.forEach((project) =>
       labels.set(key(PageLinkTypeEnum.PROJECT, project.id), {
@@ -235,6 +248,7 @@ export default class PageLinksService {
       labels.set(key(PageLinkTypeEnum.ISSUE, issue.id), {
         label: `${issue.team.identifier}-${issue.number} ${issue.title}`,
         teamId: issue.teamId,
+        key: `${issue.team.identifier}-${issue.number}`,
       }),
     );
     pages.forEach((page) =>
@@ -259,6 +273,7 @@ export default class PageLinksService {
           entityId: link.entityId,
           label: resolved.label,
           ...(resolved.teamId ? { teamId: resolved.teamId } : {}),
+          ...(resolved.key ? { key: resolved.key } : {}),
         };
       })
       .filter(Boolean) as ResolvedLink[];

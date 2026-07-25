@@ -180,6 +180,12 @@ export default class PageEntriesService {
         : []),
     ]);
 
+    // The new entry enters the index in the same breath as it is written. A
+    // human writing a fact by hand *is* the review step, so it lands STANDING
+    // and is served immediately — without this it would sit unsearchable until
+    // some later, unrelated write happened to touch it.
+    await this.indexer?.entryChanged(entry.id);
+
     // A superseded entry has to leave the index in the same breath, or the
     // reader gets both the correction and the thing it corrected and has no
     // way to tell which is current.
@@ -314,6 +320,13 @@ export default class PageEntriesService {
    * A standing entry nothing has ever retrieved archives on a longer window,
    * because unused knowledge is by definition not load-bearing. Nothing is
    * deleted either way — archived entries stay readable and can be revived.
+   *
+   * **Nothing calls this yet.** The server runs no scheduler, so both windows
+   * are dormant and the inbox is bounded only by the per-token budget on
+   * curated pages. Said here rather than left to be discovered, because the
+   * rest of this file reads as though decay were running: a deployment relying
+   * on it to keep the bank small is relying on nothing. Wiring it to a job is
+   * the remaining work.
    */
   async runDecay(workspaceId?: string): Promise<{
     expiredProposed: number;

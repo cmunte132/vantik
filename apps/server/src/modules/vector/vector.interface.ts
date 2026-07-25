@@ -1,3 +1,4 @@
+import { PageEntryStatusEnum } from '@vantikhq/types';
 import { CollectionFieldSchema } from 'typesense/lib/Typesense/Collection';
 import { CollectionCreateSchema } from 'typesense/lib/Typesense/Collections';
 
@@ -155,6 +156,22 @@ export const SIMILARITY_MEASUREMENT_NOTE =
 
 /** Distance ceiling for "entries that look like this one", used for dedup hints. */
 export const KNOWLEDGE_NEAR_MATCH_DISTANCE = 0.75;
+
+/**
+ * Entry statuses that get a document at all.
+ *
+ * Narrower than "everything" and wider than "what is served". Retrieval filters
+ * to STANDING on the way out — see `buildKnowledgeFilterBy`, whose default is
+ * that and nothing else — and the near-match check on a write is the single
+ * caller allowed past it. That one has to see the inbox: a claim somebody
+ * proposed an hour ago is the likeliest thing a new claim duplicates, and the
+ * flood this whole gate exists for is ten agents asserting the same untriaged
+ * fact.
+ */
+export const INDEXED_STATUSES: PageEntryStatusEnum[] = [
+  PageEntryStatusEnum.STANDING,
+  PageEntryStatusEnum.PROPOSED,
+];
 
 export interface KnowledgeSearchHit {
   id: string;

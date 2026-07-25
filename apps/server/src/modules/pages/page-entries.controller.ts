@@ -11,6 +11,7 @@ import {
 import {
   BulkUpdatePageEntriesDto,
   CreatePageEntryDto,
+  CreatePageEntryQueryDto,
   ListPageEntriesQueryDto,
   PageEntry,
   PageEntryRequestParamsDto,
@@ -81,12 +82,18 @@ export class PageEntriesController {
     return this.pageEntriesService.getFacets(workspaceId, query.pageId);
   }
 
+  /**
+   * `pageId` is required here, and the DTO is what enforces it. The guard reads
+   * the page out of the query to prove it belongs to the caller's workspace, so
+   * a request that names no page is one the guard cannot check — and the service
+   * would then resolve whichever page came back first, in any workspace.
+   */
   @Post()
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createEntry(
     @UserId() userId: string,
     @TokenId() tokenId: string | null,
-    @Query() query: ListPageEntriesQueryDto,
+    @Query() query: CreatePageEntryQueryDto,
     @Body() entryData: CreatePageEntryDto,
   ): Promise<PageEntry> {
     return this.pageEntriesService.createEntry(

@@ -98,6 +98,24 @@ export class PageEntryRequestParamsDto {
   pageEntryId: string;
 }
 
+/**
+ * The query an append arrives with.
+ *
+ * Separate from `ListPageEntriesQueryDto` because `pageId` is optional there —
+ * a list with no page is the whole workspace — and required here. Optional on
+ * the create path meant the request named no page at all: the route guard has
+ * nothing to check, so it checks nothing, and the service then resolves
+ * whichever page postgres returned first, in whatever workspace it sat in.
+ */
+export class CreatePageEntryQueryDto {
+  @IsOptional()
+  @IsUUID()
+  workspaceId?: string;
+
+  @IsUUID()
+  pageId: string;
+}
+
 export class ListPageEntriesQueryDto {
   @IsOptional()
   @IsUUID()

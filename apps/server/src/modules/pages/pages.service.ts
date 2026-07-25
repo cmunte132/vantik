@@ -43,6 +43,22 @@ function toStoredBody(pageData: {
 /** A page as the API hands it back: storage shape plus the markdown boundary. */
 export type PageResponse = Page & { descriptionMarkdown: string };
 
+/** Everything on a page except its body — see `getPages`. */
+const SUMMARY_FIELDS = {
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  deleted: true,
+  title: true,
+  parentId: true,
+  sortOrder: true,
+  entryPolicy: true,
+  visibility: true,
+  workspaceId: true,
+  createdById: true,
+  updatedById: true,
+} as const;
+
 /**
  * One recorded change to a page.
  *
@@ -74,9 +90,19 @@ export default class PagesService {
 
   // ----------------------------------------------------------------- reading
 
+  /**
+   * `summary` leaves the bodies out.
+   *
+   * Resolving a page by title is the commonest reason anything reads this list,
+   * and answering that with every document in the workspace — each converted
+   * from tiptap JSON to markdown on the way out — costs the whole bank to learn
+   * one uuid. Summary rows carry a null body and an empty markdown rendering,
+   * so nothing mistakes an omitted body for an empty page.
+   */
   async getPages(
     workspaceId: string,
     parentId?: string,
+    { summary = false }: { summary?: boolean } = {},
   ): Promise<PageResponse[]> {
     const pages = await this.prisma.page.findMany({
       where: {
@@ -85,9 +111,18 @@ export default class PagesService {
         ...(parentId ? { parentId } : {}),
       },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      ...(summary ? { select: SUMMARY_FIELDS } : {}),
     });
 
-    return pages.map((page) => this.withMarkdown(page));
+    return pages.map((page) =>
+      summary
+        ? ({
+            ...page,
+            description: null,
+            descriptionMarkdown: '',
+          } as PageResponse)
+        : this.withMarkdown(page),
+    );
   }
 
   async getPage(pageId: string): Promise<PageResponse> {
@@ -230,6 +265,9 @@ export default class PagesService {
       await this.assertNotAncestorOfItself(pageId, pageData.parentId);
     }
 
+    const titleChanged =
+      pageData.title !== undefined && pageData.title !== current.title;
+
     // Named one field at a time rather than spread. The global ValidationPipe
     // does not whitelist, so anything else the caller put in the body survives
     // validation and would reach Prisma: `workspaceId` would move the page into
@@ -256,7 +294,7 @@ export default class PagesService {
     });
 
     await this.recordHistory(pageId, userId, {
-      ...(pageData.title !== undefined && pageData.title !== current.title
+      ...(titleChanged
         ? { title: { from: current.title, to: pageData.title } }
         : {}),
       ...(pageData.parentId !== undefined &&
@@ -274,7 +312,7 @@ export default class PagesService {
     // history read as though every edit rewrote the page.
     toStoredBody(pageData) !== undefined ? current.description : undefined,
     );
-    await this.indexer?.pageChanged(pageId);
+    await this.indexer?.pageChanged(pageId, { titleChanged });
 
     return this.withMarkdown(page);
   }

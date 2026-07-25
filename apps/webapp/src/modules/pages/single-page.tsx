@@ -120,23 +120,34 @@ const SinglePageView = observer(() => {
     setExternalRevision((revision: number) => revision + 1);
   }, [page?.description]);
 
-  const onBodyChange = useDebouncedCallback((content: string) => {
-    const { json: description } = getTiptapJSON(content);
+  // The page id travels with the text rather than being read off `page` when
+  // the timer fires. use-debounce calls the newest version of this function
+  // with the arguments it was given a second ago, so a page switch inside the
+  // debounce window would otherwise send the page you were writing in to the
+  // page you just opened, overwriting it.
+  const onBodyChange = useDebouncedCallback(
+    (pageId: string, content: string) => {
+      const { json: description } = getTiptapJSON(content);
 
-    lastSentRef.current = JSON.stringify(description);
+      lastSentRef.current = JSON.stringify(description);
 
-    updatePage({
-      pageId: page.id,
-      // Tiptap JSON straight through: the editor already holds this format, and
-      // converting to markdown and back to satisfy the API would drop whatever
-      // markdown cannot express.
-      description: JSON.stringify(description),
-    });
-  }, 1000);
+      updatePage({
+        pageId,
+        // Tiptap JSON straight through: the editor already holds this format,
+        // and converting to markdown and back to satisfy the API would drop
+        // whatever markdown cannot express.
+        description: JSON.stringify(description),
+      });
+    },
+    1000,
+  );
 
-  const onTitleChange = useDebouncedCallback((title: string) => {
-    updatePage({ pageId: page.id, title });
-  }, 1000);
+  const onTitleChange = useDebouncedCallback(
+    (pageId: string, title: string) => {
+      updatePage({ pageId, title });
+    },
+    1000,
+  );
 
   // Marked pending the instant a key is pressed, not when the debounced
   // request goes out — the window where the browser holds the only copy is
@@ -260,7 +271,7 @@ const SinglePageView = observer(() => {
                   value={page.title}
                   onChange={(title) => {
                     markDirty();
-                    onTitleChange(title);
+                    onTitleChange(page.id, title);
                   }}
                 />
 
@@ -274,7 +285,7 @@ const SinglePageView = observer(() => {
                   onCreate={setEditorInstance}
                   onChange={(content: string) => {
                     markDirty();
-                    onBodyChange(content);
+                    onBodyChange(page.id, content);
                   }}
                   handlePaste={handlePaste}
                   extensions={[vantikIssueExtension, AiWritingExtension]}

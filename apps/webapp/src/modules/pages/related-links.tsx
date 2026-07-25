@@ -53,13 +53,19 @@ export const RelatedLinks = observer(({ pageId }: { pageId: string }) => {
 
   const { mutate: remove } = useDeletePageLinkMutation({ onSuccess: refresh });
 
+  // Pages and projects are addressed by id; issues and teams are not. The issue
+  // route parses its parameter as "ENG-42" — identifier before the dash, number
+  // after — so a uuid resolves to no team and a NaN number, and the reader
+  // lands on a blank page rather than the issue they clicked.
   const open = (link: PageLink) => {
     if (link.entityType === 'PAGE') {
       router.push(`/${workspaceSlug}/pages/${link.entityId}`);
     } else if (link.entityType === 'PROJECT') {
       router.push(`/${workspaceSlug}/projects/${link.entityId}`);
-    } else if (link.entityType === 'ISSUE') {
-      router.push(`/${workspaceSlug}/issue/${link.entityId}`);
+    } else if (link.entityType === 'ISSUE' && link.key) {
+      router.push(`/${workspaceSlug}/issue/${link.key}`);
+    } else if (link.entityType === 'TEAM' && link.key) {
+      router.push(`/${workspaceSlug}/team/${link.key}/all`);
     }
   };
 

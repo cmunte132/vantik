@@ -127,4 +127,17 @@ export class ListPagesQueryDto {
   @IsOptional()
   @IsUUID()
   parentId?: string;
+
+  /**
+   * `true` to leave the bodies out: every page in the workspace comes back with
+   * its title, its place in the tree and its policy, and `description` null.
+   *
+   * The list is what a caller reads to turn a title into an id, and a full
+   * response converts every body in the bank from tiptap JSON to markdown to
+   * answer that. Sent as a string because query params are strings and the
+   * global ValidationPipe does not transform.
+   */
+  @IsOptional()
+  @IsString()
+  summary?: string;
 }

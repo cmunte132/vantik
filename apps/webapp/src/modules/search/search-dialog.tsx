@@ -85,7 +85,9 @@ export function SearchDialog({ open, setOpen }: SearchDialogProps) {
           {(knowledge?.hits ?? []).map((hit: KnowledgeHit) => (
             <CommandItem
               key={`${hit.pageId}:${hit.entryId ?? 'body'}`}
-              value={`page:${hit.pageId}`}
+              // cmdk keys selection off the value, so several facts from one
+              // page sharing it collapse into a single reachable row.
+              value={`page:${hit.pageId}:${hit.entryId ?? 'body'}`}
               className="m-2 !py-2"
               onSelect={() => {
                 push(`/${workspace.slug}/pages/${hit.pageId}`);

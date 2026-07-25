@@ -95,55 +95,106 @@ export function configureKnowledgeSyncCommands(knowledge: Command) {
 
         let bodies = 0;
         let entries = 0;
+        let corrections = 0;
         const conflicts: string[] = [];
+        const failures: string[] = [];
 
         for (const name of files) {
-          const parsed = parsePageFile(
-            readFileSync(join(options.dir, name), 'utf8'),
-          );
-
-          if (!parsed) {
-            continue;
-          }
-
-          const page = await agent.readPage(parsed.pageId);
-
-          // The revision is the whole safety story. Without it a push against a
-          // page somebody else edited in the meantime silently wins, and the
-          // loser never finds out.
-          if (parsed.revision && parsed.revision !== page.updatedAt) {
-            conflicts.push(
-              `${name}: the bank has moved on (file ${parsed.revision}, bank ${page.updatedAt})`,
+          // One unreadable file must not take the rest of the push with it. A
+          // throw escaping this loop would end the run with the earlier files
+          // already applied and the later ones never looked at, which is the
+          // partial push the conflict reporting exists to avoid.
+          try {
+            const parsed = parsePageFile(
+              readFileSync(join(options.dir, name), 'utf8'),
             );
-            continue;
-          }
 
-          const bodyChanged = parsed.body.trim() !== page.body.trim();
+            if (!parsed) {
+              continue;
+            }
 
-          if (options.dryRun) {
+            const page = await agent.readPage(parsed.pageId);
+
+            // The revision is the whole safety story. Without it a push against
+            // a page somebody else edited in the meantime silently wins, and
+            // the loser never finds out.
+            if (parsed.revision && parsed.revision !== page.updatedAt) {
+              conflicts.push(
+                `${name}: the bank has moved on (file ${parsed.revision}, bank ${page.updatedAt})`,
+              );
+              continue;
+            }
+
+            const bodyChanged = parsed.body.trim() !== page.body.trim();
+
+            // Lines that already carry an id and no longer match the bank. The
+            // file invites this edit in as many words, so dropping it silently
+            // left someone believing they had corrected a fact the bank went on
+            // serving unchanged.
+            const edited = parsed.existing.filter((line) => {
+              const current = page.standing.find(
+                (entry) => entry.id === line.id,
+              );
+
+              return (
+                current &&
+                (current.content.replace(/\s*\n\s*/g, ' ').trim() !==
+                  line.content ||
+                  (current.scope ?? null) !== line.scope)
+              );
+            });
+
+            if (options.dryRun) {
+              if (bodyChanged) {
+                bodies += 1;
+              }
+              entries += parsed.added.length;
+              corrections += edited.length;
+              continue;
+            }
+
             if (bodyChanged) {
+              await agent.writePage({ title: page.title, body: parsed.body });
               bodies += 1;
             }
-            entries += parsed.added.length;
-            continue;
-          }
 
-          if (bodyChanged) {
-            await agent.writePage({ title: page.title, body: parsed.body });
-            bodies += 1;
-          }
+            for (const line of edited) {
+              await agent.updateEntry(line.id, {
+                content: line.content,
+                scope: line.scope,
+              });
+              corrections += 1;
+            }
 
-          for (const added of parsed.added) {
-            await agent.remember({
-              page: parsed.pageId,
-              content: added.content,
-              ...(added.scope ? { scope: added.scope } : {}),
-              // A person editing a file has already decided this is worth
-              // asserting; the near-match round trip belongs on the agent write
-              // path, not between a human and their own text editor.
-              distinct: true,
-            });
-            entries += 1;
+            for (const added of parsed.added) {
+              await agent.remember({
+                page: parsed.pageId,
+                content: added.content,
+                ...(added.scope ? { scope: added.scope } : {}),
+                // A person editing a file has already decided this is worth
+                // asserting; the near-match round trip belongs on the agent
+                // write path, not between a human and their own text editor.
+                distinct: true,
+              });
+              entries += 1;
+            }
+
+            // Written back so the file carries the ids and the revision the
+            // bank now holds. Without this the bullets just created still read
+            // as new ones, and the next push appends them a second time — with
+            // the near-match check turned off, because the line above turns it
+            // off.
+            if (bodyChanged || edited.length > 0 || parsed.added.length > 0) {
+              writeFileSync(
+                join(options.dir, name),
+                renderPageFile(await agent.readPage(parsed.pageId), new Date()),
+                'utf8',
+              );
+            }
+          } catch (error) {
+            failures.push(
+              `${name}: ${error instanceof Error ? error.message : String(error)}`,
+            );
           }
         }
 
@@ -162,11 +213,36 @@ export function configureKnowledgeSyncCommands(knowledge: Command) {
           process.exitCode = 1;
         }
 
+        if (failures.length > 0) {
+          // eslint-disable-next-line no-console
+          console.error(
+            [
+              chalkWarning(`${failures.length} file(s) could not be pushed:`),
+              ...failures.map((line) => `  ${line}`),
+            ].join('\n'),
+          );
+          process.exitCode = 1;
+        }
+
         // eslint-disable-next-line no-console
         console.log(
           `${chalkGreen(options.dryRun ? 'Would apply' : 'Applied')} ` +
-            `${bodies} body edit(s) and ${entries} new entr${entries === 1 ? 'y' : 'ies'}`,
+            `${bodies} body edit(s), ${corrections} correction(s) and ` +
+            `${entries} new entr${entries === 1 ? 'y' : 'ies'}`,
         );
+
+        // The files were rewritten from the bank, and the bank serves standing
+        // facts — so a new bullet leaves the file until it has been triaged.
+        // Said out loud, because text disappearing from a file you just edited
+        // is otherwise indistinguishable from having lost it.
+        if (!options.dryRun && entries > 0) {
+          // eslint-disable-next-line no-console
+          console.log(
+            chalkGrey(
+              'New facts wait for review; they return to the file once accepted.',
+            ),
+          );
+        }
       } catch (error) {
         fail(error);
       }

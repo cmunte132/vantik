@@ -3,6 +3,7 @@ import { PageEntryStatusEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { LoggerService } from 'modules/logger/logger.service';
+import { INDEXED_STATUSES } from 'modules/vector/vector.interface';
 import { VectorService } from 'modules/vector/vector.service';
 
 /**
@@ -26,7 +27,17 @@ export default class KnowledgeIndexService {
     private vectorService: VectorService,
   ) {}
 
-  async pageChanged(pageId: string): Promise<void> {
+  /**
+   * `titleChanged` is what decides whether the page's entries are rewritten
+   * too. Only the title reaches an entry's document, and a body edit is
+   * autosaved once a second while somebody types — so re-embedding every
+   * standing entry on every save would spend a page's worth of embedding work
+   * per keystroke burst to write back values that did not move.
+   */
+  async pageChanged(
+    pageId: string,
+    { titleChanged = false }: { titleChanged?: boolean } = {},
+  ): Promise<void> {
     try {
       const page = await this.prisma.page.findUnique({ where: { id: pageId } });
 
@@ -40,7 +51,9 @@ export default class KnowledgeIndexService {
       // A page's title is part of every one of its entries' documents, so a
       // rename that only touched the page row would leave entries advertising
       // the old name in search results.
-      await this.reindexEntries(pageId);
+      if (titleChanged) {
+        await this.reindexEntries(pageId);
+      }
     } catch (error) {
       this.log('pageChanged', pageId, error);
     }
@@ -53,13 +66,15 @@ export default class KnowledgeIndexService {
         include: { page: { select: { title: true, workspaceId: true } } },
       });
 
-      // Only standing entries are served, so anything else is removed from the
-      // index rather than indexed with a status filter standing between it and
-      // a caller — one filter mistake would otherwise expose the whole inbox.
+      // Standing and proposed entries are indexed; everything else is removed.
+      // Only STANDING is ever *served* — the read filter defaults to it and
+      // only the near-match query widens past it — but a proposed entry has to
+      // be findable by that query or the duplicate check cannot see the claims
+      // most likely to be duplicates: the ones still sitting in the inbox.
       if (
         !entry ||
         entry.deleted ||
-        entry.status !== PageEntryStatusEnum.STANDING
+        !INDEXED_STATUSES.includes(entry.status as PageEntryStatusEnum)
       ) {
         await this.vectorService.deleteKnowledgeDocument(`entry:${entryId}`);
         return;
@@ -96,7 +111,7 @@ export default class KnowledgeIndexService {
       where: {
         pageId,
         deleted: null,
-        status: PageEntryStatusEnum.STANDING,
+        status: { in: INDEXED_STATUSES },
       },
       include: { page: { select: { title: true, workspaceId: true } } },
     });

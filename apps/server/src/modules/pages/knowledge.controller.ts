@@ -51,7 +51,7 @@ export class KnowledgeController {
       sessionWorkspaceId,
       query.workspaceId,
     );
-    const limit = parseLimit(query.limit);
+    const limit = parseKnowledgeLimit(query.limit);
 
     return this.knowledgeService.search(workspaceId, query.query, {
       limit,
@@ -125,7 +125,7 @@ export class KnowledgeController {
   }
 }
 
-function parseLimit(limit?: string): number | undefined {
+export function parseKnowledgeLimit(limit?: string): number | undefined {
   if (!limit) {
     return undefined;
   }

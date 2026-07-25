@@ -46,8 +46,8 @@ import { Header } from './header';
 import { MemoryRail } from './memory-rail';
 import { PageHistory } from './page-history';
 import { PageNav } from './page-nav';
-import { RelatedLinks } from './related-links';
 import { PageTitle } from './page-title';
+import { RelatedLinks } from './related-links';
 import { SaveIndicator, type SaveState } from './save-indicator';
 
 /**

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Command,
@@ -13,12 +14,9 @@ import {
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
 import { AddLine, CrossLine } from '@vantikhq/ui/icons';
-import { useQueryClient } from '@tanstack/react-query';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import * as React from 'react';
-
-import { useContextStore } from 'store/global-context-provider';
 
 import {
   type PageLink,
@@ -27,6 +25,8 @@ import {
   useDeletePageLinkMutation,
   usePageLinks,
 } from 'services/pages';
+
+import { useContextStore } from 'store/global-context-provider';
 
 /**
  * What this page is about, in the workspace's own terms.
@@ -176,15 +176,17 @@ const AddLink = observer(
               <CommandEmpty>Nothing matches.</CommandEmpty>
 
               <CommandGroup heading="Teams">
-                {teamsStore.getTeams.map((team: { id: string; name: string }) => (
-                  <CommandItem
-                    key={team.id}
-                    value={`team ${team.name}`}
-                    onSelect={() => add('TEAM', team.id)}
-                  >
-                    {team.name}
-                  </CommandItem>
-                ))}
+                {teamsStore.getTeams.map(
+                  (team: { id: string; name: string }) => (
+                    <CommandItem
+                      key={team.id}
+                      value={`team ${team.name}`}
+                      onSelect={() => add('TEAM', team.id)}
+                    >
+                      {team.name}
+                    </CommandItem>
+                  ),
+                )}
               </CommandGroup>
 
               <CommandGroup heading="Projects">

@@ -40,7 +40,12 @@ export const Header = observer(
     } = useRouter();
 
     const create = onCreate ? (
-      <Button variant="secondary" className="gap-1" size="sm" onClick={onCreate}>
+      <Button
+        variant="secondary"
+        className="gap-1"
+        size="sm"
+        onClick={onCreate}
+      >
         <AddLine size={14} />
         New page
       </Button>

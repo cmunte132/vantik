@@ -8,9 +8,9 @@ import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
 import { PageEntryStatus } from 'common/types';
 
-import { useContextStore } from 'store/global-context-provider';
-
 import { useCreatePageMutation } from 'services/pages';
+
+import { useContextStore } from 'store/global-context-provider';
 
 import { Header } from './header';
 import { KnowledgeGaps } from './knowledge-gaps';
@@ -41,9 +41,7 @@ const PagesView = observer(() => {
   ).length;
 
   return (
-    <MainLayout
-      header={<Header onCreate={() => createPage({ title: '' })} />}
-    >
+    <MainLayout header={<Header onCreate={() => createPage({ title: '' })} />}>
       <ScrollArea className="h-[calc(100%_-_38px)] w-full">
         <div className="max-w-[80ch] mx-auto py-8 px-6 flex flex-col gap-8">
           <section className="flex flex-col gap-2">

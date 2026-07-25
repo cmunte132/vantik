@@ -1,10 +1,11 @@
+import type KnowledgeService from './knowledge.service';
+
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { PrismaService } from 'nestjs-prisma';
-import { KnowledgeSearchQueryDto } from '@vantikhq/types';
 
-import KnowledgeService from './knowledge.service';
 import { KnowledgeController } from './knowledge.controller';
+import { KnowledgeSearchQueryDto } from '../../../../../packages/types/src/page/knowledge.dto';
 
 describe('KnowledgeController', () => {
   it('trims and rejects empty or wildcard search queries', async () => {
@@ -32,9 +33,16 @@ describe('KnowledgeController', () => {
       knowledgeService,
       {} as PrismaService,
     );
+    const controllerWithWorkspace = controller as unknown as {
+      workspace: (
+        userId: string,
+        sessionWorkspaceId: string,
+        requested?: string,
+      ) => Promise<string>;
+    };
 
     jest
-      .spyOn(controller as never, 'workspace')
+      .spyOn(controllerWithWorkspace, 'workspace')
       .mockResolvedValue('workspace-1');
 
     await controller.search('session-workspace', 'user-1', {

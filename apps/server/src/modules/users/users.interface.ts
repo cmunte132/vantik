@@ -1,5 +1,5 @@
-import { Invite, User } from '@vantikhq/types';
-import { IsArray, IsString } from 'class-validator';
+import { AGENT_SCOPES, AgentScope, Invite, User } from '@vantikhq/types';
+import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class UserIdParams {
   @IsString()
@@ -17,6 +17,26 @@ export class UpdateUserBody {
 export class UserIdsBody {
   @IsArray()
   userIds: string[];
+}
+
+export class CreateAgentDto {
+  @IsString()
+  name: string;
+
+  /**
+   * What the agent may do. Omit for the default — read and write, but not
+   * delete. Unknown values are dropped rather than rejected, so a client asking
+   * for a scope this server does not have still gets a usable agent.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsIn(AGENT_SCOPES, { each: true })
+  scopes?: AgentScope[];
+}
+
+export class AgentIdParams {
+  @IsString()
+  agentId: string;
 }
 
 export interface PublicUser {
@@ -38,6 +58,7 @@ export function userSerializer(user: User) {
     email: user.email,
     fullname: user.fullname,
     username: user.username,
+    type: user.type,
     initialSetupComplete: user.initialSetupComplete,
     anonymousDataCollection: user.anonymousDataCollection,
 

@@ -757,6 +757,11 @@ model User {
   updatedAt DateTime @updatedAt
   email     String   @unique
 
+  /// What this account *is*, as opposed to what it may do in a given workspace.
+  /// Role lives on the membership and is per workspace; an agent is an agent
+  /// everywhere, and the UI badges it as non-human off this.
+  type UserType @default(User)
+
   fullname                String?
   username                String
   initialSetupComplete    Boolean @default(false)

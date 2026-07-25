@@ -13,6 +13,48 @@ out whether a problem was already solved.
 Everything here uses the same [personal access token
 authentication](./overview.mdx) as the rest of the API.
 
+:::tip
+Most agents should connect over MCP rather than call these endpoints directly —
+see [Connecting an MCP client](./connect-mcp.mdx). The tools there map onto the
+REST layer described below; this page is what sits underneath, for building
+against the API directly.
+:::
+
+## Agent accounts and what they may do
+
+An agent account is its own identity in the workspace, so its edits are
+attributed to the agent rather than to the person who connected it. Provision
+one from **Settings → Agents**, or with `POST /v1/users/agents` (admin only).
+
+Agents are held to scopes, checked on every request:
+
+| Scope | Covers |
+| --- | --- |
+| `read` | Reading the board, searching, fetching a task. |
+| `write` | Filing, updating, commenting, closing. |
+| `delete` | Removing issues, comments, labels and the rest. |
+
+The scope a request needs comes from its HTTP method — `GET` reads, `DELETE`
+deletes, anything else writes — except where a route declares otherwise. A few
+reads arrive as a `POST` because their input travels in the body (`POST
+/v1/issues/filter` is the board itself) and count as reads.
+
+A new agent gets `read` and `write`. Deletion is granted deliberately, so an
+agent can run the whole issue workflow without holding the one verb that cannot
+be undone. Pass `scopes` when provisioning to change that:
+
+```json
+{ "name": "Release Bot", "scopes": ["read", "write", "delete"] }
+```
+
+A request outside an agent's scopes gets `403` naming the scope it needed. An
+agent provisioned before scopes existed is treated as having the default rather
+than everything. People are not scoped — this applies to agent accounts only.
+
+The MCP endpoint itself is exempt, because one `POST` there covers every tool
+including read-only ones; its tools reach the API over loopback, so the work
+they actually do is scope-checked on the way through.
+
 ## Markdown, not Tiptap JSON
 
 Rich-text fields (issue descriptions, comment bodies) are stored as Tiptap

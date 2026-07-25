@@ -31,6 +31,7 @@ import { IssueRelationModule } from 'modules/issue-relation/issue-relation.modul
 import { IssuesModule } from 'modules/issues/issues.module';
 import { LabelsModule } from 'modules/labels/labels.module';
 import { LinkedIssueModule } from 'modules/linked-issue/linked-issue.module';
+import { McpModule } from 'modules/mcp/mcp.module';
 import { NotificationsModule } from 'modules/notifications/notifications.module';
 import { OAuthCallbackModule } from 'modules/oauth-callback/oauth-callback.module';
 import { PeopleModule } from 'modules/people/people.module';
@@ -107,6 +108,7 @@ import { AppService } from './app.service';
     IssueRelationModule,
     NotificationsModule,
     SearchModule,
+    McpModule,
     AttachmentModule,
     ViewsModule,
     TriggerdevModule,

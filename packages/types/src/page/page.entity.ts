@@ -36,6 +36,20 @@ export enum PageVisibilityEnum {
   WORKSPACE = 'WORKSPACE',
 }
 
+/**
+ * What a page can be linked to.
+ *
+ * Nesting gives a page one parent, which cannot say "this runbook belongs to
+ * the Payments project and the Platform team". Links can, and unlike a mention
+ * buried in prose they are traversable in both directions.
+ */
+export enum PageLinkTypeEnum {
+  TEAM = 'TEAM',
+  PROJECT = 'PROJECT',
+  ISSUE = 'ISSUE',
+  PAGE = 'PAGE',
+}
+
 /** Statuses retrieval is allowed to serve. Everything else is withheld. */
 export const SERVED_ENTRY_STATUSES: PageEntryStatusEnum[] = [
   PageEntryStatusEnum.STANDING,

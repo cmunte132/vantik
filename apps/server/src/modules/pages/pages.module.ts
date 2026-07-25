@@ -7,6 +7,7 @@ import { VectorModule } from 'modules/vector/vector.module';
 import KnowledgeIndexService from './knowledge-index.service';
 import { KnowledgeController } from './knowledge.controller';
 import KnowledgeService from './knowledge.service';
+import PageLinksService from './page-links.service';
 import { PageEntriesController } from './page-entries.controller';
 import PageEntriesService from './page-entries.service';
 import { PagesController } from './pages.controller';
@@ -18,11 +19,12 @@ import PagesService from './pages.service';
   providers: [
     PagesService,
     PageEntriesService,
+    PageLinksService,
     KnowledgeService,
     KnowledgeIndexService,
     PrismaService,
     UsersService,
   ],
-  exports: [PagesService, PageEntriesService, KnowledgeService],
+  exports: [PagesService, PageEntriesService, PageLinksService, KnowledgeService],
 })
 export class PagesModule {}

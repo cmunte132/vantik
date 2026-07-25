@@ -42,7 +42,11 @@ export const PageNav = observer(({ activePageId }: { activePageId: string }) => 
       </div>
 
       <ScrollArea className="grow px-2 pb-3">
-        <PageTree activePageId={activePageId} onSelect={goToPage} />
+        <PageTree
+          activePageId={activePageId}
+          onSelect={goToPage}
+          onCreateChild={(parentId) => createPage({ title: '', parentId })}
+        />
       </ScrollArea>
     </div>
   );

@@ -11,7 +11,10 @@ import {
   KnowledgeHit,
   KnowledgePage,
   KnowledgePageRef,
+  LinkPageInput,
   LoadContextInput,
+  PageLink,
+  PagesForInput,
   RecallInput,
   RememberInput,
   RememberResult,
@@ -622,6 +625,47 @@ export class VantikAgent {
       tokenBudget: pack?.tokenBudget ?? 0,
       omitted: pack?.omitted ?? 0,
     };
+  }
+
+  /**
+   * Links a page to a team, project, issue or another page.
+   *
+   * Neutral about whether a link is warranted — like every other write here,
+   * the judgment belongs to the surface talking to the person or the model.
+   */
+  async linkPage(input: LinkPageInput): Promise<PageLink> {
+    const page = await this.resolvePage(input.page);
+
+    return this.client.post<PageLink>(`/pages/${page.id}/links`, {
+      body: { entityType: input.entityType, entityId: input.entityId },
+    });
+  }
+
+  /** What a page is linked to. */
+  async pageLinks(page: string): Promise<PageLink[]> {
+    const resolved = await this.resolvePage(page);
+
+    return (await this.client.get<PageLink[]>(
+      `/pages/${resolved.id}/links`,
+    )) ?? [];
+  }
+
+  /**
+   * The pages that relate to one team, project, issue or page.
+   *
+   * The direction search cannot serve. An agent given "ENG-57" has a uuid and
+   * no vocabulary — it does not know the runbook is called "Deploying the
+   * worker pool", so no query it can construct will find it. This is a lookup
+   * on an index instead.
+   */
+  async pagesFor(input: PagesForInput): Promise<KnowledgePageRef[]> {
+    const pages = await this.client.get<Array<{ id: string; title: string }>>(
+      `/pages/related?entityType=${input.entityType}&entityId=${encodeURIComponent(
+        input.entityId,
+      )}`,
+    );
+
+    return (pages ?? []).map((page) => ({ id: page.id, title: page.title }));
   }
 
   /**

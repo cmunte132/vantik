@@ -229,6 +229,72 @@ export function usePageMarkdown(pageId?: string, enabled = true) {
   });
 }
 
+export type PageLinkType = 'TEAM' | 'PROJECT' | 'ISSUE' | 'PAGE';
+
+export interface PageLink {
+  id: string;
+  pageId: string;
+  entityType: PageLinkType;
+  entityId: string;
+  label: string;
+  teamId?: string;
+}
+
+/**
+ * What a page is linked to.
+ *
+ * Not synced: links change rarely and are read when a page is open, so keeping
+ * a fifth model in the local cache would cost every reader for the benefit of
+ * one section.
+ */
+export function usePageLinks(pageId?: string) {
+  return useQuery<PageLink[]>({
+    queryKey: ['page-links', pageId],
+    enabled: Boolean(pageId),
+    queryFn: () =>
+      ajaxGet({ url: `/api/v1/pages/${pageId}/links` }) as Promise<PageLink[]>,
+  });
+}
+
+export function createPageLink({
+  pageId,
+  ...data
+}: {
+  pageId: string;
+  entityType: PageLinkType;
+  entityId: string;
+}) {
+  return ajaxPost({ url: `/api/v1/pages/${pageId}/links`, data });
+}
+
+export function deletePageLink({
+  pageId,
+  linkId,
+}: {
+  pageId: string;
+  linkId: string;
+}) {
+  return ajaxDelete({ url: `/api/v1/pages/${pageId}/links/${linkId}` });
+}
+
+export function useCreatePageLinkMutation(
+  params: MutationParams<PageLink> = {},
+) {
+  return buildMutation<
+    { pageId: string; entityType: PageLinkType; entityId: string },
+    PageLink
+  >(createPageLink, params);
+}
+
+export function useDeletePageLinkMutation(
+  params: MutationParams<{ id: string }> = {},
+) {
+  return buildMutation<{ pageId: string; linkId: string }, { id: string }>(
+    deletePageLink,
+    params,
+  );
+}
+
 /** Issues that link to a page. Documentation and work, not two worlds. */
 export function usePageBacklinks(pageId?: string) {
   return useQuery<

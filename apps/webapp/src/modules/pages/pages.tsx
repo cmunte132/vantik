@@ -77,7 +77,12 @@ const PagesView = observer(() => {
                   write — see the unanswered questions below.
                 </p>
               ) : (
-                <PageTree onSelect={goToPage} />
+                <PageTree
+                  onSelect={goToPage}
+                  onCreateChild={(parentId) =>
+                    createPage({ title: '', parentId })
+                  }
+                />
               )}
             </div>
           </section>

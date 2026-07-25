@@ -1,6 +1,11 @@
 import { Button } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
-import { ChevronRight } from '@vantikhq/ui/icons';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@vantikhq/ui/components/tooltip';
+import { AddLine, ChevronRight } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import * as React from 'react';
@@ -13,6 +18,8 @@ interface PageTreeProps {
   /** Highlighted page, when one is open. */
   activePageId?: string;
   onSelect: (pageId: string) => void;
+  /** Creates a child of the given page. Omit to hide the affordance. */
+  onCreateChild?: (parentId: string) => void;
 }
 
 /**
@@ -22,21 +29,24 @@ interface PageTreeProps {
  * "Runbooks" and "Deployment" under "Sales" are different documents — so the
  * navigation is a tree rather than the flat list a `getPages` response is.
  */
-export const PageTree = observer(({ activePageId, onSelect }: PageTreeProps) => {
-  const { pagesStore } = useContextStore();
+export const PageTree = observer(
+  ({ activePageId, onSelect, onCreateChild }: PageTreeProps) => {
+    const { pagesStore } = useContextStore();
 
-  return (
-    <div className="flex flex-col gap-px">
-      <Branch
-        parentId={null}
-        depth={0}
-        activePageId={activePageId}
-        onSelect={onSelect}
-        pagesStore={pagesStore}
-      />
-    </div>
-  );
-});
+    return (
+      <div className="flex flex-col gap-px">
+        <Branch
+          parentId={null}
+          depth={0}
+          activePageId={activePageId}
+          onSelect={onSelect}
+          onCreateChild={onCreateChild}
+          pagesStore={pagesStore}
+        />
+      </div>
+    );
+  },
+);
 
 interface NodeProps extends PageTreeProps {
   depth: number;
@@ -49,7 +59,14 @@ interface BranchProps extends NodeProps {
 }
 
 const Branch = observer(
-  ({ parentId, depth, activePageId, onSelect, pagesStore }: BranchProps) => {
+  ({
+    parentId,
+    depth,
+    activePageId,
+    onSelect,
+    onCreateChild,
+    pagesStore,
+  }: BranchProps) => {
     const children: PageType[] = pagesStore.getChildren(parentId);
 
     if (children.length === 0) {
@@ -65,6 +82,7 @@ const Branch = observer(
             depth={depth}
             activePageId={activePageId}
             onSelect={onSelect}
+            onCreateChild={onCreateChild}
             pagesStore={pagesStore}
           />
         ))}
@@ -79,6 +97,7 @@ const TreeNode = observer(
     depth,
     activePageId,
     onSelect,
+    onCreateChild,
     pagesStore,
   }: NodeProps & { page: PageType }) => {
     const hasChildren = pagesStore.getChildren(page.id).length > 0;
@@ -98,7 +117,7 @@ const TreeNode = observer(
       <>
         <div
           className={cn(
-            'flex items-center gap-1 rounded px-1 py-1 hover:bg-grayAlpha-100',
+            'group flex items-center gap-1 rounded px-1 py-1 hover:bg-grayAlpha-100',
             page.id === activePageId && 'bg-grayAlpha-100',
           )}
           style={{ paddingLeft: `${depth * 12 + 4}px` }}
@@ -120,11 +139,32 @@ const TreeNode = observer(
 
           <Button
             variant="ghost"
-            className="h-auto p-0 justify-start grow text-left font-normal"
+            className="h-auto p-0 justify-start grow text-left font-normal min-w-0"
             onClick={() => onSelect(page.id)}
           >
-            <span className="truncate">{page.title}</span>
+            <span className="truncate">{page.title || 'Untitled page'}</span>
           </Button>
+
+          {/* The only way to nest from the app. The hierarchy has always been
+              in the model — parent, ancestors, breadcrumbs, this indentation —
+              but every create path passed no parent, so every page made here
+              was a root and the tree could only ever be flat. */}
+          {onCreateChild && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`New page under ${page.title || 'Untitled page'}`}
+                  className="shrink-0 h-5 px-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                  onClick={() => onCreateChild(page.id)}
+                >
+                  <AddLine size={12} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Add a page inside</TooltipContent>
+            </Tooltip>
+          )}
         </div>
 
         {expanded && (
@@ -133,6 +173,7 @@ const TreeNode = observer(
             depth={depth + 1}
             activePageId={activePageId}
             onSelect={onSelect}
+            onCreateChild={onCreateChild}
             pagesStore={pagesStore}
           />
         )}

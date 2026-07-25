@@ -513,6 +513,53 @@ export function registerVantikTools(
   );
 
   server.registerTool(
+    'pages_for',
+    {
+      title: 'Pages about a team, project or issue',
+      description:
+        'The documentation attached to one thing in the workspace. Use this ' +
+        'the moment you are handed an issue or a project, before you search: ' +
+        'you have an id and no vocabulary, so you cannot write the query that ' +
+        'would find the page — you do not yet know it is called “Deploying ' +
+        'the worker pool”. This is a direct lookup and does not guess.\n\n' +
+        'Search is for questions. This is for “what has already been written ' +
+        'down about the thing in front of me”.',
+      inputSchema: {
+        entityType: z
+          .enum(['TEAM', 'PROJECT', 'ISSUE', 'PAGE'])
+          .describe('What kind of thing you are starting from.'),
+        entityId: z.string().describe('Its id.'),
+      },
+    },
+    handler(({ entityType, entityId }) =>
+      agent.pagesFor({ entityType, entityId }),
+    ),
+  );
+
+  server.registerTool(
+    'link_page',
+    {
+      title: 'Link a page to work',
+      description:
+        'Attach a page to the team, project or issue it is about, so the next ' +
+        'agent handed that work is given the page without having to find it.\n\n' +
+        'Link when the connection is durable — this runbook governs this ' +
+        'project, this page explains this team’s conventions. Do not link a ' +
+        'page to every issue that happened to touch it: a page attached to ' +
+        'forty issues tells the next reader nothing about which of them it ' +
+        'actually explains.',
+      inputSchema: {
+        page: z.string().describe('Page title or id.'),
+        entityType: z.enum(['TEAM', 'PROJECT', 'ISSUE', 'PAGE']),
+        entityId: z.string().describe('The id of the thing to link it to.'),
+      },
+    },
+    handler(({ page, entityType, entityId }) =>
+      agent.linkPage({ page, entityType, entityId }),
+    ),
+  );
+
+  server.registerTool(
     'remember',
     {
       title: 'Remember a fact',

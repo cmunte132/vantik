@@ -9,6 +9,9 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
 import { Editor, EditorExtensions } from '@vantikhq/ui/components/editor/index';
@@ -43,6 +46,7 @@ import { Header } from './header';
 import { MemoryRail } from './memory-rail';
 import { PageHistory } from './page-history';
 import { PageNav } from './page-nav';
+import { RelatedLinks } from './related-links';
 import { PageTitle } from './page-title';
 import { SaveIndicator, type SaveState } from './save-indicator';
 
@@ -173,6 +177,42 @@ const SinglePageView = observer(() => {
 
         <DropdownMenuSeparator />
 
+        {/* Nesting existed everywhere except here: the model, the breadcrumb
+            and the tree all understood a parent, and nothing in the app could
+            set one. */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Move to</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="max-h-[300px] overflow-y-auto">
+            <DropdownMenuItem
+              onClick={() => updatePage({ pageId: page.id, parentId: null })}
+            >
+              Top level
+            </DropdownMenuItem>
+            {pagesStore.getPages
+              .filter(
+                (candidate: PageType) =>
+                  candidate.id !== page.id &&
+                  candidate.id !== page.parentId &&
+                  // A page cannot be moved inside its own subtree; the server
+                  // refuses it, and offering it here would only produce an
+                  // error message where a missing option says it better.
+                  !pagesStore
+                    .getAncestors(candidate.id)
+                    .some((ancestor: PageType) => ancestor.id === page.id),
+              )
+              .map((candidate: PageType) => (
+                <DropdownMenuItem
+                  key={candidate.id}
+                  onClick={() =>
+                    updatePage({ pageId: page.id, parentId: candidate.id })
+                  }
+                >
+                  {candidate.title || 'Untitled page'}
+                </DropdownMenuItem>
+              ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
         {/* Agents may rewrite a body to keep it current, so the way to see
             what one did — and undo it — has to be on the page itself. */}
         <DropdownMenuItem onClick={() => setShowHistory(true)}>
@@ -247,6 +287,8 @@ const SinglePageView = observer(() => {
                 >
                   <EditorExtensions suggestionItems={suggestionItems} />
                 </Editor>
+
+                <RelatedLinks pageId={page.id} />
 
                 <Backlinks pageId={page.id} />
 

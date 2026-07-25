@@ -6,7 +6,7 @@ import {
   IsUUID,
 } from 'class-validator';
 
-import { PageEntryPolicyEnum } from './page.entity';
+import { PageEntryPolicyEnum, PageLinkTypeEnum } from './page.entity';
 
 export class CreatePageDto {
   @IsString()
@@ -86,6 +86,36 @@ export class PageRevertParamsDto {
 
   @IsUUID()
   historyId: string;
+}
+
+/** One edge from a page to a team, project, issue or other page. */
+export class CreatePageLinkDto {
+  @IsEnum(PageLinkTypeEnum)
+  entityType: PageLinkTypeEnum;
+
+  @IsUUID()
+  entityId: string;
+}
+
+export class PageLinkRequestParamsDto {
+  @IsUUID()
+  pageId: string;
+
+  @IsUUID()
+  linkId: string;
+}
+
+/** The reverse lookup: which pages relate to one thing. */
+export class RelatedPagesQueryDto {
+  @IsOptional()
+  @IsUUID()
+  workspaceId?: string;
+
+  @IsEnum(PageLinkTypeEnum)
+  entityType: PageLinkTypeEnum;
+
+  @IsUUID()
+  entityId: string;
 }
 
 export class ListPagesQueryDto {

@@ -634,6 +634,7 @@ model Page {
 
   entries PageEntry[]
   history PageHistory[]
+  links   PageLink[]
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
@@ -1185,6 +1186,53 @@ enum ModelName {
 /// be tidy in a tool description is the weakest control available — it fails
 /// precisely when a cheaper or unfamiliar model is pointed at the endpoint,
 /// which is the cross-harness case this feature exists to serve.
+/// What a page has been linked to.
+///
+/// Polymorphic rather than one nullable column per kind, because the set of
+/// things worth relating a page to grows — a cycle, a label, a customer — and
+/// each new one would otherwise be a migration plus a branch in every query
+/// that walks the graph.
+enum PageLinkType {
+  TEAM
+  PROJECT
+  ISSUE
+  /// Page to page. Bodies can already mention each other in prose, but prose is
+  /// not traversable and says nothing in the other direction.
+  PAGE
+}
+
+/// An edge between a page and something else in the workspace.
+///
+/// Nesting gives a page exactly one parent, which is the wrong shape for "this
+/// runbook belongs to the Payments project and the Platform team". This is the
+/// shape that answers that, and it is what lets an agent holding an issue find
+/// the documentation for it instead of guessing search terms.
+model PageLink {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  page   Page   @relation(fields: [pageId], references: [id])
+  pageId String
+
+  entityType PageLinkType
+  /// Deliberately not a foreign key: one column cannot reference four tables.
+  /// The cost is that a dangling edge is possible, so reads resolve targets and
+  /// drop the ones that no longer exist rather than trusting the row.
+  entityId String
+
+  createdById String?
+
+  /// The same edge twice is not two facts about the graph.
+  @@unique([pageId, entityType, entityId])
+  @@index([pageId])
+  /// The reverse direction, and the reason this is a graph rather than a list:
+  /// "what pages relate to this issue" has to be a lookup, not a scan of every
+  /// issue body in the workspace.
+  @@index([entityType, entityId])
+}
+
 enum PageEntryPolicy {
   /// Append freely. Scratch pages, where volume does not matter.
   OPEN

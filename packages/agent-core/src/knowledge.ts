@@ -96,6 +96,38 @@ export interface LoadContextInput {
   tokenBudget?: number;
 }
 
+/** What a page can be linked to. */
+export type PageLinkType = 'TEAM' | 'PROJECT' | 'ISSUE' | 'PAGE';
+
+export interface PageLink {
+  id: string;
+  pageId: string;
+  entityType: PageLinkType;
+  entityId: string;
+  /** An issue key and title, a project or team name, a page title. */
+  label: string;
+}
+
+export interface LinkPageInput {
+  /** Page title or id. */
+  page: string;
+  entityType: PageLinkType;
+  /** The team, project, issue or page id to link to. */
+  entityId: string;
+}
+
+/**
+ * Pages reachable from one thing in the workspace.
+ *
+ * The traversal the graph exists for: an agent holding an issue can be handed
+ * the documentation for it without knowing what the documentation is called,
+ * which is the case free-text search is worst at.
+ */
+export interface PagesForInput {
+  entityType: PageLinkType;
+  entityId: string;
+}
+
 export interface RememberInput {
   /** Page title or id. The fact is appended to this page. */
   page: string;

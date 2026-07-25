@@ -17,6 +17,10 @@ export const WORKSPACE_LINKS: LinkItem[] = [
     href: 'members',
   },
   {
+    title: 'Agents',
+    href: 'agents',
+  },
+  {
     title: 'Integrations',
     href: 'integrations',
   },

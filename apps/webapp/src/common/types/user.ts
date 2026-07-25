@@ -1,4 +1,4 @@
-import type { Role } from '@vantikhq/types';
+import type { Role, UserType } from '@vantikhq/types';
 
 interface Workspace {
   name: string;
@@ -24,5 +24,10 @@ export interface User {
   workspaces: Workspace[];
   invites: Invite[];
   role: Role;
+  /**
+   * Person, agent or system. Absent on payloads written before the column
+   * existed, so read it through `isAgentUser` rather than comparing directly.
+   */
+  type?: UserType;
   image?: string;
 }

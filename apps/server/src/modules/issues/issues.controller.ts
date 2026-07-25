@@ -27,6 +27,7 @@ import {
 import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
+import { RequiresScope } from 'modules/auth/agent-scope';
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
 import {
@@ -112,6 +113,10 @@ export class IssuesController {
     return issues;
   }
 
+  // A read that arrives as a POST because the filter travels in the body. Left
+  // to the method, the scope guard would read it as a write and lock a
+  // read-only agent out of the board itself.
+  @RequiresScope('read')
   @Post('filter')
   @UseGuards(AuthGuard)
   async getIssuesByFilter(

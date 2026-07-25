@@ -4,6 +4,7 @@ import { configureDeployCommand } from '../commands/deploy';
 import { configureInitCommand } from '../commands/init';
 import { configureLoginCommand } from '../commands/login';
 import { configureLogoutCommand } from '../commands/logout';
+import { configureTaskCommands } from '../commands/task';
 import { COMMAND_NAME } from '../consts';
 import { getVersion } from '../utilities/getVersion';
 
@@ -18,3 +19,4 @@ configureDeployCommand(program);
 configureInitCommand(program);
 configureLoginCommand(program);
 configureLogoutCommand(program);
+configureTaskCommands(program);

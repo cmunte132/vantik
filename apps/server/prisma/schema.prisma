@@ -470,6 +470,9 @@ model PersonalAccessToken {
   workspaceId String
 
   @@unique([name, userId, token])
+  /// Authenticating a request means finding the token by value, and the
+  /// uniqueness constraint above cannot serve a lookup on `token` alone.
+  @@index([token])
 }
 
 model Label {
@@ -753,6 +756,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   email     String   @unique
+
+  /// What this account *is*, as opposed to what it may do in a given workspace.
+  /// Role lives on the membership and is per workspace; an agent is an agent
+  /// everywhere, and the UI badges it as non-human off this.
+  type UserType @default(User)
 
   fullname                String?
   username                String

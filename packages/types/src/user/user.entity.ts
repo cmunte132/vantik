@@ -1,4 +1,5 @@
 import { Attachment } from '../attachment';
+import { UserType } from '../conversation-history';
 import { IntegrationAccount } from '../integration-account';
 import { Role } from '../invite';
 import { Issue } from '../issue';
@@ -12,6 +13,8 @@ export class User {
   email: string;
   fullname: string | null;
   username: string;
+  /** Person, agent or system. Role is per workspace; this is per account. */
+  type: UserType;
   initialSetupComplete: boolean;
   anonymousDataCollection: boolean;
   usersOnWorkspaces?: UsersOnWorkspaces[];
@@ -27,4 +30,5 @@ export class PublicUser {
   fullname: string;
   email: string;
   role: Role;
+  type: UserType;
 }

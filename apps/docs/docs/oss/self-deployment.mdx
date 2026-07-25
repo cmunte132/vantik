@@ -48,6 +48,39 @@ docker compose up -d
 docker compose logs server | grep -A5 "magic link"
 ```
 
+## Signing in
+
+There are two ways in, and both are available on a fresh install.
+
+**Email code or magic link.** Enter an address and Vantik emails a six-digit
+code and a link. This needs [SMTP](#email-smtp) to be configured, or the code
+lands in the server log instead.
+
+**Passkey.** Authenticate with Touch ID, Windows Hello, or a security key. No
+mail server is involved, which makes it the practical choice for a single-user
+or local install where SMTP is never set up. Sign in with a passkey from the
+login screen, or add one to an existing account under **Settings → Security**.
+
+A passkey is bound to the hostname the browser sees, taken from
+`FRONTEND_HOST`. Reaching the same instance on a different domain means the
+browser will not offer the passkeys registered on the old one, so set
+`FRONTEND_HOST` before people enrol. WebAuthn also requires a secure context:
+HTTPS in production, though `localhost` is exempt.
+
+Each account holds one passkey, alongside the email code that always keeps
+working — so losing a device is not a lockout. To move a passkey to a new
+device, remove it under **Settings → Security** and enrol the new one.
+
+By default anyone can create an account by registering a passkey. To run an
+invite-only instance, turn that off:
+
+```bash
+PASSKEY_SIGNUP_ENABLED=false
+```
+
+People then arrive through an invite or a login code, and add a passkey
+afterwards from Settings.
+
 ## Optional services
 
 Everything below is optional. The server logs an error and continues if a
@@ -56,8 +89,9 @@ service is not configured.
 ### Email (SMTP)
 
 Magic-link logins and notification emails are sent via SMTP when configured;
-otherwise login links land in the server log. Any provider that supports SMTP
-authentication works (Gmail, Amazon SES, SendGrid, ...):
+otherwise login links land in the server log. A [passkey](#signing-in) skips
+email altogether, so a single-user install can leave this unset. Any provider
+that supports SMTP authentication works (Gmail, Amazon SES, SendGrid, ...):
 
 ```bash
 SMTP_HOST=your-smtp-host

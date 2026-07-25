@@ -21,9 +21,11 @@ export class ProjectsService {
 
   async getProjects(workspaceId: string) {
     return await this.prisma.project.findMany({
-      where: {
-        workspaceId,
-      },
+      // Deleting a project is a soft delete, and every other listing in the
+      // API excludes those. Without this the list hands back projects that
+      // were deleted — which a person can at least recognise, but an agent
+      // resolving a name against this list would file work into a dead one.
+      where: { workspaceId, deleted: null },
     });
   }
 

@@ -12,6 +12,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  AgentAccount,
+  AgentSummary,
   CodeDto,
   CodeDtoWithWorkspace,
   CreatePatDto,
@@ -23,6 +25,7 @@ import {
 import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
+import { RequiresScope, sanitizeScopes } from 'modules/auth/agent-scope';
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
 import {
@@ -31,7 +34,13 @@ import {
   Workspace,
 } from 'modules/auth/session.decorator';
 
-import { UpdateUserBody, UserWithInvites } from './users.interface';
+import { AdminGuard } from './admin.guard';
+import {
+  AgentIdParams,
+  CreateAgentDto,
+  UpdateUserBody,
+  UserWithInvites,
+} from './users.interface';
 import { UsersService } from './users.service';
 
 @Controller({
@@ -65,6 +74,8 @@ export class UsersController {
     return user;
   }
 
+  // Reads a set of users; POST only because the id list travels in the body.
+  @RequiresScope('read')
   @Post()
   @UseGuards(AuthGuard)
   async getUsersById(
@@ -100,6 +111,54 @@ export class UsersController {
     );
 
     return user;
+  }
+
+  /**
+   * Provisions an agent account and returns its personal access token once.
+   * Admin-only: an agent acts as a distinct identity in the workspace, so
+   * minting one is a privileged action. Drop the returned token into an MCP
+   * client's Authorization header to have that client act as the agent.
+   */
+  @Post('agents')
+  @UseGuards(AuthGuard, AdminGuard)
+  async createAgentAccount(
+    @Workspace() workspaceId: string,
+    @SessionDecorator() session: SessionContainer,
+    @Body() createAgentDto: CreateAgentDto,
+  ): Promise<AgentAccount> {
+    const createdByUserId = getAppUserId(session);
+    return await this.users.createAgentAccount(
+      workspaceId,
+      createAgentDto.name,
+      createdByUserId,
+      'personal',
+      sanitizeScopes(createAgentDto.scopes),
+    );
+  }
+
+  /**
+   * The agent accounts in this workspace, without tokens (a token exists only
+   * at creation). Admin-only, mirroring the create path.
+   */
+  @Get('agents')
+  @UseGuards(AuthGuard, AdminGuard)
+  async listAgentAccounts(
+    @Workspace() workspaceId: string,
+  ): Promise<AgentSummary[]> {
+    return await this.users.listAgentAccounts(workspaceId);
+  }
+
+  /**
+   * Revokes an agent's access by deleting its tokens. The account is kept so
+   * its past edits stay attributed; it simply can no longer authenticate.
+   */
+  @Post('agents/:agentId/revoke')
+  @UseGuards(AuthGuard, AdminGuard)
+  async revokeAgent(
+    @Workspace() workspaceId: string,
+    @Param() { agentId }: AgentIdParams,
+  ): Promise<void> {
+    return await this.users.revokeAgent(workspaceId, agentId);
   }
 
   @Post('pat-for-code')

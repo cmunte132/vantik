@@ -54,7 +54,17 @@ export const EntryRail = observer(({ pageId }: { pageId: string }) => {
   );
 
   return (
-    <div className="w-[380px] shrink-0 border-l h-full flex flex-col">
+    <div className="w-[360px] shrink-0 border-l border-border h-full flex flex-col">
+      {/* Named, because "what is this column" was the first thing the rail
+          failed to answer. Facts are the agent-written half of the page, and
+          nothing here is served until somebody accepts it. */}
+      <div className="px-3 pt-3">
+        <h2>Facts</h2>
+        <p className="text-muted-foreground">
+          What agents have asserted about this page.
+        </p>
+      </div>
+
       <Tabs defaultValue="inbox" className="flex flex-col h-full">
         <TabsList className="mx-3 mt-3">
           <TabsTrigger value="inbox">

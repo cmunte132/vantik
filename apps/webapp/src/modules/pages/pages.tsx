@@ -1,14 +1,15 @@
-import { Button } from '@vantikhq/ui/components/button';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
+import { MainLayout } from 'common/layouts/main-layout';
 
 import { useContextStore } from 'store/global-context-provider';
 
 import { useCreatePageMutation } from 'services/pages';
 
+import { Header } from './header';
 import { KnowledgeGaps } from './knowledge-gaps';
 import { PageTree, usePageNavigation } from './page-tree';
 
@@ -25,49 +26,37 @@ const PagesView = observer(() => {
   });
 
   return (
-    <ScrollArea className="h-full w-full">
-      <div className="max-w-[80ch] mx-auto py-8 px-6 flex flex-col gap-8">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-medium">Pages</h1>
-            <p className="text-muted-foreground mt-1">
-              Documentation people read, and the memory agents write into. What
-              a page says is what the workspace has agreed; what agents assert
-              waits on each page for review.
-            </p>
-          </div>
-
-          <Button
-            variant="secondary"
-            className="shrink-0"
-            onClick={() => createPage({ title: 'Untitled page' })}
-          >
-            New page
-          </Button>
-        </div>
-
-        <section className="flex flex-col gap-2">
-          <h2>Tree</h2>
-          {pagesStore.getPages.length === 0 ? (
+    <MainLayout
+      header={<Header onCreate={() => createPage({ title: '' })} />}
+    >
+      <ScrollArea className="h-[calc(100%_-_38px)] w-full">
+        <div className="max-w-[80ch] mx-auto py-8 px-6 flex flex-col gap-8">
+          <section className="flex flex-col gap-2">
+            <h2>Pages</h2>
             <p className="text-muted-foreground">
-              No pages yet. Start one, or let an agent tell you what to write —
-              see the unanswered questions below.
+              Documentation people read, and the memory agents write into. A
+              page is what the workspace has agreed; what agents assert waits on
+              each page for review.
             </p>
-          ) : (
-            <PageTree onSelect={goToPage} />
-          )}
-        </section>
 
-        <KnowledgeGaps
-          onCreatePage={(query) =>
-            createPage({
-              title: query,
-              descriptionMarkdown: `Written in answer to a question agents asked ${''}and the bank could not answer.`,
-            })
-          }
-        />
-      </div>
-    </ScrollArea>
+            <div className="mt-2">
+              {pagesStore.getPages.length === 0 ? (
+                <p className="text-muted-foreground">
+                  No pages yet. Start one, or let an agent tell you what to
+                  write — see the unanswered questions below.
+                </p>
+              ) : (
+                <PageTree onSelect={goToPage} />
+              )}
+            </div>
+          </section>
+
+          <KnowledgeGaps
+            onCreatePage={(query) => createPage({ title: query })}
+          />
+        </div>
+      </ScrollArea>
+    </MainLayout>
   );
 });
 

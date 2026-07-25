@@ -102,7 +102,7 @@ export const ChecklistItemRow = observer(function ChecklistItemRow({
       <Button
         variant="ghost"
         size="xs"
-        className="opacity-0 group-hover:opacity-100"
+        className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
         onClick={() =>
           deleteChecklistItem({ checklistItemId: checklistItem.id })
         }

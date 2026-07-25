@@ -85,13 +85,13 @@ export interface ChecklistItemType {
 
   body: string;
   completed: boolean;
-  sortOrder?: number;
+  sortOrder?: number | null;
 
-  completedAt?: string;
-  completedById?: string;
+  completedAt?: string | null;
+  completedById?: string | null;
 
   issueId: string;
-  createdById?: string;
+  createdById?: string | null;
 }
 
 export enum SubscribeType {

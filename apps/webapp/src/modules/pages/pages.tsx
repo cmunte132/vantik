@@ -1,9 +1,12 @@
+import { Button } from '@vantikhq/ui/components/button';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { observer } from 'mobx-react-lite';
+import { useRouter } from 'next/router';
 import * as React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { PageEntryStatus } from 'common/types';
 
 import { useContextStore } from 'store/global-context-provider';
 
@@ -19,11 +22,23 @@ import { PageTree, usePageNavigation } from './page-tree';
  */
 const PagesView = observer(() => {
   const goToPage = usePageNavigation();
-  const { pagesStore } = useContextStore();
+  const router = useRouter();
+  const { workspaceSlug } = router.query;
+  const { pagesStore, pageEntriesStore } = useContextStore();
 
   const { mutate: createPage } = useCreatePageMutation({
     onSuccess: (page) => goToPage(page.id),
   });
+
+  // The front door is where you find out there is anything to review at all,
+  // so it needs every page's entries and not just one page's.
+  React.useEffect(() => {
+    pageEntriesStore.loadAll();
+  }, [pageEntriesStore]);
+
+  const waiting = pageEntriesStore.getAllByStatus(
+    PageEntryStatus.PROPOSED,
+  ).length;
 
   return (
     <MainLayout
@@ -38,6 +53,22 @@ const PagesView = observer(() => {
               page is what the workspace has agreed; what agents assert waits on
               each page for review.
             </p>
+
+            {waiting > 0 && (
+              <div className="rounded border border-border p-3 mt-2 flex items-center gap-3 flex-wrap">
+                <span className="grow">
+                  {waiting} {waiting === 1 ? 'fact is' : 'facts are'} waiting
+                  for review across your pages.
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => router.push(`/${workspaceSlug}/pages/review`)}
+                >
+                  Review
+                </Button>
+              </div>
+            )}
 
             <div className="mt-2">
               {pagesStore.getPages.length === 0 ? (

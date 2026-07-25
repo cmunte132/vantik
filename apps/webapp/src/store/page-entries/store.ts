@@ -57,7 +57,29 @@ export const PageEntriesStore: IAnyStateTreeNode = types
       }
     });
 
-    return { update, deleteById, load };
+    /**
+     * Every entry in the workspace, for the review inbox.
+     *
+     * Reviewing is a sitting-down task done across pages at once — you clear
+     * what is waiting, you do not tour every page asking whether it has
+     * anything. The map stays keyed by page either way, so a page opened
+     * afterwards reads its rows from the same place `load` would have put them.
+     */
+    const loadAll = flow(function* () {
+      const entries: PageEntryType[] =
+        yield vantikDatabase.pageEntries.toArray();
+
+      const byPage = new Map<string, PageEntryType[]>();
+      for (const entry of entries) {
+        byPage.set(entry.pageId, [...(byPage.get(entry.pageId) ?? []), entry]);
+      }
+
+      for (const [pageId, rows] of byPage.entries()) {
+        self.pageEntries.set(pageId, PageEntryArray.create(rows));
+      }
+    });
+
+    return { update, deleteById, load, loadAll };
   })
   .views((self) => ({
     getEntries(pageId: string): PageEntryType[] {
@@ -74,6 +96,17 @@ export const PageEntriesStore: IAnyStateTreeNode = types
       return this.getEntries(pageId).filter(
         (entry: PageEntryType) => entry.status === status,
       );
+    },
+
+    /** The same filter, across every page — what the review inbox opens on. */
+    getAllByStatus(status: PageEntryStatus): PageEntryType[] {
+      const entries: PageEntryType[] = [];
+
+      for (const rows of self.pageEntries.values()) {
+        entries.push(...rows.filter((entry) => entry.status === status));
+      }
+
+      return entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
 
     /**

@@ -18,6 +18,8 @@ interface HeaderProps {
   ancestors?: PageType[];
   /** The open page, when there is one. */
   page?: PageType;
+  /** A trailing crumb for views that are not a page, such as the review inbox. */
+  label?: string;
   onCreate?: () => void;
   actions?: React.ReactNode;
 }
@@ -32,7 +34,7 @@ interface HeaderProps {
  * no way back up the tree.
  */
 export const Header = observer(
-  ({ ancestors = [], page, onCreate, actions }: HeaderProps) => {
+  ({ ancestors = [], page, label, onCreate, actions }: HeaderProps) => {
     const {
       query: { workspaceSlug },
     } = useRouter();
@@ -66,6 +68,12 @@ export const Header = observer(
           {page && (
             <BreadcrumbItem>
               <BreadcrumbLink>{page.title || 'Untitled'}</BreadcrumbLink>
+            </BreadcrumbItem>
+          )}
+
+          {label && (
+            <BreadcrumbItem>
+              <BreadcrumbLink>{label}</BreadcrumbLink>
             </BreadcrumbItem>
           )}
         </Breadcrumb>

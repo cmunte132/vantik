@@ -1,6 +1,7 @@
 import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
@@ -12,6 +13,7 @@ import { ActionModule } from 'modules/action/action.module';
 import { AIRequestsModule } from 'modules/ai-requests/ai-requests.module';
 import { ALSModule } from 'modules/als/als.module';
 import { AttachmentModule } from 'modules/attachments/attachments.module';
+import { AgentScopeGuard } from 'modules/auth/agent-scope.guard';
 import { AuthModule } from 'modules/auth/auth.module';
 import { BullConfigModule } from 'modules/bull/bull.module';
 import { CachceModule } from 'modules/cache/cache.module';
@@ -140,6 +142,12 @@ import { AppService } from './app.service';
   controllers: [AppController],
   providers: [
     AppService,
+
+    // Registered globally so an agent is held to its scopes on every route,
+    // rather than only on the ones somebody remembered to decorate. It
+    // resolves the caller from the token itself, so running ahead of each
+    // route's AuthGuard costs it nothing.
+    { provide: APP_GUARD, useClass: AgentScopeGuard },
 
     // { provide: APP_INTERCEPTOR, useClass: SyncActionsInterceptor },
   ],

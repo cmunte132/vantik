@@ -20,6 +20,7 @@ import type {
   IssueHistoryType,
   IssueCommentType,
   IssueSuggestionType,
+  ChecklistItemType,
 } from 'common/types';
 import type { IssueRelationType } from 'common/types';
 import type { LabelType } from 'common/types';
@@ -40,6 +41,7 @@ export class VantikDatabase extends Dexie {
   issues: Dexie.Table<IssueType, string>;
   issueHistory: Dexie.Table<IssueHistoryType, string>;
   comments: Dexie.Table<IssueCommentType, string>;
+  checklistItems: Dexie.Table<ChecklistItemType, string>;
   usersOnWorkspaces: Dexie.Table<UsersOnWorkspaceType, string>;
   integrationAccounts: Dexie.Table<IntegrationAccountType, string>;
   linkedIssues: Dexie.Table<LinkedIssueType, string>;
@@ -60,7 +62,7 @@ export class VantikDatabase extends Dexie {
   constructor(databaseName: string) {
     super(databaseName);
 
-    this.version(19).stores({
+    this.version(20).stores({
       [MODELS.Workspace]: 'id,createdAt,updatedAt,name,slug,preferences',
       [MODELS.Label]:
         'id,createdAt,updatedAt,name,color,description,workspaceId,groupId,teamId',
@@ -76,6 +78,8 @@ export class VantikDatabase extends Dexie {
         'id,createdAt,updatedAt,userId,issueId,assedLabelIds,removedLabelIds,fromPriority,toPriority,fromStateId,toStateId,fromEstimate,toEstimate,fromAssigneeId,toAssigneeId,fromParentId,toParentId,sourceMetadata',
       [MODELS.IssueComment]:
         'id,createdAt,updatedAt,userId,issueId,body,parentId,sourceMetadata',
+      [MODELS.ChecklistItem]:
+        'id,createdAt,updatedAt,body,completed,sortOrder,completedAt,completedById,issueId,createdById',
       [MODELS.IntegrationAccount]:
         'id,createdAt,updatedAt,accountId,settings,personal,integratedById,integrationDefinitionId,workspaceId',
       [MODELS.LinkedIssue]:
@@ -117,6 +121,7 @@ export class VantikDatabase extends Dexie {
     this.usersOnWorkspaces = this.table(MODELS.UsersOnWorkspaces);
     this.issueHistory = this.table(MODELS.IssueHistory);
     this.comments = this.table(MODELS.IssueComment);
+    this.checklistItems = this.table(MODELS.ChecklistItem);
     this.integrationAccounts = this.table(MODELS.IntegrationAccount);
     this.linkedIssues = this.table(MODELS.LinkedIssue);
     this.issueRelations = this.table(MODELS.IssueRelation);

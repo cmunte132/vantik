@@ -17,7 +17,14 @@ export function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-/** Caches the in-flight promise, so concurrent askers share one request. */
+/**
+ * Caches the in-flight promise, so concurrent askers share one request.
+ *
+ * A rejection is evicted. Caching one means a single timeout or 500 is replayed
+ * for the life of the instance: every later call re-awaits the same settled
+ * promise and re-throws an error about a failure that has long since stopped
+ * happening.
+ */
 function memo<K, V>(cache: Map<K, Promise<V>>, key: K, load: () => Promise<V>) {
   const cached = cache.get(key);
   if (cached) {
@@ -25,6 +32,13 @@ function memo<K, V>(cache: Map<K, Promise<V>>, key: K, load: () => Promise<V>) {
   }
   const loading = load();
   cache.set(key, loading);
+  loading.catch(() => cache.delete(key));
+  return loading;
+}
+
+/** The same eviction for the caches that hold a single promise, not a map. */
+function forget<V>(loading: Promise<V>, clear: () => void): Promise<V> {
+  loading.catch(clear);
   return loading;
 }
 
@@ -57,8 +71,24 @@ export class Directory {
 
   constructor(private readonly client: VantikClient) {}
 
+  /**
+   * Drops everything cached, so a long-lived agent can pick up a team, state,
+   * project, label or member added since it started. A CLI invocation or one MCP
+   * request never needs this; a process holding an agent across requests does.
+   */
+  refresh(): void {
+    this.teams = undefined;
+    this.projects = undefined;
+    this.me = undefined;
+    this.statesByTeam.clear();
+    this.labelsByWorkspace.clear();
+    this.membersByTeam.clear();
+  }
+
   getTeams(): Promise<Team[]> {
-    this.teams ??= this.client.get<Team[]>('/teams');
+    this.teams ??= forget(this.client.get<Team[]>('/teams'), () => {
+      this.teams = undefined;
+    });
     return this.teams;
   }
 
@@ -69,7 +99,9 @@ export class Directory {
   }
 
   getCurrentUser(): Promise<User> {
-    this.me ??= this.client.get<User>('/users');
+    this.me ??= forget(this.client.get<User>('/users'), () => {
+      this.me = undefined;
+    });
     return this.me;
   }
 
@@ -123,13 +155,18 @@ export class Directory {
    * row carries scheduling and ownership columns too, which only cost context.
    */
   getProjects(): Promise<Project[]> {
-    this.projects ??= this.client.get<Project[]>('/projects').then((projects) =>
-      projects.map((project) => ({
-        id: project.id,
-        name: project.name,
-        description: project.description ?? null,
-        status: project.status ?? null,
-      })),
+    this.projects ??= forget(
+      this.client.get<Project[]>('/projects').then((projects) =>
+        projects.map((project) => ({
+          id: project.id,
+          name: project.name,
+          description: project.description ?? null,
+          status: project.status ?? null,
+        })),
+      ),
+      () => {
+        this.projects = undefined;
+      },
     );
 
     return this.projects;

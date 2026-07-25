@@ -31,6 +31,7 @@ export function BootstrapWrapper({ children }: Props) {
 
   const {
     commentsStore,
+    checklistItemsStore,
     issuesHistoryStore,
     issuesStore,
     workflowsStore,
@@ -64,6 +65,7 @@ export function BootstrapWrapper({ children }: Props) {
     [MODELS.Issue]: issuesStore,
     [MODELS.IssueHistory]: issuesHistoryStore,
     [MODELS.IssueComment]: commentsStore,
+    [MODELS.ChecklistItem]: checklistItemsStore,
     [MODELS.IntegrationAccount]: integrationAccountsStore,
     [MODELS.LinkedIssue]: linkedIssuesStore,
     [MODELS.IssueRelation]: issueRelationsStore,

@@ -87,6 +87,14 @@ export interface CreateTaskInput {
   title: string;
   /** Markdown. Converted to the editor's format server-side. */
   description?: string;
+  /**
+   * The task's Definition of Done, one string per criterion. Each becomes a
+   * checklist item that can be ticked off independently, in the order given.
+   *
+   * Neutral about whether a task needs any — that judgment belongs to the
+   * surface talking to the person or the model, not to the client underneath it.
+   */
+  acceptanceCriteria?: string[];
   /** Team identifier ("ENG"), name or id. Optional in single-team workspaces. */
   team?: string;
   /** State name or category. Defaults to the team's first BACKLOG state. */
@@ -344,26 +352,20 @@ export class VantikAgent {
   async createTask(input: CreateTaskInput): Promise<TaskRef> {
     const team = await this.directory.resolveTeam(input.team);
 
-    const state = input.state
-      ? await this.directory.resolveState(team.id, input.state)
-      : await this.directory.stateForCategory(team.id, 'BACKLOG');
-
-    const labelIds = await this.directory.resolveLabels(
-      input.labels ?? [],
-      team.workspaceId,
-    );
-
-    const assignee = input.assignee
-      ? await this.directory.resolveUser(team.id, input.assignee)
-      : undefined;
-
-    const parent = input.parent
-      ? await this.resolveTask(input.parent)
-      : undefined;
-
-    const project = input.project
-      ? await this.directory.resolveProject(input.project)
-      : undefined;
+    // Only the team has to be known first; the rest are independent lookups, so
+    // they go out together rather than one round trip at a time. Over the MCP
+    // server each of these is a full loopback request through the guard stack.
+    const [state, labelIds, assignee, parent, project] = await Promise.all([
+      input.state
+        ? this.directory.resolveState(team.id, input.state)
+        : this.directory.stateForCategory(team.id, 'BACKLOG'),
+      this.directory.resolveLabels(input.labels ?? [], team.workspaceId),
+      input.assignee
+        ? this.directory.resolveUser(team.id, input.assignee)
+        : undefined,
+      input.parent ? this.resolveTask(input.parent) : undefined,
+      input.project ? this.directory.resolveProject(input.project) : undefined,
+    ]);
 
     const issue = await this.client.post<RawIssue>('/issues', {
       body: {
@@ -381,11 +383,43 @@ export class VantikAgent {
       },
     });
 
+    await this.addCriteria(issue.id, input.acceptanceCriteria ?? []);
+
     return {
       id: issue.id,
       key: `${team.identifier}-${issue.number}`,
       title: issue.title,
     };
+  }
+
+  /**
+   * Adds criteria to a task's Definition of Done as real checklist items, so
+   * they show up in the panel, count towards the progress the board reads, and
+   * can be ticked off one at a time.
+   *
+   * Rendering them as markdown in the description instead looked the same on the
+   * page and was inert: nothing to tick, nothing to count.
+   */
+  async addCriteria(issueId: string, criteria: string[]): Promise<void> {
+    const bodies = criteria
+      .map((criterion) => criterion.trim())
+      .filter(Boolean);
+
+    if (bodies.length === 0) {
+      return;
+    }
+
+    // sortOrder is sent explicitly. Left to the server each item lands at
+    // max+1, which is read per request — so posting these together would race
+    // and the list would come back in an arbitrary order.
+    await Promise.all(
+      bodies.map((body, index) =>
+        this.client.post('/checklist_items', {
+          query: { issueId },
+          body: { body, sortOrder: index + 1 },
+        }),
+      ),
+    );
   }
 
   async updateTask(
@@ -394,21 +428,17 @@ export class VantikAgent {
   ): Promise<TaskRef> {
     const task = await this.resolveTask(reference);
 
-    const state = input.state
-      ? await this.directory.resolveState(task.teamId, input.state)
-      : undefined;
-
-    const assignee = input.assignee
-      ? await this.directory.resolveUser(task.teamId, input.assignee)
-      : undefined;
-
-    const labelIds = input.labels
-      ? await this.directory.resolveLabels(input.labels)
-      : undefined;
-
-    const project = input.project
-      ? await this.directory.resolveProject(input.project)
-      : undefined;
+    // Independent of one another once the task is known, so resolved together.
+    const [state, assignee, labelIds, project] = await Promise.all([
+      input.state
+        ? this.directory.resolveState(task.teamId, input.state)
+        : undefined,
+      input.assignee
+        ? this.directory.resolveUser(task.teamId, input.assignee)
+        : undefined,
+      input.labels ? this.directory.resolveLabels(input.labels) : undefined,
+      input.project ? this.directory.resolveProject(input.project) : undefined,
+    ]);
 
     await this.client.post<RawIssue>(`/issues/${task.id}`, {
       query: { teamId: task.teamId },

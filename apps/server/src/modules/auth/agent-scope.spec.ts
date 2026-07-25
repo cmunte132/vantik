@@ -71,9 +71,19 @@ describe('sanitizeScopes', () => {
     expect(sanitizeScopes(['write', 'write', 'sudo'])).toEqual(['write']);
   });
 
-  it('defaults rather than granting nothing', () => {
-    expect(sanitizeScopes([])).toEqual(DEFAULT_AGENT_SCOPES);
-    expect(sanitizeScopes(['sudo'])).toEqual(DEFAULT_AGENT_SCOPES);
+  it('grants nothing rather than defaulting, once a list is present', () => {
+    // An explicit empty grant, and a grant naming only scopes this server does
+    // not know, both narrow to nothing. Widening either into read and write
+    // would hand an agent permissions its record never claimed.
+    expect(sanitizeScopes([])).toEqual([]);
+    expect(sanitizeScopes(['sudo'])).toEqual([]);
+  });
+
+  it('hands back a copy, so a caller cannot mutate the default', () => {
+    const scopes = sanitizeScopes(undefined);
+    scopes.push('delete');
+
+    expect(DEFAULT_AGENT_SCOPES).not.toContain('delete');
   });
 });
 

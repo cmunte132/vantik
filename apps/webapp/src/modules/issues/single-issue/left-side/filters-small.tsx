@@ -6,6 +6,7 @@ import {
   IssuePriorityDropdown,
   IssueStatusDropdown,
 } from 'modules/issues/components';
+import { useCompletionGuard } from 'modules/issues/components/use-completion-guard';
 
 import { useIssueData } from 'hooks/issues';
 import { useCurrentTeam } from 'hooks/teams';
@@ -17,8 +18,12 @@ export const FilterSmall = observer(() => {
   const { mutate: updateIssue } = useUpdateIssueMutation({});
   const currentTeam = useCurrentTeam();
 
+  const { guard, dialog } = useCompletionGuard();
+
   const statusChange = (stateId: string) => {
-    updateIssue({ id: issue.id, stateId, teamId: issue.teamId });
+    guard(issue.id, stateId, () =>
+      updateIssue({ id: issue.id, stateId, teamId: issue.teamId }),
+    );
   };
 
   const assigneeChange = (assigneeId: string) => {
@@ -61,6 +66,8 @@ export const FilterSmall = observer(() => {
         onChange={labelsChange}
         teamIdentifier={currentTeam.identifier}
       />
+
+      {dialog}
     </div>
   );
 });

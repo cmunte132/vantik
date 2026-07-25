@@ -9,13 +9,16 @@ import { type XHRErrorResponse } from 'services/utils';
  */
 export const GetAgents = 'getAgents';
 
-export function useGetAgentsQuery(): UseQueryResult<
-  AgentSummary[],
-  XHRErrorResponse
-> {
+export function useGetAgentsQuery(
+  workspaceId: string,
+  enabled = true,
+): UseQueryResult<AgentSummary[], XHRErrorResponse> {
   return useQuery({
-    queryKey: [GetAgents],
-    queryFn: () => getAgents(),
+    // Keyed by workspace, so switching workspaces does not read the previous
+    // one's agents out of the cache.
+    queryKey: [GetAgents, workspaceId],
+    queryFn: () => getAgents(workspaceId),
+    enabled: enabled && Boolean(workspaceId),
     retry: 1,
     staleTime: 1,
     refetchOnWindowFocus: false,

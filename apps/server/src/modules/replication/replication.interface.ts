@@ -9,6 +9,7 @@ export const tablesToSendMessagesFor = new Map([
   [ModelNameEnum.Workflow, true],
   [ModelNameEnum.Template, true],
   [ModelNameEnum.IssueComment, true],
+  [ModelNameEnum.ChecklistItem, true],
   [ModelNameEnum.IssueHistory, true],
   [ModelNameEnum.UsersOnWorkspaces, true],
   [ModelNameEnum.IntegrationAccount, true],

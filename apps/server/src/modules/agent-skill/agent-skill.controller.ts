@@ -95,6 +95,40 @@ const CANDIDATE_DIRS = [
   join(process.cwd(), '../../apps/docs/skills/working-vantik-issues'),
 ];
 
+/**
+ * Every served body, read and transformed once.
+ *
+ * This route is deliberately unauthenticated, and it was doing the work per
+ * request: up to four `existsSync` calls to find the directory, twenty for a
+ * listing, and a synchronous `readFileSync` that parks the whole event loop.
+ * That is a lot to hand an anonymous caller with a loop. The files ship inside
+ * the image and are identical for every workspace, so there is nothing to
+ * re-read — a miss here means the guide is not in this deployment at all.
+ */
+const BODIES: Map<string, string> = loadServedBodies();
+
+function loadServedBodies(): Map<string, string> {
+  const bodies = new Map<string, string>();
+  const dir = CANDIDATE_DIRS.find((candidate) => existsSync(candidate));
+
+  if (!dir) {
+    return bodies;
+  }
+
+  for (const [file, served] of Object.entries(SERVED_FILES)) {
+    const path = join(dir, served.source ?? file);
+
+    if (!existsSync(path)) {
+      continue;
+    }
+
+    const body = readFileSync(path, 'utf8');
+    bodies.set(file, served.transform ? served.transform(body) : body);
+  }
+
+  return bodies;
+}
+
 @Controller({ version: '1', path: 'agent-skill' })
 export class AgentSkillController {
   @Get()
@@ -102,7 +136,7 @@ export class AgentSkillController {
     return {
       name: 'working-vantik-issues',
       files: Object.entries(SERVED_FILES)
-        .filter(([file]) => this.pathFor(file) !== null)
+        .filter(([file]) => BODIES.has(file))
         .map(([file, { description }]) => ({ file, description })),
     };
   }
@@ -117,41 +151,17 @@ export class AgentSkillController {
       );
     }
 
-    const path = this.pathFor(file);
+    const body = BODIES.get(file);
 
-    if (!path) {
+    if (body === undefined) {
       throw new NotFoundException(
         'The guide is not present in this deployment.',
       );
     }
 
-    const served = SERVED_FILES[file];
-    const body = readFileSync(path, 'utf8');
-
     response
       .type('text/markdown; charset=utf-8')
       .setHeader('Content-Disposition', `attachment; filename="${file}"`);
-    response.send(served.transform ? served.transform(body) : body);
-  }
-
-  /**
-   * Where a served file is read from. Several names are the same document in
-   * another tool's format, so the name on the way out is not always the name on
-   * disk.
-   */
-  private pathFor(file: string): string | null {
-    const dir = this.skillDir();
-
-    if (!dir) {
-      return null;
-    }
-
-    const path = join(dir, SERVED_FILES[file]?.source ?? file);
-
-    return existsSync(path) ? path : null;
-  }
-
-  private skillDir(): string | null {
-    return CANDIDATE_DIRS.find((dir) => existsSync(dir)) ?? null;
+    response.send(body);
   }
 }

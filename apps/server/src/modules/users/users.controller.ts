@@ -34,7 +34,6 @@ import {
   Workspace,
 } from 'modules/auth/session.decorator';
 
-import { AdminGuard } from './admin.guard';
 import {
   AgentIdParams,
   CreateAgentDto,
@@ -120,11 +119,12 @@ export class UsersController {
    * client's Authorization header to have that client act as the agent.
    */
   @Post('agents')
-  @UseGuards(AuthGuard, AdminGuard)
+  @UseGuards(AuthGuard)
   async createAgentAccount(
     @Workspace() workspaceId: string,
     @SessionDecorator() session: SessionContainer,
     @Body() createAgentDto: CreateAgentDto,
+    @Query('workspaceId') requestedWorkspaceId?: string,
   ): Promise<AgentAccount> {
     const createdByUserId = getAppUserId(session);
     return await this.users.createAgentAccount(
@@ -133,6 +133,7 @@ export class UsersController {
       createdByUserId,
       'personal',
       sanitizeScopes(createAgentDto.scopes),
+      requestedWorkspaceId,
     );
   }
 
@@ -141,11 +142,17 @@ export class UsersController {
    * at creation). Admin-only, mirroring the create path.
    */
   @Get('agents')
-  @UseGuards(AuthGuard, AdminGuard)
+  @UseGuards(AuthGuard)
   async listAgentAccounts(
     @Workspace() workspaceId: string,
+    @SessionDecorator() session: SessionContainer,
+    @Query('workspaceId') requestedWorkspaceId?: string,
   ): Promise<AgentSummary[]> {
-    return await this.users.listAgentAccounts(workspaceId);
+    return await this.users.listAgentAccounts(
+      workspaceId,
+      getAppUserId(session),
+      requestedWorkspaceId,
+    );
   }
 
   /**
@@ -153,12 +160,19 @@ export class UsersController {
    * its past edits stay attributed; it simply can no longer authenticate.
    */
   @Post('agents/:agentId/revoke')
-  @UseGuards(AuthGuard, AdminGuard)
+  @UseGuards(AuthGuard)
   async revokeAgent(
     @Workspace() workspaceId: string,
     @Param() { agentId }: AgentIdParams,
+    @SessionDecorator() session: SessionContainer,
+    @Query('workspaceId') requestedWorkspaceId?: string,
   ): Promise<void> {
-    return await this.users.revokeAgent(workspaceId, agentId);
+    return await this.users.revokeAgent(
+      workspaceId,
+      agentId,
+      getAppUserId(session),
+      requestedWorkspaceId,
+    );
   }
 
   @Post('pat-for-code')
@@ -180,8 +194,14 @@ export class UsersController {
 
   @Delete('pats/:patId')
   @UseGuards(AuthGuard)
-  async deletePat(@Param() patIdDto: PatIdDto) {
-    return await this.users.deletePat(patIdDto.patId);
+  async deletePat(
+    @Param() patIdDto: PatIdDto,
+    @SessionDecorator() session: SessionContainer,
+  ) {
+    // The owner is passed down and applied in the query: a token id alone says
+    // nothing about whose token it is, and this route is reachable by any
+    // authenticated caller, agents included.
+    return await this.users.deletePat(patIdDto.patId, getAppUserId(session));
   }
 
   @Get('authorization')

@@ -78,6 +78,22 @@ export interface IssueCommentType {
   sourceMetadata?: string;
 }
 
+export interface ChecklistItemType {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+
+  body: string;
+  completed: boolean;
+  sortOrder?: number | null;
+
+  completedAt?: string | null;
+  completedById?: string | null;
+
+  issueId: string;
+  createdById?: string | null;
+}
+
 export enum SubscribeType {
   SUBSCRIBE = 'SUBSCRIBE',
   UNSUBSCRIBE = 'UNSUBSCRIBE',

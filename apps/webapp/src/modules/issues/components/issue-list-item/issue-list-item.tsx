@@ -11,6 +11,7 @@ import {
   IssueStatusDropdownVariant,
   LazyIssueAssigneeDropdown,
 } from 'modules/issues/components';
+import { useCompletionGuard } from 'modules/issues/components/use-completion-guard';
 
 import type { IssueType } from 'common/types';
 
@@ -87,8 +88,12 @@ export const IssueListItem = observer(
 
     const issueSelected = applicationStore.selectedIssues.includes(issue.id);
 
+    const { guard, dialog } = useCompletionGuard();
+
     const statusChange = (stateId: string) => {
-      updateIssue({ id: issue.id, stateId, teamId: issue.teamId });
+      guard(issue.id, stateId, () =>
+        updateIssue({ id: issue.id, stateId, teamId: issue.teamId }),
+      );
     };
 
     const assigneeChange = (assigneeId: string) => {
@@ -101,6 +106,7 @@ export const IssueListItem = observer(
 
     return (
       <>
+        {dialog}
         <a
           onClick={(e) => {
             if (!e.metaKey && currentViewIssueId === issue.id) {

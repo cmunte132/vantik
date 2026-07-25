@@ -3,6 +3,7 @@ import { runInAction } from 'mobx';
 import type { SyncActionRecord } from 'common/types';
 
 import { saveActionData } from 'store/action';
+import { saveChecklistItemData } from 'store/checklist-items';
 import { saveCommentsData } from 'store/comments';
 import { saveCompanyData } from 'store/company';
 import { saveConversationHistorytData } from 'store/conversation-history';
@@ -65,6 +66,7 @@ export async function saveSocketData(
       [MODELS.Issue]: saveIssuesData,
       [MODELS.IssueHistory]: saveIssueHistoryData,
       [MODELS.IssueComment]: saveCommentsData,
+      [MODELS.ChecklistItem]: saveChecklistItemData,
       [MODELS.IntegrationAccount]: saveIntegrationAccountData,
       [MODELS.LinkedIssue]: saveLinkedIssueData,
       [MODELS.IssueRelation]: saveIssueRelationData,

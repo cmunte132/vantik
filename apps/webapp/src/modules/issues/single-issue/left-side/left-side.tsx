@@ -20,6 +20,7 @@ import { useTeamWorkflows } from 'hooks/workflows';
 import { useUpdateIssueMutation } from 'services/issues';
 
 import { Activity } from './activity';
+import { ChecklistView } from './checklist-view';
 import { FileUpload } from './file-upload';
 import { IssueSubIssueSelector } from './issue-sub-issue-selector';
 import { IssueTitle } from './issue-title';
@@ -91,6 +92,8 @@ export const LeftSide = observer(() => {
             <div className="mx-6">
               <Separator />
             </div>
+            <ChecklistView issueId={issue.id} />
+
             <SubIssueView childIssues={issue.children} issueId={issue.id} />
 
             <RelationsView issueId={issue.id} />

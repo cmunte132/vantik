@@ -19,6 +19,7 @@ import {
   ProjectMilestoneDropdown,
   ProjectMilestoneDropdownVariant,
 } from 'modules/issues/components/issue-metadata/project';
+import { useCompletionGuard } from 'modules/issues/components/use-completion-guard';
 
 import { useIssueData } from 'hooks/issues';
 import { useTeamWithId } from 'hooks/teams';
@@ -38,8 +39,14 @@ export const RightSide = observer(() => {
   const team = useTeamWithId(issue?.teamId);
   const hasProjectsForTeam = projectsStore.hasProjects(team.id);
 
+  // Warns, rather than blocks, when this would complete the issue with criteria
+  // still open. Shared with every other place that can change a status.
+  const { guard, dialog } = useCompletionGuard();
+
   const statusChange = (stateId: string) => {
-    updateIssue({ id: issue.id, stateId, teamId: issue.teamId });
+    guard(issue.id, stateId, () =>
+      updateIssue({ id: issue.id, stateId, teamId: issue.teamId }),
+    );
   };
 
   const assigneeChange = (assigneeId: string) => {
@@ -72,85 +79,89 @@ export const RightSide = observer(() => {
   };
 
   return (
-    <ScrollArea className="h-full">
-      <div className="grow p-6 flex flex-col gap-4 pb-10">
-        <div className="flex flex-col items-start">
-          <label className="text-xs">Status</label>
-          <IssueStatusDropdown
-            value={issue.stateId}
-            onChange={statusChange}
-            variant={IssueStatusDropdownVariant.LINK}
-            teamIdentifier={team.identifier}
-          />
-        </div>
-
-        <div className="flex flex-col items-start">
-          <label className="text-xs">Priority</label>
-
-          <IssuePriorityDropdown
-            value={issue.priority ?? 0}
-            onChange={priorityChange}
-            variant={IssuePriorityDropdownVariant.LINK}
-          />
-        </div>
-
-        <div className="flex flex-col items-start">
-          <label className="text-xs">Assignee</label>
-
-          <IssueAssigneeDropdown
-            value={issue.assigneeId}
-            teamId={team.id}
-            onChange={assigneeChange}
-            variant={IssueAssigneeDropdownVariant.LINK}
-          />
-        </div>
-
-        <IssueRelatedProperties />
-
-        <div className={cn('flex flex-col items-start')}>
-          <div className="text-xs text-left">Labels</div>
-
-          <IssueLabelDropdown
-            value={issue.labelIds}
-            onChange={labelsChange}
-            variant={IssueLabelDropdownVariant.LINK}
-            teamIdentifier={team.identifier}
-          />
-        </div>
-
-        {hasProjectsForTeam && (
-          <div className={cn('flex flex-col items-start')}>
-            <div className="text-xs text-left">Project</div>
-
-            <ProjectDropdown
-              value={issue.projectId}
-              onChange={projectChange}
-              variant={ProjectDropdownVariant.LINK}
+    <>
+      <ScrollArea className="h-full">
+        <div className="grow p-6 flex flex-col gap-4 pb-10">
+          <div className="flex flex-col items-start">
+            <label className="text-xs">Status</label>
+            <IssueStatusDropdown
+              value={issue.stateId}
+              onChange={statusChange}
+              variant={IssueStatusDropdownVariant.LINK}
               teamIdentifier={team.identifier}
             />
           </div>
-        )}
 
-        {issue.projectId && (
-          <div className={cn('flex flex-col items-start')}>
-            <div className="text-xs text-left">Project Milestone</div>
+          <div className="flex flex-col items-start">
+            <label className="text-xs">Priority</label>
 
-            <ProjectMilestoneDropdown
-              value={issue.projectMilestoneId}
-              onChange={projectMilestoneChange}
-              variant={ProjectMilestoneDropdownVariant.LINK}
-              teamIdentifier={team.identifier}
-              projectId={issue.projectId}
+            <IssuePriorityDropdown
+              value={issue.priority ?? 0}
+              onChange={priorityChange}
+              variant={IssuePriorityDropdownVariant.LINK}
             />
           </div>
-        )}
 
-        {team.preferences?.teamType === 'support' ? (
-          <SupportProperties />
-        ) : (
-          <EngineeringProperties />
-        )}
-      </div>
-    </ScrollArea>
+          <div className="flex flex-col items-start">
+            <label className="text-xs">Assignee</label>
+
+            <IssueAssigneeDropdown
+              value={issue.assigneeId}
+              teamId={team.id}
+              onChange={assigneeChange}
+              variant={IssueAssigneeDropdownVariant.LINK}
+            />
+          </div>
+
+          <IssueRelatedProperties />
+
+          <div className={cn('flex flex-col items-start')}>
+            <div className="text-xs text-left">Labels</div>
+
+            <IssueLabelDropdown
+              value={issue.labelIds}
+              onChange={labelsChange}
+              variant={IssueLabelDropdownVariant.LINK}
+              teamIdentifier={team.identifier}
+            />
+          </div>
+
+          {hasProjectsForTeam && (
+            <div className={cn('flex flex-col items-start')}>
+              <div className="text-xs text-left">Project</div>
+
+              <ProjectDropdown
+                value={issue.projectId}
+                onChange={projectChange}
+                variant={ProjectDropdownVariant.LINK}
+                teamIdentifier={team.identifier}
+              />
+            </div>
+          )}
+
+          {issue.projectId && (
+            <div className={cn('flex flex-col items-start')}>
+              <div className="text-xs text-left">Project Milestone</div>
+
+              <ProjectMilestoneDropdown
+                value={issue.projectMilestoneId}
+                onChange={projectMilestoneChange}
+                variant={ProjectMilestoneDropdownVariant.LINK}
+                teamIdentifier={team.identifier}
+                projectId={issue.projectId}
+              />
+            </div>
+          )}
+
+          {team.preferences?.teamType === 'support' ? (
+            <SupportProperties />
+          ) : (
+            <EngineeringProperties />
+          )}
+        </div>
+      </ScrollArea>
+
+      {dialog}
+    </>
   );
 });

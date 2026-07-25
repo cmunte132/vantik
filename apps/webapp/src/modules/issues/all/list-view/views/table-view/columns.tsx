@@ -31,9 +31,17 @@ export const getColumns = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateIssue: UseMutateFunction<unknown, any, UpdateIssueParams, void>,
   teamsStore: TeamsStoreType,
+  /**
+   * Warns before a status change completes an issue with criteria still open.
+   * Passed in because this is a factory, not a component, so it cannot call the
+   * hook itself — the table renders the dialog.
+   */
+  guard: (issueId: string, stateId: string, apply: () => void) => void,
 ) => {
   const statusChange = (issue: IssueType, stateId: string) => {
-    updateIssue({ id: issue.id, stateId, teamId: issue.teamId });
+    guard(issue.id, stateId, () =>
+      updateIssue({ id: issue.id, stateId, teamId: issue.teamId }),
+    );
   };
 
   const assigneeChange = (issue: IssueType, assigneeId: string) => {

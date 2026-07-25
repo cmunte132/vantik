@@ -3,6 +3,7 @@ import React from 'react';
 
 import { ActionsStore } from './action';
 import { ApplicationStore, defaultApplicationStoreValue } from './application';
+import { ChecklistItemsStore } from './checklist-items';
 import { CommentsStore } from './comments';
 import { CommonStore, defaultCommonStoreValue } from './common';
 import { CompanyStore } from './company';
@@ -28,6 +29,7 @@ import { WorkspaceStore } from './workspace';
 
 const StoreContextModel = types.model({
   commentsStore: CommentsStore,
+  checklistItemsStore: ChecklistItemsStore,
   issuesHistoryStore: IssueHistoryStore,
   issuesStore: IssuesStore,
   workflowsStore: WorkflowsStore,
@@ -57,6 +59,9 @@ const StoreContextModel = types.model({
 export const storeContextStore = StoreContextModel.create({
   commentsStore: {
     comments: {},
+  },
+  checklistItemsStore: {
+    checklistItems: {},
   },
   issuesHistoryStore: {
     issueHistories: {},

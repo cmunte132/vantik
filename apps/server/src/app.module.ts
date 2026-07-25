@@ -1,13 +1,14 @@
 import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { PrismaModule } from 'nestjs-prisma';
 
 import config from 'common/configs/config';
+import { ErrorReportingInterceptor } from 'common/interceptors/error-reporting.interceptor';
 
 import { ActionModule } from 'modules/action/action.module';
 import { AgentSkillModule } from 'modules/agent-skill/agent-skill.module';
@@ -18,12 +19,13 @@ import { AgentScopeGuard } from 'modules/auth/agent-scope.guard';
 import { AuthModule } from 'modules/auth/auth.module';
 import { BullConfigModule } from 'modules/bull/bull.module';
 import { CachceModule } from 'modules/cache/cache.module';
-import { ClientConfigModule } from 'modules/client-config/client-config.module';
 import { ChecklistItemsModule } from 'modules/checklist-items/checklist-items.module';
+import { ClientConfigModule } from 'modules/client-config/client-config.module';
 import { CompanyModule } from 'modules/company/company.modules';
 import { ConversationModule } from 'modules/conversation/conversation.module';
 import { ConversationHistoryModule } from 'modules/conversation-history/conversation-history.module';
 import { CyclesModule } from 'modules/cycles/cycles.module';
+import { HealthModule } from 'modules/health/health.module';
 import { IntegrationAccountModule } from 'modules/integration-account/integration-account.module';
 import { IntegrationDefinitionModule } from 'modules/integration-definition/integration-definition.module';
 import { IntegrationsModule } from 'modules/integrations/integrations.module';
@@ -98,6 +100,7 @@ import { AppService } from './app.service';
 
     AuthModule.forRoot(),
     ALSModule,
+    HealthModule,
     UsersModule,
     WorkspacesModule,
     TeamsModule,
@@ -157,7 +160,9 @@ import { AppService } from './app.service';
     // route's AuthGuard costs it nothing.
     { provide: APP_GUARD, useClass: AgentScopeGuard },
 
-    // { provide: APP_INTERCEPTOR, useClass: SyncActionsInterceptor },
+    // Records 5xx exceptions on the active span before they reach the
+    // exception filters, which own the response.
+    { provide: APP_INTERCEPTOR, useClass: ErrorReportingInterceptor },
   ],
 })
 export class AppModule {}

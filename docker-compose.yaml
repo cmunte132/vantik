@@ -73,7 +73,11 @@ services:
     networks:
       - vantik
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ | grep -q '\"status\":\"ok\"'"]
+      # Readiness, not liveness: the webapp waits on this, and it must not
+      # start against a server whose database or search index is unreachable.
+      # /health/ready returns 503 until every dependency answers, so wget's
+      # non-zero exit on a 503 is the signal.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health/ready | grep -q '\"status\":\"ready\"'"]
       interval: 10s
       timeout: 5s
       retries: 30

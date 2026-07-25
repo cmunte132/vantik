@@ -23,6 +23,8 @@ import { VectorService } from './vector.service';
         }),
     },
   ],
-  exports: [VectorService],
+  // The client is exported so the readiness probe can reach typesense without
+  // standing up a second connection to it.
+  exports: [VectorService, TypesenseClient],
 })
 export class VectorModule {}

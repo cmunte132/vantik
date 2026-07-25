@@ -35,6 +35,15 @@ export class CacheService implements OnModuleDestroy {
     this.logger.log({ message: 'Redis client disconnected' });
   }
 
+  /**
+   * Round-trips a PING. Used by the readiness probe — ioredis queues commands
+   * while it is reconnecting, so a rejection here means genuinely unreachable
+   * rather than momentarily disconnected.
+   */
+  async ping(): Promise<void> {
+    await this.redis.ping();
+  }
+
   async set(key: string, value: string, expiry?: number): Promise<'OK' | null> {
     // try {
     if (expiry) {

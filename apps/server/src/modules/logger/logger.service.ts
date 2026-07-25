@@ -1,216 +1,180 @@
 import { Injectable } from '@nestjs/common';
-import chalk from 'chalk';
-import { WinstonModuleOptions } from 'nest-winston';
+import { trace } from '@opentelemetry/api';
 import winston, { Logger as WinstonLogger, createLogger } from 'winston';
 
 import config from 'common/configs/config';
-import { LogConfigs } from 'common/configs/config.interface';
 
 import { ALS_SERVICE_INSTANCE } from 'modules/als/als.service';
 
 import {
-  GetPrintFormatInput,
-  GetPrintFormatPayload,
   LogInput,
   LoggerPrintFormat,
+  SerialisedError,
 } from './logger.interface';
+
+function serialiseError(error: unknown): SerialisedError | undefined {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message, stack: error.stack };
+  }
+
+  if (typeof error === 'string') {
+    return { name: 'UnknownError', message: error };
+  }
+
+  if (error && typeof error === 'object' && Object.keys(error).length) {
+    return { name: 'UnknownError', message: JSON.stringify(error) };
+  }
+
+  return undefined;
+}
+
+function printLine({
+  level = 'info',
+  message,
+  timestamp,
+  ...metadata
+}: winston.Logform.TransformableInfo): string {
+  const line: LoggerPrintFormat = {
+    timestamp: timestamp as string,
+    lvl: level.toUpperCase(),
+    ctx: (metadata.ctx as string) ?? '',
+    msg: message as string,
+  };
+
+  // Correlation ids from the request's AsyncLocalStorage store. All four were
+  // previously written only to the file transport, so the logs that actually
+  // got collected carried none of them.
+  const workspaceId = ALS_SERVICE_INSTANCE.get<string>('workspaceId');
+  if (workspaceId) {
+    line.wId = workspaceId;
+  }
+
+  const requestId = ALS_SERVICE_INSTANCE.get<string>('requestId');
+  if (requestId) {
+    line.reqId = requestId;
+  }
+
+  const opName = ALS_SERVICE_INSTANCE.get<string>('opName');
+  if (opName) {
+    line.opName = opName;
+  }
+
+  const actorId = ALS_SERVICE_INSTANCE.get<string>('actorId');
+  if (actorId) {
+    line.aId = actorId;
+  }
+
+  // Present only while a trace is active, which is only when an OTLP endpoint
+  // is configured. These are what let a log line be pivoted to its trace.
+  const spanContext = trace.getActiveSpan()?.spanContext();
+  if (spanContext) {
+    line.traceId = spanContext.traceId;
+    line.spanId = spanContext.spanId;
+  }
+
+  // `where` is part of LogInput and callers pass it, but the old formatter
+  // never read it, so every value was silently dropped.
+  if (metadata.where) {
+    line.where = metadata.where as string;
+  }
+
+  if (metadata.payload && Object.keys(metadata.payload).length) {
+    line.payload = metadata.payload as Record<string, unknown>;
+  }
+
+  // `winston.format.errors({ stack: true })` moves a thrown Error's stack onto
+  // `metadata.stack`, so it is the fallback when no explicit error was passed.
+  const error = serialiseError(metadata.error ?? metadata.stack);
+  if (error) {
+    line.error = error;
+  }
+
+  return JSON.stringify(line);
+}
+
+/**
+ * Logs are JSON on stdout, always. That is the only sink a container
+ * orchestrator collects, and the only format a log pipeline can parse. This
+ * used to pretty-print coloured text to the console and emit JSON only to a
+ * file behind `CREATE_LOG_FILE`, which put the machine-readable copy in
+ * `combined.log` in the working directory — inside the container, where
+ * nothing reads it — while the copy that was actually collected could not be
+ * parsed.
+ *
+ * One logger is shared by every context. `new LoggerService('Foo')` is called
+ * 27 times across the codebase and each call used to construct its own winston
+ * instance with its own transports; the context is per-instance state, the
+ * pipeline is not.
+ */
+const rootLogger: WinstonLogger = createLogger({
+  level: config().log.level ?? 'info',
+  format: winston.format.combine(
+    winston.format.splat(),
+    winston.format.errors({ stack: true }),
+    winston.format.timestamp(),
+    winston.format.printf(printLine),
+  ),
+  transports: [new winston.transports.Console()],
+});
 
 @Injectable()
 export class LoggerService {
-  readonly logger: WinstonLogger;
-  private logLevel: string = 'info';
-  private logFileName: string = 'combined.log';
-
-  constructor(private readonly context?: string) {
-    // Set log level to only print log which are having higher or equal level then input level.
-    this.logLevel = this.loggerConfigs.level ?? 'info';
-
-    // Common format for console and file logs
-    const commonFormat: winston.Logform.Format[] = [
-      winston.format.splat(),
-      winston.format.errors({ stack: true }),
-      winston.format.timestamp(),
-    ];
-
-    // By default set format for console level logs
-    const transports: winston.transport[] = [
-      new winston.transports.Console({
-        level: this.logLevel,
-        format: winston.format.combine(
-          ...commonFormat,
-          winston.format.printf(this.getPrintFormat({ isConsoleFormat: true })),
-        ),
-      }),
-    ];
-
-    // If createLogFile env is set to true then append logs in file.
-    if (this.loggerConfigs.createLogFile) {
-      transports.push(
-        new winston.transports.File({
-          level: this.logLevel,
-          filename: this.logFileName,
-          format: winston.format.combine(
-            ...commonFormat,
-            winston.format.printf(
-              this.getPrintFormat({ isConsoleFormat: false }),
-            ),
-          ),
-        }),
-      );
-    }
-
-    const createLoggerConfig: WinstonModuleOptions = {
-      level: this.logLevel,
-      transports,
-    };
-
-    // create winston logger
-    this.logger = createLogger(createLoggerConfig);
-  }
+  constructor(private readonly context?: string) {}
 
   /**
-   * Private getter to return logger configs.
-   *
-   * @returns LogConfigs type having logger configs.
+   * Nest's internals call these with `(message, stack)` as two plain strings
+   * rather than with a `LogInput`, so both shapes have to be accepted. Passing
+   * an object straight through as the winston message prints `undefined` and
+   * throws away the only part worth reading — which is what used to happen to
+   * unhandled exceptions, where the stack matters most.
    */
-  private get loggerConfigs(): LogConfigs {
-    return config().log;
-  }
-
-  /**
-   * Function to get logger print format based on transport format
-   *
-   * @param   input  GetPrintFormatInput type input to configure logger print format.
-   * @returns GetPrintFormatPayload type output which return TransformableInfo function.
-   */
-  getPrintFormat(input: GetPrintFormatInput): GetPrintFormatPayload {
-    const { isConsoleFormat } = input;
-    return ({ level = 'info', message, timestamp, err, ...metadata }) => {
-      const workspaceId = ALS_SERVICE_INSTANCE.get<string>('workspaceId');
-
-      const loggerPrintFormat: LoggerPrintFormat = {
-        timestamp: timestamp as string,
-        lvl: level.toUpperCase(),
-        ctx: this.context ?? '',
-        msg: message as string,
-        wId: workspaceId ?? '',
-      };
-
-      if (err) {
-        loggerPrintFormat.error =
-          err instanceof Error ? err : new Error(String(err));
-      }
-
-      if (metadata?.error && Object.keys(metadata?.error).length) {
-        loggerPrintFormat.error = metadata.error as Error;
-      }
-
-      if (metadata?.payload && Object.keys(metadata?.payload).length) {
-        loggerPrintFormat.payload = metadata?.payload;
-      }
-
-      // if console format, return an array structure
-      if (isConsoleFormat) {
-        const consoleFormat = [
-          chalk.green(loggerPrintFormat.timestamp),
-          loggerPrintFormat.lvl === 'ERROR'
-            ? chalk.red(loggerPrintFormat.lvl)
-            : chalk.green(loggerPrintFormat.lvl),
-          chalk.blue(loggerPrintFormat.ctx),
-          chalk.cyan(loggerPrintFormat.msg),
-        ];
-
-        if (loggerPrintFormat.error) {
-          consoleFormat.push(
-            chalk.red(JSON.stringify(loggerPrintFormat.error)),
-          );
-        }
-
-        if (loggerPrintFormat.payload) {
-          consoleFormat.push(
-            chalk.yellow(JSON.stringify(loggerPrintFormat.payload)),
-          );
-        }
-
-        return consoleFormat.join(' ');
-      }
-
-      // for file logs, return a JSON structure
-      const requestId = ALS_SERVICE_INSTANCE.get<string>('requestId');
-      if (requestId) {
-        loggerPrintFormat.reqId = requestId;
-      }
-
-      const opName = ALS_SERVICE_INSTANCE.get<string>('opName');
-      if (opName) {
-        loggerPrintFormat.opName = opName;
-      }
-
-      const actorId = ALS_SERVICE_INSTANCE.get<string>('actorId');
-      if (actorId) {
-        loggerPrintFormat.aId = actorId;
-      }
-
-      return JSON.stringify(loggerPrintFormat);
-    };
-  }
-
-  get loggerInstance(): WinstonLogger {
-    return this.logger;
-  }
-
-  log(input: LogInput) {
-    this.logger.info(input);
-  }
-
-  info(input: LogInput) {
-    this.logger.info(input);
-  }
-
-  /**
-   * Nest does not call this the way the rest of the codebase does. Its own
-   * internals — the exception handler above all — pass `(message, stack)` as
-   * two plain strings, which arrived here as an object whose `.message` was
-   * undefined and printed as a bare `ERROR Vantik undefined`, throwing away
-   * the one thing worth logging. Unhandled exceptions are exactly when the
-   * stack matters, so both shapes are accepted.
-   */
-  error(input: LogInput | string | Error, stack?: string) {
-    // Nest does not call this the way the rest of the codebase does. Its
-    // exception handler hands over the Error itself, or a message and a stack
-    // as two plain strings. Both arrived here as a `LogInput` whose `.message`
-    // was undefined and printed as a bare `ERROR Vantik undefined`, throwing
-    // away the only part worth reading. Unhandled exceptions are exactly when
-    // the stack matters.
+  private write(
+    level: 'info' | 'error' | 'warn' | 'debug' | 'verbose',
+    input: LogInput | string | Error,
+    stack?: string,
+  ) {
     if (input instanceof Error) {
-      this.logger.error({
+      rootLogger.log(level, {
         message: input.message,
+        ctx: this.context,
         error: input,
-        payload: { stack: input.stack },
       });
       return;
     }
 
     if (typeof input === 'string') {
-      this.logger.error({
+      rootLogger.log(level, {
         message: input,
-        ...(stack ? { payload: { stack } } : {}),
+        ctx: this.context,
+        ...(stack ? { error: stack } : {}),
       });
       return;
     }
 
-    this.logger.error(input);
+    rootLogger.log(level, { ...input, ctx: this.context });
   }
 
-  warn(input: LogInput) {
-    this.logger.warn(input);
+  log(input: LogInput | string) {
+    this.write('info', input);
   }
 
-  debug(input: LogInput) {
-    this.logger.debug(input);
+  info(input: LogInput | string) {
+    this.write('info', input);
   }
 
-  verbose(input: LogInput) {
-    this.logger.verbose(input);
+  error(input: LogInput | string | Error, stack?: string) {
+    this.write('error', input, stack);
+  }
+
+  warn(input: LogInput | string) {
+    this.write('warn', input);
+  }
+
+  debug(input: LogInput | string) {
+    this.write('debug', input);
+  }
+
+  verbose(input: LogInput | string) {
+    this.write('verbose', input);
   }
 }

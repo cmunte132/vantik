@@ -6,7 +6,6 @@ export interface Config {
 
 export interface LogConfigs {
   level: string;
-  createLogFile?: boolean;
 }
 
 export interface AppInfoConfig {

@@ -18,7 +18,6 @@ export const config: Config = {
   },
   log: {
     level: process.env.LOG_LEVEL,
-    createLogFile: process.env.CREATE_LOG_FILE === 'true',
   },
 };
 

@@ -1,3 +1,7 @@
+// MUST be first. OpenTelemetry patches modules as they are required, so
+// anything imported above this line runs uninstrumented. See src/otel.ts.
+import './otel';
+
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';

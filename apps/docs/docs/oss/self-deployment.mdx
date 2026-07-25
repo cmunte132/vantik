@@ -192,6 +192,61 @@ so treat trigger.dev integration as legacy-supported rather than the
 long-term direction.
 :::
 
+## Observability
+
+### Logs
+
+The server writes JSON to stdout, one object per line, at the level set by
+`LOG_LEVEL`. Collect it however your platform collects container logs — no
+configuration is needed.
+
+Each line carries the correlation fields the request arrived with: `reqId`
+(mirrored from `x-request-id`, generated if the caller did not send one and
+echoed back on the response), `wId` for the workspace, `aId` for the acting
+user, and `opName` for the endpoint. When tracing is on, `traceId` and `spanId`
+are included too, so any log line can be pivoted to the trace it belongs to.
+
+:::caution Upgrading
+Logs used to be human-readable coloured text on the console, with JSON written
+only to a file when `CREATE_LOG_FILE=true`. They are now JSON on stdout in all
+cases, and `CREATE_LOG_FILE` has been removed — the file it produced was
+written inside the container, where nothing read it. Anything parsing the old
+console output needs updating.
+:::
+
+### Traces
+
+Tracing is off by default and nothing leaves your deployment unless you turn it
+on. Point the server at any OTLP/HTTP collector to enable it:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
+OTEL_EXPORTER_OTLP_HEADERS=x-api-key=...   # if your collector needs auth
+```
+
+With that set, each request produces a trace spanning the HTTP handler, the
+Nest controller, and the Postgres, Redis and Prisma calls underneath it —
+enough to see which query is making an endpoint slow. Unhandled 5xx exceptions
+are recorded on the span with their stack.
+
+Any OpenTelemetry backend works: Grafana Tempo, Honeycomb, Jaeger, Sentry, or a
+local collector fanning out to several. With the variable unset the SDK is
+never started, so there is no instrumentation and no measurable overhead.
+
+If you set an endpoint and no spans arrive, set `OTEL_LOG_LEVEL=debug` to
+surface the exporter's own diagnostics, which are otherwise silent.
+
+### Health endpoints
+
+| Endpoint | Meaning |
+| --- | --- |
+| `GET /` | Liveness. The process is up. Cheap, touches no dependencies. |
+| `GET /health/ready` | Readiness. Returns `200` when Postgres, Redis and Typesense all answer, `503` otherwise, with a per-dependency breakdown in the body. |
+
+Point an orchestrator's liveness probe at `/` and its readiness probe at
+`/health/ready`. Using readiness for liveness would get the container killed
+and restarted over a transient database blip, which fixes nothing.
+
 ## FAQ
 
 **Q: Is there a hosted cloud version?**

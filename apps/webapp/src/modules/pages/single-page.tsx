@@ -40,8 +40,8 @@ import { useContextStore } from 'store/global-context-provider';
 
 import { EditorRibbon } from './editor-ribbon';
 import { Header } from './header';
+import { MemoryRail } from './memory-rail';
 import { PageHistory } from './page-history';
-import { PageMemory } from './page-memory';
 import { PageNav } from './page-nav';
 import { PageTitle } from './page-title';
 import { SaveIndicator, type SaveState } from './save-indicator';
@@ -248,12 +248,6 @@ const SinglePageView = observer(() => {
                   <EditorExtensions suggestionItems={suggestionItems} />
                 </Editor>
 
-                {/* Below the body rather than in a rail beside it. What
-                    agents are told about this page is metadata about the
-                    document, in the way "referenced by" is — not a second
-                    task competing with writing for the width of the screen. */}
-                <PageMemory pageId={page.id} />
-
                 <Backlinks pageId={page.id} />
 
                 <PageHistory
@@ -264,6 +258,11 @@ const SinglePageView = observer(() => {
               </div>
             </div>
           </ScrollArea>
+
+          {/* Beside the page, not under it. The foot of a document is where
+              human conversation belongs; what the page tells agents is
+              standing metadata, which this product already keeps in a rail. */}
+          <MemoryRail pageId={page.id} />
         </div>
       )}
     </MainLayout>

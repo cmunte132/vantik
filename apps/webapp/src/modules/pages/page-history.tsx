@@ -63,7 +63,7 @@ export const PageHistory = observer(
             </p>
           )}
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col">
             {revisions?.map((revision) => (
               <Revision
                 key={revision.id}
@@ -101,7 +101,7 @@ const Revision = observer(
     const isAgent = author?.type === 'Agent';
 
     return (
-      <div className="rounded border border-border p-3 flex flex-col gap-2">
+      <div className="group border-b border-border last:border-0 py-2 flex flex-col gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span>{summarize(revision.changes)}</span>
           {isAgent && <Badge variant="secondary">agent</Badge>}
@@ -111,11 +111,12 @@ const Revision = observer(
               addSuffix: true,
             })}
           </span>
-        </div>
 
-        {revision.previousBodyMarkdown !== null && (
-          <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
+          {/* Kept out of the way until wanted: a column of "Restore this
+              version" down every row reads as an instruction rather than an
+              option, on a list people mostly open to read. */}
+          {revision.previousBodyMarkdown !== null && (
+            <div className="ml-auto flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
               <Button
                 variant="ghost"
                 size="sm"
@@ -124,7 +125,7 @@ const Revision = observer(
                 {showDiff ? 'Hide changes' : 'See what changed'}
               </Button>
               <Button
-                variant="secondary"
+                variant="ghost"
                 size="sm"
                 onClick={() =>
                   revert({
@@ -133,17 +134,14 @@ const Revision = observer(
                   })
                 }
               >
-                Restore this version
+                Restore
               </Button>
             </div>
+          )}
+        </div>
 
-            {showDiff && (
-              <Diff
-                before={revision.previousBodyMarkdown}
-                after={currentMarkdown}
-              />
-            )}
-          </div>
+        {showDiff && revision.previousBodyMarkdown !== null && (
+          <Diff before={revision.previousBodyMarkdown} after={currentMarkdown} />
         )}
       </div>
     );

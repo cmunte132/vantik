@@ -14,7 +14,6 @@ import {
 } from '@vantikhq/ui/components/tooltip';
 import { MoreLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
-import { formatDistanceToNow } from 'date-fns';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
@@ -27,17 +26,17 @@ import { useUpdatePageEntryMutation } from 'services/pages';
 /**
  * One fact, and where it came from.
  *
- * The first version printed a name and dropped everything else, so facts read
- * as though they had materialized — the commonest reaction to the panel was
- * "where did these come from?". Every entry stores who wrote it, on which
- * harness session, when, and when it was last handed to an agent; a claim you
- * are being asked to vouch for has to show that, because "an agent said so" is
- * not enough to decide on and the provenance is the only thing that is.
+ * Two shapes, because the two places a fact appears are asking different
+ * questions. In the rail you are scanning — what does this page tell agents? —
+ * so rows are quiet: one line of meta, actions only on hover. In the review
+ * queue each row is a decision, so it carries its choices openly, with one of
+ * them weighted as the answer people usually want.
  *
- * Shared by both places entries appear, so the two never drift into describing
- * the same row differently: `review` is the decision surface and leads with the
- * three choices, `reference` is the read-only list of what agents are currently
- * given and keeps corrections behind a menu.
+ * Provenance is on both. The first version printed a name and dropped the rest,
+ * so facts read as though they had materialized, and "where did these come
+ * from?" was the commonest reaction to the panel. A claim you are asked to
+ * vouch for has to show who made it and when, because that is most of what you
+ * have to judge it on.
  */
 
 export type EntryRowVariant = 'review' | 'reference';
@@ -47,10 +46,17 @@ interface EntryRowProps {
   variant: EntryRowVariant;
   selected?: boolean;
   onToggle?: (id: string) => void;
+  /** True once anything is selected, so the rest of the boxes come out to meet it. */
+  selecting?: boolean;
 }
 
-export const EntryRow = observer(
-  ({ entry, variant, selected = false, onToggle }: EntryRowProps) => {
+export const EntryRow = observer((props: EntryRowProps) =>
+  props.variant === 'review' ? <ReviewRow {...props} /> : <RailRow {...props} />,
+);
+
+/** A decision. Reads as one, and states what each choice does. */
+const ReviewRow = observer(
+  ({ entry, selected = false, onToggle }: EntryRowProps) => {
     const { mutate: update } = useUpdatePageEntryMutation();
 
     const set = (status: PageEntryStatus) =>
@@ -59,13 +65,10 @@ export const EntryRow = observer(
     return (
       <div
         className={cn(
-          'rounded border border-border p-3 flex gap-3',
+          'rounded-md border border-border p-3 flex gap-3 transition-colors',
           selected && 'bg-grayAlpha-100',
         )}
       >
-        {/* Selectable wherever the caller has something to do with a
-            selection — triage in the queue, folding into the page body in the
-            reference list. */}
         {onToggle && (
           <Checkbox
             checked={selected}
@@ -78,29 +81,26 @@ export const EntryRow = observer(
         <div className="flex flex-col gap-2 min-w-0 grow">
           <p className="whitespace-pre-wrap">{entry.content}</p>
 
-          <Provenance entry={entry} />
+          <Meta entry={entry} />
 
-          {variant === 'review' ? (
-            <div className="flex gap-1 flex-wrap">
-              <Choice
-                label="Use it"
-                hint="Agents asking about this page start being given this fact"
-                onClick={() => set(PageEntryStatus.STANDING)}
-              />
-              <Choice
-                label="Set aside"
-                hint="Kept on the record, never given to an agent. You can undo this"
-                onClick={() => set(PageEntryStatus.ARCHIVED)}
-              />
-              <Choice
-                label="Not true"
-                hint="Flags it as wrong or contradicted, and stops it being given to agents"
-                onClick={() => set(PageEntryStatus.DISPUTED)}
-              />
-            </div>
-          ) : (
-            <ReferenceMenu entry={entry} />
-          )}
+          <div className="flex gap-1 flex-wrap">
+            <Choice
+              primary
+              label="Use it"
+              hint="Agents asking about this page start being given this fact"
+              onClick={() => set(PageEntryStatus.STANDING)}
+            />
+            <Choice
+              label="Set aside"
+              hint="Kept on the record, never given to an agent. You can undo this"
+              onClick={() => set(PageEntryStatus.ARCHIVED)}
+            />
+            <Choice
+              label="Not true"
+              hint="Flags it as wrong or contradicted, and stops it being given to agents"
+              onClick={() => set(PageEntryStatus.DISPUTED)}
+            />
+          </div>
         </div>
       </div>
     );
@@ -108,123 +108,154 @@ export const EntryRow = observer(
 );
 
 /**
- * Who said it, when, and whether anything has ever used it.
+ * A fact in the rail: quiet by default.
  *
- * The retrieval count is here rather than beside the actions because it is
- * evidence for the decision, not a decision of its own — and because zero is
- * the case it exists to surface, it is spelled out rather than left as a digit
- * for the reader to interpret.
+ * Boxed cards stacked down a 280px column read as a wall of containers rather
+ * than as a list of sentences — the border was doing no work that a divider and
+ * a hover state do not do more calmly.
  */
-const Provenance = observer(({ entry }: { entry: PageEntryType }) => {
+const RailRow = observer(
+  ({ entry, selected = false, onToggle, selecting = false }: EntryRowProps) => (
+    <div
+      className={cn(
+        'group flex gap-2 rounded px-2 py-1.5 -mx-2 transition-colors hover:bg-grayAlpha-100',
+        selected && 'bg-grayAlpha-100',
+      )}
+    >
+      {onToggle && (
+        <Checkbox
+          checked={selected}
+          // Hidden until the row is under the cursor or a selection is
+          // underway. A column of empty boxes made a list people mostly read
+          // look like a form waiting to be filled in.
+          className={cn(
+            'mt-1 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+            (selected || selecting) && 'opacity-100',
+          )}
+          aria-label="Select this fact"
+          onCheckedChange={() => onToggle(entry.id)}
+        />
+      )}
+
+      <div className="flex flex-col gap-0.5 min-w-0 grow">
+        <p className="whitespace-pre-wrap">{entry.content}</p>
+        <Meta entry={entry} />
+      </div>
+
+      {/* Held open while its own menu is, or it would vanish under the cursor
+          on the way to the item you were reaching for. */}
+      <RowMenu entry={entry} />
+    </div>
+  ),
+);
+
+/**
+ * Who, when, where — on one line.
+ *
+ * This was three stacked sentences, which gave the bookkeeping about a fact
+ * more room than the fact itself. The retrieval count only earns a place when
+ * it says something: nothing has ever used this, or plenty has.
+ */
+const Meta = observer(({ entry }: { entry: PageEntryType }) => {
   const { users } = useAllUsers();
 
   const author = users.find((candidate) => candidate.id === entry.sourceUserId);
   const name = author?.fullname ?? author?.username ?? 'an agent';
   const isAgent = author?.type === 'Agent';
 
-  const when = entry.createdAt
-    ? formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })
-    : null;
+  const bits: string[] = [name];
+
+  if (entry.createdAt) {
+    bits.push(shortAgo(entry.createdAt));
+  }
+
+  if (entry.scope) {
+    bits.push(entry.scope);
+  }
+
+  if (entry.status === PageEntryStatus.STANDING) {
+    bits.push(
+      entry.retrievalCount === 0
+        ? 'never used'
+        : `used ${entry.retrievalCount}×`,
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-1 text-muted-foreground">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span>
-          {isAgent ? 'Recorded by' : 'Written by'} {name}
-        </span>
-        {isAgent && <Badge variant="secondary">agent</Badge>}
-        {when && <span>· {when}</span>}
-        {entry.verifiedAt && <Badge variant="secondary">confirmed</Badge>}
-      </div>
-
-      {entry.scope && (
-        <span>
-          Applies to <code>{entry.scope}</code>
-        </span>
-      )}
-
-      {entry.status === PageEntryStatus.STANDING && (
-        <span>
-          {entry.retrievalCount === 0
-            ? 'No agent has been given this yet'
-            : `Given to an agent ${entry.retrievalCount} ${
-                entry.retrievalCount === 1 ? 'time' : 'times'
-              }`}
-          {entry.lastServedAt &&
-            `, last ${formatDistanceToNow(new Date(entry.lastServedAt), {
-              addSuffix: true,
-            })}`}
-        </span>
-      )}
+    <div className="flex items-center gap-1.5 flex-wrap text-muted-foreground">
+      {/* Wraps rather than truncates: a clipped scope ("apps/webap…") is worse
+          than a second line, because the path is the part that says where the
+          fact is meant to apply. */}
+      <span className="break-words">{bits.join(' · ')}</span>
+      {isAgent && <Badge variant="secondary">agent</Badge>}
+      {entry.verifiedAt && <Badge variant="secondary">confirmed</Badge>}
     </div>
   );
 });
 
 /**
- * Corrections to a fact already in use.
+ * Corrections to a fact already in use, behind a menu on purpose.
  *
- * Behind a menu on purpose. Giving every in-use fact the same row of buttons as
- * a fact awaiting review was what made the inbox meaningless — if everything is
- * equally actionable everywhere, "waiting for you" stops being a claim about
- * anything.
+ * Giving every in-use fact the same row of buttons as one awaiting review is
+ * what made the inbox meaningless: if everything is equally actionable
+ * everywhere, "waiting for you" stops being a claim about anything.
  */
-const ReferenceMenu = observer(({ entry }: { entry: PageEntryType }) => {
+const RowMenu = observer(({ entry }: { entry: PageEntryType }) => {
   const { mutate: update } = useUpdatePageEntryMutation();
+  const [open, setOpen] = React.useState(false);
+
+  const items = [
+    !entry.verifiedAt && {
+      label: 'Confirm',
+      hint: 'Vouch for it. Confirmed facts are never retired automatically',
+      run: () => update({ pageEntryId: entry.id, verified: true }),
+    },
+    entry.status !== PageEntryStatus.STANDING && {
+      label: 'Use it',
+      hint: 'Agents asking about this page start being given this fact',
+      run: () =>
+        update({ pageEntryId: entry.id, status: PageEntryStatus.STANDING }),
+    },
+    entry.status !== PageEntryStatus.ARCHIVED && {
+      label: 'Stop using it',
+      hint: 'Kept on the record, but no longer given to agents',
+      run: () =>
+        update({ pageEntryId: entry.id, status: PageEntryStatus.ARCHIVED }),
+    },
+    entry.status !== PageEntryStatus.DISPUTED && {
+      label: 'Mark as wrong',
+      hint: 'Flags it as contradicted and stops it being given to agents',
+      run: () =>
+        update({ pageEntryId: entry.id, status: PageEntryStatus.DISPUTED }),
+    },
+  ].filter(Boolean) as Array<{ label: string; hint: string; run: () => void }>;
 
   return (
-    <div className="flex">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" aria-label="Change this fact">
-            <MoreLine size={14} />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-[280px]">
-          {!entry.verifiedAt && (
-            <DropdownMenuItem
-              onClick={() => update({ pageEntryId: entry.id, verified: true })}
-            >
-              <div className="flex flex-col">
-                <span>Confirm</span>
-                <span className="text-muted-foreground">
-                  Vouch for it. Confirmed facts are never retired automatically
-                </span>
-              </div>
-            </DropdownMenuItem>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label="Change this fact"
+          className={cn(
+            'shrink-0 h-6 px-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+            open && 'opacity-100',
           )}
-          <DropdownMenuItem
-            onClick={() =>
-              update({
-                pageEntryId: entry.id,
-                status: PageEntryStatus.ARCHIVED,
-              })
-            }
-          >
+        >
+          <MoreLine size={14} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[260px]">
+        {items.map((item) => (
+          <DropdownMenuItem key={item.label} onClick={item.run}>
             <div className="flex flex-col">
-              <span>Stop using it</span>
-              <span className="text-muted-foreground">
-                Kept on the record, but no longer given to agents
-              </span>
+              <span>{item.label}</span>
+              <span className="text-muted-foreground">{item.hint}</span>
             </div>
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() =>
-              update({
-                pageEntryId: entry.id,
-                status: PageEntryStatus.DISPUTED,
-              })
-            }
-          >
-            <div className="flex flex-col">
-              <span>Mark as wrong</span>
-              <span className="text-muted-foreground">
-                Flags it as contradicted and stops it being given to agents
-              </span>
-            </div>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 });
 
@@ -233,14 +264,20 @@ const Choice = observer(
     label,
     hint,
     onClick,
+    primary = false,
   }: {
     label: string;
     hint: string;
     onClick: () => void;
+    primary?: boolean;
   }) => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="secondary" size="sm" onClick={onClick}>
+        <Button
+          variant={primary ? 'secondary' : 'ghost'}
+          size="sm"
+          onClick={onClick}
+        >
           {label}
         </Button>
       </TooltipTrigger>
@@ -251,3 +288,36 @@ const Choice = observer(
     </Tooltip>
   ),
 );
+
+/**
+ * "3d" rather than "about 3 days ago".
+ *
+ * The long form is fine in a dialog and too wide for a 280px rail, where it
+ * pushes the author's name onto a second line and makes a one-line fact look
+ * like a paragraph.
+ */
+function shortAgo(iso: string): string {
+  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+
+  if (seconds < 60) {
+    return 'just now';
+  }
+
+  const steps: Array<[number, string]> = [
+    [60, 'm'],
+    [3600, 'h'],
+    [86400, 'd'],
+    [604800, 'w'],
+  ];
+
+  let label = `${Math.floor(seconds / 60)}m`;
+
+  for (const [size, suffix] of steps) {
+    const value = Math.floor(seconds / size);
+    if (value >= 1) {
+      label = `${value}${suffix}`;
+    }
+  }
+
+  return label;
+}

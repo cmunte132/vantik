@@ -49,7 +49,11 @@ export class VantikClient {
       );
     }
 
-    this.baseUrl = baseUrl.replace(/\/+$/, '');
+    let normalizedUrl = baseUrl;
+    while (normalizedUrl.endsWith('/')) {
+      normalizedUrl = normalizedUrl.slice(0, -1);
+    }
+    this.baseUrl = normalizedUrl;
     this.token = token;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchImpl = config.fetch ?? globalThis.fetch;

@@ -12,7 +12,7 @@ function getErrorMessage(errorResponse: any) {
   if (errorResponse.response?.data) {
     return errorResponse.response.data.message;
   }
-  return errorResponse?.message || 'Error occured';
+  return errorResponse?.message || 'Error occurred';
 }
 
 export function useRemoveTeamMemberMutation({

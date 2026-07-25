@@ -25,8 +25,8 @@ export class CreateAgentDto {
 
   /**
    * What the agent may do. Omit for the default — read and write, but not
-   * delete. Unknown values are dropped rather than rejected, so a client asking
-   * for a scope this server does not have still gets a usable agent.
+   * delete. Unknown values are rejected with a validation error, so only
+   * scopes listed in AGENT_SCOPES are accepted.
    */
   @IsOptional()
   @IsArray()

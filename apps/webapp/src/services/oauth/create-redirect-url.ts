@@ -38,7 +38,7 @@ export function useCreateRedirectURLMutation({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occured';
+    const errorText = errorResponse?.errors?.message || 'Error occurred';
 
     onError && onError(errorText);
   };

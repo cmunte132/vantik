@@ -8,12 +8,24 @@ import {
 } from '@vantikhq/ui/components/dialog';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { Textarea } from '@vantikhq/ui/components/textarea';
-import { AddLine, ChevronRight } from '@vantikhq/ui/icons';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@vantikhq/ui/components/tooltip';
+import {
+  AddLine,
+  ChevronRight,
+  RightSidebarClosed,
+  RightSidebarOpen,
+} from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
 import { PageEntryStatus, type PageEntryType } from 'common/types';
+
+import { useLocalCommonState } from 'hooks/use-local-state';
 
 import { useContextStore } from 'store/global-context-provider';
 
@@ -40,6 +52,13 @@ import { ReviewQueue } from './review-queue';
  */
 export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
   const { pageEntriesStore } = useContextStore();
+
+  // Collapsed until asked for, and the choice sticks across pages — a rail you
+  // have to close on every document is worse than one that was never there.
+  // Deliberately not keyed by page: this is a preference about how you read,
+  // not a property of the page you happen to be on.
+  const [open, setOpen] = useLocalCommonState<boolean>('pageMemoryRail', false);
+
   const [reviewing, setReviewing] = React.useState(false);
   const [showStanding, setShowStanding] = React.useState(false);
   const [showSetAside, setShowSetAside] = React.useState(false);
@@ -68,12 +87,69 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
       return next;
     });
 
+  if (!open) {
+    return (
+      <div className="shrink-0 border-l border-border flex flex-col items-center gap-2 w-[44px] h-full pt-3">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="px-2"
+              aria-label="Show agent memory"
+              onClick={() => setOpen(true)}
+            >
+              <RightSidebarClosed size={16} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">Agent memory</TooltipContent>
+        </Tooltip>
+
+        {/* The one thing that must survive collapsing. Closed by default means
+            nobody is looking, so a queue with no outward sign of being there
+            is a queue that never gets cleared. */}
+        {waiting.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={`${waiting.length} facts waiting for review`}
+                onClick={() => setOpen(true)}
+              >
+                <Badge variant="secondary">{waiting.length}</Badge>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              {waiting.length} waiting for you
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="shrink-0 border-l border-border flex flex-col w-[280px] h-full">
+    <div className="shrink-0 border-l border-border flex flex-col w-[360px] h-full">
       <ScrollArea className="h-full">
         <div className="p-4 flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <h3>Agent memory</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="grow">Agent memory</h3>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="px-2 -mr-1"
+                    aria-label="Hide agent memory"
+                    onClick={() => setOpen(false)}
+                  >
+                    <RightSidebarOpen size={16} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Hide</TooltipContent>
+              </Tooltip>
+            </div>
             <p className="text-muted-foreground">
               Short facts agents recorded here as they worked. They are given
               these along with the page itself — they are not part of it.

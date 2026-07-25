@@ -1,12 +1,20 @@
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
+import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@vantikhq/ui/components/tabs';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@vantikhq/ui/components/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@vantikhq/ui/components/tooltip';
+import { ChevronRight } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -27,328 +35,522 @@ import {
  * The review surface: what agents have asserted about this page, and what to do
  * about it.
  *
- * Without this the bank is a black box that agents write to and nobody trusts.
- * The design constraint that shapes everything here is that **review has to
- * scale**: a rail listing entries one per row is usable at five and abandoned
- * at fifty, and fifty is the realistic steady state for an active page. So the
- * inbox opens on facet groups — "24 from claude-opus-5 scoped
- * apps/server/prisma" — and a reviewer acts on a whole group at once. Four
- * decisions instead of thirty-eight is the difference between a surface people
- * use and one they ignore, and an ignored inbox is how the bank silently stops
- * being trustworthy.
+ * Built as a moderation queue, because that is a shape people already know.
+ * The first version was not one, and four things were wrong with it:
+ *
+ * 1. **The same entry appeared twice.** It grouped by source *and* by scope at
+ *    once, so a single entry showed as "1 claude-opus-5" and again as
+ *    "1 apps/server" — a panel that says two when it means one.
+ * 2. **The vocabulary was the database's.** "Standing", "Proposed" and
+ *    "Disputed" are enum values; nobody had been told that "Standing" means
+ *    agents are being handed this right now. The API keeps those names, this
+ *    does not.
+ * 3. **No action said what it did.** Accept into what? Is archive a delete?
+ *    What is verify *for*, once a thing is already accepted?
+ * 4. **You acted on groups you could not see inside.** Accepting claims
+ *    sight-unseen is precisely the wrong default on a surface whose entire
+ *    purpose is deciding what to trust.
+ *
+ * So: rows are always visible, selection is by checkbox with a bulk bar, and
+ * grouping is a control that changes how rows are *arranged* rather than a
+ * substitute for showing them. That keeps the "four decisions, not thirty-eight"
+ * property — select a group, act once — without asking anyone to sign off on
+ * text they have not read.
  */
+
+type Tab = 'inbox' | 'in-use' | 'set-aside';
+type GroupBy = 'source' | 'scope' | 'none';
+
+const TABS: Array<{ id: Tab; label: string; status: PageEntryStatus }> = [
+  { id: 'inbox', label: 'Inbox', status: PageEntryStatus.PROPOSED },
+  { id: 'in-use', label: 'In use', status: PageEntryStatus.STANDING },
+  { id: 'set-aside', label: 'Set aside', status: PageEntryStatus.ARCHIVED },
+];
+
+/** What each tab is, said once, at the top, in consequences. */
+const TAB_HELP: Record<Tab, string> = {
+  inbox:
+    'Claims agents have made, waiting on you. Nothing here is given to any agent until you accept it.',
+  'in-use':
+    'Agents are given these when they ask about this page. Confirmed ones are never retired automatically.',
+  'set-aside':
+    'Kept for the record but never given to agents. Nothing here is deleted — you can put any of it back in use.',
+};
+
 export const EntryRail = observer(({ pageId }: { pageId: string }) => {
   const { pageEntriesStore } = useContextStore();
+  const [tab, setTab] = React.useState<Tab>('inbox');
+  const [groupBy, setGroupBy] = React.useState<GroupBy>('source');
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
 
-  const proposed = pageEntriesStore.getByStatus(
+  const countFor = (status: PageEntryStatus) =>
+    pageEntriesStore.getByStatus(pageId, status).length;
+
+  const active = TABS.find((candidate) => candidate.id === tab);
+  const entries: PageEntryType[] = pageEntriesStore.getByStatus(
     pageId,
-    PageEntryStatus.PROPOSED,
+    active.status,
   );
-  const standing = pageEntriesStore.getByStatus(
-    pageId,
-    PageEntryStatus.STANDING,
-  );
-  const disputed = pageEntriesStore.getByStatus(
+
+  const flagged: PageEntryType[] = pageEntriesStore.getByStatus(
     pageId,
     PageEntryStatus.DISPUTED,
   );
 
+  // Selection is per tab: carrying it across would let a bulk action land on
+  // rows the person can no longer see.
+  React.useEffect(() => setSelected(new Set()), [tab, pageId]);
+
+  const toggle = (id: string) =>
+    setSelected((current: Set<string>) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+
+  const selectMany = (ids: string[], select: boolean) =>
+    setSelected((current: Set<string>) => {
+      const next = new Set(current);
+      ids.forEach((id) => (select ? next.add(id) : next.delete(id)));
+      return next;
+    });
+
   return (
-    <div className="w-[360px] shrink-0 border-l border-border h-full flex flex-col">
-      {/* Named, because "what is this column" was the first thing the rail
-          failed to answer. Facts are the agent-written half of the page, and
-          nothing here is served until somebody accepts it. */}
-      <div className="px-3 pt-3">
-        <h2>Facts</h2>
-        <p className="text-muted-foreground">
-          What agents have asserted about this page.
-        </p>
+    <div className="w-[400px] shrink-0 border-l border-border h-full flex flex-col">
+      <div className="px-3 pt-3 flex flex-col gap-2">
+        <div>
+          <h2>Facts from agents</h2>
+          <p className="text-muted-foreground">
+            Short claims agents recorded here. The page body is what your team
+            wrote.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1">
+          {TABS.map((candidate) => (
+            <Button
+              key={candidate.id}
+              variant={tab === candidate.id ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setTab(candidate.id)}
+            >
+              {candidate.label}
+              {countFor(candidate.status) > 0 && (
+                <Badge variant="secondary" className="ml-1.5">
+                  {countFor(candidate.status)}
+                </Badge>
+              )}
+            </Button>
+          ))}
+        </div>
+
+        <p className="text-muted-foreground">{TAB_HELP[tab]}</p>
+
+        {/* A flagged entry is a contradiction somewhere in the bank, so it is
+            surfaced from every tab rather than hidden behind one. */}
+        {flagged.length > 0 && tab !== 'inbox' && (
+          <FlaggedBanner count={flagged.length} />
+        )}
       </div>
 
-      <Tabs defaultValue="inbox" className="flex flex-col h-full">
-        <TabsList className="mx-3 mt-3">
-          <TabsTrigger value="inbox">
-            Inbox
-            {proposed.length > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {proposed.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="standing">
-            Standing
-            {standing.length > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {standing.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          {/* Only shown when there is one: a contradiction between the body and
-              an entry is a signal, and a permanently empty tab teaches a
-              reviewer to stop looking at it. */}
-          {disputed.length > 0 && (
-            <TabsTrigger value="disputed">
-              Disputed
-              <Badge variant="secondary" className="ml-2">
-                {disputed.length}
-              </Badge>
-            </TabsTrigger>
-          )}
-        </TabsList>
+      {entries.length > 0 && (
+        <div className="px-3 pt-2 flex items-center gap-2">
+          <span className="text-muted-foreground">Group by</span>
+          <Select
+            value={groupBy}
+            onValueChange={(value: GroupBy) => setGroupBy(value)}
+          >
+            <SelectTrigger className="h-7 w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="source">Who said it</SelectItem>
+              <SelectItem value="scope">Where it applies</SelectItem>
+              <SelectItem value="none">Nothing</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
-        <ScrollArea className="grow px-3 pb-3">
-          <TabsContent value="inbox">
-            <Inbox pageId={pageId} entries={proposed} />
-          </TabsContent>
+      <ScrollArea className="grow px-3 pb-3 pt-2">
+        <EntryGroups
+          entries={entries}
+          groupBy={groupBy}
+          selected={selected}
+          onToggle={toggle}
+          onSelectMany={selectMany}
+          emptyMessage={
+            tab === 'inbox'
+              ? 'Nothing waiting. New claims from agents land here first.'
+              : tab === 'in-use'
+                ? 'No facts are being given to agents from this page yet.'
+                : 'Nothing has been set aside.'
+          }
+        />
+      </ScrollArea>
 
-          <TabsContent value="standing">
-            <StandingList entries={standing} />
-          </TabsContent>
-
-          <TabsContent value="disputed">
-            <EntryList entries={disputed} />
-          </TabsContent>
-        </ScrollArea>
-      </Tabs>
+      {selected.size > 0 && (
+        <BulkBar
+          tab={tab}
+          ids={[...selected]}
+          onDone={() => setSelected(new Set())}
+        />
+      )}
     </div>
   );
 });
 
-/** Facets first, rows on request. */
-const Inbox = observer(
-  ({ pageId, entries }: { pageId: string; entries: PageEntryType[] }) => {
-    const { pageEntriesStore } = useContextStore();
-    const [showRows, setShowRows] = React.useState(false);
-    const { mutate: triage } = useBulkTriageMutation();
-
-    const facets = pageEntriesStore.facets(pageId, PageEntryStatus.PROPOSED);
-
-    if (entries.length === 0) {
-      return (
-        <p className="text-muted-foreground py-4">
-          Nothing waiting. Facts agents assert land here for review before
-          anything is served from them.
-        </p>
-      );
-    }
-
-    const groups = [
-      ...Object.entries(facets.sourceUserId).map(([value, count]) => ({
-        kind: 'source' as const,
-        value,
-        count: count as number,
-      })),
-      ...Object.entries(facets.scope).map(([value, count]) => ({
-        kind: 'scope' as const,
-        value,
-        count: count as number,
-      })),
-    ].filter((group) => group.count > 0);
-
-    const idsFor = (group: (typeof groups)[number]) =>
-      entries
-        .filter((entry) =>
-          group.kind === 'source'
-            ? (entry.sourceUserId ?? '') === group.value
-            : (entry.scope ?? '') === group.value,
-        )
-        .map((entry) => entry.id);
-
-    return (
-      <div className="flex flex-col gap-3 py-3">
-        <p className="text-muted-foreground">
-          {entries.length} proposed. Accepting serves the fact to every agent in
-          the workspace; archiving keeps it readable but stops serving it.
-        </p>
-
-        {groups.map((group) => (
-          <div
-            key={`${group.kind}:${group.value}`}
-            className="rounded border p-2 flex flex-col gap-2"
-          >
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{group.count}</Badge>
-              <span className="truncate">
-                {group.kind === 'source' ? (
-                  <SourceName userId={group.value} />
-                ) : (
-                  <code>{group.value || 'no scope'}</code>
-                )}
-              </span>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  triage({
-                    entryIds: idsFor(group),
-                    status: PageEntryStatus.STANDING,
-                  })
-                }
-              >
-                Accept all
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  triage({
-                    entryIds: idsFor(group),
-                    status: PageEntryStatus.ARCHIVED,
-                  })
-                }
-              >
-                Archive all
-              </Button>
-            </div>
-          </div>
-        ))}
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="self-start"
-          onClick={() => setShowRows((shown) => !shown)}
-        >
-          {showRows ? 'Hide individual entries' : 'Review one at a time'}
-        </Button>
-
-        {showRows && <EntryList entries={entries} />}
-      </div>
-    );
-  },
-);
-
-const StandingList = observer(
-  ({ entries }: { entries: PageEntryType[] }) => {
-    if (entries.length === 0) {
-      return (
-        <p className="text-muted-foreground py-4">
-          Nothing is being served from this page yet.
-        </p>
-      );
-    }
-
-    return (
-      <div className="flex flex-col gap-2 py-3">
-        <p className="text-muted-foreground">
-          Served to agents on recall. The retrieval count is how often each has
-          actually been read — a standing fact at zero is dead knowledge.
-        </p>
-        <EntryList entries={entries} />
-      </div>
-    );
-  },
-);
-
-const EntryList = observer(({ entries }: { entries: PageEntryType[] }) => (
-  <div className="flex flex-col gap-2">
-    {entries.map((entry) => (
-      <EntryRow key={entry.id} entry={entry} />
-    ))}
-  </div>
+const FlaggedBanner = observer(({ count }: { count: number }) => (
+  <p className="rounded border border-border px-2 py-1 text-muted-foreground">
+    {count} {count === 1 ? 'fact is' : 'facts are'} flagged as wrong and not
+    being given to agents.
+  </p>
 ));
 
-const EntryRow = observer(({ entry }: { entry: PageEntryType }) => {
-  const { mutate: update } = useUpdatePageEntryMutation();
-
-  return (
-    <div className="rounded border p-2 flex flex-col gap-2">
-      <p className="whitespace-pre-wrap">{entry.content}</p>
-
-      <div className="flex items-center gap-2 flex-wrap text-muted-foreground">
-        <SourceName userId={entry.sourceUserId ?? ''} />
-        {entry.scope && <code className="truncate">{entry.scope}</code>}
-        {entry.status === PageEntryStatus.STANDING && (
-          <span
-            className={cn(entry.retrievalCount === 0 && 'text-muted-foreground')}
-          >
-            served {entry.retrievalCount}×
-          </span>
-        )}
-        {entry.verifiedAt && <Badge variant="secondary">verified</Badge>}
-      </div>
-
-      <div className="flex gap-2 flex-wrap">
-        {entry.status === PageEntryStatus.PROPOSED && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() =>
-              update({
-                pageEntryId: entry.id,
-                status: PageEntryStatus.STANDING,
-              })
-            }
-          >
-            Accept
-          </Button>
-        )}
-        {entry.status !== PageEntryStatus.DISPUTED && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              update({
-                pageEntryId: entry.id,
-                status: PageEntryStatus.DISPUTED,
-              })
-            }
-          >
-            Dispute
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            update({ pageEntryId: entry.id, status: PageEntryStatus.ARCHIVED })
-          }
-        >
-          Archive
-        </Button>
-        {!entry.verifiedAt && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => update({ pageEntryId: entry.id, verified: true })}
-          >
-            Verify
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-});
+interface GroupsProps {
+  entries: PageEntryType[];
+  groupBy: GroupBy;
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  onSelectMany: (ids: string[], select: boolean) => void;
+  emptyMessage: string;
+}
 
 /**
- * Who asserted a fact, badged when it was an agent.
+ * Rows, arranged.
  *
- * An agent-written claim and a human-written one are identical as text, and the
- * difference is the entire reason a reviewer is looking at this list.
+ * Grouping picks **one** axis, so every entry is listed exactly once — the
+ * previous version summed two axes and double-counted everything in the panel.
  */
-const SourceName = observer(({ userId }: { userId: string }) => {
-  const currentUser = React.useContext(UserContext);
-  // The workspace store holds memberships, which carry a role but no name —
-  // the account itself is what has a name and a type, which is what actually
-  // distinguishes an agent's claim from a person's.
-  const { users } = useAllUsers();
+const EntryGroups = observer(
+  ({
+    entries,
+    groupBy,
+    selected,
+    onToggle,
+    onSelectMany,
+    emptyMessage,
+  }: GroupsProps) => {
+    const { users } = useAllUsers();
 
-  if (!userId) {
-    return <span className="text-muted-foreground">unknown source</span>;
-  }
+    if (entries.length === 0) {
+      return <p className="text-muted-foreground py-2">{emptyMessage}</p>;
+    }
 
-  const user = users.find((candidate) => candidate.id === userId);
-  const name = user?.fullname ?? user?.username ?? userId.slice(0, 8);
-  const isAgent = user?.type === 'Agent';
+    if (groupBy === 'none') {
+      return (
+        <div className="flex flex-col gap-2">
+          {entries.map((entry) => (
+            <EntryRow
+              key={entry.id}
+              entry={entry}
+              selected={selected.has(entry.id)}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+      );
+    }
 
-  return (
-    <span className="flex items-center gap-1">
-      {name}
-      {userId === currentUser?.id && <span>(you)</span>}
-      {isAgent && <Badge variant="secondary">agent</Badge>}
-    </span>
-  );
-});
+    const keyOf = (entry: PageEntryType) =>
+      groupBy === 'source' ? (entry.sourceUserId ?? '') : (entry.scope ?? '');
+
+    const groups = new Map<string, PageEntryType[]>();
+    for (const entry of entries) {
+      const key = keyOf(entry);
+      groups.set(key, [...(groups.get(key) ?? []), entry]);
+    }
+
+    const labelOf = (key: string) => {
+      if (groupBy === 'scope') {
+        return key || 'Everywhere on this page';
+      }
+      const user = users.find((candidate) => candidate.id === key);
+      return user?.fullname ?? user?.username ?? 'Unknown source';
+    };
+
+    return (
+      <div className="flex flex-col gap-3">
+        {[...groups.entries()].map(([key, rows]) => (
+          <EntryGroup
+            key={key || 'ungrouped'}
+            label={labelOf(key)}
+            isAgent={
+              groupBy === 'source' &&
+              users.find((candidate) => candidate.id === key)?.type === 'Agent'
+            }
+            isCode={groupBy === 'scope' && Boolean(key)}
+            rows={rows}
+            selected={selected}
+            onToggle={onToggle}
+            onSelectMany={onSelectMany}
+          />
+        ))}
+      </div>
+    );
+  },
+);
+
+const EntryGroup = observer(
+  ({
+    label,
+    isAgent,
+    isCode,
+    rows,
+    selected,
+    onToggle,
+    onSelectMany,
+  }: {
+    label: string;
+    isAgent: boolean;
+    isCode: boolean;
+    rows: PageEntryType[];
+    selected: Set<string>;
+    onToggle: (id: string) => void;
+    onSelectMany: (ids: string[], select: boolean) => void;
+  }) => {
+    const [open, setOpen] = React.useState(true);
+    const ids = rows.map((row) => row.id);
+    const allSelected = ids.every((id) => selected.has(id));
+
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={allSelected}
+            aria-label={`Select all from ${label}`}
+            onCheckedChange={(checked: boolean) =>
+              onSelectMany(ids, Boolean(checked))
+            }
+          />
+
+          <button
+            type="button"
+            className="flex items-center gap-1 grow min-w-0 text-left"
+            onClick={() => setOpen((shown: boolean) => !shown)}
+          >
+            <ChevronRight
+              size={12}
+              className={cn(
+                'shrink-0 transition-transform',
+                open && 'rotate-90',
+              )}
+            />
+            {isCode ? (
+              <code className="truncate">{label}</code>
+            ) : (
+              <span className="truncate">{label}</span>
+            )}
+            {isAgent && <Badge variant="secondary">agent</Badge>}
+            <Badge variant="secondary" className="ml-auto">
+              {rows.length}
+            </Badge>
+          </button>
+        </div>
+
+        {open && (
+          <div className="flex flex-col gap-2 pl-6">
+            {rows.map((entry) => (
+              <EntryRow
+                key={entry.id}
+                entry={entry}
+                selected={selected.has(entry.id)}
+                onToggle={onToggle}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  },
+);
+
+const EntryRow = observer(
+  ({
+    entry,
+    selected,
+    onToggle,
+  }: {
+    entry: PageEntryType;
+    selected: boolean;
+    onToggle: (id: string) => void;
+  }) => {
+    const { mutate: update } = useUpdatePageEntryMutation();
+    const { users } = useAllUsers();
+    const currentUser = React.useContext(UserContext);
+
+    const author = users.find(
+      (candidate) => candidate.id === entry.sourceUserId,
+    );
+    const name = author?.fullname ?? author?.username ?? 'unknown';
+
+    return (
+      <div
+        className={cn(
+          'rounded border border-border p-2 flex gap-2',
+          selected && 'bg-grayAlpha-100',
+        )}
+      >
+        <Checkbox
+          checked={selected}
+          className="mt-0.5"
+          aria-label="Select this fact"
+          onCheckedChange={() => onToggle(entry.id)}
+        />
+
+        <div className="flex flex-col gap-1.5 min-w-0 grow">
+          <p className="whitespace-pre-wrap">{entry.content}</p>
+
+          <div className="flex items-center gap-2 flex-wrap text-muted-foreground">
+            <span>
+              {name}
+              {entry.sourceUserId === currentUser?.id && ' (you)'}
+            </span>
+            {author?.type === 'Agent' && (
+              <Badge variant="secondary">agent</Badge>
+            )}
+            {entry.scope && <code className="truncate">{entry.scope}</code>}
+            {entry.verifiedAt && <Badge variant="secondary">confirmed</Badge>}
+          </div>
+
+          {entry.status === PageEntryStatus.STANDING && (
+            <RetrievalCount count={entry.retrievalCount} />
+          )}
+
+          <div className="flex gap-1 flex-wrap">
+            <RowAction
+              show={entry.status !== PageEntryStatus.STANDING}
+              label="Use"
+              hint="Start giving this to agents that ask about this page"
+              onClick={() =>
+                update({
+                  pageEntryId: entry.id,
+                  status: PageEntryStatus.STANDING,
+                })
+              }
+            />
+            <RowAction
+              show={
+                entry.status === PageEntryStatus.STANDING && !entry.verifiedAt
+              }
+              label="Confirm"
+              hint="Vouch for this. Confirmed facts are never retired automatically"
+              onClick={() => update({ pageEntryId: entry.id, verified: true })}
+            />
+            <RowAction
+              show={entry.status !== PageEntryStatus.DISPUTED}
+              label="Flag"
+              hint="Mark as wrong or contradicted. Stops being given to agents"
+              onClick={() =>
+                update({
+                  pageEntryId: entry.id,
+                  status: PageEntryStatus.DISPUTED,
+                })
+              }
+            />
+            <RowAction
+              show={entry.status !== PageEntryStatus.ARCHIVED}
+              label="Set aside"
+              hint="Keep it, but stop giving it to agents. Reversible"
+              onClick={() =>
+                update({
+                  pageEntryId: entry.id,
+                  status: PageEntryStatus.ARCHIVED,
+                })
+              }
+            />
+          </div>
+        </div>
+      </div>
+    );
+  },
+);
+
+/**
+ * How often a fact has actually been given to an agent.
+ *
+ * "served 4×" meant nothing to anyone who had not read the schema. What the
+ * number is *for* is spotting knowledge nothing uses, so zero says so outright
+ * rather than leaving the reader to infer it from a count.
+ */
+const RetrievalCount = observer(({ count }: { count: number }) => (
+  <span className="text-muted-foreground">
+    {count === 0
+      ? 'Never used by an agent yet'
+      : `Given to an agent ${count} ${count === 1 ? 'time' : 'times'}`}
+  </span>
+));
+
+const RowAction = observer(
+  ({
+    show,
+    label,
+    hint,
+    onClick,
+  }: {
+    show: boolean;
+    label: string;
+    hint: string;
+    onClick: () => void;
+  }) => {
+    if (!show) {
+      return null;
+    }
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="sm" onClick={onClick}>
+            {label}
+          </Button>
+        </TooltipTrigger>
+        {/* Every action states its consequence. The first version labelled them
+            with status names, which told you what the row would be called
+            afterwards and nothing about what would happen. */}
+        <TooltipContent className="max-w-[260px]">{hint}</TooltipContent>
+      </Tooltip>
+    );
+  },
+);
+
+/** Appears only when something is selected, the way a mail client's does. */
+const BulkBar = observer(
+  ({ tab, ids, onDone }: { tab: Tab; ids: string[]; onDone: () => void }) => {
+    const { mutate: triage } = useBulkTriageMutation({ onSuccess: onDone });
+
+    const apply = (status: PageEntryStatus) => triage({ entryIds: ids, status });
+
+    return (
+      <div className="border-t border-border p-3 flex flex-col gap-2">
+        <span className="text-muted-foreground">{ids.length} selected</span>
+        <div className="flex gap-2 flex-wrap">
+          {tab !== 'in-use' && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => apply(PageEntryStatus.STANDING)}
+            >
+              Use {ids.length}
+            </Button>
+          )}
+          {tab !== 'set-aside' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => apply(PageEntryStatus.ARCHIVED)}
+            >
+              Set aside
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={onDone}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  },
+);

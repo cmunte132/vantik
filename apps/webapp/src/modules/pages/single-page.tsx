@@ -1,3 +1,5 @@
+import type { Editor as EditorT } from '@tiptap/core';
+
 import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
@@ -36,9 +38,12 @@ import {
 
 import { useContextStore } from 'store/global-context-provider';
 
+import { EditorRibbon } from './editor-ribbon';
 import { EntryRail } from './entry-rail';
 import { Header } from './header';
+import { PageNav } from './page-nav';
 import { PageTitle } from './page-title';
+import { SaveIndicator, type SaveState } from './save-indicator';
 
 /**
  * What each policy means, said where a person actually chooses one.
@@ -61,7 +66,13 @@ const SinglePageView = observer(() => {
   const page: PageType | undefined = pagesStore.getPageWithId(pageId as string);
   const { handlePaste } = useEditorPasteHandler();
   const { suggestionItems } = useEditorSuggestionItems();
-  const { mutate: updatePage } = useUpdatePageMutation();
+  const [editorInstance, setEditorInstance] = React.useState<EditorT>();
+  const [saveState, setSaveState] = React.useState<SaveState>('idle');
+
+  const { mutate: updatePage } = useUpdatePageMutation({
+    onSuccess: () => setSaveState('saved'),
+    onError: () => setSaveState('error'),
+  });
   const { mutate: deletePage } = useDeletePageMutation({
     onSuccess: () => router.push(`/${workspaceSlug}/pages`),
   });
@@ -89,6 +100,11 @@ const SinglePageView = observer(() => {
   const onTitleChange = useDebouncedCallback((title: string) => {
     updatePage({ pageId: page.id, title });
   }, 1000);
+
+  // Marked pending the instant a key is pressed, not when the debounced
+  // request goes out — the window where the browser holds the only copy is
+  // exactly the window worth admitting to.
+  const markDirty = () => setSaveState('pending');
 
   const ancestors: PageType[] = page ? pagesStore.getAncestors(page.id) : [];
 
@@ -133,7 +149,18 @@ const SinglePageView = observer(() => {
 
   return (
     <MainLayout
-      header={<Header ancestors={ancestors} page={page} actions={actions} />}
+      header={
+        <Header
+          ancestors={ancestors}
+          page={page}
+          actions={
+            <div className="flex items-center gap-3">
+              <SaveIndicator state={saveState} />
+              {actions}
+            </div>
+          }
+        />
+      }
     >
       {!page ? (
         <div className="p-6 text-muted-foreground">
@@ -141,21 +168,34 @@ const SinglePageView = observer(() => {
         </div>
       ) : (
         <div className="flex h-[calc(100%_-_38px)] w-full">
+          <PageNav activePageId={page.id} />
+
           <ScrollArea className="grow h-full">
             <div className="flex justify-center w-full">
-              <div className="grow flex flex-col max-w-[80ch] py-8 px-6">
+              <div className="grow flex flex-col max-w-[80ch] pt-8 pb-8 px-6">
                 {/* Keyed on the page so switching pages in the tree resets
                     the local value, rather than leaving the previous page's
                     title sitting above the new page's body. */}
                 <PageTitle
                   key={page.id}
                   value={page.title}
-                  onChange={(title) => onTitleChange(title)}
+                  onChange={(title) => {
+                    markDirty();
+                    onTitleChange(title);
+                  }}
                 />
+
+                {/* Above the content and sticky, so it is still reachable
+                    partway down a long page. */}
+                <EditorRibbon editor={editorInstance} />
 
                 <Editor
                   value={page.description}
-                  onChange={onBodyChange}
+                  onCreate={setEditorInstance}
+                  onChange={(content: string) => {
+                    markDirty();
+                    onBodyChange(content);
+                  }}
                   handlePaste={handlePaste}
                   extensions={[vantikIssueExtension, AiWritingExtension]}
                   // There is no formatting toolbar anywhere in this product —
@@ -163,7 +203,7 @@ const SinglePageView = observer(() => {
                   // issue description. That is only discoverable if something
                   // says so, and an empty page said nothing at all.
                   placeholder="Write, or press '/' for headings, lists and more…"
-                  className="min-h-[300px] mt-4 text-md"
+                  className="min-h-[300px] mt-3 text-md"
                 >
                   <EditorExtensions suggestionItems={suggestionItems} />
                 </Editor>

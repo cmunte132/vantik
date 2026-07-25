@@ -10,6 +10,7 @@ import { PrismaModule } from 'nestjs-prisma';
 import config from 'common/configs/config';
 
 import { ActionModule } from 'modules/action/action.module';
+import { AgentSkillModule } from 'modules/agent-skill/agent-skill.module';
 import { AIRequestsModule } from 'modules/ai-requests/ai-requests.module';
 import { ALSModule } from 'modules/als/als.module';
 import { AttachmentModule } from 'modules/attachments/attachments.module';
@@ -109,6 +110,7 @@ import { AppService } from './app.service';
     NotificationsModule,
     SearchModule,
     McpModule,
+    AgentSkillModule,
     AttachmentModule,
     ViewsModule,
     TriggerdevModule,

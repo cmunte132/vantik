@@ -64,54 +64,57 @@ export const ConsolidateDialog = observer(
 
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-[720px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Write {entries.length}{' '}
-              {entries.length === 1 ? 'note' : 'notes'} into the page
+        <DialogContent className="p-0 gap-0 min-w-[720px] sm:max-w-[720px]">
+          <DialogHeader className="text-left px-6 pt-6 pb-4 border-b border-border">
+            <DialogTitle className="font-normal">
+              Write {entries.length} {entries.length === 1 ? 'note' : 'notes'}{' '}
+              into the page
             </DialogTitle>
+            <p className="text-muted-foreground">
+              Appended at the end — edit them into the page however it should
+              read. Once saved they are part of the document and stop being
+              given to agents separately, so nothing is said twice.
+            </p>
           </DialogHeader>
 
-          <p className="text-muted-foreground">
-            The notes are appended below — edit them into the page however it
-            should read. Once saved they become part of the document and stop
-            being served to agents separately, so nothing is said twice.
-          </p>
-
-          <Textarea
-            rows={16}
-            value={markdown}
-            className="font-mono"
-            onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) =>
-              setMarkdown(event.currentTarget.value)
-            }
-          />
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={isPending || markdown.trim().length === 0}
-              onClick={() =>
-                consolidate({
-                  pageId,
-                  descriptionMarkdown: markdown,
-                  entryIds: entries.map((entry) => entry.id),
-                })
+          <div className="px-6 py-4">
+            <Textarea
+              rows={16}
+              value={markdown}
+              className="font-mono resize-none"
+              onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) =>
+                setMarkdown(event.currentTarget.value)
               }
-            >
-              Save to the page
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <span className="text-muted-foreground ml-auto">
-              You can undo this from the page history
+            />
+          </div>
+
+          <div className="px-6 py-3 border-t border-border flex items-center gap-2">
+            <span className="text-muted-foreground">
+              You can undo this from the page history.
             </span>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={isPending || markdown.trim().length === 0}
+                onClick={() =>
+                  consolidate({
+                    pageId,
+                    descriptionMarkdown: markdown,
+                    entryIds: entries.map((entry) => entry.id),
+                  })
+                }
+              >
+                Save to the page
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

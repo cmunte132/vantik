@@ -174,12 +174,24 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
       </ScrollArea>
 
       <Dialog open={reviewing} onOpenChange={setReviewing}>
-        <DialogContent className="max-w-[720px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Facts waiting on this page</DialogTitle>
+        {/* The primitive pins itself to 500px with an `!important` max-width
+            and ships no padding of its own, so width has to be driven by
+            min-w and the spacing supplied here — the same way the member and
+            project dialogs do it. */}
+        <DialogContent className="p-0 gap-0 min-w-[720px] sm:max-w-[720px]">
+          <DialogHeader className="text-left px-6 pt-6 pb-4 border-b border-border">
+            <DialogTitle className="font-normal">
+              Facts waiting on this page
+            </DialogTitle>
+            <p className="text-muted-foreground">
+              Recorded by agents as they worked. None of it is given to an
+              agent until you decide.
+            </p>
           </DialogHeader>
 
-          <ReviewQueue scope={{ kind: 'page', pageId }} />
+          <div className="px-6 py-4 overflow-y-auto max-h-[60vh]">
+            <ReviewQueue scope={{ kind: 'page', pageId }} />
+          </div>
         </DialogContent>
       </Dialog>
 

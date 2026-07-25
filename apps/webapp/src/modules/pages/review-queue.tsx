@@ -80,13 +80,14 @@ export const ReviewQueue = observer(({ scope }: { scope: ReviewScope }) => {
             onSelectMany={selectMany}
           />
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             {entries.map((entry) => (
               <EntryRow
                 key={entry.id}
                 entry={entry}
                 variant="review"
                 selected={selected.has(entry.id)}
+                selecting={selected.size > 0}
                 onToggle={toggle}
               />
             ))}
@@ -167,13 +168,14 @@ const ByPage = observer(
                 </span>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col">
                 {rows.map((entry) => (
                   <EntryRow
                     key={entry.id}
                     entry={entry}
                     variant="review"
                     selected={selected.has(entry.id)}
+                    selecting={selected.size > 0}
                     onToggle={onToggle}
                   />
                 ))}
@@ -194,7 +196,7 @@ const BulkBar = observer(
     const apply = (status: PageEntryStatus) => triage({ entryIds: ids, status });
 
     return (
-      <div className="sticky bottom-0 bg-background-2 border-t border-border pt-3 flex items-center gap-2 flex-wrap">
+      <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-background-2 border-t border-border flex items-center gap-2 flex-wrap">
         <span className="text-muted-foreground mr-1">
           {ids.length} selected
         </span>

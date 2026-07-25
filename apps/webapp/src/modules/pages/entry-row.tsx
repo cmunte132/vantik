@@ -56,7 +56,7 @@ export const EntryRow = observer((props: EntryRowProps) =>
 
 /** A decision. Reads as one, and states what each choice does. */
 const ReviewRow = observer(
-  ({ entry, selected = false, onToggle }: EntryRowProps) => {
+  ({ entry, selected = false, onToggle, selecting = false }: EntryRowProps) => {
     const { mutate: update } = useUpdatePageEntryMutation();
 
     const set = (status: PageEntryStatus) =>
@@ -65,25 +65,31 @@ const ReviewRow = observer(
     return (
       <div
         className={cn(
-          'rounded-md border border-border p-3 flex gap-3 transition-colors',
+          // Ruled rows rather than a stack of outlined cards. Nesting bordered
+          // boxes inside a bordered dialog gave three frames around every
+          // sentence and made a short list look like a form.
+          'group border-b border-border last:border-0 py-3 flex gap-3 transition-colors',
           selected && 'bg-grayAlpha-100',
         )}
       >
         {onToggle && (
           <Checkbox
             checked={selected}
-            className="mt-1"
+            className={cn(
+              'mt-1 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+              (selected || selecting) && 'opacity-100',
+            )}
             aria-label="Select this fact"
             onCheckedChange={() => onToggle(entry.id)}
           />
         )}
 
-        <div className="flex flex-col gap-2 min-w-0 grow">
+        <div className="flex flex-col gap-1.5 min-w-0 grow">
           <p className="whitespace-pre-wrap">{entry.content}</p>
 
           <Meta entry={entry} />
 
-          <div className="flex gap-1 flex-wrap">
+          <div className="flex gap-1 flex-wrap -ml-2 pt-0.5">
             <Choice
               primary
               label="Use it"

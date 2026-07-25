@@ -50,28 +50,35 @@ export const PageHistory = observer(
 
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-[820px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Page history</DialogTitle>
+        <DialogContent className="p-0 gap-0 min-w-[760px] sm:max-w-[760px]">
+          <DialogHeader className="text-left px-6 pt-6 pb-4 border-b border-border">
+            <DialogTitle className="font-normal">Page history</DialogTitle>
+            <p className="text-muted-foreground">
+              Every change to this page, including the ones agents made.
+            </p>
           </DialogHeader>
 
-          {isLoading && <p className="text-muted-foreground">Loading…</p>}
+          <div className="px-6 py-2 overflow-y-auto max-h-[60vh]">
+            {isLoading && (
+              <p className="text-muted-foreground py-2">Loading…</p>
+            )}
 
-          {revisions && revisions.length === 0 && (
-            <p className="text-muted-foreground">
-              Nothing has changed since this page was created.
-            </p>
-          )}
+            {revisions && revisions.length === 0 && (
+              <p className="text-muted-foreground py-2">
+                Nothing has changed since this page was created.
+              </p>
+            )}
 
-          <div className="flex flex-col">
-            {revisions?.map((revision) => (
-              <Revision
-                key={revision.id}
-                revision={revision}
-                currentMarkdown={current?.descriptionMarkdown ?? ''}
-                onReverted={() => onOpenChange(false)}
-              />
-            ))}
+            <div className="flex flex-col">
+              {revisions?.map((revision) => (
+                <Revision
+                  key={revision.id}
+                  revision={revision}
+                  currentMarkdown={current?.descriptionMarkdown ?? ''}
+                  onReverted={() => onOpenChange(false)}
+                />
+              ))}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -102,21 +109,27 @@ const Revision = observer(
 
     return (
       <div className="group border-b border-border last:border-0 py-2 flex flex-col gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span>{summarize(revision.changes)}</span>
-          {isAgent && <Badge variant="secondary">agent</Badge>}
-          <span className="text-muted-foreground">
-            {name} ·{' '}
-            {formatDistanceToNow(new Date(revision.createdAt), {
-              addSuffix: true,
-            })}
-          </span>
+        {/* The actions sit in their own non-wrapping column. Left in the same
+            wrapping row, a long summary pushed them onto a second line, and
+            since they are invisible until hover that read as a blank band
+            under some rows and not others. */}
+        <div className="flex items-start gap-2">
+          <div className="grow min-w-0 flex items-center gap-2 flex-wrap">
+            <span>{summarize(revision.changes)}</span>
+            {isAgent && <Badge variant="secondary">agent</Badge>}
+            <span className="text-muted-foreground">
+              {name} ·{' '}
+              {formatDistanceToNow(new Date(revision.createdAt), {
+                addSuffix: true,
+              })}
+            </span>
+          </div>
 
           {/* Kept out of the way until wanted: a column of "Restore this
               version" down every row reads as an instruction rather than an
               option, on a list people mostly open to read. */}
           {revision.previousBodyMarkdown !== null && (
-            <div className="ml-auto flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            <div className="shrink-0 flex gap-1 -my-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
               <Button
                 variant="ghost"
                 size="sm"

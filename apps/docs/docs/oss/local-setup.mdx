@@ -67,6 +67,14 @@ Magic link: http://localhost:3000/auth/verify?token=...
 
    Copy the link into your browser to sign in.
 
+:::tip
+Steps 5 and 6 can be skipped with a passkey: choose **Create an account with a
+passkey** and authenticate with Touch ID, Windows Hello, or a security key.
+Nothing is emailed and there is no log to read. `localhost` is a secure context
+as far as WebAuthn is concerned, so this works without TLS. See [Signing
+in](/docs/oss/self-deployment#signing-in).
+:::
+
 7. Provide your details to set up your account and workspace:
 
 ![](/img/docs/account-setup.png)

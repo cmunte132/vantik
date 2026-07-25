@@ -30,6 +30,11 @@ log instead of emailed:
 docker compose logs server | grep -A5 "magic link"
 ```
 
+Or skip the log entirely: choose **Create an account with a passkey** and
+authenticate with Touch ID, Windows Hello, or a security key. Nothing is
+emailed, so no mail server is involved. See [Signing
+in](/docs/oss/self-deployment#signing-in).
+
 For production-style deployments (custom domain, secrets, optional services
 like SMTP, AI providers, and trigger.dev), see
 [Self-hosting](/docs/oss/self-deployment). To run the apps from source with hot

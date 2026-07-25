@@ -18,6 +18,19 @@ interface PageTitleProps {
  */
 export function PageTitle({ value, onChange }: PageTitleProps) {
   const [inputValue, setInputValue] = React.useState(value);
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+
+  // Follows the stored title when it changes underneath — an agent renaming the
+  // page, or the same page open elsewhere. Skipped while the field has focus,
+  // because overwriting a title someone is midway through typing is worse than
+  // showing a stale one for a moment.
+  React.useEffect(() => {
+    if (document.activeElement === ref.current) {
+      return;
+    }
+
+    setInputValue(value);
+  }, [value]);
 
   const debouncedUpdates = useDebouncedCallback(async (title: string) => {
     onChange && onChange(title);
@@ -30,6 +43,7 @@ export function PageTitle({ value, onChange }: PageTitleProps) {
 
   return (
     <Textarea
+      ref={ref}
       className="border-0 px-0 py-0 font-medium resize-none bg-transparent no-scrollbar overflow-hidden outline-none focus-visible:ring-0 text-xl"
       rows={1}
       cols={1}

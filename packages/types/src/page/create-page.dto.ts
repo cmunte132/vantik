@@ -79,6 +79,15 @@ export class PageRequestParamsDto {
   pageId: string;
 }
 
+/** Undoing one recorded change to a page body. */
+export class PageRevertParamsDto {
+  @IsUUID()
+  pageId: string;
+
+  @IsUUID()
+  historyId: string;
+}
+
 export class ListPagesQueryDto {
   @IsOptional()
   @IsUUID()

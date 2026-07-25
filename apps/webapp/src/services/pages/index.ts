@@ -169,6 +169,66 @@ export function useCreatePageEntryMutation(
   >(createPageEntry, params);
 }
 
+export interface RevertParams {
+  pageId: string;
+  historyId: string;
+}
+
+export function revertPageBody({ pageId, historyId }: RevertParams) {
+  return ajaxPost({ url: `/api/v1/pages/${pageId}/revert/${historyId}` });
+}
+
+export function useRevertPageMutation(params: MutationParams<PageType> = {}) {
+  return buildMutation<RevertParams, PageType>(revertPageBody, params);
+}
+
+export interface PageRevision {
+  id: string;
+  pageId: string;
+  userId: string | null;
+  createdAt: string;
+  changes: Record<string, unknown>;
+  /** What the body said before this change; null if it did not touch the body. */
+  previousBodyMarkdown: string | null;
+}
+
+/**
+ * What has happened to a page.
+ *
+ * Not synced, because history is read when someone asks "what changed?" and
+ * never needed to render the page itself — keeping fifty revisions per page in
+ * the local cache would cost every reader for the benefit of the occasional
+ * auditor.
+ */
+export function usePageHistory(pageId?: string, enabled = true) {
+  return useQuery<PageRevision[]>({
+    queryKey: ['page-history', pageId],
+    enabled: Boolean(pageId) && enabled,
+    queryFn: () =>
+      ajaxGet({ url: `/api/v1/pages/${pageId}/history` }) as Promise<
+        PageRevision[]
+      >,
+  });
+}
+
+/**
+ * The page body as markdown.
+ *
+ * The store holds tiptap JSON, which is what the editor wants, but folding
+ * notes into the body means handing the API prose — so the one place that needs
+ * markdown asks for it rather than shipping a converter to every browser.
+ */
+export function usePageMarkdown(pageId?: string, enabled = true) {
+  return useQuery<{ descriptionMarkdown: string }>({
+    queryKey: ['page-markdown', pageId],
+    enabled: Boolean(pageId) && enabled,
+    queryFn: () =>
+      ajaxGet({ url: `/api/v1/pages/${pageId}` }) as Promise<{
+        descriptionMarkdown: string;
+      }>,
+  });
+}
+
 /** Issues that link to a page. Documentation and work, not two worlds. */
 export function usePageBacklinks(pageId?: string) {
   return useQuery<

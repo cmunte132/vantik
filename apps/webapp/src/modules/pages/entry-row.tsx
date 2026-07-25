@@ -63,7 +63,10 @@ export const EntryRow = observer(
           selected && 'bg-grayAlpha-100',
         )}
       >
-        {variant === 'review' && onToggle && (
+        {/* Selectable wherever the caller has something to do with a
+            selection — triage in the queue, folding into the page body in the
+            reference list. */}
+        {onToggle && (
           <Checkbox
             checked={selected}
             className="mt-1"

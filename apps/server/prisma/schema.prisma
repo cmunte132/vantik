@@ -743,6 +743,15 @@ model PageHistory {
   /// The change as a small JSON patch: `{ "title": { "from": …, "to": … } }`.
   changes Json?
 
+  /// The body as it stood *before* this change, when this change touched it.
+  ///
+  /// Agents may rewrite a page wholesale to keep it current, which is the point
+  /// — but a rewrite that cannot be seen or undone is not an edit, it is a
+  /// replacement. The patch above recorded only that the body changed, so there
+  /// was nothing to diff against and nothing to go back to. Kept as the same
+  /// tiptap JSON `Page.description` holds, so a revert is a straight write.
+  previousBody String?
+
   @@index([pageId])
 }
 

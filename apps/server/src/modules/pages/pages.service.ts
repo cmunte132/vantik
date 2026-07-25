@@ -43,6 +43,23 @@ function toStoredBody(pageData: {
 /** A page as the API hands it back: storage shape plus the markdown boundary. */
 export type PageResponse = Page & { descriptionMarkdown: string };
 
+/**
+ * One recorded change to a page.
+ *
+ * `previousBodyMarkdown` is what the body said *before* this change, and is
+ * null when the change did not touch the body — a rename, a move, a policy
+ * switch. Diffing is left to the reader: the server has no view on how a
+ * difference should be presented, and the webapp and a CLI want different ones.
+ */
+export interface PageRevision {
+  id: string;
+  pageId: string;
+  userId: string | null;
+  createdAt: string;
+  changes: Record<string, unknown>;
+  previousBodyMarkdown: string | null;
+}
+
 @Injectable()
 export default class PagesService {
   /**
@@ -197,6 +214,7 @@ export default class PagesService {
       where: { id: pageId, deleted: null },
       select: {
         title: true,
+        description: true,
         parentId: true,
         entryPolicy: true,
         workspaceId: true,
@@ -250,7 +268,12 @@ export default class PagesService {
         ? { entryPolicy: { from: current.entryPolicy, to: pageData.entryPolicy } }
         : {}),
       ...(toStoredBody(pageData) !== undefined ? { body: true } : {}),
-    });
+    },
+    // Only when the body actually moved. Storing it on a title-only change
+    // would fill the table with copies of an unchanged document and make the
+    // history read as though every edit rewrote the page.
+    toStoredBody(pageData) !== undefined ? current.description : undefined,
+    );
     await this.indexer?.pageChanged(pageId);
 
     return this.withMarkdown(page);
@@ -317,6 +340,14 @@ export default class PagesService {
       select: { id: true },
     });
 
+    // Folding notes into prose rewrites the body wholesale, which is the one
+    // change most likely to want undoing — it is where a person finds out how
+    // the narrative reads only after it has replaced what was there.
+    const before = await this.prisma.page.findUnique({
+      where: { id: pageId },
+      select: { description: true },
+    });
+
     const [page] = await this.prisma.$transaction([
       this.prisma.page.update({
         where: { id: pageId },
@@ -333,14 +364,100 @@ export default class PagesService {
       }),
     ]);
 
-    await this.recordHistory(pageId, userId, {
-      consolidated: { to: entries.length },
-    });
+    await this.recordHistory(
+      pageId,
+      userId,
+      { consolidated: { to: entries.length }, body: true },
+      before?.description,
+    );
     // The folded entries have to stop being served the moment the body carries
     // them, or the same fact comes back twice — once as narrative and once as
     // the entry it was written from, reading as two confirmations of one thing.
     await this.indexer?.pageChanged(pageId);
     await this.indexer?.entriesChanged(entries.map((entry) => entry.id));
+
+    return this.withMarkdown(page);
+  }
+
+  /**
+   * What has happened to this page, newest first.
+   *
+   * The body of each revision comes back as markdown rather than tiptap JSON,
+   * for the same reason every other read does: nothing outside the editor
+   * should have to parse editor JSON to find out what a page used to say.
+   */
+  async getHistory(pageId: string): Promise<PageRevision[]> {
+    const rows = await this.prisma.pageHistory.findMany({
+      where: { pageId, deleted: null },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      pageId: row.pageId,
+      userId: row.userId,
+      createdAt: row.createdAt.toISOString(),
+      changes: (row.changes ?? {}) as Record<string, unknown>,
+      previousBodyMarkdown: row.previousBody
+        ? convertTiptapJsonToMarkdown(row.previousBody)
+        : null,
+    }));
+  }
+
+  /**
+   * Puts the body back to what it was before one recorded change.
+   *
+   * The revert is itself an edit — it records its own history row carrying the
+   * body it replaced — so undoing an agent's rewrite is not a hole in the trail
+   * and can in turn be undone. A revert that erased its own evidence would make
+   * the history lie about what the page has been.
+   */
+  async revertBody(
+    pageId: string,
+    historyId: string,
+    userId: string,
+  ): Promise<PageResponse> {
+    const revision = await this.prisma.pageHistory.findFirst({
+      where: { id: historyId, pageId, deleted: null },
+      select: { previousBody: true },
+    });
+
+    if (!revision) {
+      throw new NotFoundException({
+        message: `No change ${historyId} on page ${pageId}`,
+      });
+    }
+
+    if (revision.previousBody === null) {
+      throw new BadRequestException({
+        message:
+          'That change did not touch the body, so there is no earlier version ' +
+          'of it to go back to.',
+      });
+    }
+
+    const current = await this.prisma.page.findFirst({
+      where: { id: pageId, deleted: null },
+      select: { description: true },
+    });
+
+    if (!current) {
+      throw new NotFoundException({ message: `Page ${pageId} not found` });
+    }
+
+    const page = await this.prisma.page.update({
+      where: { id: pageId },
+      data: { description: revision.previousBody, updatedById: userId },
+    });
+
+    await this.recordHistory(
+      pageId,
+      userId,
+      { body: true, revertedTo: { to: historyId } },
+      current.description,
+    );
+    await this.indexer?.pageChanged(pageId);
 
     return this.withMarkdown(page);
   }
@@ -425,13 +542,14 @@ export default class PagesService {
     userId: string,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     changes: Record<string, any>,
+    previousBody?: string | null,
   ): Promise<void> {
     if (Object.keys(changes).length === 0) {
       return;
     }
 
     await this.prisma.pageHistory.create({
-      data: { pageId, userId, changes },
+      data: { pageId, userId, changes, previousBody: previousBody ?? null },
     });
   }
 

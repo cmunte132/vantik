@@ -13,6 +13,7 @@ import {
   CreatePageDto,
   ListPagesQueryDto,
   PageRequestParamsDto,
+  PageRevertParamsDto,
   UpdatePageDto,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
@@ -23,7 +24,7 @@ import { AuthGuard } from 'modules/auth/auth.guard';
 import { UserId, Workspace } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
-import PagesService, { PageResponse } from './pages.service';
+import PagesService, { PageResponse, PageRevision } from './pages.service';
 
 @Controller({
   version: '1',
@@ -83,6 +84,21 @@ export class PagesController {
     return this.pagesService.getBacklinks(params.pageId, workspaceId);
   }
 
+  /**
+   * What has happened to this page, and what it said before each change.
+   *
+   * Agents may rewrite a body wholesale to keep it current. That is the point
+   * of letting them edit at all, and it is only safe if the change can be seen
+   * afterwards and undone.
+   */
+  @Get(':pageId/history')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async getHistory(
+    @Param() params: PageRequestParamsDto,
+  ): Promise<PageRevision[]> {
+    return this.pagesService.getHistory(params.pageId);
+  }
+
   @Post()
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createPage(
@@ -119,6 +135,19 @@ export class PagesController {
     @Body() input: ConsolidatePageDto,
   ): Promise<PageResponse> {
     return this.pagesService.consolidate(params.pageId, userId, input);
+  }
+
+  @Post(':pageId/revert/:historyId')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async revertBody(
+    @UserId() userId: string,
+    @Param() params: PageRevertParamsDto,
+  ): Promise<PageResponse> {
+    return this.pagesService.revertBody(
+      params.pageId,
+      params.historyId,
+      userId,
+    );
   }
 
   @Delete(':pageId')

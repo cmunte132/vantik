@@ -40,6 +40,7 @@ import { useContextStore } from 'store/global-context-provider';
 
 import { EditorRibbon } from './editor-ribbon';
 import { Header } from './header';
+import { PageHistory } from './page-history';
 import { PageMemory } from './page-memory';
 import { PageNav } from './page-nav';
 import { PageTitle } from './page-title';
@@ -68,6 +69,7 @@ const SinglePageView = observer(() => {
   const { suggestionItems } = useEditorSuggestionItems();
   const [editorInstance, setEditorInstance] = React.useState<EditorT>();
   const [saveState, setSaveState] = React.useState<SaveState>('idle');
+  const [showHistory, setShowHistory] = React.useState(false);
 
   const { mutate: updatePage } = useUpdatePageMutation({
     onSuccess: () => setSaveState('saved'),
@@ -85,8 +87,39 @@ const SinglePageView = observer(() => {
     }
   }, [pageId, pageEntriesStore]);
 
+  // What this editor last sent. Anything arriving over sync that does not match
+  // it came from somewhere else — an agent rewriting the page, a consolidate,
+  // a revert, or the same page open in another tab.
+  const lastSentRef = React.useRef<string | undefined>(undefined);
+  const [externalRevision, setExternalRevision] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!page || page.description === undefined) {
+      return;
+    }
+
+    if (lastSentRef.current === undefined) {
+      lastSentRef.current = page.description;
+      return;
+    }
+
+    if (page.description === lastSentRef.current) {
+      return;
+    }
+
+    // Remount the editor on the new body. Tiptap takes its value once, so
+    // without this the document silently diverges from what is stored — you
+    // would fold notes into the page, be told it worked, and watch nothing
+    // change, then overwrite the fold with the stale text on your next
+    // keystroke.
+    lastSentRef.current = page.description;
+    setExternalRevision((revision: number) => revision + 1);
+  }, [page?.description]);
+
   const onBodyChange = useDebouncedCallback((content: string) => {
     const { json: description } = getTiptapJSON(content);
+
+    lastSentRef.current = JSON.stringify(description);
 
     updatePage({
       pageId: page.id,
@@ -140,6 +173,12 @@ const SinglePageView = observer(() => {
 
         <DropdownMenuSeparator />
 
+        {/* Agents may rewrite a body to keep it current, so the way to see
+            what one did — and undo it — has to be on the page itself. */}
+        <DropdownMenuItem onClick={() => setShowHistory(true)}>
+          Page history
+        </DropdownMenuItem>
+
         <DropdownMenuItem onClick={() => deletePage({ pageId: page.id })}>
           Delete page
         </DropdownMenuItem>
@@ -190,6 +229,7 @@ const SinglePageView = observer(() => {
                 <EditorRibbon editor={editorInstance} />
 
                 <Editor
+                  key={`${page.id}-${externalRevision}`}
                   value={page.description}
                   onCreate={setEditorInstance}
                   onChange={(content: string) => {
@@ -215,6 +255,12 @@ const SinglePageView = observer(() => {
                 <PageMemory pageId={page.id} />
 
                 <Backlinks pageId={page.id} />
+
+                <PageHistory
+                  pageId={page.id}
+                  open={showHistory}
+                  onOpenChange={setShowHistory}
+                />
               </div>
             </div>
           </ScrollArea>

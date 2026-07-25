@@ -17,6 +17,7 @@ import { useContextStore } from 'store/global-context-provider';
 
 import { useCreatePageEntryMutation } from 'services/pages';
 
+import { ConsolidateDialog } from './consolidate-dialog';
 import { EntryRow } from './entry-row';
 import { ReviewQueue } from './review-queue';
 
@@ -42,6 +43,8 @@ export const PageMemory = observer(({ pageId }: { pageId: string }) => {
   const [showStanding, setShowStanding] = React.useState(false);
   const [showSetAside, setShowSetAside] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
+  const [folding, setFolding] = React.useState<PageEntryType[]>([]);
+  const [picked, setPicked] = React.useState<Set<string>>(new Set());
 
   const byStatus = (status: PageEntryStatus): PageEntryType[] =>
     pageEntriesStore.getByStatus(pageId, status);
@@ -103,9 +106,52 @@ export const PageMemory = observer(({ pageId }: { pageId: string }) => {
 
       {showStanding && (
         <div className="flex flex-col gap-2">
+          <p className="text-muted-foreground">
+            These are notes agents keep for themselves — they are not part of
+            the page. Pick any that have earned a place in the document and
+            write them in.
+          </p>
+
           {standing.map((entry) => (
-            <EntryRow key={entry.id} entry={entry} variant="reference" />
+            <EntryRow
+              key={entry.id}
+              entry={entry}
+              variant="reference"
+              selected={picked.has(entry.id)}
+              onToggle={(id: string) =>
+                setPicked((current: Set<string>) => {
+                  const next = new Set(current);
+                  if (next.has(id)) {
+                    next.delete(id);
+                  } else {
+                    next.add(id);
+                  }
+                  return next;
+                })
+              }
+            />
           ))}
+
+          {picked.size > 0 && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  setFolding(standing.filter((entry) => picked.has(entry.id)))
+                }
+              >
+                Write {picked.size} into the page
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPicked(new Set())}
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -144,6 +190,18 @@ export const PageMemory = observer(({ pageId }: { pageId: string }) => {
           <ReviewQueue scope={{ kind: 'page', pageId }} />
         </DialogContent>
       </Dialog>
+
+      <ConsolidateDialog
+        pageId={pageId}
+        entries={folding}
+        open={folding.length > 0}
+        onOpenChange={(open: boolean) => {
+          if (!open) {
+            setFolding([]);
+            setPicked(new Set());
+          }
+        }}
+      />
     </section>
   );
 });

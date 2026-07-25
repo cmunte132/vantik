@@ -53,7 +53,10 @@ function buildContext({
     body,
     session: {
       getUserId: () => USER,
-      getAccessTokenPayload: () => ({ workspaceId: OWN_WORKSPACE }),
+      getAccessTokenPayload: () => ({
+        appUserId: USER,
+        workspaceId: OWN_WORKSPACE,
+      }),
     },
   };
 

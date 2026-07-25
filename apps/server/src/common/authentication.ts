@@ -11,6 +11,7 @@ import { createNewSessionWithoutRequestResponse } from 'supertokens-node/recipe/
 import { verifySession } from 'supertokens-node/recipe/session/framework/express';
 
 import { config } from 'common/configs/config';
+import { bearerToken, createPatSession, isPatToken } from 'common/pat-session';
 
 import { UsersService } from 'modules/users/users.service';
 
@@ -31,51 +32,63 @@ export async function getKey(jwt: string) {
 }
 
 /**
- * Exchanges a personal access token for a freshly minted access token.
+ * Authenticates a personal access token and puts its session context on the
+ * request.
  *
  * The PAT itself is the credential and stays valid until it is revoked. The
  * `jwt` column recorded at creation time is deliberately *not* consulted: it
  * holds a supertokens access token, which expires an hour after it is issued,
  * so verifying it here made every PAT die an hour after being created and no
  * amount of re-authenticating could revive it.
+ *
+ * Nothing is persisted. This used to mint a real SuperTokens session for one of
+ * the account's credentials, which wrote a `session_info` row per request; the
+ * only thing it got out of that was an object carrying the account's claims, so
+ * it now builds those claims directly. Answers true when the token is good.
+ *
+ * The claims name the workspace the *token* was issued for. `createNewSession`
+ * stamps the account's first workspace because a browser session is not issued
+ * for any particular one; a token is, and taking the first membership instead
+ * let a token for one workspace answer for another as soon as its owner joined
+ * a second.
  */
 export async function hasValidPat(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   request: any,
   usersService: UsersService,
-) {
-  let authHeaderValue = request.headers['authorization'];
-  authHeaderValue =
-    authHeaderValue === undefined
-      ? undefined
-      : authHeaderValue.split('Bearer ')[1];
+): Promise<boolean> {
+  const token = bearerToken(request.headers['authorization']);
 
-  if (authHeaderValue !== undefined) {
-    const userId = await usersService.getUserIdFromPat(authHeaderValue);
-
-    if (userId) {
-      // A token belongs to an account, but SuperTokens mints sessions for
-      // credentials, so one of the account's ways in has to be named here.
-      // Any of them will do — the session resolves back to this same account
-      // through the identity it carries.
-      const supertokensUserId =
-        await usersService.getSupertokensIdForUser(userId);
-
-      if (!supertokensUserId) {
-        return undefined;
-      }
-
-      const session = await createNewSessionWithoutRequestResponse(
-        'public',
-        supertokens.convertToRecipeUserId(supertokensUserId),
-      );
-
-      request.session = session;
-      return `Bearer ${session.getAccessToken()}`;
-    }
+  if (!token) {
+    return false;
   }
 
-  return undefined;
+  const principal = await usersService.resolvePat(token, request);
+
+  // An account with no way in is not one a token should speak for; this is the
+  // same guard the session-minting path had, and it keeps `getUserId()`
+  // answerable for anything that asks.
+  //
+  // Nor is an account that no longer holds the membership its token names. The
+  // claims have no other workspace to honestly report, and a session carrying
+  // no workspace is worse than no session: `@Workspace()` hands the handler
+  // undefined, Prisma drops an undefined `where` clause, and a scoped read like
+  // `GET /teams` turns into every team on the server. A token that can act in
+  // no workspace authenticates nobody.
+  if (!principal?.supertokensUserId || !principal.membership) {
+    return false;
+  }
+
+  request.session = createPatSession(
+    {
+      appUserId: principal.userId,
+      workspaceId: principal.membership.workspaceId,
+      role: principal.membership.role,
+    },
+    principal.supertokensUserId,
+  );
+
+  return true;
 }
 
 /**
@@ -161,11 +174,18 @@ export async function isSessionValid(
         err = res;
       });
     } else {
-      let authHeader = request.headers['authorization'];
-      if (authHeader && authHeader.includes('tg_pat_')) {
-        authHeader = await hasValidPat(request, usersService);
+      const authHeader = request.headers['authorization'];
 
-        request.headers['personal'] = true;
+      // A personal access token is checked against the database, not against
+      // JWKS: it is our own credential, not something we signed. Verifying it
+      // used to mean minting an access token just to verify it back, which is
+      // what persisted a session row per request.
+      if (isPatToken(bearerToken(authHeader))) {
+        if (await hasValidPat(request, usersService)) {
+          return true;
+        }
+
+        throw new UnauthorizedException({ message: 'Unauthorised' });
       }
 
       return hasValidHeader(authHeader);

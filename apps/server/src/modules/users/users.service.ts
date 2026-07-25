@@ -18,10 +18,8 @@ import { PrismaService } from 'nestjs-prisma';
 import supertokens from 'supertokens-node';
 import Session from 'supertokens-node/recipe/session';
 
-import {
-  generateKeyForUserId,
-  generatePersonalAccessToken,
-} from 'common/authentication';
+import { generatePersonalAccessToken } from 'common/authentication';
+import { PatPrincipal, resolvePatPrincipal } from 'common/pat-session';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
@@ -103,21 +101,6 @@ export class UsersService {
     });
 
     return identity ? identity.userId : null;
-  }
-
-  /**
-   * Any credential belonging to an account, for the paths that have to hand a
-   * recipe user id back to SuperTokens — minting a session for a personal
-   * access token, above all.
-   */
-  async getSupertokensIdForUser(userId: string): Promise<string | null> {
-    const identity = await this.prisma.authIdentity.findFirst({
-      where: { userId },
-      orderBy: { createdAt: 'asc' },
-      select: { supertokensUserId: true },
-    });
-
-    return identity ? identity.supertokensUserId : null;
   }
 
   async upsertUser(
@@ -286,16 +269,21 @@ export class UsersService {
     workspaceId: string,
     type = 'user',
   ) {
-    const jwt = await generateKeyForUserId(userId);
     const token = generatePersonalAccessToken();
 
+    // The `jwt` column is vestigial: authentication resolves a token against
+    // this table and never reads the column. It used to hold an
+    // access token minted here, but since identity moved into the database
+    // (ENG-42) minting one requires a SuperTokens *recipe* id, and this was
+    // handing it an account id — which `createNewSession` rejects, breaking
+    // every PAT creation. Nothing needs the value, so it is no longer minted.
     const pat = await this.prisma.personalAccessToken.create({
       data: {
         name,
         userId,
         token,
         workspaceId,
-        jwt,
+        jwt: '',
         type,
       },
     });
@@ -323,19 +311,15 @@ export class UsersService {
   }
 
   /**
-   * Resolves a personal access token to the user it was issued for.
-   *
-   * Returns null for an unknown or revoked token — `findFirst` yields null and
-   * the caller must not dereference it, which is how a bad token used to
-   * surface as a 500 instead of a 401.
+   * Who a personal access token speaks for. Null for an unknown or revoked
+   * token, which is how a bad token surfaces as a 401 rather than a 500.
    */
-  async getUserIdFromPat(token: string): Promise<string | null> {
-    const pat = await this.prisma.personalAccessToken.findFirst({
-      where: { token, deleted: null },
-      select: { userId: true },
-    });
-
-    return pat ? pat.userId : null;
+  async resolvePat(
+    token: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    request?: any,
+  ): Promise<PatPrincipal | null> {
+    return resolvePatPrincipal(this.prisma, token, request);
   }
 
   // Authorization code
@@ -411,7 +395,14 @@ export class UsersService {
       };
     }
 
-    const token = await this.createPersonalAccessToken('cli', userId, 'cli');
+    // The workspace being logged into, not the literal string 'cli' this used
+    // to pass as the workspace id. A token acts in the workspace it names, so a
+    // token naming a workspace that does not exist can act nowhere at all.
+    const token = await this.createPersonalAccessToken(
+      'cli',
+      userId,
+      codeBody.workspaceId,
+    );
 
     await this.prisma.authorizationCode.updateMany({
       where: {

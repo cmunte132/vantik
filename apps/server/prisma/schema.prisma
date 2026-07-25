@@ -470,6 +470,9 @@ model PersonalAccessToken {
   workspaceId String
 
   @@unique([name, userId, token])
+  /// Authenticating a request means finding the token by value, and the
+  /// uniqueness constraint above cannot serve a lookup on `token` alone.
+  @@index([token])
 }
 
 model Label {

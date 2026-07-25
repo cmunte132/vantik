@@ -600,6 +600,152 @@ model People {
   @@unique([email, workspaceId])
 }
 
+/// A canonical document. The human half of the knowledge bank — a Confluence
+/// page — and the thing an agent's asserted facts hang off.
+///
+/// The body is tiptap JSON exactly like `Issue.description`, so the editor, the
+/// markdown converters and the search text extraction are all reused rather
+/// than reinvented for documentation.
+model Page {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  title String
+  /// Tiptap JSON. The API speaks markdown on both sides of this column, so no
+  /// caller ever has to parse editor JSON to read a page.
+  description String?
+
+  /// Pages nest, so a workspace's documentation is a tree rather than a list.
+  parent   Page?   @relation("PageTree", fields: [parentId], references: [id])
+  parentId String?
+  children Page[]  @relation("PageTree")
+
+  sortOrder Int?
+
+  /// How strictly appends to this page are policed. One column, so a workspace
+  /// need not pick a single strictness for every kind of knowledge it holds.
+  entryPolicy PageEntryPolicy @default(CURATED)
+
+  /// Shape only for now: sharing is workspace-only and nothing beyond
+  /// workspace membership is enforced.
+  visibility PageVisibility @default(WORKSPACE)
+
+  entries PageEntry[]
+  history PageHistory[]
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+
+  createdById String?
+  updatedById String?
+
+  @@index([workspaceId])
+  @@index([parentId])
+}
+
+/// One atomic asserted fact, appended to a page. This is what agents write:
+/// short, markdown, never prose.
+///
+/// Agents append entries by default and touch page bodies only when asked.
+/// Concurrent prose editing by many agents produces churn, editor merge
+/// conflicts and no record of who claimed what; atomic appends are safe at any
+/// rate and carry provenance for free.
+model PageEntry {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  /// Markdown, short. One claim per row.
+  content String
+
+  /// Where the fact applies — a repo path glob, a team, a project. Null means
+  /// it applies to the page as a whole.
+  scope String?
+
+  /// Retrieval serves only STANDING entries. Without that boundary the bank
+  /// accumulates contradictions and stops being trusted: a wiki rots over
+  /// years, a bank ten agent sessions a day write into rots in days.
+  status PageEntryStatus @default(PROPOSED)
+
+  /// Who asserted it. An `AGENT`-typed user is what makes this meaningful — an
+  /// agent-written claim and a human-written one are identical as text.
+  sourceUserId String?
+  /// Opaque harness session id, so a claim can be traced back to the run.
+  sourceSession String?
+  /// The token the append arrived on. This is what the per-token budget counts,
+  /// so one noisy harness cannot spend another's allowance.
+  sourceTokenId String?
+
+  /// A newer entry points at the one it replaces. Unique because two entries
+  /// replacing the same fact is a contradiction, not a supersede.
+  supersedes   PageEntry? @relation("PageEntrySupersede", fields: [supersedesId], references: [id])
+  supersedesId String?    @unique
+  supersededBy PageEntry? @relation("PageEntrySupersede")
+
+  verifiedByUserId String?
+  verifiedAt       DateTime?
+
+  /// Written by the retrieval layer when this entry is actually served. Unused
+  /// knowledge is by definition not load-bearing, so this is what the decay job
+  /// reads to archive entries nobody ever asks for.
+  retrievalCount Int       @default(0)
+  lastServedAt   DateTime?
+
+  page   Page   @relation(fields: [pageId], references: [id])
+  pageId String
+
+  @@index([pageId])
+  @@index([status])
+}
+
+/// A question an agent asked that the bank could not answer.
+///
+/// The most valuable signal the system produces: it says which page to write
+/// next, and it turns the bank from a record of what agents dumped into a
+/// record of what agents needed.
+///
+/// Kept in postgres rather than in a typesense `nohits_queries` analytics rule,
+/// which aggregates across the whole index with no workspace field — one
+/// workspace's unanswered questions are not another's to read, and a query
+/// string is often the most revealing thing about work in progress.
+model PageKnowledgeGap {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Normalised query text, so "redis eviction" and "Redis  Eviction" are one
+  /// gap rather than two.
+  query String
+  /// How many times it has been asked. Demand, not just absence.
+  count Int @default(1)
+
+  workspaceId String
+
+  @@unique([workspaceId, query])
+  @@index([workspaceId])
+}
+
+/// Who changed what on a page, mirroring IssueHistory.
+model PageHistory {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  userId String?
+
+  page   Page   @relation(fields: [pageId], references: [id])
+  pageId String
+
+  /// The change as a small JSON patch: `{ "title": { "from": …, "to": … } }`.
+  changes Json?
+
+  @@index([pageId])
+}
+
 model Project {
   id        String    @id @default(uuid())
   createdAt DateTime  @default(now())
@@ -916,6 +1062,7 @@ model Workspace {
   prompts               Prompt[]
   action                Action[]
   projects              Project[]
+  pages                 Page[]
   webhookSubscription   WebhookSubscription[]
 
   ActionEvent  ActionEvent[]
@@ -1000,6 +1147,9 @@ enum ModelName {
   LinkedComment
   LinkedIssue
   Notification
+  Page
+  PageEntry
+  PageHistory
   People
   Project
   ProjectMilestone
@@ -1016,6 +1166,44 @@ enum ModelName {
   Workflow
   Workspace
   WorkspaceTriggerProject
+}
+
+/// How strictly a page polices appended entries.
+///
+/// The failure mode this exists for is not one badly-behaved agent; it is ten
+/// well-behaved ones each appending the same six facts, because rediscovering
+/// those facts is exactly what a memory bank exists to prevent. Asking agents to
+/// be tidy in a tool description is the weakest control available — it fails
+/// precisely when a cheaper or unfamiliar model is pointed at the endpoint,
+/// which is the cross-harness case this feature exists to serve.
+enum PageEntryPolicy {
+  /// Append freely. Scratch pages, where volume does not matter.
+  OPEN
+  /// Dedup and the per-token budget are enforced. The default.
+  CURATED
+  /// Human-only. Agents read the page but cannot append to it.
+  LOCKED
+}
+
+enum PageEntryStatus {
+  /// Awaiting triage. An inbox, never served.
+  PROPOSED
+  /// True, too granular for prose, and worth retrieving. The only status
+  /// retrieval serves.
+  STANDING
+  /// Folded into the page body. Must stop being served separately, or the same
+  /// fact comes back twice.
+  CONSOLIDATED
+  /// Replaced by a newer entry. Kept for audit, never served.
+  SUPERSEDED
+  /// Contradicts the body or another entry. Withheld until resolved.
+  DISPUTED
+  /// Aged out — either never triaged or never read.
+  ARCHIVED
+}
+
+enum PageVisibility {
+  WORKSPACE
 }
 
 enum ActionType {

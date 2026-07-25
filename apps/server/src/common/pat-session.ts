@@ -6,6 +6,16 @@ export interface PatSessionClaims {
   appUserId: string;
   workspaceId: string;
   role: string;
+  /**
+   * The token this request came in on. Present only for PAT requests — a
+   * browser session is not issued for a token and has none.
+   *
+   * Per-token limits need to name the token, not just the account: an account
+   * can hold several, and a budget spent per account would let one noisy
+   * harness exhaust the allowance of every other harness signed in as the same
+   * agent.
+   */
+  tokenId?: string;
 }
 
 /** The token on an Authorization header, or null when there is not one. */
@@ -34,6 +44,8 @@ export function isPatToken(token?: string | null): boolean {
  */
 export interface PatPrincipal {
   userId: string;
+  /** The token row itself, so per-token limits have something to key on. */
+  tokenId: string;
   /** Any credential belonging to the account; null when it has no way in. */
   supertokensUserId: string | null;
   membership: { workspaceId: string; role: string; settings: unknown } | null;
@@ -61,6 +73,7 @@ export async function resolvePatPrincipal(
   const pat = await prisma.personalAccessToken.findFirst({
     where: { token, deleted: null },
     select: {
+      id: true,
       userId: true,
       workspaceId: true,
       user: {
@@ -80,6 +93,7 @@ export async function resolvePatPrincipal(
 
   const principal: PatPrincipal | null = pat && {
     userId: pat.userId,
+    tokenId: pat.id,
     supertokensUserId: pat.user.authIdentities[0]?.supertokensUserId ?? null,
     membership:
       pat.user.usersOnWorkspaces.find(

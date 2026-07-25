@@ -63,11 +63,12 @@ COPY --from=builder  --chown=node:node /app/apps/server/prisma ./apps/server/pri
 COPY --from=builder  --chown=node:node /app/apps/server/templates ./apps/server/templates
 COPY --from=builder  --chown=node:node /app/apps/server/scripts ./apps/server/scripts
 
-# The working-vantik-issues guide, served over /v1/agent-skill so the Agents
-# screen can offer it as a download instead of a path to go find in a checkout.
-# Straight from the build context: it is authored in the docs app, which turbo
-# prune drops when it builds the server.
-COPY --chown=node:node apps/docs/skills/working-vantik-issues ./apps/server/skills/working-vantik-issues
+# The agent guides, served over /v1/agent-skill so the Agents screen can offer
+# them as downloads instead of paths to go find in a checkout. Straight from the
+# build context: they are authored in the docs app, which turbo prune drops when
+# it builds the server. Copied as a directory so a guide added later needs no
+# change here.
+COPY --chown=node:node apps/docs/skills ./apps/server/skills
 
 EXPOSE 3001
 EXPOSE 5555

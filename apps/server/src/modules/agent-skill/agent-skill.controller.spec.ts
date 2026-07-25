@@ -92,6 +92,60 @@ describe('AgentSkillController', () => {
     expect(body).not.toContain('<!--');
   });
 
+  it('lists every guide, not just the default one', () => {
+    const listing = controller.list();
+
+    // A client that only knew about the issues guide still reads the top-level
+    // name and files; a client wanting both reads `skills`.
+    expect(listing.skills.map((skill) => skill.name)).toEqual(
+      expect.arrayContaining([
+        'working-vantik-issues',
+        'working-vantik-knowledge',
+      ]),
+    );
+  });
+
+  it('serves the knowledge guide under its own prefix', () => {
+    const response = fakeResponse();
+
+    controller.downloadFromSkill(
+      'working-vantik-knowledge',
+      'SKILL.md',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      response as any,
+    );
+
+    expect(response.sent.body).toContain('working-vantik-knowledge');
+  });
+
+  it('derives the knowledge Cursor rule with its own description', () => {
+    const response = fakeResponse();
+
+    controller.downloadFromSkill(
+      'working-vantik-knowledge',
+      'working-vantik-knowledge.mdc',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      response as any,
+    );
+
+    const body = response.sent.body ?? '';
+    // Both guides derive their rule from the same helper, so the wrong
+    // description here would be the first sign the two had been conflated.
+    expect(body).toContain('description: How to use the Vantik knowledge bank');
+    expect(body).not.toContain('<!--');
+  });
+
+  it('refuses a guide it does not serve', () => {
+    const response = fakeResponse();
+
+    expect(() =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      controller.downloadFromSkill('../../etc', 'SKILL.md', response as any),
+    ).toThrow(NotFoundException);
+
+    expect(response.sent.body).toBeUndefined();
+  });
+
   it('refuses anything outside the served set', () => {
     const response = fakeResponse();
 

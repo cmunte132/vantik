@@ -14,6 +14,8 @@ import { saveIssueHistoryData } from 'store/issue-history';
 import { saveIssueRelationData } from 'store/issue-relation';
 import { saveIssueSuggestionData } from 'store/issue-suggestions';
 import { saveIssuesData } from 'store/issues';
+import { savePageEntryData } from 'store/page-entries';
+import { savePageData } from 'store/pages';
 import { saveLabelData } from 'store/labels';
 import { saveLinkedIssueData } from 'store/linked-issues';
 import { MODELS } from 'store/models';
@@ -67,6 +69,8 @@ export async function saveSocketData(
       [MODELS.IssueHistory]: saveIssueHistoryData,
       [MODELS.IssueComment]: saveCommentsData,
       [MODELS.ChecklistItem]: saveChecklistItemData,
+      [MODELS.Page]: savePageData,
+      [MODELS.PageEntry]: savePageEntryData,
       [MODELS.IntegrationAccount]: saveIntegrationAccountData,
       [MODELS.LinkedIssue]: saveLinkedIssueData,
       [MODELS.IssueRelation]: saveIssueRelationData,

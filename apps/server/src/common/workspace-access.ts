@@ -168,6 +168,50 @@ export async function assertChecklistItemInWorkspace(
   }
 }
 
+/** Proves a page belongs to the given workspace. */
+export async function assertPageInWorkspace(
+  prisma: PrismaService,
+  pageId: string,
+  workspaceId: string,
+): Promise<void> {
+  const page = await prisma.page.findFirst({
+    where: { id: pageId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!page) {
+    throw new NotFoundException({ message: `Page ${pageId} not found` });
+  }
+}
+
+/**
+ * Proves an entry's page belongs to the given workspace.
+ *
+ * Entry triage addresses the row by id alone — no page anywhere in the request
+ * — so without this a caller could accept, archive or rewrite a fact asserted
+ * in someone else's workspace.
+ */
+export async function assertPageEntryInWorkspace(
+  prisma: PrismaService,
+  pageEntryId: string,
+  workspaceId: string,
+): Promise<void> {
+  const entry = await prisma.pageEntry.findFirst({
+    where: {
+      id: pageEntryId,
+      deleted: null,
+      page: { workspaceId, deleted: null },
+    },
+    select: { id: true },
+  });
+
+  if (!entry) {
+    throw new NotFoundException({
+      message: `Page entry ${pageEntryId} not found`,
+    });
+  }
+}
+
 /**
  * Proves a team belongs to the given workspace.
  *

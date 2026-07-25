@@ -18,3 +18,4 @@ export {
   VantikNotFoundError,
 } from './errors';
 export * from './types';
+export * from './knowledge';

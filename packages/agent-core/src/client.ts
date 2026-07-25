@@ -67,6 +67,10 @@ export class VantikClient {
     return this.request<T>('POST', path, options);
   }
 
+  delete<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    return this.request<T>('DELETE', path, options);
+  }
+
   private async request<T>(
     method: string,
     path: string,

@@ -15,6 +15,7 @@ import type {
   SupportType,
   TemplateType,
 } from 'common/types';
+import type { PageType, PageEntryType } from 'common/types';
 import type {
   IssueType,
   IssueHistoryType,
@@ -42,6 +43,8 @@ export class VantikDatabase extends Dexie {
   issueHistory: Dexie.Table<IssueHistoryType, string>;
   comments: Dexie.Table<IssueCommentType, string>;
   checklistItems: Dexie.Table<ChecklistItemType, string>;
+  pages: Dexie.Table<PageType, string>;
+  pageEntries: Dexie.Table<PageEntryType, string>;
   usersOnWorkspaces: Dexie.Table<UsersOnWorkspaceType, string>;
   integrationAccounts: Dexie.Table<IntegrationAccountType, string>;
   linkedIssues: Dexie.Table<LinkedIssueType, string>;
@@ -62,7 +65,7 @@ export class VantikDatabase extends Dexie {
   constructor(databaseName: string) {
     super(databaseName);
 
-    this.version(20).stores({
+    this.version(21).stores({
       [MODELS.Workspace]: 'id,createdAt,updatedAt,name,slug,preferences',
       [MODELS.Label]:
         'id,createdAt,updatedAt,name,color,description,workspaceId,groupId,teamId',
@@ -111,6 +114,12 @@ export class VantikDatabase extends Dexie {
         'id,createdAt,updatedAt,name,domain,website,workspaceId,description,logo,industry,type,size,metadata',
       [MODELS.People]:
         'id,createdAt,updatedAt,name,email,phone,metadata,companyId,workspaceId',
+      [MODELS.Page]:
+        'id,createdAt,updatedAt,title,description,parentId,sortOrder,entryPolicy,visibility,workspaceId,createdById,updatedById',
+      // Indexed on pageId and status: every read of this table is "the entries
+      // on this page", usually narrowed to one status for the review rail.
+      [MODELS.PageEntry]:
+        'id,createdAt,updatedAt,content,scope,status,sourceUserId,sourceSession,verifiedByUserId,verifiedAt,retrievalCount,lastServedAt,supersedesId,pageId',
     });
 
     this.workspaces = this.table(MODELS.Workspace);
@@ -138,6 +147,8 @@ export class VantikDatabase extends Dexie {
     this.people = this.table(MODELS.People);
     this.company = this.table(MODELS.Company);
     this.support = this.table(MODELS.Support);
+    this.pages = this.table(MODELS.Page);
+    this.pageEntries = this.table(MODELS.PageEntry);
   }
 }
 

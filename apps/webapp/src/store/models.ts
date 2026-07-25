@@ -18,6 +18,8 @@ export enum MODELS {
   IssueRelation = 'IssueRelation',
   Notification = 'Notification',
   IssueSuggestion = 'IssueSuggestion',
+  Page = 'Page',
+  PageEntry = 'PageEntry',
   Project = 'Project',
   ProjectMilestone = 'ProjectMilestone',
   Cycle = 'Cycle',

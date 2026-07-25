@@ -84,6 +84,7 @@ export async function hasValidPat(
       appUserId: principal.userId,
       workspaceId: principal.membership.workspaceId,
       role: principal.membership.role,
+      tokenId: principal.tokenId,
     },
     principal.supertokensUserId,
   );

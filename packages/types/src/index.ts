@@ -5,6 +5,7 @@ export * from './integration-account';
 export * from './integration-definition';
 export * from './ai-request';
 export * from './attachment';
+export * from './checklist-item';
 export * from './emoji';
 export * from './integration-account';
 export * from './integration-definition';

@@ -349,6 +349,7 @@ model Issue {
   attachments   String[]
 
   comments       IssueComment[]
+  checklistItems ChecklistItem[]
   history        IssueHistory[]
   linkedIssue    LinkedIssue[]
   issueRelations IssueRelation[]
@@ -361,6 +362,34 @@ model Issue {
   issueSuggestionId String?          @unique
 
   @@unique([teamId, number])
+}
+
+// One criterion on an issue's Definition of Done. Its own table (rather than a
+// JSON column on Issue) so each item flows through logical replication like any
+// other model: created, ticked, reordered, and soft-deleted independently, each
+// change becoming its own sync action.
+model ChecklistItem {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  body      String
+  completed Boolean   @default(false)
+  // Nullable so rows written before an explicit ordering existed fall back to
+  // createdAt until the list is next reordered.
+  sortOrder Int?
+
+  completedAt   DateTime?
+  completedById String?
+
+  issue   Issue  @relation(fields: [issueId], references: [id])
+  issueId String
+
+  createdById String?
+  updatedById String?
+
+  @@index([issueId])
 }
 
 model IssueComment {
@@ -952,6 +981,7 @@ enum ModelName {
   ActionEntity
   Attachment
   AIRequest
+  ChecklistItem
   Cycle
   Company
   Conversation

@@ -3,6 +3,7 @@ import { PrismaService } from 'nestjs-prisma';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import {
+  assertChecklistItemInWorkspace,
   assertIssueCommentInWorkspace,
   assertIssueInWorkspace,
   assertTeamInWorkspace,
@@ -45,7 +46,7 @@ export class WorkspaceResourceGuard implements CanActivate {
       request.query?.workspaceId,
     );
 
-    const { issueId, issueCommentId } = request.params ?? {};
+    const { issueId, issueCommentId, checklistItemId } = request.params ?? {};
 
     // The bulk routes carry their ids inside a body array, one per issue, so
     // the path and query alone do not describe everything the request touches.
@@ -82,6 +83,17 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertIssueCommentInWorkspace(
         this.prisma,
         issueCommentId,
+        workspaceId,
+      );
+    }
+
+    // Checklist item updates and deletes address the row by id alone, with no
+    // issueId anywhere in the request, so without this a foreign item could be
+    // ticked or removed.
+    if (checklistItemId) {
+      await assertChecklistItemInWorkspace(
+        this.prisma,
+        checklistItemId,
         workspaceId,
       );
     }

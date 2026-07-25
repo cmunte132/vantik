@@ -26,6 +26,7 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
 
     const {
       commentsStore,
+      checklistItemsStore,
       issuesHistoryStore,
       issuesStore,
       workflowsStore,
@@ -90,6 +91,7 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
         [MODELS.Issue]: issuesStore,
         [MODELS.IssueHistory]: issuesHistoryStore,
         [MODELS.IssueComment]: commentsStore,
+        [MODELS.ChecklistItem]: checklistItemsStore,
         [MODELS.IntegrationAccount]: integrationAccountsStore,
         [MODELS.LinkedIssue]: linkedIssuesStore,
         [MODELS.IssueRelation]: issueRelationsStore,

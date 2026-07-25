@@ -95,6 +95,28 @@ export async function assertIssueCommentInWorkspace(
   }
 }
 
+/** Proves a checklist item's issue belongs to the given workspace. */
+export async function assertChecklistItemInWorkspace(
+  prisma: PrismaService,
+  checklistItemId: string,
+  workspaceId: string,
+): Promise<void> {
+  const checklistItem = await prisma.checklistItem.findFirst({
+    where: {
+      id: checklistItemId,
+      deleted: null,
+      issue: { team: { workspaceId } },
+    },
+    select: { id: true },
+  });
+
+  if (!checklistItem) {
+    throw new NotFoundException({
+      message: `Checklist item ${checklistItemId} not found`,
+    });
+  }
+}
+
 /**
  * Proves a team belongs to the given workspace.
  *

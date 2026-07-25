@@ -115,6 +115,13 @@ export async function getWorkspaceId(
       });
       return issuecomment.issue.team.workspaceId;
 
+    case ModelName.ChecklistItem:
+      const checklistItem = await prisma.checklistItem.findUnique({
+        where: { id: modelId },
+        include: { issue: { include: { team: true } } },
+      });
+      return checklistItem.issue.team.workspaceId;
+
     case ModelName.IssueHistory:
       const issueHistory = await prisma.issueHistory.findUnique({
         where: { id: modelId },
@@ -290,6 +297,7 @@ export async function getModelData(
     Workflow: prisma.workflow,
     Template: prisma.template,
     IssueComment: prisma.issueComment,
+    ChecklistItem: prisma.checklistItem,
     IssueHistory: prisma.issueHistory,
     IntegrationAccount: {
       findUnique: (args: { where: { id: string } }) =>

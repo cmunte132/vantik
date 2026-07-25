@@ -1,3 +1,4 @@
+import { Agents } from './agents';
 import { CreateNewTeam } from './create-new-team';
 import { Export } from './export';
 import { Labels } from './labels';
@@ -8,6 +9,7 @@ export const SECTION_COMPONENTS = {
   overview: Overview,
   labels: Labels,
   members: Members,
+  agents: Agents,
   new_team: CreateNewTeam,
   export: Export,
 };
@@ -16,6 +18,7 @@ export const SECTION_TITLES = {
   overview: 'Overview',
   labels: 'Labels',
   members: 'Members',
+  agents: 'Agents',
   new_team: 'Add team',
   export: 'Export',
 };

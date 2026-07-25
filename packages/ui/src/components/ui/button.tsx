@@ -1,4 +1,4 @@
-import { Slot } from '@radix-ui/react-slot';
+import { Slot, Slottable } from '@radix-ui/react-slot';
 import { RiLoader4Line } from '@remixicon/react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import * as React from 'react';
@@ -74,12 +74,24 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           isActive && 'bg-accent text-accent-foreground hover:bg-accent',
         )}
         ref={ref}
-        type="button"
+        // `type` and `disabled` mean nothing on whatever element `asChild`
+        // hands us — an anchor, most likely — and React warns about both.
+        //
+        // Either reason disables the button. `isLoading ?? disabled` only looked
+        // at `disabled` when `isLoading` was absent, so passing `isLoading={false}`
+        // alongside `disabled` left the button live.
+        {...(asChild
+          ? {}
+          : { type: 'button', disabled: Boolean(isLoading || disabled) })}
         {...props}
-        disabled={isLoading ?? disabled}
       >
-        {isLoading ? <RiLoader4Line className="animate-spin mr-2" /> : <></>}
-        {children}
+        {isLoading ? <RiLoader4Line className="animate-spin mr-2" /> : null}
+        {/*
+          Slot takes exactly one child unless it is told which one to merge
+          into. The spinner made two, so `asChild` threw for every caller that
+          tried it — naming the child here is what makes the prop work at all.
+        */}
+        {asChild ? <Slottable>{children}</Slottable> : children}
       </Comp>
     );
   },

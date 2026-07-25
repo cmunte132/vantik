@@ -18,6 +18,8 @@ import React from 'react';
 
 import type { IssueType } from 'common/types';
 
+import { useCompletionGuard } from 'modules/issues/components/use-completion-guard';
+
 import { useUpdateIssueMutation } from 'services/issues';
 
 import { useContextStore } from 'store/global-context-provider';
@@ -35,8 +37,9 @@ export const TableC = observer(({ issues }: TableCProps) => {
   const [colSizing, setColSizing] = React.useState<ColumnSizingState>({});
 
   const { mutate: updateIssue } = useUpdateIssueMutation({});
+  const { guard, dialog } = useCompletionGuard();
 
-  const columns = getColumns(workspaceSlug, updateIssue, teamsStore);
+  const columns = getColumns(workspaceSlug, updateIssue, teamsStore, guard);
 
   const table = useReactTable({
     data: issues,
@@ -52,6 +55,7 @@ export const TableC = observer(({ issues }: TableCProps) => {
 
   return (
     <div className="ml-4 h-full overflow-y-auto">
+      {dialog}
       <div className="h-full relative overflow-auto">
         <Table style={{ width: table.getTotalSize() }}>
           <TableHeader className="sticky top-0 bg-background-2">

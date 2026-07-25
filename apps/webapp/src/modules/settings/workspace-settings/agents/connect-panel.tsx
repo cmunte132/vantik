@@ -20,7 +20,7 @@ import { InstallConfig } from './install-config';
  * The new agent appears in the list below without this telling it to: the
  * mutation invalidates that query, which is what refetches it.
  */
-export function ConnectPanel() {
+export function ConnectPanel({ workspaceId }: { workspaceId: string }) {
   const [name, setName] = React.useState('My agent');
   const [mayDelete, setMayDelete] = React.useState(false);
   const [token, setToken] = React.useState<string | null>(null);
@@ -43,7 +43,7 @@ export function ConnectPanel() {
       ? ['read', 'write', 'delete']
       : ['read', 'write'];
 
-    createAgent({ name: trimmed, scopes });
+    createAgent({ name: trimmed, scopes, workspaceId });
   };
 
   return (

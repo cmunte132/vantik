@@ -3,6 +3,7 @@ import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import { Input } from '@vantikhq/ui/components/input';
 import { DeleteLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
+import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
 import type { ChecklistItemType } from 'common/types';
@@ -16,7 +17,15 @@ interface ChecklistItemRowProps {
   checklistItem: ChecklistItemType;
 }
 
-export function ChecklistItemRow({ checklistItem }: ChecklistItemRowProps) {
+/**
+ * `observer` because the row reads `body` straight off the synced store node and
+ * no ancestor does: the list above observes `completed` and the sort keys, so a
+ * body edit arriving from another client changed nothing anything was watching
+ * and the row kept showing stale text.
+ */
+export const ChecklistItemRow = observer(function ChecklistItemRow({
+  checklistItem,
+}: ChecklistItemRowProps) {
   const [editing, setEditing] = React.useState(false);
   const [body, setBody] = React.useState(checklistItem.body);
 
@@ -34,7 +43,6 @@ export function ChecklistItemRow({ checklistItem }: ChecklistItemRowProps) {
   const onToggle = (completed: boolean) => {
     updateChecklistItem({
       checklistItemId: checklistItem.id,
-      issueId: checklistItem.issueId,
       completed,
     });
   };
@@ -50,7 +58,6 @@ export function ChecklistItemRow({ checklistItem }: ChecklistItemRowProps) {
 
     updateChecklistItem({
       checklistItemId: checklistItem.id,
-      issueId: checklistItem.issueId,
       body: trimmed,
     });
   };
@@ -104,4 +111,4 @@ export function ChecklistItemRow({ checklistItem }: ChecklistItemRowProps) {
       </Button>
     </div>
   );
-}
+});

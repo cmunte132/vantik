@@ -6,9 +6,6 @@ import { ajaxPost } from 'services/utils';
 
 export interface UpdateChecklistItemParams {
   checklistItemId: string;
-  // Carried so the caller can scope optimistic updates to an issue; the server
-  // resolves the item by id alone.
-  issueId: string;
   body?: string;
   completed?: boolean;
   sortOrder?: number;

@@ -7,9 +7,10 @@ import { useRevokeAgentMutation } from 'services/users/revoke-agent';
 
 interface AgentItemProps {
   agent: AgentSummary;
+  workspaceId: string;
 }
 
-export function AgentItem({ agent }: AgentItemProps) {
+export function AgentItem({ agent, workspaceId }: AgentItemProps) {
   // Revoking is the one destructive thing on this screen; a failure that only
   // showed up as the row staying put would read as nothing having happened.
   const [error, setError] = React.useState<string | null>(null);
@@ -36,7 +37,7 @@ export function AgentItem({ agent }: AgentItemProps) {
         <Button
           variant="secondary"
           isLoading={isPending}
-          onClick={() => revoke({ agentId: agent.id })}
+          onClick={() => revoke({ agentId: agent.id, workspaceId })}
         >
           revoke
         </Button>

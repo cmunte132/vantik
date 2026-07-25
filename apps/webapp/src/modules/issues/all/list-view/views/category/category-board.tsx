@@ -5,6 +5,8 @@ import { observer } from 'mobx-react-lite';
 
 import type { WorkflowType } from 'common/types';
 
+import { useCompletionGuard } from 'modules/issues/components/use-completion-guard';
+
 import { useComputedWorkflows } from 'hooks/workflows';
 
 import { useUpdateIssueMutation } from 'services/issues';
@@ -21,6 +23,7 @@ export const CategoryBoard = observer(({ workflows }: CategoryBoardProps) => {
   const { mutate: updateIssue } = useUpdateIssueMutation({});
   const { issuesStore } = useContextStore();
   const { workflowMap } = useComputedWorkflows();
+  const { guard, dialog } = useCompletionGuard();
 
   const onDragEnd = (result: DropResult) => {
     const issueId = result.draggableId;
@@ -41,13 +44,18 @@ export const CategoryBoard = observer(({ workflows }: CategoryBoardProps) => {
     );
 
     if (issue.stateId !== workflowId) {
-      updateIssue({ id: issueId, stateId: workflowId, teamId: issue.teamId });
+      // Dragging a card into a Done column completes the issue as surely as the
+      // status dropdown does, so it asks the same question first.
+      guard(issueId, workflowId, () =>
+        updateIssue({ id: issueId, stateId: workflowId, teamId: issue.teamId }),
+      );
     }
   };
 
   return (
     <Board onDragEnd={onDragEnd} className="pl-4">
       <>
+        {dialog}
         {workflows.map((workflow: WorkflowType) => {
           return (
             <CategoryBoardList

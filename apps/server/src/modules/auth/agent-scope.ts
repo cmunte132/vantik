@@ -56,25 +56,27 @@ export function requiredScopeFor(method: string): AgentScope {
  * Normalises a scope list, dropping duplicates and anything this server does
  * not recognise.
  *
- * Falls back to the default rather than to nothing, which covers both an
- * unusable request and an agent provisioned before scopes existed: one that was
- * never granted deletion should not hold it by accident of having been created
- * early, and one whose grant is empty should still be able to work.
+ * The absence of a list and an empty list mean different things. Nothing at all
+ * — an agent provisioned before scopes existed, or a request that omits them —
+ * gets the default, so such an agent still works without silently holding
+ * deletion it was never granted. A list that *is* present is taken at its word
+ * and narrowed to what this server knows, down to nothing if that is what
+ * survives: an explicit empty grant, or names this server no longer recognises
+ * after a rename, must not widen into read and write. A copy is returned so no
+ * caller can mutate the shared default.
  */
 export function sanitizeScopes(requested?: unknown): AgentScope[] {
   if (!Array.isArray(requested)) {
-    return DEFAULT_AGENT_SCOPES;
+    return [...DEFAULT_AGENT_SCOPES];
   }
 
-  const valid = [
+  return [
     ...new Set(
       requested.filter((scope): scope is AgentScope =>
         AGENT_SCOPES.includes(scope as AgentScope),
       ),
     ),
   ];
-
-  return valid.length > 0 ? valid : DEFAULT_AGENT_SCOPES;
 }
 
 /**

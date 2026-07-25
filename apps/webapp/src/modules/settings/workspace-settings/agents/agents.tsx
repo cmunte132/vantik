@@ -5,6 +5,8 @@ import React from 'react';
 
 import { SettingSection } from 'modules/settings/setting-section';
 
+import { useCurrentWorkspace } from 'hooks/workspace';
+
 import { useGetAgentsQuery } from 'services/users/get-agents';
 
 import { useContextStore } from 'store/global-context-provider';
@@ -22,10 +24,12 @@ import { ConnectPanel } from './connect-panel';
 export const Agents = observer(() => {
   const { workspaceStore } = useContextStore();
   const currentUser = React.useContext(UserContext);
+  const workspace = useCurrentWorkspace();
   const userRole = workspaceStore.getUserData(currentUser.id)?.role;
   const isAdmin = userRole === RoleEnum.ADMIN;
 
-  const { data: agents, isLoading } = useGetAgentsQuery();
+  // Only admins may list agents, so asking as anybody else just earns a 403.
+  const { data: agents, isLoading } = useGetAgentsQuery(workspace.id, isAdmin);
 
   return (
     <SettingSection
@@ -40,13 +44,17 @@ export const Agents = observer(() => {
 
       {isAdmin && (
         <div className="flex flex-col">
-          <ConnectPanel />
+          <ConnectPanel workspaceId={workspace.id} />
 
           <h4 className="text-base mb-3">Agents</h4>
 
           {isLoading && <Loader />}
           {agents?.map((agent) => (
-            <AgentItem key={agent.id} agent={agent} />
+            <AgentItem
+              key={agent.id}
+              agent={agent}
+              workspaceId={workspace.id}
+            />
           ))}
           {!isLoading && agents?.length === 0 && (
             <p className="text-muted-foreground">

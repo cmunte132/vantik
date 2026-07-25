@@ -29,6 +29,7 @@ import Session from 'supertokens-node/recipe/session';
 
 import { generatePersonalAccessToken } from 'common/authentication';
 import { PatPrincipal, resolvePatPrincipal } from 'common/pat-session';
+import { resolveAdminWorkspaceId } from 'common/workspace-access';
 
 import { agentSettings } from 'modules/auth/agent-scope';
 import { LoggerService } from 'modules/logger/logger.service';
@@ -326,12 +327,20 @@ export class UsersService {
    * verb that cannot be undone.
    */
   async createAgentAccount(
-    workspaceId: string,
+    sessionWorkspaceId: string,
     name: string,
     createdByUserId: string,
     ownership: AgentOwnership = 'personal',
     scopes: AgentScope[] = DEFAULT_AGENT_SCOPES,
+    requestedWorkspaceId?: string,
   ): Promise<AgentAccount> {
+    const workspaceId = await resolveAdminWorkspaceId(
+      this.prisma,
+      createdByUserId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
     const slug =
       name
         .trim()
@@ -354,45 +363,67 @@ export class UsersService {
       name,
     );
 
-    // The passwordless sign-up derives a name from the synthetic address, so
-    // set the display name explicitly — this is how the agent reads in history,
-    // lists and assignments. `type` marks it non-human everywhere, not only in
-    // the workspace whose membership carries the AGENT role.
-    const user = await this.prisma.user.update({
-      where: { email },
-      data: { fullname: name, type: UserTypeEnum.Agent },
-    });
-
-    const teamIds = (
-      await this.prisma.team.findMany({
-        where: { workspaceId },
-        select: { id: true },
-      })
-    ).map((team) => team.id);
-
     // A personal agent belongs to the person who made it; a workspace-owned one
     // belongs to no individual.
     const ownerUserId = ownership === 'personal' ? createdByUserId : null;
+    const agentSettingsBlob = { agent: { ownership, ownerUserId, scopes } };
 
-    await this.prisma.usersOnWorkspaces.upsert({
-      where: { userId_workspaceId: { userId: user.id, workspaceId } },
-      update: { role: RoleEnum.AGENT },
-      create: {
-        userId: user.id,
-        workspaceId,
-        role: RoleEnum.AGENT,
-        teamIds,
-        joinedAt: new Date(),
-        settings: { agent: { ownership, ownerUserId, scopes } },
-      },
+    // One transaction, because the half-finished states are worse than a failed
+    // provision. An account marked `type: Agent` with a live credential but no
+    // membership is invisible to `listAgentAccounts` (which reads memberships)
+    // and unreachable by `revokeAgent` (which requires one), so it could only be
+    // cleaned up by hand in the database. An agent with a membership but no
+    // token would show on the screen as permanently revoked.
+    const { user, token } = await this.prisma.$transaction(async (tx) => {
+      // The passwordless sign-up derives a name from the synthetic address, so
+      // set the display name explicitly — this is how the agent reads in
+      // history, lists and assignments. `type` marks it non-human everywhere,
+      // not only in the workspace whose membership carries the AGENT role.
+      const user = await tx.user.update({
+        where: { email },
+        data: { fullname: name, type: UserTypeEnum.Agent },
+      });
+
+      const teamIds = (
+        await tx.team.findMany({
+          where: { workspaceId },
+          select: { id: true },
+        })
+      ).map((team) => team.id);
+
+      await tx.usersOnWorkspaces.upsert({
+        where: { userId_workspaceId: { userId: user.id, workspaceId } },
+        // `settings` is written on both branches. Left off the update, an
+        // existing membership kept whatever it already had while this method
+        // still returned the scopes it was asked for — so the screen and the
+        // API claimed a grant the guard was not enforcing.
+        update: { role: RoleEnum.AGENT, settings: agentSettingsBlob },
+        create: {
+          userId: user.id,
+          workspaceId,
+          role: RoleEnum.AGENT,
+          teamIds,
+          joinedAt: new Date(),
+          settings: agentSettingsBlob,
+        },
+      });
+
+      // Inlined rather than calling createPersonalAccessToken, which holds its
+      // own client and so would commit outside this transaction.
+      const token = generatePersonalAccessToken();
+      await tx.personalAccessToken.create({
+        data: {
+          name,
+          userId: user.id,
+          token,
+          workspaceId,
+          jwt: '',
+          type: 'agent',
+        },
+      });
+
+      return { user, token };
     });
-
-    const pat = await this.createPersonalAccessToken(
-      name,
-      user.id,
-      workspaceId,
-      'agent',
-    );
 
     this.logger.info({
       message: `Provisioned ${ownership} agent account ${user.id} in workspace ${workspaceId} with scopes ${scopes.join(', ')} (by ${createdByUserId})`,
@@ -406,7 +437,7 @@ export class UsersService {
       ownership,
       ownerUserId,
       scopes,
-      token: pat.token,
+      token,
     };
   }
 
@@ -416,7 +447,18 @@ export class UsersService {
    * reflects whether an agent-typed token still exists, since a revoked agent
    * keeps its identity (so its past edits stay attributed) but loses access.
    */
-  async listAgentAccounts(workspaceId: string): Promise<AgentSummary[]> {
+  async listAgentAccounts(
+    sessionWorkspaceId: string,
+    userId: string,
+    requestedWorkspaceId?: string,
+  ): Promise<AgentSummary[]> {
+    const workspaceId = await resolveAdminWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
     const memberships = await this.prisma.usersOnWorkspaces.findMany({
       where: { workspaceId, role: RoleEnum.AGENT },
       include: { user: true },
@@ -457,7 +499,19 @@ export class UsersService {
    * authenticate is removed. Scoped to the workspace and to agent-typed tokens
    * so it can never touch a person's PATs.
    */
-  async revokeAgent(workspaceId: string, agentId: string): Promise<void> {
+  async revokeAgent(
+    sessionWorkspaceId: string,
+    agentId: string,
+    userId: string,
+    requestedWorkspaceId?: string,
+  ): Promise<void> {
+    const workspaceId = await resolveAdminWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      requestedWorkspaceId,
+    );
+
     const membership = await this.prisma.usersOnWorkspaces.findFirst({
       where: { workspaceId, userId: agentId, role: RoleEnum.AGENT },
     });
@@ -488,13 +542,28 @@ export class UsersService {
     return pats;
   }
 
-  async deletePat(patId: string) {
-    await this.prisma.personalAccessToken.update({
-      where: { id: patId },
+  /**
+   * Revokes one of the caller's own tokens.
+   *
+   * The owner is part of the `where`, not checked before it: an id belonging to
+   * somebody else simply matches nothing. Taking the id alone meant any
+   * authenticated caller could revoke any token on the server — including every
+   * other workspace's CLI tokens and every agent's — which an agent granted the
+   * `delete` scope could do on a loop. `updateMany` is what allows the owner in
+   * the filter, and it reports how many rows it touched, so a foreign or
+   * unknown id is answered with a 404 rather than silently doing nothing.
+   */
+  async deletePat(patId: string, userId: string) {
+    const { count } = await this.prisma.personalAccessToken.updateMany({
+      where: { id: patId, userId, deleted: null },
       data: {
         deleted: new Date(),
       },
     });
+
+    if (count === 0) {
+      throw new NotFoundException(`No token ${patId} to delete.`);
+    }
   }
 
   /**

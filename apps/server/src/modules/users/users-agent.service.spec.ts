@@ -25,7 +25,19 @@ jest.mock('common/authentication', () => ({
 }));
 
 function buildPrisma() {
-  return {
+  const prisma = {
+    // Provisioning writes inside a transaction so a half-made agent cannot be
+    // left behind; the stub just runs the callback against the same mock.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    $transaction: (fn: any) => fn(prisma),
+    // Every agent route resolves the workspace and proves the caller
+    // administers *that* one, rather than trusting the access token's.
+    usersOnWorkspaces: {
+      findUnique: jest
+        .fn()
+        .mockResolvedValue({ status: 'ACTIVE', role: RoleEnum.ADMIN }),
+      upsert: jest.fn().mockResolvedValue({}),
+    },
     user: {
       upsert: jest.fn().mockResolvedValue({
         id: 'agent-user-1',
@@ -44,15 +56,14 @@ function buildPrisma() {
         .fn()
         .mockResolvedValue([{ id: 'team-1' }, { id: 'team-2' }]),
     },
-    usersOnWorkspaces: {
-      upsert: jest.fn().mockResolvedValue({}),
-    },
     personalAccessToken: {
       create: jest
         .fn()
         .mockResolvedValue({ id: 'pat-1', token: 'tg_pat_agentSECRET' }),
     },
   };
+
+  return prisma;
 }
 
 /** The service over a stubbed prisma; each suite supplies the shape it needs. */
@@ -224,6 +235,9 @@ describe('UsersService.listAgentAccounts', () => {
     return {
       usersOnWorkspaces: {
         findMany: jest.fn().mockResolvedValue([membership]),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ status: 'ACTIVE', role: RoleEnum.ADMIN }),
       },
       personalAccessToken: {
         findMany: jest
@@ -235,7 +249,10 @@ describe('UsersService.listAgentAccounts', () => {
 
   it('reads ownership from the membership and marks a live token active', async () => {
     const prisma = listPrisma(['agent-1']);
-    const [agent] = await serviceWith(prisma).listAgentAccounts('ws-1');
+    const [agent] = await serviceWith(prisma).listAgentAccounts(
+      'ws-1',
+      'admin-1',
+    );
 
     expect(prisma.usersOnWorkspaces.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -253,14 +270,17 @@ describe('UsersService.listAgentAccounts', () => {
 
   it('marks an agent with no live token inactive', async () => {
     const prisma = listPrisma([]);
-    const [agent] = await serviceWith(prisma).listAgentAccounts('ws-1');
+    const [agent] = await serviceWith(prisma).listAgentAccounts(
+      'ws-1',
+      'admin-1',
+    );
 
     expect(agent.active).toBe(false);
   });
 
   it('only counts agent-typed, non-deleted tokens in this workspace', async () => {
     const prisma = listPrisma(['agent-1']);
-    await serviceWith(prisma).listAgentAccounts('ws-1');
+    await serviceWith(prisma).listAgentAccounts('ws-1', 'admin-1');
 
     expect(prisma.personalAccessToken.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -281,6 +301,9 @@ describe('UsersService.revokeAgent', () => {
         findFirst: jest
           .fn()
           .mockResolvedValue(found ? { userId: 'agent-1' } : null),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ status: 'ACTIVE', role: RoleEnum.ADMIN }),
       },
       personalAccessToken: {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -290,7 +313,7 @@ describe('UsersService.revokeAgent', () => {
 
   it("soft-deletes only this workspace's agent tokens for the account", async () => {
     const prisma = revokePrisma(true);
-    await serviceWith(prisma).revokeAgent('ws-1', 'agent-1');
+    await serviceWith(prisma).revokeAgent('ws-1', 'agent-1', 'admin-1');
 
     expect(prisma.personalAccessToken.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -309,7 +332,7 @@ describe('UsersService.revokeAgent', () => {
     const prisma = revokePrisma(false);
 
     await expect(
-      serviceWith(prisma).revokeAgent('ws-1', 'not-an-agent'),
+      serviceWith(prisma).revokeAgent('ws-1', 'not-an-agent', 'admin-1'),
     ).rejects.toThrow(/No agent/);
     expect(prisma.personalAccessToken.updateMany).not.toHaveBeenCalled();
   });

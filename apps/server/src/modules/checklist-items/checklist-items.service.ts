@@ -73,10 +73,17 @@ export default class ChecklistItemsService {
       }
     }
 
+    // Named one by one rather than spread. The global ValidationPipe does not
+    // whitelist, so anything else the caller put in the body survives validation
+    // and would reach Prisma: `issueId` would move the item onto an issue in
+    // another workspace (the guard only proves the item's *current* issue is the
+    // caller's), a nested `issue: { update: … }` would edit the parent issue, and
+    // `deleted: null` would undo a delete.
     return this.prisma.checklistItem.update({
       where: { id: checklistItemParams.checklistItemId },
       data: {
-        ...rest,
+        ...(rest.body !== undefined && { body: rest.body }),
+        ...(rest.sortOrder !== undefined && { sortOrder: rest.sortOrder }),
         ...(completed !== undefined && { completed }),
         ...completionData,
         updatedById: userId,

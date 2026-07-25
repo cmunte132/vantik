@@ -102,15 +102,6 @@ function assertSubstantialIssue(
   }
 }
 
-/** Description followed by an acceptance-criteria checklist, when present. */
-function composeIssueBody(description: string, criteria: string[]): string {
-  if (criteria.length === 0) {
-    return description;
-  }
-  const checklist = criteria.map((item) => `- [ ] ${item}`).join('\n');
-  return `${description}\n\n## Acceptance criteria\n${checklist}`;
-}
-
 export function registerVantikTools(
   server: McpServer,
   agent: VantikAgent,
@@ -296,8 +287,8 @@ export function registerVantikTools(
     },
     handler((input) => {
       // The opinion lives here, not in agent-core: hold the issue to the floor,
-      // then compose the criteria into the body and hand a plain issue to the
-      // neutral client.
+      // then hand the criteria to the neutral client, which files them as real
+      // checklist items rather than as markdown in the description.
       const { acceptanceCriteria, description, ...rest } = input;
       const criteria: string[] = (acceptanceCriteria ?? [])
         .map((item: string) => item.trim())
@@ -308,7 +299,8 @@ export function registerVantikTools(
 
       return agent.createTask({
         ...rest,
-        description: composeIssueBody(body, criteria),
+        description: body,
+        acceptanceCriteria: criteria,
       });
     }),
   );

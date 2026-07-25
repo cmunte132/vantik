@@ -1,14 +1,3 @@
-import { WorkflowCategoryEnum } from '@vantikhq/types';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@vantikhq/ui/components/alert-dialog';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
@@ -30,12 +19,10 @@ import {
   ProjectMilestoneDropdown,
   ProjectMilestoneDropdownVariant,
 } from 'modules/issues/components/issue-metadata/project';
-
-import type { ChecklistItemType } from 'common/types';
+import { useCompletionGuard } from 'modules/issues/components/use-completion-guard';
 
 import { useIssueData } from 'hooks/issues';
 import { useTeamWithId } from 'hooks/teams';
-import { useTeamWorkflows } from 'hooks/workflows';
 
 import { useUpdateIssueMutation } from 'services/issues';
 
@@ -48,42 +35,18 @@ import { SupportProperties } from './support-properties';
 export const RightSide = observer(() => {
   const issue = useIssueData();
   const { mutate: updateIssue } = useUpdateIssueMutation({});
-  const { projectsStore, checklistItemsStore } = useContextStore();
+  const { projectsStore } = useContextStore();
   const team = useTeamWithId(issue?.teamId);
   const hasProjectsForTeam = projectsStore.hasProjects(team.id);
 
-  const workflows = useTeamWorkflows(team.identifier);
-  // A state the caller picked that would complete the issue while criteria are
-  // still open. Held until they confirm, so the move is warned about, not
-  // blocked.
-  const [pendingStateId, setPendingStateId] = React.useState<
-    string | undefined
-  >();
-
-  const criteria = checklistItemsStore.getChecklistItems(
-    issue.id,
-  ) as ChecklistItemType[];
-  const openCriteria = criteria.filter(
-    (item: ChecklistItemType) => !item.completed,
-  );
-
-  const applyStatus = (stateId: string) => {
-    updateIssue({ id: issue.id, stateId, teamId: issue.teamId });
-  };
+  // Warns, rather than blocks, when this would complete the issue with criteria
+  // still open. Shared with every other place that can change a status.
+  const { guard, dialog } = useCompletionGuard();
 
   const statusChange = (stateId: string) => {
-    const nextWorkflow = workflows.find(
-      (workflow: { id: string }) => workflow.id === stateId,
+    guard(issue.id, stateId, () =>
+      updateIssue({ id: issue.id, stateId, teamId: issue.teamId }),
     );
-    const completesIssue =
-      nextWorkflow?.category === WorkflowCategoryEnum.COMPLETED;
-
-    if (completesIssue && openCriteria.length > 0) {
-      setPendingStateId(stateId);
-      return;
-    }
-
-    applyStatus(stateId);
   };
 
   const assigneeChange = (assigneeId: string) => {
@@ -198,31 +161,7 @@ export const RightSide = observer(() => {
         </div>
       </ScrollArea>
 
-      <AlertDialog
-        open={!!pendingStateId}
-        onOpenChange={(open) => !open && setPendingStateId(undefined)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Definition of Done not met</AlertDialogTitle>
-            <AlertDialogDescription>
-              {openCriteria.length} of {criteria.length} criteria are still
-              unchecked. You can still complete this issue.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                applyStatus(pendingStateId);
-                setPendingStateId(undefined);
-              }}
-            >
-              Complete anyway
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {dialog}
     </>
   );
 });

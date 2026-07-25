@@ -1,4 +1,9 @@
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { RoleEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 /**
@@ -45,6 +50,52 @@ export async function resolveWorkspaceId(
   if (!membership || membership.status !== 'ACTIVE') {
     throw new UnauthorizedException({
       message: 'You do not have access to this workspace',
+    });
+  }
+
+  return workspaceId;
+}
+
+/**
+ * Resolves the workspace a privileged write should land in, and proves the
+ * caller administers *that* workspace.
+ *
+ * AdminGuard reads the role off the access token, which carries the user's first
+ * workspace and its role there. For anything that writes into a named workspace
+ * that is the wrong question twice over: someone who administers workspace A but
+ * is only a member of B passes the guard while browsing B, and `@Workspace()`
+ * then hands the handler A — so the write lands in a workspace the person was
+ * not looking at, with an admin check that was never about the target. Both come
+ * from the membership row instead.
+ */
+export async function resolveAdminWorkspaceId(
+  prisma: PrismaService,
+  userId: string,
+  sessionWorkspaceId: string,
+  requestedWorkspaceId?: string,
+): Promise<string> {
+  const workspaceId = requestedWorkspaceId || sessionWorkspaceId;
+
+  if (!workspaceId || !userId) {
+    throw new UnauthorizedException({
+      message: 'No workspace is associated with this session',
+    });
+  }
+
+  const membership = await prisma.usersOnWorkspaces.findUnique({
+    where: { userId_workspaceId: { userId, workspaceId } },
+    select: { status: true, role: true },
+  });
+
+  if (!membership || membership.status !== 'ACTIVE') {
+    throw new UnauthorizedException({
+      message: 'You do not have access to this workspace',
+    });
+  }
+
+  if (membership.role !== RoleEnum.ADMIN) {
+    throw new ForbiddenException({
+      message: 'Only workspace admins can do this',
     });
   }
 

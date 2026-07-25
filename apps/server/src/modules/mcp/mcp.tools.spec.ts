@@ -84,6 +84,9 @@ const engStates = [
 const baseRoutes = {
   'GET /teams': teams,
   'GET /team-eng/workflows': engStates,
+  // Acceptance criteria are filed as checklist items after the issue exists, so
+  // any test passing them reaches this too.
+  'POST /checklist_items': { id: 'item-1' },
 };
 
 /** A tool result travels as text; these read it back the way the model would. */
@@ -130,6 +133,7 @@ describe('vantik MCP tools', () => {
         teamId: 'team-eng',
         stateId: 'state-backlog',
       },
+      'POST /checklist_items': { id: 'item-1' },
     });
 
     const result = await client.callTool({
@@ -138,17 +142,32 @@ describe('vantik MCP tools', () => {
         title: 'Pool exhausted',
         description:
           'The connection pool is exhausted under load in the checkout path.',
-        acceptanceCriteria: ['Checkout holds at 200 rps without pool errors'],
+        acceptanceCriteria: [
+          'Checkout holds at 200 rps without pool errors',
+          'Pool size is configurable',
+        ],
       },
     });
 
     const created = requests.find((request) => request.path === '/issues');
     expect(created?.body).toMatchObject({ stateId: 'state-backlog' });
-    // The acceptance criteria are composed into the body as a checklist.
+    // The description is the description. Criteria are not folded into it as
+    // markdown, which looked right on the page but could not be ticked.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect((created?.body as any).descriptionMarkdown).toContain(
-      '## Acceptance criteria',
+    expect((created?.body as any).descriptionMarkdown).toBe(
+      'The connection pool is exhausted under load in the checkout path.',
     );
+
+    // Each criterion becomes a real checklist item on the Definition of Done,
+    // ordered as it was given rather than by whichever write landed first.
+    const items = requests.filter(
+      (request) => request.path === '/checklist_items',
+    );
+    expect(items.map((item) => item.body)).toEqual([
+      { body: 'Checkout holds at 200 rps without pool errors', sortOrder: 1 },
+      { body: 'Pool size is configurable', sortOrder: 2 },
+    ]);
+
     expect(jsonOf(result)).toMatchObject({ key: 'ENG-99' });
   });
 

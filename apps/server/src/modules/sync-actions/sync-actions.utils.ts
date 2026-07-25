@@ -187,6 +187,26 @@ export async function getWorkspaceId(
       });
       return company.workspaceId;
 
+    case ModelName.Page:
+      const page = await prisma.page.findUnique({
+        where: { id: modelId },
+      });
+      return page.workspaceId;
+
+    case ModelName.PageEntry:
+      const pageEntry = await prisma.pageEntry.findUnique({
+        where: { id: modelId },
+        include: { page: true },
+      });
+      return pageEntry.page.workspaceId;
+
+    case ModelName.PageHistory:
+      const pageHistory = await prisma.pageHistory.findUnique({
+        where: { id: modelId },
+        include: { page: true },
+      });
+      return pageHistory.page.workspaceId;
+
     case ModelName.People:
       const people = await prisma.people.findUnique({
         where: { id: modelId },
@@ -350,6 +370,9 @@ export async function getModelData(
     },
     View: prisma.view,
     IssueSuggestion: prisma.issueSuggestion,
+    Page: prisma.page,
+    PageEntry: prisma.pageEntry,
+    PageHistory: prisma.pageHistory,
     Project: prisma.project,
     ProjectMilestone: prisma.projectMilestone,
     Support: prisma.support,

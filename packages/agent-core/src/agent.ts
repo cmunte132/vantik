@@ -1,6 +1,26 @@
 import { VantikClient, VantikClientConfig } from './client';
 import { Directory, isUuid, parseIssueKey } from './directory';
-import { VantikNotFoundError } from './errors';
+import { VantikAmbiguousError, VantikNotFoundError } from './errors';
+import {
+  ConsolidateInput,
+  ContextPack,
+  EntryPolicy,
+  EntryStatus,
+  KnowledgeEntry,
+  KnowledgeGap,
+  KnowledgeHit,
+  KnowledgePage,
+  KnowledgePageRef,
+  LinkPageInput,
+  LoadContextInput,
+  PageLink,
+  PagesForInput,
+  RecallInput,
+  RememberInput,
+  RememberResult,
+  TriageInput,
+  WritePageInput,
+} from './knowledge';
 import {
   Paginated,
   PriorityName,
@@ -526,7 +546,344 @@ export class VantikAgent {
     return task;
   }
 
+  // ------------------------------------------------------- knowledge bank
+
+  /** The workspace's pages, as a flat list with their parents. */
+  async listPages(): Promise<
+    Array<KnowledgePageRef & { parentId: string | null; entryPolicy: EntryPolicy }>
+  > {
+    const pages = await this.pageIndex();
+
+    return pages.map((page) => ({
+      id: page.id,
+      title: page.title,
+      parentId: page.parentId ?? null,
+      entryPolicy: page.entryPolicy,
+    }));
+  }
+
+  /** One page: its body as markdown, its place in the tree, its standing facts. */
+  async readPage(reference: string): Promise<KnowledgePage> {
+    const { id } = await this.resolvePage(reference);
+
+    const [page, entries] = await Promise.all([
+      this.client.get<RawPage & { ancestors: KnowledgePageRef[] }>(
+        `/pages/${id}`,
+      ),
+      this.client.get<RawEntry[]>('/page_entries', {
+        query: { pageId: id, status: 'STANDING' },
+      }),
+    ]);
+
+    return {
+      id: page.id,
+      title: page.title,
+      body: page.descriptionMarkdown ?? '',
+      parentId: page.parentId ?? null,
+      entryPolicy: page.entryPolicy,
+      ancestors: page.ancestors ?? [],
+      standing: (entries ?? []).map((entry) => toEntry(entry)),
+      updatedAt: page.updatedAt,
+    };
+  }
+
+  /** "What do we know about X." */
+  async recallKnowledge(input: RecallInput): Promise<KnowledgeHit[]> {
+    const result = await this.client.get<RawKnowledgeResult>(
+      '/knowledge/search',
+      {
+        query: {
+          query: input.query,
+          scope: input.scope,
+          limit: input.limit,
+        },
+      },
+    );
+
+    return (result?.hits ?? []).map(toHit);
+  }
+
+  /**
+   * "Load what matters before I begin."
+   *
+   * The half of the loop an agent cannot express as a query, because it does
+   * not yet know what it does not know — so it says where it is working and
+   * how much context it can afford instead.
+   */
+  async loadContext(input: LoadContextInput = {}): Promise<ContextPack> {
+    const pack = await this.client.post<RawContextPack>('/knowledge/context', {
+      body: {
+        ...(input.task ? { query: input.task } : {}),
+        ...(input.scope ? { scope: input.scope } : {}),
+        ...(input.tokenBudget ? { tokenBudget: input.tokenBudget } : {}),
+      },
+    });
+
+    return {
+      items: (pack?.items ?? []).map(toHit),
+      estimatedTokens: pack?.estimatedTokens ?? 0,
+      tokenBudget: pack?.tokenBudget ?? 0,
+      omitted: pack?.omitted ?? 0,
+    };
+  }
+
+  /**
+   * Links a page to a team, project, issue or another page.
+   *
+   * Neutral about whether a link is warranted — like every other write here,
+   * the judgment belongs to the surface talking to the person or the model.
+   */
+  async linkPage(input: LinkPageInput): Promise<PageLink> {
+    const page = await this.resolvePage(input.page);
+
+    return this.client.post<PageLink>(`/pages/${page.id}/links`, {
+      body: { entityType: input.entityType, entityId: input.entityId },
+    });
+  }
+
+  /** What a page is linked to. */
+  async pageLinks(page: string): Promise<PageLink[]> {
+    const resolved = await this.resolvePage(page);
+
+    return (await this.client.get<PageLink[]>(
+      `/pages/${resolved.id}/links`,
+    )) ?? [];
+  }
+
+  /**
+   * The pages that relate to one team, project, issue or page.
+   *
+   * The direction search cannot serve. An agent given "ENG-57" has a uuid and
+   * no vocabulary — it does not know the runbook is called "Deploying the
+   * worker pool", so no query it can construct will find it. This is a lookup
+   * on an index instead.
+   */
+  async pagesFor(input: PagesForInput): Promise<KnowledgePageRef[]> {
+    const pages = await this.client.get<Array<{ id: string; title: string }>>(
+      `/pages/related?entityType=${input.entityType}&entityId=${encodeURIComponent(
+        input.entityId,
+      )}`,
+    );
+
+    return (pages ?? []).map((page) => ({ id: page.id, title: page.title }));
+  }
+
+  /**
+   * Appends one asserted fact to a page.
+   *
+   * Searches before it writes. When near matches exist and the caller has
+   * neither named an entry to supersede nor confirmed the fact is distinct,
+   * nothing is written and the matches come back instead. The round trip is the
+   * tax: it costs a spamming caller something and costs a careful one almost
+   * nothing.
+   */
+  async remember(input: RememberInput): Promise<RememberResult> {
+    const page = await this.resolvePage(input.page);
+
+    if (!input.supersedes && !input.distinct) {
+      const near = await this.client.get<RawKnowledgeHit[]>(
+        '/knowledge/similar',
+        { query: { pageId: page.id, content: input.content } },
+      );
+
+      if (near?.length) {
+        return {
+          status: 'needs-decision',
+          nearMatches: near.map(toHit),
+          guidance:
+            `"${page.title}" already holds ${near.length} similar ` +
+            `${near.length === 1 ? 'entry' : 'entries'}. Either pass ` +
+            '`supersedes` with the id of the one this replaces, or pass ' +
+            '`distinct: true` to say this is a separate fact. Nothing was ' +
+            'written.',
+        };
+      }
+    }
+
+    const entry = await this.client.post<RawEntry>('/page_entries', {
+      query: { pageId: page.id },
+      body: {
+        content: input.content,
+        ...(input.scope ? { scope: input.scope } : {}),
+        ...(input.session ? { sourceSession: input.session } : {}),
+        ...(input.supersedes ? { supersedesId: input.supersedes } : {}),
+      },
+    });
+
+    return { status: 'written', entry: toEntry(entry) };
+  }
+
+  /**
+   * Creates a page, or rewrites the body of one that already exists.
+   *
+   * Neutral about whether a new page is warranted — that judgment belongs to
+   * the surface talking to the person or the model, not to the client
+   * underneath it.
+   */
+  async writePage(input: WritePageInput): Promise<KnowledgePageRef> {
+    const existing = await this.findPage(input.title);
+
+    if (existing) {
+      const updated = await this.client.post<RawPage>(
+        `/pages/${existing.id}`,
+        {
+          body: {
+            ...(input.body !== undefined
+              ? { descriptionMarkdown: input.body }
+              : {}),
+            ...(input.entryPolicy ? { entryPolicy: input.entryPolicy } : {}),
+          },
+        },
+      );
+
+      return { id: updated.id, title: updated.title };
+    }
+
+    const parent = input.parent
+      ? await this.resolvePage(input.parent)
+      : undefined;
+
+    const created = await this.client.post<RawPage>('/pages', {
+      body: {
+        title: input.title,
+        ...(input.body !== undefined
+          ? { descriptionMarkdown: input.body }
+          : {}),
+        ...(parent ? { parentId: parent.id } : {}),
+        ...(input.entryPolicy ? { entryPolicy: input.entryPolicy } : {}),
+      },
+    });
+
+    return { id: created.id, title: created.title };
+  }
+
+  /**
+   * Folds standing entries into a page body and marks them CONSOLIDATED, so the
+   * same fact is not served twice — once as narrative and once as the entry it
+   * was written from.
+   */
+  async consolidate(input: ConsolidateInput): Promise<KnowledgePageRef> {
+    const page = await this.resolvePage(input.page);
+
+    const updated = await this.client.post<RawPage>(
+      `/pages/${page.id}/consolidate`,
+      {
+        body: {
+          descriptionMarkdown: input.body,
+          ...(input.entryIds?.length ? { entryIds: input.entryIds } : {}),
+        },
+      },
+    );
+
+    return { id: updated.id, title: updated.title };
+  }
+
+  /** Entries on a page, optionally narrowed to a status. */
+  async listEntries(
+    reference: string,
+    status?: EntryStatus[],
+  ): Promise<KnowledgeEntry[]> {
+    const page = await this.resolvePage(reference);
+
+    const entries = await this.client.get<RawEntry[]>('/page_entries', {
+      query: {
+        pageId: page.id,
+        ...(status?.length ? { status: status.join(',') } : {}),
+      },
+    });
+
+    return (entries ?? []).map((entry) => toEntry(entry));
+  }
+
+  /**
+   * Corrects a fact in place.
+   *
+   * A correction rather than a new claim: the entry keeps its id, its
+   * provenance and its retrieval count, which is what a person editing the
+   * wording of something already true is asking for. A fact that has *changed*
+   * is a different thing and wants `remember` with `supersedes`.
+   */
+  async updateEntry(
+    entryId: string,
+    changes: { content?: string; scope?: string | null },
+  ): Promise<KnowledgeEntry> {
+    const entry = await this.client.post<RawEntry>(
+      `/page_entries/${entryId}`,
+      {
+        body: {
+          ...(changes.content !== undefined
+            ? { content: changes.content }
+            : {}),
+          ...(changes.scope !== undefined ? { scope: changes.scope } : {}),
+        },
+      },
+    );
+
+    return toEntry(entry);
+  }
+
+  /** Applies one triage decision to a set of entries. */
+  async triageEntries(
+    input: TriageInput,
+  ): Promise<{ updated: number; skipped: number }> {
+    return this.client.post<{ updated: number; skipped: number }>(
+      '/page_entries/bulk',
+      { body: { entryIds: input.entryIds, status: input.status } },
+    );
+  }
+
+  /** Questions the bank could not answer — what to document next. */
+  async knowledgeGaps(): Promise<KnowledgeGap[]> {
+    const gaps = await this.client.get<KnowledgeGap[]>('/knowledge/gaps');
+    return gaps ?? [];
+  }
+
   // --------------------------------------------------------------- internals
+
+  /**
+   * Accepts a page title or id.
+   *
+   * Titles are how an agent refers to a page — a uuid in a tool call is a thing
+   * a model has to carry between turns, and it will not.
+   */
+  private async resolvePage(reference: string): Promise<KnowledgePageRef> {
+    const pages = await this.pageIndex();
+    const found = matchPage(pages, reference);
+
+    if (!found) {
+      // Built from the list already in hand. Fetching it again to write the
+      // error message was a second copy of every page in the workspace, on the
+      // path that had just failed.
+      throw new VantikNotFoundError(
+        `No page "${reference}". Pages in this workspace: ${
+          pages.map((page) => page.title).join(', ') || 'none yet'
+        }.`,
+      );
+    }
+
+    return found;
+  }
+
+  private async findPage(
+    reference: string,
+  ): Promise<KnowledgePageRef | undefined> {
+    return matchPage(await this.pageIndex(), reference);
+  }
+
+  /**
+   * The page list, without the bodies.
+   *
+   * Everything here resolves titles to ids through this, and a full list hands
+   * back every document in the bank — each one converted from the editor's JSON
+   * to markdown on the way out — to answer a question about names.
+   */
+  private async pageIndex(): Promise<RawPage[]> {
+    return (
+      (await this.client.get<RawPage[]>('/pages', {
+        query: { summary: 'true' },
+      })) ?? []
+    );
+  }
 
   /** Accepts an issue key ("ENG-42") or a raw issue id. */
   private async resolveTask(
@@ -737,4 +1094,105 @@ export class VantikAgent {
 
 function toArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
+}
+
+/** One page out of a list, by id or by title. */
+function matchPage(
+  pages: RawPage[],
+  reference: string,
+): KnowledgePageRef | undefined {
+  const trimmed = reference.trim();
+  const needle = trimmed.toLowerCase();
+
+  const matches = pages.filter(
+    (page) => page.id === trimmed || page.title.toLowerCase() === needle,
+  );
+
+  if (matches.length > 1) {
+    throw new VantikAmbiguousError(
+      `"${reference}" matches ${matches.length} pages; use the page id.`,
+    );
+  }
+
+  return matches[0]
+    ? { id: matches[0].id, title: matches[0].title }
+    : undefined;
+}
+
+/** Server-side knowledge shapes. Kept local so agent-core stays standalone. */
+interface RawPage {
+  id: string;
+  title: string;
+  descriptionMarkdown?: string;
+  parentId?: string | null;
+  entryPolicy: EntryPolicy;
+  updatedAt: string;
+}
+
+interface RawEntry {
+  id: string;
+  content: string;
+  scope: string | null;
+  status: EntryStatus;
+  sourceUserId: string | null;
+  sourceSession: string | null;
+  verifiedAt: string | null;
+  retrievalCount: number;
+  supersedesId: string | null;
+  pageId: string;
+  createdAt: string;
+}
+
+interface RawKnowledgeHit {
+  kind: 'page' | 'entry';
+  pageId: string;
+  pageTitle: string;
+  entryId: string | null;
+  content: string;
+  scope: string | null;
+  verified: boolean;
+  retrievalCount: number;
+  relevanceScore?: number;
+}
+
+interface RawKnowledgeResult {
+  hits: RawKnowledgeHit[];
+}
+
+interface RawContextPack {
+  items: RawKnowledgeHit[];
+  estimatedTokens: number;
+  tokenBudget: number;
+  omitted: number;
+}
+
+function toEntry(entry: RawEntry): KnowledgeEntry {
+  return {
+    id: entry.id,
+    content: entry.content,
+    scope: entry.scope ?? null,
+    status: entry.status,
+    sourceUserId: entry.sourceUserId ?? null,
+    sourceSession: entry.sourceSession ?? null,
+    // A timestamp is provenance the caller has to interpret; whether a human
+    // vouched for the claim is the thing it actually weighs.
+    verified: Boolean(entry.verifiedAt),
+    retrievalCount: entry.retrievalCount ?? 0,
+    supersedesId: entry.supersedesId ?? null,
+    pageId: entry.pageId,
+    createdAt: entry.createdAt,
+  };
+}
+
+function toHit(hit: RawKnowledgeHit): KnowledgeHit {
+  return {
+    kind: hit.kind,
+    page: { id: hit.pageId, title: hit.pageTitle },
+    entryId: hit.entryId ?? null,
+    content: hit.content,
+    scope: hit.scope ?? null,
+    verified: Boolean(hit.verified),
+    retrievalCount: hit.retrievalCount ?? 0,
+    ...(hit.relevanceScore === undefined ? {} : { score: hit.relevanceScore }),
+  };
 }

@@ -36,6 +36,7 @@ import { LinkedIssueModule } from 'modules/linked-issue/linked-issue.module';
 import { McpModule } from 'modules/mcp/mcp.module';
 import { NotificationsModule } from 'modules/notifications/notifications.module';
 import { OAuthCallbackModule } from 'modules/oauth-callback/oauth-callback.module';
+import { PagesModule } from 'modules/pages/pages.module';
 import { PeopleModule } from 'modules/people/people.module';
 import { ProjectsModule } from 'modules/projects/projects.module';
 import { ReplicationModule } from 'modules/replication/replication.module';
@@ -119,6 +120,7 @@ import { AppService } from './app.service';
     ActionModule,
     AIRequestsModule,
     ProjectsModule,
+    PagesModule,
     CyclesModule,
     WebhookSubscriptionModule,
 

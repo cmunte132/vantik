@@ -2,6 +2,7 @@ import { Command } from 'commander';
 
 import { configureDeployCommand } from '../commands/deploy';
 import { configureInitCommand } from '../commands/init';
+import { configureKnowledgeCommands } from '../commands/knowledge';
 import { configureLoginCommand } from '../commands/login';
 import { configureLogoutCommand } from '../commands/logout';
 import { configureTaskCommands } from '../commands/task';
@@ -20,3 +21,4 @@ configureInitCommand(program);
 configureLoginCommand(program);
 configureLogoutCommand(program);
 configureTaskCommands(program);
+configureKnowledgeCommands(program);

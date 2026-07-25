@@ -1,3 +1,4 @@
+import { PageEntryStatusEnum } from '@vantikhq/types';
 import { CollectionFieldSchema } from 'typesense/lib/Typesense/Collection';
 import { CollectionCreateSchema } from 'typesense/lib/Typesense/Collections';
 
@@ -41,6 +42,165 @@ export const typesenseEmbedding: CollectionFieldSchema = {
     },
   },
 };
+
+/**
+ * The knowledge bank: page bodies and standing entries in one collection, so a
+ * hit can be either a section of a document or a single asserted fact.
+ *
+ * The same in-process embedding model backs this. It matters more here than it
+ * does for issues: a knowledge bank collects exactly the things a team keeps
+ * out of a tracker — architecture decisions, why a customer left, what broke
+ * last time — and none of it leaves the deployment.
+ *
+ * **The facet flags are the load-bearing part of this schema.** `group_by`
+ * composes with vector search but works only on fields declared `facet: true`
+ * at creation time, and typesense's alter endpoint cannot backfill an embedding
+ * field, so adding a facet later forces the drop-and-rebuild path. Everything
+ * grouping or triage could plausibly need is faceted up front.
+ */
+export const pageSchema: CollectionCreateSchema = {
+  name: 'pages',
+  fields: [
+    { name: 'id', type: 'string' },
+    { name: 'workspaceId', type: 'string' },
+    // 'page' or 'entry'. A caller has to know whether it is reading agreed
+    // narrative or one agent's assertion — they carry different authority.
+    { name: 'kind', type: 'string', facet: true },
+    // The flood-control axis: group_by pageId caps how much of a result set a
+    // single busy page can occupy.
+    { name: 'pageId', type: 'string', facet: true },
+    { name: 'pageTitle', type: 'string' },
+    { name: 'entryId', type: 'string' },
+    { name: 'title', type: 'string' },
+    { name: 'content', type: 'string' },
+    // Faceted for triage: "24 from claude-opus-5 scoped apps/server/prisma".
+    { name: 'scope', type: 'string', facet: true },
+    { name: 'status', type: 'string', facet: true },
+    { name: 'sourceUserId', type: 'string', facet: true },
+    // Booleans rather than emptiness checks on the strings above, because
+    // `_eval` needs a filter it can evaluate and `scope:!=''` is not one.
+    { name: 'verified', type: 'bool', facet: true },
+    { name: 'scoped', type: 'bool', facet: true },
+    // Demonstrated usefulness, refreshed from postgres on re-index.
+    { name: 'retrievalCount', type: 'int32' },
+    // Coarse bucket ("2026-07") so recency can be faceted without turning every
+    // distinct timestamp into its own facet value.
+    { name: 'updatedBucket', type: 'string', facet: true },
+    { name: 'updatedAt', type: 'int64' },
+  ],
+  default_sorting_field: 'retrievalCount',
+};
+
+export const pageEmbedding: CollectionFieldSchema = {
+  name: 'embeddings',
+  type: 'float[]',
+  embed: {
+    // Deliberately narrow. The `issues` collection embeds number, title,
+    // description and every comment as one blob, which is why an exact
+    // restatement of a title can score a *worse* vector distance than an
+    // unrelated issue — matching one field still leaves most of the vector
+    // different. An entry is one short claim, so its embedding should be a far
+    // tighter fit. See SIMILARITY_MEASUREMENT_NOTE.
+    from: ['title', 'content', 'scope'],
+    model_config: {
+      model_name: 'ts/all-MiniLM-L12-v2',
+    },
+  },
+};
+
+export const PAGE_QUERY_BY = 'title,content,scope,pageTitle,embeddings';
+
+/**
+ * How many documents one page may contribute to a result set.
+ *
+ * This is the single most important control in the design, because it is the
+ * one that still holds when every other gate has failed. A page carrying fifty
+ * entries contributes three. It decouples "the bank is messy" from "retrieval
+ * is degraded" — an ungroomed bank still returns useful context, which buys
+ * time to fix the mess rather than losing trust in the feature first.
+ */
+export const KNOWLEDGE_GROUP_LIMIT = 3;
+
+/**
+ * Ranking, expressed inside the query rather than re-sorted in Node.
+ *
+ * `_eval` scores conditionally during the search, so it composes with grouping
+ * — a Node-side re-sort would reorder rows typesense had already grouped and
+ * truncated, which is a different (and wrong) answer. Verified knowledge beats
+ * unverified, and a narrowly-scoped fact beats a page-level one because it is
+ * the one that actually applies to what the caller is doing.
+ */
+export const KNOWLEDGE_SORT_BY =
+  '_text_match:desc,_eval([(verified:true):2,(scoped:true):1]):desc,retrievalCount:desc';
+
+/** Facets the review rail opens on, before it shows a single row. */
+export const KNOWLEDGE_FACET_BY = 'sourceUserId,scope,status,kind';
+
+/**
+ * A measured warning, kept next to the code it constrains.
+ *
+ * Tested against the live `issues` collection on typesense 27.1: an exact
+ * restatement of an existing issue title scored a *greater* vector distance
+ * (0.53) than an unrelated issue (0.47). Cosine distance from this model, over
+ * a multi-field blob, is not a duplicate detector.
+ *
+ * Entries embed one short claim rather than a blob and should behave
+ * considerably better — but "should" is not "does". Nothing here rejects a
+ * write on a distance threshold; near matches are *returned to the caller*,
+ * which puts the judgment in a model comparing two short facts, where it
+ * belongs. Measure self-similarity on real entry text before any threshold
+ * becomes load-bearing anywhere.
+ */
+export const SIMILARITY_MEASUREMENT_NOTE =
+  'Vector distance is not calibrated for dedup here; near matches are returned, never auto-rejected.';
+
+/** Distance ceiling for "entries that look like this one", used for dedup hints. */
+export const KNOWLEDGE_NEAR_MATCH_DISTANCE = 0.75;
+
+/**
+ * Entry statuses that get a document at all.
+ *
+ * Narrower than "everything" and wider than "what is served". Retrieval filters
+ * to STANDING on the way out — see `buildKnowledgeFilterBy`, whose default is
+ * that and nothing else — and the near-match check on a write is the single
+ * caller allowed past it. That one has to see the inbox: a claim somebody
+ * proposed an hour ago is the likeliest thing a new claim duplicates, and the
+ * flood this whole gate exists for is ten agents asserting the same untriaged
+ * fact.
+ */
+export const INDEXED_STATUSES: PageEntryStatusEnum[] = [
+  PageEntryStatusEnum.STANDING,
+  PageEntryStatusEnum.PROPOSED,
+];
+
+export interface KnowledgeSearchHit {
+  id: string;
+  kind: 'page' | 'entry';
+  pageId: string;
+  pageTitle: string;
+  entryId: string | null;
+  title: string;
+  content: string;
+  scope: string | null;
+  status: string;
+  sourceUserId: string | null;
+  verified: boolean;
+  retrievalCount: number;
+  distance?: number;
+  relevanceScore?: number;
+}
+
+export interface KnowledgeSearchResult {
+  hits: KnowledgeSearchHit[];
+  /** Counts by source, scope, status and kind — what bulk triage is built on. */
+  facets: Record<string, Record<string, number>>;
+  found: number;
+}
+
+/** Fields the running code depends on; a collection missing any is stale. */
+export const requiredPageFields = pageSchema.fields
+  .map((field) => field.name)
+  .filter((name) => name !== 'id');
 
 /**
  * Fields a free-text issue search matches against. Listing `embeddings` makes

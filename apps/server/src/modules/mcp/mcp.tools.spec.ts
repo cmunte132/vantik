@@ -99,24 +99,37 @@ function jsonOf(result: unknown) {
 }
 
 describe('vantik MCP tools', () => {
-  it('advertises the task workflow tools with descriptions', async () => {
+  it('advertises the task and knowledge tools with descriptions', async () => {
     const { client } = await connect({});
 
     const { tools } = await client.listTools();
     const names = tools.map((tool) => tool.name).sort();
 
+    // Asserted exactly rather than loosely: this list is the surface a model
+    // chooses from, and a tool silently appearing or vanishing changes agent
+    // behaviour everywhere without any other test noticing.
     expect(names).toEqual([
       'add_note',
       'close_task',
+      'consolidate_knowledge',
       'create_project',
       'create_task',
       'find_similar_tasks',
       'get_task',
+      'knowledge_gaps',
+      'link_page',
+      'list_pages',
       'list_projects',
       'list_tasks',
+      'load_context',
+      'pages_for',
       'pick_up_task',
+      'read_page',
+      'recall_knowledge',
+      'remember',
       'search_tasks',
       'update_task',
+      'write_page',
     ]);
     expect(tools.every((tool) => (tool.description ?? '').length > 20)).toBe(
       true,

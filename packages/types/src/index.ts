@@ -19,6 +19,7 @@ export * from './label';
 export * from './linked-comment';
 export * from './linked-issue';
 export * from './notification';
+export * from './page';
 export * from './prompt';
 export * from './reaction';
 export * from './sync-action';

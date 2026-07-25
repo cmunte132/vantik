@@ -1,4 +1,5 @@
 import {
+  BookLine,
   Inbox,
   MyIssues,
   Project,
@@ -72,6 +73,11 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
                     title: 'Projects',
                     icon: Project,
                     href: `/${workspaceSlug}/projects`,
+                  },
+                  {
+                    title: 'Pages',
+                    icon: BookLine,
+                    href: `/${workspaceSlug}/pages`,
                   },
                   {
                     title: 'Teams',

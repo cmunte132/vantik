@@ -6,6 +6,8 @@ import {
   assertChecklistItemInWorkspace,
   assertIssueCommentInWorkspace,
   assertIssueInWorkspace,
+  assertPageEntryInWorkspace,
+  assertPageInWorkspace,
   assertTeamInWorkspace,
   resolveWorkspaceId,
 } from 'common/workspace-access';
@@ -46,7 +48,8 @@ export class WorkspaceResourceGuard implements CanActivate {
       request.query?.workspaceId,
     );
 
-    const { issueId, issueCommentId, checklistItemId } = request.params ?? {};
+    const { issueId, issueCommentId, checklistItemId, pageEntryId } =
+      request.params ?? {};
 
     // The bulk routes carry their ids inside a body array, one per issue, so
     // the path and query alone do not describe everything the request touches.
@@ -96,6 +99,29 @@ export class WorkspaceResourceGuard implements CanActivate {
         checklistItemId,
         workspaceId,
       );
+    }
+
+    // Pages are reached by path on read and edit, and by query when appending
+    // an entry — the same split the comment routes have, and the same reason to
+    // check both rather than only params. A `parentId` in the body is
+    // deliberately not checked here: the issue routes use that name for an
+    // issue, so the page reparent path validates its own parent instead.
+    const pageIds = unique([request.params?.pageId, request.query?.pageId]);
+
+    for (const id of pageIds) {
+      await assertPageInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    // Entry triage addresses the row by id alone, with no page anywhere in the
+    // request, so without this a foreign fact could be accepted or archived.
+    const entryIds = unique([
+      pageEntryId,
+      request.body?.supersedesId,
+      ...(Array.isArray(request.body?.entryIds) ? request.body.entryIds : []),
+    ]);
+
+    for (const id of entryIds) {
+      await assertPageEntryInWorkspace(this.prisma, id, workspaceId);
     }
 
     return true;

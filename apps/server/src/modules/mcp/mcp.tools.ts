@@ -102,6 +102,64 @@ function assertSubstantialIssue(
   }
 }
 
+/**
+ * The knowledge bank's half of the same opinion, and the same division of
+ * labour.
+ *
+ * The *mechanical* limits — a page's entry policy, the per-token budget on
+ * untriaged entries, the two-phase write when near matches exist — live on the
+ * server and apply to every caller, because a tool description asking for
+ * restraint is advisory and fails against exactly the unfamiliar models this
+ * feature exists to serve.
+ *
+ * What lives here is the editorial floor: an entry is *one* fact, and a page is
+ * a thing to add to rather than a thing to create. Both failures look the same
+ * from the outside — a bank that grows faster than anyone can read it — but
+ * only one of them is worth failing a call over, and it is the one where the
+ * caller has clearly dumped a session summary into a field meant for a claim.
+ */
+const MAX_ENTRY_CONTENT_LENGTH = 600;
+const MIN_ENTRY_CONTENT_LENGTH = 15;
+
+function assertAtomicFact(content: string): void {
+  const trimmed = content.trim();
+
+  if (trimmed.length < MIN_ENTRY_CONTENT_LENGTH) {
+    throw new Error(
+      'That is too short to be a fact anyone can act on later. An entry ' +
+        'should state one thing that is true, with enough context that a ' +
+        'reader who was not in this session understands it.',
+    );
+  }
+
+  if (trimmed.length > MAX_ENTRY_CONTENT_LENGTH) {
+    throw new Error(
+      `An entry is one self-contained fact, not a summary (got ` +
+        `${trimmed.length} characters, the ceiling is ` +
+        `${MAX_ENTRY_CONTENT_LENGTH}). If this is several facts, remember ` +
+        'them one at a time so each can be scoped, verified and superseded ' +
+        'on its own. If it is narrative, it belongs in a page body — call ' +
+        'write_page or consolidate_knowledge instead.',
+    );
+  }
+
+  // A bulleted list in a single entry is the commonest way one claim becomes
+  // six: each bullet is separately true, separately falsifiable, and separately
+  // worth superseding, and none of that is possible once they share a row.
+  const bullets = trimmed
+    .split('\n')
+    .filter((line) => /^\s*[-*+]\s|^\s*\d+[.)]\s/.test(line));
+
+  if (bullets.length > 2) {
+    throw new Error(
+      `This reads as ${bullets.length} facts in one entry. Remember them ` +
+        'separately — an entry that bundles claims cannot be scoped, ' +
+        'verified or superseded one claim at a time, which is the whole ' +
+        'reason entries are atomic.',
+    );
+  }
+}
+
 export function registerVantikTools(
   server: McpServer,
   agent: VantikAgent,
@@ -361,6 +419,277 @@ export function registerVantikTools(
       },
     },
     handler(({ task, body }) => agent.addNote(task, body)),
+  );
+
+  // ------------------------------------------------------- knowledge bank
+
+  server.registerTool(
+    'load_context',
+    {
+      title: 'Load what the workspace already knows',
+      description:
+        'Call this FIRST, before starting work on anything. Returns what the ' +
+        'workspace has already established about the area you are about to ' +
+        'touch — decisions, gotchas, conventions — under a token budget you ' +
+        'set. This is the cheapest way to avoid rediscovering something a ' +
+        'previous session already paid for, and it works across harnesses: ' +
+        'knowledge another tool wrote is knowledge you get. Give it a scope ' +
+        '(the repo path or area you are working in) even if you have no ' +
+        'specific question, because at the start of a task you do not yet ' +
+        'know what you do not know.',
+      inputSchema: {
+        task: z
+          .string()
+          .optional()
+          .describe('What you are about to do, in a sentence.'),
+        scope: z
+          .string()
+          .optional()
+          .describe('Where you are working, e.g. "apps/server/prisma".'),
+        tokenBudget: z
+          .number()
+          .int()
+          .min(200)
+          .max(20000)
+          .optional()
+          .describe('How much context you can afford. Defaults to 2000.'),
+      },
+    },
+    handler((input) => agent.loadContext(input)),
+  );
+
+  server.registerTool(
+    'recall_knowledge',
+    {
+      title: 'Recall knowledge',
+      description:
+        'Ask the workspace what it knows about something — "how do we handle ' +
+        'migrations", "why is redis only a cache here". Searches page bodies ' +
+        'and the facts agents have asserted, newest and best-established ' +
+        'first, with who asserted each and whether a human confirmed it. Use ' +
+        'this before investigating something from scratch; the answer may ' +
+        'already be in the bank.',
+      inputSchema: {
+        query: z.string().describe('What you want to know.'),
+        scope: z
+          .string()
+          .optional()
+          .describe('Narrow to a repo path, team or project.'),
+        limit: z.number().int().min(1).max(50).optional(),
+      },
+    },
+    handler((input) => agent.recallKnowledge(input)),
+  );
+
+  server.registerTool(
+    'list_pages',
+    {
+      title: 'List knowledge pages',
+      description:
+        'The pages this workspace keeps. Check here before writing anything ' +
+        'down: knowledge belongs *on* an existing page far more often than it ' +
+        'belongs on a new one, and a bank of forty thin pages is one nobody ' +
+        'can navigate. Pages are few, broad and long-lived; the facts under ' +
+        'them are many.',
+      inputSchema: {},
+    },
+    handler(() => agent.listPages()),
+  );
+
+  server.registerTool(
+    'read_page',
+    {
+      title: 'Read a knowledge page',
+      description:
+        'One page in full: its body as markdown, where it sits in the tree, ' +
+        'and the facts currently being served from it. Read the page before ' +
+        'adding to it — the thing you are about to assert may already be in ' +
+        'the body, in which case there is nothing to add.',
+      inputSchema: {
+        page: z.string().describe('Page title or id.'),
+      },
+    },
+    handler(({ page }) => agent.readPage(page)),
+  );
+
+  server.registerTool(
+    'pages_for',
+    {
+      title: 'Pages about a team, project or issue',
+      description:
+        'The documentation attached to one thing in the workspace. Use this ' +
+        'the moment you are handed an issue or a project, before you search: ' +
+        'you have an id and no vocabulary, so you cannot write the query that ' +
+        'would find the page — you do not yet know it is called “Deploying ' +
+        'the worker pool”. This is a direct lookup and does not guess.\n\n' +
+        'Search is for questions. This is for “what has already been written ' +
+        'down about the thing in front of me”.',
+      inputSchema: {
+        entityType: z
+          .enum(['TEAM', 'PROJECT', 'ISSUE', 'PAGE'])
+          .describe('What kind of thing you are starting from.'),
+        entityId: z.string().describe('Its id.'),
+      },
+    },
+    handler(({ entityType, entityId }) =>
+      agent.pagesFor({ entityType, entityId }),
+    ),
+  );
+
+  server.registerTool(
+    'link_page',
+    {
+      title: 'Link a page to work',
+      description:
+        'Attach a page to the team, project or issue it is about, so the next ' +
+        'agent handed that work is given the page without having to find it.\n\n' +
+        'Link when the connection is durable — this runbook governs this ' +
+        'project, this page explains this team’s conventions. Do not link a ' +
+        'page to every issue that happened to touch it: a page attached to ' +
+        'forty issues tells the next reader nothing about which of them it ' +
+        'actually explains.',
+      inputSchema: {
+        page: z.string().describe('Page title or id.'),
+        entityType: z.enum(['TEAM', 'PROJECT', 'ISSUE', 'PAGE']),
+        entityId: z.string().describe('The id of the thing to link it to.'),
+      },
+    },
+    handler(({ page, entityType, entityId }) =>
+      agent.linkPage({ page, entityType, entityId }),
+    ),
+  );
+
+  server.registerTool(
+    'remember',
+    {
+      title: 'Remember a fact',
+      description:
+        'Write one thing you learned into the workspace’s memory, so the next ' +
+        'session — yours or another tool’s — does not have to learn it again. ' +
+        'This is the main way knowledge gets in.\n\n' +
+        'An entry is ONE self-contained fact, with a scope saying where it ' +
+        'applies. Not a summary of what you did, not a list. If you learned ' +
+        'six things, call this six times: each fact can then be scoped, ' +
+        'confirmed and corrected on its own.\n\n' +
+        'Prefer an existing page. If the fact contradicts something already ' +
+        'in the bank, supersede that entry rather than leaving a second truth ' +
+        'beside the first — two contradictory facts are worse than neither, ' +
+        'because a reader cannot tell which one the workspace believes.\n\n' +
+        'The call searches before it writes. If near matches come back, ' +
+        'nothing was written: read them, then either supersede one or say ' +
+        'the fact is distinct.',
+      inputSchema: {
+        page: z.string().describe('Page title or id to append to.'),
+        content: z
+          .string()
+          .describe('One fact, in markdown. Write it for a stranger.'),
+        scope: z
+          .string()
+          .optional()
+          .describe(
+            'Where it applies — a repo path glob, team or project. A fact ' +
+              'without a scope is served everywhere, so scope it when it is ' +
+              'not true of the whole workspace.',
+          ),
+        session: z
+          .string()
+          .optional()
+          .describe('Your session id, so the claim can be traced back.'),
+        supersedes: z
+          .string()
+          .optional()
+          .describe('Id of the entry this one replaces.'),
+        distinct: z
+          .boolean()
+          .optional()
+          .describe(
+            'Set only after reading the near matches and deciding this is a ' +
+              'separate fact.',
+          ),
+      },
+    },
+    handler((input) => {
+      // The editorial floor lives here and nowhere below: agent-core, the CLI
+      // and the REST API accept whatever a caller sends.
+      assertAtomicFact(input.content);
+      return agent.remember(input);
+    }),
+  );
+
+  server.registerTool(
+    'write_page',
+    {
+      title: 'Write a knowledge page',
+      description:
+        'Create or rewrite a page — the narrative documentation a human ' +
+        'reads. Reach for this rarely. Most of what you learn is a fact, not ' +
+        'a document: call remember instead, and let a person fold the facts ' +
+        'into prose when a shape emerges. Open a new page only when there is ' +
+        'genuinely no existing page the knowledge belongs under; check ' +
+        'list_pages first. A page needs a real body — a title with nothing ' +
+        'underneath it is a stub that makes the tree worse, not better.',
+      inputSchema: {
+        title: z.string(),
+        body: z.string().describe('Markdown. The page as a reader sees it.'),
+        parent: z
+          .string()
+          .optional()
+          .describe('Parent page title or id, to nest this under it.'),
+        entryPolicy: z
+          .enum(['OPEN', 'CURATED', 'LOCKED'])
+          .optional()
+          .describe('How strictly appends to this page are policed.'),
+      },
+    },
+    handler((input) => {
+      if (!input.body?.trim()) {
+        throw new Error(
+          'A page needs a body. A title with nothing underneath it is a stub ' +
+            'that makes the tree harder to navigate without adding anything ' +
+            'to it. If you have a fact rather than a document, call remember ' +
+            'against an existing page instead.',
+        );
+      }
+      return agent.writePage(input);
+    }),
+  );
+
+  server.registerTool(
+    'consolidate_knowledge',
+    {
+      title: 'Consolidate knowledge into a page',
+      description:
+        'Fold standing facts into a page body and mark them consolidated, so ' +
+        'the same thing is not served twice — once as narrative and once as ' +
+        'the entry it was written from. This is how the bank stays small ' +
+        'enough to stay useful; do it when a page has accumulated facts that ' +
+        'now read as a paragraph. You supply the rewritten body, because ' +
+        'deciding how a set of facts reads as prose is the judgment being ' +
+        'asked for.',
+      inputSchema: {
+        page: z.string().describe('Page title or id.'),
+        body: z.string().describe('The rewritten page body, in markdown.'),
+        entryIds: z
+          .array(z.string())
+          .optional()
+          .describe('Entries folded in. Omit to fold every standing entry.'),
+      },
+    },
+    handler((input) => agent.consolidate(input)),
+  );
+
+  server.registerTool(
+    'knowledge_gaps',
+    {
+      title: 'Knowledge gaps',
+      description:
+        'Questions agents asked that the bank could not answer, most-asked ' +
+        'first. The most direct answer available to "what should I document ' +
+        'next" — it says what people actually needed, rather than what ' +
+        'somebody thought to write down.',
+      inputSchema: {},
+    },
+    handler(() => agent.knowledgeGaps()),
   );
 
   server.registerTool(

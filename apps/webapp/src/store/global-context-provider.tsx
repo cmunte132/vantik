@@ -14,6 +14,8 @@ import { IntegrationAccountsStore } from './integration-accounts';
 import { IssueHistoryStore } from './issue-history';
 import { IssueRelationsStore } from './issue-relation';
 import { IssueSuggestionsStore } from './issue-suggestions';
+import { PageEntriesStore } from './page-entries';
+import { PagesStore } from './pages';
 import { IssuesStore } from './issues';
 import { LabelsStore } from './labels';
 import { LinkedIssuesStore } from './linked-issues';
@@ -30,6 +32,8 @@ import { WorkspaceStore } from './workspace';
 const StoreContextModel = types.model({
   commentsStore: CommentsStore,
   checklistItemsStore: ChecklistItemsStore,
+  pagesStore: PagesStore,
+  pageEntriesStore: PageEntriesStore,
   issuesHistoryStore: IssueHistoryStore,
   issuesStore: IssuesStore,
   workflowsStore: WorkflowsStore,
@@ -62,6 +66,12 @@ export const storeContextStore = StoreContextModel.create({
   },
   checklistItemsStore: {
     checklistItems: {},
+  },
+  pagesStore: {
+    pages: [],
+  },
+  pageEntriesStore: {
+    pageEntries: {},
   },
   issuesHistoryStore: {
     issueHistories: {},

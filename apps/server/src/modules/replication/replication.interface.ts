@@ -22,6 +22,8 @@ export const tablesToSendMessagesFor = new Map([
   [ModelNameEnum.ActionEntity, true],
   [ModelNameEnum.Project, true],
   [ModelNameEnum.ProjectMilestone, true],
+  [ModelNameEnum.Page, true],
+  [ModelNameEnum.PageEntry, true],
   [ModelNameEnum.Cycle, true],
   [ModelNameEnum.Conversation, true],
   [ModelNameEnum.ConversationHistory, true],

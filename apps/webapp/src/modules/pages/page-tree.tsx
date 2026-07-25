@@ -199,7 +199,10 @@ export function usePageNavigation() {
 
   return React.useCallback(
     (pageId: string) => {
-      router.push(`/${workspaceSlug}/pages/${pageId}`);
+      router.push({
+        pathname: '/[workspaceSlug]/pages/[pageId]',
+        query: { workspaceSlug, pageId },
+      });
     },
     [router, workspaceSlug],
   );

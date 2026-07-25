@@ -59,13 +59,25 @@ export const RelatedLinks = observer(({ pageId }: { pageId: string }) => {
   // lands on a blank page rather than the issue they clicked.
   const open = (link: PageLink) => {
     if (link.entityType === 'PAGE') {
-      router.push(`/${workspaceSlug}/pages/${link.entityId}`);
+      router.push({
+        pathname: '/[workspaceSlug]/pages/[pageId]',
+        query: { workspaceSlug, pageId: link.entityId },
+      });
     } else if (link.entityType === 'PROJECT') {
-      router.push(`/${workspaceSlug}/projects/${link.entityId}`);
+      router.push({
+        pathname: '/[workspaceSlug]/projects/[projectId]',
+        query: { workspaceSlug, projectId: link.entityId },
+      });
     } else if (link.entityType === 'ISSUE' && link.key) {
-      router.push(`/${workspaceSlug}/issue/${link.key}`);
+      router.push({
+        pathname: '/[workspaceSlug]/issue/[issueId]',
+        query: { workspaceSlug, issueId: link.key },
+      });
     } else if (link.entityType === 'TEAM' && link.key) {
-      router.push(`/${workspaceSlug}/team/${link.key}/all`);
+      router.push({
+        pathname: '/[workspaceSlug]/team/[teamIdentifier]/all',
+        query: { workspaceSlug, teamIdentifier: link.key },
+      });
     }
   };
 

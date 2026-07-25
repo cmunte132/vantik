@@ -123,4 +123,5 @@ export class PageHistory {
   pageId: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   changes: Record<string, any> | null;
+  previousBody: string | null;
 }

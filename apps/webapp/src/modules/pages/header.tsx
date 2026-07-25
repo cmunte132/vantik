@@ -50,7 +50,12 @@ export const Header = observer(
       <HeaderLayout actions={actions ?? create}>
         <Breadcrumb>
           <BreadcrumbItem>
-            <Link href={`/${workspaceSlug}/pages`}>
+            <Link
+              href={{
+                pathname: '/[workspaceSlug]/pages',
+                query: { workspaceSlug },
+              }}
+            >
               <BreadcrumbLink>Pages</BreadcrumbLink>
             </Link>
           </BreadcrumbItem>
@@ -59,7 +64,12 @@ export const Header = observer(
               and "Deployment" under "Sales" are different documents. */}
           {ancestors.map((ancestor) => (
             <BreadcrumbItem key={ancestor.id}>
-              <Link href={`/${workspaceSlug}/pages/${ancestor.id}`}>
+              <Link
+                href={{
+                  pathname: '/[workspaceSlug]/pages/[pageId]',
+                  query: { workspaceSlug, pageId: ancestor.id },
+                }}
+              >
                 <BreadcrumbLink>{ancestor.title}</BreadcrumbLink>
               </Link>
             </BreadcrumbItem>

@@ -51,9 +51,10 @@ export class KnowledgeController {
       sessionWorkspaceId,
       query.workspaceId,
     );
+    const limit = parseLimit(query.limit);
 
     return this.knowledgeService.search(workspaceId, query.query, {
-      limit: query.limit ? Number(query.limit) : undefined,
+      limit,
       scope: query.scope,
     });
   }
@@ -122,4 +123,14 @@ export class KnowledgeController {
       requested,
     );
   }
+}
+
+function parseLimit(limit?: string): number | undefined {
+  if (!limit) {
+    return undefined;
+  }
+
+  const parsed = Number(limit);
+
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }

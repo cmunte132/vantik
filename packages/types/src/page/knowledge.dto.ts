@@ -1,4 +1,12 @@
-import { IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  NotEquals,
+} from 'class-validator';
 
 export class KnowledgeGapsQueryDto {
   @IsOptional()
@@ -16,7 +24,10 @@ export class KnowledgeSearchQueryDto {
    * match and the query embedding for `*`, and returns the whole workspace
    * unranked — which is the unbounded dump the budget exists to prevent.
    */
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @IsNotEmpty()
+  @NotEquals('*')
   query: string;
 
   /** Restrict to facts asserted about this repo path, team or project. */
@@ -25,6 +36,7 @@ export class KnowledgeSearchQueryDto {
   scope?: string;
 
   @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   limit?: string;
 }

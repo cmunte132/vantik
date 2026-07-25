@@ -63,7 +63,12 @@ const PagesView = observer(() => {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => router.push(`/${workspaceSlug}/pages/review`)}
+                  onClick={() =>
+                    router.push({
+                      pathname: '/[workspaceSlug]/pages/review',
+                      query: { workspaceSlug },
+                    })
+                  }
                 >
                   Review
                 </Button>

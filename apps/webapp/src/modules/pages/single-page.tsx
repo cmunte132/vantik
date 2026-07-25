@@ -80,7 +80,11 @@ const SinglePageView = observer(() => {
     onError: () => setSaveState('error'),
   });
   const { mutate: deletePage } = useDeletePageMutation({
-    onSuccess: () => router.push(`/${workspaceSlug}/pages`),
+    onSuccess: () =>
+      router.push({
+        pathname: '/[workspaceSlug]/pages',
+        query: { workspaceSlug },
+      }),
   });
 
   // Entries are loaded per page, the same way checklist items are per issue —
@@ -350,7 +354,12 @@ const Backlinks = observer(({ pageId }: { pageId: string }) => {
             key={issue.id}
             type="button"
             className="text-left hover:underline"
-            onClick={() => router.push(`/${workspaceSlug}/issue/${key}`)}
+            onClick={() =>
+              router.push({
+                pathname: '/[workspaceSlug]/issue/[issueId]',
+                query: { workspaceSlug, issueId: key },
+              })
+            }
           >
             <span className="text-muted-foreground mr-2">{key}</span>
             {issue.title}

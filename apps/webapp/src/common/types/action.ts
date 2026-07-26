@@ -5,7 +5,7 @@ export interface ActionType {
   createdAt: string;
   updatedAt: string;
   config: string;
-  data?: string;
+  data: string | null;
   isPersonal: boolean;
   status: ActionStatusEnum;
   version: string;
@@ -14,7 +14,7 @@ export interface ActionType {
   description: string;
   integrations: string[];
   cron?: string;
-  workspaceId: string;
+  workspaceId: string | null;
   createdById: string;
 }
 

@@ -44,7 +44,7 @@
     "typescript": "^5.3.3"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.check.json",
+    "typecheck": "tsc -p tsconfig.json",
     "build": "pnpm run clean && pnpm run build:main",
     "build:main": "tsup",
     "dev:cli": "npm run clean && pnpm run dev:main",

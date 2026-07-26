@@ -103,6 +103,18 @@
       ]
     },
     "lint": {},
+    "test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
+    "typecheck": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": []
+    },
     "create-resources": {
       "interactive": true,
       "cache": false

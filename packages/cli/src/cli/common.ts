@@ -28,7 +28,15 @@ export class SkipLoggingError extends Error {}
 export class SkipCommandError extends Error {}
 export class OutroCommandError extends SkipCommandError {}
 
-export async function wrapCommandAction<T extends z.AnyZodObject, TResult>(
+// zod 4 dropped `AnyZodObject`. Naming the one field this function reads keeps
+// the bound tighter than that alias was: a schema without a log level no longer
+// compiles here. Richer shapes still satisfy it.
+export async function wrapCommandAction<
+  T extends z.ZodObject<{
+    logLevel: z.ZodType<CommonCommandOptions['logLevel']>;
+  }>,
+  TResult,
+>(
   name: string,
   schema: T,
   options: unknown,

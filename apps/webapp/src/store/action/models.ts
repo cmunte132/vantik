@@ -14,7 +14,7 @@ export const Action = types.model({
 
   isPersonal: types.boolean,
 
-  data: types.string,
+  data: types.union(types.string, types.null),
   status: types.enumeration([
     'DEPLOYING',
     'ERRORED',
@@ -24,7 +24,7 @@ export const Action = types.model({
     'SUSPENDED',
   ]),
 
-  workspaceId: types.string,
+  workspaceId: types.union(types.string, types.null),
 
   createdById: types.string,
 });

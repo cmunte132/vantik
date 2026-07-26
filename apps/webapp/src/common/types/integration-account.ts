@@ -27,8 +27,8 @@ export interface IntegrationAccountType {
   createdAt: string;
   updatedAt: string;
 
-  accountId: string;
-  settings: string;
+  accountId: string | null;
+  settings: string | null;
   personal: boolean;
 
   integratedById: string;

@@ -8,7 +8,7 @@ export const Conversation = types.model({
   updatedAt: types.string,
   title: types.union(types.null, types.string),
   userId: types.string,
-  workspaceId: types.string,
+  workspaceId: types.union(types.string, types.null),
 });
 
 export interface ConversationStoreType {

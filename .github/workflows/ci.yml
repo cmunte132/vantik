@@ -1,0 +1,42 @@
+name: CI
+
+# Typecheck and unit tests on every pull request. Until this existed the suites
+# in apps/server and packages/agent-core ran only when someone remembered to
+# run them, and `tsc` ran only as a side effect of a release build — which meant
+# a type error could sit on main until the next tagged image was built.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reads the version from the root package.json `packageManager` field.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the base image both Dockerfiles build on.
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Both tasks build their workspace dependencies first, so the packages
+      # webapp and server import from are compiled the same way a release is.
+      - run: pnpm run typecheck
+
+      - run: pnpm run test

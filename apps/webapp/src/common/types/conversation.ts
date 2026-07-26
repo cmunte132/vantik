@@ -7,7 +7,7 @@ export interface ConversationType {
 
   title: string;
   userId: string;
-  workspaceId: string;
+  workspaceId: string | null;
 }
 
 export interface ConversationHistoryType {

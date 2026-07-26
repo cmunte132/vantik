@@ -17,7 +17,9 @@
     "trigger-dev": "dotenv -- turbo run trigger-dev",
     "trigger-deploy": "dotenv -- turbo run trigger-deploy --filter=server --",
     "prisma:studio": "dotenv -- turbo run prisma:studio --filter=server",
-    "migrate": "dotenv -- turbo run migrate --filter=server"
+    "migrate": "dotenv -- turbo run migrate --filter=server",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
   },
   "packageManager": "pnpm@10.34.5",
   "pnpm": {

@@ -46,15 +46,26 @@ export function filterIssue(issue: IssueType, filter: FilterType) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fieldValue = (issue as any)[key];
 
+  // A filter with nothing selected is not a filter that matches nothing: it is
+  // no filter at all. Reading `includes` off the missing value instead throws,
+  // and the throw happens inside the list render, so the whole issues view
+  // goes down rather than one row. `getFilters` builds exactly such a filter
+  // for `source`, which has no case in `filterIssues`.
+  if (filterType !== FilterTypeEnum.UNDEFINED && !castedValue) {
+    return true;
+  }
+
   switch (filterType) {
     case FilterTypeEnum.IS:
       return castedValue.includes(fieldValue);
     case FilterTypeEnum.IS_NOT:
       return !castedValue.includes(fieldValue);
+    // INCLUDES and EXCLUDES compare against array columns — labelIds and the
+    // like. A row whose array is null still has to be answered for.
     case FilterTypeEnum.INCLUDES:
-      return castedValue.some((value) => fieldValue.includes(value));
+      return castedValue.some((value) => (fieldValue ?? []).includes(value));
     case FilterTypeEnum.EXCLUDES:
-      return !castedValue.some((value) => fieldValue.includes(value));
+      return !castedValue.some((value) => (fieldValue ?? []).includes(value));
     case FilterTypeEnum.UNDEFINED:
       return fieldValue === null || fieldValue === undefined;
     default:

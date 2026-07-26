@@ -28,9 +28,15 @@ const AISelectorCommands = ({ onSelect }: AISelectorCommandsProps) => {
           <CommandItem
             onSelect={(value) => {
               const slice = editor.state.selection.content();
-              const text = editor.storage.markdown.serializer.serialize(
-                slice.content,
-              );
+              // tiptap-markdown registers this storage at runtime but only
+              // augments Tiptap 2's Storage interface, so it is invisible to
+              // the compiler on Tiptap 3.
+              const { markdown } = editor.storage as unknown as {
+                markdown: {
+                  serializer: { serialize: (content: unknown) => string };
+                };
+              };
+              const text = markdown.serializer.serialize(slice.content);
               onSelect(text, value);
             }}
             className="flex gap-2 px-2"

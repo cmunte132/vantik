@@ -1,0 +1,47 @@
+version: 2
+
+# Until this existed, Dependabot ran with defaults over every manifest it could
+# find, which meant the six actions/* directories too. Those are unregistered
+# Tegon leftovers — actions/actions.json is empty, pnpm-workspace.yaml excludes
+# them, no workflow builds them and nothing under apps/ or packages/ imports
+# them — and they were producing 416 of the repository's 500 open alerts, along
+# with most of the red on the Dependabot Updates workflow. Scanning them tells
+# us about the security of code we do not ship.
+#
+# The directories below are the pnpm workspace as pnpm-workspace.yaml defines
+# it, so what Dependabot watches and what CI builds are the same set.
+updates:
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/apps/*"
+      - "/packages/*"
+      - "/tooling/*"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    # One PR per group rather than per dependency. The default behaviour opened
+    # a dozen at a time and every one of them had to run CI to prove a patch
+    # bump was harmless.
+    groups:
+      production-minor-patch:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The workflows pin actions by major tag, so this is mostly about picking up
+  # the Node runtime bumps that show as deprecation warnings on every run.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      actions:
+        patterns:
+          - "*"

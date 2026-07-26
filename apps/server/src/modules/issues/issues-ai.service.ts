@@ -13,7 +13,6 @@ import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
 import IssueRelationService from 'modules/issue-relation/issue-relation.service';
 import { LoggerService } from 'modules/logger/logger.service';
-import { LLMMappings } from 'modules/prompts/prompts.interface';
 import { VectorService } from 'modules/vector/vector.service';
 
 import {
@@ -492,7 +491,7 @@ export default class IssuesAIService {
           labels: ${JSON.stringify(labelNames)}`,
           },
         ],
-        llmModel: LLMMappings[subIssuePrompt.model],
+        llmModel: subIssuePrompt.model,
         model: 'SubIssues',
       },
       subIssueInput.workspaceId,
@@ -561,7 +560,7 @@ export default class IssuesAIService {
                 user_input: ${descriptionInput.userInput}`,
             },
           ],
-          llmModel: LLMMappings[descriptionPrompt.model],
+          llmModel: descriptionPrompt.model,
           model: 'IssueDescrptionStream',
         },
         descriptionInput.workspaceId,

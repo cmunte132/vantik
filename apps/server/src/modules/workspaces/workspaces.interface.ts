@@ -1,4 +1,3 @@
-import { LLMModels } from '@prisma/client';
 import { RoleEnum, WorkspaceStatusEnum } from '@vantikhq/types';
 import {
   filterPrompt,
@@ -83,36 +82,36 @@ export const promptsSeedData = [
   {
     name: 'IssueTitle',
     prompt: issueTitlePrompt,
-    model: LLMModels.GPT35TURBO,
+    model: 'fast',
   },
   {
     name: 'IssueLabels',
     prompt: issueLabelPrompt,
-    model: LLMModels.GPT35TURBO,
+    model: 'fast',
   },
   {
     name: 'IssueSummary',
     prompt: issueSummarizePrompt,
-    model: LLMModels.GPT35TURBO,
+    model: 'fast',
   },
   {
     name: 'Filter',
     prompt: filterPrompt,
-    model: LLMModels.GPT4TURBO,
+    model: 'smart',
   },
   {
     name: 'SubIssues',
     prompt: subIssuesPrompt,
-    model: LLMModels.GPT4TURBO,
+    model: 'smart',
   },
   {
     name: 'ViewNameDescription',
     prompt: viewNameDescriptionPrompt,
-    model: LLMModels.GPT35TURBO,
+    model: 'fast',
   },
   {
     name: 'IssueDescription',
     prompt: issueDescriptionPrompt,
-    model: LLMModels.GPT4O,
+    model: 'smart',
   },
 ];

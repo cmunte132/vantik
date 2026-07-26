@@ -3,7 +3,6 @@ import { CreateIssueDto, UpdateIssueDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
-import { LLMMappings } from 'modules/prompts/prompts.interface';
 
 const logger = new Logger('IssuesAIUtils');
 
@@ -25,7 +24,7 @@ export async function getIssueTitle(
           { role: 'system', content: titlePrompt.prompt },
           { role: 'user', content: issueData.description },
         ],
-        llmModel: LLMMappings[titlePrompt.model],
+        llmModel: titlePrompt.model,
         model: 'IssueTitle',
       },
       workspaceId,
@@ -56,7 +55,7 @@ export async function getAiFilter(
           { role: 'system', content: filterPrompt },
           { role: 'user', content: filterText },
         ],
-        llmModel: LLMMappings[aiFilterPrompt.model],
+        llmModel: aiFilterPrompt.model,
         model: 'AIFilters',
       },
       workspaceId,
@@ -92,7 +91,7 @@ export async function getSuggestedLabels(
           content: `Text Description  -  ${description} \n Company Specific Labels -  ${labels.join(',')}`,
         },
       ],
-      llmModel: LLMMappings[labelPrompt.model],
+      llmModel: labelPrompt.model,
       model: 'LabelSuggestion',
     },
     workspaceId,
@@ -117,7 +116,7 @@ export async function getSummary(
           content: `[INPUT] conversations: ${conversations}`,
         },
       ],
-      llmModel: LLMMappings[summarizePrompt.model],
+      llmModel: summarizePrompt.model,
       model: 'IssueSummary',
     },
     workspaceId,

@@ -1,5 +1,5 @@
-import { LLMModelEnum, LLMModelType } from '@vantikhq/types';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { LLMRoles } from '@vantikhq/types';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 export class PromptInput {
   @IsString()
@@ -8,15 +8,9 @@ export class PromptInput {
   @IsString()
   prompt: string;
 
+  // Named `model` to match the column. It was `models` before, so it never
+  // bound to anything and the validator never ran.
   @IsOptional()
-  @IsEnum(LLMModelEnum)
-  models: LLMModelType;
-}
-
-export enum LLMMappings {
-  GPT35TURBO = 'gpt-3.5-turbo',
-  GPT4TURBO = 'gpt-4-turbo',
-  LLAMA3 = 'llama3',
-  CLAUDEOPUS = 'opus',
-  GPT4O = 'gpt-4o',
+  @IsIn(LLMRoles)
+  model: string;
 }

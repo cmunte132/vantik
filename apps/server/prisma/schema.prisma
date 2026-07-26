@@ -824,9 +824,12 @@ model Prompt {
   updatedAt DateTime  @updatedAt
   deleted   DateTime?
 
-  name        String
-  prompt      String
-  model       LLMModels @default(GPT35TURBO)
+  name   String
+  prompt String
+  // A role — "fast" or "smart" — not a model name. Which model serves each
+  // role is deployment configuration (LLM_MODEL_FAST / LLM_MODEL_SMART), so
+  // reaching a new model is not a schema change.
+  model       String    @default("fast")
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
 
@@ -1314,14 +1317,6 @@ enum InviteStatus {
   INVITED
   ACCEPTED
   DECLINED
-}
-
-enum LLMModels {
-  GPT35TURBO
-  GPT4TURBO
-  LLAMA3
-  CLAUDEOPUS
-  GPT4O
 }
 
 enum CycleHistoryChangeType {

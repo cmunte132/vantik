@@ -12,12 +12,12 @@ import { DeleteLine, MoreLine } from '@vantikhq/ui/icons';
 import { format } from 'date-fns';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
 import * as React from 'react';
 
 import type { CycleType } from 'common/types';
 
 import { useCurrentTeam } from 'hooks/teams';
+import { useCurrentWorkspace } from 'hooks/workspace';
 
 import { useStartCycleMutation } from 'services/cycle';
 
@@ -42,7 +42,7 @@ const STATUS_LABEL: Record<string, string> = {
 export const CycleListItem = observer(
   ({ cycle, nextCycle, showControls }: CycleListItemProps) => {
     const team = useCurrentTeam();
-    const { query } = useRouter();
+    const workspace = useCurrentWorkspace();
     const { toast } = useToast();
 
     const [completeOpen, setCompleteOpen] = React.useState(false);
@@ -73,7 +73,7 @@ export const CycleListItem = observer(
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <Link
-                href={`/${query.workspaceSlug}/team/${team?.identifier}/cycles/${cycle.number}`}
+                href={`/${workspace?.slug}/team/${team?.identifier}/cycles/${cycle.number}`}
                 className="text-md hover:underline"
               >
                 {cycle.name}

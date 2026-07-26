@@ -39,6 +39,5 @@ export function useCycleIssueCounts(cycleId?: string) {
       finished: finished.length,
       unfinished: issues.length - finished.length,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [issues.length, workflows, cycleId]);
+  }, [issues, workflows, cycleId]);
 }

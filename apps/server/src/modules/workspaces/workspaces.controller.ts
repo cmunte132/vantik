@@ -48,9 +48,8 @@ export class WorkspacesController {
     @Res() res: Response,
     @Req() req: Request,
   ) {
-    const userId = getAppUserId(session);
     await this.workspacesService.createInitialResources(
-      userId,
+      session,
       workspaceData,
       res,
       req,
@@ -74,13 +73,11 @@ export class WorkspacesController {
     @Res() response: Response,
     @Req() request: Request,
   ) {
-    const userId = getAppUserId(session);
-
     return await this.workspacesService.inviteAction(
       request,
       response,
       inviteActionBody.inviteId,
-      userId,
+      session,
       inviteActionBody.accept,
     );
   }

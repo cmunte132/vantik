@@ -158,19 +158,20 @@ export default class TeamsService {
       },
     });
 
-    await this.prisma.team.update({
+    // The updated row, not the one read a moment ago. Callers use the response
+    // to refresh what they show, and returning the pre-merge team meant a
+    // settings form snapped back to the old value until a sync arrived.
+    return await this.prisma.team.update({
       where: {
         id: team.id,
       },
       data: {
         preferences: {
-          ...(team.preferences as Record<string, string | boolean>),
+          ...(team.preferences as Record<string, string | number | boolean>),
           ...preferencesDto,
         },
       },
     });
-
-    return team;
   }
 
   async deleteTeam(teamRequestParams: TeamRequestParams): Promise<Team> {

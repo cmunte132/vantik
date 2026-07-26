@@ -71,6 +71,10 @@ export const TEAM_LINKS: LinkItem[] = [
     href: 'workflow',
   },
   {
+    title: 'Cycles',
+    href: 'cycles',
+  },
+  {
     title: 'Labels',
     href: 'labels',
   },

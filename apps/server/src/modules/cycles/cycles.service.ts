@@ -27,7 +27,8 @@ export class CyclesService {
       select: { number: true },
     });
 
-    let currentCycleNumber = (latestCycle?.number ?? 0) + 1;
+    const firstCycleNumber = (latestCycle?.number ?? 0) + 1;
+    let currentCycleNumber = firstCycleNumber;
     let currentStartDate = this.roundToNearest30Minutes(new Date());
     const cyclesData = [];
 
@@ -55,9 +56,12 @@ export class CyclesService {
     const cycles = await this.prisma.$transaction(
       cyclesData.map((cycle) => this.prisma.cycle.create({ data: cycle })),
     );
+    // The number of the batch's first cycle — the one created CURRENT — not a
+    // hardcoded 1. A team that already ran cycles 1-12 continues at 13, and
+    // pinning the pointer to 1 sent it at a cycle that had long since closed.
     await this.prisma.team.update({
       where: { id: teamId },
-      data: { currentCycle: 1 },
+      data: { currentCycle: firstCycleNumber },
     });
 
     return cycles;

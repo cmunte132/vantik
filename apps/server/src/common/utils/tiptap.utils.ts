@@ -25,7 +25,7 @@ import { Underline } from '@tiptap/extension-underline';
 // Node ("generateHTML can only be used in a browser environment"). The /server
 // entry point runs the same conversion on happy-dom instead.
 import { generateHTML, generateJSON } from '@tiptap/html/server';
-import { marked } from 'marked';
+import { marked, Renderer, Tokens } from 'marked';
 import TurndownService from 'turndown';
 
 import {
@@ -91,7 +91,90 @@ function buildTurndownService(): TurndownService {
     replacement: (content) => (content ? `~~${content}~~` : ''),
   });
 
+  // TaskItem renders its checkbox as <label><input><span></span></label>
+  // alongside the text. Turndown keeps the label's (empty) text and drops the
+  // input, so the checked state was lost and every task item came back as a
+  // plain bullet. Drop the control here and re-derive the state from
+  // data-checked below, which is where tiptap actually stores it.
+  service.addRule('taskItemControl', {
+    filter: (node) =>
+      node.nodeName === 'LABEL' &&
+      node.parentElement?.getAttribute('data-type') === 'taskItem',
+    replacement: () => '',
+  });
+
+  service.addRule('taskItem', {
+    filter: (node) =>
+      node.nodeName === 'LI' && node.getAttribute('data-type') === 'taskItem',
+    replacement: (content, node) => {
+      const checked =
+        (node as HTMLElement).getAttribute('data-checked') === 'true';
+      // The item's paragraph arrives with the blank lines turndown puts around
+      // a block; a task item is one line, so collapse them.
+      const text = content.trim().replace(/\s*\n\s*/g, ' ');
+      return `- [${checked ? 'x' : ' '}] ${text}\n`;
+    },
+  });
+
   return service;
+}
+
+/**
+ * Emits tiptap's task-list markup for GFM checkboxes.
+ *
+ * `marked` renders `- [ ] x` as `<li><input type="checkbox"> x</li>`, which is
+ * correct GFM but not what tiptap looks for: TaskList only matches
+ * `ul[data-type="taskList"]` and TaskItem only `li[data-type="taskItem"]`.
+ * Without this the whole list parsed as a plain bulletList and every checkbox
+ * was dropped on the way in.
+ */
+class TiptapTaskRenderer extends Renderer {
+  override list(token: Tokens.List): string {
+    // Ordered lists keep their own node type even when GFM allows a checkbox
+    // in them, so only bullet lists are candidates here.
+    if (token.ordered || !token.items.some((item) => item.task)) {
+      return super.list(token);
+    }
+
+    // A list can mix checkboxes and plain bullets, but tiptap's taskList only
+    // accepts taskItem children — feeding it a bare <li> gets the item coerced
+    // into a different list type entirely. Emit each consecutive run as its
+    // own list so both kinds survive as what they are.
+    let html = '';
+    let index = 0;
+
+    while (index < token.items.length) {
+      const isTask = token.items[index].task;
+      const run: Tokens.ListItem[] = [];
+
+      while (index < token.items.length && token.items[index].task === isTask) {
+        run.push(token.items[index] as Tokens.ListItem);
+        index++;
+      }
+
+      const items = run.map((item) => this.listitem(item)).join('');
+      html += isTask
+        ? `<ul data-type="taskList">${items}</ul>`
+        : `<ul>${items}</ul>`;
+    }
+
+    return html;
+  }
+
+  override listitem(item: Tokens.ListItem): string {
+    if (!item.task) {
+      return super.listitem(item);
+    }
+
+    // TaskItem's content is `paragraph block*`, so the text has to be wrapped
+    // — a bare text node would be dropped by the schema.
+    const inner = this.parser.parse(item.tokens, true).trim();
+    const body = inner.startsWith('<') ? inner : `<p>${inner}</p>`;
+
+    return `<li data-type="taskItem" data-checked="${Boolean(
+      item.checked,
+    )}">${body}</li>`;
+  }
 }
 
 export function convertTiptapJsonToText(
@@ -491,7 +574,10 @@ export function convertMarkdownToTiptapJson(markdown: string) {
     breaks: true, // Render line breaks as <br>
   };
   const tokens = marked.lexer(markdown, markedOptions);
-  const htmlText = marked.parser(tokens, markedOptions);
+  const htmlText = marked.parser(tokens, {
+    ...markedOptions,
+    renderer: new TiptapTaskRenderer(),
+  });
 
   return convertHtmlToTiptapJson(htmlText);
 }

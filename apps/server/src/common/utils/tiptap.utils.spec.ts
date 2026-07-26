@@ -158,6 +158,72 @@ describe('convertMarkdownToTiptapJson', () => {
     expect(markdown).toContain('_retried_');
     expect(markdown).toContain('~~reverted~~');
   });
+
+  // Acceptance criteria arrive as GFM checklists, so losing the box turns a
+  // tracked criterion into an untracked bullet. marked renders these as
+  // <li><input type="checkbox">, which is correct GFM but not the
+  // data-type="taskList" markup tiptap's schema matches on.
+  it('parses GFM task items as a task list, preserving checked state', () => {
+    const tiptap = convertMarkdownToTiptapJson(
+      '- [ ] first thing\n- [x] second thing',
+    );
+
+    expect(tiptap).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'taskList',
+          content: [
+            expect.objectContaining({
+              type: 'taskItem',
+              attrs: { checked: false },
+            }),
+            expect.objectContaining({
+              type: 'taskItem',
+              attrs: { checked: true },
+            }),
+          ],
+        },
+      ],
+    });
+  });
+
+  it('round-trips task items as checkboxes', () => {
+    const source = '- [ ] first thing\n- [x] second thing';
+
+    const markdown = convertTiptapJsonToMarkdown(
+      JSON.stringify(convertMarkdownToTiptapJson(source)),
+    );
+
+    expect(markdown.trim()).toBe(source);
+  });
+
+  it('leaves plain bullet lists as bullet lists', () => {
+    const tiptap = convertMarkdownToTiptapJson('- one\n- two');
+
+    expect(JSON.stringify(tiptap)).toContain('"bulletList"');
+    expect(JSON.stringify(tiptap)).not.toContain('taskList');
+  });
+
+  // A taskList only accepts taskItem children, so emitting one list for a
+  // mixed run got the plain bullet coerced into another list type entirely.
+  it('splits a mixed list so both kinds survive', () => {
+    const markdown = convertTiptapJsonToMarkdown(
+      JSON.stringify(
+        convertMarkdownToTiptapJson('- [ ] a task\n- plain bullet'),
+      ),
+    );
+
+    expect(markdown).toContain('- [ ] a task');
+    expect(markdown).toMatch(/-\s+plain bullet/);
+    expect(markdown).not.toContain('[ ] plain bullet');
+  });
+
+  it('does not tick an item whose text merely mentions a checkbox', () => {
+    const tiptap = convertMarkdownToTiptapJson('- a bullet citing [x] inline');
+
+    expect(JSON.stringify(tiptap)).not.toContain('taskItem');
+  });
 });
 
 // This text is what gets indexed for search, so anything dropped here is

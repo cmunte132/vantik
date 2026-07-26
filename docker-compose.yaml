@@ -25,7 +25,9 @@ services:
     build:
       context: .
       dockerfile: ./apps/webapp/Dockerfile
-    image: vantikhq/vantik-webapp:${VERSION:-latest}
+    # Releases are published to GitHub Container Registry. Override REGISTRY to
+    # pull from a fork's namespace; the default matches what CI publishes.
+    image: ${REGISTRY:-ghcr.io/cmunte132}/vantik-webapp:${VERSION:-latest}
     restart: unless-stopped
     depends_on:
       server:
@@ -46,7 +48,7 @@ services:
     build:
       context: .
       dockerfile: ./apps/server/Dockerfile
-    image: vantikhq/vantik-server:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io/cmunte132}/vantik-server:${VERSION:-latest}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -110,7 +112,11 @@ services:
 
   redis:
     container_name: vantik-redis
-    image: redis:7-alpine
+    # 8.x rather than 7.x: 7.2 is still patched, but ships on an older Alpine
+    # base and so carries more OS-level CVEs. Redis 8 reads a 7.x RDB, but once
+    # it writes one, 7.x can no longer read it — a downgrade means discarding
+    # the volume (it holds BullMQ job state, which regenerates).
+    image: redis:8-alpine
     restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379"
@@ -129,7 +135,7 @@ services:
     # Pinned deliberately. An auth core that moves under us on every pull is a
     # liability, and the SDKs speak a specific CDI version: supertokens-node 24
     # needs CDI 5.3, which this core serves.
-    image: supertokens/supertokens-postgresql:12.0.6
+    image: supertokens/supertokens-postgresql:12.0.7
     restart: unless-stopped
     depends_on:
       postgres:
@@ -148,7 +154,11 @@ services:
 
   typesense:
     container_name: vantik-typesense
-    image: typesense/typesense:27.1
+    # 27.x → 30.x needs no reindex: v30 still supports downgrading to any
+    # version above v27, so the on-disk format carries over. The v30 auto-
+    # migration of synonyms/curation/analytics rules does not apply — none are
+    # used here.
+    image: typesense/typesense:30.2
     restart: unless-stopped
     command:
       ["--data-dir", "/data", "--api-key", "${TYPESENSE_API_KEY:-random_API_key}"]

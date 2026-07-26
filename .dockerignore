@@ -1,8 +1,37 @@
+# Only this file is consulted. Both images build with the repo root as context,
+# so a .dockerignore next to a Dockerfile would never be read.
+#
+# Everything here is either large or churning. Churn matters more than size: the
+# build context is ~15MB, but any byte that changes invalidates the source COPY
+# in the builder stage, so editor droppings and local build state belong here
+# even when they are tiny.
+
+# Build output and dependencies — reinstalled/rebuilt inside the image.
 node_modules
 **/node_modules
 **/.next
 **/dist
 **/build
 **/.turbo
+out
+
+# Local state that changes constantly and means nothing to a build.
 .git
+.DS_Store
+**/.DS_Store
+**/*.tsbuildinfo
+*.log
+.vscode
+.idea
+
+# Agent and editor config. .claude also holds credentials (pat.key) that must
+# never reach an image layer.
+.claude
+
+# Secrets. apps/webapp/.prod.env is deliberately NOT ignored — it holds only
+# NEXT_PUBLIC_VERSION and the webapp build reads it.
 .env
+.env.prod
+
+# CI definitions are not part of any image.
+.github

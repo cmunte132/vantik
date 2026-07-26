@@ -1,5 +1,17 @@
 name: Build Docker Images
 
+# Publishes to GitHub Container Registry. Authentication is the workflow's own
+# GITHUB_TOKEN — no external registry account and no long-lived secret to
+# rotate. The `packages: write` permission below is what makes that token
+# usable for pushing.
+#
+# Each image is built once per architecture on a runner of that architecture,
+# pushed by digest, and the two digests are then joined into one manifest list.
+#
+# The previous version built linux/arm64 on an x86 runner under QEMU emulation,
+# which runs roughly 5-10x slower than native, and carried no build cache at
+# all — every tag re-downloaded ~1900 npm packages from scratch.
+
 on:
   push:
     tags:
@@ -7,44 +19,117 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-webapp:
-    runs-on: ubuntu-latest
+  build:
+    name: ${{ matrix.app }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [webapp, server]
+        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
 
     steps:
-      - uses: actions/checkout@v2
-        with:
-          ref: main
+      # No `ref:` — a tag push must build the tagged commit. The previous
+      # version pinned `ref: main`, so a tag built whatever main happened to be
+      # at that moment rather than the commit that was tagged.
+      - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+      - name: Resolve image name and platform slug
+        run: |
+          # GHCR rejects uppercase in image paths, and repository_owner
+          # preserves the casing of the GitHub account.
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/vantik-${{ matrix.app }}" >> "$GITHUB_ENV"
+          platform="${{ matrix.platform }}"
+          echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Registry
-        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Frontend Docker Image
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: ${{ matrix.platform }}
+          # Only the webapp declares this ARG; passing it to the server build
+          # would just warn about an unconsumed build-arg.
+          build-args: ${{ matrix.app == 'webapp' && format('SENTRY_AUTH_TOKEN={0}', secrets.SENTRY_AUTH_TOKEN) || '' }}
+          # Scoped per app and platform so the four jobs do not evict each
+          # other. mode=max keeps intermediate stages, which is what makes the
+          # dependency-install layers reusable across runs.
+          cache-from: type=gha,scope=${{ matrix.app }}-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}-${{ env.PLATFORM_PAIR }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
         run: |
-          docker buildx build --platform linux/amd64,linux/arm64 -f apps/webapp/Dockerfile -t vantikhq/vantik-webapp:${{ github.ref_name }} --build-arg SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }} --push .
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
 
-  build-server:
-    runs-on: ubuntu-latest
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.app }}-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish ${{ matrix.app }} manifest
+    runs-on: ubuntu-24.04
+    needs: [build]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [webapp, server]
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Download digests
+        uses: actions/download-artifact@v4
         with:
-          ref: main
+          path: /tmp/digests
+          pattern: digests-${{ matrix.app }}-*
+          merge-multiple: true
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+      - name: Resolve image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/vantik-${{ matrix.app }}" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Registry
-        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Server Docker Image
+      - name: Create and push manifest list
+        working-directory: /tmp/digests
         run: |
-          docker buildx build --platform linux/amd64,linux/arm64 -f apps/server/Dockerfile -t vantikhq/vantik-server:${{ github.ref_name }} --push .
+          docker buildx imagetools create \
+            -t "${IMAGE}:${{ github.ref_name }}" \
+            $(printf "${IMAGE}@sha256:%s " *)
+
+      - name: Inspect
+        run: docker buildx imagetools inspect "${IMAGE}:${{ github.ref_name }}"

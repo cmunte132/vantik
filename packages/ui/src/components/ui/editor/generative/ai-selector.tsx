@@ -1,6 +1,6 @@
 'use client';
 
-import { useCompletion } from 'ai/react';
+import { useCompletion } from '@ai-sdk/react';
 import { useState } from 'react';
 import Markdown from 'react-markdown';
 

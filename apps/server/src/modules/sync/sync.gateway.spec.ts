@@ -21,9 +21,13 @@ function buildClient(query: Record<string, string>) {
     id: 'socket-1',
     handshake: { query, headers: { cookie: 'sAccessToken=token' } },
     join: jest.fn(),
+    // The gateway announces its build to each client that connects, so a fake
+    // socket without this throws before the assertions are reached.
+    emit: jest.fn(),
     disconnect: jest.fn(),
   } as unknown as Socket & {
     join: jest.Mock;
+    emit: jest.Mock;
     disconnect: jest.Mock;
   };
 }

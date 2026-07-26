@@ -1,6 +1,10 @@
 import { VantikClient, VantikClientConfig } from './client';
 import { Directory, isUuid, parseIssueKey } from './directory';
-import { VantikAmbiguousError, VantikNotFoundError } from './errors';
+import {
+  VantikAmbiguousError,
+  VantikError,
+  VantikNotFoundError,
+} from './errors';
 import {
   ConsolidateInput,
   ContextPack,
@@ -22,6 +26,7 @@ import {
   WritePageInput,
 } from './knowledge';
 import {
+  DefinitionOfDone,
   Paginated,
   PriorityName,
   Project,
@@ -30,11 +35,19 @@ import {
   TaskNote,
   TaskRef,
   TaskSearchHit,
+  UpdateCriteriaInput,
   WorkflowCategory,
   WorkflowState,
   priorityByName,
   priorityNames,
 } from './types';
+
+interface RawChecklistItem {
+  id: string;
+  body: string;
+  completed: boolean;
+  sortOrder: number | null;
+}
 
 /** Server-side shapes we consume. Kept local so agent-core stays standalone. */
 interface RawIssue {
@@ -72,6 +85,7 @@ interface RawContext {
     issue: { id: string; key: string; title: string };
   }>;
   linkedIssues: Array<{ url: string; title: string | null }>;
+  criteria: Array<{ id: string; body: string; completed: boolean }>;
   comments: RawComment[];
   history: Array<{
     at: string;
@@ -442,6 +456,108 @@ export class VantikAgent {
     );
   }
 
+  /**
+   * The task's Definition of Done as it stands.
+   *
+   * Reads the criteria on their own rather than through the context endpoint,
+   * which is called on the way into and out of a change where the rest of the
+   * context would be dead weight.
+   */
+  async getDefinitionOfDone(reference: string): Promise<DefinitionOfDone> {
+    const { id } = await this.resolveTask(reference);
+    return toDefinitionOfDone(await this.criteriaRows(id));
+  }
+
+  /**
+   * Ticks, unticks and appends criteria in one call, and reports where that
+   * leaves the task.
+   *
+   * Returning the resulting Definition of Done rather than nothing is the
+   * point: a caller ticking the last of seventeen wants to know it was the
+   * last, and one that has to make a second request to find out mostly will
+   * not.
+   */
+  async updateCriteria(
+    reference: string,
+    input: UpdateCriteriaInput,
+  ): Promise<DefinitionOfDone> {
+    const tick = input.tick ?? [];
+    const untick = input.untick ?? [];
+
+    const contradictory = tick.filter((id) => untick.includes(id));
+    if (contradictory.length) {
+      throw new VantikError(
+        `Cannot tick and untick the same criteria in one call: ` +
+          `${contradictory.join(', ')}. Nothing was changed. Send whichever ` +
+          'you meant.',
+      );
+    }
+
+    const { id } = await this.resolveTask(reference);
+    const existing = await this.criteriaRows(id);
+    const rowById = new Map(existing.map((row) => [row.id, row]));
+
+    // Checked against *this* task before anything is written, so a criterion id
+    // copied from another issue is refused rather than quietly edited there —
+    // the routes address a row by id alone.
+    const unknown = [...tick, ...untick].filter((each) => !rowById.has(each));
+    if (unknown.length) {
+      throw new VantikNotFoundError(
+        `No criteria on ${reference} with id ${unknown.join(', ')}. Nothing ` +
+          'was changed. Call get_task to read the current ids.',
+      );
+    }
+
+    const setCompleted = (ids: string[], completed: boolean) =>
+      ids.map((criterionId) =>
+        this.client.post(`/checklist_items/${criterionId}`, {
+          body: { completed },
+        }),
+      );
+
+    await Promise.all([
+      ...setCompleted(tick, true),
+      ...setCompleted(untick, false),
+    ]);
+
+    const added = (input.add ?? [])
+      .map((criterion) => criterion.trim())
+      .filter(Boolean);
+
+    if (added.length) {
+      // Appended after what is already there, and numbered here rather than by
+      // the server: left alone each would land at max+1 read per request, so
+      // posting them together would race and the list would come back shuffled.
+      const highest = existing.reduce(
+        (max, row) => Math.max(max, row.sortOrder ?? 0),
+        0,
+      );
+
+      await Promise.all(
+        added.map((body, index) =>
+          this.client.post('/checklist_items', {
+            query: { issueId: id },
+            body: { body, sortOrder: highest + index + 1 },
+          }),
+        ),
+      );
+    }
+
+    return toDefinitionOfDone(await this.criteriaRows(id));
+  }
+
+  private async criteriaRows(issueId: string): Promise<RawChecklistItem[]> {
+    const rows = await this.client.get<RawChecklistItem[]>('/checklist_items', {
+      query: { issueId },
+    });
+
+    // A server old enough not to serve this answers with something that is not
+    // a list. "No criteria" is the honest reading there, and it keeps a caller
+    // that only wanted to close a task from failing over a field it never
+    // asked about.
+    return Array.isArray(rows) ? rows : [];
+  }
+
   async updateTask(
     reference: string,
     input: UpdateTaskInput,
@@ -524,10 +640,19 @@ export class VantikAgent {
    * issue's resolution, which is what makes "how was this fixed last time?"
    * answerable later.
    */
+  /**
+   * Closes the task and reports what its Definition of Done looked like at the
+   * moment it closed.
+   *
+   * Warn, never block — the same posture the webapp takes when a state change
+   * would complete an issue with criteria still open. The close goes through
+   * either way; the caller is told, and deciding what that means is the
+   * caller's job, not this layer's.
+   */
   async closeTask(
     reference: string,
     input: CloseTaskInput = {},
-  ): Promise<TaskRef> {
+  ): Promise<TaskRef & { definitionOfDone: DefinitionOfDone }> {
     const task = await this.resolveTask(reference);
 
     if (input.resolution) {
@@ -538,12 +663,18 @@ export class VantikAgent {
       ? await this.directory.resolveState(task.teamId, input.state)
       : await this.directory.stateForCategory(task.teamId, 'COMPLETED');
 
+    // Read before the state change, so what comes back describes the task as it
+    // was closed rather than as it might be a moment later.
+    const definitionOfDone = toDefinitionOfDone(
+      await this.criteriaRows(task.id),
+    );
+
     await this.client.post<RawIssue>(`/issues/${task.id}`, {
       query: { teamId: task.teamId },
       body: { stateId: state.id },
     });
 
-    return task;
+    return { ...task, definitionOfDone };
   }
 
   // ------------------------------------------------------- knowledge bank
@@ -1053,6 +1184,7 @@ export class VantikAgent {
       subIssues,
       relations,
       linkedIssues,
+      criteria,
       comments,
       history,
       ...rest
@@ -1080,6 +1212,10 @@ export class VantikAgent {
         task: relation.issue,
       })),
       links: linkedIssues,
+      // An older server does not send this. An empty Definition of Done reads
+      // as "none set", which is the truth there — a missing field would instead
+      // make every caller guard, and the ones that forgot would crash.
+      definitionOfDone: toDefinitionOfDone(criteria ?? []),
       notes: comments.map((comment) => this.toNote(comment)),
       history: history.map((entry) => ({
         ...entry,
@@ -1090,6 +1226,20 @@ export class VantikAgent {
       })),
     };
   }
+}
+
+function toDefinitionOfDone(
+  rows: Array<{ id: string; body: string; completed: boolean }>,
+): DefinitionOfDone {
+  return {
+    completed: rows.filter((row) => row.completed).length,
+    total: rows.length,
+    criteria: rows.map((row) => ({
+      id: row.id,
+      body: row.body,
+      completed: row.completed,
+    })),
+  };
 }
 
 function toArray<T>(value: T | T[]): T[] {

@@ -179,6 +179,20 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     subIssue: [issueRows[2]],
     comments,
     history: historyRows,
+    checklistItems: [
+      {
+        id: 'criterion-1',
+        body: 'The pool size is configurable',
+        completed: true,
+        completedAt: new Date('2026-01-02T09:00:00Z'),
+      },
+      {
+        id: 'criterion-2',
+        body: 'Exhaustion is logged',
+        completed: false,
+        completedAt: null,
+      },
+    ],
     linkedIssue: [
       {
         id: 'link-1',
@@ -276,6 +290,31 @@ describe('IssueContextService', () => {
         'Pool exhausted during the nightly job',
       );
       expect(JSON.stringify(context)).not.toContain('"type":"doc"');
+    });
+
+    it('carries the Definition of Done, in order and with its ticked state', async () => {
+      const service = new IssueContextService(buildPrisma());
+
+      const context = await service.getIssueContext('issue-1');
+
+      // The criteria have to arrive with the context rather than behind a
+      // second request. A caller that must know they exist before it can ask
+      // will not ask — it will infer a standard from the description and then
+      // report done against that.
+      expect(context.criteria).toEqual([
+        {
+          id: 'criterion-1',
+          body: 'The pool size is configurable',
+          completed: true,
+          completedAt: new Date('2026-01-02T09:00:00Z'),
+        },
+        {
+          id: 'criterion-2',
+          body: 'Exhaustion is logged',
+          completed: false,
+          completedAt: null,
+        },
+      ]);
     });
 
     it('normalises relations to the requested issue perspective', async () => {

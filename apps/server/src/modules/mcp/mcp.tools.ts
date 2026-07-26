@@ -250,9 +250,12 @@ export function registerVantikTools(
     {
       title: 'Get task context',
       description:
-        'Everything about one task in a single call: description, notes, ' +
-        'full change history, sub-tasks, blocking relations and links. Call ' +
-        'this before starting work on a task.',
+        'Everything about one task in a single call: description, its ' +
+        'Definition of Done, notes, full change history, sub-tasks, blocking ' +
+        'relations and links. Call this before starting work on a task. The ' +
+        'Definition of Done is the standard the work is judged against — read ' +
+        'it rather than inferring one from the description, and tick each ' +
+        'criterion off with update_criteria as you meet it.',
       inputSchema: { task: taskRef },
     },
     handler(({ task }) => agent.getTask(task)),
@@ -384,6 +387,38 @@ export function registerVantikTools(
       },
     },
     handler(({ task, ...rest }) => agent.updateTask(task, rest)),
+  );
+
+  server.registerTool(
+    'update_criteria',
+    {
+      title: 'Update Definition of Done',
+      description:
+        'Tick, untick and append criteria on a task’s Definition of Done. ' +
+        'Tick each one as you meet it rather than all of them at the end: a ' +
+        'half-finished task that says which half is worth far more to whoever ' +
+        'picks it up than one claiming nothing. Criterion ids come from ' +
+        'get_task, and the response reports where the task now stands. Append ' +
+        'a criterion when the work uncovers a condition the issue did not ' +
+        'anticipate — never to describe what you happened to do, which is how ' +
+        'a Definition of Done decays into a changelog.',
+      inputSchema: {
+        task: taskRef,
+        tick: z
+          .array(z.string())
+          .optional()
+          .describe('Ids of criteria that are now met.'),
+        untick: z
+          .array(z.string())
+          .optional()
+          .describe('Ids of criteria that turned out not to be met.'),
+        add: z
+          .array(z.string())
+          .optional()
+          .describe('New criteria, appended after the existing ones.'),
+      },
+    },
+    handler(({ task, ...rest }) => agent.updateCriteria(task, rest)),
   );
 
   server.registerTool(
@@ -699,7 +734,11 @@ export function registerVantikTools(
       description:
         'Close a task, recording how it was resolved. Always pass a ' +
         'resolution: it is posted as a note before the state changes, which ' +
-        'is what makes the fix findable the next time this problem appears.',
+        'is what makes the fix findable the next time this problem appears. ' +
+        'The response reports the Definition of Done as it stood at the close. ' +
+        'Criteria left open do not block anything — but closing over them ' +
+        'without saying so in the resolution leaves the next reader unable to ' +
+        'tell what was decided from what was missed.',
       inputSchema: {
         task: taskRef,
         resolution: z

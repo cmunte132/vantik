@@ -54,6 +54,22 @@ export interface ContextComment {
   replies?: ContextComment[];
 }
 
+/**
+ * One criterion off the issue's Definition of Done.
+ *
+ * Carried in the context rather than left to a second request, because a caller
+ * that has to know to ask is a caller that will not ask. An agent reading an
+ * issue it is about to work has no way to guess that criteria exist, and one
+ * working to an invented standard is worse than one working to none — it
+ * reports done with confidence.
+ */
+export interface ContextCriterion {
+  id: string;
+  body: string;
+  completed: boolean;
+  completedAt: Date | null;
+}
+
 export interface ContextHistoryEntry {
   at: Date;
   actor: string | null;
@@ -80,6 +96,7 @@ export interface IssueContext {
   subIssues: ContextIssueRef[];
   relations: ContextRelation[];
   linkedIssues: ContextLinkedIssue[];
+  criteria: ContextCriterion[];
   comments: ContextComment[];
   history: ContextHistoryEntry[];
   createdAt: Date;

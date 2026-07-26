@@ -87,6 +87,9 @@ const baseRoutes = {
   // Acceptance criteria are filed as checklist items after the issue exists, so
   // any test passing them reaches this too.
   'POST /checklist_items': { id: 'item-1' },
+  // Read by close_task to report the Definition of Done, and by
+  // update_criteria to check ids and find where to append.
+  'GET /checklist_items': [] as unknown[],
 };
 
 /** A tool result travels as text; these read it back the way the model would. */
@@ -128,6 +131,7 @@ describe('vantik MCP tools', () => {
       'recall_knowledge',
       'remember',
       'search_tasks',
+      'update_criteria',
       'update_task',
       'write_page',
     ]);
@@ -259,6 +263,217 @@ describe('vantik MCP tools', () => {
       .filter((request) => request.method === 'POST')
       .map((request) => request.path);
     expect(writes).toEqual(['/issue_comments', '/issues/issue-42']);
+  });
+
+  /**
+   * The Definition of Done is the standard an agent is judged against, and for
+   * a while it was write-only: create_task filed criteria and no tool could
+   * read them back. An agent that cannot see them infers a standard from the
+   * description and reports done against that, which is worse than reporting
+   * nothing — it is confident.
+   */
+  describe('Definition of Done', () => {
+    const issue42 = {
+      id: 'issue-42',
+      number: 42,
+      title: 'Pool exhausted',
+      teamId: 'team-eng',
+      stateId: 'state-backlog',
+    };
+
+    // Annotated because the server compiles with strictNullChecks off, where a
+    // bare `null` or `[]` in a literal is an implicit any.
+    const context: Record<string, unknown> = {
+      ...issue42,
+      key: 'ENG-42',
+      descriptionMarkdown: 'The pool runs dry under load.',
+      state: { id: 'state-backlog', name: 'Backlog', category: 'BACKLOG' },
+      assignee: null,
+      team: { id: 'team-eng', identifier: 'ENG', name: 'Engineering' },
+      labels: [],
+      priority: null,
+      estimate: null,
+      dueDate: null,
+      project: null,
+      cycle: null,
+      parent: null,
+      subIssues: [],
+      relations: [],
+      linkedIssues: [],
+      comments: [],
+      history: [],
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    };
+
+    const criteria = [
+      {
+        id: 'item-1',
+        body: 'Pool size is configurable',
+        completed: true,
+        sortOrder: 1,
+      },
+      {
+        id: 'item-2',
+        body: 'Exhaustion is logged',
+        completed: false,
+        sortOrder: 2,
+      },
+    ];
+
+    it('travels with get_task rather than behind a second call', async () => {
+      const { client } = await connect({
+        ...baseRoutes,
+        'GET /issues/number/42': issue42,
+        'GET /issues/issue-42/context': { ...context, criteria },
+      });
+
+      const task = jsonOf(
+        await client.callTool({
+          name: 'get_task',
+          arguments: { task: 'ENG-42' },
+        }),
+      );
+
+      // The count as much as the list: an agent deciding whether it is finished
+      // should not have to total the array itself.
+      expect(task.definitionOfDone.completed).toBe(1);
+      expect(task.definitionOfDone.total).toBe(2);
+      expect(task.definitionOfDone.criteria[1]).toEqual({
+        id: 'item-2',
+        body: 'Exhaustion is logged',
+        completed: false,
+      });
+    });
+
+    it('reads as empty rather than absent when a task has no criteria', async () => {
+      const { client } = await connect({
+        ...baseRoutes,
+        'GET /issues/number/42': issue42,
+        'GET /issues/issue-42/context': { ...context, criteria: [] },
+      });
+
+      const task = jsonOf(
+        await client.callTool({
+          name: 'get_task',
+          arguments: { task: 'ENG-42' },
+        }),
+      );
+
+      // A missing field would make every caller guard, and the ones that forgot
+      // would crash on a task nobody set criteria for.
+      expect(task.definitionOfDone).toEqual({
+        completed: 0,
+        total: 0,
+        criteria: [],
+      });
+    });
+
+    it('ticks a criterion by id', async () => {
+      const { client, requests } = await connect({
+        ...baseRoutes,
+        'GET /issues/number/42': issue42,
+        'GET /checklist_items': criteria,
+        'POST /checklist_items/item-2': { id: 'item-2' },
+      });
+
+      const result = await client.callTool({
+        name: 'update_criteria',
+        arguments: { task: 'ENG-42', tick: ['item-2'] },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const write = requests.find(
+        (request) => request.path === '/checklist_items/item-2',
+      );
+      expect(write?.body).toEqual({ completed: true });
+    });
+
+    it('refuses an id that is not on this task, without writing anything', async () => {
+      const { client, requests } = await connect({
+        ...baseRoutes,
+        'GET /issues/number/42': issue42,
+        'GET /checklist_items': criteria,
+      });
+
+      const result = await client.callTool({
+        name: 'update_criteria',
+        arguments: { task: 'ENG-42', tick: ['item-from-another-issue'] },
+      });
+
+      // The update route addresses a row by id alone, so an id copied from a
+      // different issue would otherwise be ticked over there.
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain('item-from-another-issue');
+      expect(requests.some((request) => request.method === 'POST')).toBe(false);
+    });
+
+    it('refuses to tick and untick the same criterion in one call', async () => {
+      const { client, requests } = await connect({
+        ...baseRoutes,
+        'GET /issues/number/42': issue42,
+        'GET /checklist_items': criteria,
+      });
+
+      const result = await client.callTool({
+        name: 'update_criteria',
+        arguments: { task: 'ENG-42', tick: ['item-1'], untick: ['item-1'] },
+      });
+
+      // Both writes would land in an arbitrary order, so the outcome would be
+      // a coin toss rather than an error.
+      expect(result.isError).toBe(true);
+      expect(requests.some((request) => request.method === 'POST')).toBe(false);
+    });
+
+    it('appends new criteria after the existing ones', async () => {
+      const { client, requests } = await connect({
+        ...baseRoutes,
+        'GET /issues/number/42': issue42,
+        'GET /checklist_items': criteria,
+      });
+
+      await client.callTool({
+        name: 'update_criteria',
+        arguments: { task: 'ENG-42', add: ['Metric is exported'] },
+      });
+
+      const appended = requests.find(
+        (request) =>
+          request.method === 'POST' && request.path === '/checklist_items',
+      );
+      // Numbered past the highest existing item, not from one: restarting the
+      // count would interleave the new criteria with what is already there.
+      expect(appended?.body).toEqual({
+        body: 'Metric is exported',
+        sortOrder: 3,
+      });
+    });
+
+    it('reports open criteria on close without blocking the close', async () => {
+      const { client, requests } = await connect({
+        ...baseRoutes,
+        'GET /issues/number/42': issue42,
+        'GET /checklist_items': criteria,
+        'POST /issue_comments': { id: 'comment-1' },
+        'POST /issues/issue-42': { id: 'issue-42', number: 42 },
+      });
+
+      const closed = jsonOf(
+        await client.callTool({
+          name: 'close_task',
+          arguments: { task: 'ENG-42', resolution: 'Bumped pool to 20' },
+        }),
+      );
+
+      // Warn, never block — the same posture the webapp takes. The state change
+      // still goes through; the caller is simply told what it closed over.
+      expect(closed.definitionOfDone.completed).toBe(1);
+      expect(closed.definitionOfDone.total).toBe(2);
+      expect(
+        requests.some((request) => request.path === '/issues/issue-42'),
+      ).toBe(true);
+    });
   });
 
   it('returns a readable tool error instead of throwing', async () => {

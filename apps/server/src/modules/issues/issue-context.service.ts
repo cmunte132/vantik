@@ -62,6 +62,14 @@ export default class IssueContextService {
           where: { deleted: null },
           orderBy: { createdAt: 'asc' },
         },
+        // sortOrder is nullable for rows written before an explicit ordering
+        // existed. Postgres sorts nulls last on ASC, which puts those after the
+        // ordered ones, and createdAt settles them among themselves — the
+        // fallback the column's own comment describes.
+        checklistItems: {
+          where: { deleted: null },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        },
         history: { where: { deleted: null }, orderBy: { createdAt: 'asc' } },
         linkedIssue: { where: { deleted: null } },
         issueRelations: { where: { deleted: null } },
@@ -219,6 +227,12 @@ export default class IssueContextService {
       linkedIssues: issue.linkedIssue.map((linkedIssue) =>
         this.toLinkedIssue(linkedIssue),
       ),
+      criteria: issue.checklistItems.map((item) => ({
+        id: item.id,
+        body: item.body,
+        completed: item.completed,
+        completedAt: item.completedAt,
+      })),
       comments: this.nestComments(issue.comments, userById),
       history: this.condenseHistory(issue.history, {
         stateById,

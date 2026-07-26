@@ -91,6 +91,26 @@ export interface TaskHistoryEntry {
 }
 
 /** The full working context of one task — the payload of `getTask`. */
+/** One criterion off a task's Definition of Done. */
+export interface TaskCriterion {
+  id: string;
+  body: string;
+  completed: boolean;
+}
+
+/**
+ * What "done" means for one task, as recorded on the task itself.
+ *
+ * Travels with the context rather than behind a second call. A caller that has
+ * to know criteria exist before it can ask for them will not ask, and will
+ * instead infer a standard from the description and report done against that.
+ */
+export interface DefinitionOfDone {
+  completed: number;
+  total: number;
+  criteria: TaskCriterion[];
+}
+
 export interface TaskContext {
   id: string;
   key: string;
@@ -109,10 +129,25 @@ export interface TaskContext {
   subTasks: Array<TaskRef & { stateCategory: WorkflowCategory }>;
   relations: Array<{ type: RelationType; task: TaskRef }>;
   links: Array<{ url: string; title: string | null }>;
+  definitionOfDone: DefinitionOfDone;
   notes: TaskNote[];
   history: TaskHistoryEntry[];
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Changes to a task's Definition of Done. Every field is optional and they
+ * compose, so one call can tick what was finished and add what the work turned
+ * up.
+ */
+export interface UpdateCriteriaInput {
+  /** Criterion ids to mark done. */
+  tick?: string[];
+  /** Criterion ids to put back to open. */
+  untick?: string[];
+  /** New criteria, appended after the existing ones. */
+  add?: string[];
 }
 
 /** A row in a task list — lean on purpose, for filling agent context cheaply. */

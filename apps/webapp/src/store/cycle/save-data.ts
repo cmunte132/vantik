@@ -22,6 +22,12 @@ export async function saveCyclesData(
         endDate: record.data.endDate,
         number: record.data.number,
 
+        // Every control in the cycles list keys off this — which cycle can be
+        // started, which can be completed, which may be deleted. Left out of
+        // this mapping, the whole list read as one undifferentiated pile.
+        status: record.data.status,
+        closedAt: record.data.closedAt,
+
         preferences: JSON.stringify(record.data.preferences),
       };
 

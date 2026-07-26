@@ -11,6 +11,15 @@ export const Team = types.model({
   currentCycle: types.union(types.number, types.null, types.undefined),
   preferences: types.model({
     cyclesEnabled: types.union(types.boolean, types.undefined, types.null),
+    cyclesMode: types.union(types.string, types.undefined, types.null),
+    cyclesAutoRunning: types.union(types.boolean, types.undefined, types.null),
+    autoRolloverDestination: types.union(
+      types.string,
+      types.undefined,
+      types.null,
+    ),
+    cyclesFrequency: types.union(types.number, types.undefined, types.null),
+    upcomingCycles: types.union(types.number, types.undefined, types.null),
     teamType: types.union(types.string, types.undefined, types.null),
   }),
 });

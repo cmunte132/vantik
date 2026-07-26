@@ -18,6 +18,7 @@ import { withApplicationStore } from 'common/wrappers/with-application-store';
 import { useCycle } from 'hooks/cycles';
 import { useLocalState } from 'hooks/use-local-state';
 
+import { CycleActions } from './cycle-actions';
 import { CycleDisplayOptions } from './cycle-display-options';
 import { CycleProgress } from './cycle-progress';
 import { Overview } from './overview';
@@ -47,6 +48,7 @@ export const CycleView = observer(({ view }: { view: CycleTabs }) => {
 export const CycleViewWrapper = withApplicationStore(() => {
   const [view, setView] = useLocalState<CycleTabs>('cycle_tab', 'overview');
   const [overview, setOverview] = useLocalState('insightsSidebar', false);
+  const cycle = useCycle();
 
   return (
     <MainLayout
@@ -57,18 +59,21 @@ export const CycleViewWrapper = withApplicationStore(() => {
           view={view}
           setView={setView}
           actions={
-            <Button
-              variant="ghost"
-              onClick={() => setOverview(!overview)}
-              isActive={overview}
-              size="sm"
-            >
-              {overview ? (
-                <RightSidebarOpen size={18} />
-              ) : (
-                <RightSidebarClosed size={18} />
-              )}
-            </Button>
+            <>
+              {cycle && <CycleActions cycle={cycle} />}
+              <Button
+                variant="ghost"
+                onClick={() => setOverview(!overview)}
+                isActive={overview}
+                size="sm"
+              >
+                {overview ? (
+                  <RightSidebarOpen size={18} />
+                ) : (
+                  <RightSidebarClosed size={18} />
+                )}
+              </Button>
+            </>
           }
         />
       }

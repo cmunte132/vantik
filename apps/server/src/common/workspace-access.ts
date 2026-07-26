@@ -213,6 +213,29 @@ export async function assertPageEntryInWorkspace(
 }
 
 /**
+ * Proves a cycle's team belongs to the given workspace.
+ *
+ * The cycle routes address the row by id alone — start, complete and delete
+ * name no team anywhere in the request — so without this a caller could
+ * complete a sprint, or move its unfinished issues, in someone else's
+ * workspace.
+ */
+export async function assertCycleInWorkspace(
+  prisma: PrismaService,
+  cycleId: string,
+  workspaceId: string,
+): Promise<void> {
+  const cycle = await prisma.cycle.findFirst({
+    where: { id: cycleId, deleted: null, team: { workspaceId } },
+    select: { id: true },
+  });
+
+  if (!cycle) {
+    throw new NotFoundException({ message: `Cycle ${cycleId} not found` });
+  }
+}
+
+/**
  * Proves a team belongs to the given workspace.
  *
  * A teamId arrives as a query or body parameter on the create, update and move

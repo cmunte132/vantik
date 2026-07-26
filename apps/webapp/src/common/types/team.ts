@@ -4,8 +4,22 @@ export enum TeamTypeEnum {
   ENGINEERING = 'engineering',
   SUPPORT = 'support',
 }
+export type CyclesMode = 'auto' | 'manual';
+
 export interface TeamPreferences {
   cyclesEnabled?: boolean;
+  /**
+   * Widened to `string` because it arrives through the MobX model, which cannot
+   * express the union. Absent on every team that enabled cycles before the mode
+   * existed; readers treat that as manual — see `cyclesModeForTeam` in the
+   * teams store, the one place the fallback is spelled out.
+   */
+  cyclesMode?: string;
+  cyclesFrequency?: number;
+  upcomingCycles?: number;
+  /** Whether the automatic cadence is currently running. Set by Start/Stop. */
+  cyclesAutoRunning?: boolean;
+  autoRolloverDestination?: string;
   teamType?: string;
 }
 

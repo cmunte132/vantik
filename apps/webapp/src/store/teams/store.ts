@@ -6,7 +6,7 @@ import {
   flow,
 } from 'mobx-state-tree';
 
-import type { TeamType } from 'common/types';
+import type { CyclesMode, TeamType } from 'common/types';
 
 import { vantikDatabase } from 'store/database';
 
@@ -72,6 +72,21 @@ export const TeamsStore: IAnyStateTreeNode = types
       });
 
       return team?.preferences?.cyclesEnabled;
+    },
+    /**
+     * The mode a team's cycles run in, for the UI that has to choose between
+     * the manual controls and the automatic ones.
+     *
+     * Manual when unset, because every team that enabled cycles before the
+     * preference existed has no value here, and the alternative would show them
+     * a Start button that seeds a cadence they never configured.
+     */
+    cyclesModeForTeam(teamId: string): CyclesMode {
+      const team = self.teams.find((team: TeamType) => {
+        return team.id === teamId;
+      });
+
+      return team?.preferences?.cyclesMode === 'auto' ? 'auto' : 'manual';
     },
     get getTeams() {
       return self.teams;

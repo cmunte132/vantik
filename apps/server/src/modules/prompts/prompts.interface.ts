@@ -1,4 +1,4 @@
-import { LLMRoles } from '@vantikhq/types';
+import { LLMRoles, type LLMRole } from '@vantikhq/types';
 import { IsIn, IsOptional, IsString } from 'class-validator';
 
 export class PromptInput {
@@ -12,5 +12,5 @@ export class PromptInput {
   // bound to anything and the validator never ran.
   @IsOptional()
   @IsIn(LLMRoles)
-  model: string;
+  model: LLMRole;
 }

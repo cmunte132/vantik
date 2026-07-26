@@ -35,6 +35,13 @@ export interface RelatedPage {
   title: string;
   entityType: PageLinkTypeEnum;
   entityId: string;
+  /**
+   * The edge, not the page. Carried because deletes are scoped by page — a
+   * caller looking at this list from the *other* end has the issue in hand and
+   * would otherwise have to read the page's own links back to find the id of
+   * the edge it is already looking at.
+   */
+  linkId: string;
 }
 
 @Injectable()
@@ -78,6 +85,7 @@ export default class PageLinksService {
         page: { deleted: null, workspaceId },
       },
       select: {
+        id: true,
         entityType: true,
         entityId: true,
         page: { select: { id: true, title: true } },
@@ -90,6 +98,7 @@ export default class PageLinksService {
       title: link.page.title,
       entityType: link.entityType as PageLinkTypeEnum,
       entityId: link.entityId,
+      linkId: link.id,
     }));
   }
 

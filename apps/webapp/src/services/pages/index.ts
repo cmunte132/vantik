@@ -262,6 +262,32 @@ export function usePageLinks(pageId?: string) {
   });
 }
 
+export interface RelatedPage {
+  /** The page. */
+  id: string;
+  title: string;
+  /** The edge, so this list can unlink without reading the page's links back. */
+  linkId: string;
+}
+
+/**
+ * The other direction: the pages linked to one issue, project or team.
+ *
+ * The same edges `usePageLinks` reads, entered from the work rather than from
+ * the documentation. Read on demand for the same reason — an issue is opened far
+ * more often than its pages change.
+ */
+export function useRelatedPages(entityType: PageLinkType, entityId?: string) {
+  return useQuery<RelatedPage[]>({
+    queryKey: ['related-pages', entityType, entityId],
+    enabled: Boolean(entityId),
+    queryFn: () =>
+      ajaxGet({
+        url: `/api/v1/pages/related?entityType=${entityType}&entityId=${entityId}`,
+      }) as Promise<RelatedPage[]>,
+  });
+}
+
 export function createPageLink({
   pageId,
   ...data

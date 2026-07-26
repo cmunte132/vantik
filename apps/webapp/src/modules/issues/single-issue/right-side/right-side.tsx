@@ -29,6 +29,7 @@ import { useUpdateIssueMutation } from 'services/issues';
 import { useContextStore } from 'store/global-context-provider';
 
 import { EngineeringProperties } from './engineering-properties';
+import { IssuePages } from './issue-pages';
 import { IssueRelatedProperties } from './issue-related-properties';
 import { SupportProperties } from './support-properties';
 
@@ -158,6 +159,8 @@ export const RightSide = observer(() => {
           ) : (
             <EngineeringProperties />
           )}
+
+          <IssuePages />
         </div>
       </ScrollArea>
 

@@ -10,7 +10,6 @@ import {
 import {
   convertMarkdownToTiptapJson,
   convertTiptapJsonToText,
-  LLMMappings,
 } from '../utils';
 import { PARTIAL_SOLUTION_PROMPT } from '../utils';
 
@@ -48,7 +47,7 @@ export const bugEnricher = async (actionPayload: ActionEventPayload) => {
         content: `[INPUT] bug_description: ${convertTiptapJsonToText(issue.description)}`,
       },
     ],
-    llmModel: LLMMappings.GPT35TURBO,
+    llmModel: 'fast',
     model: 'BugSuggestion',
     workspaceId: issue.team.workspaceId,
   };

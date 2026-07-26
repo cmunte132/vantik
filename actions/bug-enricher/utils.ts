@@ -6,14 +6,6 @@ export interface TiptapNode {
   attrs?: TiptapAttrs;
 }
 
-export enum LLMMappings {
-  GPT35TURBO = 'gpt-3.5-turbo',
-  GPT4TURBO = 'gpt-4-turbo',
-  LLAMA3 = 'llama3',
-  CLAUDEOPUS = 'opus',
-  GPT4O = 'gpt-4o',
-}
-
 export type TiptapListTypes = 'orderedList' | 'bulletList' | 'taskList' | null;
 export interface TiptapAttrs {
   src?: string;

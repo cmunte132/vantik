@@ -137,10 +137,19 @@ Local servers ignore the key but still expect the header, so set
 `LLM_API_KEY` to any non-empty string for those.
 
 :::note
-Leave these unset and the AI features fail with an error naming the missing
-variable. Earlier versions fell back to a local model instead, which meant a
-half-configured install answered with a model nobody had chosen. Everything
-that is not an AI feature works regardless.
+Leave these unset and the interface simply has no AI in it — no generate-title
+button, no AI filter, no AI entries in the editor's slash menu. Nothing is
+shown that cannot work. Set them later and the features appear on the next page
+load, with no rebuild: the browser reads this at runtime from
+`/api/v1/config`.
+
+Everything else is unaffected. Creating an issue without a title still works,
+it just does not get one written for you, and issue suggestions still return
+assignees from search, only without label suggestions.
+
+A request that reaches an AI endpoint anyway — a direct API call, or an action
+deployed against an older server — fails with an error naming the missing
+variable rather than answering with a model nobody chose.
 :::
 
 Two optional settings, read only by OpenRouter, attribute usage to your install

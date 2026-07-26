@@ -11,6 +11,8 @@ export interface ClientConfig {
   posthogKey: string;
   posthogHost: string;
   sentryDsn: string;
+  /** Whether this install has an LLM endpoint configured. */
+  aiEnabled: boolean;
 }
 
 const FALLBACK: ClientConfig = {
@@ -18,6 +20,9 @@ const FALLBACK: ClientConfig = {
   posthogKey: '',
   posthogHost: 'https://us.i.posthog.com',
   sentryDsn: '',
+  // Off until the server says otherwise, so an install without an endpoint
+  // never flashes an AI affordance that would fail when pressed.
+  aiEnabled: false,
 };
 
 // Parked on window rather than in module scope because the instrumentation

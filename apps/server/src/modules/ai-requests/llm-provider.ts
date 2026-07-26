@@ -41,6 +41,23 @@ function readEnv(name: string): string {
 }
 
 /**
+ * Whether this install has an endpoint to talk to at all.
+ *
+ * Read by the client config endpoint so the browser can leave the AI
+ * affordances out of the interface entirely, rather than offering buttons that
+ * fail when pressed. A request that arrives anyway still throws — hiding a
+ * feature is not the same as pretending it worked.
+ */
+export function isLLMConfigured(): boolean {
+  return [
+    'LLM_BASE_URL',
+    'LLM_API_KEY',
+    'LLM_MODEL_FAST',
+    'LLM_MODEL_SMART',
+  ].every((name) => Boolean(process.env[name]?.trim()));
+}
+
+/**
  * The client is memoized rather than rebuilt per request: it holds no per-call
  * state, and rebuilding it would throw away the agent's connection pool.
  */

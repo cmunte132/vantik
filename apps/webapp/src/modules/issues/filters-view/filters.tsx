@@ -11,7 +11,7 @@ import { AI, CrossLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
-import { useScope } from 'hooks';
+import { useAIEnabled, useScope } from 'hooks';
 import { useCurrentTeam } from 'hooks/teams';
 import { useFiltersFromAI } from 'hooks/use-filters-from-ai';
 import { useCurrentWorkspace } from 'hooks/workspace';
@@ -67,6 +67,7 @@ export const Filters = observer(({ onClose }: FiltersProps) => {
   const [isLoading, setLoading] = React.useState(false);
   const [showOption, setShowOptions] = React.useState(false);
   const { setFilters } = useFiltersFromAI();
+  const aiEnabled = useAIEnabled();
 
   const { mutate: aiFilterIssues } = useAIFilterIssuesMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -210,7 +211,7 @@ export const Filters = observer(({ onClose }: FiltersProps) => {
                 ) : (
                   <DefaultFilterDropdown onSelect={onSelect} />
                 )}
-                {value && (
+                {value && aiEnabled && (
                   <CommandGroup>
                     <CommandItem
                       key="AI"

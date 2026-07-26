@@ -81,8 +81,9 @@ Optional services (the server logs an error and continues without them):
   `TRIGGER_DATABASE_URL` at your trigger.dev deployment and its database.
 - **an LLM endpoint** — powers the AI features. Any OpenAI-compatible one:
   OpenRouter, OpenAI, or a local LM Studio / Ollama / vLLM server. Set
-  `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL_FAST` and `LLM_MODEL_SMART`; without
-  them the AI features error and everything else works as normal.
+  `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL_FAST` and `LLM_MODEL_SMART`. Without
+  them the AI affordances are left out of the interface entirely and everything
+  else works as normal; set them later and they appear on the next page load.
 - **SMTP** — set the `SMTP_*` variables to send real emails.
 
 ## Local development

@@ -1,4 +1,4 @@
-import { coerceRole, resolveModel } from './llm-provider';
+import { coerceRole, isLLMConfigured, resolveModel } from './llm-provider';
 
 describe('coerceRole', () => {
   it.each(['fast', 'smart'] as const)('passes %s through', (role) => {
@@ -38,6 +38,42 @@ describe('coerceRole', () => {
       expect(coerceRole(empty)).toBe('fast');
     },
   );
+});
+
+describe('isLLMConfigured', () => {
+  const env = process.env;
+  const complete = {
+    LLM_BASE_URL: 'https://example.test/v1',
+    LLM_API_KEY: 'key',
+    LLM_MODEL_FAST: 'fast-model',
+    LLM_MODEL_SMART: 'smart-model',
+  };
+
+  afterAll(() => {
+    process.env = env;
+  });
+
+  it('is true once all four variables are set', () => {
+    process.env = { ...env, ...complete };
+
+    expect(isLLMConfigured()).toBe(true);
+  });
+
+  // This is what the browser reads to decide whether to show the AI
+  // affordances at all, so a half-configured install has to read as off — the
+  // alternative is buttons that fail on press.
+  it.each(Object.keys(complete))('is false without %s', (missing) => {
+    process.env = { ...env, ...complete };
+    delete process.env[missing];
+
+    expect(isLLMConfigured()).toBe(false);
+  });
+
+  it('treats a blank value as unset', () => {
+    process.env = { ...env, ...complete, LLM_API_KEY: '   ' };
+
+    expect(isLLMConfigured()).toBe(false);
+  });
 });
 
 describe('resolveModel', () => {

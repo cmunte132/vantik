@@ -3,6 +3,7 @@ import { CreateIssueDto, UpdateIssueDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
+import { isLLMConfigured } from 'modules/ai-requests/llm-provider';
 
 const logger = new Logger('IssuesAIUtils');
 
@@ -14,7 +15,10 @@ export async function getIssueTitle(
 ): Promise<string> {
   if (issueData.title) {
     return issueData.title;
-  } else if (issueData.description) {
+    // This one is not an AI feature the caller opted into — it sits on the
+    // ordinary create-issue path. An install with no LLM endpoint must still be
+    // able to create issues, so it gets an empty title, not an error.
+  } else if (issueData.description && isLLMConfigured()) {
     const titlePrompt = await prisma.prompt.findFirst({
       where: { name: 'IssueTitle', workspaceId },
     });
@@ -79,6 +83,13 @@ export async function getSuggestedLabels(
   description: string,
   workspaceId: string,
 ) {
+  // The suggestions endpoint also returns assignees, which come from vector
+  // search and need no LLM. Returning no labels leaves that half working
+  // instead of failing the whole response.
+  if (!isLLMConfigured()) {
+    return '';
+  }
+
   const labelPrompt = await prisma.prompt.findUnique({
     where: { name_workspaceId: { name: 'IssueLabels', workspaceId } },
   });

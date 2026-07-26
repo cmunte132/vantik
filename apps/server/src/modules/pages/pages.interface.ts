@@ -45,6 +45,30 @@ export const STANDING_ENTRY_DECAY_DAYS = Number(
 );
 
 /**
+ * When the decay pass runs. Empty or `off` disables it entirely.
+ *
+ * Both windows above are dormant without this — a deployment that trusts decay
+ * to keep the bank small is trusting nothing until something calls the pass.
+ * Nightly rather than hourly because the windows are measured in weeks: running
+ * it more often changes what is archived not at all, and only costs a scan.
+ */
+export const DECAY_CRON = process.env.PAGE_DECAY_CRON ?? '0 3 * * *';
+
+/** The queue and job the decay pass runs under. */
+export const PAGES_QUEUE = 'pages';
+export const DECAY_JOB = 'runDecay';
+
+/**
+ * A fixed id for the repeatable job.
+ *
+ * Every replica registers the schedule at boot, so without a stable id each one
+ * would add its own copy and the pass would run once per replica per night —
+ * harmless in effect, since archiving twice is idempotent, but it makes the
+ * queue unreadable and the logs lie about how often the bank is being groomed.
+ */
+export const DECAY_JOB_ID = 'page-entry-decay';
+
+/**
  * Transitions a client may ask for.
  *
  * `CONSOLIDATED` and `SUPERSEDED` are absent as sources because they are

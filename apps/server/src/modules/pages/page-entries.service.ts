@@ -321,12 +321,10 @@ export default class PageEntriesService {
    * because unused knowledge is by definition not load-bearing. Nothing is
    * deleted either way — archived entries stay readable and can be revived.
    *
-   * **Nothing calls this yet.** The server runs no scheduler, so both windows
-   * are dormant and the inbox is bounded only by the per-token budget on
-   * curated pages. Said here rather than left to be discovered, because the
-   * rest of this file reads as though decay were running: a deployment relying
-   * on it to keep the bank small is relying on nothing. Wiring it to a job is
-   * the remaining work.
+   * Called nightly by `PagesProcessor` on the `pages` queue, on the schedule in
+   * `DECAY_CRON`. Setting `PAGE_DECAY_CRON=off` disables the pass, which leaves
+   * both windows dormant and the inbox bounded only by the per-token budget on
+   * curated pages — worth knowing before turning it off.
    */
   async runDecay(workspaceId?: string): Promise<{
     expiredProposed: number;

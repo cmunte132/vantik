@@ -1,17 +1,25 @@
 'use client';
 
-import { buttonVariants } from '@vantikhq/ui/components/button';
-import { cn } from '@vantikhq/ui/lib/utils';
-import Link from 'next/link';
+import {
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from '@vantikhq/ui/components/sidebar';
+import NextLink from 'next/link';
 import { usePathname } from 'next/navigation';
 
 export interface Link {
   title: string;
-  label?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   icon?: any;
   href: string;
   count?: number;
+  /**
+   * Renders the count as the brand pill rather than a plain numeral. Reserved
+   * for counts that are genuinely different in kind — unread, not "how many".
+   */
+  unread?: boolean;
   strict?: boolean;
   activePaths?: string[];
 }
@@ -49,8 +57,8 @@ export function Nav({ links }: NavProps) {
   const pathname = usePathname();
 
   return (
-    <nav className="grid gap-0.5">
-      {links.map((link, index) => {
+    <SidebarMenu>
+      {links.map((link) => {
         const isActive = checkIsActive(
           pathname,
           link.href,
@@ -59,31 +67,26 @@ export function Nav({ links }: NavProps) {
         );
 
         return (
-          <div className="flex gap-1 items-center " key={index}>
-            <Link
-              href={link.href}
-              className={cn(
-                buttonVariants({ variant: 'link' }),
-                'flex items-center gap-1 justify-between text-foreground bg-grayAlpha-100 w-fit',
-                isActive && 'bg-accent text-accent-foreground',
-              )}
-            >
-              <div className="flex items-center gap-1">
-                {link.icon && <link.icon className="h-4 w-4" />}
-                {link.title}
-                {link.label && (
-                  <span className={cn('ml-auto')}>{link.label}</span>
+          <SidebarMenuItem key={link.href}>
+            <SidebarMenuButton asChild isActive={isActive} tooltip={link.title}>
+              <NextLink href={link.href}>
+                {link.icon && <link.icon />}
+                <span className="flex-1 truncate">{link.title}</span>
+                {/*
+                  The count lives inside the link, so it sits on the row's
+                  trailing edge instead of tracking the label's width, and it
+                  is part of the same hit target.
+                */}
+                {link.count > 0 && (
+                  <SidebarMenuBadge variant={link.unread ? 'unread' : 'count'}>
+                    {link.count}
+                  </SidebarMenuBadge>
                 )}
-              </div>
-            </Link>
-            {link.count > 0 && (
-              <div className="h-6 flex items-center px-1 rounded text-xs bg-accent text-accent-foreground">
-                {link.count}
-              </div>
-            )}
-          </div>
+              </NextLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         );
       })}
-    </nav>
+    </SidebarMenu>
   );
 }

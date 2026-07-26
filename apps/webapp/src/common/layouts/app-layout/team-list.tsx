@@ -1,17 +1,32 @@
+'use client';
+
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@vantikhq/ui/components/accordion';
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@vantikhq/ui/components/collapsible';
+import {
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+} from '@vantikhq/ui/components/sidebar';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@vantikhq/ui/components/tooltip';
-import { ChevronRight, Cycle, IssuesLine, StackLine } from '@vantikhq/ui/icons';
+  AddLine,
+  ChevronRight,
+  Cycle,
+  IssuesLine,
+  StackLine,
+} from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
+import NextLink from 'next/link';
+import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
 import type { TeamType } from 'common/types';
@@ -22,12 +37,12 @@ import { useCurrentWorkspace } from 'hooks/workspace';
 import { useContextStore } from 'store/global-context-provider';
 import { UserContext } from 'store/user-context';
 
-import { Nav, type Link } from './nav';
+import { checkIsActive, type Link } from './nav';
 
 export const TeamList = observer(() => {
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
   const currentUser = React.useContext(UserContext);
   const { teamsStore, workspaceStore } = useContextStore();
+  const pathname = usePathname();
   // If the team exists in the route path
   const team = useCurrentTeam();
   const teamAccessList =
@@ -37,32 +52,42 @@ export const TeamList = observer(() => {
   );
   const workspace = useCurrentWorkspace();
 
-  return (
-    <div ref={containerRef} className="mt-4">
-      <div className="mb-2">Your teams</div>
+  /*
+   * `defaultOpen` is only read when the Collapsible mounts, and on first render
+   * the stores have not hydrated yet, so the team you are actually looking at
+   * stayed shut. Deriving open-ness from the current team instead means it
+   * opens as soon as that resolves, while an explicit toggle still wins.
+   */
+  const [toggled, setToggled] = React.useState<Record<string, boolean>>({});
 
-      <Accordion
-        type="single"
-        collapsible
-        defaultValue={team?.id}
-        className="w-full flex flex-col gap-2"
-      >
-        {teams.map((team: TeamType) => {
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>
+        Your teams
+        <SidebarGroupAction asChild aria-label="Add team">
+          <NextLink href={`/${workspace.slug}/settings/new_team`}>
+            <AddLine />
+          </NextLink>
+        </SidebarGroupAction>
+      </SidebarGroupLabel>
+
+      <SidebarMenu>
+        {teams.map((teamItem: TeamType) => {
           let links: Link[] = [
             {
               title: 'Issues',
               icon: IssuesLine,
-              href: `/${workspace.slug}/team/${team.identifier}/all`,
-              activePaths: [`/${workspace.slug}/issue/${team.identifier}-`],
+              href: `/${workspace.slug}/team/${teamItem.identifier}/all`,
+              activePaths: [`/${workspace.slug}/issue/${teamItem.identifier}-`],
             },
             {
               title: 'Views',
               icon: StackLine,
-              href: `/${workspace.slug}/team/${team.identifier}/views`,
+              href: `/${workspace.slug}/team/${teamItem.identifier}/views`,
             },
           ];
 
-          if (team.preferences.cyclesEnabled) {
+          if (teamItem.preferences.cyclesEnabled) {
             links = [
               ...links,
               ...[
@@ -70,46 +95,93 @@ export const TeamList = observer(() => {
                   title: 'Cycles',
                   icon: Cycle,
                   strict: true,
-                  href: `/${workspace.slug}/team/${team.identifier}/cycles`,
+                  href: `/${workspace.slug}/team/${teamItem.identifier}/cycles`,
                 },
                 {
                   title: 'Current',
                   icon: Cycle,
-                  href: `/${workspace.slug}/team/${team.identifier}/cycles/current`,
+                  href: `/${workspace.slug}/team/${teamItem.identifier}/cycles/current`,
                 },
               ],
             ];
           }
 
+          /*
+           * Collapsed to a rail the submenu is hidden, so the active row would
+           * be invisible and nothing would say where you are. Carrying the
+           * child's active state up to the team row fixes that, and expanded it
+           * reads as the trail you actually took: Engineering › Issues.
+           */
+          const hasActiveChild = links.some((link) =>
+            checkIsActive(pathname, link.href, link.activePaths, link.strict),
+          );
+
           return (
-            <AccordionItem value={team.id} key={team.id} className="mb-1">
-              <AccordionTrigger className="flex justify-between [&[data-state=open]>div>div>svg]:rotate-90 w-fit rounded-md min-w-0">
-                <div className="w-full justify-start flex items-center gap-1">
-                  <div>
-                    <TeamIcon preferences={team.preferences} name={team.name} />
-                  </div>
+            <Collapsible
+              key={teamItem.id}
+              open={toggled[teamItem.id] ?? teamItem.id === team?.id}
+              onOpenChange={(open) => {
+                setToggled((previous) => ({
+                  ...previous,
+                  [teamItem.id]: open,
+                }));
+              }}
+              className="group/collapsible"
+            >
+              <SidebarMenuItem>
+                <CollapsibleTrigger asChild>
+                  {/*
+                    The team row toggles rather than navigates, so it carries no
+                    brand marker — that indicator means "the page you are on".
+                  */}
+                  <SidebarMenuButton
+                    isActive={hasActiveChild}
+                    tooltip={teamItem.name}
+                  >
+                    <TeamIcon
+                      preferences={teamItem.preferences}
+                      name={teamItem.name}
+                      className="!h-4 !w-4 shrink-0 [&>svg]:!h-3 [&>svg]:!w-3"
+                    />
+                    <span className="flex-1 truncate">{teamItem.name}</span>
+                    <span data-rail-hide className="flex shrink-0">
+                      <ChevronRight
+                        className="!size-3.5 text-sidebar-muted transition-transform
+                          duration-200 group-data-[state=open]/collapsible:rotate-90"
+                      />
+                    </span>
+                  </SidebarMenuButton>
+                </CollapsibleTrigger>
 
-                  <div className="flex justify-center items-center gap-1 min-w-0">
-                    <Tooltip>
-                      <TooltipTrigger className="truncate">
-                        {team?.name}
-                      </TooltipTrigger>
-
-                      <TooltipContent className="p-2">
-                        <p className="text-xs">{team?.name}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                  </div>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="flex flex-col justify-center items-start w-full my-2">
-                <Nav links={links} />
-              </AccordionContent>
-            </AccordionItem>
+                <CollapsibleContent>
+                  <SidebarMenuSub>
+                    {links.map((link) => (
+                      <SidebarMenuSubItem key={link.href}>
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={checkIsActive(
+                            pathname,
+                            link.href,
+                            link.activePaths,
+                            link.strict,
+                          )}
+                        >
+                          <NextLink href={link.href}>
+                            {link.icon && <link.icon />}
+                            <span className="flex-1 truncate">
+                              {link.title}
+                            </span>
+                          </NextLink>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
+                </CollapsibleContent>
+              </SidebarMenuItem>
+            </Collapsible>
           );
         })}
-      </Accordion>
-    </div>
+      </SidebarMenu>
+    </SidebarGroup>
   );
 });

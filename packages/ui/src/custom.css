@@ -92,3 +92,70 @@ ul[data-type='taskList'] li[data-checked='true'] > div > p {
 .dark .side-issue-view .context-box {
   box-shadow: 0px 16px 32px 0px rgba(20, 20, 20, 0.2) !important;
 }
+
+/* The active navigation row carries the logo's dot-dot-dash rhythm on its
+   leading edge. Three stacked gradients rather than three elements, so one
+   pseudo-element draws the whole marker and the row stays a single node. */
+.sidebar-marker::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  width: 3px;
+  height: 20px;
+  margin-top: -10px;
+  border-radius: 2px;
+  background:
+    linear-gradient(var(--sidebar-brand), var(--sidebar-brand)) 0 0 / 3px 3px
+      no-repeat,
+    linear-gradient(var(--sidebar-brand), var(--sidebar-brand)) 0 5px / 3px 3px
+      no-repeat,
+    linear-gradient(var(--sidebar-brand), var(--sidebar-brand)) 0 10px / 3px 10px
+      no-repeat;
+}
+
+/* Collapsed rail.
+   These rules describe relationships between the sidebar and its descendants,
+   which is what descendant selectors are for — expressing the same thing as
+   `group-data-[collapsed=true]/sidebar:` variants spread across eight
+   components would be considerably harder to read and to keep in step. */
+[data-sidebar='sidebar'][data-collapsed='true'] [data-sidebar='menu-button'],
+[data-sidebar='sidebar'][data-collapsed='true'] [data-sidebar='rail-item'] {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* Anything that only makes sense next to a label goes away with the label:
+   the labels themselves, group headings, submenus, plain counts, and the
+   text blocks in the switcher and account rows (marked `data-rail-hide`). */
+[data-sidebar='sidebar'][data-collapsed='true'] [data-sidebar='menu-button'] > span,
+[data-sidebar='sidebar'][data-collapsed='true'] [data-sidebar='group-label'],
+[data-sidebar='sidebar'][data-collapsed='true'] [data-sidebar='menu-sub'],
+[data-sidebar='sidebar'][data-collapsed='true']
+  [data-sidebar='menu-badge'][data-variant='count'],
+[data-sidebar='sidebar'][data-collapsed='true'] [data-rail-hide] {
+  display: none;
+}
+
+/* Unread survives as a dot — the one thing worth knowing at rail width. */
+[data-sidebar='sidebar'][data-collapsed='true']
+  [data-sidebar='menu-badge'][data-variant='unread'] {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  height: 7px;
+  min-width: 7px;
+  width: 7px;
+  padding: 0;
+  font-size: 0;
+}
+
+/* Search and compose stack instead of sitting side by side. */
+[data-sidebar='sidebar'][data-collapsed='true'] [data-sidebar='actions'] {
+  flex-direction: column;
+}
+
+/* The scroll gutter stays at rail width. The 32px buttons still centre inside
+   the sidebar's own 8px padding, and without the gutter the active marker —
+   the only "you are here" signal left once labels are gone — gets clipped. */

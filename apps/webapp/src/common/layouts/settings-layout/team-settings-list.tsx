@@ -1,19 +1,23 @@
-import { RiAddLine } from '@remixicon/react';
+'use client';
+
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@vantikhq/ui/components/accordion';
-import { buttonVariants } from '@vantikhq/ui/components/button';
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@vantikhq/ui/components/collapsible';
+import {
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+} from '@vantikhq/ui/components/sidebar';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@vantikhq/ui/components/tooltip';
-import { ChevronRight, TeamLine } from '@vantikhq/ui/icons';
-import { cn } from '@vantikhq/ui/lib/utils';
+import { AddLine, ChevronRight } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -37,79 +41,77 @@ export const TeamSettingsList = observer(() => {
     teamAccessList.includes(team.id),
   );
 
+  // Same reasoning as the app sidebar: derive open-ness from the route so the
+  // team being edited is revealed once the stores hydrate, but let a toggle win.
+  const [toggled, setToggled] = React.useState<Record<string, boolean>>({});
+
   return (
-    <div className="px-6 py-3">
-      <div className="flex flex-col items-start justify-start w-full">
-        <div className="flex items-center mb-2">
-          <TeamLine size={20} />
-          <div className="ml-1">Teams</div>
-        </div>
+    <SidebarGroup>
+      <SidebarGroupLabel>
+        Teams
+        <SidebarGroupAction asChild aria-label="Add team">
+          <Link href={`/${workspaceSlug}/settings/new_team`}>
+            <AddLine />
+          </Link>
+        </SidebarGroupAction>
+      </SidebarGroupLabel>
 
-        <div className="flex flex-col w-full">
-          <Accordion
-            type="single"
-            collapsible
-            defaultValue={teams[0]?.identifier}
-            className="w-full flex flex-col gap-3"
+      <SidebarMenu>
+        {teams.map((team: TeamType) => (
+          <Collapsible
+            key={team.identifier}
+            open={
+              toggled[team.identifier] ?? team.identifier === teamIdentifier
+            }
+            onOpenChange={(open) => {
+              setToggled((previous) => ({
+                ...previous,
+                [team.identifier]: open,
+              }));
+            }}
+            className="group/collapsible"
           >
-            {teams.map((team: TeamType) => (
-              <AccordionItem key={team.identifier} value={team.identifier}>
-                <AccordionTrigger className="flex justify-between [&[data-state=open]>div>div>svg]:rotate-90 w-fit rounded min-w-0">
-                  <div className="w-full justify-start flex items-center gap-1 ">
-                    <div>
-                      <TeamIcon
-                        preferences={team.preferences}
-                        name={team.name}
-                      />
-                    </div>
+            <SidebarMenuItem>
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton marker={false}>
+                  <TeamIcon
+                    preferences={team.preferences}
+                    name={team.name}
+                    className="!h-4 !w-4 shrink-0 [&>svg]:!h-3 [&>svg]:!w-3"
+                  />
+                  <span className="flex-1 truncate">{team.name}</span>
+                  <ChevronRight
+                    className="!size-3.5 shrink-0 text-sidebar-muted transition-transform
+                      duration-200 group-data-[state=open]/collapsible:rotate-90"
+                  />
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
 
-                    <div className="flex justify-center items-center gap-1 min-w-0">
-                      <Tooltip>
-                        <TooltipTrigger className="truncate">
-                          {team?.name}
-                        </TooltipTrigger>
-                        <TooltipContent className="p-2">
-                          <p className="text-xs">{team?.name}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                    </div>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="flex flex-col justify-center items-start w-full my-2 gap-0.5">
+              <CollapsibleContent>
+                <SidebarMenuSub>
                   {TEAM_LINKS.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={`/${workspaceSlug}/settings/teams/${team.identifier}/${item.href}`}
-                      className={cn(
-                        buttonVariants({ variant: 'link' }),
-                        'flex items-center justify-start bg-grayAlpha-100 w-fit',
-
-                        team.identifier === teamIdentifier &&
-                          settingsSection === item.href &&
-                          'bg-accent text-accent-foreground',
-                      )}
-                    >
-                      {item.title}
-                    </Link>
+                    <SidebarMenuSubItem key={item.href}>
+                      <SidebarMenuSubButton
+                        asChild
+                        isActive={
+                          team.identifier === teamIdentifier &&
+                          settingsSection === item.href
+                        }
+                      >
+                        <Link
+                          href={`/${workspaceSlug}/settings/teams/${team.identifier}/${item.href}`}
+                        >
+                          <span className="flex-1 truncate">{item.title}</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
                   ))}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </div>
-
-        <Link
-          className={cn(
-            buttonVariants({ variant: 'link' }),
-            'flex items-center justify-start my-2 w-full gap-2 px-0',
-          )}
-          href={`/${workspaceSlug}/settings/new_team`}
-        >
-          <RiAddLine size={18} />
-          <div>Add team</div>
-        </Link>
-      </div>
-    </div>
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </SidebarMenuItem>
+          </Collapsible>
+        ))}
+      </SidebarMenu>
+    </SidebarGroup>
   );
 });

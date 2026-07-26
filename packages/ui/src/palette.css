@@ -66,6 +66,12 @@
   --team-color-1: #89c794;
   --team-color-2: #d2a1bb;
   --team-color-3: #90c5d6;
+
+  /* Brand green, taken from the logo. Hex rather than oklch components like
+     the rest of the theme, because these two are fixed brand constants and
+     a round-trip through oklch would only cost accuracy. */
+  --sidebar-brand: #2e8555;
+  --sidebar-brand-foreground: #ffffff;
 }
 
 .dark {
@@ -119,4 +125,9 @@
   --team-color-1: #54935b;
   --team-color-2: #a165a1;
   --team-color-3: #4187c0;
+
+  /* The lighter of the two logo greens, so the mark still carries on a dark
+     ground; the foreground pairs against it rather than against white. */
+  --sidebar-brand: #3cad6e;
+  --sidebar-brand-foreground: #0b1a11;
 }

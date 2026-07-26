@@ -85,6 +85,17 @@ const config = {
           DEFAULT: 'oklch(var(--popover) / <alpha-value>)',
           foreground: 'oklch(var(--popover-foreground) / <alpha-value>)',
         },
+        sidebar: {
+          DEFAULT: 'oklch(var(--sidebar-background) / <alpha-value>)',
+          foreground: 'oklch(var(--sidebar-foreground) / <alpha-value>)',
+          muted: 'oklch(var(--sidebar-muted) / <alpha-value>)',
+          // These three carry their own alpha, so no `<alpha-value>` slot.
+          hover: 'oklch(var(--sidebar-hover))',
+          active: 'oklch(var(--sidebar-active))',
+          border: 'oklch(var(--sidebar-border))',
+          brand: 'var(--sidebar-brand)',
+          'brand-foreground': 'var(--sidebar-brand-foreground)',
+        },
         gray: {
           50: 'var(--gray-50)',
           100: 'var(--gray-100)',

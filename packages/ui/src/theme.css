@@ -28,6 +28,17 @@
   --input: 0% 0 0 / 6.27%;
   --ring: 221.2 83.2% 53.3%;
   --radius: 8px;
+
+  /* Sidebar. Its own scale rather than reused semantic tokens, because the
+     navigation needs a rest/hover/active ladder that `accent` cannot give it:
+     `accent` is pure white here, which reads as barely a step up from a row
+     that already carries a resting background. */
+  --sidebar-background: 91.28% 0 0;
+  --sidebar-foreground: 0% 0 0;
+  --sidebar-muted: 49.26% 0 0;
+  --sidebar-hover: 0% 0 0 / 2.35%;
+  --sidebar-active: 0% 0 0 / 9.02%;
+  --sidebar-border: 0% 0 0 / 13%;
 }
 
 .dark {
@@ -54,4 +65,14 @@
   --border: 100% 0 0 / 13.33%;
   --input: 100% 0 0 / 10.59%;
   --ring: 221.2 83.2% 53.3%;
+
+  /* `--sidebar-muted` sits below `--muted-foreground` (76.99%) on purpose:
+     at 13px on this ground, the brighter value made every resting row look
+     selected, which is the exact problem the rest/active ladder exists to fix. */
+  --sidebar-background: 21.34% 0 0;
+  --sidebar-foreground: 92.8% 0 0;
+  --sidebar-muted: 70% 0 0;
+  --sidebar-hover: 100% 0 0 / 3.5%;
+  --sidebar-active: 100% 0 0 / 10.5%;
+  --sidebar-border: 100% 0 0 / 11.5%;
 }

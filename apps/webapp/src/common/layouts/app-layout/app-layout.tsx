@@ -1,4 +1,12 @@
 import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarProvider,
+  SidebarSeparator,
+} from '@vantikhq/ui/components/sidebar';
+import {
   BookLine,
   Inbox,
   MyIssues,
@@ -19,12 +27,12 @@ import { useCurrentTeam } from 'hooks/teams';
 
 import { useContextStore } from 'store/global-context-provider';
 
-import { BottomBar } from './bottom-bar';
-import { Header } from './header';
+import { AccountMenu } from './account-menu';
 import { Nav } from './nav';
+import { SidebarActions } from './sidebar-actions';
 import { TeamList } from './team-list';
 import { useSidebarShortcut } from './use-sidebar-shortcut';
-import { WorkspaceDropdown } from './workspace-dropdown';
+import { WorkspaceSwitcher } from './workspace-switcher';
 
 interface LayoutProps {
   defaultCollapsed?: boolean;
@@ -40,63 +48,83 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
   } = useRouter();
   const team = useCurrentTeam();
 
-  return (
-    <>
-      <div className="h-[100vh] w-[100vw] flex">
-        {!applicationStore.sidebarCollapsed && (
-          <div className="w-[190px] flex flex-col h-full overflow-auto">
-            <div className="flex py-3 px-4 pr-2 pt-5 items-center justify-between">
-              <WorkspaceDropdown />
-              <Header />
-            </div>
+  const collapsed = applicationStore.sidebarCollapsed;
 
-            <div className="px-4 pr-2 mt-1 grow">
-              <Nav
-                links={[
-                  {
-                    title: 'Inbox',
-                    icon: Inbox,
-                    href: `/${workspaceSlug}/inbox`,
-                    count: notificationsStore.unReadCount,
-                  },
-                  {
-                    title: 'My issues',
-                    icon: MyIssues,
-                    href: `/${workspaceSlug}/my-issues`,
-                  },
-                  {
-                    title: 'Views',
-                    icon: StackLine,
-                    href: `/${workspaceSlug}/views`,
-                  },
-                  {
-                    title: 'Projects',
-                    icon: Project,
-                    href: `/${workspaceSlug}/projects`,
-                  },
-                  {
-                    title: 'Pages',
-                    icon: BookLine,
-                    href: `/${workspaceSlug}/pages`,
-                  },
-                  {
-                    title: 'Teams',
-                    icon: TeamLine,
-                    href: `/${workspaceSlug}/teams`,
-                  },
-                ]}
-              />
-              <TeamList />
-            </div>
-            <BottomBar />
-          </div>
-        )}
+  // Collapse state stays in the application store; the provider is told about
+  // it rather than keeping a second copy that could drift from ⌘B.
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      applicationStore.updateSideBar(!open);
+    },
+    [applicationStore],
+  );
+
+  return (
+    <SidebarProvider open={!collapsed} onOpenChange={handleOpenChange}>
+      <div className="h-[100vh] w-[100vw] flex">
+        {/*
+          ⌘B narrows the sidebar to a rail rather than removing it, so every
+          top-level destination stays one click away at either width.
+        */}
+        <Sidebar collapsible="icon">
+          <SidebarHeader>
+            <WorkspaceSwitcher />
+            <SidebarActions />
+          </SidebarHeader>
+
+          <SidebarContent>
+            <Nav
+              links={[
+                {
+                  title: 'Inbox',
+                  icon: Inbox,
+                  href: `/${workspaceSlug}/inbox`,
+                  count: notificationsStore.unReadCount,
+                  unread: true,
+                },
+                {
+                  title: 'My issues',
+                  icon: MyIssues,
+                  href: `/${workspaceSlug}/my-issues`,
+                },
+                {
+                  title: 'Views',
+                  icon: StackLine,
+                  href: `/${workspaceSlug}/views`,
+                },
+                {
+                  title: 'Projects',
+                  icon: Project,
+                  href: `/${workspaceSlug}/projects`,
+                },
+                {
+                  title: 'Pages',
+                  icon: BookLine,
+                  href: `/${workspaceSlug}/pages`,
+                },
+                {
+                  title: 'Teams',
+                  icon: TeamLine,
+                  href: `/${workspaceSlug}/teams`,
+                },
+              ]}
+            />
+
+            <SidebarSeparator />
+
+            <TeamList />
+          </SidebarContent>
+
+          <SidebarFooter>
+            <AccountMenu />
+          </SidebarFooter>
+        </Sidebar>
 
         <div
           className={cn(
             'w-full',
-            applicationStore.sidebarCollapsed && 'max-w-[100vw]',
-            !applicationStore.sidebarCollapsed && 'max-w-[calc(100vw_-_190px)]',
+            collapsed && 'max-w-[calc(100vw_-_48px)]',
+            !collapsed && 'max-w-[calc(100vw_-_248px)]',
           )}
         >
           {children}
@@ -106,7 +134,7 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
       <GlobalShortcuts />
 
       {team && <IssueShortcutDialogs />}
-    </>
+    </SidebarProvider>
   );
 });
 

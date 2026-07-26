@@ -1,9 +1,16 @@
 'use client';
 
-import { Button, buttonVariants } from '@vantikhq/ui/components/button';
-import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
-import { BuildingLine, ChevronLeft, UserLine } from '@vantikhq/ui/icons';
-import { cn } from '@vantikhq/ui/lib/utils';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from '@vantikhq/ui/components/sidebar';
+import { ChevronLeft } from '@vantikhq/ui/icons';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'next/router';
@@ -18,9 +25,12 @@ import {
 } from './settings-layout-constants';
 import { TeamSettingsList } from './team-settings-list';
 
-interface SidebarNavProps extends React.HTMLAttributes<HTMLElement> {}
-
-export function SidebarNav({ className, ...props }: SidebarNavProps) {
+/**
+ * Shares the app sidebar's primitives rather than its own copy of the class
+ * strings. The two navs had drifted apart precisely because they were
+ * hand-rolled twice.
+ */
+export function SidebarNav() {
   const router = useRouter();
   const { query, push } = router;
   const { teamsStore } = useContextStore();
@@ -40,79 +50,65 @@ export function SidebarNav({ className, ...props }: SidebarNavProps) {
   }
 
   return (
-    <nav className={cn('flex flex-col pt-1', className)} {...props}>
-      <div className="flex justify-between items-center">
-        <Button
-          variant="ghost"
-          size="xl"
+    <Sidebar collapsible="offcanvas">
+      <SidebarHeader>
+        <button
+          type="button"
           onClick={() => {
             push(
               `/${query.workspaceSlug}/team/${teamsStore.teams[0].identifier}/all`,
             );
           }}
-          className="group my-2 px-4 flex justify-start hover:bg-transparent"
+          className="flex h-9 w-full items-center gap-1.5 rounded px-2 text-left font-medium
+            text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-hover
+            focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <ChevronLeft className="mr-2 " size={20} />
+          <ChevronLeft size={16} className="shrink-0" />
           Settings
-        </Button>
-      </div>
-      <ScrollArea className="overflow-y-auto h-[calc(100vh_-_56px)]">
-        <div className="px-6">
-          <div className="flex flex-col items-start justify-start w-full">
-            <div className="flex items-center mb-1">
-              <BuildingLine size={20} />
-              <div className="ml-1">Workspace</div>
-            </div>
+        </button>
+      </SidebarHeader>
 
-            <div className="flex flex-col w-full gap-0.5">
-              {WORKSPACE_LINKS.map((item) => (
-                <Link
-                  key={item.href}
-                  href={`/${workspaceSlug}/settings/${item.href}`}
-                  className={cn(
-                    buttonVariants({ variant: 'link' }),
-                    'flex items-center justify-start text-foreground bg-grayAlpha-100 w-fit',
-                    !teamIdentifier &&
-                      isActive(item) &&
-                      'bg-accent text-accent-foreground',
-                  )}
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+          <SidebarMenu>
+            {WORKSPACE_LINKS.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={!teamIdentifier && isActive(item)}
                 >
-                  {item.title}
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
+                  <Link href={`/${workspaceSlug}/settings/${item.href}`}>
+                    <span className="flex-1 truncate">{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
 
-        <div className="px-6 py-3">
-          <div className="flex flex-col items-start justify-start w-full">
-            <div className="flex items-center mb-1">
-              <UserLine size={20} />
-              <div className="ml-1">My Account</div>
-            </div>
-
-            <div className="flex flex-col w-full gap-0.5">
-              {ACCOUNT_LINKS.map((item) => (
-                <Link
-                  key={item.href}
-                  href={`/${workspaceSlug}/settings/account/${item.href}`}
-                  className={cn(
-                    buttonVariants({ variant: 'link' }),
-                    'flex items-center justify-start text-foreground bg-grayAlpha-100 w-fit',
-
-                    settingsSection === item.href &&
-                      'bg-accent text-accent-foreground',
-                  )}
+        <SidebarGroup>
+          <SidebarGroupLabel>My account</SidebarGroupLabel>
+          <SidebarMenu>
+            {ACCOUNT_LINKS.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={settingsSection === item.href}
                 >
-                  {item.title}
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
+                  <Link
+                    href={`/${workspaceSlug}/settings/account/${item.href}`}
+                  >
+                    <span className="flex-1 truncate">{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
 
         <TeamSettingsList />
-      </ScrollArea>
-    </nav>
+      </SidebarContent>
+    </Sidebar>
   );
 }

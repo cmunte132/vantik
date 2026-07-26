@@ -82,8 +82,7 @@ export const useSuggestionItems = (
       },
       ...suggestionItems,
     ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiEnabled]);
+  }, [aiEnabled, generateSubIssues, workspace.id]);
 
   return { suggestionItems: appendedSuggestionItems, isLoading };
 };

@@ -16,7 +16,7 @@ export class Prompt {
   name: string;
   prompt: string;
 
-  model: string;
+  model: LLMRole;
   workspace?: Workspace;
   workspaceId: string;
 }

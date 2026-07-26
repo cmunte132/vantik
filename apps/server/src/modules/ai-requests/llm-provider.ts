@@ -1,3 +1,4 @@
+import type { LLMRole } from '@vantikhq/types';
 import type { LanguageModel } from 'ai';
 
 import {
@@ -17,8 +18,6 @@ const logger = new LoggerService('LLMProvider');
  * Callers ask for a role, never a model name. Which concrete model serves each
  * role is the deployment's business, not the caller's.
  */
-export type LLMRole = 'fast' | 'smart';
-
 const MODEL_ENV: Record<LLMRole, string> = {
   fast: 'LLM_MODEL_FAST',
   smart: 'LLM_MODEL_SMART',

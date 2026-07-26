@@ -85,7 +85,7 @@ export const prepareTriggerPayload = async (
 
   // Created by id is taken for both dev and personal deployed actions
   const userId = actionUser?.userId ?? action.createdById;
-  const accessToken = await generateKeyForUserId(userId);
+  const accessToken = await generateKeyForUserId(prisma, userId);
 
   const integrationMap = await getIntegrationAccountsFromActions(
     prisma,

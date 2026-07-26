@@ -1,4 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { PrismaService } from 'nestjs-prisma';
+import supertokens, { RecipeUserId } from 'supertokens-node';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 /**
@@ -24,4 +26,36 @@ export function getAppUserId(session: SessionContainer): string {
   }
 
   return appUserId;
+}
+
+/**
+ * A credential to mint a session against, for an account.
+ *
+ * The inverse of the lookup `createNewSession` performs. Minting a session
+ * needs a SuperTokens *recipe* user id, and callers that hold only an account
+ * id — no live session to read one from — have to resolve one. Passing the
+ * account id straight to `convertToRecipeUserId` builds a well-formed id that
+ * belongs to nobody, and `createNewSession` then rejects it.
+ *
+ * An account reachable by both a login code and a passkey has an identity per
+ * credential; any of them authenticates the same account, so the oldest is
+ * taken for a stable choice.
+ */
+export async function getRecipeUserIdForAccount(
+  prisma: PrismaService,
+  appUserId: string,
+): Promise<RecipeUserId> {
+  const identity = await prisma.authIdentity.findFirst({
+    where: { userId: appUserId },
+    orderBy: { createdAt: 'asc' },
+    select: { supertokensUserId: true },
+  });
+
+  if (!identity) {
+    throw new UnauthorizedException(
+      `No credential is registered for account ${appUserId}.`,
+    );
+  }
+
+  return supertokens.convertToRecipeUserId(identity.supertokensUserId);
 }

@@ -23,7 +23,6 @@ import {
 } from '@vantikhq/types';
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
-import supertokens from 'supertokens-node';
 import Passwordless from 'supertokens-node/recipe/passwordless';
 import Session from 'supertokens-node/recipe/session';
 
@@ -32,6 +31,7 @@ import { PatPrincipal, resolvePatPrincipal } from 'common/pat-session';
 import { resolveAdminWorkspaceId } from 'common/workspace-access';
 
 import { agentSettings } from 'modules/auth/agent-scope';
+import { getRecipeUserIdForAccount } from 'modules/auth/session-user';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import {
@@ -731,7 +731,7 @@ export class UsersService {
       req,
       res,
       'public',
-      supertokens.convertToRecipeUserId(userId),
+      await getRecipeUserIdForAccount(this.prisma, userId),
     );
 
     res.send({ status: 200, message: 'impersonate' });

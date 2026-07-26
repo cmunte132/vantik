@@ -104,16 +104,60 @@ SMTP_DEFAULT_FROM=noreply@yourdomain.com
 ### AI features
 
 AI features (title generation, description elaboration, breaking issues into
-sub-issues, filter suggestions) use the first configured provider:
+sub-issues, filter suggestions) talk to one OpenAI-compatible endpoint. Which
+one is yours to choose — hosted or on your own hardware, one place to set it:
 
 ```bash
-# Hosted providers (either one)
-OPENAI_API_KEY=your-openai-key
-ANTHROPIC_API_KEY=your-anthropic-key
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=your-key
 
-# Or a local model via ollama
-LOCAL_MODEL=gemma2:2b
-OLLAMA_HOST=http://your-ollama-host:11434
+# Vantik asks for a role, never a model name. Point each role wherever you
+# like; the ids are whatever your endpoint serves.
+LLM_MODEL_FAST=openai/gpt-4o-mini
+LLM_MODEL_SMART=openai/gpt-4o
+```
+
+`fast` handles the short, frequent calls — titles, labels, filters. `smart`
+handles the ones worth paying for — descriptions, sub-issues. Pointing both at
+the same model is perfectly reasonable.
+
+The four setups people run:
+
+| Setup | `LLM_BASE_URL` | `LLM_API_KEY` | Notes |
+| --- | --- | --- | --- |
+| OpenRouter | `https://openrouter.ai/api/v1` | your OpenRouter key | One key, most models. Ids are namespaced, e.g. `anthropic/claude-sonnet-4.5`. |
+| OpenAI | `https://api.openai.com/v1` | your OpenAI key | Ids are bare, e.g. `gpt-4o-mini`. |
+| LM Studio | `http://localhost:1234/v1` | any placeholder | Nothing leaves the machine. Use the id shown in LM Studio's server tab. |
+| Ollama | `http://localhost:11434/v1` | any placeholder | Same, e.g. `gemma2:2b`. Pull the model before pointing a role at it. |
+
+Anything else speaking the same API — vLLM, LiteLLM, a corporate gateway —
+works on the same four variables.
+
+Local servers ignore the key but still expect the header, so set
+`LLM_API_KEY` to any non-empty string for those.
+
+:::note
+Leave these unset and the interface simply has no AI in it — no generate-title
+button, no AI filter, no AI entries in the editor's slash menu. Nothing is
+shown that cannot work. Set them later and the features appear on the next page
+load, with no rebuild: the browser reads this at runtime from
+`/api/v1/config`.
+
+Everything else is unaffected. Creating an issue without a title still works,
+it just does not get one written for you, and issue suggestions still return
+assignees from search, only without label suggestions.
+
+A request that reaches an AI endpoint anyway — a direct API call, or an action
+deployed against an older server — fails with an error naming the missing
+variable rather than answering with a model nobody chose.
+:::
+
+Two optional settings, read only by OpenRouter, attribute usage to your install
+on its dashboard and public leaderboards:
+
+```bash
+LLM_APP_URL=https://vantik.example.com
+LLM_APP_NAME=Vantik
 ```
 
 Search needs no API key and no external service. Typesense generates the

@@ -14,6 +14,7 @@ import {
 import { AI } from '@vantikhq/ui/icons';
 import { useWatch, type UseFormReturn } from 'react-hook-form';
 
+import { useAIEnabled } from 'hooks';
 import { useCurrentWorkspace } from 'hooks/workspace';
 
 import { useAITitleMutation } from 'services/issues';
@@ -55,6 +56,7 @@ export function NewIssueTitle({ form, index }: NewIssueTitleProps) {
 
   const descriptionString = getDescription(description);
   const workspace = useCurrentWorkspace();
+  const aiEnabled = useAIEnabled();
   const { mutate, isPending: isLoading } = useAITitleMutation({
     onSuccess: (data) => {
       if (data) {
@@ -66,34 +68,45 @@ export function NewIssueTitle({ form, index }: NewIssueTitleProps) {
     },
   });
 
-  useDescriptionChange(touched, descriptionString, (description: string) => {
-    (mutate({ description, workspaceId: workspace.id }), 100, 40);
-  });
+  // The same flag that hides the button also stops the title being generated
+  // as you type: `touched` is what suppresses that, so an install with no LLM
+  // endpoint is permanently "touched" here.
+  useDescriptionChange(
+    touched || !aiEnabled,
+    descriptionString,
+    (description: string) => {
+      mutate({ description, workspaceId: workspace.id });
+    },
+    100,
+    40,
+  );
 
   return (
     <div className="p-4 py-2 text-lg font-normal w-full gap-2 flex items-center">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="link"
-            className="px-0"
-            isLoading={isLoading}
-            onClick={() => {
-              if (descriptionString) {
-                mutate({
-                  description: descriptionString,
-                  workspaceId: workspace.id,
-                });
-              }
-            }}
-          >
-            <AI size={16} />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Click to generate title</p>
-        </TooltipContent>
-      </Tooltip>
+      {aiEnabled && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="link"
+              className="px-0"
+              isLoading={isLoading}
+              onClick={() => {
+                if (descriptionString) {
+                  mutate({
+                    description: descriptionString,
+                    workspaceId: workspace.id,
+                  });
+                }
+              }}
+            >
+              <AI size={16} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Click to generate title</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
       <FormField
         control={form.control}
         name={`issues.${index}.title`}

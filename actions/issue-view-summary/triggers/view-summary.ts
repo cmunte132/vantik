@@ -8,7 +8,7 @@ import {
 import axios from 'axios';
 
 import { parseExpression } from 'cron-parser';
-import { IssueViewSummaryPrompt, LLMMappings } from 'types';
+import { IssueViewSummaryPrompt } from 'types';
 import { getSlackHeaders } from 'utils';
 
 function getLastRunTime(cronExpression: string): Date {
@@ -104,7 +104,7 @@ export const viewSummary = async (actionPayload: ActionEventPayload) => {
 issues: ${JSON.stringify(transformedIssues)}`,
       },
     ],
-    llmModel: LLMMappings.GPT35TURBO,
+    llmModel: 'fast',
     model: 'IssueViewSummary',
     workspaceId: view.workspaceId,
   };

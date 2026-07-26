@@ -10,7 +10,6 @@ import {
 } from '@vantikhq/types';
 import { Request, Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
-import supertokens from 'supertokens-node';
 import {
   createNewSession,
   SessionContainer,
@@ -46,11 +45,12 @@ export default class WorkspacesService {
   ) {}
 
   async createInitialResources(
-    userId: string,
+    session: SessionContainer,
     workspaceData: CreateInitialResourcesDto,
     res: Response,
     req: Request,
   ) {
+    const userId = getAppUserId(session);
     const workspace = await this.prisma.usersOnWorkspaces.findFirst({
       where: { userId },
     });
@@ -114,11 +114,16 @@ export default class WorkspacesService {
       },
     );
 
+    // Re-issued so the token carries the workspace that did not exist when the
+    // session was minted. It has to name the *recipe* user — the credential
+    // this session was created from — because that is what createNewSession
+    // resolves an account from. Handing it the account id instead left every
+    // first-run install unable to finish onboarding.
     await Session.createNewSession(
       req,
       res,
       'public',
-      supertokens.convertToRecipeUserId(userId),
+      session.getRecipeUserId(),
     );
 
     res.send({ status: 200, message: 'success' });
@@ -326,8 +331,16 @@ export default class WorkspacesService {
   }
 
   async getInvites(workspaceId: string) {
+    // Only the ones still outstanding. `deleted` is what closes an invite;
+    // filtering on status alone worked only while a decline was miswritten as
+    // an acceptance, and would have listed declined invites as pending the
+    // moment that was fixed.
     return await this.prisma.invite.findMany({
-      where: { workspaceId, status: { not: InviteStatusEnum.ACCEPTED } },
+      where: {
+        workspaceId,
+        deleted: null,
+        status: { not: InviteStatusEnum.ACCEPTED },
+      },
     });
   }
 
@@ -335,9 +348,11 @@ export default class WorkspacesService {
     req: Request,
     res: Response,
     inviteId: string,
-    userId: string,
+    session: SessionContainer,
     accepted: boolean = false,
   ) {
+    const userId = getAppUserId(session);
+
     if (accepted) {
       const invite = await this.prisma.invite.update({
         where: { id: inviteId },
@@ -352,20 +367,23 @@ export default class WorkspacesService {
       });
     }
 
+    // Closes the invite either way, but records which way: this used to write
+    // ACCEPTED unconditionally, so someone who pressed Decline was left on the
+    // record as having joined.
     const invite = await this.prisma.invite.update({
       where: { id: inviteId },
       data: {
-        status: InviteStatusEnum.ACCEPTED,
+        status: accepted
+          ? InviteStatusEnum.ACCEPTED
+          : InviteStatusEnum.DECLINED,
         deleted: new Date().toISOString(),
       },
     });
 
-    await createNewSession(
-      req,
-      res,
-      'public',
-      supertokens.convertToRecipeUserId(userId),
-    );
+    // Same reason as onboarding: the token has to pick up the workspace the
+    // invite just joined, and it is minted from the recipe user, not the
+    // account.
+    await createNewSession(req, res, 'public', session.getRecipeUserId());
     res.status(200).json(invite);
   }
 

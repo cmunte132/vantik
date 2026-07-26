@@ -1,11 +1,3 @@
-export enum LLMMappings {
-  GPT35TURBO = 'gpt-3.5-turbo',
-  GPT4TURBO = 'gpt-4-turbo',
-  LLAMA3 = 'llama3',
-  CLAUDEOPUS = 'opus',
-  GPT4O = 'gpt-4o',
-}
-
 export const IssueViewSummaryPrompt = `[TASK]
 You are tasked with understanding and summarizing task management data based on users' queries about tasks' status, assignees, priority, and completion. Your response should transform raw data into informative, practical summaries that address user's queries efficiently and fluently. For each query:
 - Calculate and aggregate data such as counts and lists from the provided tasks.

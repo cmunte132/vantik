@@ -1,7 +1,6 @@
 import { PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
-import { LLMMappings } from 'modules/prompts/prompts.interface';
 
 import { CreateViewsRequestBody } from './views.interface';
 
@@ -20,7 +19,7 @@ export async function getViewNameDescription(
         { role: 'system', content: viewNameDescriptionPrompt.prompt },
         { role: 'user', content: JSON.stringify(filtersData.filters) },
       ],
-      llmModel: LLMMappings[viewNameDescriptionPrompt.model],
+      llmModel: viewNameDescriptionPrompt.model,
       model: 'ViewNameDescription',
     },
 

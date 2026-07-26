@@ -5,6 +5,7 @@ import { suggestionItems } from '@vantikhq/ui/components/editor/slash-command';
 import { ListEdit, SubIssue } from '@vantikhq/ui/icons';
 import React from 'react';
 
+import { useAIEnabled } from 'hooks';
 import { useCurrentWorkspace } from 'hooks/workspace';
 
 import { useSubIssueGenerationMutation } from 'services/issues';
@@ -13,6 +14,7 @@ export const useSuggestionItems = (
   subIssueOperations: Partial<UseFieldArrayReturn>,
 ) => {
   const workspace = useCurrentWorkspace();
+  const aiEnabled = useAIEnabled();
   const { mutate: generateSubIssues, isPending: isLoading } =
     useSubIssueGenerationMutation({
       onSuccess: (data: string[]) => {
@@ -40,6 +42,13 @@ export const useSuggestionItems = (
     });
 
   const appendedSuggestionItems = React.useMemo(() => {
+    // Without an LLM endpoint the slash menu is the plain editor one. Both of
+    // the items below reach the AI request path, so offering them would only
+    // produce a failure a keystroke later.
+    if (!aiEnabled) {
+      return suggestionItems;
+    }
+
     return [
       {
         title: 'Break into sub-issues',
@@ -73,8 +82,7 @@ export const useSuggestionItems = (
       },
       ...suggestionItems,
     ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [aiEnabled, generateSubIssues, workspace.id]);
 
   return { suggestionItems: appendedSuggestionItems, isLoading };
 };

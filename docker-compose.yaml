@@ -19,7 +19,8 @@
 #
 # Not included (optional — the server logs an error and continues without them):
 #   - trigger.dev (background actions/automations) — https://trigger.dev/docs/self-hosting
-#   - ollama (local LLM fallback when no OPENAI/ANTHROPIC key is set)
+#   - an LLM endpoint for the AI features — any OpenAI-compatible one, hosted or
+#     local; point LLM_BASE_URL at it (see .env.example)
 #   - SMTP — without it, magic-link login emails are printed to the server log
 #     (docker compose logs server | grep -A5 "magic link")
 

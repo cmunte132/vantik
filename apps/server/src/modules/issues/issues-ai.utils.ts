@@ -3,7 +3,7 @@ import { CreateIssueDto, UpdateIssueDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
-import { LLMMappings } from 'modules/prompts/prompts.interface';
+import { isLLMConfigured } from 'modules/ai-requests/llm-provider';
 
 const logger = new Logger('IssuesAIUtils');
 
@@ -15,7 +15,10 @@ export async function getIssueTitle(
 ): Promise<string> {
   if (issueData.title) {
     return issueData.title;
-  } else if (issueData.description) {
+    // This one is not an AI feature the caller opted into — it sits on the
+    // ordinary create-issue path. An install with no LLM endpoint must still be
+    // able to create issues, so it gets an empty title, not an error.
+  } else if (issueData.description && isLLMConfigured()) {
     const titlePrompt = await prisma.prompt.findFirst({
       where: { name: 'IssueTitle', workspaceId },
     });
@@ -25,7 +28,7 @@ export async function getIssueTitle(
           { role: 'system', content: titlePrompt.prompt },
           { role: 'user', content: issueData.description },
         ],
-        llmModel: LLMMappings[titlePrompt.model],
+        llmModel: titlePrompt.model,
         model: 'IssueTitle',
       },
       workspaceId,
@@ -56,7 +59,7 @@ export async function getAiFilter(
           { role: 'system', content: filterPrompt },
           { role: 'user', content: filterText },
         ],
-        llmModel: LLMMappings[aiFilterPrompt.model],
+        llmModel: aiFilterPrompt.model,
         model: 'AIFilters',
       },
       workspaceId,
@@ -80,6 +83,13 @@ export async function getSuggestedLabels(
   description: string,
   workspaceId: string,
 ) {
+  // The suggestions endpoint also returns assignees, which come from vector
+  // search and need no LLM. Returning no labels leaves that half working
+  // instead of failing the whole response.
+  if (!isLLMConfigured()) {
+    return '';
+  }
+
   const labelPrompt = await prisma.prompt.findUnique({
     where: { name_workspaceId: { name: 'IssueLabels', workspaceId } },
   });
@@ -92,7 +102,7 @@ export async function getSuggestedLabels(
           content: `Text Description  -  ${description} \n Company Specific Labels -  ${labels.join(',')}`,
         },
       ],
-      llmModel: LLMMappings[labelPrompt.model],
+      llmModel: labelPrompt.model,
       model: 'LabelSuggestion',
     },
     workspaceId,
@@ -117,7 +127,7 @@ export async function getSummary(
           content: `[INPUT] conversations: ${conversations}`,
         },
       ],
-      llmModel: LLMMappings[summarizePrompt.model],
+      llmModel: summarizePrompt.model,
       model: 'IssueSummary',
     },
     workspaceId,

@@ -1,41 +1,21 @@
-import { anthropic } from '@ai-sdk/anthropic';
-import { openai } from '@ai-sdk/openai';
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { AIStreamResponse, GetAIRequestDTO } from '@vantikhq/types';
 import {
   generateText,
-  type LanguageModel,
   type ModelMessage,
   streamText,
   type UserModelMessage,
 } from 'ai';
 import { PrismaService } from 'nestjs-prisma';
-import { Ollama } from 'ollama';
-import { ollama } from 'ollama-ai-provider-v2';
 
 import { LoggerService } from 'modules/logger/logger.service';
+
+import { getLanguageModel, resolveModel } from './llm-provider';
 
 @Injectable()
 export default class AIRequestsService {
   private readonly logger: LoggerService = new LoggerService('RequestsService');
-  constructor(
-    private prisma: PrismaService,
-    private configService: ConfigService,
-  ) {
-    if (
-      !configService.get('OPENAI_API_KEY') ||
-      !configService.get('ANTHROPIC_API_KEY')
-    ) {
-      const ollama = new Ollama({ host: process.env['OLLAMA_HOST'] });
-      ollama.pull({ model: process.env['LOCAL_MODEL'] }).catch((error) => {
-        this.logger.error({
-          message: `Unable to pull local model from ollama: ${error.message}`,
-          where: `AIRequestsService.constructor`,
-        });
-      });
-    }
-  }
+  constructor(private prisma: PrismaService) {}
 
   async getLLMRequest(
     reqBody: GetAIRequestDTO,
@@ -102,50 +82,17 @@ export default class AIRequestsService {
     messages: ModelMessage[],
     onFinish: (text: string, model: string) => void,
   ) {
-    let modelInstance;
-    let finalModel: string;
-    if (
-      !this.configService.get('OPENAI_API_KEY') ||
-      !this.configService.get('ANTHROPIC_API_KEY')
-    ) {
-      model = null;
-    }
+    const { role, modelId: finalModel } = resolveModel(model);
+    const modelInstance = getLanguageModel(finalModel);
 
-    switch (model) {
-      case 'gpt-3.5-turbo':
-      case 'gpt-4-turbo':
-      case 'gpt-4o':
-        finalModel = model;
-        this.logger.info({
-          message: `Sending request to OpenAI with model: ${finalModel}`,
-          where: `AIRequestsService.makeModelCall`,
-        });
-        modelInstance = openai(finalModel);
-        break;
-
-      case 'claude-3-opus-20240229':
-      case 'claude-3-5-sonnet-20241022':
-      case 'claude-3-haiku-20240307':
-        finalModel = model;
-        this.logger.info({
-          message: `Sending request to Claude with model: ${finalModel}`,
-          where: `AIRequestsService.makeModelCall`,
-        });
-        modelInstance = anthropic(finalModel);
-        break;
-
-      default:
-        finalModel = process.env.LOCAL_MODEL;
-        this.logger.info({
-          message: `Sending request to ollama with model: ${model}`,
-          where: `AIRequestsService.makeModelCall`,
-        });
-        modelInstance = ollama(finalModel);
-    }
+    this.logger.info({
+      message: `Sending request for role '${role}' with model: ${finalModel}`,
+      where: `AIRequestsService.makeModelCall`,
+    });
 
     if (stream) {
       return await streamText({
-        model: modelInstance as LanguageModel,
+        model: modelInstance,
         messages,
         onFinish: async ({ text }) => {
           onFinish(text, finalModel);
@@ -154,7 +101,7 @@ export default class AIRequestsService {
     }
 
     const { text } = await generateText({
-      model: modelInstance as LanguageModel,
+      model: modelInstance,
       messages,
     });
 

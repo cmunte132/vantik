@@ -4,7 +4,6 @@ import {
   getIssueCommentReplies,
   JsonObject,
   LinkedIssue,
-  LLMMappings,
   Workflow,
 } from '@vantikhq/sdk';
 import { CREATE_TICKET_PROMPT } from 'prompts/create-ticket-prompt';
@@ -42,7 +41,7 @@ export async function getCompanyId(workspaceId: string, groupName: string) {
         ),
       },
     ],
-    llmModel: LLMMappings.GPT35TURBO,
+    llmModel: 'fast',
     model: 'GroupCompanyName',
     workspaceId,
   };
@@ -92,7 +91,7 @@ export async function isCreateTicket(
         ),
       },
     ],
-    llmModel: LLMMappings.GPT4O,
+    llmModel: 'smart',
     model: 'GroupCompanyName',
     workspaceId,
   };

@@ -1,4 +1,5 @@
 import { PrismaService } from 'nestjs-prisma';
+import supertokens from 'supertokens-node';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 /** What the API actually reads off a session, and nothing more. */
@@ -134,7 +135,11 @@ export function createPatSession(
   const session = {
     getAccessTokenPayload: () => claims,
     getUserId: () => supertokensUserId,
-    getRecipeUserId: () => supertokensUserId,
+    // A RecipeUserId object, not the bare string: callers hand this straight to
+    // createNewSession, which asks it for getAsString(). Unlike an account id,
+    // this one really is a recipe user id, so converting it names a credential
+    // that exists.
+    getRecipeUserId: () => supertokens.convertToRecipeUserId(supertokensUserId),
     getTenantId: () => 'public',
     getHandle: () => `pat:${claims.appUserId}`,
     getAccessToken: () => {

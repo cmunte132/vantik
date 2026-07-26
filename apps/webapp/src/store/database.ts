@@ -103,7 +103,7 @@ export class VantikDatabase extends Dexie {
       [MODELS.ProjectMilestone]:
         'id,createdAt,updatedAt,projectId,name,description,endDate',
       [MODELS.Cycle]:
-        'id,createdAt,updatedAt,teamId,name,description,endDate,startDate,preferences,number',
+        'id,createdAt,updatedAt,teamId,name,description,endDate,startDate,preferences,number,status,closedAt',
       [MODELS.Conversation]: 'id,createdAt,updatedAt,title,userId,workspaceId',
       [MODELS.ConversationHistory]:
         'id,createdAt,updatedAt,message,userType,context,thoughts,userId,conversationId',

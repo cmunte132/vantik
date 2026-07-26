@@ -12,4 +12,4 @@
  * schema than this cannot be migrated backwards and gets wiped and re-synced
  * instead; see `reconcileSchemaVersion`.
  */
-export const DEXIE_SCHEMA_VERSION = 21;
+export const DEXIE_SCHEMA_VERSION = 22;

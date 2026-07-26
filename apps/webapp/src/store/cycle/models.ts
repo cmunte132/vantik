@@ -12,6 +12,9 @@ export const Cycle = types.model('Cycle', {
   startDate: types.union(types.string, types.null),
   endDate: types.union(types.string, types.null),
 
+  status: types.string,
+  closedAt: types.union(types.string, types.null, types.undefined),
+
   preferences: types.union(types.string, types.null),
 });
 

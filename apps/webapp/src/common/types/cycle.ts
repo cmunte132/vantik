@@ -12,5 +12,8 @@ export interface CycleType {
   startDate: string;
   endDate: string;
 
+  status: string;
+  closedAt?: string | null;
+
   preferences?: string;
 }

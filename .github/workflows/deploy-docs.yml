@@ -24,10 +24,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Reads the version from the root package.json `packageManager` field, as
+      # CI does. Pinning it here instead made the action refuse to run at all
+      # once the two disagreed.
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.3.0
 
       - name: Setup Node
         uses: actions/setup-node@v4

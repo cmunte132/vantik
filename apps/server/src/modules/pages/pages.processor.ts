@@ -73,7 +73,11 @@ export class PagesScheduler implements OnModuleInit {
         jobId: DECAY_JOB_ID,
         repeat: { cron },
         removeOnComplete: true,
-        removeOnFail: true,
+        // Failures are kept, successes are not. Discarding a failed run left
+        // the queue looking idle and healthy while decay had in fact stopped —
+        // the same symptom as no scheduler at all. Bounded so a pass that fails
+        // every night cannot fill Redis.
+        removeOnFail: 20,
       },
     );
 
@@ -103,8 +107,25 @@ export class PagesProcessor {
    */
   @Process(DECAY_JOB)
   async handleDecay() {
-    const { expiredProposed, archivedStanding } =
-      await this.pageEntriesService.runDecay();
+    let expiredProposed: number;
+    let archivedStanding: number;
+
+    try {
+      ({ expiredProposed, archivedStanding } =
+        await this.pageEntriesService.runDecay());
+    } catch (error) {
+      // Said out loud, because the alternative is silence. The only other
+      // signal this pass gives is the line below, and "no line" reads exactly
+      // like "no schedule" — the bug this file was written to fix. Rethrown so
+      // Bull still records the run as failed.
+      this.logger.error({
+        message: `Knowledge decay pass failed: ${error}`,
+        where: 'PagesProcessor.handleDecay',
+        error: error instanceof Error ? error : undefined,
+      });
+
+      throw error;
+    }
 
     this.logger.info({
       message:

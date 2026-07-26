@@ -30,7 +30,9 @@ export const CycleList = observer(({ onNewCycle }: CycleListProps) => {
 
   const isManual =
     teamsStore.cyclesModeForTeam(team?.id) === CyclesModeEnum.MANUAL;
-  const isRunning = Boolean(team?.preferences?.cyclesAutoRunning);
+  const isRunning = Boolean(
+    teamsStore.getTeamWithId(team?.id)?.preferences?.cyclesAutoRunning,
+  );
 
   // An automatic team that has never started, or has been stopped and run its
   // last cycle out, gets the cadence summary and a Start button instead of an

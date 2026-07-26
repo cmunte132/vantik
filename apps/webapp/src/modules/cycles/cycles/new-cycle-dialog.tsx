@@ -37,8 +37,6 @@ import { useCurrentTeam } from 'hooks/teams';
 
 import { useCreateCycleMutation } from 'services/cycle';
 
-import { useContextStore } from 'store/global-context-provider';
-
 const NewCycleSchema = z
   .object({
     name: z.string().min(1, { message: 'Give the cycle a name' }),
@@ -69,7 +67,6 @@ export const NewCycleDialog = observer(
   ({ open, setOpen }: NewCycleDialogProps) => {
     const team = useCurrentTeam();
     const { cycles } = useCycles();
-    const { cyclesStore } = useContextStore();
     const { toast } = useToast();
 
     // Numbered from what the team already has, matching what the server will
@@ -105,10 +102,12 @@ export const NewCycleDialog = observer(
     }, [open, nextNumber]);
 
     const { mutate: createCycle, isPending } = useCreateCycleMutation({
-      // The sync socket carries the new cycle a moment later; writing it now is
-      // what keeps the list from looking like nothing happened.
+      // Deliberately not written into the cycles store here. That store keeps
+      // `preferences` as a JSON *string* — the sync path stringifies it on the
+      // way in — so handing it the raw API object throws, and the dialog would
+      // stay open over a cycle that had in fact been created. The socket
+      // delivers it correctly shaped a moment later.
       onSuccess: (cycle) => {
-        cyclesStore.update(cycle, cycle.id);
         setOpen(false);
         toast({
           variant: 'success',

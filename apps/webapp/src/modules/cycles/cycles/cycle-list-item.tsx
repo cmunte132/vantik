@@ -21,8 +21,6 @@ import { useCurrentTeam } from 'hooks/teams';
 
 import { useStartCycleMutation } from 'services/cycle';
 
-import { useContextStore } from 'store/global-context-provider';
-
 import { CompleteCycleDialog } from './complete-cycle-dialog';
 import { DeleteCycleAlert } from './delete-cycle-alert';
 import { CycleProgress } from '../cycle-view/cycle-progress';
@@ -45,7 +43,6 @@ export const CycleListItem = observer(
   ({ cycle, nextCycle, showControls }: CycleListItemProps) => {
     const team = useCurrentTeam();
     const { query } = useRouter();
-    const { cyclesStore } = useContextStore();
     const { toast } = useToast();
 
     const [completeOpen, setCompleteOpen] = React.useState(false);
@@ -53,9 +50,8 @@ export const CycleListItem = observer(
 
     const { mutate: startCycle, isPending: isStarting } = useStartCycleMutation(
       {
-        onSuccess: (started) => {
-          cyclesStore.update(started, started.id);
-        },
+        // The status change arrives through the sync socket, which shapes the
+        // cycle for the store; writing the raw response here would throw.
         // The server refuses a second current cycle; saying so plainly is the
         // difference between a rule and a button that does nothing.
         onError: (error: string) => {

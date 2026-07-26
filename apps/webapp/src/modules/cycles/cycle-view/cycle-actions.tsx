@@ -25,12 +25,12 @@ import { CompleteCycleDialog } from '../cycles/complete-cycle-dialog';
 export const CycleActions = observer(({ cycle }: { cycle: CycleType }) => {
   const team = useCurrentTeam();
   const { cycles } = useCycles();
-  const { cyclesStore, teamsStore } = useContextStore();
+  const { teamsStore } = useContextStore();
   const { toast } = useToast();
   const [completeOpen, setCompleteOpen] = React.useState(false);
 
   const { mutate: startCycle, isPending } = useStartCycleMutation({
-    onSuccess: (started) => cyclesStore.update(started, started.id),
+    // The sync socket carries the status change, correctly shaped for the store.
     onError: (error: string) => {
       toast({
         variant: 'destructive',

@@ -16,8 +16,6 @@ import { useDebouncedCallback } from 'use-debounce';
 
 import { SettingSection } from 'modules/settings/setting-section';
 
-import type { TeamType } from 'common/types';
-
 import { useCurrentTeam } from 'hooks/teams';
 
 import { useUpdateTeamPreferencesMutation } from 'services/team';
@@ -42,13 +40,11 @@ export const Cycles = observer(() => {
   const { toast } = useToast();
 
   const { mutate: updatePreferences } = useUpdateTeamPreferencesMutation({
-    // The gated UI — the sidebar's Cycles rows, the issue-sidebar dropdown —
-    // reads the store, so writing the response back is what makes it appear
-    // and disappear without a reload. The sync socket carries the same change
-    // a moment later and lands on an identical row.
-    onSuccess: (updatedTeam: TeamType) => {
-      teamsStore.update(updatedTeam, updatedTeam.id);
-    },
+    // The saved team is deliberately not written into the store here. That
+    // store's update replaces the array element rather than mutating it, so
+    // every component still holding the old node — the team icon, the workflow
+    // hooks — starts reading a node MST has already killed. The sync socket
+    // delivers this same change through the path built for it.
     onError: (error: string) => {
       toast({
         variant: 'destructive',
@@ -58,7 +54,12 @@ export const Cycles = observer(() => {
     },
   });
 
-  const preferences = team?.preferences;
+  // Read back through the store rather than trusting the node `useCurrentTeam`
+  // handed us. That hook memoises on the team count, and the store's update
+  // *replaces* the array element, so after a save the hook still holds the old,
+  // detached node — which never re-renders. Looking it up here tracks the array
+  // itself, so the form reflects what was just written without a reload.
+  const preferences = teamsStore.getTeamWithId(team?.id)?.preferences;
   const cyclesEnabled = Boolean(preferences?.cyclesEnabled);
   // Absent for every team that turned cycles on before modes existed. Manual is
   // the mode that does nothing unasked, so it is the safe reading of silence.

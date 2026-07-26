@@ -29,7 +29,8 @@ const CyclesView = observer(() => {
   const isManual =
     teamsStore.cyclesModeForTeam(team?.id) === CyclesModeEnum.MANUAL;
   const isAutoRunning =
-    !isManual && Boolean(team?.preferences?.cyclesAutoRunning);
+    !isManual &&
+    Boolean(teamsStore.getTeamWithId(team?.id)?.preferences?.cyclesAutoRunning);
 
   return (
     <MainLayout

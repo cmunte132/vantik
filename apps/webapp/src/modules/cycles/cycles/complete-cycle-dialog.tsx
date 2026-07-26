@@ -49,8 +49,7 @@ export const CompleteCycleDialog = observer(
     }, [nextCycle, open]);
 
     const { mutate: complete, isPending } = useCompleteCycleMutation({
-      onSuccess: (completed) => {
-        cyclesStore.update(completed, completed.id);
+      onSuccess: () => {
         // The issues that moved are not in this response, and the cycle a
         // person is looking at is exactly the one whose membership changed.
         issuesStore.load();

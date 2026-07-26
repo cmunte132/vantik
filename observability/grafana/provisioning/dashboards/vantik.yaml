@@ -1,0 +1,15 @@
+# Mounted into the lgtm image's Grafana provisioning directory. The image's own
+# provider file lists dashboards by explicit path, so this adds to it rather
+# than replacing it — the bundled RED metrics dashboards stay available.
+apiVersion: 1
+
+providers:
+  - name: Vantik
+    type: file
+    # Dashboards live in a directory of their own, mounted read-only. Editing a
+    # provisioned dashboard in the Grafana UI is allowed but not saved back to
+    # the file; use "Export -> JSON" and write it into the repo.
+    options:
+      path: /otel-lgtm/vantik-dashboards
+      foldersFromFilesStructure: false
+    folder: Vantik

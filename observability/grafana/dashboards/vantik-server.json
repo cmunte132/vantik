@@ -1,0 +1,1154 @@
+{
+  "uid": "vantik-server",
+  "title": "Vantik Server",
+  "description": "Requests, datastores and Node runtime health for apps/server. Metric names here are the Prometheus translations of the OTel names emitted by apps/server/src/otel.ts — dots become underscores and the unit is appended, so http.server.request.duration is http_server_request_duration_seconds.",
+  "tags": [
+    "vantik"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(http_server_request_duration_seconds_count, service_name)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "description": "allValue is .+ rather than Grafana's default .* because Loki rejects a matcher that can match empty (service_name=~\".*\" is a parse error, not an empty result), which would break every log panel whenever this was left on All. Prometheus accepts .+ identically.",
+        "allValue": ".+",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Request rate",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval]))",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Error rate (5xx)",
+      "description": "`or vector(0)` keeps the panel showing 0 rather than N/A when there have been no 5xx at all — an empty numerator makes the whole division empty.",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "100 * (sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\", http_response_status_code=~\"5..\"}[$__rate_interval])) or vector(0)) / sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval]))",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Latency p95",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Event loop utilization",
+      "description": "Fraction of wall clock the event loop spent executing rather than idle. Sustained above ~0.8 and the process is saturated: requests queue behind work already running, and no amount of per-request latency data shows why.",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "max(nodejs_eventloop_utilization_ratio{service_name=~\"$service\"})",
+          "instant": false
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "Requests",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Request rate by route",
+      "description": "Routes are the Express/Nest route template, not the raw path, so /issues/:id is one series rather than one per issue. Requests that matched no route (404s) carry no http_route label at all; label_replace names them `(unrouted)` rather than letting Grafana fall back to calling the series \"Value\".",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "label_replace(sum by (http_route) (rate(http_server_request_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval])), \"http_route\", \"(unrouted)\", \"http_route\", \"^$\")",
+          "legendFormat": "{{http_route}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Latency percentiles",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.90, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "p90"
+        },
+        {
+          "refId": "C",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Responses by status code",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "fillOpacity": 40,
+            "lineWidth": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "5.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "2.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum by (http_response_status_code) (rate(http_server_request_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{http_response_status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "p95 by route",
+      "description": "The route to open a trace for. Slow here, then search Tempo for the same route to see which query underneath it is responsible.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "label_replace(histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval]))), \"http_route\", \"(unrouted)\", \"http_route\", \"^$\")",
+          "legendFormat": "{{http_route}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Datastores",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "text",
+      "title": "Where Prisma queries are",
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "The panels below cover the **`pg` driver only** — in this app that is the replication/sync engine, not the request path. Prisma talks to Postgres through its own Rust engine and emits **spans but no metrics**, so application query rate and latency cannot be graphed here.\n\nFor Prisma query timings, open a trace: [Explore → Tempo](/explore?left=%7B%22datasource%22:%22tempo%22%7D) and search `{span.http.route=\"/health/ready\"}`. Each request carries `prisma:engine:db_query` children with their own durations."
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Postgres driver query rate",
+      "description": "From @opentelemetry/instrumentation-pg, which sees the node-postgres client used by the sync engine. Prisma's queries do not appear here — verified against the running stack: this counter does not move under request traffic that runs prisma.$queryRaw.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 25
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum by (db_operation_name) (rate(db_client_operation_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{db_operation_name}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Postgres driver latency",
+      "description": "Gaps rather than lines mean no pg-driver queries in the window — histogram_quantile over empty buckets is NaN, which is correct and not a broken query.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 25
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(db_client_operation_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(db_client_operation_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(db_client_operation_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Outbound calls p95 by host",
+      "description": "The server's own HTTP clients — Typesense, SuperTokens, the LLM provider. Keyed by host, because a stall in one of these looks exactly like a slow endpoint from the outside.\n\nThe `lgtm` host is excluded: the OTLP exporter's own POSTs to the collector are themselves instrumented by the http instrumentation, so leaving them in means this panel is largely measuring the act of sending telemetry. They only exist when telemetry is switched on, which makes them pure artefact.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 25
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, server_address) (rate(http_client_request_duration_seconds_bucket{service_name=~\"$service\", server_address!=\"lgtm\"}[$__rate_interval])))",
+          "legendFormat": "{{server_address}}"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Node runtime",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Event loop delay",
+      "description": "How long a callback waited to run. This is the panel that explains latency nothing else accounts for: the slow request and the request blocking it are rarely the same one.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "max"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "max(nodejs_eventloop_delay_mean_seconds{service_name=~\"$service\"})",
+          "legendFormat": "mean"
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "expr": "max(nodejs_eventloop_delay_p90_seconds{service_name=~\"$service\"})",
+          "legendFormat": "p90"
+        },
+        {
+          "refId": "C",
+          "editorMode": "code",
+          "expr": "max(nodejs_eventloop_delay_p99_seconds{service_name=~\"$service\"})",
+          "legendFormat": "p99"
+        },
+        {
+          "refId": "D",
+          "editorMode": "code",
+          "expr": "max(nodejs_eventloop_delay_max_seconds{service_name=~\"$service\"})",
+          "legendFormat": "max"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Event loop utilization",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "max(nodejs_eventloop_utilization_ratio{service_name=~\"$service\"})",
+          "legendFormat": "utilization"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "V8 heap",
+      "description": "Used against total allocated. A used line climbing across restarts with GC unable to bring it back down is the shape of a leak.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total allocated"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "max(v8js_memory_heap_used_bytes{service_name=~\"$service\"})",
+          "legendFormat": "used"
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "expr": "sum(v8js_memory_heap_space_size_bytes{service_name=~\"$service\"})",
+          "legendFormat": "total allocated"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "GC time by collector",
+      "description": "Seconds of garbage collection per second of wall clock, split by collector. A rising major-GC line means the process is spending real time collecting instead of serving.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 42
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "fillOpacity": 30,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum by (v8js_gc_type) (rate(v8js_gc_duration_seconds_sum{service_name=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{v8js_gc_type}}"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Logs",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Log volume by level",
+      "description": "severity_text is structured metadata rather than a stream label, so grouping by it costs nothing in index cardinality — the only indexed labels are service_name and deployment_environment_name.",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 51
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "logs",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            "barAlignment": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "warn"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code",
+          "expr": "sum by (severity_text) (count_over_time({service_name=~\"$service\"}[$__auto]))",
+          "legendFormat": "{{severity_text}}"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "logs",
+      "title": "Errors and warnings",
+      "description": "Expand a line to see its fields — reqId, wId, opName and where come across as record attributes, and trace_id links straight to the trace in Tempo.",
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 8,
+        "y": 51
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code",
+          "expr": "{service_name=~\"$service\"} | severity_text =~ \"error|warn\"",
+          "maxLines": 200
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "logs",
+      "title": "All logs",
+      "description": "The stdout JSON is unchanged and still available via `docker compose logs -f server`; this is the same stream over OTLP, with the fields split out so they can be filtered on.",
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 60
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "editorMode": "code",
+          "expr": "{service_name=~\"$service\"}",
+          "maxLines": 500
+        }
+      ]
+    }
+  ]
+}

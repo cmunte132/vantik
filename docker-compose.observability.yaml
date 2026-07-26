@@ -1,0 +1,87 @@
+# Local observability. Opt-in overlay on top of docker-compose.yaml:
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d
+#
+# Grafana on http://localhost:3002 — no login, see GF_AUTH_ANONYMOUS below.
+#
+# This file is an overlay rather than a profile in the main compose file on
+# purpose. Turning telemetry on means setting OTEL_EXPORTER_OTLP_ENDPOINT on the
+# server, and a profile cannot do that conditionally: the variable would be set
+# whether or not the stack was running, leaving the exporter retrying against a
+# host that does not exist. Nobody who does not ask for this pays for it, and
+# the default `docker compose up -d` is unchanged.
+#
+# What you get: every metric, trace and log line the server emits (see
+# apps/server/src/otel.ts). Logs go over the same OTLP connection as the rest —
+# there is no log shipper and no container socket mounted — and stdout is
+# untouched, so `docker compose logs -f server` keeps working as before.
+
+name: vantik
+
+services:
+  # The server is instrumented but silent until it is given an endpoint. This is
+  # the whole switch: with it set, the OTel SDK starts and exports over OTLP/HTTP
+  # to the collector inside the lgtm container.
+  server:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+      # 60s (the default, and what most backends expect) is unusable when you
+      # are poking an endpoint by hand and want to see the panel move. Metrics
+      # are cumulative, so this costs export overhead, not correctness.
+      OTEL_METRIC_EXPORT_INTERVAL: 5000
+      # The SDK swallows exporter errors by default. Locally, silence is the
+      # wrong trade: if the collector is unreachable you want to be told.
+      OTEL_LOG_LEVEL: error
+
+  lgtm:
+    container_name: vantik-lgtm
+    # Grafana, Prometheus, Tempo, Loki and an OTel collector in one container,
+    # with datasources already wired to each other. Pinned rather than :latest —
+    # dashboard JSON is written against specific metric names and a specific
+    # Grafana schema, and both move between releases.
+    #
+    # Upstream is explicit that this image is for development and demos, not
+    # production: single container, no auth, no retention policy. That is the
+    # right shape for this file and the wrong shape for a real deployment, which
+    # is why the app side is a plain OTLP endpoint — point it at Alloy, Mimir or
+    # a hosted backend instead and nothing in the app changes.
+    image: grafana/otel-lgtm:0.9.3
+    restart: unless-stopped
+    volumes:
+      # Grafana, Prometheus and Tempo all keep state under /data. Without this
+      # every restart is a blank slate, which is a bad surprise the first time
+      # you go looking for what happened an hour ago.
+      - lgtm-data:/data
+      # Provider configs point at explicit file paths, so adding one alongside
+      # them leaves the image's own dashboards (RED metrics, JVM) in place. A
+      # directory mount over provisioning/dashboards would remove them.
+      - ./observability/grafana/provisioning/dashboards/vantik.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/vantik.yaml:ro
+      - ./observability/grafana/dashboards:/otel-lgtm/vantik-dashboards:ro
+    environment:
+      # The image defaults to anonymous admin access. Made explicit because it
+      # is the reason every port below is bound to 127.0.0.1: this is an open
+      # Grafana, and it must not be reachable from off the machine.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    ports:
+      # Grafana. Not :3000 — the webapp has it.
+      - "127.0.0.1:3002:3000"
+      # OTLP in. The server container reaches the collector over the compose
+      # network and does not need these; they are here for running the apps on
+      # the host (`pnpm dev`), where OTEL_EXPORTER_OTLP_ENDPOINT should be
+      # http://localhost:4318 in .env instead of the override above.
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      # Prometheus' own UI, for checking what arrived when a panel is empty.
+      - "127.0.0.1:9090:9090"
+    networks:
+      - vantik
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  lgtm-data:

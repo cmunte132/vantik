@@ -28,6 +28,54 @@ function serialiseError(error: unknown): SerialisedError | undefined {
   return undefined;
 }
 
+/**
+ * Puts the correlation ids onto the log record itself, before any transport
+ * sees it.
+ *
+ * These used to be read straight out of AsyncLocalStorage inside `printLine`,
+ * which worked only because the console was the one and only transport. The
+ * winston instrumentation in the OTel auto set appends a second transport when
+ * an OTLP endpoint is configured, and it builds its attributes from the record's
+ * own fields — so anything conjured up inside the printf formatter is invisible
+ * to it. Logs reached Grafana with no workspace, request or operation to filter
+ * on, which is most of what makes a log line worth having.
+ *
+ * Enriching here instead means both sinks see the same fields. `printLine` keeps
+ * emitting byte-identical stdout, because it reads the same values from the
+ * record rather than fetching them itself.
+ */
+const withCorrelationIds = winston.format((info) => {
+  const workspaceId = ALS_SERVICE_INSTANCE.get<string>('workspaceId');
+  if (workspaceId) {
+    info.wId = workspaceId;
+  }
+
+  const requestId = ALS_SERVICE_INSTANCE.get<string>('requestId');
+  if (requestId) {
+    info.reqId = requestId;
+  }
+
+  const opName = ALS_SERVICE_INSTANCE.get<string>('opName');
+  if (opName) {
+    info.opName = opName;
+  }
+
+  const actorId = ALS_SERVICE_INSTANCE.get<string>('actorId');
+  if (actorId) {
+    info.aId = actorId;
+  }
+
+  // Present only while a trace is active, which is only when an OTLP endpoint
+  // is configured. These are what let a log line be pivoted to its trace.
+  const spanContext = trace.getActiveSpan()?.spanContext();
+  if (spanContext) {
+    info.traceId = spanContext.traceId;
+    info.spanId = spanContext.spanId;
+  }
+
+  return info;
+});
+
 function printLine({
   level = 'info',
   message,
@@ -41,35 +89,27 @@ function printLine({
     msg: message as string,
   };
 
-  // Correlation ids from the request's AsyncLocalStorage store. All four were
-  // previously written only to the file transport, so the logs that actually
-  // got collected carried none of them.
-  const workspaceId = ALS_SERVICE_INSTANCE.get<string>('workspaceId');
-  if (workspaceId) {
-    line.wId = workspaceId;
+  // Read in this order deliberately: it fixes the key order of the emitted
+  // JSON, which anything parsing stdout may reasonably have come to expect.
+  if (metadata.wId) {
+    line.wId = metadata.wId as string;
   }
 
-  const requestId = ALS_SERVICE_INSTANCE.get<string>('requestId');
-  if (requestId) {
-    line.reqId = requestId;
+  if (metadata.reqId) {
+    line.reqId = metadata.reqId as string;
   }
 
-  const opName = ALS_SERVICE_INSTANCE.get<string>('opName');
-  if (opName) {
-    line.opName = opName;
+  if (metadata.opName) {
+    line.opName = metadata.opName as string;
   }
 
-  const actorId = ALS_SERVICE_INSTANCE.get<string>('actorId');
-  if (actorId) {
-    line.aId = actorId;
+  if (metadata.aId) {
+    line.aId = metadata.aId as string;
   }
 
-  // Present only while a trace is active, which is only when an OTLP endpoint
-  // is configured. These are what let a log line be pivoted to its trace.
-  const spanContext = trace.getActiveSpan()?.spanContext();
-  if (spanContext) {
-    line.traceId = spanContext.traceId;
-    line.spanId = spanContext.spanId;
+  if (metadata.traceId) {
+    line.traceId = metadata.traceId as string;
+    line.spanId = metadata.spanId as string;
   }
 
   // `where` is part of LogInput and callers pass it, but the old formatter
@@ -112,6 +152,10 @@ const rootLogger: WinstonLogger = createLogger({
     winston.format.splat(),
     winston.format.errors({ stack: true }),
     winston.format.timestamp(),
+    // Must come before printf: printf terminates the chain by producing the
+    // output string, and every transport — including the OTel one — reads the
+    // record this leaves behind.
+    withCorrelationIds(),
     winston.format.printf(printLine),
   ),
   transports: [new winston.transports.Console()],

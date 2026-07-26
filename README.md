@@ -109,6 +109,34 @@ pnpm dev
 If the full stack is already running in containers, free the app ports first
 with `docker compose stop webapp server`.
 
+### Observability
+
+The server is instrumented for OpenTelemetry but exports nothing until it is
+given an endpoint. To get metrics and traces in a local Grafana with a dashboard
+already set up, add the observability overlay:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d
+```
+
+Grafana is on [localhost:3002](http://localhost:3002), no login. It bundles
+Prometheus, Tempo and Loki, so request rate/errors/latency, Node event loop and
+heap health, request traces, and logs all work with no further setup — and
+because every log line carries its `traceId`, you can go from a slow trace to
+the lines it emitted and back. Logs travel over the same OTLP connection as
+everything else; nothing scrapes your containers.
+
+Running the apps on the host? Start the stack alongside the backing services and
+point the exporter at the published port instead of the container:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d postgres redis supertokens typesense lgtm
+echo 'OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318' >> .env
+```
+
+See [Observability](apps/docs/docs/oss/self-deployment.mdx) for what is collected
+and what is deliberately left out.
+
 ## Documentation
 
 Docs live in `apps/docs` (Docusaurus) and are deployed to GitHub Pages on every push to

@@ -14,6 +14,14 @@
 # They publish their ports on localhost for exactly that — see "Local
 # development" in README.md.
 #
+# For metrics and traces in a local Grafana, add the observability overlay:
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d
+#
+# It is a separate file rather than a profile because it has to set
+# OTEL_EXPORTER_OTLP_ENDPOINT on the server, which a profile cannot do
+# conditionally. Nothing here changes when it is not in use.
+#
 # Values in `environment:` blocks override .env where the in-container network
 # differs from the host view (service names instead of localhost).
 #

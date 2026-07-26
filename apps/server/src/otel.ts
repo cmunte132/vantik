@@ -16,6 +16,7 @@
  */
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { ExpressLayerType } from '@opentelemetry/instrumentation-express';
@@ -24,6 +25,7 @@ import {
   defaultResource,
   resourceFromAttributes,
 } from '@opentelemetry/resources';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import {
@@ -92,6 +94,19 @@ export function startOtel(): void {
         exporter: new OTLPMetricExporter(),
         exportIntervalMillis: metricExportIntervalMs(),
       }),
+    ],
+    // Logs ride the same endpoint and switch as traces and metrics. The winston
+    // instrumentation in the auto set below is what feeds this: it was already
+    // active and already forwarding records, but with no processor registered
+    // they went nowhere. Registering one is the whole of it — no log shipper, no
+    // container socket to mount, and it works the same whether the server runs
+    // in a container or on the host.
+    //
+    // stdout is untouched. The Console transport still writes the same JSON, so
+    // `docker compose logs server` keeps working and an operator who collects
+    // container logs the normal way loses nothing.
+    logRecordProcessors: [
+      new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() }),
     ],
     instrumentations: [
       getNodeAutoInstrumentations({

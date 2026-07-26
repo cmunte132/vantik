@@ -315,8 +315,12 @@ export function getFilterWhere(
     });
   }
 
+  // Deletion is soft — `deleted` holds a timestamp and the row stays. Every
+  // single-issue read filters on it, so leaving it out here made a deleted
+  // issue keep appearing in lists while a read of that same id returned 404.
+  // It also skewed the paginated `total`, which counts through this clause.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: Record<string, any> = { team: { workspaceId } };
+  const where: Record<string, any> = { team: { workspaceId }, deleted: null };
 
   for (const [filterKey, filterValue] of Object.entries(
     filterData as Record<FilterKey, FilterValue>,

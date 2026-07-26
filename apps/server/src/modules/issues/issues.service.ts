@@ -116,6 +116,7 @@ export default class IssuesService {
       where: {
         team: { workspaceId, ...(teamId && { id: teamId }) },
         ...(issueIds?.length && { id: { in: issueIds } }),
+        deleted: null,
       },
       include: { team: true },
     });
@@ -663,9 +664,11 @@ export default class IssuesService {
    * @returns A Promise that resolves to the CSV string of exported issues.
    */
   async exportIssues(workspaceId: string): Promise<string> {
-    // Find all issues for the given workspace, including related data
+    // Find all issues for the given workspace, including related data. Deleted
+    // issues are excluded: an export is a snapshot of the workspace as it
+    // stands, not of every row ever written.
     const issues = await this.prisma.issue.findMany({
-      where: { team: { workspaceId } },
+      where: { team: { workspaceId }, deleted: null },
       include: {
         parent: true,
         team: true,

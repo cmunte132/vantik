@@ -158,4 +158,35 @@ describe('IssuesService.getIssuesByFilter', () => {
       'Nightly job saturates the pool',
     );
   });
+
+  // Deletion is soft, so a deleted issue is still a row that matches on
+  // tenancy alone. Without this clause it kept surfacing in every list while a
+  // read of the same id returned 404.
+  it('excludes soft-deleted issues on the unpaginated branch', async () => {
+    const { service, prisma } = buildService();
+
+    await service.getIssuesByFilter(baseFilter, 'workspace-1', 'user-1');
+
+    expect((prisma.issue.findMany as jest.Mock).mock.calls[0][0].where).toEqual(
+      expect.objectContaining({ deleted: null }),
+    );
+  });
+
+  it('excludes soft-deleted issues from the page and its total', async () => {
+    const { service, prisma } = buildService();
+
+    await service.getIssuesByFilter(
+      { ...baseFilter, page: 1 },
+      'workspace-1',
+      'user-1',
+    );
+
+    // The count shares the where clause, so an unfiltered total would report
+    // deleted issues as pages of results that are not there.
+    for (const query of [prisma.issue.findMany, prisma.issue.count]) {
+      expect((query as jest.Mock).mock.calls[0][0].where).toEqual(
+        expect.objectContaining({ deleted: null }),
+      );
+    }
+  });
 });

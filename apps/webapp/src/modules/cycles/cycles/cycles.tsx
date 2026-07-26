@@ -13,6 +13,7 @@ import { useCurrentTeam } from 'hooks/teams';
 
 import { useContextStore } from 'store/global-context-provider';
 
+import { AutoCyclesPanel } from './auto-cycles-panel';
 import { CycleList } from './cycle-list';
 import { NewCycleDialog } from './new-cycle-dialog';
 import { Header } from '../header';
@@ -23,9 +24,12 @@ const CyclesView = observer(() => {
   const [newCycleOpen, setNewCycleOpen] = React.useState(false);
 
   // Automatic teams get a read-only list: their cycles are created and closed
-  // on a cadence, and a New cycle button here would cut across it.
+  // on a cadence, and a New cycle button here would cut across it. What they
+  // get instead is the way to turn that cadence off.
   const isManual =
     teamsStore.cyclesModeForTeam(team?.id) === CyclesModeEnum.MANUAL;
+  const isAutoRunning =
+    !isManual && Boolean(team?.preferences?.cyclesAutoRunning);
 
   return (
     <MainLayout
@@ -33,16 +37,19 @@ const CyclesView = observer(() => {
         <Header
           title="All cycles"
           actions={
-            isManual ? (
-              <Button
-                variant="secondary"
-                className="gap-1"
-                onClick={() => setNewCycleOpen(true)}
-              >
-                <AddLine size={14} />
-                New cycle
-              </Button>
-            ) : null
+            <>
+              {isManual && (
+                <Button
+                  variant="secondary"
+                  className="gap-1"
+                  onClick={() => setNewCycleOpen(true)}
+                >
+                  <AddLine size={14} />
+                  New cycle
+                </Button>
+              )}
+              {isAutoRunning && <AutoCyclesPanel running />}
+            </>
           }
         />
       }

@@ -6,6 +6,8 @@ import {
   IsString,
 } from 'class-validator';
 
+import { UnfinishedDestinationEnum } from '../cycle/complete-cycle.dto';
+
 export class TeamRequestParamsDto {
   @IsString()
   teamId: string;
@@ -46,6 +48,28 @@ export class TeamPreferenceDto {
   @IsOptional()
   @IsEnum(CyclesModeEnum)
   cyclesMode?: CyclesModeEnum;
+
+  /**
+   * Whether the automatic cadence is currently running for this team.
+   *
+   * Set by Start, cleared by Stop. Recorded explicitly rather than inferred
+   * from the cycle rows, because the two states are indistinguishable from the
+   * rows alone: a team that was stopped mid-cycle has a running cycle and no
+   * upcoming ones, which is exactly what a team about to be topped up looks
+   * like. Inferring it would have the schedule undo every Stop on its next
+   * pass.
+   */
+  @IsOptional()
+  @IsBoolean()
+  cyclesAutoRunning?: boolean;
+
+  /**
+   * Where the schedule sends unfinished issues when it closes a cycle. Only
+   * consulted in automatic mode; manual completions are asked each time.
+   */
+  @IsOptional()
+  @IsEnum(UnfinishedDestinationEnum)
+  autoRolloverDestination?: UnfinishedDestinationEnum;
 
   @IsOptional()
   @IsNumber()

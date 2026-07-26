@@ -58,6 +58,22 @@ docker compose logs server | grep -A5 "magic link"
 For a non-localhost deployment, set `FRONTEND_HOST` / `BACKEND_HOST` in `.env` to your
 domain and change `POSTGRES_PASSWORD`, `TYPESENSE_API_KEY`, and `TRIGGER_TOKEN`.
 
+### Scheduled work
+
+Some of what Vantik does happens on a schedule rather than in response to a
+request. These run inside the server process as Bull repeatable jobs on the
+Redis the stack already requires — not on trigger.dev, which is optional here
+and therefore cannot be where anything load-bearing lives. Each is registered at
+boot and logs the schedule it registered, so "is it running?" is answerable from
+`docker compose logs server`.
+
+| Job | Default | Variable | What it does |
+| --- | --- | --- | --- |
+| Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | For teams on the automatic cadence: completes cycles whose end date has passed, rolls their unfinished issues per the team's preference, and tops up upcoming cycles. Teams running cycles manually are never touched. |
+| Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | Archives untriaged and unserved knowledge entries. |
+
+Set either to `off` to disable it.
+
 Optional services (the server logs an error and continues without them):
 
 - **trigger.dev** — powers background actions/automations;

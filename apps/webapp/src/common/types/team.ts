@@ -17,6 +17,9 @@ export interface TeamPreferences {
   cyclesMode?: string;
   cyclesFrequency?: number;
   upcomingCycles?: number;
+  /** Whether the automatic cadence is currently running. Set by Start/Stop. */
+  cyclesAutoRunning?: boolean;
+  autoRolloverDestination?: string;
   teamType?: string;
 }
 

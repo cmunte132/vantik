@@ -1,4 +1,4 @@
-import { CyclesModeEnum } from '@vantikhq/types';
+import { CyclesModeEnum, UnfinishedDestinationEnum } from '@vantikhq/types';
 import { Input } from '@vantikhq/ui/components/input';
 import { Label } from '@vantikhq/ui/components/label';
 import {
@@ -67,12 +67,20 @@ export const Cycles = observer(() => {
       ? CyclesModeEnum.AUTO
       : CyclesModeEnum.MANUAL;
 
+  // Carrying work forward is what a cadence is for, so that is the reading of
+  // an unset preference.
+  const rolloverDestination =
+    preferences?.autoRolloverDestination === UnfinishedDestinationEnum.BACKLOG
+      ? UnfinishedDestinationEnum.BACKLOG
+      : UnfinishedDestinationEnum.NEXT_CYCLE;
+
   const save = React.useCallback(
     (values: {
       cyclesEnabled?: boolean;
       cyclesMode?: CyclesModeEnum;
       cyclesFrequency?: number;
       upcomingCycles?: number;
+      autoRolloverDestination?: UnfinishedDestinationEnum;
     }) => {
       updatePreferences({ teamId: team.id, ...values });
     },
@@ -181,6 +189,33 @@ export const Cycles = observer(() => {
                     How many future cycles to keep ahead
                   </p>
                 </div>
+              </div>
+            )}
+
+            {cyclesMode === CyclesModeEnum.AUTO && (
+              <div className="flex flex-col gap-2 max-w-[320px]">
+                <Label htmlFor="auto-rollover">Unfinished work</Label>
+                <Select
+                  value={rolloverDestination}
+                  onValueChange={(value: UnfinishedDestinationEnum) =>
+                    save({ autoRolloverDestination: value })
+                  }
+                >
+                  <SelectTrigger id="auto-rollover">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UnfinishedDestinationEnum.NEXT_CYCLE}>
+                      Move to the next cycle
+                    </SelectItem>
+                    <SelectItem value={UnfinishedDestinationEnum.BACKLOG}>
+                      Send back to the backlog
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-muted-foreground">
+                  What happens to issues that are still open when a cycle closes
+                </p>
               </div>
             )}
           </>

@@ -1,6 +1,7 @@
 import { IsBoolean, IsEnum, IsNumber, IsOptional } from 'class-validator';
 
 import { CyclesModeEnum } from './team.dto';
+import { UnfinishedDestinationEnum } from '../cycle/complete-cycle.dto';
 
 export enum TeamType {
   ENGINEERING = 'engineering',
@@ -15,6 +16,10 @@ export class UpdateTeamPreferencesDto {
   @IsOptional()
   @IsEnum(CyclesModeEnum)
   cyclesMode?: CyclesModeEnum;
+
+  @IsOptional()
+  @IsEnum(UnfinishedDestinationEnum)
+  autoRolloverDestination?: UnfinishedDestinationEnum;
 
   @IsOptional()
   @IsNumber()

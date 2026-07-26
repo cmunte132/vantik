@@ -17,6 +17,7 @@ import { UserId } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 import { AdminGuard } from 'modules/users/admin.guard';
 
+import { CyclesAutomationService } from './cycles-automation.service';
 import { CyclesService } from './cycles.service';
 
 @Controller({
@@ -24,12 +25,26 @@ import { CyclesService } from './cycles.service';
   path: 'cycles',
 })
 export class CyclesController {
-  constructor(private cycles: CyclesService) {}
+  constructor(
+    private cycles: CyclesService,
+    private cyclesAutomation: CyclesAutomationService,
+  ) {}
 
+  /**
+   * Start the automatic cadence: seed the first batch from the team's
+   * configured cadence and mark it running.
+   */
   @Post()
   @UseGuards(AuthGuard, AdminGuard, WorkspaceResourceGuard)
   async createCycle(@Body('teamId') teamId: string) {
-    return await this.cycles.createCycles(teamId);
+    return await this.cyclesAutomation.startAutoCycles(teamId);
+  }
+
+  /** Stop it: upcoming cycles go, the running one is left to finish. */
+  @Post('stop')
+  @UseGuards(AuthGuard, AdminGuard, WorkspaceResourceGuard)
+  async stopCycles(@Body('teamId') teamId: string) {
+    return await this.cyclesAutomation.stopAutoCycles(teamId);
   }
 
   /**

@@ -11,6 +11,7 @@ import { useCurrentTeam } from 'hooks/teams';
 
 import { useContextStore } from 'store/global-context-provider';
 
+import { AutoCyclesPanel } from './auto-cycles-panel';
 import { CycleListItem } from './cycle-list-item';
 
 interface CycleListProps {
@@ -29,21 +30,25 @@ export const CycleList = observer(({ onNewCycle }: CycleListProps) => {
 
   const isManual =
     teamsStore.cyclesModeForTeam(team?.id) === CyclesModeEnum.MANUAL;
+  const isRunning = Boolean(team?.preferences?.cyclesAutoRunning);
+
+  // An automatic team that has never started, or has been stopped and run its
+  // last cycle out, gets the cadence summary and a Start button instead of an
+  // empty list — the list is not the thing it acts on.
+  if (!isManual && !isRunning) {
+    return <AutoCyclesPanel running={false} />;
+  }
 
   if (cycles.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3">
         <Cycle size={32} className="text-muted-foreground" />
         <p className="text-muted-foreground">
-          {isManual
-            ? 'No cycles yet. Create one to start planning work into time boxes.'
-            : 'No cycles yet.'}
+          No cycles yet. Create one to start planning work into time boxes.
         </p>
-        {isManual && (
-          <Button variant="secondary" onClick={onNewCycle}>
-            New cycle
-          </Button>
-        )}
+        <Button variant="secondary" onClick={onNewCycle}>
+          New cycle
+        </Button>
       </div>
     );
   }

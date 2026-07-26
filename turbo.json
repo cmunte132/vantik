@@ -3,6 +3,11 @@
   "globalEnv": [
     "VERSION",
     "NEXT_PUBLIC_VERSION",
+    // Part of the hash, not just passed through. The build stamp is baked into
+    // the bundle and into the chunk namespace, so a cached build replayed under
+    // a new stamp would ship the old build id and defeat the whole mechanism.
+    "VANTIK_BUILD_ID",
+    "VANTIK_COMMIT",
     "NODE_ENV",
     "NEXT_RUNTIME",
     "NEXT_PUBLIC_BACKEND_HOST",

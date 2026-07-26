@@ -55,6 +55,18 @@ RUN if [ -n "$SENTRY_AUTH_TOKEN" ]; then \
       echo "SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN" >> .env && \
       printf '[auth]\ntoken=%s\n' "$SENTRY_AUTH_TOKEN" > /app/apps/webapp/.sentryclirc; \
     fi
+# The build stamp. .git is in .dockerignore, so the build genuinely cannot read
+# the commit itself — it has to be passed in, and docker-compose.yaml derives it.
+# Declared here rather than at the top of the stage so changing it does not
+# invalidate the COPY above it.
+#
+# Both are in turbo.json's globalEnv: they are baked into the bundle and into the
+# chunk namespace, so a turbo cache hit replayed under a new stamp would ship the
+# wrong build id.
+ARG VANTIK_BUILD_ID
+ARG VANTIK_COMMIT
+ENV VANTIK_BUILD_ID=$VANTIK_BUILD_ID
+ENV VANTIK_COMMIT=$VANTIK_COMMIT
 # .next/cache is Next's incremental compile cache. It is deliberately not part
 # of the image — the runner takes only .next/standalone and .next/static — so a
 # cache mount costs nothing and turns every build after the first into an

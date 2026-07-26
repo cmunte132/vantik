@@ -16,6 +16,7 @@ import {
   useMentionSuggestions,
 } from 'components/editor';
 import { useIssueData } from 'hooks/issues';
+import { useReloadBlock } from 'hooks/use-reload-block';
 
 import { useCreateIssueCommentMutation } from 'services/issues';
 
@@ -27,6 +28,15 @@ export function IssueComment() {
   const { mutate: createIssueComment } = useCreateIssueCommentMutation({});
   const suggestion = useMentionSuggestions();
   const { toast } = useToast();
+
+  // A half-written comment lives only in this component, so an auto-reload
+  // would throw it away. Unlike the issue description, nothing autosaves it.
+  //
+  // Truthiness, not `!== ''`: submitting resets the editor with `undefined`,
+  // which is not the empty string, so the stricter test held the block for as
+  // long as the view stayed mounted and no silent reload could ever happen
+  // again on a client that had posted once.
+  useReloadBlock(!!commentValue);
 
   const onSubmit = () => {
     if (commentValue !== '') {

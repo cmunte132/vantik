@@ -5,6 +5,7 @@ import { Socket, io } from 'socket.io-client';
 
 import { hash } from 'common/common-utils';
 import { loadClientConfig } from 'common/lib/client-config';
+import { noteServerDeployAnnouncement } from 'common/wrappers/app-version-provider';
 
 import { useCurrentWorkspace } from 'hooks/workspace';
 
@@ -122,6 +123,15 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
           `lastSequenceId_${hash(hashKey)}`,
           `${data.sequenceId}`,
         );
+      });
+
+      // The fastest deploy signal available: this connection is already open, so
+      // a window that has been sitting untouched for days hears about a new
+      // build in seconds instead of waiting for the next poll. What arrives is
+      // the server image's stamp, which is a prompt to go and ask /api/version —
+      // not an answer about the bundle.
+      socket.on('server-version', () => {
+        noteServerDeployAnnouncement();
       });
     }
 

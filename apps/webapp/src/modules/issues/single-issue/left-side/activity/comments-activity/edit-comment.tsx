@@ -15,6 +15,7 @@ import {
   pendingUploads,
   useMentionSuggestions,
 } from 'components/editor';
+import { useReloadBlock } from 'hooks/use-reload-block';
 
 import { useUpdateIssueCommentMutation } from 'services/issues';
 
@@ -31,6 +32,10 @@ export function EditComment({ value, onCancel, comment }: EditCommentProps) {
   const suggestion = useMentionSuggestions();
   const { mutate: updateComment } = useUpdateIssueCommentMutation({});
   const { toast } = useToast();
+
+  // An edit in progress is unsaved for as long as this form is open, whether or
+  // not the text has been touched yet.
+  useReloadBlock(true);
 
   const onSubmit = () => {
     const { json, text } = getTiptapJSON(commentValue);

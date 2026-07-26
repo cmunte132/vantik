@@ -40,7 +40,10 @@ export function onSuccess<T, E>({
   resolve(rawData);
 
   if (!isServer() && !disableEvents) {
-    triggerSuccess(rawData, config);
+    // Response headers reach the global listeners too: the build stamp rides on
+    // every response, so version drift is detected on traffic the app already
+    // makes rather than on a poll of its own.
+    triggerSuccess(rawData, config, headers);
   }
 }
 
@@ -67,6 +70,7 @@ interface OnErrorParams<T, E> {
 export function onError<T, E>({
   config,
   error: { errors, ...rawError },
+  headers,
   reject,
 }: OnErrorParams<T, E>) {
   const { disableEvents, onError } = config;
@@ -84,6 +88,9 @@ export function onError<T, E>({
   reject(error);
 
   if (!isServer() && !disableEvents) {
-    triggerError(error, config);
+    // The failing request is the most valuable place to read the build stamp:
+    // if a client broke because its build was replaced, this is where it finds
+    // out.
+    triggerError(error, config, headers);
   }
 }

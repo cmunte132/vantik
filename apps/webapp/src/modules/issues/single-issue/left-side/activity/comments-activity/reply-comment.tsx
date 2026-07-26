@@ -17,6 +17,7 @@ import {
   useMentionSuggestions,
 } from 'components/editor';
 import { useIssueData } from 'hooks/issues';
+import { useReloadBlock } from 'hooks/use-reload-block';
 
 import { useCreateIssueCommentMutation } from 'services/issues';
 
@@ -35,6 +36,10 @@ export function ReplyComment({ issueCommentId }: ReplyCommentProps) {
   const { mutate: createIssueComment } = useCreateIssueCommentMutation({});
   const suggestion = useMentionSuggestions();
   const { toast } = useToast();
+
+  // Nothing autosaves a reply: until it is submitted this component holds the
+  // only copy, so an auto-reload has to wait.
+  useReloadBlock(!!commentValue);
 
   const onSubmit = () => {
     if (commentValue !== '') {

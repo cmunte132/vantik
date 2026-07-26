@@ -32,6 +32,7 @@ import type { ViewType } from 'common/types';
 import type { UsersOnWorkspaceType, WorkspaceType } from 'common/types';
 
 import { MODELS } from './models';
+import { DEXIE_SCHEMA_VERSION } from './schema-version';
 
 export class VantikDatabase extends Dexie {
   actions: Dexie.Table<ActionType, string>;
@@ -65,7 +66,7 @@ export class VantikDatabase extends Dexie {
   constructor(databaseName: string) {
     super(databaseName);
 
-    this.version(21).stores({
+    this.version(DEXIE_SCHEMA_VERSION).stores({
       [MODELS.Workspace]: 'id,createdAt,updatedAt,name,slug,preferences',
       [MODELS.Label]:
         'id,createdAt,updatedAt,name,color,description,workspaceId,groupId,teamId',
@@ -154,14 +155,104 @@ export class VantikDatabase extends Dexie {
 
 export let vantikDatabase: VantikDatabase;
 
+/** The hash of the workspace/user the open database belongs to. */
+let databaseHash: number | undefined;
+
+function schemaVersionKey(hash: number) {
+  return `dexieSchemaVersion_${hash}`;
+}
+
+export function sequenceIdKey(hash: number) {
+  return `lastSequenceId_${hash}`;
+}
+
 export function initDatabase(hash: number) {
-  vantikDatabase = new VantikDatabase(`Vantik_${hash}`);
+  databaseHash = hash;
+
+  const database = new VantikDatabase(`Vantik_${hash}`);
+
+  // The store is shared by every tab on this origin, and the wipe below is
+  // decided per tab from a localStorage key they all share. So a tab loading an
+  // older bundle after a rollback deletes the database a newer tab is still
+  // reading and writing. Dexie's default response in that tab is to close the
+  // connection, which leaves it running against a store that is gone: reads
+  // come back empty and socket deltas land nowhere, with nothing on screen
+  // saying so until someone reloads by hand.
+  //
+  // Reloading is the honest answer. It re-enters `reconcileSchemaVersion`,
+  // which decides afresh what this bundle can actually use, and it releases the
+  // connection so the deleting tab is not left blocked.
+  database.on('versionchange', () => {
+    database.close();
+
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+
+    return false;
+  });
+
+  vantikDatabase = database;
 }
 
 export async function resetDatabase() {
-  localStorage.removeItem('lastSequenceId');
+  // The sequence id is per workspace/user, and clearing the unsuffixed key
+  // cleared nothing: bootstrap-data.tsx reads `lastSequenceId_<hash>`. A reset
+  // that left it behind was worse than no reset at all — the next load saw a
+  // sequence id, chose a delta sync over a bootstrap, and rebuilt an empty
+  // store that would never recover the records written before that point.
+  if (databaseHash !== undefined) {
+    localStorage.removeItem(sequenceIdKey(databaseHash));
+    localStorage.removeItem(schemaVersionKey(databaseHash));
+  }
 
   if (vantikDatabase) {
     await vantikDatabase.delete();
   }
+}
+
+/**
+ * Opens the database for `hash`, wiping it first if this bundle cannot use what
+ * is stored.
+ *
+ * Dexie upgrades itself when the shipped version is *higher* than the stored
+ * one, so the ordinary case needs no help. The case that needs handling is the
+ * reverse — a client that ran a newer build and then loaded an older one, which
+ * IndexedDB refuses outright — plus any other failure to open, since a database
+ * we cannot open is worth less than the round trip to rebuild it.
+ *
+ * Entirely client-side by design. The server advertises versions and never
+ * decides this, so there is no path by which it can order a client to discard
+ * local data.
+ *
+ * @returns Whether the store was wiped, in which case the caller must
+ * bootstrap from scratch rather than ask for a delta.
+ */
+export async function reconcileSchemaVersion(hash: number): Promise<boolean> {
+  const key = schemaVersionKey(hash);
+  const recorded = Number.parseInt(localStorage.getItem(key) ?? '', 10);
+  const stored = Number.isNaN(recorded) ? undefined : recorded;
+
+  let wiped = false;
+
+  if (stored !== undefined && stored > DEXIE_SCHEMA_VERSION) {
+    await resetDatabase();
+    initDatabase(hash);
+    wiped = true;
+  }
+
+  try {
+    await vantikDatabase.open();
+  } catch {
+    // Includes Dexie's VersionError, but deliberately catches everything: a
+    // corrupt or blocked database has the same remedy.
+    await resetDatabase();
+    initDatabase(hash);
+    await vantikDatabase.open();
+    wiped = true;
+  }
+
+  localStorage.setItem(key, `${DEXIE_SCHEMA_VERSION}`);
+
+  return wiped;
 }

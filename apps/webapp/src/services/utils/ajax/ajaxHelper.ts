@@ -166,7 +166,7 @@ export const makeAjaxCall = <D, T, E>({
         errRes.message = text;
       }
 
-      onError<T, E>({ config, error: errRes, reject });
+      onError<T, E>({ config, error: errRes, headers: res?.headers, reject });
     },
   );
 

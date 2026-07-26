@@ -25,6 +25,18 @@ services:
     build:
       context: .
       dockerfile: ./apps/webapp/Dockerfile
+      args:
+        # The build stamp. .git is in .dockerignore, so the build cannot read the
+        # commit itself and it has to be handed in:
+        #
+        #   VANTIK_BUILD_ID=$(git rev-parse --short HEAD) docker compose build
+        #
+        # Left unset, the build falls back to VERSION plus a timestamp, which is
+        # unique per build but says nothing about what is in it. Setting it means
+        # rebuilding the same commit produces the same chunk URLs, so clients
+        # that are already open are not made to reload for nothing.
+        VANTIK_BUILD_ID: ${VANTIK_BUILD_ID:-}
+        VANTIK_COMMIT: ${VANTIK_COMMIT:-}
     # Releases are published to GitHub Container Registry. Override REGISTRY to
     # pull from a fork's namespace; the default matches what CI publishes.
     image: ${REGISTRY:-ghcr.io/cmunte132}/vantik-webapp:${VERSION:-latest}
@@ -61,6 +73,11 @@ services:
         condition: service_healthy
     env_file: .env
     environment:
+      # Read at runtime, not baked in: the server advertises this on every
+      # response and to every socket that connects, so a client can see when the
+      # two images are from different builds. It is never used to refuse a
+      # request — an old client keeps working.
+      VANTIK_BUILD_ID: ${VANTIK_BUILD_ID:-}
       DB_HOST: postgres
       REDIS_URL: redis
       TYPESENSE_HOST: typesense

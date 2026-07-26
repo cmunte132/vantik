@@ -22,6 +22,9 @@ import { SuperTokensWrapper } from 'supertokens-auth-react';
 import { initPosthog, initSuperTokens } from 'common/init-config';
 import { useGetQueryClient } from 'common/lib/react-query-client';
 import { SCOPES } from 'common/scopes';
+import { AppVersionProvider } from 'common/wrappers/app-version-provider';
+
+import { UpdateAvailableChip } from 'components/update-available-chip';
 
 import { StoreContext, storeContextStore } from 'store/global-context-provider';
 
@@ -56,17 +59,26 @@ export const MyApp: NextComponentType<
               <StoreContext.Provider value={storeContextStore}>
                 <QueryClientProvider client={queryClientRef.current}>
                   <HydrationBoundary state={dehydratedState}>
-                    <div
-                      className={cn(
-                        'min-h-screen font-sans antialiased flex',
-                        GeistSans.variable,
-                        GeistMono.variable,
-                      )}
-                    >
-                      {getLayout(<Component {...pageProps} />)}
-                    </div>
+                    {/*
+                      Above the routes and outside any auth guard: a client can
+                      be stale on the login screen too, and the stale-chunk
+                      recovery it installs has to be in place before the first
+                      navigation.
+                    */}
+                    <AppVersionProvider>
+                      <div
+                        className={cn(
+                          'min-h-screen font-sans antialiased flex',
+                          GeistSans.variable,
+                          GeistMono.variable,
+                        )}
+                      >
+                        {getLayout(<Component {...pageProps} />)}
+                      </div>
 
-                    <Toaster />
+                      <Toaster />
+                      <UpdateAvailableChip />
+                    </AppVersionProvider>
                   </HydrationBoundary>
                 </QueryClientProvider>
               </StoreContext.Provider>

@@ -8,6 +8,7 @@ import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.ad
 import { PrismaModule } from 'nestjs-prisma';
 
 import config from 'common/configs/config';
+import { BuildStampInterceptor } from 'common/interceptors/build-stamp.interceptor';
 import { ErrorReportingInterceptor } from 'common/interceptors/error-reporting.interceptor';
 
 import { ActionModule } from 'modules/action/action.module';
@@ -163,6 +164,10 @@ import { AppService } from './app.service';
     // Records 5xx exceptions on the active span before they reach the
     // exception filters, which own the response.
     { provide: APP_INTERCEPTOR, useClass: ErrorReportingInterceptor },
+
+    // Advertises this image's build on every response, so version skew between
+    // the two images is visible without asking for it.
+    { provide: APP_INTERCEPTOR, useClass: BuildStampInterceptor },
   ],
 })
 export class AppModule {}

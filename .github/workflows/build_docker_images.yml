@@ -67,9 +67,19 @@ jobs:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
           platforms: ${{ matrix.platform }}
-          # Only the webapp declares this ARG; passing it to the server build
-          # would just warn about an unconsumed build-arg.
-          build-args: ${{ matrix.app == 'webapp' && format('SENTRY_AUTH_TOKEN={0}', secrets.SENTRY_AUTH_TOKEN) || '' }}
+          # Only the webapp declares these ARGs; passing them to the server
+          # build would just warn about unconsumed build-args. Blank lines are
+          # ignored, which is what the false branches produce.
+          #
+          # VANTIK_COMMIT is what makes the build id deterministic. .git is in
+          # .dockerignore, so the build cannot read the commit itself; without
+          # it the id falls through to VERSION plus a timestamp, and every
+          # rebuild — including a re-run of this workflow on an unchanged
+          # commit — moves the chunk namespace and evicts every open client for
+          # a bundle that did not change.
+          build-args: |
+            ${{ matrix.app == 'webapp' && format('SENTRY_AUTH_TOKEN={0}', secrets.SENTRY_AUTH_TOKEN) || '' }}
+            ${{ matrix.app == 'webapp' && format('VANTIK_COMMIT={0}', github.sha) || '' }}
           # Scoped per app and platform so the four jobs do not evict each
           # other. mode=max keeps intermediate stages, which is what makes the
           # dependency-install layers reusable across runs.

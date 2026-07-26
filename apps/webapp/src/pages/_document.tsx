@@ -32,11 +32,22 @@ export default function Document() {
           PWA. Done here (not in a React effect) so it runs on raw HTML load,
           independent of React hydration. The worker only enables the install
           prompt; it does no caching.
+
+          updateViaCache: 'none' matters more than it looks: without it the
+          browser may serve sw.js from its HTTP cache for up to 24h, which pins
+          the registration to whichever build first installed it. The update()
+          call is what actually picks up a replacement worker in a window that
+          has been open for days.
+
+          Its triggers are deliberately the same three the version poll uses —
+          focus, reconnect, and a 15 minute interval. The interval is the one
+          that covers a window nobody has touched and whose network never
+          dropped, which is precisely the always-open PWA this exists for.
         */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){})});}",
+              "if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).then(function(r){function u(){r.update().catch(function(){})}document.addEventListener('visibilitychange',function(){document.hidden||u()});window.addEventListener('online',u);setInterval(u,900000)}).catch(function(){})});}",
           }}
         />
       </body>

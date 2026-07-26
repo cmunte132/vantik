@@ -7,6 +7,7 @@ import {
 import { PrismaService } from 'nestjs-prisma';
 import { Server, Socket } from 'socket.io';
 
+import { SERVER_BUILD } from 'common/build-stamp';
 import { resolveWorkspaceId } from 'common/workspace-access';
 
 import { LoggerService } from 'modules/logger/logger.service';
@@ -78,6 +79,14 @@ export class SyncGateway implements OnGatewayInit, OnGatewayConnection {
 
     client.join(workspaceId);
     client.join(identity.userId);
+
+    // A client that connects to a restarted server learns the build immediately.
+    // Combined with the fact that a client reconnects after a deploy anyway,
+    // this is what closes the gap for an installed PWA window that has been open
+    // for days: it hears about the new build in seconds rather than on its next
+    // poll. The client treats it as a prompt to re-check /api/version, not as an
+    // answer — this is the server image's stamp, not the webapp's.
+    client.emit('server-version', { build: SERVER_BUILD });
   }
 
   private disconnect(client: Socket, reason: string) {

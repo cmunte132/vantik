@@ -275,10 +275,15 @@ export class CyclesService {
       });
     }
 
+    // Upcoming only. Without the status filter this found whatever sat at the
+    // next number, and the promotion below would set a cycle that had already
+    // been completed back to CURRENT — closedAt still populated — and roll this
+    // cycle's leftovers into a sprint that had already reported as finished.
     const nextCycle = await this.prisma.cycle.findFirst({
       where: {
         teamId: cycle.teamId,
         number: cycle.number + 1,
+        status: CycleStatusEnum.UPCOMING,
         deleted: null,
       },
       select: { id: true, number: true },
@@ -321,6 +326,16 @@ export class CyclesService {
         ? nextCycle.id
         : null;
 
+    // Only the cycle a team is actually running owns the team pointer. A cycle
+    // completed out of turn — an upcoming one the schedule found past its end
+    // date, or one closed straight through the API — must leave the running
+    // cycle and the pointer where they are. Moving them regardless is how
+    // completing a trailing upcoming cycle used to null `currentCycle` out from
+    // under a sprint that was still in progress, and promote a successor into a
+    // second CURRENT cycle beside it.
+    const wasCurrent = cycle.status === CycleStatusEnum.CURRENT;
+    const successor = wasCurrent ? nextCycle : null;
+
     await this.prisma.$transaction([
       this.prisma.cycle.update({
         where: { id: cycleId },
@@ -330,46 +345,56 @@ export class CyclesService {
         },
       }),
 
-      ...unfinishedIssues.flatMap((issue) => [
-        this.prisma.issue.update({
-          where: { id: issue.id },
-          data: { cycleId: destinationCycleId },
-        }),
-        // Written against the cycle the issue is leaving, so a burnup of that
-        // cycle can still say what happened to the work it did not finish.
-        // Without this the issues simply vanish from the cycle's history.
-        this.prisma.cycleHistory.create({
-          data: {
-            cycleId,
-            issueId: issue.id,
-            userId,
-            changeType: (destinationCycleId
-              ? CycleHistoryChangeEnum.MOVED
-              : CycleHistoryChangeEnum.REMOVED) as CycleHistoryChangeType,
-            fromStateId: issue.stateId,
-            toStateId: issue.stateId,
-            fromEstimate: issue.estimate,
-            toEstimate: issue.estimate,
-          },
-        }),
-      ]),
+      // Batched rather than one statement per issue: a cycle carrying a few
+      // hundred unfinished issues produced 2n+3 statements in a single
+      // interactive transaction and blew through Prisma's 5s default, so the
+      // completion rolled back and the cycle could never be closed.
+      ...(unfinishedIssues.length
+        ? [
+            this.prisma.issue.updateMany({
+              where: { id: { in: unfinishedIssues.map((issue) => issue.id) } },
+              data: { cycleId: destinationCycleId },
+            }),
+            // Written against the cycle the issue is leaving, so a burnup of
+            // that cycle can still say what happened to the work it did not
+            // finish. Without this the issues simply vanish from its history.
+            this.prisma.cycleHistory.createMany({
+              data: unfinishedIssues.map((issue) => ({
+                cycleId,
+                issueId: issue.id,
+                userId,
+                changeType: (destinationCycleId
+                  ? CycleHistoryChangeEnum.MOVED
+                  : CycleHistoryChangeEnum.REMOVED) as CycleHistoryChangeType,
+                fromStateId: issue.stateId,
+                toStateId: issue.stateId,
+                fromEstimate: issue.estimate,
+                toEstimate: issue.estimate,
+              })),
+            }),
+          ]
+        : []),
 
       // Promoting the next cycle here is what makes completion a single step
       // for the caller: the manual dialog and the schedule both end with a team
       // whose pointer is on a cycle that exists, or on nothing at all.
-      ...(nextCycle
+      ...(successor
         ? [
             this.prisma.cycle.update({
-              where: { id: nextCycle.id },
+              where: { id: successor.id },
               data: { status: CycleStatusEnum.CURRENT },
             }),
           ]
         : []),
 
-      this.prisma.team.update({
-        where: { id: cycle.teamId },
-        data: { currentCycle: nextCycle ? nextCycle.number : null },
-      }),
+      ...(wasCurrent
+        ? [
+            this.prisma.team.update({
+              where: { id: cycle.teamId },
+              data: { currentCycle: successor ? successor.number : null },
+            }),
+          ]
+        : []),
     ]);
 
     return await this.prisma.cycle.findUnique({ where: { id: cycleId } });

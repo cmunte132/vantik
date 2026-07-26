@@ -71,6 +71,20 @@ export class CyclesAutomationService {
    * untouched history.
    */
   async stopAutoCycles(teamId: string): Promise<{ removed: number }> {
+    const preferences = await this.getPreferences(teamId);
+
+    // Refused for a manual team rather than merely hidden from it. What follows
+    // soft-deletes every upcoming cycle and detaches its issues — on a team
+    // that plans its own cycles that is somebody's roadmap, not a batch the
+    // machine made, and the only thing that had been keeping this route off it
+    // was the button not being rendered.
+    if (preferences.cyclesMode !== CyclesModeEnum.AUTO) {
+      throw new BadRequestException({
+        message:
+          'This team runs its cycles manually. Delete the cycles you no longer want instead.',
+      });
+    }
+
     const upcoming = await this.prisma.cycle.findMany({
       where: {
         teamId,
@@ -101,10 +115,11 @@ export class CyclesAutomationService {
   /**
    * One maintenance pass over every team running the automatic cadence.
    *
-   * Per team the order is replenish, close, replenish. Closing a cycle promotes
-   * its successor, so there has to be one before anything is closed — otherwise
-   * a team that reached the end of its batch would be left pointing at nothing
-   * until the following pass. The second top-up refills what the promotion just
+   * Per team the order is replenish, close, replenish, and the close step tops
+   * up again before each individual completion. Closing a cycle promotes its
+   * successor, so there has to be one before anything is closed — otherwise a
+   * team that reached the end of its batch would be left pointing at nothing
+   * until the following pass. The final top-up refills what the last promotion
    * consumed.
    */
   async runMaintenance(): Promise<MaintenanceResult> {
@@ -133,10 +148,10 @@ export class CyclesAutomationService {
           team.id,
           preferences,
         );
-        result.cyclesClosed += await this.closeEndedCycles(
-          team.id,
-          preferences,
-        );
+        const closed = await this.closeEndedCycles(team.id, preferences);
+        result.cyclesClosed += closed.closed;
+        result.cyclesCreated += closed.created;
+
         result.cyclesCreated += await this.replenishUpcoming(
           team.id,
           preferences,
@@ -163,11 +178,14 @@ export class CyclesAutomationService {
    * Oldest first, because a team whose schedule was down for a while has a
    * backlog of ended cycles and each completion decides where the next one
    * starts.
+   *
+   * @returns How many cycles were created topping the team up mid-batch, and
+   * how many were closed.
    */
   private async closeEndedCycles(
     teamId: string,
     preferences: TeamPreferenceDto,
-  ): Promise<number> {
+  ): Promise<{ closed: number; created: number }> {
     const endedCycles = await this.prisma.cycle.findMany({
       where: {
         teamId,
@@ -183,13 +201,22 @@ export class CyclesAutomationService {
       preferences.autoRolloverDestination ??
       UnfinishedDestinationEnum.NEXT_CYCLE;
 
+    let created = 0;
+
     for (const cycle of endedCycles) {
+      // Topped up before each close, not just once before the batch. Every
+      // completion promotes an upcoming cycle and so consumes one, which meant
+      // a batch longer than `upcomingCycles` ran out of successors partway and
+      // the last completion threw — taking the rest of this team's pass with
+      // it. A team coming back from a long outage is exactly that batch.
+      created += await this.replenishUpcoming(teamId, preferences);
+
       await this.cycles.completeCycle(cycle.id, {
         unfinishedDestination: destination,
       });
     }
 
-    return endedCycles.length;
+    return { closed: endedCycles.length, created };
   }
 
   /**

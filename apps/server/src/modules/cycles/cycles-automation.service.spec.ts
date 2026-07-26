@@ -220,6 +220,42 @@ describe('CyclesAutomationService.runMaintenance', () => {
     });
   });
 
+  it('tops the team up between closes, not only before the batch', async () => {
+    // Each completion promotes an upcoming cycle and so consumes one. A team
+    // coming back from an outage has more ended cycles than it keeps ahead, so
+    // topping up once at the front left the last completion with no successor
+    // to move work into — it threw, and took the rest of that team's pass with
+    // it, including the closing top-up.
+    const prisma = buildPrisma({
+      upcomingCount: 2,
+      endedCycles: [{ id: 'cycle-5' }, { id: 'cycle-6' }, { id: 'cycle-7' }],
+    });
+
+    // A count that falls as completions eat the upcoming cycles, which is what
+    // makes the difference between topping up once and topping up per close.
+    let ahead = 2;
+    prisma.cycle.count = jest.fn().mockImplementation(async () => ahead);
+    prisma.cycle.create = jest.fn().mockImplementation((args: any) => {
+      ahead += 1;
+      return args.data;
+    });
+
+    const cycles = buildCycles();
+    cycles.completeCycle = jest.fn().mockImplementation(async () => {
+      ahead -= 1;
+      return {};
+    });
+
+    const { service } = serviceWith(prisma, cycles);
+    const result = await service.runMaintenance();
+
+    expect(cycles.completeCycle).toHaveBeenCalledTimes(3);
+    expect(result.cyclesClosed).toBe(3);
+    // One replaced before each of the last two closes, one after the batch.
+    expect(result.cyclesCreated).toBe(3);
+    expect(ahead).toBe(2);
+  });
+
   it('keeps going after one team fails', async () => {
     const prisma = buildPrisma({
       teams: [
@@ -316,5 +352,30 @@ describe('CyclesAutomationService.stopAutoCycles', () => {
     expect(
       prisma.team.update.mock.calls[0][0].data.preferences.cyclesAutoRunning,
     ).toBe(false);
+  });
+
+  it('refuses a manual team, whose upcoming cycles are its own plan', async () => {
+    // This soft-deletes every upcoming cycle and detaches its issues. On a team
+    // that plans its own cycles that is somebody's roadmap, and the only thing
+    // that had been keeping this route off it was the button not being drawn.
+    const prisma = buildPrisma({
+      teams: [
+        {
+          id: 'team-1',
+          name: 'Engineering',
+          preferences: { cyclesEnabled: true, cyclesMode: CyclesModeEnum.MANUAL },
+        },
+      ],
+    });
+    prisma.cycle.findMany = jest
+      .fn()
+      .mockResolvedValue([{ id: 'cycle-6' }, { id: 'cycle-7' }]);
+    const { service } = serviceWith(prisma);
+
+    await expect(service.stopAutoCycles('team-1')).rejects.toThrow(
+      /runs its cycles manually/,
+    );
+    expect(prisma.cycle.updateMany).not.toHaveBeenCalled();
+    expect(prisma.issue.updateMany).not.toHaveBeenCalled();
   });
 });

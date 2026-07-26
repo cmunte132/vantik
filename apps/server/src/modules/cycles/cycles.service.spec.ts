@@ -120,6 +120,7 @@ function buildCompletionPrisma({
     },
     cycleHistory: {
       create: jest.fn().mockImplementation((args: any) => args),
+      createMany: jest.fn().mockImplementation((args: any) => args),
     },
     team: {
       update: jest.fn().mockImplementation((args: any) => args),
@@ -137,8 +138,8 @@ describe('CyclesService.completeCycle', () => {
       unfinishedDestination: UnfinishedDestinationEnum.NEXT_CYCLE,
     });
 
-    expect(prisma.issue.update).toHaveBeenCalledWith({
-      where: { id: 'issue-1' },
+    expect(prisma.issue.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['issue-1'] } },
       data: { cycleId: 'cycle-2' },
     });
   });
@@ -150,8 +151,8 @@ describe('CyclesService.completeCycle', () => {
       unfinishedDestination: UnfinishedDestinationEnum.BACKLOG,
     });
 
-    expect(prisma.issue.update).toHaveBeenCalledWith({
-      where: { id: 'issue-1' },
+    expect(prisma.issue.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['issue-1'] } },
       data: { cycleId: null },
     });
   });
@@ -180,7 +181,33 @@ describe('CyclesService.completeCycle', () => {
       unfinishedDestination: UnfinishedDestinationEnum.NEXT_CYCLE,
     });
 
-    expect(prisma.issue.update).not.toHaveBeenCalled();
+    expect(prisma.issue.updateMany).not.toHaveBeenCalled();
+    expect(prisma.cycleHistory.createMany).not.toHaveBeenCalled();
+  });
+
+  it('moves every issue in one statement rather than one each', async () => {
+    // A cycle carrying hundreds of unfinished issues used to build 2n+3
+    // statements for a single interactive transaction and exceed Prisma's 5s
+    // default, so the completion rolled back and the cycle could never close.
+    const unfinishedIssues = Array.from({ length: 250 }, (_, index) => ({
+      id: `issue-${index}`,
+      stateId: 'state-todo',
+      estimate: 1,
+    }));
+    const prisma = buildCompletionPrisma({ unfinishedIssues });
+
+    await serviceWith(prisma).completeCycle('cycle-1', {
+      unfinishedDestination: UnfinishedDestinationEnum.BACKLOG,
+    });
+
+    expect(prisma.issue.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.cycleHistory.createMany).toHaveBeenCalledTimes(1);
+    expect(prisma.cycleHistory.createMany.mock.calls[0][0].data).toHaveLength(
+      250,
+    );
+    // Close the cycle, move the issues, write their history, promote the
+    // successor, move the pointer — five, whatever the issue count.
+    expect(prisma.$transaction.mock.calls[0][0]).toHaveLength(5);
   });
 
   it('records where each moved issue went', async () => {
@@ -192,12 +219,14 @@ describe('CyclesService.completeCycle', () => {
       'user-1',
     );
 
-    expect(prisma.cycleHistory.create.mock.calls[0][0].data).toMatchObject({
-      cycleId: 'cycle-1',
-      issueId: 'issue-1',
-      userId: 'user-1',
-      changeType: CycleHistoryChangeEnum.MOVED,
-    });
+    expect(prisma.cycleHistory.createMany.mock.calls[0][0].data[0]).toMatchObject(
+      {
+        cycleId: 'cycle-1',
+        issueId: 'issue-1',
+        userId: 'user-1',
+        changeType: CycleHistoryChangeEnum.MOVED,
+      },
+    );
   });
 
   it('records a removal when the work goes back to the backlog', async () => {
@@ -207,9 +236,9 @@ describe('CyclesService.completeCycle', () => {
       unfinishedDestination: UnfinishedDestinationEnum.BACKLOG,
     });
 
-    expect(prisma.cycleHistory.create.mock.calls[0][0].data.changeType).toBe(
-      CycleHistoryChangeEnum.REMOVED,
-    );
+    expect(
+      prisma.cycleHistory.createMany.mock.calls[0][0].data[0].changeType,
+    ).toBe(CycleHistoryChangeEnum.REMOVED);
   });
 
   it('promotes the next cycle and follows it with the team pointer', async () => {
@@ -239,6 +268,75 @@ describe('CyclesService.completeCycle', () => {
     expect(prisma.team.update).toHaveBeenCalledWith({
       where: { id: 'team-1' },
       data: { currentCycle: null },
+    });
+  });
+
+  it('leaves the pointer alone when the cycle completed was not the current one', async () => {
+    // Completing a trailing upcoming cycle — which the schedule does when it
+    // finds one past its end date — used to null `currentCycle` out from under
+    // a sprint that was still running, and promote a successor into a second
+    // CURRENT cycle beside it.
+    const prisma = buildCompletionPrisma({
+      cycle: {
+        id: 'cycle-9',
+        teamId: 'team-1',
+        number: 9,
+        name: 'Cycle 9',
+        status: CycleStatusEnum.UPCOMING,
+      },
+      nextCycle: null,
+    });
+
+    await serviceWith(prisma).completeCycle('cycle-9', {
+      unfinishedDestination: UnfinishedDestinationEnum.BACKLOG,
+    });
+
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('does not promote a successor behind a cycle that was not current', async () => {
+    const prisma = buildCompletionPrisma({
+      cycle: {
+        id: 'cycle-9',
+        teamId: 'team-1',
+        number: 9,
+        name: 'Cycle 9',
+        status: CycleStatusEnum.UPCOMING,
+      },
+    });
+
+    await serviceWith(prisma).completeCycle('cycle-9', {
+      unfinishedDestination: UnfinishedDestinationEnum.NEXT_CYCLE,
+    });
+
+    // The issues still move into it; it just does not become the team's
+    // running cycle on the back of a completion that was not the current one.
+    expect(prisma.issue.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['issue-1'] } },
+      data: { cycleId: 'cycle-2' },
+    });
+    expect(prisma.cycle.update).not.toHaveBeenCalledWith({
+      where: { id: 'cycle-2' },
+      data: { status: CycleStatusEnum.CURRENT },
+    });
+  });
+
+  it('looks for a successor that is upcoming, never one already completed', async () => {
+    // Without the status filter this found whatever sat at the next number and
+    // set a completed cycle back to CURRENT, closedAt and all.
+    const prisma = buildCompletionPrisma();
+
+    await serviceWith(prisma).completeCycle('cycle-1', {
+      unfinishedDestination: UnfinishedDestinationEnum.NEXT_CYCLE,
+    });
+
+    const successorQuery = prisma.cycle.findFirst.mock.calls.find(
+      (call: any) => call[0].where.number !== undefined,
+    );
+    expect(successorQuery[0].where).toMatchObject({
+      number: 5,
+      status: CycleStatusEnum.UPCOMING,
+      deleted: null,
     });
   });
 

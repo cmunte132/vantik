@@ -214,26 +214,45 @@ written inside the container, where nothing read it. Anything parsing the old
 console output needs updating.
 :::
 
-### Traces
+### Traces and metrics
 
-Tracing is off by default and nothing leaves your deployment unless you turn it
-on. Point the server at any OTLP/HTTP collector to enable it:
+Both are off by default and nothing leaves your deployment unless you turn them
+on. Point the server at any OTLP/HTTP collector to enable them:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
 OTEL_EXPORTER_OTLP_HEADERS=x-api-key=...   # if your collector needs auth
 ```
 
-With that set, each request produces a trace spanning the HTTP handler, the
-Nest controller, and the Postgres, Redis and Prisma calls underneath it —
-enough to see which query is making an endpoint slow. Unhandled 5xx exceptions
-are recorded on the span with their stack.
+One switch covers both signals deliberately. Running a metrics pipeline that
+nothing is collecting is machinery you cannot see, so with no endpoint set the
+SDK is never started: no instrumentation, no exporters, no measurable overhead.
 
-Any OpenTelemetry backend works: Grafana Tempo, Honeycomb, Jaeger, Sentry, or a
-local collector fanning out to several. With the variable unset the SDK is
-never started, so there is no instrumentation and no measurable overhead.
+**Traces.** Each request produces a trace spanning the HTTP handler, the Nest
+controller, and the Postgres, Redis and Prisma calls underneath it — enough to
+see which query is making an endpoint slow. Unhandled 5xx exceptions are
+recorded on the span with their stack.
 
-If you set an endpoint and no spans arrive, set `OTEL_LOG_LEVEL=debug` to
+**Metrics.** Request rate, error rate and latency come from
+`http.server.request.duration`, labelled by route template, method and status
+code. Database work comes from `db.client.operation.duration`. Node runtime
+health covers event loop delay (mean through p99), event loop utilisation, GC
+duration by collector type, and V8 heap usage by space — a stalled event loop
+is the usual shape of trouble in a Node process, and request-level data alone
+will not show it, because the slow request and the request blocking it are
+rarely the same one.
+
+Metric labels deliberately exclude workspace, user and request ids. Those live
+on trace attributes, where one value per request is the point; on a metric each
+distinct value is another time series, and per-tenant labels are how a metrics
+backend falls over. Pushes happen every 60s by default
+(`OTEL_METRIC_EXPORT_INTERVAL`); metrics are cumulative, so a longer interval
+costs resolution rather than data.
+
+Any OpenTelemetry backend works: Grafana Tempo/Mimir, Honeycomb, Jaeger,
+Sentry, or a local collector fanning out to several.
+
+If you set an endpoint and nothing arrives, set `OTEL_LOG_LEVEL=debug` to
 surface the exporter's own diagnostics, which are otherwise silent.
 
 ### Health endpoints

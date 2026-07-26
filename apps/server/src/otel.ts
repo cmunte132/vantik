@@ -16,12 +16,15 @@
  */
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { ExpressLayerType } from '@opentelemetry/instrumentation-express';
+import { RuntimeNodeInstrumentation } from '@opentelemetry/instrumentation-runtime-node';
 import {
   defaultResource,
   resourceFromAttributes,
 } from '@opentelemetry/resources';
+import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import {
   ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
@@ -31,6 +34,18 @@ import {
 import { PrismaInstrumentation } from '@prisma/instrumentation';
 
 const SERVICE_NAME = 'vantik-server';
+
+/**
+ * Metrics are cumulative, so a longer interval costs resolution rather than
+ * data — a delayed export still carries the running totals. Sixty seconds is
+ * the OTel default and what most backends expect. `OTEL_METRIC_EXPORT_INTERVAL`
+ * is the standard knob for tuning it, and is honoured here because passing
+ * `exportIntervalMillis` explicitly would otherwise override it silently.
+ */
+function metricExportIntervalMs(): number {
+  const configured = Number(process.env.OTEL_METRIC_EXPORT_INTERVAL);
+  return Number.isFinite(configured) && configured > 0 ? configured : 60_000;
+}
 
 let sdk: NodeSDK | undefined;
 
@@ -66,9 +81,18 @@ export function startOtel(): void {
           process.env.NODE_ENV ?? 'development',
       }),
     ),
-    // The exporter reads OTEL_EXPORTER_OTLP_HEADERS itself, which is how
+    // The exporters read OTEL_EXPORTER_OTLP_HEADERS themselves, which is how
     // hosted collectors take their auth token.
     traceExporter: new OTLPTraceExporter(),
+    // Metrics ride the same endpoint and the same on/off switch as traces:
+    // with no collector configured there is nothing to look at, so running a
+    // meter provider would be machinery nobody sees.
+    metricReaders: [
+      new PeriodicExportingMetricReader({
+        exporter: new OTLPMetricExporter(),
+        exportIntervalMillis: metricExportIntervalMs(),
+      }),
+    ],
     instrumentations: [
       getNodeAutoInstrumentations({
         // One span per file read drowns everything worth looking at.
@@ -101,6 +125,11 @@ export function startOtel(): void {
       // against the running stack — `pg` spans alone produced zero children
       // under a request.
       new PrismaInstrumentation(),
+      // Event loop lag, heap and GC. The symptom of most trouble in a Node
+      // process is a stalled event loop, and no amount of request-level
+      // instrumentation shows it — the slow request and the one blocking it
+      // are usually not the same request.
+      new RuntimeNodeInstrumentation(),
     ],
   });
 

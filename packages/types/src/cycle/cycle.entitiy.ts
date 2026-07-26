@@ -26,7 +26,9 @@ export class Cycle {
   startDate: Date;
   endDate: Date;
   status: CycleStatusType;
-  completedAt?: Date;
+  // `closedAt` in the schema. This declared `completedAt`, which no row ever
+  // had, so anything reading it got undefined and no compiler complained.
+  closedAt?: Date | null;
 
   history?: CycleHistory[];
 

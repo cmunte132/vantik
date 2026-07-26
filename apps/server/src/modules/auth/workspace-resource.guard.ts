@@ -4,6 +4,7 @@ import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import {
   assertChecklistItemInWorkspace,
+  assertCycleInWorkspace,
   assertIssueCommentInWorkspace,
   assertIssueInWorkspace,
   assertPageEntryInWorkspace,
@@ -48,7 +49,7 @@ export class WorkspaceResourceGuard implements CanActivate {
       request.query?.workspaceId,
     );
 
-    const { issueId, issueCommentId, checklistItemId, pageEntryId } =
+    const { issueId, issueCommentId, checklistItemId, pageEntryId, cycleId } =
       request.params ?? {};
 
     // The bulk routes carry their ids inside a body array, one per issue, so
@@ -88,6 +89,13 @@ export class WorkspaceResourceGuard implements CanActivate {
         issueCommentId,
         workspaceId,
       );
+    }
+
+    // Same shape as the checklist items below: start, complete and delete name
+    // the cycle by id and nothing else, and completing one moves other people's
+    // issues around.
+    if (cycleId) {
+      await assertCycleInWorkspace(this.prisma, cycleId, workspaceId);
     }
 
     // Checklist item updates and deletes address the row by id alone, with no

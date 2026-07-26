@@ -316,11 +316,11 @@ export class UsersService {
    * does. The token is returned once and is not retrievable afterwards.
    *
    * The membership records whether the agent is `personal` — owned by the
-   * person who made it, to drive their own client — or `workspace`-owned by the
-   * app. Only personal agents are provisioned today; the distinction is stored
-   * from the start so later, app-owned agents are a new ownership rather than a
-   * retrofit. An agent is never a BOT: that role is for the actions feature's
-   * automations, a separate kind of principal.
+   * person who made it, to drive their own client — or `workspace`-owned, a
+   * shared credential for CI, a scheduled job or a shared runner, stored with a
+   * null `ownerUserId` so an admin rather than an owner retires it. An agent is
+   * never a BOT: that role is for the actions feature's automations, a separate
+   * kind of principal.
    *
    * It also records the agent's scopes. The default is read and write but not
    * delete, so an agent can do the whole issue workflow without holding the one

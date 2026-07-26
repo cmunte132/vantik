@@ -117,6 +117,10 @@ export class UsersController {
    * Admin-only: an agent acts as a distinct identity in the workspace, so
    * minting one is a privileged action. Drop the returned token into an MCP
    * client's Authorization header to have that client act as the agent.
+   *
+   * `ownership` chooses between an agent belonging to the caller and one
+   * belonging to the workspace itself; it defaults to personal, which is what
+   * this passed unconditionally before workspace agents could be asked for.
    */
   @Post('agents')
   @UseGuards(AuthGuard)
@@ -131,7 +135,7 @@ export class UsersController {
       workspaceId,
       createAgentDto.name,
       createdByUserId,
-      'personal',
+      createAgentDto.ownership ?? 'personal',
       sanitizeScopes(createAgentDto.scopes),
       requestedWorkspaceId,
     );

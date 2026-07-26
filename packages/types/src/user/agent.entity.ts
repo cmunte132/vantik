@@ -22,15 +22,18 @@ export const DEFAULT_AGENT_SCOPES: AgentScope[] = ['read', 'write'];
  * - `personal`: a user provisioned it for their own use — to drive their own
  *   Claude Code or whichever agent they run — and it belongs to that person,
  *   recorded as `ownerUserId`.
- * - `workspace`: created and owned within the app itself, not tied to any one
- *   person. Not provisionable yet; the value exists so the two kinds can be
- *   told apart from the first agent, ahead of the features that will own them.
+ * - `workspace`: a shared credential — held by CI, a scheduled job or a shared
+ *   runner — belonging to nobody in particular, so `ownerUserId` is null and
+ *   an admin rather than an owner retires it.
  *
  * This is orthogonal to a BOT. A BOT is an internal automation (the actions
  * feature), a different kind of principal altogether — not an agent, and never
  * described as one.
  */
 export type AgentOwnership = 'personal' | 'workspace';
+
+/** Validation source for the ownership a caller may ask for. */
+export const AGENT_OWNERSHIPS: AgentOwnership[] = ['personal', 'workspace'];
 
 /**
  * An agent account as it reads in a listing. `active` is whether the agent

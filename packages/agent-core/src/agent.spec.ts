@@ -222,6 +222,47 @@ describe('closeTask', () => {
 
     expect(calls.some((call) => call.path === '/issue_comments')).toBe(false);
   });
+
+  it('reports the Definition of Done as it stood at the close', async () => {
+    const { agent } = makeAgent({
+      ...baseRoutes,
+      'GET /checklist_items': [
+        { id: 'item-1', body: 'Pool sized from config', completed: true, sortOrder: 1 },
+        { id: 'item-2', body: 'Exhaustion is logged', completed: false, sortOrder: 2 },
+      ],
+      'POST /issues/issue-42': issue42,
+    });
+
+    const closed = await agent.closeTask('ENG-42');
+
+    expect(closed.definitionOfDone).toEqual({
+      completed: 1,
+      total: 2,
+      criteria: [
+        { id: 'item-1', body: 'Pool sized from config', completed: true },
+        { id: 'item-2', body: 'Exhaustion is logged', completed: false },
+      ],
+    });
+  });
+
+  // A server predating the checklist route 404s it. Closing a task is not a
+  // request for criteria, so it must not fail over their absence.
+  it('closes against a server that does not serve criteria', async () => {
+    const { agent, calls } = makeAgent({
+      ...baseRoutes,
+      'POST /issues/issue-42': issue42,
+    });
+
+    const closed = await agent.closeTask('ENG-42');
+
+    expect(closed.definitionOfDone).toEqual({
+      completed: 0,
+      total: 0,
+      criteria: [],
+    });
+    const update = calls.find((call) => call.path === '/issues/issue-42');
+    expect(update?.body).toEqual({ stateId: 'state-done' });
+  });
 });
 
 describe('pickUpTask', () => {

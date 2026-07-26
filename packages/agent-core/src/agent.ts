@@ -2,6 +2,7 @@ import { VantikClient, VantikClientConfig } from './client';
 import { Directory, isUuid, parseIssueKey } from './directory';
 import {
   VantikAmbiguousError,
+  VantikApiError,
   VantikError,
   VantikNotFoundError,
 } from './errors';
@@ -547,14 +548,24 @@ export class VantikAgent {
   }
 
   private async criteriaRows(issueId: string): Promise<RawChecklistItem[]> {
-    const rows = await this.client.get<RawChecklistItem[]>('/checklist_items', {
-      query: { issueId },
-    });
+    // A server old enough not to serve this route answers 404, and one that
+    // serves it differently answers with something that is not a list. "No
+    // criteria" is the honest reading of both, and it keeps a caller that only
+    // wanted to close a task from failing over a field it never asked about.
+    // The issue itself was resolved before we got here, so a 404 here is the
+    // route missing rather than the task.
+    let rows: unknown;
+    try {
+      rows = await this.client.get<RawChecklistItem[]>('/checklist_items', {
+        query: { issueId },
+      });
+    } catch (error) {
+      if (error instanceof VantikApiError && error.status === 404) {
+        return [];
+      }
+      throw error;
+    }
 
-    // A server old enough not to serve this answers with something that is not
-    // a list. "No criteria" is the honest reading there, and it keeps a caller
-    // that only wanted to close a task from failing over a field it never
-    // asked about.
     return Array.isArray(rows) ? rows : [];
   }
 

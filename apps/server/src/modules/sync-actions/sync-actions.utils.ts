@@ -402,9 +402,21 @@ export async function getSyncActionsData(
 
   return syncActionsData.reduce((result, actionData, index) => {
     const data = modelDataResults[index];
+
     if (data) {
       result.push({ data, ...actionData });
+      return result;
     }
+
+    // No row behind the action. For a delete that is the normal case rather
+    // than a fault — the record is gone, which is the whole message — and
+    // dropping it would mean a client that missed the websocket event never
+    // hears about the deletion on any later delta, keeping the row forever.
+    // The id is all a client needs to evict it.
+    if (actionData.action === 'D') {
+      result.push({ data: { id: actionData.modelId }, ...actionData });
+    }
+
     return result;
   }, []);
 }

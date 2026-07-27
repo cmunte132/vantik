@@ -23,9 +23,24 @@ export default class SyncActionsService {
     modelName: ModelNameEnum,
     modelId: string,
   ) {
-    const workspaceId = await getWorkspaceId(this.prisma, modelName, modelId);
     const sequenceId = convertLsnToInt(lsn);
     const actionType = convertToActionType(action);
+
+    // A physically deleted row cannot be read to find out whose it was, so the
+    // workspace comes from the sync log's own memory of it. Every model a
+    // client caches was announced to that client at least once, and that
+    // announcement recorded the workspace — which makes the log the one place
+    // that still knows after the row is gone.
+    const workspaceId =
+      actionType === 'D'
+        ? await this.workspaceOfDeleted(modelName, modelId)
+        : await getWorkspaceId(this.prisma, modelName, modelId);
+
+    // Nothing was ever announced, so no client has it and there is nobody to
+    // tell. Writing a delete for it would only add a row nobody can act on.
+    if (!workspaceId) {
+      return undefined;
+    }
 
     const syncActionData = await this.prisma.syncAction.upsert({
       where: {
@@ -47,12 +62,38 @@ export default class SyncActionsService {
       },
     });
 
-    const modelData = await getModelData(this.prisma, modelName, modelId);
+    // A deleted row has no data to read. The client needs only the id to evict
+    // it, and every save handler reads `record.data.id`, so that is what a
+    // delete carries.
+    const modelData =
+      actionType === 'D'
+        ? ((await getModelData(this.prisma, modelName, modelId)) ?? {
+            id: modelId,
+          })
+        : await getModelData(this.prisma, modelName, modelId);
 
     return {
       data: modelData,
       ...syncActionData,
     };
+  }
+
+  /**
+   * The workspace a now-deleted record belonged to.
+   *
+   * Read from the sync log rather than the record, because the record is gone
+   * by the time a delete is processed.
+   */
+  private async workspaceOfDeleted(
+    modelName: ModelNameEnum,
+    modelId: string,
+  ): Promise<string | undefined> {
+    const announced = await this.prisma.syncAction.findFirst({
+      where: { modelId, modelName: modelName as ModelName },
+      select: { workspaceId: true },
+    });
+
+    return announced?.workspaceId;
   }
 
   async getBootstrap(

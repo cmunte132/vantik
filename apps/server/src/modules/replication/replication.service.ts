@@ -239,9 +239,12 @@ export default class ReplicationService {
       });
 
     service.on('data', async (_lsn: string, log: Pgoutput.Message) => {
-      // pgoutput emits one event per message (begin/commit/relation/DML);
-      // deletes are ignored because the app soft-deletes via the `deleted` column
-      if (log.tag !== 'insert' && log.tag !== 'update') {
+      // pgoutput emits one event per message (begin/commit/relation/DML).
+      if (
+        log.tag !== 'insert' &&
+        log.tag !== 'update' &&
+        log.tag !== 'delete'
+      ) {
         return;
       }
 
@@ -250,9 +253,30 @@ export default class ReplicationService {
       }
 
       const modelName = log.relation.name as ModelNameEnum;
-      const newRow = log.new ?? {};
-      const isDeleted = !!newRow.deleted;
+
+      // A physical delete carries no new row — the id comes from the replica
+      // identity instead. These used to be dropped on the grounds that the app
+      // soft-deletes, which is true of the app's own write paths and of nothing
+      // else: cascades, retention jobs, event trimming, a workspace deletion,
+      // an operator fixing data by hand. Every one of those left the row in
+      // each connected client's cache permanently, because the only thing that
+      // ever removes a cached row is a delete action, and none was written.
+      // A stale row is not inert either: it is clickable, and it opens a page
+      // for something the server will 404.
+      const newRow = (log.tag === 'delete' ? log.key ?? log.old : log.new) ?? {};
+      const isDeleted = log.tag === 'delete' || !!newRow.deleted;
       const modelId = newRow.id;
+
+      if (!modelId) {
+        // Without a replica identity there is no id to tell anyone about. Say
+        // so once per table rather than failing silently, since the fix is a
+        // schema change on the server.
+        this.logger.error({
+          message: `A ${log.tag} on ${modelName} carried no id; clients cannot be told about it. Set REPLICA IDENTITY on that table.`,
+          where: `ReplicationService.setupReplication`,
+        });
+        return;
+      }
 
       if (tablesToSendMessagesFor.has(modelName)) {
         const syncActionData = await this.syncActionsService.upsertSyncAction(
@@ -261,6 +285,12 @@ export default class ReplicationService {
           modelName,
           modelId,
         );
+
+        // Nothing to announce: a record deleted before any client was ever
+        // told it existed.
+        if (!syncActionData) {
+          return;
+        }
 
         const recipientId = [
           ModelNameEnum.Notification,
@@ -275,7 +305,11 @@ export default class ReplicationService {
           .emit('message', JSON.stringify(syncActionData));
       }
 
-      if (tablesToTrigger.has(modelName)) {
+      // Physical deletes are deliberately not turned into action events: the
+      // event's workspace is resolved by reading the record, which no longer
+      // exists. Soft deletes still arrive here as updates and are unaffected,
+      // which is every delete the app itself performs.
+      if (tablesToTrigger.has(modelName) && log.tag !== 'delete') {
         const changedData = this.getChangedData(log);
 
         const workspaceId = await getWorkspaceId(

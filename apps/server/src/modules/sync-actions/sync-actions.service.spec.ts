@@ -53,14 +53,35 @@ function findMany(rows: FakeSyncAction[], args: FindManyArgs) {
   });
 }
 
-function buildService(rows: FakeSyncAction[]) {
+function buildService(rows: FakeSyncAction[], liveIssueIds?: string[]) {
+  // `undefined` keeps the old behaviour for the bootstrap tests: every issue
+  // still exists. A list makes rows outside it physically gone, which is what
+  // a hard delete leaves behind.
+  const exists = (id: string) =>
+    liveIssueIds === undefined || liveIssueIds.includes(id);
+
   const prisma = {
     syncAction: {
       findMany: jest.fn((args) => Promise.resolve(findMany(rows, args))),
-      findFirst: jest.fn(() => Promise.resolve({ sequenceId: 30n })),
+      findFirst: jest.fn((args) => {
+        // Two callers: `getLastSequenceId` wants the highest sequence, and
+        // `workspaceOfDeleted` wants the workspace a modelId was announced in.
+        const modelId = args?.where?.modelId;
+
+        if (!modelId) {
+          return Promise.resolve({ sequenceId: 30n });
+        }
+
+        return Promise.resolve(
+          rows.find((row) => row.modelId === modelId) ?? null,
+        );
+      }),
+      upsert: jest.fn(({ create }) => Promise.resolve(create)),
     },
     issue: {
-      findUnique: jest.fn(({ where }) => Promise.resolve({ id: where.id })),
+      findUnique: jest.fn(({ where }) =>
+        Promise.resolve(exists(where.id) ? { id: where.id } : null),
+      ),
     },
     usersOnWorkspaces: {
       findUnique: jest.fn(() => Promise.resolve({ status: 'ACTIVE' })),
@@ -135,5 +156,89 @@ describe('SyncActionsService.getBootstrap', () => {
       'issue-mid',
       'issue-new',
     ]);
+  });
+});
+
+/**
+ * A physically deleted record must still reach the client.
+ *
+ * Replication used to drop `delete` messages outright, on the grounds that the
+ * app soft-deletes — true of the app's own write paths and of nothing else.
+ * Cascades, retention jobs, event trimming and an operator fixing data by hand
+ * all remove rows for real, and every one of them left the record in each
+ * connected client's cache permanently: the only thing that evicts a cached
+ * row is a delete action, and none was written.
+ *
+ * Two things have to hold for the delete to survive the trip. The workspace
+ * has to be resolvable after the row is gone, and the delta has to carry an
+ * action whose record no longer exists — which it used to drop, so a client
+ * that missed the live event never heard about the deletion again.
+ */
+describe('deletes of records that are physically gone', () => {
+  it('resolves the workspace from the sync log, not from the missing row', async () => {
+    const service = buildService([action('issue-gone', 'I', 10n)], []);
+
+    const result = await service.upsertSyncAction(
+      '0/1F',
+      'delete',
+      'Issue' as never,
+      'issue-gone',
+    );
+
+    expect(result?.workspaceId).toBe(WORKSPACE);
+    expect(result?.action).toBe('D');
+  });
+
+  it('carries the id, which is all a client needs to evict it', async () => {
+    const service = buildService([action('issue-gone', 'I', 10n)], []);
+
+    const result = await service.upsertSyncAction(
+      '0/1F',
+      'delete',
+      'Issue' as never,
+      'issue-gone',
+    );
+
+    expect(result?.data).toEqual({ id: 'issue-gone' });
+  });
+
+  it('says nothing about a record no client was ever told about', async () => {
+    // Never announced, so nobody has it cached and a delete action would be a
+    // row nobody can act on.
+    const service = buildService([], []);
+
+    const result = await service.upsertSyncAction(
+      '0/1F',
+      'delete',
+      'Issue' as never,
+      'issue-never-seen',
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  it('keeps the delete in a delta even though the record cannot be read', async () => {
+    const service = buildService(
+      [action('issue-gone', 'I', 10n), action('issue-gone', 'D', 20n)],
+      [],
+    );
+
+    const { syncActions } = await service.getDelta('Issue', 5n, WORKSPACE, USER);
+
+    // The regression: dropping this leaves the row in the client's cache for
+    // good, clickable and opening a page the server will 404.
+    expect(syncActions).toHaveLength(1);
+    expect(syncActions[0].action).toBe('D');
+    expect(syncActions[0].data).toEqual({ id: 'issue-gone' });
+  });
+
+  it('still drops a non-delete whose record cannot be read', async () => {
+    // An insert with no row behind it is a fault, not a message: sending it
+    // would ask the client to store a record that does not exist.
+    const service = buildService([action('issue-gone', 'I', 10n)], []);
+
+    const { syncActions } = await service.getDelta('Issue', 5n, WORKSPACE, USER);
+
+    expect(syncActions).toHaveLength(0);
   });
 });

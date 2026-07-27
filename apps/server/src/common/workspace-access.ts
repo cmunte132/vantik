@@ -168,6 +168,32 @@ export async function assertChecklistItemInWorkspace(
   }
 }
 
+/**
+ * Proves an agent run belongs to the given workspace.
+ *
+ * Every run route addresses the row by id alone — cancel, retry, heartbeat,
+ * report, append event — with no issue or team anywhere in the request. The
+ * service scopes its own queries too; this is the check at the HTTP boundary,
+ * where the untrusted id actually arrives, and it means a foreign run id is
+ * refused before any handler runs.
+ */
+export async function assertAgentRunInWorkspace(
+  prisma: PrismaService,
+  agentRunId: string,
+  workspaceId: string,
+): Promise<void> {
+  const run = await prisma.agentRun.findFirst({
+    where: { id: agentRunId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!run) {
+    throw new NotFoundException({
+      message: `Agent run ${agentRunId} not found`,
+    });
+  }
+}
+
 /** Proves a page belongs to the given workspace. */
 export async function assertPageInWorkspace(
   prisma: PrismaService,

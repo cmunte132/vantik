@@ -94,6 +94,229 @@ model ActionSchedule {
   @@unique([actionId, cron, timezone])
 }
 
+/// One agent's attempt at one issue.
+///
+/// The unit of work the whole Autonomous agents project turns on. Execution
+/// backends — a runner on someone's laptop, a hosted sandbox, a third-party
+/// coding agent — are all just writers against this record; none of them owns
+/// the lifecycle, which is why cancelling from the webapp works the same way
+/// whichever one is running.
+///
+/// A retry is a new row, not a mutated one. An attempt that lost its lease
+/// three quarters of the way through is evidence, and evidence you overwrite
+/// on retry is evidence you do not have when someone asks why the third
+/// attempt also failed.
+model AgentRun {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+
+  issue   Issue  @relation(fields: [issueId], references: [id])
+  issueId String
+
+  /// The AGENT user the work is attributed to. Comments and commits carry this
+  /// identity, so a reader can tell which agent produced what.
+  agentUserId String
+  /// The member who delegated. Never derived from issue content: if anything
+  /// the agent reads could start a run, prompt injection gets an execution
+  /// primitive for free.
+  createdById String?
+
+  /// Registry key for the backend — `byo`, `hosted`, later `github`. A string
+  /// rather than an enum because adapters are meant to arrive without a
+  /// migration.
+  executor String
+  status   AgentRunStatus @default(QUEUED)
+
+  /// 1 for the first try. A lease that expires re-queues the work as a fresh
+  /// row with attempt + 1, up to a cap.
+  attempt Int @default(1)
+  /// The run this one retries, so a chain of attempts is walkable in both
+  /// directions without scanning by issue.
+  previousRun   AgentRun?  @relation("AgentRunAttempts", fields: [previousRunId], references: [id])
+  previousRunId String?    @unique
+  nextRun       AgentRun?  @relation("AgentRunAttempts")
+
+  /// Held by whoever claimed the run; renewed by heartbeat. Past it, the run is
+  /// expired by the sweeper regardless of what the runner believes.
+  leaseExpiresAt DateTime?
+  claimedAt      DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+
+  /// Prose for a human, written by the server from the executor's report — the
+  /// executor never writes the comment itself.
+  summary String?
+  /// The operator-facing message behind a terminal failure.
+  error String?
+  /// Typed, so failures are countable. A free-text error field answers "what
+  /// happened here" and never "how often does setup break".
+  failure AgentRunFailure?
+
+  /// Branch, PR url, linked issue id, token and cost counters.
+  result Json?
+  /// Repo, base branch, harness command, verification commands, limits.
+  config Json?
+  /// What the agent was handed, snapshotted at dispatch. Kept so a run stays
+  /// reproducible after the issue it came from has been edited.
+  contextPack Json?
+
+  // Reproducibility and comparison. Present from the first migration on
+  // purpose: added later, every run recorded before the migration is a
+  // permanent hole in the population, and no two runs from either side of it
+  // are comparable.
+
+  /// Pinned harness build, e.g. `pi@0.82.1`.
+  harnessVersion String?
+  /// The model the harness actually ran, as the provider names it.
+  modelId String?
+  /// Hash over the effective config — harness, limits, phase flags. Two runs
+  /// with the same hash were asked the same question.
+  configHash String?
+  /// How many implement/score cycles ran. 0 until the ENG-62 loop is enabled.
+  iterationCount Int @default(0)
+  /// Milliseconds per phase: `{ setup, specify, implement, score, review }`.
+  /// One blob rather than a column each, because the phase set is exactly what
+  /// ENG-62 is expected to change.
+  phaseTimings Json?
+  /// The commit the patch is computed against. Authoritative: the diff is
+  /// `git diff` versus this, never a model-emitted patch.
+  baseCommit String?
+
+  events     AgentRunEvent[]
+  iterations AgentRunIteration[]
+
+  @@index([workspaceId, status])
+  @@index([issueId])
+  @@index([agentUserId])
+  @@index([status, leaseExpiresAt])
+}
+
+/// An append-only progress line on a run.
+///
+/// So the UI and the CLI can tail a run without the executor holding a socket
+/// open — a runner in someone's CI cannot keep one, and a run that only exists
+/// while a connection does is a run nobody can walk away from.
+model AgentRunEvent {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  /// When the executor says it happened, which is not when we stored it.
+  at      DateTime          @default(now())
+  level   AgentRunEventLevel @default(INFO)
+  message String
+  /// Phase this line belongs to, when the harness knows: only it can see the
+  /// boundaries.
+  phase String?
+  data  Json?
+
+  run   AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId String
+
+  @@index([runId, at])
+}
+
+/// One pass of the ENG-62 implement/score loop.
+///
+/// Carried from the first migration even though the loop ships disabled: the
+/// alternative is discovering later that every run predating it has no
+/// per-iteration record, which is the same comparability hole the fields above
+/// exist to avoid.
+model AgentRunIteration {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  run   AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId String
+  /// 1-based.
+  index Int
+
+  /// Pass rate over the suite the implementer could see.
+  validationPassRate Float?
+  /// Pass rate over the suite it never saw.
+  heldOutPassRate Float?
+  /// validation − held-out. The reward-hacking metric: numeric, per-iteration,
+  /// no model asked for an opinion. Widening while validation climbs is the
+  /// signature of optimising the proxy, and aborts the loop.
+  delta Float?
+
+  /// Whether the repo's own verification commands passed this pass.
+  verificationPassed Boolean?
+  /// Review findings, each carrying a `file:line` or a failing command.
+  /// Findings without evidence are discarded before they get here.
+  findings Json?
+  /// Hash of the patch this iteration produced, for detecting the oscillation
+  /// case where two passes change nothing.
+  diffHash String?
+  phaseTimings Json?
+
+  @@unique([runId, index])
+  @@index([runId])
+}
+
+/// A secret a workspace hands Vantik so hosted runs can work on its behalf.
+///
+/// Write-only over the API: creation and rotation return a masked handle and
+/// no endpoint reads one back. The decisive property is not the encryption
+/// though — it is that the git token never enters the sandbox at all. A
+/// sandbox stops an agent rooting the host; only keeping the credential
+/// outside it stops a prompt-injected agent exfiltrating the token it was
+/// handed.
+model WorkspaceCredential {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+
+  kind WorkspaceCredentialKind
+
+  /// Which model provider a MODEL_API_KEY belongs to — `anthropic`, `openai`,
+  /// `openrouter` and so on, matching a row in the MODEL_PROVIDERS table in
+  /// the types package. A workspace holds one key per provider.
+  ///
+  /// This is what tells the executor which environment variable to hand the
+  /// key to the harness under. There is no generic one: Pi reads
+  /// ANTHROPIC_API_KEY, OPENAI_API_KEY and the rest by name, so a key with no
+  /// provider is a key the harness cannot use.
+  ///
+  /// Empty for a GIT_TOKEN, which has no provider. Empty rather than null so
+  /// the unique index below actually constrains it — Postgres treats nulls as
+  /// distinct, so a nullable column here would allow unlimited duplicates.
+  provider String @default("")
+
+  /// AES-256-GCM, under a key derived from the server secret. Never returned.
+  ciphertext String
+  nonce      String
+  tag        String
+
+  /// The last few characters, so a human can tell which key is which without
+  /// the API ever handing back the secret.
+  hint String
+
+  /// The account's own endpoint, for a provider that has one per customer.
+  /// Most have a single fixed host and leave this empty.
+  baseUrl String?
+
+  /// What the key could reach when it was last checked, and when. Cached so
+  /// the settings screen can name the models a key offers without calling the
+  /// provider on every render.
+  models        Json?
+  modelsCheckedAt DateTime?
+
+  createdById String?
+  rotatedAt   DateTime?
+
+  @@unique([workspaceId, kind, provider])
+  @@index([workspaceId])
+}
+
 model Attachment {
   id        String    @id @default(uuid())
   createdAt DateTime  @default(now())
@@ -361,6 +584,7 @@ model Issue {
 
   comments       IssueComment[]
   checklistItems ChecklistItem[]
+  agentRuns      AgentRun[]
   history        IssueHistory[]
   linkedIssue    LinkedIssue[]
   issueRelations IssueRelation[]
@@ -506,6 +730,14 @@ model PersonalAccessToken {
   name  String
   jwt   String
   token String
+
+  /// When this token last authenticated a request.
+  ///
+  /// Written on a throttle rather than on every request: the value is read by
+  /// people deciding whether a credential is still in use, and that question is
+  /// not asked to the minute. Null means it has never been used — which is the
+  /// signal that an agent account is a leftover rather than something live.
+  lastUsedAt DateTime?
 
   user        User   @relation(fields: [userId], references: [id])
   userId      String
@@ -843,6 +1075,21 @@ model Module {
   linkedProductIds String[]
 
   repos ModuleRepo[]
+
+  /// How an agent run checks work in this module: setup, test, lint,
+  /// typecheck and build commands, shaped as `AgentRunVerification`.
+  ///
+  /// Here rather than on the workspace because the command depends on the code
+  /// and nothing else. One workspace holds a Go service and a pnpm monorepo,
+  /// and there is no single `testCommand` that is right for both. A module is
+  /// already what an agent run is grounded to — the issue names modules, the
+  /// modules name the repository and the paths inside it — so the commands
+  /// belong on the same hook, and an issue filed against a module arrives at a
+  /// run that knows how to verify itself with nothing else configured.
+  ///
+  /// JSON rather than five columns because nothing queries by these, and
+  /// because the set will grow.
+  verification Json?
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
@@ -1253,6 +1500,8 @@ model Workspace {
   modules               Module[]
   capabilities          Capability[]
   pages                 Page[]
+  agentRuns             AgentRun[]
+  credentials           WorkspaceCredential[]
   webhookSubscription   WebhookSubscription[]
 
   ActionEvent  ActionEvent[]
@@ -1312,12 +1561,95 @@ enum ActionScheduleStatus {
   DELETED
 }
 
+/// Where a run is in its life.
+///
+/// `QUEUED → CLAIMED → RUNNING → terminal`, enforced server-side against a
+/// transition table rather than by whoever happens to be writing. A runner that
+/// crashed and came back believing it still owns a run will try to report on
+/// one the sweeper already expired; the table is what refuses it.
+enum AgentRunStatus {
+  /// Waiting for a backend to take it.
+  QUEUED
+  /// A backend has it and holds a lease, but has not started work.
+  CLAIMED
+  /// The harness is running.
+  RUNNING
+
+  // Terminal. Nothing leaves these; a retry opens a new row.
+
+  /// Work produced and reported — a branch, usually a PR.
+  SUCCEEDED
+  /// Reached a terminal failure; see `failure` for which.
+  FAILED
+  /// Stopped deliberately, by a person or by reassignment.
+  CANCELED
+  /// The lease lapsed. Distinct from FAILED because nothing is known about
+  /// what the runner was doing, and it is the one terminal state that is
+  /// automatically retryable.
+  EXPIRED
+  /// Finished, but a human has to look: the issue was not test-specifiable, or
+  /// the ENG-62 loop aborted on a widening Δ. Not a failure, and reporting it
+  /// as one would train people to ignore the category that most needs them.
+  NEEDS_REVIEW
+}
+
+/// Why a run ended badly, as a closed set.
+///
+/// Every one of these is a different thing for the user to go and fix, which
+/// is the test for whether a category earns a place here.
+enum AgentRunFailure {
+  /// Clone, dependency install or service startup failed. The most common one
+  /// in practice: "the agent failed" is usually "the agent could not run
+  /// anything".
+  ENVIRONMENT_SETUP_FAILED
+  /// The harness process died or broke protocol.
+  HARNESS_CRASHED
+  /// Wall-clock, token or iteration budget spent.
+  BUDGET_EXHAUSTED
+  /// The harness finished and changed nothing.
+  NO_DIFF_PRODUCED
+  /// The repo's own tests, typecheck or lint failed and the loop could not
+  /// recover.
+  VERIFICATION_FAILED
+  /// The git host refused the push — protected branch, stale base, no rights.
+  PUSH_REJECTED
+  /// The branch went up but opening the pull request failed.
+  PR_CREATION_FAILED
+  /// The sandbox blocked a network call the run needed. Also the clearest
+  /// prompt-injection signal available, so it is never folded into a generic
+  /// failure.
+  EGRESS_DENIED
+  /// The lease lapsed while work was in flight.
+  LEASE_LOST
+  /// No executable test could be derived from the Definition of Done — a
+  /// refactor, a docs change, a dependency bump. Routes to human review.
+  NOT_TEST_SPECIFIABLE
+  /// Δ widened while the visible pass rate climbed: the run was optimising the
+  /// tests it could see rather than the spec. Routes to human review.
+  REWARD_HACK_SUSPECTED
+}
+
+/// What kind of secret a workspace credential holds.
+enum WorkspaceCredentialKind {
+  /// Used by the harness inside the sandbox — it has to reach the model.
+  MODEL_API_KEY
+  /// Used by the host to push and open pull requests on the sandbox's
+  /// request. Never injected into the guest.
+  GIT_TOKEN
+}
+
+enum AgentRunEventLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
 /// The label on a sync action. It names the table that a record came from.
 ///
-/// The three agent values are here because the database already holds sync
-/// actions that use them. A value that the schema does not declare stops every
-/// read of this table, and the whole sync log then fails, and not only the rows
-/// of that one model. The models themselves live on another branch.
+/// A value that the schema does not declare stops every read of this table,
+/// and the whole sync log then fails, and not only the rows of that one model.
+/// So a new model's value is added to this enum before any row can carry it.
 enum ModelName {
   Action
   ActionEntity

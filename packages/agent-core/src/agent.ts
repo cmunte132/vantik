@@ -27,8 +27,10 @@ import {
   WritePageInput,
 } from './knowledge';
 import {
+  AgentRunSummary,
   Capability,
   DefinitionOfDone,
+  DelegateTaskInput,
   Module,
   Paginated,
   PriorityName,
@@ -45,6 +47,50 @@ import {
   priorityByName,
   priorityNames,
 } from './types';
+
+/** The run record as the API returns it, before it is narrowed for an agent. */
+interface RawAgentRun {
+  id: string;
+  issueId: string;
+  status: AgentRunSummary['status'];
+  executor: string;
+  attempt: number;
+  failure: string | null;
+  summary: string | null;
+  error: string | null;
+  result: {
+    branch?: string;
+    prUrl?: string;
+    worktreePath?: string;
+  } | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+/**
+ * Flattens the run record for a caller that just wants to know what happened.
+ *
+ * `result` is a JSON blob on the row because its shape varies by delivery;
+ * pulling branch, PR url and worktree path up to the top level means a caller
+ * never has to know that.
+ */
+function toAgentRunSummary(run: RawAgentRun): AgentRunSummary {
+  return {
+    id: run.id,
+    taskId: run.issueId,
+    status: run.status,
+    executor: run.executor,
+    attempt: run.attempt,
+    failure: run.failure ?? null,
+    summary: run.summary ?? null,
+    error: run.error ?? null,
+    branch: run.result?.branch ?? null,
+    prUrl: run.result?.prUrl ?? null,
+    worktreePath: run.result?.worktreePath ?? null,
+    createdAt: run.createdAt,
+    finishedAt: run.finishedAt ?? null,
+  };
+}
 
 interface RawChecklistItem {
   id: string;
@@ -583,6 +629,75 @@ export class VantikAgent {
     await this.directory.cacheProject(project);
 
     return project;
+  }
+
+  /**
+   * Hands a task to an agent to work in the background.
+   *
+   * The server assembles what the agent is told and picks the backend, so this
+   * carries no opinion about either. It returns as soon as the run is queued —
+   * the work happens elsewhere, and `getAgentRun` is how you find out how it
+   * went.
+   */
+  async delegateTask(
+    reference: string,
+    input: DelegateTaskInput = {},
+  ): Promise<AgentRunSummary> {
+    const { id } = await this.resolveTask(reference);
+
+    const run = await this.client.post<RawAgentRun>('/agent_runs', {
+      body: {
+        issueId: id,
+        ...(input.agent ? { agentUserId: input.agent } : {}),
+        ...(input.executor ? { executor: input.executor } : {}),
+        ...(input.repo ? { config: input.repo } : {}),
+        ...(input.force ? { force: true } : {}),
+      },
+    });
+
+    return toAgentRunSummary(run);
+  }
+
+  /** How a delegated run is going, or how it went. */
+  async getAgentRun(runId: string): Promise<AgentRunSummary> {
+    return toAgentRunSummary(
+      await this.client.get<RawAgentRun>(`/agent_runs/${runId}`),
+    );
+  }
+
+  /** Runs for one task, newest first — every attempt, not just the live one. */
+  async listAgentRuns(reference: string): Promise<AgentRunSummary[]> {
+    const { id } = await this.resolveTask(reference);
+
+    const page = await this.client.get<{ items: RawAgentRun[] }>(
+      '/agent_runs',
+      { query: { issueId: id } },
+    );
+
+    return (page.items ?? []).map(toAgentRunSummary);
+  }
+
+  /** Progress lines from a run, oldest first. */
+  async agentRunEvents(
+    runId: string,
+  ): Promise<Array<{ at: string; level: string; message: string }>> {
+    const events = await this.client.get<
+      Array<{ at: string; level: string; message: string }>
+    >(`/agent_runs/${runId}/events`);
+
+    return events ?? [];
+  }
+
+  /** Stops a run. Nothing is destroyed; the record and its log remain. */
+  async cancelAgentRun(
+    runId: string,
+    reason?: string,
+  ): Promise<AgentRunSummary> {
+    return toAgentRunSummary(
+      await this.client.post<RawAgentRun>(`/agent_runs/${runId}/cancel`, {
+        body: reason ? { reason } : {},
+      }),
+    );
   }
 
   async createTask(input: CreateTaskInput): Promise<TaskRef> {

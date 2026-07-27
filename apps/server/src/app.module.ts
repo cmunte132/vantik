@@ -15,6 +15,7 @@ import { ActionModule } from 'modules/action/action.module';
 import { AgentSkillModule } from 'modules/agent-skill/agent-skill.module';
 import { AIRequestsModule } from 'modules/ai-requests/ai-requests.module';
 import { ALSModule } from 'modules/als/als.module';
+import { AgentRunsModule } from 'modules/agent-runs/agent-runs.module';
 import { AttachmentModule } from 'modules/attachments/attachments.module';
 import { AgentScopeGuard } from 'modules/auth/agent-scope.guard';
 import { AuthModule } from 'modules/auth/auth.module';
@@ -116,6 +117,7 @@ import { AppService } from './app.service';
     IssuesModule,
     IssueCommentsModule,
     ChecklistItemsModule,
+    AgentRunsModule,
     IssueHistoryModule,
     LinkedIssueModule,
     IssueRelationModule,

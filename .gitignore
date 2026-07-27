@@ -14,3 +14,6 @@ docker-compose.prod.yaml
 dist
 # Claude Code local config
 .claude/
+
+# Local development data, including a signing secret
+.dev-data/

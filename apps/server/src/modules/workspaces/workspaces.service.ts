@@ -188,7 +188,11 @@ export default class WorkspacesService {
   async getAllWorkspaces(userId: string): Promise<Workspace[]> {
     return await this.prisma.workspace.findMany({
       where: {
-        usersOnWorkspaces: { every: { userId } },
+        // `some`, not `every`. `every` asks that *all* of a workspace's
+        // memberships belong to this user, so the moment a second person joins
+        // the workspace stops being returned at all — and an empty list reads
+        // as "you have no workspaces" rather than as a bug.
+        usersOnWorkspaces: { some: { userId } },
       },
     });
   }

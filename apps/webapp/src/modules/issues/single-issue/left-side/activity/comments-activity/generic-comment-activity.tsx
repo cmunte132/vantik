@@ -33,10 +33,10 @@ import { useIssueData } from 'hooks/issues';
 
 import { UserContext } from 'store/user-context';
 
+import { authorName } from './comment-author';
 import { DeleteCommentDialog } from './delete-comment-alert';
 import { EditComment } from './edit-comment';
 import { ReplyComment } from './reply-comment';
-import { getUserDetails } from '../issue-activity/user-activity-utils';
 
 export interface GenericCommentActivityProps {
   comment: IssueCommentType;
@@ -89,13 +89,7 @@ export function GenericCommentActivity(props: GenericCommentActivityProps) {
           <div className="flex">
             {getUserIcon(user)}
 
-            {user ? (
-              <span>{getUserDetails(sourceMetadata, user).fullname}</span>
-            ) : (
-              <span>
-                {sourceMetadata.userDisplayName} via {sourceMetadata.type}
-              </span>
-            )}
+            <span>{authorName(sourceMetadata, user)}</span>
           </div>
 
           <div className="flex gap-2 items-center">
@@ -107,7 +101,9 @@ export function GenericCommentActivity(props: GenericCommentActivityProps) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
-                  {!sourceMetadata && user.id === currentUser.id && (
+                  {/* `user?.id === currentUser?.id` would be true for two
+                      undefineds, offering Edit on someone else's comment. */}
+                  {!sourceMetadata && !!user?.id && user.id === currentUser?.id && (
                     <DropdownMenuItem onClick={() => setEdit(true)}>
                       <div className="flex items-center gap-1">
                         <EditLine size={16} className="mr-1" /> Edit
@@ -115,7 +111,7 @@ export function GenericCommentActivity(props: GenericCommentActivityProps) {
                     </DropdownMenuItem>
                   )}
 
-                  {!sourceMetadata && user.id === currentUser.id && (
+                  {!sourceMetadata && !!user?.id && user.id === currentUser?.id && (
                     <DropdownMenuItem onClick={() => setDeleteComment(true)}>
                       <div className="flex items-center gap-1">
                         <DeleteLine size={16} className="mr-1" /> Delete

@@ -2,7 +2,10 @@ import type { User } from 'common/types';
 import type { IssueSourceMetadataType } from 'common/types';
 
 export function getUserDetails(
-  sourceMetadata: IssueSourceMetadataType,
+  // Every caller passes a parsed JSON blob, and the body already treats each
+  // field as maybe-absent — the signature was the only thing claiming
+  // otherwise.
+  sourceMetadata: Partial<IssueSourceMetadataType> | undefined,
   user?: User,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {

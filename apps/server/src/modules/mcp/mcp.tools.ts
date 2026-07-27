@@ -326,6 +326,48 @@ export function registerVantikTools(
   );
 
   server.registerTool(
+    'update_project',
+    {
+      title: 'Update project',
+      description:
+        'Change a project that already exists — its description, status, ' +
+        'name, dates or lead. Use this instead of opening a second project ' +
+        'when the shape of the work turns out to be different from what you ' +
+        'first wrote down: the fix for a project whose description no longer ' +
+        'matches its issues is to correct the description, never to start a ' +
+        'fresh project beside it. The description is where an objective’s ' +
+        'decisions belong, and it is the first thing anyone reads before ' +
+        'touching the issues underneath — keep it current as you learn, and ' +
+        'record what was decided and why, not just what changed. When you ' +
+        'finish the last issue serving an objective, move the status to ' +
+        'Completed rather than leaving the board saying work is still open.',
+      inputSchema: {
+        project: projectRef,
+        name: z.string().optional().describe('New name for the objective.'),
+        description: z
+          .string()
+          .optional()
+          .describe(
+            'Markdown, replacing the current description in full. Read the ' +
+              'existing one first and edit it — do not overwrite a considered ' +
+              'description with a shorter one.',
+          ),
+        status: z
+          .string()
+          .optional()
+          .describe(
+            'Workspace status, e.g. "Backlog", "Planned", "In Progress", ' +
+              '"Completed".',
+          ),
+        startDate: z.string().optional().describe('ISO date.'),
+        endDate: z.string().optional().describe('ISO date.'),
+        leadUserId: z.string().optional().describe('Member id of the lead.'),
+      },
+    },
+    handler(({ project, ...changes }) => agent.updateProject(project, changes)),
+  );
+
+  server.registerTool(
     'get_task',
     {
       title: 'Get task context',

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   CreateProjectDto,
   CreateProjectMilestoneDto,
@@ -41,11 +41,34 @@ export class ProjectsService {
     });
   }
 
-  async updateProject(updateProjectDto: UpdateProjectDto, projectId: string) {
-    return await this.prisma.project.update({
-      where: { id: projectId },
+  /**
+   * Workspace-scoped on purpose. The route names the project by id alone, so
+   * without the workspace in the predicate any caller holding a valid session
+   * could rewrite a project belonging to someone else's workspace — the same
+   * class of hole ENG-18..ENG-23 closed elsewhere.
+   *
+   * `updateMany` rather than `update` so a project outside the workspace is a
+   * miss, not a match: `update` with a compound `where` still throws Prisma's
+   * P2025, but the count here lets us answer with a plain 404 that says nothing
+   * about whether the id exists somewhere else.
+   */
+  async updateProject(
+    updateProjectDto: UpdateProjectDto,
+    projectId: string,
+    workspaceId: string,
+  ) {
+    const { count } = await this.prisma.project.updateMany({
+      where: { id: projectId, workspaceId, deleted: null },
       data: updateProjectDto,
     });
+
+    if (count === 0) {
+      throw new NotFoundException({
+        message: `Project ${projectId} not found`,
+      });
+    }
+
+    return await this.prisma.project.findUnique({ where: { id: projectId } });
   }
 
   async createProjectMilestone(

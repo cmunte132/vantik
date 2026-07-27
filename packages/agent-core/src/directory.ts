@@ -248,10 +248,22 @@ export class Directory {
     return this.projects;
   }
 
-  /** Keeps a just-created project resolvable by name without a refetch. */
+  /**
+   * Keeps a just-written project resolvable by name without a refetch.
+   *
+   * Upserts on id rather than appending. An update that renames a project would
+   * otherwise leave both names in the cache — the old one still resolving to a
+   * project that no longer answers to it, which is worse than a cache miss.
+   */
   async cacheProject(project: Project): Promise<void> {
     const known = await this.getProjects();
-    this.projects = Promise.resolve([...known, project]);
+    const existing = known.findIndex((other) => other.id === project.id);
+
+    this.projects = Promise.resolve(
+      existing === -1
+        ? [...known, project]
+        : known.map((other, index) => (index === existing ? project : other)),
+    );
   }
 
   /** Resolves a project by name or id, naming the alternatives when it cannot. */

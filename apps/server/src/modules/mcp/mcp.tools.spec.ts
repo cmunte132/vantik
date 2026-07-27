@@ -142,6 +142,7 @@ describe('vantik MCP tools', () => {
       'remember',
       'search_tasks',
       'update_criteria',
+      'update_project',
       'update_task',
       'write_page',
     ]);
@@ -743,16 +744,54 @@ describe('vantik MCP tools', () => {
     });
   });
 
+  it('updates a project the caller named rather than one it had to look up', async () => {
+    const { client, requests } = await connect({
+      'GET /projects': [
+        {
+          id: 'project-search',
+          name: 'Search rewrite',
+          description: 'Replace the search stack',
+          status: 'In Progress',
+        },
+      ],
+      'POST /projects/project-search': {
+        id: 'project-search',
+        name: 'Search rewrite',
+        description: 'Replace the search stack. Typesense, decided 2026-07.',
+        status: 'Completed',
+      },
+    });
+
+    const result = await client.callTool({
+      name: 'update_project',
+      arguments: {
+        project: 'Search rewrite',
+        status: 'Completed',
+        description: 'Replace the search stack. Typesense, decided 2026-07.',
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(
+      requests.some((request) => request.path === '/projects/project-search'),
+    ).toBe(true);
+    expect(jsonOf(result)).toMatchObject({ status: 'Completed' });
+  });
+
   it('tells the model what a project is for, not just what the tool does', async () => {
     const { client } = await connect({});
 
     const { tools } = await client.listTools();
     const create = tools.find((tool) => tool.name === 'create_task');
     const project = tools.find((tool) => tool.name === 'create_project');
+    const update = tools.find((tool) => tool.name === 'update_project');
 
     // The opinion lives here and in the skill, never in agent-core or the CLI.
     expect(create?.description).toMatch(/project/i);
     expect(project?.description).toMatch(/several issues/i);
+    // Update carries the other half of it: correct the project you have
+    // rather than opening a second one beside it.
+    expect(update?.description).toMatch(/never to start a fresh project/i);
   });
 
   it('rejects arguments that do not match the schema', async () => {

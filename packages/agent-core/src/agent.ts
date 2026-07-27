@@ -210,6 +210,28 @@ export interface CreateProjectInput {
   endDate?: string;
 }
 
+/**
+ * Changes to a project. Every field optional, and an omitted field is left
+ * alone — so correcting a description does not require restating the dates.
+ *
+ * Lives here beside `CreateProjectInput` rather than in `types.ts`, which holds
+ * the shapes the API hands back; the `*Input` types all sit with the methods
+ * that take them.
+ */
+export interface UpdateProjectInput {
+  name?: string;
+  description?: string;
+  /** Free text, e.g. "Backlog", "In Progress", "Completed". */
+  status?: string;
+  /** ISO dates, as the API stores them. */
+  startDate?: string;
+  endDate?: string;
+  /** Member id of the project lead. */
+  leadUserId?: string;
+  /** Team ids the project belongs to; replaces the existing set. */
+  teams?: string[];
+}
+
 export interface SearchTasksInput {
   query: string;
   stateCategory?: WorkflowCategory | WorkflowCategory[];
@@ -440,6 +462,16 @@ export class VantikAgent {
     return this.directory.getProjects();
   }
 
+  /**
+   * One project by name or id.
+   *
+   * Served from the same listing the resolver uses rather than a per-project
+   * endpoint, because the API has none — `/projects` is the only read.
+   */
+  getProject(reference: string): Promise<Project> {
+    return this.directory.resolveProject(reference);
+  }
+
   /** The workspace's products — what it ships, above the modules. */
   listProducts(): Promise<Product[]> {
     return this.directory.getProducts();
@@ -499,6 +531,55 @@ export class VantikAgent {
       status: created.status ?? null,
     };
 
+    await this.directory.cacheProject(project);
+
+    return project;
+  }
+
+  /**
+   * Changes a project that already exists: its name, description, status,
+   * dates, lead or teams.
+   *
+   * The counterpart to `createProject`, and the reason a project is not
+   * write-once over this surface. An agent that opens a project, works its
+   * issues and finishes them can now say so — record what was decided in the
+   * description, move the status to Completed — instead of leaving project
+   * state to drift permanently out of step with the issues underneath it.
+   *
+   * Neutral, like the rest of this client: it changes what it is told to
+   * change. Whether the project deserved to exist is not its question.
+   */
+  async updateProject(
+    reference: string,
+    input: UpdateProjectInput,
+  ): Promise<Project> {
+    const { id } = await this.directory.resolveProject(reference);
+
+    const updated = await this.client.post<Project>(`/projects/${id}`, {
+      // Spread rather than field-by-field so that an explicit empty string —
+      // "clear this description" — survives, where a truthiness check would
+      // silently drop it. Undefined keys are omitted by JSON.stringify, so an
+      // untouched field never reaches the server.
+      body: {
+        name: input.name,
+        description: input.description,
+        status: input.status,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        leadUserId: input.leadUserId,
+        teams: input.teams,
+      },
+    });
+
+    const project: Project = {
+      id: updated.id,
+      name: updated.name,
+      description: updated.description ?? null,
+      status: updated.status ?? null,
+    };
+
+    // A rename has to reach the cache, or the resolver keeps answering to the
+    // old name for the life of the process.
     await this.directory.cacheProject(project);
 
     return project;

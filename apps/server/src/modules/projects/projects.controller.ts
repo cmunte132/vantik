@@ -79,12 +79,14 @@ export class ProjectsController {
   @Post(':projectId')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateProject(
+    @Workspace() workspace: string,
     @Param() projectParams: ProjectRequestParamsDto,
     @Body() projectData: UpdateProjectDto,
   ) {
     return await this.projects.updateProject(
       projectData,
       projectParams.projectId,
+      workspace,
     );
   }
 

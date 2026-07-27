@@ -8,6 +8,7 @@ export type {
   CreateTaskInput,
   ListTasksInput,
   SearchTasksInput,
+  UpdateProjectInput,
   UpdateTaskInput,
 } from './agent';
 export {

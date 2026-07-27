@@ -4,7 +4,10 @@ import type { IssueType, IssueRelationEnum } from 'common/types';
 
 import { ajaxPost } from 'services/utils';
 
+import { vantikDatabase } from 'store/database';
 import { useContextStore } from 'store/global-context-provider';
+import { queueWrite } from 'store/outbox';
+import { isRetryable } from 'store/outbox-drain';
 
 export interface UpdateIssueParams {
   id: string;
@@ -32,10 +35,47 @@ export interface UpdateIssueParams {
 }
 
 export function updateIssue({ id, teamId, ...otherParams }: UpdateIssueParams) {
-  return ajaxPost({
-    url: `/api/v1/issues/${id}?teamId=${teamId}`,
-    data: otherParams,
+  const url = `/api/v1/issues/${id}?teamId=${teamId}`;
+
+  // The optimistic update has already been applied to the store by the time
+  // this runs, and a network failure is asynchronous — so the rollback in
+  // `useUpdateIssueMutation` never fires for one. That left the change on
+  // screen with nothing carrying it to the server: the write was simply lost,
+  // silently, which is the exact case this buffer exists for.
+  return ajaxPost({ url, data: otherParams }).catch(async (
+    error,
+  ): Promise<undefined> => {
+    if (!isRetryable(error)) {
+      throw error;
+    }
+
+    await queueWrite({ recordId: id, url, data: otherParams });
+    await persistLocally(id, otherParams);
+
+    // Resolving rather than rejecting is deliberate: from the user's point of
+    // view the change has been accepted, and it has — by this device, which
+    // will deliver it. An error toast here would be a lie about work that is
+    // not lost.
+    return undefined;
   });
+}
+
+/**
+ * Keeps an unsent change across a reload.
+ *
+ * The store's optimistic update lives in memory only. Without this, closing
+ * the tab shows the old value on the way back while the outbox still holds —
+ * and later applies — the new one.
+ */
+async function persistLocally(
+  id: string,
+  changes: Record<string, unknown>,
+): Promise<void> {
+  const cached = await vantikDatabase.issues.get(id);
+
+  if (cached) {
+    await vantikDatabase.issues.put({ ...cached, ...changes });
+  }
 }
 
 interface MutationParams {

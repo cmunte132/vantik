@@ -6,6 +6,7 @@ import { hash } from 'common/common-utils';
 import { useCurrentWorkspace } from 'hooks/workspace';
 
 import { initDatabase, reconcileSchemaVersion } from 'store/database';
+import { initOutbox } from 'store/outbox';
 import { UserContext } from 'store/user-context';
 
 interface Props {
@@ -28,6 +29,10 @@ export function DatabaseWrapper(props: Props): React.ReactElement {
       const workspaceHash = hash(hashKey);
 
       initDatabase(workspaceHash);
+
+      // Opened alongside the cache but kept separate from it, so a resync that
+      // drops and rebuilds the cache cannot take unsent writes with it.
+      initOutbox(workspaceHash);
 
       // Has to finish before the children mount. BootstrapWrapper reads the
       // stored sequence id as it renders and picks a delta sync over a full

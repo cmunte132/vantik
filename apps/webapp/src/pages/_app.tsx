@@ -24,6 +24,7 @@ import { useGetQueryClient } from 'common/lib/react-query-client';
 import { SCOPES } from 'common/scopes';
 import { AppVersionProvider } from 'common/wrappers/app-version-provider';
 
+import { UnsentChangesChip } from 'components/unsent-changes-chip';
 import { UpdateAvailableChip } from 'components/update-available-chip';
 
 import { StoreContext, storeContextStore } from 'store/global-context-provider';
@@ -78,6 +79,7 @@ export const MyApp: NextComponentType<
 
                       <Toaster />
                       <UpdateAvailableChip />
+                      <UnsentChangesChip />
                     </AppVersionProvider>
                   </HydrationBoundary>
                 </QueryClientProvider>

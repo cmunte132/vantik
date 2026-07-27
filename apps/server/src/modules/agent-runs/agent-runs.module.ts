@@ -8,6 +8,11 @@ import { LinkedIssueModule } from 'modules/linked-issue/linked-issue.module';
 import { UsersService } from 'modules/users/users.service';
 
 import { AgentDelegationService } from './agent-delegation.service';
+import { CredentialsController } from './credentials/credentials.controller';
+import { CredentialsService } from './credentials/credentials.service';
+import { GitProxyService } from './sandbox/git-proxy.service';
+import { GondolinRuntime } from './sandbox/gondolin.runtime';
+import { HostedExecutor } from './executors/hosted.executor';
 import { AgentRunsController } from './agent-runs.controller';
 import {
   AGENT_DELEGATION_SERVICE,
@@ -27,7 +32,7 @@ import { ExecutorRegistry } from './executors/executor.registry';
     IssueCommentsModule,
     LinkedIssueModule,
   ],
-  controllers: [AgentRunsController],
+  controllers: [AgentRunsController, CredentialsController],
   providers: [
     AgentRunsService,
     AgentDelegationService,
@@ -37,6 +42,10 @@ import { ExecutorRegistry } from './executors/executor.registry';
     ContextPackService,
     ExecutorRegistry,
     ByoExecutor,
+    HostedExecutor,
+    CredentialsService,
+    GondolinRuntime,
+    GitProxyService,
     AgentRunsScheduler,
     AgentRunsProcessor,
     PrismaService,
@@ -49,6 +58,7 @@ import { ExecutorRegistry } from './executors/executor.registry';
     AgentDelegationService,
     AGENT_DELEGATION_SERVICE,
     ExecutorRegistry,
+    CredentialsService,
   ],
 })
 export class AgentRunsModule {}

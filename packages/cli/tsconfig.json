@@ -27,7 +27,7 @@
     "module": "ESNext",
     "noEmit": true,
     "lib": ["es2022", "DOM"],
-    "types": ["node"]
+    "types": ["node", "jest"]
   },
   "exclude": ["node_modules", "./e2e/fixtures"]
 }

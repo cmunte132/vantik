@@ -215,6 +215,48 @@ export class StartAgentRunDto {
   modelId?: string;
 }
 
+/**
+ * One pass of the ENG-62 loop.
+ *
+ * Δ is computed server-side from the two pass rates rather than accepted from
+ * the caller: it is the reward-hacking metric, and a metric the party being
+ * measured gets to report is not a metric.
+ */
+export class RecordIterationDto {
+  @IsInt()
+  @Min(1)
+  index: number;
+
+  /** Pass rate over the suite the implementer could see, 0..1. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  validationPassRate?: number;
+
+  /** Pass rate over the suite it never saw, 0..1. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  heldOutPassRate?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  verificationPassed?: boolean;
+
+  /** Each must cite a file:line or a failing command; others are discarded. */
+  @IsOptional()
+  @IsArray()
+  findings?: unknown[];
+
+  @IsOptional()
+  @IsString()
+  diffHash?: string;
+
+  @IsOptional()
+  @IsObject()
+  phaseTimings?: Record<string, number>;
+}
+
 export class AgentRunRequestParamsDto {
   @IsString()
   agentRunId: string;

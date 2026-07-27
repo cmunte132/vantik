@@ -15,6 +15,7 @@ import {
   CancelAgentRunDto,
   ClaimAgentRunDto,
   CreateAgentRunDto,
+  RecordIterationDto,
   ReportAgentRunDto,
   RoleEnum,
   StartAgentRunDto,
@@ -223,6 +224,29 @@ export class AgentRunsController {
     @Body() body: ReportAgentRunDto,
   ) {
     return this.delegation.report(params.agentRunId, body, workspace);
+  }
+
+  /**
+   * One pass of the ENG-62 loop.
+   *
+   * Δ is derived server-side from the two pass rates rather than accepted
+   * here: it is the reward-hacking metric, and a metric reported by the party
+   * being measured is not a metric.
+   */
+  @Post(':agentRunId/iterations')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async recordIteration(
+    @Workspace() workspace: string,
+    @UserId() userId: string,
+    @Role() role: string,
+    @Param() params: AgentRunRequestParamsDto,
+    @Body() body: RecordIterationDto,
+  ) {
+    return this.agentRuns.recordIteration(
+      params.agentRunId,
+      body,
+      this.scope(workspace, userId, role),
+    );
   }
 
   @Post(':agentRunId/events')

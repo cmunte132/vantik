@@ -82,6 +82,22 @@ export class RunnerClient {
     await this.client.post(`/agent_runs/${runId}/events`, { body: input });
   }
 
+  /** Records one pass of the loop. Δ is computed server-side. */
+  async iteration(
+    runId: string,
+    input: {
+      index: number;
+      validationPassRate?: number;
+      heldOutPassRate?: number;
+      verificationPassed?: boolean;
+      findings?: unknown[];
+      diffHash?: string;
+      phaseTimings?: Record<string, number>;
+    },
+  ): Promise<void> {
+    await this.client.post(`/agent_runs/${runId}/iterations`, { body: input });
+  }
+
   async report(runId: string, input: ReportInput): Promise<void> {
     await this.client.post(`/agent_runs/${runId}/report`, { body: input });
   }

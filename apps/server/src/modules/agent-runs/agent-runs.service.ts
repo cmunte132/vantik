@@ -390,6 +390,70 @@ export class AgentRunsService {
     });
   }
 
+  /**
+   * Records one pass of the ENG-62 loop.
+   *
+   * Δ is computed here from the two pass rates rather than accepted from the
+   * caller. It is the reward-hacking metric, and a metric supplied by the
+   * party being measured is not a metric — the runner reports what its suites
+   * scored, and the server decides what that means.
+   */
+  async recordIteration(
+    runId: string,
+    input: {
+      index: number;
+      validationPassRate?: number;
+      heldOutPassRate?: number;
+      verificationPassed?: boolean;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      findings?: any;
+      diffHash?: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      phaseTimings?: any;
+    },
+    scope: AgentRunScope,
+  ) {
+    await this.requireRun(runId, scope);
+
+    const delta =
+      input.validationPassRate != null && input.heldOutPassRate != null
+        ? input.validationPassRate - input.heldOutPassRate
+        : null;
+
+    const iteration = await this.prisma.agentRunIteration.upsert({
+      where: { runId_index: { runId, index: input.index } },
+      create: {
+        runId,
+        index: input.index,
+        validationPassRate: input.validationPassRate,
+        heldOutPassRate: input.heldOutPassRate,
+        delta,
+        verificationPassed: input.verificationPassed,
+        findings: input.findings ?? undefined,
+        diffHash: input.diffHash,
+        phaseTimings: input.phaseTimings ?? undefined,
+      },
+      update: {
+        validationPassRate: input.validationPassRate,
+        heldOutPassRate: input.heldOutPassRate,
+        delta,
+        verificationPassed: input.verificationPassed,
+        findings: input.findings ?? undefined,
+        diffHash: input.diffHash,
+        phaseTimings: input.phaseTimings ?? undefined,
+      },
+    });
+
+    // Kept on the run too, so "how many passes did this take" is answerable
+    // without joining.
+    await this.prisma.agentRun.updateMany({
+      where: { id: runId },
+      data: { iterationCount: input.index },
+    });
+
+    return iteration;
+  }
+
   async cancelRun(runId: string, scope: AgentRunScope, reason?: string) {
     return this.transition(
       runId,

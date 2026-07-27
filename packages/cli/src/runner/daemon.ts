@@ -5,6 +5,7 @@ import type { Harness } from './contract';
 import { deliver, type Delivery } from './delivery';
 import { RunnerError, type AgentRunFailure } from './failures';
 import { diffStat, hasChanges, scrubArtifacts } from './git';
+import { isTestSpecifiable, resolvePhases } from './loop/phases';
 import { PiHarness } from './pi-harness';
 import { prepareWorkspace } from './workspace';
 import type { ClaimedRun, ReportInput, RunnerClient } from './client';
@@ -219,6 +220,33 @@ async function handleRun(run: ClaimedRun, options: DaemonOptions) {
         'NO_DIFF_PRODUCED',
         'The harness finished without changing anything.',
       );
+    }
+
+    // The ENG-62 loop, when a workspace has switched any of it on. Every
+    // phase ships off: the null hypothesis is that implement plus
+    // deterministic verification is as good, and nothing has beaten that
+    // compute-matched baseline yet.
+    const phases = resolvePhases(config.phases);
+
+    if (phases.specify && !isTestSpecifiable(pack)) {
+      // A legitimate terminal state, not a failure. Refactors, docs and
+      // dependency bumps cannot be pinned down with new tests — a refactor's
+      // Definition of Done is "behaviour unchanged" — and reporting that as a
+      // failure trains people to ignore the category.
+      await note(
+        'This issue cannot be specified with tests; routing to human review.',
+        { phase: 'specify' },
+      );
+
+      await options.client.report(run.id, {
+        needsReview: true,
+        summary:
+          'The work is done, but no executable test could be derived from the ' +
+          'Definition of Done — this is a change whose correctness a person has ' +
+          'to judge.',
+        phaseTimings,
+      });
+      return;
     }
 
     const stat = await diffStat(workspace.workdir, workspace.baseCommit);

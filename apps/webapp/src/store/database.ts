@@ -47,6 +47,10 @@ export class VantikDatabase extends Dexie {
   issueHistory: Dexie.Table<IssueHistoryType, string>;
   comments: Dexie.Table<IssueCommentType, string>;
   checklistItems: Dexie.Table<ChecklistItemType, string>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  agentRuns: Dexie.Table<any, string>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  agentRunEvents: Dexie.Table<any, string>;
   pages: Dexie.Table<PageType, string>;
   pageEntries: Dexie.Table<PageEntryType, string>;
   usersOnWorkspaces: Dexie.Table<UsersOnWorkspaceType, string>;
@@ -90,6 +94,9 @@ export class VantikDatabase extends Dexie {
         'id,createdAt,updatedAt,userId,issueId,body,parentId,sourceMetadata',
       [MODELS.ChecklistItem]:
         'id,createdAt,updatedAt,body,completed,sortOrder,completedAt,completedById,issueId,createdById',
+      [MODELS.AgentRun]:
+        'id,createdAt,updatedAt,workspaceId,issueId,agentUserId,executor,status,attempt,startedAt,finishedAt,failure',
+      [MODELS.AgentRunEvent]: 'id,createdAt,at,level,phase,runId',
       [MODELS.IntegrationAccount]:
         'id,createdAt,updatedAt,accountId,settings,personal,integratedById,integrationDefinitionId,workspaceId',
       [MODELS.LinkedIssue]:
@@ -146,6 +153,8 @@ export class VantikDatabase extends Dexie {
     this.issueHistory = this.table(MODELS.IssueHistory);
     this.comments = this.table(MODELS.IssueComment);
     this.checklistItems = this.table(MODELS.ChecklistItem);
+    this.agentRuns = this.table(MODELS.AgentRun);
+    this.agentRunEvents = this.table(MODELS.AgentRunEvent);
     this.integrationAccounts = this.table(MODELS.IntegrationAccount);
     this.linkedIssues = this.table(MODELS.LinkedIssue);
     this.issueRelations = this.table(MODELS.IssueRelation);
@@ -233,10 +242,19 @@ export async function resetDatabase() {
  * is stored.
  *
  * Dexie upgrades itself when the shipped version is *higher* than the stored
- * one, so the ordinary case needs no help. The case that needs handling is the
- * reverse — a client that ran a newer build and then loaded an older one, which
- * IndexedDB refuses outright — plus any other failure to open, since a database
- * we cannot open is worth less than the round trip to rebuild it.
+ * one, but that upgrade is not the whole job. A version goes up because a
+ * synced model was added, and Dexie makes that table empty. The stored
+ * sequence id survives, so the next load asks for a delta, the delta carries
+ * only what changed since, and every row written before the upgrade is never
+ * delivered — the new table stays empty for as long as the client lives. So a
+ * forward bump drops the sequence id and the client bootstraps once more. The
+ * data it already holds is rewritten rather than lost, which is cheaper than a
+ * wipe and invisible to the reader.
+ *
+ * The other case is the reverse — a client that ran a newer build and then
+ * loaded an older one, which IndexedDB refuses outright — plus any other
+ * failure to open, since a database we cannot open is worth less than the
+ * round trip to rebuild it.
  *
  * Entirely client-side by design. The server advertises versions and never
  * decides this, so there is no path by which it can order a client to discard
@@ -256,6 +274,10 @@ export async function reconcileSchemaVersion(hash: number): Promise<boolean> {
     await resetDatabase();
     initDatabase(hash);
     wiped = true;
+  } else if (stored !== undefined && stored < DEXIE_SCHEMA_VERSION) {
+    // Keep the tables, discard the bookmark. See the note above: the tables a
+    // bump adds arrive empty and a delta will never fill them.
+    localStorage.removeItem(sequenceIdKey(hash));
   }
 
   try {

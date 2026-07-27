@@ -34,6 +34,8 @@ import { useUpdateIssueMutation } from 'services/issues';
 
 import { useContextStore } from 'store/global-context-provider';
 
+import { AgentRunPanel } from './agent-run-panel';
+import { DelegateControl } from './delegate-control';
 import { EngineeringProperties } from './engineering-properties';
 import { IssuePages } from './issue-pages';
 import { IssueRelatedProperties } from './issue-related-properties';
@@ -135,6 +137,13 @@ export const RightSide = observer(() => {
               onChange={assigneeChange}
               variant={IssueAssigneeDropdownVariant.LINK}
             />
+          </div>
+
+          {/* Agent work sits above the relational properties: when a run is
+              live it is the most time-sensitive thing on this panel. */}
+          <div className="flex flex-col items-start">
+            <DelegateControl />
+            <AgentRunPanel />
           </div>
 
           <IssueRelatedProperties />

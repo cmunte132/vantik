@@ -12,6 +12,8 @@ export enum MODELS {
   IssueHistory = 'IssueHistory',
   IssueComment = 'IssueComment',
   ChecklistItem = 'ChecklistItem',
+  AgentRun = 'AgentRun',
+  AgentRunEvent = 'AgentRunEvent',
   IntegrationDefinition = 'IntegrationDefinition',
   IntegrationAccount = 'IntegrationAccount',
   LinkedIssue = 'LinkedIssue',

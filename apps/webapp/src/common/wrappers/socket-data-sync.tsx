@@ -57,6 +57,7 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
     const hashKey = `${workspace.id}__${user.id}`;
 
     const [socket, setSocket] = React.useState<Socket | undefined>(undefined);
+    const retryTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
 
     React.useEffect(() => {
       if (!socket && workspaceStore.workspace?.id) {
@@ -65,6 +66,7 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
 
       return () => {
         socket && socket.disconnect();
+        clearTimeout(retryTimer.current);
       };
 
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,6 +76,17 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
       // The gateway is mounted on the server's own port and is not proxied
       // through this app, so it needs an absolute origin rather than a path.
       const { socketHost } = await loadClientConfig();
+
+      // No host means the config never landed. Connecting anyway is worse than
+      // waiting: io('') points socket.io at this app's own origin, where there
+      // is no gateway, so the page would sit there looking connected with every
+      // live update going nowhere. loadClientConfig retries a failure, so
+      // asking again is what eventually gets a real host.
+      if (!socketHost) {
+        retryTimer.current = setTimeout(initSocket, 5000);
+
+        return;
+      }
 
       const socket = io(socketHost, {
         query: {

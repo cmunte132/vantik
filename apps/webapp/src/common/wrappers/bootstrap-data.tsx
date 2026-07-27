@@ -13,6 +13,7 @@ import { getBootstrapRecords, getDeltaRecords } from 'services/sync';
 import { vantikDatabase } from 'store/database';
 import { useContextStore } from 'store/global-context-provider';
 import { MODELS } from 'store/models';
+import { resync } from 'store/resync';
 import { UserContext } from 'store/user-context';
 
 import { saveSocketData } from './socket-data-util';
@@ -111,14 +112,22 @@ export function BootstrapWrapper({ children }: Props) {
   };
 
   const syncRecords = async () => {
-    await saveRecords(
-      await getDeltaRecords(
-        workspace?.id,
-        Object.values(MODELS),
-        lastSequenceId,
-        user.id,
-      ),
+    const delta = await getDeltaRecords(
+      workspace?.id,
+      Object.values(MODELS),
+      lastSequenceId,
+      user.id,
     );
+
+    // The server cannot serve a delta from the sequence this client holds, so
+    // there is no incremental way back: applying an empty delta would leave the
+    // cache wrong and confident. Start again from a known state instead.
+    if (delta.resync) {
+      await resync();
+      return;
+    }
+
+    await saveRecords(delta);
   };
 
   const initStore = async () => {

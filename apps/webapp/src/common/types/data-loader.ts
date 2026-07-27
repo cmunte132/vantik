@@ -18,4 +18,12 @@ export interface SyncActionRecord {
 export interface BootstrapResponse {
   syncActions: SyncActionRecord[];
   lastSequenceId: string;
+
+  /**
+   * Set when the server cannot serve a delta from the sequence this client
+   * sent — its history belongs to a database this one is not. There is no
+   * incremental way back from that, so the client rebuilds from a bootstrap
+   * rather than applying an empty delta over a cache that is already wrong.
+   */
+  resync?: boolean;
 }

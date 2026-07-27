@@ -62,7 +62,18 @@ function buildService(rows: FakeSyncAction[], liveIssueIds?: string[]) {
 
   const prisma = {
     syncAction: {
-      findMany: jest.fn((args) => Promise.resolve(findMany(rows, args))),
+      findMany: jest.fn((args) => {
+        // `getDelta` filters by sequence before ordering; without honouring
+        // that here, a "client is already current" case would still be handed
+        // rows and the test would be asserting against a fake, not the service.
+        const after = args?.where?.sequenceId?.gt;
+        const candidates =
+          after === undefined
+            ? rows
+            : rows.filter((row) => row.sequenceId > after);
+
+        return Promise.resolve(findMany(candidates, args));
+      }),
       findFirst: jest.fn((args) => {
         // Two callers: `getLastSequenceId` wants the highest sequence, and
         // `workspaceOfDeleted` wants the workspace a modelId was announced in.
@@ -240,5 +251,45 @@ describe('deletes of records that are physically gone', () => {
     const { syncActions } = await service.getDelta('Issue', 5n, WORKSPACE, USER);
 
     expect(syncActions).toHaveLength(0);
+  });
+});
+
+/**
+ * A client cannot legitimately be ahead of the server.
+ *
+ * When it is, its history belongs to a database this one is not — a restore, a
+ * workspace copied between environments, a sequence surviving a reset — and
+ * every delta from that point is empty while the cache quietly stays wrong.
+ * Answering "no changes" to a question with no true answer is the failure mode
+ * worth refusing.
+ */
+describe('SyncActionsService.getDelta on a sequence it cannot serve', () => {
+  it('asks the client to resync when its sequence is ahead of the log', async () => {
+    const service = buildService([action('issue-1', 'I', 10n)]);
+
+    const delta = await service.getDelta('Issue', 999n, WORKSPACE, USER);
+
+    expect(delta.resync).toBe(true);
+    expect(delta.syncActions).toEqual([]);
+  });
+
+  it('serves a delta normally for a sequence the log covers', async () => {
+    const service = buildService([action('issue-1', 'I', 10n)]);
+
+    const delta = await service.getDelta('Issue', 5n, WORKSPACE, USER);
+
+    expect(delta.resync).toBeUndefined();
+    expect(delta.syncActions).toHaveLength(1);
+  });
+
+  it('serves an empty delta rather than a resync when the client is current', async () => {
+    // Caught up is the common case and must stay cheap: nothing to send, and
+    // no reason to make anyone re-download a workspace.
+    const service = buildService([action('issue-1', 'I', 10n)]);
+
+    const delta = await service.getDelta('Issue', 30n, WORKSPACE, USER);
+
+    expect(delta.resync).toBeUndefined();
+    expect(delta.syncActions).toEqual([]);
   });
 });

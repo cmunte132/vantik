@@ -6,6 +6,7 @@ import ActionEventService from 'modules/action-event/action-event.service';
 import { IntegrationsModule } from 'modules/integrations/integrations.module';
 import { SyncModule } from 'modules/sync/sync.module';
 import SyncActionsService from 'modules/sync-actions/sync-actions.service';
+import { SyncRepairService } from 'modules/sync-actions/sync-repair.service';
 
 import ReplicationService from './replication.service';
 
@@ -16,6 +17,7 @@ import ReplicationService from './replication.service';
     ReplicationService,
     ConfigService,
     SyncActionsService,
+    SyncRepairService,
     PrismaService,
     ActionEventService,
   ],

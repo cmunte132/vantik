@@ -158,6 +158,21 @@ export default class SyncActionsService {
       requestedWorkspaceId,
     );
 
+    const currentSequenceId = await getLastSequenceId(this.prisma, workspaceId);
+
+    // A client cannot legitimately be ahead of the server. When it is, its
+    // history belongs to a database this one is not — a restore, a workspace
+    // copied between environments, or a stale sequence surviving a reset — and
+    // every delta from here would be empty while the cache quietly stays
+    // wrong. Say so, rather than answering a question that has no true answer.
+    if (lastSequenceId > currentSequenceId) {
+      return {
+        resync: true,
+        syncActions: [] as SyncAction[],
+        lastSequenceId: currentSequenceId,
+      };
+    }
+
     const syncActions = await this.prisma.syncAction.findMany({
       where: {
         workspaceId,
@@ -176,7 +191,7 @@ export default class SyncActionsService {
         syncActions as SyncAction[],
         userId,
       ),
-      lastSequenceId: await getLastSequenceId(this.prisma, workspaceId),
+      lastSequenceId: currentSequenceId,
     };
   }
 }

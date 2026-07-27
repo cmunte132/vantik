@@ -15,6 +15,7 @@ import { LoggerService } from 'modules/logger/logger.service';
 import { SyncGateway } from 'modules/sync/sync.gateway';
 import SyncActionsService from 'modules/sync-actions/sync-actions.service';
 import { getWorkspaceId } from 'modules/sync-actions/sync-actions.utils';
+import { SyncRepairService } from 'modules/sync-actions/sync-repair.service';
 
 import {
   tablesToSendMessagesFor,
@@ -40,6 +41,7 @@ export default class ReplicationService {
     private syncActionsService: SyncActionsService,
     private actionEventService: ActionEventService,
     private prisma: PrismaService,
+    private syncRepair: SyncRepairService,
   ) {
     this.client = new Client({
       user: configService.get('POSTGRES_USER'),
@@ -56,6 +58,25 @@ export default class ReplicationService {
     await this.deleteOrphanedSlots();
     await this.createReplicationSlot();
     await this.setupReplication();
+
+    // The slot is recreated on every start, so the write-ahead log covering
+    // the downtime window is gone before the listener attaches. Anything
+    // written in that window produced no sync action, and a record with no
+    // sync action never reaches a client. Repairing the log here costs a few
+    // queries; the alternative is telling every client to re-bootstrap after
+    // every deploy to cover a window that is usually empty.
+    //
+    // Deliberately not awaited into startup: a slow reconcile should delay
+    // clients catching up, not the server accepting requests.
+    this.syncRepair
+      .reconcile()
+      .catch((error) =>
+        this.logger.error({
+          message: `Could not repair the sync log after downtime: ${error}`,
+          where: 'ReplicationService.init',
+          error: error instanceof Error ? error : undefined,
+        }),
+      );
   }
 
   async deleteOrphanedSlots() {

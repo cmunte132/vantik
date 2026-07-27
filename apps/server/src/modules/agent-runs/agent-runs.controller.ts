@@ -13,9 +13,11 @@ import {
   AgentRunRequestParamsDto,
   AppendAgentRunEventDto,
   CancelAgentRunDto,
+  ClaimAgentRunDto,
   CreateAgentRunDto,
   ReportAgentRunDto,
   RoleEnum,
+  StartAgentRunDto,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -115,6 +117,83 @@ export class AgentRunsController {
       config: body.config,
       force: body.force,
     });
+  }
+
+  /**
+   * A runner asking for work.
+   *
+   * Long-poll rather than a socket: it survives restarts, works through CI
+   * proxies, and keeps the server stateless per request. Returns 204 with no
+   * body when there is nothing queued, so an idle runner costs one cheap
+   * request per interval.
+   *
+   * Declared a write because it changes state — it takes ownership of a run.
+   */
+  @Post('claim')
+  @UseGuards(AuthGuard)
+  async claimRun(
+    @Workspace() workspace: string,
+    @UserId() userId: string,
+    @Role() role: string,
+    @Body() body: ClaimAgentRunDto,
+  ) {
+    // A person cannot claim work: claiming binds a run to the identity that
+    // will be credited with the result, and only an agent has one.
+    if (role !== RoleEnum.AGENT) {
+      throw new BadRequestException({
+        message:
+          'Only an agent token can claim runs. Run the daemon with a PAT ' +
+          'from an agent account.',
+      });
+    }
+
+    const run = await this.agentRuns.claimNext({
+      workspaceId: workspace,
+      agentUserId: userId,
+      executor: body.executor,
+    });
+
+    return run ?? null;
+  }
+
+  /** Renews the lease on a claimed run, and reports if it was stopped. */
+  @Post(':agentRunId/heartbeat')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async heartbeat(
+    @Workspace() workspace: string,
+    @UserId() userId: string,
+    @Role() role: string,
+    @Param() params: AgentRunRequestParamsDto,
+  ) {
+    return this.agentRuns.heartbeat(
+      params.agentRunId,
+      this.scope(workspace, userId, role),
+    );
+  }
+
+  /** Moves a claimed run to RUNNING once the harness actually starts. */
+  @Post(':agentRunId/start')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async startRun(
+    @Workspace() workspace: string,
+    @UserId() userId: string,
+    @Role() role: string,
+    @Param() params: AgentRunRequestParamsDto,
+    @Body() body: StartAgentRunDto,
+  ) {
+    return this.agentRuns.transition(
+      params.agentRunId,
+      'RUNNING',
+      {
+        startedAt: new Date(),
+        ...(body.baseCommit ? { baseCommit: body.baseCommit } : {}),
+        ...(body.harnessVersion
+          ? { harnessVersion: body.harnessVersion }
+          : {}),
+        ...(body.modelId ? { modelId: body.modelId } : {}),
+      },
+      this.scope(workspace, userId, role),
+    );
   }
 
   /** What this deployment can run work on, and whether each is usable here. */

@@ -199,6 +199,13 @@ export interface AgentRunLimits {
 export interface AgentRunConfig extends AgentRunRepoConfig {
   /** Command to run instead of the bundled default harness. */
   harnessCommand?: string;
+  /**
+   * Model the harness asks for, and the provider to route it through when the
+   * id alone is ambiguous. Recorded on the run either way, so two runs of the
+   * same issue can be compared by what actually drove them.
+   */
+  model?: string;
+  provider?: string;
   limits?: AgentRunLimits;
   /** Leave the diff on disk; do not push and do not open a PR. */
   dryRun?: boolean;

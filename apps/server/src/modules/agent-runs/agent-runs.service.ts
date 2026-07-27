@@ -245,6 +245,59 @@ export class AgentRunsService {
   }
 
   /**
+   * Hands the oldest eligible queued run to exactly one claimer.
+   *
+   * `FOR UPDATE SKIP LOCKED` is doing the real work. Reading a candidate and
+   * then updating it in two statements is a race two runners lose together:
+   * both read the same row, both write it, and the same issue gets worked
+   * twice — producing two branches for one issue, which is precisely the
+   * outcome the duplicate-run guard exists to prevent. The lock makes the read
+   * and the claim one indivisible step, and `SKIP LOCKED` means a second
+   * runner arriving mid-claim moves on to the next row instead of blocking
+   * behind the first.
+   *
+   * Scoped to the agent the token speaks for. A runner authenticates as one
+   * agent and may only take that agent's work; otherwise any runner could
+   * drain the whole workspace's queue.
+   */
+  async claimNext(input: {
+    workspaceId: string;
+    agentUserId: string;
+    executor?: string;
+  }) {
+    const leaseUntil = new Date(Date.now() + AGENT_RUN_LEASE_MS);
+
+    const claimed = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      UPDATE "AgentRun"
+      SET status = 'CLAIMED',
+          "claimedAt" = NOW(),
+          "leaseExpiresAt" = ${leaseUntil},
+          "updatedAt" = NOW()
+      WHERE id = (
+        SELECT id FROM "AgentRun"
+        WHERE "workspaceId" = ${input.workspaceId}
+          AND "agentUserId" = ${input.agentUserId}
+          AND status = 'QUEUED'
+          AND deleted IS NULL
+          AND (${input.executor ?? null}::text IS NULL
+               OR executor = ${input.executor ?? null})
+        ORDER BY "createdAt" ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      )
+      RETURNING id
+    `;
+
+    if (claimed.length === 0) {
+      return null;
+    }
+
+    // Re-read through Prisma so the runner gets the same shape every other
+    // read returns, rather than the raw row with its snake-cased edges.
+    return this.requireRunUnscoped(claimed[0].id);
+  }
+
+  /**
    * Renews a lease without changing status.
    *
    * Refuses a terminal run, so a runner whose work was cancelled from the UI

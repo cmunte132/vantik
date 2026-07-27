@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 
+import { configureAgentCommands } from '../commands/agent';
 import { configureDeployCommand } from '../commands/deploy';
 import { configureInitCommand } from '../commands/init';
 import { configureKnowledgeCommands } from '../commands/knowledge';
@@ -25,4 +26,5 @@ configureLogoutCommand(program);
 configureTaskCommands(program);
 configureProductAxisCommands(program);
 configureProjectCommands(program);
+configureAgentCommands(program);
 configureKnowledgeCommands(program);

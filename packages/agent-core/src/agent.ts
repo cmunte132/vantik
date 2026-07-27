@@ -677,6 +677,30 @@ export class VantikAgent {
     return (page.items ?? []).map(toAgentRunSummary);
   }
 
+  /** Every agent run in the workspace, newest first. */
+  async listWorkspaceAgentRuns(
+    input: { perPage?: number; status?: string[] } = {},
+  ): Promise<Paginated<AgentRunSummary>> {
+    const page = await this.client.get<{
+      items: RawAgentRun[];
+      page: number;
+      perPage: number;
+      total: number;
+    }>('/agent_runs', {
+      query: {
+        ...(input.perPage ? { perPage: String(input.perPage) } : {}),
+        ...(input.status?.length ? { status: input.status.join(',') } : {}),
+      },
+    });
+
+    return {
+      items: (page.items ?? []).map(toAgentRunSummary),
+      page: page.page,
+      perPage: page.perPage,
+      total: page.total,
+    };
+  }
+
   /** Progress lines from a run, oldest first. */
   async agentRunEvents(
     runId: string,

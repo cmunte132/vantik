@@ -22,6 +22,7 @@ import {
   type AgentRunFailure,
   type AgentRunStatus,
 } from './agent-run.entity';
+import { THINKING_LEVELS, type ThinkingLevel } from './model-providers';
 
 export class AgentRunLimitsDto {
   @IsOptional()
@@ -95,6 +96,24 @@ export class AgentRunConfigDto {
   @IsString()
   harnessCommand?: string;
 
+  /**
+   * Which of the workspace's model keys this run uses, and what it asks for.
+   *
+   * The provider is load-bearing rather than descriptive: it selects the key,
+   * and with it the environment variable the harness reads that key from.
+   */
+  @IsOptional()
+  @IsString()
+  provider?: string;
+
+  @IsOptional()
+  @IsString()
+  model?: string;
+
+  @IsOptional()
+  @IsIn(THINKING_LEVELS)
+  thinking?: ThinkingLevel;
+
   @IsOptional()
   @ValidateNested()
   @Type(() => AgentRunLimitsDto)
@@ -166,6 +185,34 @@ export class AgentRunFilterDto {
   @IsInt()
   @Min(1)
   perPage?: number;
+}
+
+/** What a runner is willing to take. */
+export class ClaimAgentRunDto {
+  /** Only take work for this backend. Omit to take anything queued. */
+  @IsOptional()
+  @IsString()
+  executor?: string;
+}
+
+/**
+ * What the runner knows once the harness is actually going.
+ *
+ * The base commit in particular: the patch is computed as `git diff` against
+ * it, so it has to be recorded before any file is touched.
+ */
+export class StartAgentRunDto {
+  @IsOptional()
+  @IsString()
+  baseCommit?: string;
+
+  @IsOptional()
+  @IsString()
+  harnessVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  modelId?: string;
 }
 
 export class AgentRunRequestParamsDto {

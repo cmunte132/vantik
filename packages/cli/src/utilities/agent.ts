@@ -1,4 +1,8 @@
-import { VantikAgent, VantikAuthError } from '@vantikhq/agent-core';
+import {
+  VantikAgent,
+  VantikAuthError,
+  VantikClient,
+} from '@vantikhq/agent-core';
 import { env } from 'std-env';
 
 import { readAuthConfigProfile } from './configFiles';
@@ -15,6 +19,24 @@ import { readAuthConfigProfile } from './configFiles';
  * that variable already names the API root, and when nothing points anywhere
  * agent-core falls back to the local server on :3001.
  */
+export function resolveClient(): VantikClient {
+  const profile = readAuthConfigProfile();
+
+  const token = env.ACCESS_TOKEN ?? profile?.accessToken ?? env.VANTIK_TOKEN;
+
+  if (!token) {
+    throw new VantikAuthError(
+      'Not logged in. Run `vantik-cli login`, or set VANTIK_TOKEN to a ' +
+        'tg_pat_… value from Settings → Agents.',
+    );
+  }
+
+  const appUrl = env.BASE_HOST ?? profile?.apiUrl;
+  const baseUrl = appUrl ? `${appUrl.replace(/\/+$/, '')}/api` : env.VANTIK_URL;
+
+  return new VantikClient({ token, baseUrl });
+}
+
 export function resolveAgent(): VantikAgent {
   const profile = readAuthConfigProfile();
 

@@ -204,6 +204,10 @@ describe('UsersService.createAgentAccount', () => {
       ownerUserId: 'admin-1',
       scopes: DEFAULT_AGENT_SCOPES,
       token: 'tg_pat_agentSECRET',
+      // Minted a moment ago and used for nothing yet. Null rather than absent,
+      // because "never used" is how the settings list flags a leftover and it
+      // has to be true from the start.
+      lastUsedAt: null,
     });
   });
 
@@ -231,7 +235,14 @@ describe('UsersService.listAgentAccounts', () => {
     },
   };
 
-  function listPrisma(activeTokenUserIds: string[]) {
+  function listPrisma(
+    activeTokenUserIds: string[],
+    extraTokens: Array<{
+      userId: string;
+      deleted: Date | null;
+      lastUsedAt: Date | null;
+    }> = [],
+  ) {
     return {
       usersOnWorkspaces: {
         findMany: jest.fn().mockResolvedValue([membership]),
@@ -240,9 +251,18 @@ describe('UsersService.listAgentAccounts', () => {
           .mockResolvedValue({ status: 'ACTIVE', role: RoleEnum.ADMIN }),
       },
       personalAccessToken: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue(activeTokenUserIds.map((userId) => ({ userId }))),
+        // Every token, live or revoked: the listing reads `lastUsedAt` off the
+        // revoked ones too, and decides `active` in application code.
+        findMany: jest.fn().mockResolvedValue([
+          ...activeTokenUserIds.map(
+            (userId): { userId: string; deleted: Date | null; lastUsedAt: Date | null } => ({
+              userId,
+              deleted: null,
+              lastUsedAt: null,
+            }),
+          ),
+          ...extraTokens,
+        ]),
       },
     };
   }
@@ -278,19 +298,59 @@ describe('UsersService.listAgentAccounts', () => {
     expect(agent.active).toBe(false);
   });
 
-  it('only counts agent-typed, non-deleted tokens in this workspace', async () => {
+  it('only looks at agent-typed tokens in this workspace', async () => {
     const prisma = listPrisma(['agent-1']);
     await serviceWith(prisma).listAgentAccounts('ws-1', 'admin-1');
 
     expect(prisma.personalAccessToken.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          workspaceId: 'ws-1',
-          type: 'agent',
-          deleted: null,
-        }),
+        where: expect.objectContaining({ workspaceId: 'ws-1', type: 'agent' }),
       }),
     );
+  });
+
+  it('does not let a revoked token make an agent active', async () => {
+    // Deleted rows are fetched on purpose — they still carry a last-used time
+    // worth reporting — so `active` has to be decided on `deleted`, not on the
+    // row merely existing.
+    const prisma = listPrisma([], [
+      { userId: 'agent-1', deleted: new Date(), lastUsedAt: new Date() },
+    ]);
+    const [agent] = await serviceWith(prisma).listAgentAccounts(
+      'ws-1',
+      'admin-1',
+    );
+
+    expect(agent.active).toBe(false);
+  });
+
+  it('reports an agent that has never authenticated as never used', async () => {
+    const prisma = listPrisma(['agent-1']);
+    const [agent] = await serviceWith(prisma).listAgentAccounts(
+      'ws-1',
+      'admin-1',
+    );
+
+    expect(agent.lastUsedAt).toBeNull();
+  });
+
+  it('reports the most recent use across an agent’s tokens', async () => {
+    const older = new Date('2026-07-01T00:00:00.000Z');
+    const newer = new Date('2026-07-20T00:00:00.000Z');
+
+    // An agent can hold more than one token over its life — a rotation leaves
+    // the old one deleted — so its last use is the newest of all of them.
+    const prisma = listPrisma([], [
+      { userId: 'agent-1', deleted: new Date(), lastUsedAt: older },
+      { userId: 'agent-1', deleted: null, lastUsedAt: newer },
+    ]);
+    const [agent] = await serviceWith(prisma).listAgentAccounts(
+      'ws-1',
+      'admin-1',
+    );
+
+    expect(agent.lastUsedAt).toBe(newer.toISOString());
+    expect(agent.active).toBe(true);
   });
 });
 

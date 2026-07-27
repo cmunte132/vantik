@@ -88,6 +88,13 @@ export function agentSettings(settings: unknown): {
   ownership: AgentOwnership;
   ownerUserId: string | null;
   scopes: AgentScope[];
+  /**
+   * When a revoked agent was cleared from the listing, or null.
+   *
+   * Presentation rather than permission — a hidden agent is hidden because it
+   * can no longer do anything, never as a way of restricting one that can.
+   */
+  hiddenAt: string | null;
 } {
   const agent = (
     settings as {
@@ -95,6 +102,7 @@ export function agentSettings(settings: unknown): {
         ownership?: AgentOwnership;
         ownerUserId?: string | null;
         scopes?: unknown;
+        hiddenAt?: string | null;
       };
     } | null
   )?.agent;
@@ -103,5 +111,6 @@ export function agentSettings(settings: unknown): {
     ownership: agent?.ownership ?? 'personal',
     ownerUserId: agent?.ownerUserId ?? null,
     scopes: sanitizeScopes(agent?.scopes),
+    hiddenAt: agent?.hiddenAt ?? null,
   };
 }

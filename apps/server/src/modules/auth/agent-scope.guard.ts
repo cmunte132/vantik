@@ -12,6 +12,7 @@ import {
   bearerToken,
   isPatToken,
   resolvePatPrincipal,
+  touchToken,
 } from 'common/pat-session';
 
 import {
@@ -67,8 +68,8 @@ export class AgentScopeGuard implements CanActivate {
       return true;
     }
 
-    const { membership } =
-      (await resolvePatPrincipal(this.prisma, token, request)) ?? {};
+    const principal = await resolvePatPrincipal(this.prisma, token, request);
+    const membership = principal?.membership;
 
     // A person's token, a revoked one, or one whose membership is gone: not an
     // agent, so not this guard's business. A token nobody holds still falls to
@@ -76,6 +77,12 @@ export class AgentScopeGuard implements CanActivate {
     if (membership?.role !== RoleEnum.AGENT) {
       return true;
     }
+
+    // The one place every authenticated agent request already passes through
+    // with its token row resolved, which is what makes "has this agent ever
+    // been used" answerable without a second lookup. Throttled and not awaited
+    // — see `touchToken`.
+    touchToken(this.prisma, principal);
 
     const { scopes: granted } = agentSettings(membership.settings);
     const needed =

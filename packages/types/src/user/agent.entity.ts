@@ -51,6 +51,14 @@ export interface AgentSummary {
   scopes: AgentScope[];
   createdAt: string;
   active: boolean;
+  /**
+   * When any of this agent's tokens last authenticated, or null for never.
+   *
+   * Null is the useful case: an account that has never made a request is a
+   * leftover from a script or an experiment, and telling those apart from the
+   * ones in daily use is what stops the list growing without bound.
+   */
+  lastUsedAt: string | null;
 }
 
 /**

@@ -50,6 +50,45 @@ export interface PatPrincipal {
   /** Any credential belonging to the account; null when it has no way in. */
   supertokensUserId: string | null;
   membership: { workspaceId: string; role: string; settings: unknown } | null;
+  /** Last recorded use, for deciding whether it is worth recording again. */
+  lastUsedAt: Date | null;
+}
+
+/**
+ * How stale a token's `lastUsedAt` may get before it is written again.
+ *
+ * The value answers "is this credential still in use", which nobody asks to
+ * the minute. Writing on every request would put a row update on the hot path
+ * of the one principal that calls in a loop, to sharpen a timestamp no screen
+ * displays that precisely.
+ */
+export const TOKEN_LAST_USED_THROTTLE_MS = 5 * 60 * 1000;
+
+/**
+ * Records that a token was just used, if it is worth recording.
+ *
+ * Deliberately not awaited by callers and deliberately swallowing its own
+ * failure: this is bookkeeping, and a request that did real work must not fail
+ * — or wait — because a timestamp could not be written.
+ */
+export function touchToken(
+  prisma: PrismaService,
+  principal: PatPrincipal,
+): void {
+  const last = principal.lastUsedAt?.getTime() ?? 0;
+
+  if (Date.now() - last < TOKEN_LAST_USED_THROTTLE_MS) {
+    return;
+  }
+
+  const now = new Date();
+  // Keep the request's cached principal in step, so several guards on one
+  // request do not each decide a write is due.
+  principal.lastUsedAt = now;
+
+  void prisma.personalAccessToken
+    .update({ where: { id: principal.tokenId }, data: { lastUsedAt: now } })
+    .catch((): void => undefined);
 }
 
 /**
@@ -77,6 +116,7 @@ export async function resolvePatPrincipal(
       id: true,
       userId: true,
       workspaceId: true,
+      lastUsedAt: true,
       user: {
         select: {
           authIdentities: {
@@ -100,6 +140,7 @@ export async function resolvePatPrincipal(
       pat.user.usersOnWorkspaces.find(
         (membership) => membership.workspaceId === pat.workspaceId,
       ) ?? null,
+    lastUsedAt: pat.lastUsedAt,
   };
 
   if (request) {

@@ -28,7 +28,11 @@ import Session from 'supertokens-node/recipe/session';
 
 import { generatePersonalAccessToken } from 'common/authentication';
 import { PatPrincipal, resolvePatPrincipal } from 'common/pat-session';
-import { resolveAdminWorkspaceId } from 'common/workspace-access';
+import {
+  assertWorkspaceAdmin,
+  resolveAdminWorkspaceId,
+  resolveMemberWorkspaceId,
+} from 'common/workspace-access';
 
 import { agentSettings } from 'modules/auth/agent-scope';
 import { getRecipeUserIdForAccount } from 'modules/auth/session-user';
@@ -334,12 +338,21 @@ export class UsersService {
     scopes: AgentScope[] = DEFAULT_AGENT_SCOPES,
     requestedWorkspaceId?: string,
   ): Promise<AgentAccount> {
-    const workspaceId = await resolveAdminWorkspaceId(
+    // Any member may mint a *personal* agent: it is the credential they point
+    // their own editor at, and gating that behind admin made the feature
+    // unavailable to most of the people it exists for. A workspace-owned agent
+    // acts for the whole workspace and stays admin-only — the load-bearing
+    // half, and the one easiest to lose while splitting these two checks.
+    const workspaceId = await resolveMemberWorkspaceId(
       this.prisma,
       createdByUserId,
       sessionWorkspaceId,
       requestedWorkspaceId,
     );
+
+    if (ownership !== 'personal') {
+      await assertWorkspaceAdmin(this.prisma, createdByUserId, workspaceId);
+    }
 
     const slug =
       name
@@ -438,6 +451,11 @@ export class UsersService {
       ownerUserId,
       scopes,
       token,
+      // Minted a moment ago and not yet used for anything. Null rather than
+      // omitted, because "never used" is the flag the settings list puts on a
+      // leftover, and it has to be true from the start for that to mean
+      // anything.
+      lastUsedAt: null,
     };
   }
 
@@ -451,7 +469,117 @@ export class UsersService {
     sessionWorkspaceId: string,
     userId: string,
     requestedWorkspaceId?: string,
+    scope: 'mine' | 'all' = 'all',
   ): Promise<AgentSummary[]> {
+    // `mine` is an ordinary member read — you are always allowed to see the
+    // agents you own. `all` is the admin view of everything operating in the
+    // workspace.
+    const workspaceId =
+      scope === 'mine'
+        ? await resolveMemberWorkspaceId(
+            this.prisma,
+            userId,
+            sessionWorkspaceId,
+            requestedWorkspaceId,
+          )
+        : await resolveAdminWorkspaceId(
+            this.prisma,
+            userId,
+            sessionWorkspaceId,
+            requestedWorkspaceId,
+          );
+
+    const memberships = (
+      await this.prisma.usersOnWorkspaces.findMany({
+        where: { workspaceId, role: RoleEnum.AGENT },
+        include: { user: true },
+        orderBy: { joinedAt: 'desc' },
+      })
+    ).filter((membership) =>
+      // Filtered in application code rather than in the query: ownership lives
+      // inside a JSON settings blob, and reading it through the same helper the
+      // guard uses is what keeps the screen honest about what is enforced.
+      scope === 'mine'
+        ? agentSettings(membership.settings).ownerUserId === userId
+        : true,
+    );
+
+    // Every token, not only the live ones: a revoked agent still answers "was
+    // this ever used", and that is exactly what decides whether clearing it
+    // loses anything.
+    const tokens = await this.prisma.personalAccessToken.findMany({
+      where: {
+        workspaceId,
+        type: 'agent',
+        userId: { in: memberships.map((m) => m.userId) },
+      },
+      select: { userId: true, deleted: true, lastUsedAt: true },
+    });
+
+    const activeTokenUserIds = new Set(
+      tokens.filter((pat) => !pat.deleted).map((pat) => pat.userId),
+    );
+
+    // An agent may hold more than one token over its life, so its last use is
+    // the most recent across all of them.
+    const lastUsedByUser = new Map<string, Date>();
+    for (const pat of tokens) {
+      if (!pat.lastUsedAt) {
+        continue;
+      }
+      const current = lastUsedByUser.get(pat.userId);
+      if (!current || pat.lastUsedAt > current) {
+        lastUsedByUser.set(pat.userId, pat.lastUsedAt);
+      }
+    }
+
+    return memberships
+      .filter((membership) => {
+        // A cleared agent leaves the listing but keeps its account, its
+        // membership and everything it authored, so attribution on past issues
+        // and comments still resolves. Only ever hides a revoked one — hiding a
+        // live agent would conceal something that can still act.
+        const hidden = agentSettings(membership.settings).hiddenAt;
+        return !hidden || activeTokenUserIds.has(membership.userId);
+      })
+      .map((membership) => {
+        // Read through the same helper the guard uses, so the screen shows what
+        // is actually enforced rather than what happens to be stored. `hiddenAt`
+        // is a listing concern and has no business on the wire.
+        const { hiddenAt: _hiddenAt, ...granted } = agentSettings(
+          membership.settings,
+        );
+
+        return {
+          id: membership.user.id,
+          name: membership.user.fullname,
+          email: membership.user.email,
+          ...granted,
+          createdAt: (
+            membership.joinedAt ?? membership.user.createdAt
+          ).toISOString(),
+          active: activeTokenUserIds.has(membership.user.id),
+          lastUsedAt:
+            lastUsedByUser.get(membership.user.id)?.toISOString() ?? null,
+        };
+      });
+  }
+
+  /**
+   * Hides every revoked agent in the workspace from the listing.
+   *
+   * Hides rather than deletes, and the distinction is the whole point: these
+   * accounts authored issues and comments, so removing the user would break
+   * attribution on real records that mention them. A revoked agent can no
+   * longer authenticate, so the row is the only thing left to remove.
+   *
+   * Deliberately never touches a live agent, whatever it is asked.
+   */
+  async clearRevokedAgents(
+    sessionWorkspaceId: string,
+    userId: string,
+    requestedWorkspaceId?: string,
+  ): Promise<{ hidden: number }> {
     const workspaceId = await resolveAdminWorkspaceId(
       this.prisma,
       userId,
@@ -459,38 +587,38 @@ export class UsersService {
       requestedWorkspaceId,
     );
 
-    const memberships = await this.prisma.usersOnWorkspaces.findMany({
-      where: { workspaceId, role: RoleEnum.AGENT },
-      include: { user: true },
-      orderBy: { joinedAt: 'desc' },
-    });
-
-    const activeTokenUserIds = new Set(
-      (
-        await this.prisma.personalAccessToken.findMany({
-          where: {
-            workspaceId,
-            type: 'agent',
-            deleted: null,
-            userId: { in: memberships.map((m) => m.userId) },
-          },
-          select: { userId: true },
-        })
-      ).map((pat) => pat.userId),
+    const agents = await this.listAgentAccounts(
+      sessionWorkspaceId,
+      userId,
+      requestedWorkspaceId,
+      'all',
     );
 
-    return memberships.map((membership) => ({
-      id: membership.user.id,
-      name: membership.user.fullname,
-      email: membership.user.email,
-      // Read through the same helper the guard uses, so the screen shows what
-      // is actually enforced rather than what happens to be stored.
-      ...agentSettings(membership.settings),
-      createdAt: (
-        membership.joinedAt ?? membership.user.createdAt
-      ).toISOString(),
-      active: activeTokenUserIds.has(membership.user.id),
-    }));
+    const revoked = agents.filter((agent) => !agent.active);
+    const now = new Date().toISOString();
+
+    for (const agent of revoked) {
+      const membership = await this.prisma.usersOnWorkspaces.findUnique({
+        where: { userId_workspaceId: { userId: agent.id, workspaceId } },
+        select: { settings: true },
+      });
+
+      if (!membership) {
+        continue;
+      }
+
+      const settings = (membership.settings ?? {}) as Record<string, unknown>;
+      const agentBlob = (settings.agent ?? {}) as Record<string, unknown>;
+
+      await this.prisma.usersOnWorkspaces.update({
+        where: { userId_workspaceId: { userId: agent.id, workspaceId } },
+        data: {
+          settings: { ...settings, agent: { ...agentBlob, hiddenAt: now } },
+        },
+      });
+    }
+
+    return { hidden: revoked.length };
   }
 
   /**
@@ -505,7 +633,7 @@ export class UsersService {
     userId: string,
     requestedWorkspaceId?: string,
   ): Promise<void> {
-    const workspaceId = await resolveAdminWorkspaceId(
+    const workspaceId = await resolveMemberWorkspaceId(
       this.prisma,
       userId,
       sessionWorkspaceId,
@@ -519,6 +647,13 @@ export class UsersService {
       throw new NotFoundException(
         `No agent ${agentId} in this workspace to revoke.`,
       );
+    }
+
+    // An owner may always cut off their own agent; anyone else needs admin.
+    // Checked after the membership lookup so a foreign agent id is a 404
+    // rather than a 403 that confirms the agent exists.
+    if (agentSettings(membership.settings).ownerUserId !== userId) {
+      await assertWorkspaceAdmin(this.prisma, userId, workspaceId);
     }
 
     await this.prisma.personalAccessToken.updateMany({

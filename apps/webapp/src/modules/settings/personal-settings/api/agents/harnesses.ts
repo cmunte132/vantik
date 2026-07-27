@@ -35,7 +35,10 @@ export interface Harness {
   skill: HarnessSkill;
 }
 
-/** Stand-in shown until a real token is generated. */
+/**
+ * Stands in for the token in the setup instructions, which are worth reading
+ * before you have one — that is the whole point of showing them up front.
+ */
 export const TOKEN_PLACEHOLDER = 'YOUR_VANTIK_TOKEN';
 
 export function harnessConfigs(url: string, token: string): Harness[] {

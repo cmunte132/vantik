@@ -7,13 +7,17 @@ import * as React from 'react';
 import { type Harness, TOKEN_PLACEHOLDER, harnessConfigs } from './harnesses';
 
 /**
- * Turns an agent token into ready-to-paste connection config, one tab per agent
- * harness. Used both right after provisioning (token present, shown once) and in
- * the connect panel as a live preview (token still a placeholder). It only ever
+ * Ready-to-paste connection config, one tab per agent harness. It only ever
  * formats the same endpoint + token, never a second source of truth.
+ *
+ * Two callers, and the difference is only whether a token exists yet. As
+ * instructions, read before anything has been created, it shows the steps with
+ * a placeholder where the token goes — worth reading precisely because you are
+ * deciding whether to set an agent up at all. After creating one, the same
+ * blocks carry the real token, which is the only moment that value exists.
  */
 interface InstallConfigProps {
-  /** The real token, once minted. Omit to preview with a placeholder. */
+  /** The real token. Omit for the instructions, which use a placeholder. */
   token?: string;
 }
 
@@ -57,7 +61,6 @@ function CopyBlock({ label, value }: { label: string; value: string }) {
 
 export function InstallConfig({ token }: InstallConfigProps) {
   const url = mcpUrl();
-  const hasToken = Boolean(token);
   const harnesses = harnessConfigs(url, token ?? TOKEN_PLACEHOLDER);
   const [activeId, setActiveId] = React.useState(harnesses[0].id);
   const active =
@@ -65,12 +68,11 @@ export function InstallConfig({ token }: InstallConfigProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      {hasToken && (
-        <div className="flex flex-col gap-1">
-          <p className="text-sm">
-            Copy the token now — it is shown once and cannot be retrieved again.
-          </p>
-          <CopyBlock label="Token" value={token as string} />
+      {/* Its own bordered region rather than a line of body text: this is the
+          only moment the credential exists, and it has to look like it. */}
+      {token && (
+        <div className="flex flex-col gap-2 rounded-md border border-warning/50 bg-warning/10 p-3">
+          <CopyBlock label="Token — copy it now" value={token} />
         </div>
       )}
 

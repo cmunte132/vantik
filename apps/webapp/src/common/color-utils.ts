@@ -16,28 +16,6 @@ export function generateOklchColor(): string {
   return oklchColor;
 }
 
-export function getTailwindColor(name: string): string {
-  // Generate a hash value for the input name
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-
-  // Ensure hash value is within the range of colors array
-  const index = Math.abs(hash) % 12;
-
-  return `var(--custom-color-${index + 1})`;
-}
-
-export function getTeamColor(name: string): string {
-  // Generate a hash value for the input name
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-
-  // Ensure hash value is within the range of colors array
-  const index = Math.abs(hash) % 3;
-
-  return `var(--team-color-${index + 1})`;
-}
+// getTailwindColor and getTeamColor used to be copied out here as well. Nothing
+// imported them, and a second copy of a colour rule is how the sidebar came to
+// hold two palettes at once. Import them from '@vantikhq/ui/lib/color-utils'.

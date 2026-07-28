@@ -8,6 +8,7 @@ import {
 } from '@vantikhq/ui/components/sidebar';
 import {
   BookLine,
+  BuildingLine,
   Inbox,
   MyIssues,
   Project,
@@ -29,6 +30,7 @@ import { useContextStore } from 'store/global-context-provider';
 
 import { AccountMenu } from './account-menu';
 import { Nav } from './nav';
+import { ProductList } from './product-list';
 import { SidebarActions } from './sidebar-actions';
 import { TeamList } from './team-list';
 import { useSidebarShortcut } from './use-sidebar-shortcut';
@@ -107,10 +109,27 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
                   icon: TeamLine,
                   href: `/${workspaceSlug}/teams`,
                 },
+                // The group below lists the products one by one, and its label
+                // is a label. This row is the way to the whole list, and it
+                // sits beside Teams because the two lists are the same kind of
+                // page for the two axes.
+                {
+                  title: 'Products',
+                  icon: BuildingLine,
+                  href: `/${workspaceSlug}/products`,
+                },
               ]}
             />
 
             <SidebarSeparator />
+
+            {/*
+              Products sit above the teams. The two are different axes: a
+              product is what the company ships, and a team is who builds it.
+              Reading the product first is what stops a person from treating a
+              team as the product, which is the habit this axis exists to end.
+            */}
+            <ProductList />
 
             <TeamList />
           </SidebarContent>

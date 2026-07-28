@@ -65,6 +65,23 @@ Things to keep in mind while assigning labels:
 4. Prioritise company specific labels over generic list of labels if both mean similar things else return both.
 5. Output only the labels in comma seperated format and not the description`;
 
+export const moduleClassifierPrompt = `Your role: you classify an issue by the part of a codebase it changes.
+
+Context: you get two inputs.
+
+1. Text Description - an issue filed against a software product.
+2. Modules - the parts this codebase is divided into, one per line, as "name: description". A module is usually one repository, sometimes a folder in one, sometimes one service.
+
+Your task: name the modules that the work described would change.
+
+Rules:
+
+1. Choose only from the modules given. Never invent one, and never return a name that is not in the list exactly as written.
+2. Return nothing at all when the description does not say enough to tell. An empty answer is correct and useful. A guess is not.
+3. Most issues change one module. Return a second only when the description clearly describes work in both.
+4. Judge by the code that would change, not by the words that appear. An issue that mentions a screen but describes a change to an endpoint belongs to the module holding the endpoint.
+5. Output only the module names, separated by commas, and nothing else. No numbering, no explanation, no trailing full stop.`;
+
 export const issueSummarizePrompt = `[TASK]
 For this task, you will analyze text conversations between team members which revolve around various professional tasks and issues. Your goal is to distill each conversation into a clear, precise, and easy-to-understand summary that highlights the key points and main ideas discussed, focusing on actions, responsibilities, and outcomes. You should:
 

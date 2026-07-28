@@ -1,43 +1,57 @@
-# Website
+# docs
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
+This is the Vantik documentation site. It uses
+[Docusaurus](https://docusaurus.io/), a generator for a static website.
 
-## Installation
+A push to `main` that changes this directory deploys the site to GitHub Pages.
+See `.github/workflows/deploy-docs.yml`.
 
-```bash
-npm install
-```
-
-**Note**: feel free to use the package manager of your choice.
-
-## Local Development
+## How to install
 
 ```bash
-npm run start
+pnpm install
 ```
 
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
-
-## Build
+## Local development
 
 ```bash
-npm run build
+pnpm start
 ```
 
-This command generates static content into the `build` directory and can be served using any static contents hosting service.
+This command starts a local development server and opens a browser window. The
+server shows most changes immediately, and you do not restart it.
 
-## Deployment
-
-Using SSH:
+## How to make the API reference
 
 ```bash
-USE_SSH=true npm run deploy
+pnpm run gen-api-docs vantik
 ```
 
-Not using SSH:
+This command reads `openapi/openapi.yml` and writes the pages under
+`docs/api-reference`. Do not edit a `*.api.mdx` file by hand, because this
+command replaces it. Edit `openapi/openapi.yml` and run the command again.
+
+## How to build
 
 ```bash
-GIT_USER=<Your GitHub username> npm run deploy
+pnpm build
 ```
 
-If you are using GitHub Pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+This command writes the static site into the `build` directory. Any host for a
+static site can then serve it.
+
+## How to deploy by hand
+
+The workflow deploys the site for you. To deploy it by hand with SSH, run:
+
+```bash
+USE_SSH=true pnpm deploy
+```
+
+To deploy it by hand without SSH, run:
+
+```bash
+GIT_USER=<Your GitHub username> pnpm deploy
+```
+
+Each command builds the site and pushes it to the `gh-pages` branch.

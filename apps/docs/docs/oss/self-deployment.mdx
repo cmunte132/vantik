@@ -1,27 +1,27 @@
 ---
-title: "Self-hosting"
-description: "Run Vantik on your own infrastructure."
+title: "How to self-host"
+description: "How to run Vantik on your own infrastructure."
 ---
 
 ## Overview
 
-Vantik ships as a single Docker Compose stack in the main repository. It runs
-the webapp, the API server, and all backing services (PostgreSQL, Redis,
-SuperTokens, Typesense), and the server applies database migrations on
-startup — no separate deployment repo or setup script is needed.
+Vantik is one Docker Compose stack in the main repository. It runs the webapp,
+the API server, and all the services: PostgreSQL, Redis, SuperTokens, and
+Typesense. The server applies the database migrations when it starts. You
+need no separate repository for the deployment, and no setup script.
 
-This guide gets you a working deployment quickly. Scaling, backups, and
-hardening beyond the basics are up to you.
+This guide gives you a deployment that works. You control the other work: the
+scale of the deployment, the backups, and the security beyond the basic level.
 
 ## Requirements
 
-- Docker, or Podman with the compose provider (a Podman VM needs at least
-  8 GB of memory to build the images)
-- 4 CPU / 8 GB RAM is a comfortable baseline
+- Docker, or Podman with the compose provider. A Podman VM needs 8 GB of memory
+  or more to build the images.
+- 4 CPUs and 8 GB of RAM is a comfortable minimum.
 
 ## Instructions
 
-1. Clone the repository and create your `.env`:
+1. Clone the repository and make your `.env` file:
 
 ```bash
 git clone https://github.com/cmunte132/vantik.git
@@ -29,10 +29,10 @@ cd vantik
 cp .env.example .env
 ```
 
-2. For anything beyond a localhost test, edit `.env`:
+2. For a deployment that is more than a test on localhost, edit `.env`:
 
-   - Set `FRONTEND_HOST` and `BACKEND_HOST` to your domain
-   - Change `POSTGRES_PASSWORD`, `TYPESENSE_API_KEY`, and `TRIGGER_TOKEN`
+   - Set `FRONTEND_HOST` and `BACKEND_HOST` to your domain.
+   - Change `POSTGRES_PASSWORD`, `TYPESENSE_API_KEY`, and `TRIGGER_TOKEN`.
 
 3. Start the stack:
 
@@ -40,58 +40,75 @@ cp .env.example .env
 docker compose up -d
 ```
 
-4. Open the webapp (http://localhost:3000 by default, or your
-   `FRONTEND_HOST`) and sign in with your email address. Without SMTP
-   configured, the magic login link is printed to the server log:
+4. Open the webapp and sign in with your email address. The default address is
+   http://localhost:3000, or use your `FRONTEND_HOST`. If you configure no
+   SMTP server, the server writes the magic login link to its log:
 
 ```bash
 docker compose logs server | grep -A5 "magic link"
 ```
 
-## Signing in
+## How to sign in
 
-There are two ways in, and both are available on a fresh install.
+There are two methods, and a new installation has both.
 
-**Email code or magic link.** Enter an address and Vantik emails a six-digit
-code and a link. This needs [SMTP](#email-smtp) to be configured, or the code
-lands in the server log instead.
+**An email code, or a magic link.** Type an address. Vantik then sends you an
+email with a code of six digits and a link. This method needs
+[SMTP](#email-smtp). Without SMTP, the server writes the code to its log.
 
-**Passkey.** Authenticate with Touch ID, Windows Hello, or a security key. No
-mail server is involved, which makes it the practical choice for a single-user
-or local install where SMTP is never set up. Sign in with a passkey from the
-login screen, or add one to an existing account under **Settings → Security**.
+**A passkey.** Authenticate with Touch ID, Windows Hello, or a security key. You
+need no mail server, so this is the practical method for one user, or for a
+local installation with no SMTP. Sign in with a passkey from the login screen.
+You can also add a passkey to an account that exists, under
+**Settings → Security**.
 
-A passkey is bound to the hostname the browser sees, taken from
-`FRONTEND_HOST`. Reaching the same instance on a different domain means the
-browser will not offer the passkeys registered on the old one, so set
-`FRONTEND_HOST` before people enrol. WebAuthn also requires a secure context:
-HTTPS in production, though `localhost` is exempt.
+A passkey is bound to the hostname that the browser sees, and that name comes
+from `FRONTEND_HOST`. If you open the same instance on a different domain, the
+browser does not offer the passkeys of the old domain. Therefore set
+`FRONTEND_HOST` before people enrol. WebAuthn also needs a secure context: use
+HTTPS in production. `localhost` is an exception, and it needs no TLS.
 
-Each account holds one passkey, alongside the email code that always keeps
-working — so losing a device is not a lockout. To move a passkey to a new
-device, remove it under **Settings → Security** and enrol the new one.
+Each account holds one passkey. The email code always continues to work, so the
+loss of a device does not lock you out. To move a passkey to a new device,
+remove the old passkey under **Settings → Security**, and enrol the new one.
 
-By default anyone can create an account by registering a passkey. To run an
-invite-only instance, turn that off:
+By default, any person can make an account with a passkey. For an instance that
+accepts an invitation only, disable that:
 
 ```bash
 PASSKEY_SIGNUP_ENABLED=false
 ```
 
-People then arrive through an invite or a login code, and add a passkey
-afterwards from Settings.
+A person then arrives with an invitation or a login code, and adds a passkey
+later from Settings.
+
+## Scheduled jobs
+
+Vantik does some of its work on a schedule, and not in response to a request.
+The server process runs this work as Bull repeatable jobs, on the Redis that
+the stack already needs. These jobs do not use trigger.dev, because trigger.dev
+is optional in this stack. The server registers each job when it starts, and it
+writes the schedule to the log. To see if a job runs, read
+`docker compose logs server`.
+
+| Job | Default | Variable | What it does |
+| --- | --- | --- | --- |
+| Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
+| Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives each knowledge entry that no person triaged and that the server never served. |
+
+To stop a job, set its variable to `off`.
 
 ## Optional services
 
-Everything below is optional. The server logs an error and continues if a
-service is not configured.
+Every service below is optional. If you configure no service, the server writes
+an error to the log and continues.
 
 ### Email (SMTP)
 
-Magic-link logins and notification emails are sent via SMTP when configured;
-otherwise login links land in the server log. A [passkey](#signing-in) skips
-email altogether, so a single-user install can leave this unset. Any provider
-that supports SMTP authentication works (Gmail, Amazon SES, SendGrid, ...):
+With SMTP, the server sends the magic login links and the notification emails.
+Without SMTP, the login links go to the server log. A [passkey](#how-to-sign-in)
+needs no email at all, so an installation for one user can leave SMTP unset. Any
+provider with SMTP authentication works, such as Gmail, Amazon SES, or SendGrid:
 
 ```bash
 SMTP_HOST=your-smtp-host
@@ -103,69 +120,73 @@ SMTP_DEFAULT_FROM=noreply@yourdomain.com
 
 ### AI features
 
-AI features (title generation, description elaboration, breaking issues into
-sub-issues, filter suggestions) talk to one OpenAI-compatible endpoint. Which
-one is yours to choose — hosted or on your own hardware, one place to set it:
+The AI features talk to one endpoint with the OpenAI interface. These are the
+features: the AI writes a title, it makes a description longer, it divides an
+issue into sub-issues, and it offers a filter. You choose the endpoint. It can
+be a hosted service or your own hardware, and you set it in one place:
 
 ```bash
 LLM_BASE_URL=https://openrouter.ai/api/v1
 LLM_API_KEY=your-key
 
-# Vantik asks for a role, never a model name. Point each role wherever you
-# like; the ids are whatever your endpoint serves.
+# Vantik asks for a role, and never for the name of a model. Point each role
+# where you want. The ids are the ids that your endpoint serves.
 LLM_MODEL_FAST=openai/gpt-4o-mini
 LLM_MODEL_SMART=openai/gpt-4o
 ```
 
-`fast` handles the short, frequent calls — titles, labels, filters. `smart`
-handles the ones worth paying for — descriptions, sub-issues. Pointing both at
-the same model is perfectly reasonable.
+`fast` does the short, frequent calls: the titles, the labels, and the filters.
+`smart` does the calls with a higher value: the descriptions and the sub-issues.
+You can point both roles at the same model.
 
-The four setups people run:
+People use these four setups:
 
 | Setup | `LLM_BASE_URL` | `LLM_API_KEY` | Notes |
 | --- | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/v1` | your OpenRouter key | One key, most models. Ids are namespaced, e.g. `anthropic/claude-sonnet-4.5`. |
-| OpenAI | `https://api.openai.com/v1` | your OpenAI key | Ids are bare, e.g. `gpt-4o-mini`. |
-| LM Studio | `http://localhost:1234/v1` | any placeholder | Nothing leaves the machine. Use the id shown in LM Studio's server tab. |
-| Ollama | `http://localhost:11434/v1` | any placeholder | Same, e.g. `gemma2:2b`. Pull the model before pointing a role at it. |
+| OpenRouter | `https://openrouter.ai/api/v1` | your OpenRouter key | One key, and most models. An id has a namespace, for example `anthropic/claude-sonnet-4.5`. |
+| OpenAI | `https://api.openai.com/v1` | your OpenAI key | An id has no namespace, for example `gpt-4o-mini`. |
+| LM Studio | `http://localhost:1234/v1` | any value | No data leaves the machine. Use the id from the server tab of LM Studio. |
+| Ollama | `http://localhost:11434/v1` | any value | No data leaves the machine, for example `gemma2:2b`. Pull the model before you point a role at it. |
 
-Anything else speaking the same API — vLLM, LiteLLM, a corporate gateway —
-works on the same four variables.
+Any other endpoint with the same API works on the same four variables. For
+example: vLLM, LiteLLM, or a gateway in your company.
 
-Local servers ignore the key but still expect the header, so set
-`LLM_API_KEY` to any non-empty string for those.
+A local server ignores the key, but it still needs the header. For a local
+server, therefore, set `LLM_API_KEY` to any text that is not empty.
 
 :::note
-Leave these unset and the interface simply has no AI in it — no generate-title
-button, no AI filter, no AI entries in the editor's slash menu. Nothing is
-shown that cannot work. Set them later and the features appear on the next page
-load, with no rebuild: the browser reads this at runtime from
-`/api/v1/config`.
+If you leave these variables unset, the interface has no AI in it: no button to
+write a title, no AI filter, and no AI entry in the slash menu of the editor.
+The interface shows no control that cannot work. If you set the variables later,
+the features appear on the next page load, and you rebuild nothing. The browser
+reads this configuration at runtime from `/api/v1/config`.
 
-Everything else is unaffected. Creating an issue without a title still works,
-it just does not get one written for you, and issue suggestions still return
-assignees from search, only without label suggestions.
+The other features do not change. You still create an issue with no title, but
+the AI writes no title for you. The issue suggestions still return an assignee
+from the search, but they suggest no label.
 
-A request that reaches an AI endpoint anyway — a direct API call, or an action
-deployed against an older server — fails with an error naming the missing
-variable rather than answering with a model nobody chose.
+One request can still reach an AI endpoint: a direct API call, or an action that
+you deployed against an older server. That request fails with an error, and the
+error names the variable that you did not set. The server does not answer with a
+model that nobody chose.
 :::
 
-Two optional settings, read only by OpenRouter, attribute usage to your install
-on its dashboard and public leaderboards:
+Two more settings are optional, and only OpenRouter reads them. They record the
+use of your installation on the OpenRouter dashboard and on its public
+leaderboards:
 
 ```bash
 LLM_APP_URL=https://vantik.example.com
 LLM_APP_NAME=Vantik
 ```
 
-Search needs no API key and no external service. Typesense generates the
-embeddings in-process with its built-in `ts/all-MiniLM-L12-v2` model, so issue
-titles, descriptions and comments never leave your deployment.
+The search needs no API key and no external service. Typesense makes the
+embeddings in its own process, with its `ts/all-MiniLM-L12-v2` model. The issue
+titles, the descriptions, and the comments therefore never leave your
+deployment.
 
-To rebuild the search index, delete the Typesense `issues` collection and
-restart the server — on boot the server recreates the collection and re-indexes
+To build the search index again, delete the Typesense `issues` collection and
+restart the server. The server then makes the collection again, and it indexes
 every workspace from Postgres:
 
 ```bash
@@ -174,13 +195,14 @@ curl -X DELETE \
   http://localhost:8108/collections/issues
 ```
 
-The same rebuild happens automatically when a server upgrade adds fields to the
-search schema — the collection is detected as stale, dropped and refilled.
+The server does the same work automatically after an upgrade that adds a field
+to the search schema. It finds the old collection, deletes it, and fills the new
+one.
 
 ### File attachments
 
-Issue attachments are stored in Google Cloud Storage or Amazon S3. Without a
-configured provider, attachment uploads are unavailable — everything else
+Google Cloud Storage or Amazon S3 holds the attachments of an issue. If you
+configure no provider, a person cannot upload an attachment. Every other feature
 works.
 
 ```bash
@@ -199,7 +221,7 @@ AWS_SECRET_ACCESS_KEY=your-secret-key
 PUBLIC_ATTACHMENT_URL=https://your-domain.com/api
 ```
 
-Your bucket needs a CORS configuration allowing your frontend origin:
+Your bucket needs a CORS configuration that accepts the origin of your frontend:
 
 ```json
 [
@@ -215,14 +237,15 @@ Your bucket needs a CORS configuration allowing your frontend origin:
 
 ### Background jobs (trigger.dev)
 
-[Actions](/docs/actions/overview) — the automation framework — and some
-background jobs (user notifications, automated cycle transitions, scheduled
-tasks) run on [trigger.dev](https://trigger.dev). Core issue tracking works
-without it.
+[Actions](/docs/actions/overview) are the automation framework, and they run on
+[trigger.dev](https://trigger.dev). The user notifications run there too. The
+core issue tracker works without trigger.dev. The [scheduled
+jobs](#scheduled-jobs) also run without it, inside the server.
 
-To enable, deploy trigger.dev yourself
-([self-hosting guide](https://trigger.dev/docs/self-hosting)) and point
-Vantik at it in `.env`:
+To enable trigger.dev, deploy it yourself. Read the
+[trigger.dev guide for a self-hosted deployment](https://trigger.dev/docs/self-hosting).
+Then point
+Vantik at your deployment in `.env`:
 
 ```bash
 TRIGGER_API_URL=https://your-trigger-instance
@@ -230,146 +253,154 @@ TRIGGER_DATABASE_URL=postgresql://user:pass@host/trigger
 ```
 
 :::note
-The automation subsystem is being reworked in this fork (see the
-[roadmap](https://github.com/cmunte132/vantik#roadmap-planned-direction-not-yet-built)),
-so treat trigger.dev integration as legacy-supported rather than the
-long-term direction.
+This fork changes the automation subsystem. See the
+[roadmap](https://github.com/cmunte132/vantik#roadmap-the-plan-not-yet-built).
+The integration with trigger.dev is therefore a legacy feature, and not the
+direction for the future.
 :::
 
 ## Observability
 
 ### Logs
 
-The server writes JSON to stdout, one object per line, at the level set by
-`LOG_LEVEL`. Collect it however your platform collects container logs — no
-configuration is needed.
+The server writes JSON to stdout, one object for each line, at the level in
+`LOG_LEVEL`. Collect it with the method that your platform uses for container
+logs. You configure nothing.
 
-Each line carries the correlation fields the request arrived with: `reqId`
-(mirrored from `x-request-id`, generated if the caller did not send one and
-echoed back on the response), `wId` for the workspace, `aId` for the acting
-user, and `opName` for the endpoint. When tracing is on, `traceId` and `spanId`
-are included too, so any log line can be pivoted to the trace it belongs to.
+Each line holds the correlation fields of the request: `reqId`, `wId`, `aId`,
+and `opName`. `reqId` comes from the `x-request-id` header. If the caller sends
+no such header, the server makes the value, and it returns the value on the
+response. `wId` is the workspace, `aId` is the user who acts, and `opName` is
+the endpoint. When you enable the traces, each line also holds `traceId` and
+`spanId`. From any log line you therefore go to its trace.
 
-Setting `OTEL_EXPORTER_OTLP_ENDPOINT` additionally exports every line over OTLP,
-carrying the same correlation fields as record attributes. This **adds** a sink
-rather than replacing one — stdout is written either way, so collecting container
-logs the usual way keeps working and needs no configuration. There is no log
-shipper to run and no container socket to mount.
+`OTEL_EXPORTER_OTLP_ENDPOINT` also exports every line over OTLP, with the same
+correlation fields as record attributes. This setting **adds** a destination,
+and it replaces none. The server writes to stdout in both cases, so your usual
+collection of the container logs continues to work, and it needs no
+configuration. You run no log shipper, and you mount no container socket.
 
-:::caution Upgrading
-Logs used to be human-readable coloured text on the console, with JSON written
-only to a file when `CREATE_LOG_FILE=true`. They are now JSON on stdout in all
-cases, and `CREATE_LOG_FILE` has been removed — the file it produced was
-written inside the container, where nothing read it. Anything parsing the old
-console output needs updating.
+:::caution Upgrade
+The old logs were coloured text on the console for a person to read. The server
+wrote JSON to a file only when `CREATE_LOG_FILE=true`. The logs are now always
+JSON on stdout, and `CREATE_LOG_FILE` is no longer present. The server wrote
+that file inside the container, where nothing read it. You must update any tool
+that parses the old console output.
 :::
 
-### Traces, metrics and log export
+### Traces, metrics, and log export
 
-All three are off by default and nothing leaves your deployment unless you turn
-them on. Point the server at any OTLP/HTTP collector to enable them:
+All three are off by default, and no data leaves your deployment before you
+enable them. Point the server at any collector for OTLP over HTTP:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
-OTEL_EXPORTER_OTLP_HEADERS=x-api-key=...   # if your collector needs auth
+OTEL_EXPORTER_OTLP_HEADERS=x-api-key=...   # if your collector needs authentication
 ```
 
-One switch covers all three signals deliberately. Running a metrics pipeline
-that nothing is collecting is machinery you cannot see, so with no endpoint set
-the SDK is never started: no instrumentation, no exporters, no measurable
-overhead. Log export is the one part that is additive rather than all-or-nothing
-— stdout is written either way.
+One switch controls all three signals, and that is the intent. A metrics
+pipeline that nothing collects is machinery that you cannot see. Therefore, with
+no endpoint, the server never starts the SDK: no instrumentation, no exporters,
+and no measurable cost. The log export is the one part that adds a destination.
+The server writes to stdout in both cases.
 
-**Traces.** Each request produces a trace spanning the HTTP handler, the Nest
-controller, and the Postgres, Redis and Prisma calls underneath it — enough to
-see which query is making an endpoint slow. Unhandled 5xx exceptions are
-recorded on the span with their stack.
+**Traces.** Each request makes one trace. The trace covers the HTTP handler, the
+Nest controller, and the calls below them to Postgres, Redis, and Prisma. You
+therefore see the query that makes an endpoint slow. The trace also records an
+unhandled 5xx exception on the span, with its stack.
 
-**Metrics.** Request rate, error rate and latency come from
-`http.server.request.duration`, labelled by route template, method and status
-code. Outbound calls to Typesense, SuperTokens and the LLM provider come from
-`http.client.request.duration`, labelled by host. Node runtime health covers
-event loop delay (mean through p99), event loop utilisation, GC duration by
-collector type, and V8 heap usage by space — a stalled event loop is the usual
-shape of trouble in a Node process, and request-level data alone will not show
-it, because the slow request and the request blocking it are rarely the same
-one.
+**Metrics.** The rate, the errors, and the latency of the requests come from
+`http.server.request.duration`. Its labels are the route template, the method,
+and the status code. The outbound calls to Typesense, SuperTokens, and the LLM
+provider come from `http.client.request.duration`, with the host as the label.
+The metrics for the Node runtime cover the delay of the event loop, from the
+mean to p99. They also cover the use of the event loop, the duration of the
+garbage collection for each type of collector, and the use of the V8 heap for
+each space. An event loop that stops is the usual shape of a problem in a Node
+process. The request data alone does not show this problem, because the slow
+request and the request that blocks it are rarely the same request.
 
-:::note Prisma queries are in traces, not metrics
-`db.client.operation.duration` exists, but it comes from the `pg` driver
-instrumentation, which only sees the node-postgres client used by the
-replication/sync engine. Prisma reaches Postgres through its own Rust engine and
-emits **spans but no metrics**, so there is no metric for application query rate
-or latency — that lives on the `prisma:engine:db_query` spans inside each
-request trace instead.
+:::note The Prisma queries are in the traces, and not in the metrics
+`db.client.operation.duration` exists, but it comes from the instrumentation of
+the `pg` driver. That driver sees only the node-postgres client of the
+replication engine. Prisma reaches Postgres through its own Rust engine, and
+that engine emits **spans but no metrics**. There is therefore no metric for the
+rate or the latency of an application query. That data is on the
+`prisma:engine:db_query` spans inside the trace of each request.
 :::
 
-Metric labels deliberately exclude workspace, user and request ids. Those live
-on trace attributes, where one value per request is the point; on a metric each
-distinct value is another time series, and per-tenant labels are how a metrics
-backend falls over. Pushes happen every 60s by default
-(`OTEL_METRIC_EXPORT_INTERVAL`); metrics are cumulative, so a longer interval
-costs resolution rather than data.
+The metric labels do not hold the ids of the workspace, the user, or the
+request, and that is the intent. Those ids live on the trace attributes, where
+one value for each request is the purpose. On a metric, each different value is
+another time series, and a label for each tenant is how a metrics backend fails.
+The server pushes the metrics every 60 seconds by default, and
+`OTEL_METRIC_EXPORT_INTERVAL` controls this period. The metrics are cumulative,
+so a longer period costs you resolution, and not data.
 
-Any OpenTelemetry backend works: Grafana Tempo/Mimir, Honeycomb, Jaeger,
-Sentry, or a local collector fanning out to several.
+Any OpenTelemetry backend works: Grafana Tempo, Grafana Mimir, Honeycomb,
+Jaeger, Sentry, or a local collector that sends the data to several backends.
 
-If you set an endpoint and nothing arrives, set `OTEL_LOG_LEVEL=debug` to
-surface the exporter's own diagnostics, which are otherwise silent.
+If you set an endpoint and no data arrives, set `OTEL_LOG_LEVEL=debug`. The
+exporter then shows its own diagnostics, which are silent at the other levels.
 
 ### A local Grafana
 
-You do not have to stand up a backend to look at any of this. An overlay file
-ships Grafana, Prometheus, Tempo and an OTel collector in one container, with the
-datasources wired together and a Vantik dashboard already provisioned:
+You do not need your own backend to read this data. An overlay file gives you
+Grafana, Prometheus, Tempo, and an OTel collector in one container. The
+datasources are connected, and a Vantik dashboard is ready:
 
 ```bash
 docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d
 ```
 
-Grafana is on [http://localhost:3002](http://localhost:3002) with anonymous admin
-access — which is why every port it publishes is bound to `127.0.0.1`. The
-overlay sets `OTEL_EXPORTER_OTLP_ENDPOINT` on the server for you and drops
-`OTEL_METRIC_EXPORT_INTERVAL` to 5s, because the 60s default means waiting a
-minute to see a panel move when you are poking an endpoint by hand.
+Grafana is on [http://localhost:3002](http://localhost:3002), with anonymous
+admin access. For that reason, every port of the overlay is bound to
+`127.0.0.1`. The overlay sets `OTEL_EXPORTER_OTLP_ENDPOINT` on the server for
+you. It also lowers `OTEL_METRIC_EXPORT_INTERVAL` to 5 seconds, because the
+default of 60 seconds makes you wait one minute to see a panel move when you
+test an endpoint by hand.
 
-The **Vantik → Vantik Server** dashboard covers request rate, errors and latency
-(overall and per route), outbound call latency per dependency, and Node runtime
-health. Traces are in Explore → Tempo; searching `{span.http.route="/some/route"}`
-gets you from a slow route to the Prisma and Redis calls underneath it.
+The **Vantik → Vantik Server** dashboard covers the rate, the errors, and the
+latency of the requests, for the whole server and for each route. It also covers
+the latency of the outbound call to each dependency, and the health of the Node
+runtime. The traces are in Explore → Tempo. A search for
+`{span.http.route="/some/route"}` takes you from a slow route to the Prisma and
+Redis calls below it.
 
-Logs land in Loki over the same connection, so a slow trace and the log lines
-emitted during it are two clicks apart in either direction. Nothing is scraping
-containers to make that work — see [Logs](#logs) above.
+The logs arrive in Loki over the same connection. A slow trace and its log lines
+are therefore two clicks apart, in both directions. No service reads the
+containers to make this work. See [Logs](#logs) above.
 
-What this is not is a production monitoring stack: the image upstream is built
-for development and demos, with no auth, no retention policy and all four
-components in one container. For a real deployment, point
-`OTEL_EXPORTER_OTLP_ENDPOINT` at your own collector instead; nothing in the app
+Do not use this overlay in production. The upstream image is for development and
+for a demonstration. It has no authentication, no policy
+for retention, and all four components in one container. For a real deployment,
+point `OTEL_EXPORTER_OTLP_ENDPOINT` at your own collector. Nothing in the app
 changes.
 
 ### Health endpoints
 
 | Endpoint | Meaning |
 | --- | --- |
-| `GET /` | Liveness. The process is up. Cheap, touches no dependencies. |
-| `GET /health/ready` | Readiness. Returns `200` when Postgres, Redis and Typesense all answer, `503` otherwise, with a per-dependency breakdown in the body. |
+| `GET /` | Liveness. The process is up. This call is cheap, and it touches no dependency. |
+| `GET /health/ready` | Readiness. The endpoint returns `200` when Postgres, Redis, and Typesense all answer. If one does not answer, it returns `503`, and the body gives the status of each dependency. |
 
-Point an orchestrator's liveness probe at `/` and its readiness probe at
-`/health/ready`. Using readiness for liveness would get the container killed
-and restarted over a transient database blip, which fixes nothing.
+Point the liveness probe of your orchestrator at `/`, and its readiness probe at
+`/health/ready`. Do not use the readiness endpoint for liveness. A short fault
+in the database then kills the container and restarts it, and that action
+corrects nothing.
 
 ## FAQ
 
 **Q: Is there a hosted cloud version?**
-A: No. Vantik is self-hosted only.
+A: No. You host Vantik yourself.
 
 **Q: Can I run Vantik without trigger.dev?**
-A: Yes — all core issue tracking works. You lose Actions, user notifications,
-and automated cycle transitions.
+A: Yes. All the core functions of the tracker work, and the scheduled jobs work.
+You lose
+the Actions and the user notifications.
 
-**Q: Which storage providers are supported for attachments?**
+**Q: Which storage providers can hold the attachments?**
 A: Google Cloud Storage and Amazon S3.
 
-If there are any questions that we couldn't answer here, feel free to open an
-issue on [GitHub](https://github.com/cmunte132/vantik/issues).
+If this page does not answer your question, open an issue on
+[GitHub](https://github.com/cmunte132/vantik/issues).

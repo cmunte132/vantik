@@ -1,178 +1,201 @@
 <br>
 <h1 align="center">Vantik</h1>
-<h3 align="center">A dev-first, agent-native issue tracker.</h3>
+<h3 align="center">An issue tracker for developers and for agents.</h3>
 
 <p align="center">
-Self-hosted. Open-source. Built for agents to plan, track, and audit their own work — with a real UI for humans to review it.
+You host Vantik yourself, and its source is open. Agents plan, track, and audit
+their own work in it. People review that work in a real user interface.
 </p>
 
 <br>
 
 ## What this is
 
-Vantik is a fork of [Tegon](https://github.com/RedPlanetHQ/tegon), an open-source, dev-first
-alternative to Jira/Linear that was archived by its original maintainers (RedPlanetHQ) in
-June 2025. The original project nailed the core data model — projects, issues, workflows,
-Kanban and list views, triage — but was built around human teams using AI as an assist
-feature, not agents as the primary actor.
+Vantik is a fork of [Tegon](https://github.com/RedPlanetHQ/tegon). Tegon is an
+open-source issue tracker for developers, and an alternative to Jira and Linear.
+RedPlanetHQ, the original maintainer, archived it in June 2025.
 
-This fork exists to invert that: agents create, plan, and update work here as their default
-mode of operation, with the UI serving as a human review/audit layer rather than the primary
-interface.
+The original project has a good core data model: projects, issues, workflows,
+Kanban views, list views, and triage. But the maintainers built it for human
+teams. Such a team uses AI as an assistant. It does not use an agent as the
+primary actor.
 
-**Status:** early-stage personal fork. Expect breaking changes and incomplete rebranding in
-places. The codebase builds and runs locally (see [Getting Started](#getting-started));
-dependencies were brought up to date in July 2026: NestJS 11, Prisma 6, React 19,
-Next 16, TanStack Query 5, Tiptap 3, AI SDK 7, and zod 4. The webapp builds with
-Turbopack. Runtime `NEXT_PUBLIC_*` settings are read from the server at
-`/api/v1/config`, so self-hosted installs configure them at container start.
-Still pending: trigger.dev 4 (the whole automations subsystem is being rethought
-first) and ESLint 9 flat config.
+This fork changes that. In Vantik, an agent creates, plans, and updates work as
+its default operation. The user interface is where a person reviews and audits
+that work. It is not the primary interface.
 
-## Attribution & license
+**Status:** this fork is early, and it is a personal project. Changes can break
+your installation, and some parts still show the old Tegon brand. The code
+builds and runs on a local machine. Read [How to start](#how-to-start-self-hosted).
+In July 2026 the maintainer updated the dependencies to NestJS 11, Prisma 6,
+React 19, Next 16, TanStack Query 5, Tiptap 3, AI SDK 7, and zod 4. The webapp
+builds with Turbopack. The webapp reads the `NEXT_PUBLIC_*` settings from the
+server at `/api/v1/config`, so a self-hosted installation sets them when the
+container starts. Two updates are not complete: trigger.dev 4 and the ESLint 9
+flat config. The maintainer must first make a new design for the automations
+subsystem.
 
-Vantik is a derivative work of [RedPlanetHQ/tegon](https://github.com/RedPlanetHQ/tegon),
-licensed under [AGPL-3.0](./LICENSE). All credit for the original architecture, data model,
-and implementation goes to the Tegon team. This fork is maintained independently and is not
-affiliated with or endorsed by RedPlanetHQ or Tegon.
+## Attribution and license
 
-## Getting started (self-hosting)
+Vantik is a derivative work of
+[RedPlanetHQ/tegon](https://github.com/RedPlanetHQ/tegon), and the
+[AGPL-3.0](./LICENSE) license applies to it. The Tegon team gets all the credit
+for the original architecture, the data model, and the implementation. The
+maintainer of this fork works independently. RedPlanetHQ and Tegon do not
+control this fork, and they do not endorse it.
 
-Prerequisites: Docker (or Podman with the compose provider). The compose stack is
-turn-key — it runs the webapp, API server, and all backing services (postgres, redis,
-SuperTokens, Typesense), and the server applies database migrations
-on startup.
+## How to start (self-hosted)
+
+You need Docker, or podman with the compose provider. The compose stack needs no
+other setup. It runs the webapp, the API server, and all the services:
+postgres, redis, SuperTokens, and Typesense. The server applies the database
+migrations when it starts.
 
 ```bash
-cp .env.example .env   # defaults work out of the box; change secrets for real deployments
+cp .env.example .env   # the default values work; change the secrets for a real deployment
 docker compose up -d
 ```
 
-Open http://localhost:3000 and sign in with any email address — without SMTP configured,
-the magic login link is printed to the server log instead of emailed:
+Open http://localhost:3000. Then sign in with any email address. If you
+configure no SMTP server, the server writes the magic login link to its log and
+sends no email:
 
 ```bash
 docker compose logs server | grep -A5 "magic link"
 ```
 
-For a non-localhost deployment, set `FRONTEND_HOST` / `BACKEND_HOST` in `.env` to your
-domain and change `POSTGRES_PASSWORD`, `TYPESENSE_API_KEY`, and `TRIGGER_TOKEN`.
+For a deployment that is not on localhost, do these two steps:
+
+1. Set `FRONTEND_HOST` and `BACKEND_HOST` in `.env` to your domain.
+2. Change `POSTGRES_PASSWORD`, `TYPESENSE_API_KEY`, and `TRIGGER_TOKEN`.
 
 ### Scheduled work
 
-Some of what Vantik does happens on a schedule rather than in response to a
-request. These run inside the server process as Bull repeatable jobs on the
-Redis the stack already requires — not on trigger.dev, which is optional here
-and therefore cannot be where anything load-bearing lives. Each is registered at
-boot and logs the schedule it registered, so "is it running?" is answerable from
-`docker compose logs server`.
+Vantik does some of its work on a schedule, and not in response to a request.
+The server process runs this work as Bull repeatable jobs, on the redis that the
+stack already needs. The server does not use trigger.dev for this work, because
+trigger.dev is optional here. No necessary work can depend on an optional
+service. The server registers each job when it starts, and it writes the
+schedule to the log. To see if a job runs, read `docker compose logs server`.
 
 | Job | Default | Variable | What it does |
 | --- | --- | --- | --- |
-| Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | For teams on the automatic cadence: completes cycles whose end date has passed, rolls their unfinished issues per the team's preference, and tops up upcoming cycles. Teams running cycles manually are never touched. |
-| Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | Archives untriaged and unserved knowledge entries. |
+| Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
+| Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives each knowledge entry that no person triaged and that the server never served. |
 
-Set either to `off` to disable it.
+To stop a job, set its variable to `off`.
 
-Optional services (the server logs an error and continues without them):
+These services are optional. If one is absent, the server writes an error to the
+log and continues:
 
-- **trigger.dev** — powers background actions/automations;
-  [self-hosting guide](https://trigger.dev/docs/self-hosting). Point `TRIGGER_API_URL` /
-  `TRIGGER_DATABASE_URL` at your trigger.dev deployment and its database.
-- **an LLM endpoint** — powers the AI features. Any OpenAI-compatible one:
-  OpenRouter, OpenAI, or a local LM Studio / Ollama / vLLM server. Set
-  `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL_FAST` and `LLM_MODEL_SMART`. Without
-  them the AI affordances are left out of the interface entirely and everything
-  else works as normal; set them later and they appear on the next page load.
-- **SMTP** — set the `SMTP_*` variables to send real emails.
+- **trigger.dev** runs the actions and the automations in the background. Read
+  the [trigger.dev guide for a self-hosted deployment](https://trigger.dev/docs/self-hosting).
+  Set `TRIGGER_API_URL` and `TRIGGER_DATABASE_URL` to your trigger.dev
+  deployment and to its database.
+- **an LLM endpoint** runs the AI features. Any endpoint with the OpenAI
+  interface works: OpenRouter, OpenAI, or a local LM Studio, Ollama, or vLLM
+  server. Set `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL_FAST`, and
+  `LLM_MODEL_SMART`. If you do not set them, the webapp hides all the AI
+  controls, and the other features work as normal. If you set them later, the
+  controls appear on the next page load.
+- **SMTP** sends real email. Set the `SMTP_*` variables.
 
 ## Local development
 
-Prerequisites: Node.js ≥ 20, pnpm 10 (`npm i -g pnpm@10`), and Docker/Podman.
-For hot reload, run only the backing services in containers and the apps on the
-host (the backing services publish their ports on localhost for exactly this):
+You need Node.js 20 or later, pnpm 10, and Docker or podman. To install pnpm,
+run `npm i -g pnpm@10`.
+
+For hot reload, run only the service containers, and run the apps on the host.
+These containers publish their ports on localhost for this purpose.
 
 ```bash
 cp .env.example .env
 
-# 1. Backing services only (skips the webapp/server containers)
+# 1. The service containers only. This command starts no webapp and no server.
 docker compose up -d postgres redis supertokens typesense
 
-# 2. Dependencies + database schema
+# 2. The npm packages and the database schema
 pnpm install
 pnpm migrate
 
-# 3. Run the server (:3001) and webapp (:3000) with hot reload
+# 3. The server on port 3001 and the webapp on port 3000, with hot reload
 pnpm dev
 ```
 
-If the full stack is already running in containers, free the app ports first
-with `docker compose stop webapp server`.
+If the full stack already runs in containers, the app ports are in use. To free
+them, run `docker compose stop webapp server`.
 
 ### Observability
 
-The server is instrumented for OpenTelemetry but exports nothing until it is
-given an endpoint. To get metrics and traces in a local Grafana with a dashboard
-already set up, add the observability overlay:
+The server has OpenTelemetry instrumentation, but it exports no data until you
+give it an endpoint. To get the metrics and the traces in a local Grafana with a
+dashboard, add the observability overlay:
 
 ```bash
 docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d
 ```
 
-Grafana is on [localhost:3002](http://localhost:3002), no login. It bundles
-Prometheus, Tempo and Loki, so request rate/errors/latency, Node event loop and
-heap health, request traces, and logs all work with no further setup — and
-because every log line carries its `traceId`, you can go from a slow trace to
-the lines it emitted and back. Logs travel over the same OTLP connection as
-everything else; nothing scrapes your containers.
+Grafana is on [localhost:3002](http://localhost:3002) and needs no login. The
+overlay includes Prometheus, Tempo, and Loki. These all work with no more setup:
+the rate, the errors, and the latency of the requests, the health of the Node
+event loop and of the heap, the request traces, and the logs. Every log line
+holds its `traceId`, so you can go from a slow trace to the log lines of that
+trace, and back again. The logs use the same OTLP connection as the other data.
+No service reads your containers directly.
 
-Running the apps on the host? Start the stack alongside the backing services and
-point the exporter at the published port instead of the container:
+If you run the apps on the host, start the observability stack together with the
+service containers. Then set the exporter to the published port, and not to the
+container:
 
 ```bash
 docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d postgres redis supertokens typesense lgtm
 echo 'OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318' >> .env
 ```
 
-See [Observability](apps/docs/docs/oss/self-deployment.mdx) for what is collected
-and what is deliberately left out.
+To read what the server collects, and what the maintainer left out, see
+[Observability](apps/docs/docs/oss/self-deployment.mdx).
 
 ## Documentation
 
-Docs live in `apps/docs` (Docusaurus) and are deployed to GitHub Pages on every push to
-`main` that touches that directory — see `.github/workflows/deploy-docs.yml`. Once
-`vantik.dev`'s DNS is pointed at GitHub Pages (see `apps/docs/static/CNAME` and
-[GitHub's custom domain guide](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site)),
-they'll be live there. Until then, GitHub will still build and serve them at
+The documentation is in `apps/docs`, and it uses Docusaurus. A push to `main`
+that changes that directory deploys the documentation to GitHub Pages. See
+`.github/workflows/deploy-docs.yml`. The DNS for `vantik.dev` does not point at
+GitHub Pages yet. See `apps/docs/static/CNAME` and
+[the GitHub guide for a custom domain](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site).
+Until then, GitHub builds the documentation and serves it at
 `https://cmunte132.github.io/vantik/`.
 
-To work on docs locally:
+To work on the documentation on your machine, run these commands:
 
 ```bash
 cd apps/docs
 pnpm install
-pnpm run gen-api-docs vantik   # regenerate API reference from openapi/openapi.yml
-pnpm start                     # local dev server with hot reload
+pnpm run gen-api-docs vantik   # make the API reference again from openapi/openapi.yml
+pnpm start                     # the local dev server, with hot reload
 ```
 
-One-time repo setup still needed: in GitHub repo Settings → Pages, set the source to
-"GitHub Actions" (not "Deploy from a branch") for the workflow above to work.
+The repository needs one more setup step, and you do it one time only. In the
+GitHub repository, open Settings, then Pages. Set the source to "GitHub Actions"
+and not to "Deploy from a branch". The workflow above needs this setting.
 
-## Roadmap (planned direction, not yet built)
+## Roadmap (the plan, not yet built)
 
-- [ ] Get the existing stack building and running self-hosted under this fork
-- [ ] MCP server for agent-driven issue/project CRUD
-- [ ] Rework the automation framework (originally "Tegon Actions") around agent-primary
-      workflows rather than human-triggered automations
-- [ ] Multi-repo/multi-project navigation for a single human reviewer across several
-      agent-managed codebases
+- [ ] Make the stack build and run self-hosted in this fork
+- [ ] An MCP server. An agent uses it to create, read, update, and delete an
+      issue or a project.
+- [ ] Design the automation framework again. Its original name is "Tegon
+      Actions". The new design must put the agent first, because today a person
+      starts each automation.
+- [ ] Navigation across many repositories and many projects, for one person who
+      reviews several codebases that agents control
 
 Done:
-- [x] Rebrand from Tegon, remove Slack integration and Cloud marketing content
-- [x] Docs migrated off Mintlify to a self-hosted Docusaurus site on GitHub Pages,
-      replacing the old `apps/website` marketing app entirely
+- [x] Change the brand from Tegon. Remove the Slack integration and the Cloud
+      marketing content.
+- [x] Move the documentation from Mintlify to a self-hosted Docusaurus site on
+      GitHub Pages. This site replaces the old `apps/website` marketing app.
 
-## Contributing
+## How to contribute
 
-This is currently a personal project. Issues and PRs may be considered but there's no
-formal process yet.
+This is a personal project now. The maintainer can look at an issue or a pull
+request, but there is no formal process yet.

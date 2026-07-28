@@ -3,14 +3,17 @@ title: 'Core Concepts'
 sidebar_label: "Core Concepts"
 ---
 
-Vantik Actions enables you to create workflows to automate your work. This page describes the concepts you need to know to use Vantik Actions.
+With Vantik Actions you make a workflow that does your work automatically. This
+page gives the concepts that you must know before you use Vantik Actions.
 
 ## Trigger
 
-A Trigger can be an event from an integration (e.g., Discord, GitHub, email) or a Vantik-specific event (e.g., a comment on an issue, assigning or labeling an issue). 
-Triggers are configured in a `config.json` file using the `triggers` field.
+A trigger is an event from an integration, for example Discord, GitHub, or
+email. A trigger can also be an event in Vantik, for example a comment on an
+issue, or a change to the assignee or the labels of an issue. You configure the
+triggers in the `triggers` field of a `config.json` file.
 
-Here’s an example configuration:
+This is an example of the configuration:
 
 ```json
 "triggers": [
@@ -25,35 +28,44 @@ Here’s an example configuration:
 ],
 ```
 
-In this example, the action is set to trigger when:
-- An issue is created in Vantik.
-- A webhook event is received from Discord.
+In this example, two events start the action:
 
-This flexible configuration allows you to define when your actions should run, 
-whether it's based on internal events within Vantik or external events from integrated platforms.
+- A person creates an issue in Vantik.
+- The action receives a webhook event from Discord.
+
+This configuration is flexible. You therefore control when your action runs,
+for an internal event in Vantik and for an external event from a platform that
+you connect.
 
 ## Entity
 
-An Entity typically refers to either an integration or a model within Vantik. For example, it could be `Issue` or `IssueComment` for Vantik models, or `discord` and `github` when the type is set to `source_webhook`.
+An entity is usually an integration, or a model in Vantik. For a Vantik model,
+an entity is `Issue` or `IssueComment`. For the `source_webhook` type, an entity
+is an integration, such as `discord` or `github`.
 
 
 ## Integrations
 
-Integrations are the superpower behind Vantik Actions. They allow you to both receive events from external tools (like Discord, GitHub, etc.) and interact with these platforms by making API calls.
+An integration gives Vantik Actions its power. Your action receives an event
+from an external tool, such as Discord or GitHub. Your action also makes an API
+call to that tool.
 
-To enable this, you must request access to the integrations you've configured. Vantik checks which integrations are specified for an action and provides the necessary tokens, ensuring seamless communication with these external services.
+To use an integration, you must ask for access to it. Vantik reads the
+integrations of an action and gives it the necessary tokens. Your action then
+talks to those external services.
 
-Integrations are defined in the config.json file using the integrations field:
+You give the integrations in the `integrations` field of the `config.json` file:
 
 ```json
 "integrations": ["discord", "github"]
 ```
 
-In this example, we have requested for access to `discord` and `github`
+This example asks for access to `discord` and to `github`.
 
-## Run function
+## The run function
 
-This function is invoked with the details of the triggered event, allowing you to write custom workflows or automations based on the event.
+Vantik calls this function with the details of the event. In the function you
+write your own workflow for that event.
 
 ```TypeScript
 export async function run(eventPayload: ActionEventPayload) {
@@ -69,4 +81,5 @@ export async function run(eventPayload: ActionEventPayload) {
 }
 ```
 
-In the above example the run function is configured to receive a `on_create` event from Vantik entities. 
+In this example, the run function receives an `on_create` event from a Vantik
+entity.

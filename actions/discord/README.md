@@ -1,17 +1,23 @@
 ## Overview
 
-Effortlessly integrate Vantik with Slack to transform your project communication and management:
+This action connects Vantik to Discord. It creates issues from Discord
+messages, and it keeps a Discord thread and a Vantik comment thread in step.
 
-1. Create Issues from Slack Messages:
+1. Create an issue with an emoji reaction.
 
-   - Use the "..." menu on any Slack message to effortlessly create a Vantik issue.
+   - Put an emoji reaction on a Discord message.
+   - The action then makes a triage issue in Vantik from that message.
+   - With this feature a person who does not use Vantik can report a problem.
 
-2. Automate Issue Creation with Emoji 👀:
+2. Keep the conversation threads in step.
 
-   - Assign 👀 emoji to a Slack thread to automatically trigger Vantik AI to create a triage issue.
-   - This feature empowers even non-Vantik users to easily report issues.
+   - The action links the issue to the Discord channel of the message.
+   - Each later message in that channel becomes a comment on the linked issue.
+   - The action ignores a message from the Vantik bot, so no loop occurs.
 
-3. Synchronized Conversation Threads:
-   - When issues are reported in Slack, a synced comment thread is automatically created within the corresponding Vantik issue.
-   - Vantik comments are automatically reflected in the Slack thread, keeping everyone in the loop and vice versa.
-   - Both the Slack thread and the Vantik comments update in real-time, ensuring everyone stays on the same page regardless of their chosen platform.
+3. Set up the action.
+
+   - Give Vantik access to your Discord server. Read the documentation for the
+     Discord integration.
+   - The action reads its inputs from the configuration of the action. See
+     `handlers/get-inputs.ts` for the inputs that it needs.

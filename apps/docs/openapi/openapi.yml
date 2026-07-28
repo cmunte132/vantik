@@ -11,7 +11,7 @@ paths:
   /api/v1/action/{slug}/run:
     post:
       summary: Run an action
-      description: Runs an action with the specified slug and payload
+      description: The server runs the action with the given slug and payload.
       parameters:
         - name: slug
           in: path
@@ -43,7 +43,7 @@ paths:
   /api/v1/action/{slug}/inputs:
     post:
       summary: Update action inputs
-      description: Updates the inputs of an action with the specified slug
+      description: The server updates the inputs of the action with the given slug.
       parameters:
         - name: slug
           in: path
@@ -75,7 +75,7 @@ paths:
   /api/v1/ai_requests:
     post:
       summary: Get AI request
-      description: Sends a request to the AI system and returns the response
+      description: The server sends a request to the AI system and returns the response.
       requestBody:
         required: true
         content:
@@ -101,7 +101,7 @@ paths:
   /api/v1/ai_requests/stream:
     post:
       summary: Get AI request stream
-      description: Sends a request to the AI system and returns a stream of responses
+      description: The server sends a request to the AI system and returns a stream of responses.
       requestBody:
         required: true
         content:
@@ -541,8 +541,8 @@ paths:
     get:
       summary: List products
       description: >-
-        What this workspace ships. A product holds no code and no issues: it
-        groups the modules, and the issues hang off those.
+        What this workspace ships. A product holds no code and no issues. It
+        groups the modules, and each issue belongs to a module.
       responses:
         "200":
           description: Successful response
@@ -608,7 +608,7 @@ paths:
         - Product
     delete:
       summary: Delete product
-      description: Soft delete. The row stays and `deleted` is stamped.
+      description: A soft delete. The row stays, and the server sets `deleted`.
       parameters:
         - name: productId
           in: path
@@ -633,8 +633,9 @@ paths:
     get:
       summary: List modules
       description: >-
-        Where the code is: usually one repository, sometimes a path inside one,
-        sometimes one service. Modules are flat — a module has no parent module.
+        Where the code is. A module is usually one repository. It can also be a
+        path in a repository, or one service. The modules are flat, and a module
+        has no parent module.
       responses:
         "200":
           description: Successful response
@@ -651,9 +652,9 @@ paths:
     post:
       summary: Create module
       description: >-
-        Send exactly one of `ownerTeamId` or `ownerProductId`. Sending both, or
-        neither, is refused with 400 — and a check constraint in the database
-        refuses the row as well.
+        Send `ownerTeamId` or `ownerProductId`, and send one of them only. If
+        you send both, or if you send neither, the server refuses the request
+        with a 400. A check constraint in the database refuses the row too.
       requestBody:
         required: true
         content:
@@ -678,8 +679,9 @@ paths:
     post:
       summary: Update module
       description: >-
-        To move the owner, send the new owner and null for the old one. A change
-        that would leave the module with two owners or none is refused.
+        To change the owner, send the new owner, and send null for the old
+        owner. The server refuses a change that gives the module two owners, and
+        it refuses a change that gives the module no owner.
       parameters:
         - name: moduleId
           in: path
@@ -710,9 +712,9 @@ paths:
     delete:
       summary: Delete module
       description: >-
-        Soft delete. The id is also removed from every `Capability.moduleIds`
-        and `Issue.moduleIds` that held it, so nothing is left pointing at a
-        module that no longer exists.
+        A soft delete. The server also removes the id from every
+        `Capability.moduleIds` and every `Issue.moduleIds` that held it. No
+        record then points at a module that does not exist.
       parameters:
         - name: moduleId
           in: path
@@ -737,8 +739,8 @@ paths:
     get:
       summary: List the repositories of a module
       description: >-
-        These rows are not replicated to clients, so every screen that shows
-        them asks for them.
+        The server does not replicate these rows to a client. Each screen that
+        shows them therefore asks for them.
       parameters:
         - name: moduleId
           in: path
@@ -848,9 +850,10 @@ paths:
     get:
       summary: List capabilities
       description: >-
-        What the software does for the people who use it, as opposed to what it
-        is built from. A capability is defined by the modules that hold its
-        code, and belongs to no product directly.
+        What the software does for the people who use it. This is not the same
+        as the parts that the software is built from. The modules that hold the
+        code of a capability define that capability. A capability belongs to no
+        product directly.
       responses:
         "200":
           description: Successful response
@@ -916,7 +919,7 @@ paths:
         - Capability
     delete:
       summary: Delete capability
-      description: Soft delete. Issues that named it keep the id.
+      description: A soft delete. An issue that named it keeps the id.
       parameters:
         - name: capabilityId
           in: path
@@ -2069,8 +2072,8 @@ components:
         moduleIds:
           type: array
           description: >-
-            The modules this issue changes. An issue can touch more than one,
-            and the list can be empty.
+            The modules that this issue changes. An issue can change more than
+            one module, and the list can be empty.
           items:
             type: string
         capabilityId:
@@ -2081,10 +2084,10 @@ components:
     Product:
       type: object
       description: >-
-        A thing the company ships. Before this model a team was the only thing
-        that could stand for a product, and a company shipping two things needed
-        two workspaces. A team is still the permission boundary, still holds the
-        cycles, and still namespaces the issue numbers.
+        A thing that the company ships. Before this model, only a team stood for
+        a product. A company with two products therefore needed two workspaces. A
+        team is still the boundary for the permissions. It still holds the
+        cycles, and it still gives the issue numbers their namespace.
       properties:
         id:
           type: string
@@ -2163,10 +2166,11 @@ components:
     Module:
       type: object
       description: >-
-        Usually one repository, sometimes a path inside one, sometimes one
-        service. A module has exactly one owner, a team or a product. The linked
-        lists name the other teams and products that use it, and a link carries
-        no authority.
+        A module is usually one repository. It can also be a path in a
+        repository, or one service. A module has one owner only, and that owner
+        is a team or a product. The lists of links name the other teams and the
+        other products that use the module. A link gives no authority over the
+        module.
       properties:
         id:
           type: string
@@ -2240,7 +2244,8 @@ components:
         ownerTeamId:
           type: string
           description: >-
-            Send this or ownerProductId, never both and never neither.
+            Send this field or ownerProductId. Never send both, and never send
+            neither.
         ownerProductId:
           type: string
         linkedTeamIds:
@@ -2288,9 +2293,9 @@ components:
     ModuleRepo:
       type: object
       description: >-
-        Where the code of a module is. An empty `pathPrefixes` means the module
-        is the whole repository; a monorepo becomes several modules on one
-        repository, each with its own prefixes.
+        Where the code of a module is. If `pathPrefixes` is empty, the module is
+        the full repository. A monorepo becomes several modules on one
+        repository, and each module has its own prefixes.
       properties:
         id:
           type: string
@@ -2359,9 +2364,10 @@ components:
     Capability:
       type: object
       description: >-
-        Something the software does for the people who use it. Defined by the
-        modules that hold its code, and belonging to no product directly — one
-        capability can span modules owned by several products.
+        Something that the software does for the people who use it. The modules
+        that hold its code define a capability. A capability belongs to no
+        product directly, because one capability can include modules that
+        several products own.
       properties:
         id:
           type: string
@@ -2387,8 +2393,8 @@ components:
         moduleIds:
           type: array
           description: >-
-            The modules that hold the code. An empty list means nobody has built
-            it yet.
+            The modules that hold the code. If the list is empty, nobody built
+            the capability yet.
           items:
             type: string
         workspaceId:
@@ -2689,9 +2695,9 @@ components:
       type: string
       description: >-
         `module` matches against a list, so it takes INCLUDES and EXCLUDES.
-        `capability` is a single column, so it takes IS and IS_NOT. There is no
-        product key: an issue holds no product, so filter by the ids of that
-        product's modules instead.
+        `capability` is one column only, so it takes IS and IS_NOT. There is no
+        key for a product, because an issue holds no product. To filter by a
+        product, give the ids of the modules of that product.
       enum:
         - label
         - status

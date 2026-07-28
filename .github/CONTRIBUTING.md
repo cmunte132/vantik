@@ -1,75 +1,104 @@
-# Contributing to Vantik
+# How to contribute to Vantik
 
-Thank you for considering contributing to Vantik! All community contributions are welcome.
+Thank you for your interest in Vantik. The maintainers welcome a contribution
+from any person in the community.
 
-This guide outlines the process for contributing to this project. Please make sure to go through the [documentation](https://docs.vantik.dev) before making your contribution.
+This guide gives the process for a contribution to this project. Read the
+[documentation](https://docs.vantik.dev) before you make your contribution.
 
-> And if you like the project, but just don't have time to contribute, that's fine. There are other easy ways to support the project and show your appreciation:
+> If you like the project but you have no time for a contribution, that is
+> correct too. There are other easy ways to give your support:
 >
-> - Star the project
-> - Tweet about it
+> - Star the project.
+> - Tell other people about it.
 
 <br>
 
-## Getting Started
+## How to start
 
-Good first issues are a great way to start contributing to the project and get familiar with the codebase. Here's how to find them:
+A good first issue is an easy way to make your first contribution and to learn
+the codebase. To find one, do these steps:
 
-1. Visit the "[Issues](https://github.com/vantikhq/vantik/issues)" tab on the main [repository](https://github.com/vantikhq/vantik).
-2. Use the "Labels" filter and select "[Good First Issue](https://github.com/vantikhq/vantik/labels/good%20first%20issue)" to see a list of beginner-friendly tasks.
-3. Choose an issue that interests you, fork the project, and start working on it. Once you solve and test the issue, open a PR for review.
+1. Open the "[Issues](https://github.com/vantikhq/vantik/issues)" tab in the
+   main [repository](https://github.com/vantikhq/vantik).
+2. In the "Labels" filter, select
+   "[Good First Issue](https://github.com/vantikhq/vantik/labels/good%20first%20issue)".
+   The list then shows only the tasks for a beginner.
+3. Select an issue that interests you.
+4. Fork the project.
+5. Do the work, and test it.
+6. Open a pull request for review.
 
-Note: We are aware that having multiple contributors address the same issue can cause frustration. To prevent this, we adhere to a specific guideline: if a core team member has assigned an issue to a contributor, either as the issue assignee or through explicit assignment in the issue comments within the past three days, that contributor's pull request takes precedence. Otherwise, the first PR submitted will be given priority. This delay is reduced to one day for PR tagged with "size: minutes" and extended to a week for PR tagged "size: days".
+**Note:** if two contributors work on the same issue, the work of one of them is
+lost. The maintainers use this rule to stop that problem. A member of the core
+team can assign an issue to a contributor. The team member does this with the
+assignee field, or with a clear assignment in a comment on the issue. The pull
+request of that contributor then has priority for three days. If no team member
+assigned the issue, the first pull request has priority. For an issue with the
+"size: minutes" label, the period is one day. For an issue with the "size: days"
+label, the period is one week.
 
-Therefore, ensure you are assigned to an issue before beginning work on it.
+Therefore, get the assignment of an issue before you start work on it.
 
 <br>
 
-## Contributing Guidelines
+## Rules for a contribution
 
-1. **Fork the Repository:** Click on the 'Fork' button in the upper right corner of the repository's GitHub page. This will create a copy of the repository in your GitHub account.
+1. **Fork the repository.** Click the "Fork" button at the top right of the
+   GitHub page of the repository. GitHub makes a copy of the repository in your
+   account.
 
-2. **Clone the Repository:** Clone your forked repository to your local machine using `git clone`.
+2. **Clone the repository.** Use `git clone` to copy your fork to your machine.
 
 ```shell
 git clone https://github.com/yourusername/vantik.git
 cd vantik
 ```
 
-3. **Make Changes:** Make your desired changes and ensure that your code adheres to Vantik's coding standards.
+3. **Make your changes.** Your code must obey the code standards of Vantik.
 
-4. **Test Locally:** Test your changes locally to ensure they work as expected.
+4. **Test on your machine.** Check that your changes work as you expect.
 
-5. **Commit Changes:** Commit your changes with a clear and concise commit message.
+5. **Commit your changes.** Write a clear and short commit message.
 
 ```shell
 git commit -m "Add your detailed description here"
 ```
 
-6. **Push Changes:** Push your changes to your forked repository.
+6. **Push your changes.** Push them to your fork.
 
 ```shell
 git push origin branch-name
 ```
 
-7. **Create a Pull Request:** Go to the original Vantik repository and create a pull request. Please provide a detailed description of your changes. To have your pull request accepted, you must sign a CLA.
+7. **Create a pull request.** Go to the original Vantik repository and create a
+   pull request. Give a full description of your changes. You must sign a CLA
+   before a maintainer accepts your pull request.
 
-8. **Code Review:** Your pull request will undergo a code review. Note that you might need to make any necessary adjustments based on feedback.
+8. **Wait for the code review.** A maintainer reviews your pull request. You can
+   need to make more changes after this feedback.
 
-9. **Merge:** Once approved, maintainers will merge your pull request into the main repository.
+9. **Merge.** After the approval, a maintainer merges your pull request into the
+   main repository.
 
 <br>
 
 ## Code of Conduct
 
-Please note that by contributing to this project, you're expected to follow Vantik's [Code of Conduct](./CODE_OF_CONDUCT.md). All maintainers strive to maintain a welcoming, friendly, and inclusive community for all contributors.
+If you contribute to this project, you must obey the
+[Code of Conduct](./CODE_OF_CONDUCT.md) of Vantik. The maintainers keep a
+friendly community that accepts every contributor.
 
 <br>
 
-## Reporting Issues
+## How to report a problem
 
-If you encounter any issues or have suggestions for improvements, please feel free to [create an issue on Vantik's GitHub repository](https://github.com/vantikhq/vantik/issues/new). When reporting issues, please provide as much detail as possible to help in understanding and addressing the problem effectively.
+If you find a problem, or if you have an idea for an improvement,
+[create an issue in the GitHub repository of Vantik](https://github.com/vantikhq/vantik/issues/new).
+Give as much detail as you can. The detail helps the maintainers to understand
+the problem and to correct it.
 
 ---
 
-Thank you for considering contributing to Vantik. Your contributions help make Vantik's Project management platform even better!
+Thank you for your interest in a contribution to Vantik. Your work makes the
+project management platform of Vantik better.

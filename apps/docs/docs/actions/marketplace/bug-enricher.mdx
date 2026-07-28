@@ -5,11 +5,15 @@ sidebar_label: "Bug Enricher"
 
 ## Overview
 
-Whenever an issue is created in Vantik and labeled as bug, this action performs the following steps:
-1. Sends the issue details to your configured AI model to search for a possible solution.
-2. Adds the potential solution it generates as a comment on the issue.
+A person creates an issue in Vantik and puts the `bug` label on it. This action
+then does two steps:
+
+1. It sends the details of the issue to the AI model that you configure, and it
+   asks that model for a possible solution.
+2. It adds the possible solution as a comment on the issue.
 
 
 :::tip
-You can find the whole code for this action [here](https://github.com/vantikhq/vantik/tree/main/actions/bug-enricher)
+The full code of this action is
+[in the repository](https://github.com/vantikhq/vantik/tree/main/actions/bug-enricher).
 :::

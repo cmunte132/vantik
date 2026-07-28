@@ -6,51 +6,62 @@ sidebar_label: "Contribute"
 
 ## Introduction
 
-Welcome to the Vantik integration development guide! This guide will walk you through the steps to create a new integration for Vantik.
+This guide gives the steps to make a new integration for Vantik.
 
 ## Prerequisites
 
 <details>
-<summary>Before you begin, ensure you have the following installed</summary>
+<summary>Install this tool before you start</summary>
 
 - [pnpm](https://pnpm.io/installation)
 
 </details>
 
-## Step 1: Set Up Your Environment
+## Step 1: Set up your environment
 
-1. Navigate to the `/app/integrations` folder in your Vantik project:
+1. Go to the `/app/integrations` folder in your Vantik project:
    ```bash
    cd /app/integrations
    ```
-2. Install the necessary dependencies:
+2. Install the dependencies:
    ```bash
    pnpm install
    ```
 
-## Step 2: Generate Integration Files
+## Step 2: Make the files for the integration
 
-1. Generate the necessary files by running the following command inside the newly created folder:
+1. In the new folder, run this command:
    ```bash
    pnpm generate
    ```
-2. When prompted, specify the integration name. This will generate the required `handler.ts` and `spec.ts` files for your integration.
+2. Give the name of the integration when the command asks for it. The command
+   then writes the `handler.ts` and `spec.ts` files for your integration.
 
-## Step 3: Implement Your Integration
+## Step 3: Write your integration
 
-Vantik integrations are built on top of a unified event handler that processes different event types within a single function. The core of your integration lies in how you handle these event types.
+A Vantik integration uses one event handler. That handler processes each type of
+event in one function. Your integration is therefore mostly the code that you
+write for these event types.
 
-### Handling Events
+### How to handle an event
 
-The `run` function is the main entry point for processing events related to your integration. The event payload will contain a type that determines what action your integration needs to take. Here's a breakdown of how to handle each event type:
+The `run` function is the entry point for each event of your integration. The
+event payload holds a type, and that type tells your integration what to do.
+Handle each type as below:
 
-- **IntegrationSpec:** When this event is received, your handler should return a specification JSON that defines your integration's capabilities, required authentication details, and configuration options.
-- **IntegrationCreate:** This event is triggered when a user provides authentication details within Vantik. Your handler should process the user's input and handle the creation of the integration, such as saving settings data and establishing necessary connections.
-- **IntegrationDelete:** This event is triggered when a user deletes the integration account.
+- **IntegrationSpec:** return a specification in JSON. The specification gives
+  the capabilities of your integration, the authentication details that it
+  needs, and its configuration options.
+- **IntegrationCreate:** Vantik sends this event when a user gives the
+  authentication details. Process the input of the user and make the
+  integration. For example, save the settings and make the necessary
+  connections.
+- **IntegrationDelete:** Vantik sends this event when a user deletes the
+  integration account.
 
-### Example Code
+### Example code
 
-Here's a sample structure of the `run` function:
+This is an example of the `run` function:
 
 ```typescript
 async function run(eventPayload: IntegrationEventPayload) {
@@ -73,9 +84,10 @@ async function run(eventPayload: IntegrationEventPayload) {
 }
 ```
 
-### Implementation Steps
+### Steps to write the code
 
-1. Open the generated `handler.ts` and `spec.ts` files.
-2. Follow the provided TODOs within these files to complete the integration logic.
+1. Open the `handler.ts` and `spec.ts` files that the command made.
+2. Do each TODO in those files, and the integration is then complete.
 
-Questions, comments, or concerns? Let us know in our github: https://github.com/vantikhq/vantik/issues
+If you have a question or a comment, tell the maintainers on GitHub:
+https://github.com/vantikhq/vantik/issues

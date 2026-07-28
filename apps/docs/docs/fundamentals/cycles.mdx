@@ -5,29 +5,33 @@ sidebar_label: "Cycles"
 
 ## Overview
 
-Cycles are fixed time windows (sprints) that help a team focus on a slice of
-work. Issues assigned to the active cycle show up in the team's cycle view,
-with progress tracked as issues move through the workflow.
+A cycle is a fixed period of time, and some teams call it a sprint. A cycle
+helps a team to give its attention to one part of the work. The cycle view of
+the team shows the issues in the active cycle. The view also shows the progress
+of the team, because each issue moves through the workflow.
 
 ![](/img/docs/cycles.png)
 
-## Enable cycles
+## How to enable cycles
 
-Cycles are opt-in per team:
+Each team enables cycles for itself:
 
-1. Go to **Settings → your team → Overview**.
+1. Open **Settings → your team → Overview**.
 2. Under **Team preferences**, enable cycles.
 
-Once enabled, a **Cycles** entry appears in the team's sidebar and issues gain
+A **Cycles** entry then appears in the sidebar of the team, and each issue gets
 a cycle property.
 
-## Working with cycles
+## How to use cycles
 
-- **Assign issues:** Set the cycle from the issue's right-side properties
-  panel, or in bulk from the list/board views.
-- **Track progress:** The active cycle view groups its issues by status, so
-  you can see remaining work at a glance.
-- **Transitions:** Automated cycle transitions (closing a finished cycle and
-  rolling unfinished issues into the next one) run as a background job and
-  require [trigger.dev](/docs/oss/self-deployment#background-jobs-triggerdev)
-  to be configured. Without it, you manage cycle boundaries manually.
+- **Assign an issue.** Set the cycle in the properties panel at the right of
+  the issue. You can also set the cycle for many issues together, from the list
+  view or the board view.
+- **See the progress.** The view of the active cycle groups the issues by
+  status, so you see the work that is not complete.
+- **Move between cycles.** A team with the automatic cadence needs no manual
+  step. A scheduled job in the server completes each cycle after its end date.
+  The job then moves the unfinished issues, as the preference of the team tells
+  it to, and it makes more future cycles. A team that controls its cycles
+  manually keeps full control, and the job never changes it. Read
+  [Scheduled jobs](/docs/oss/self-deployment#scheduled-jobs).

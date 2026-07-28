@@ -1,41 +1,42 @@
 ---
 title: 'Quickstart'
-description: 'Get a running Vantik instance in a few minutes'
+description: 'Get a Vantik instance that runs, in a few minutes'
 ---
 
 ## Overview
 
-Vantik is a self-hosted, dev-first, agent-native issue tracker. There is no
-hosted cloud offering — you run it yourself. The Docker Compose stack in the
-main repository is turn-key: it starts the webapp, the API server, and all
-backing services (PostgreSQL, Redis, SuperTokens, Typesense) with working
-defaults.
+Vantik is an issue tracker for developers and for agents. You host it yourself,
+because there is no cloud service. The Docker Compose stack in the main
+repository needs no other setup. It starts the webapp, the API server, and all
+the services: PostgreSQL, Redis, SuperTokens, and Typesense. The default
+values work.
 
-## Run it
+## How to run it
 
-Prerequisites: Docker (or Podman with the compose provider).
+You need Docker, or Podman with the compose provider.
 
 ```bash
 git clone https://github.com/cmunte132/vantik.git
 cd vantik
-cp .env.example .env   # defaults work out of the box
+cp .env.example .env   # the default values work
 docker compose up -d
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and sign in with any email
-address. Without SMTP configured, the magic login link is printed to the server
-log instead of emailed:
+Open [http://localhost:3000](http://localhost:3000). Then sign in with any email
+address. If you configure no SMTP server, the server writes the magic login link
+to its log and sends no email:
 
 ```bash
 docker compose logs server | grep -A5 "magic link"
 ```
 
-Or skip the log entirely: choose **Create an account with a passkey** and
-authenticate with Touch ID, Windows Hello, or a security key. Nothing is
-emailed, so no mail server is involved. See [Signing
-in](/docs/oss/self-deployment#signing-in).
+There is a second method, and it needs no log. Select **Create an account with a
+passkey**. Then authenticate with Touch ID, Windows Hello, or a security key.
+The server sends no email, so you need no mail server. See
+[How to sign in](/docs/oss/self-deployment#how-to-sign-in).
 
-For production-style deployments (custom domain, secrets, optional services
-like SMTP, AI providers, and trigger.dev), see
-[Self-hosting](/docs/oss/self-deployment). To run the apps from source with hot
-reload, see [Local Setup](/docs/oss/local-setup).
+For a deployment like a production one, read
+[How to self-host](/docs/oss/self-deployment). That page covers a custom domain, the
+secrets, and the optional services: SMTP, an AI provider, and trigger.dev. To
+run the apps from the source with hot reload, read
+[Local Setup](/docs/oss/local-setup).

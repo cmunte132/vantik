@@ -1,32 +1,36 @@
 # working-vantik-knowledge
 
-An opinionated guide that teaches an LLM agent to use Vantik's knowledge bank
-well: load context before starting work, record **one fact at a time**,
-supersede rather than contradict, and consolidate instead of piling up.
+This guide has an opinion, and it teaches an LLM agent to use the Vantik
+knowledge bank well. It says four things: load the context before you start
+work, record **one fact at a time**, supersede an old fact and do not contradict
+it, and consolidate the entries instead of a collection that only grows.
 
-It is the judgment layer above the floor the `remember` tool already enforces
-(an entry has to be a single self-contained fact, not a session summary), and
-the companion to [`working-vantik-issues`](../working-vantik-issues/README.md) —
-issues are the work, the bank is what the work taught you.
+This guide is the layer of judgement above the minimum of the `remember` tool.
+That tool already needs an entry that is one complete fact, and not a summary of
+a session. This guide is also the companion of
+[`working-vantik-issues`](../working-vantik-issues/README.md). The issues are
+the work, and the bank is what the work taught you.
 
-The guidance is authored in two forms here, and Vantik serves four: **Settings →
-Agents** offers a download and a one-line install for whichever file your tool
-actually reads. `CLAUDE.md` and the Cursor `.mdc` rule are derived from
-`AGENTS.md` when they are served — they are not files here, and must not become
-files here, or the same guidance starts drifting in four places.
+A person authors the guidance here in two forms, and Vantik serves four.
+**Settings → Agents** gives a download and a one-line install command for the
+file that your tool reads. The server makes `CLAUDE.md` and the Cursor `.mdc`
+rule from `AGENTS.md` when it serves them. They are not files here, and they must
+not become files here. If they do, the same guidance becomes different in four
+places.
 
 ## Connect first
 
-Both forms assume the agent can reach Vantik over MCP. Provision a token in
-**Vantik → Settings → Agents**, which mints an agent identity so entries are
-attributed to the agent rather than to you — which is the whole point of
-provenance on a knowledge bank, since an agent-written claim and a human-written
-one are identical as text.
+Both forms need an agent that reaches Vantik over MCP. Make a token in
+**Vantik → Settings → Agents**. That page makes an agent identity, so the bank
+records each entry against the agent and not against you. This provenance is the
+purpose of the bank, because the text of a claim from an agent and the text of a
+claim from a person are the same.
 
-## Option A — Claude Code skill (recommended)
+## Option A — a Claude Code skill (the better method)
 
-`SKILL.md` is a Claude Code skill as-is. It loads on demand, so it costs no
-context until knowledge work actually comes up. Install it into a project:
+`SKILL.md` is a Claude Code skill, and it needs no change. Claude loads it on
+demand, so it costs no context until the knowledge work starts. To install it in
+a project, run:
 
 ```bash
 mkdir -p .claude/skills/working-vantik-knowledge
@@ -34,22 +38,24 @@ curl -fsSL "$VANTIK_URL/api/v1/agent-skill/working-vantik-knowledge/SKILL.md" \
   -o .claude/skills/working-vantik-knowledge/SKILL.md
 ```
 
-## Option B — AGENTS.md snippet
+## Option B — the AGENTS.md text
 
-For runners that read an `AGENTS.md`, a `CLAUDE.md`, or a Cursor project rule.
-Append the served file to whatever your tool already loads:
+Some runners read an `AGENTS.md` file, a `CLAUDE.md` file, or a project rule of
+Cursor. For those, add the served file to the end of the file that your tool
+already loads:
 
 ```bash
 curl -fsSL "$VANTIK_URL/api/v1/agent-skill/working-vantik-knowledge/AGENTS.md" >> AGENTS.md
 ```
 
-The served copies have the note-to-humans at the top of `AGENTS.md` stripped —
-once you have chosen a format, a note explaining which format to choose is
-answering a question you just answered.
+The `AGENTS.md` file here has a note at the top for a person to read. The server
+removes that note from each copy that it serves. After you select a format, a
+note that tells you how to select a format answers a question that you answered
+already.
 
-## Changing the guidance
+## How to change the guidance
 
-Edit `SKILL.md` and `AGENTS.md` here. Both are shipped in the server image and
-read at boot; there is nothing to regenerate. Keep them saying the same thing —
-the skill can afford more room, but the two must not disagree, or an agent's
-behaviour depends on which one its harness happened to load.
+Edit `SKILL.md` and `AGENTS.md` here. The server image holds both files, and the
+server reads them when it starts. You generate nothing. Keep the two files in
+agreement. The skill has more space, but the two must not disagree. If they
+disagree, the behaviour of an agent depends on the file that its harness loaded.

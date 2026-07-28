@@ -1,23 +1,24 @@
 # @vantikhq/cli
 
-The `vantik-cli` command. It does two jobs: deploying Vantik actions
-(`login`, `init`, `deploy`, `logout`), and working issues from the terminal
-(`task …`).
+The `vantik-cli` command. It does two jobs. It deploys Vantik actions with
+`login`, `init`, `deploy`, and `logout`. It also works issues from the terminal
+with `task …`.
 
 ## Authentication
 
-The task commands need a token. They look, in order, for:
+Each task command needs a token. The command looks for a token in this order:
 
-1. `ACCESS_TOKEN` in the environment (with `BASE_HOST` for the host).
-2. The profile written by `vantik-cli login`.
-3. `VANTIK_TOKEN` (with `VANTIK_URL`), the same variables agent-core reads.
+1. `ACCESS_TOKEN` in the environment, with `BASE_HOST` for the host.
+2. The profile that `vantik-cli login` writes.
+3. `VANTIK_TOKEN`, with `VANTIK_URL`. agent-core reads the same two variables.
 
-Provision a token under **Vantik → Settings → Agents** so the work is
-attributed to an agent identity, or use a personal token from **Settings →
-API**. `VANTIK_URL` points at the API root — the server directly
-(`http://localhost:3001`) or the webapp proxy (`https://vantik.example.com/api`).
+Make a token under **Vantik → Settings → Agents**. The workspace then records
+the work against an agent identity. You can also use a personal token from
+**Settings → API**. `VANTIK_URL` points at the root of the API. Give the address
+of the server (`http://localhost:3001`), or the address of the webapp proxy
+(`https://vantik.example.com/api`).
 
-## Working issues
+## How to work issues
 
 ```bash
 # Read
@@ -35,50 +36,51 @@ vantik-cli task note ENG-42 Reproduced only under load
 vantik-cli task close ENG-42 --resolution "Bumped the pool to 20"
 ```
 
-Every command takes `--json` for raw output. Run `vantik-cli task --help` (or
-`… <command> --help`) for the full flag list.
+Every command accepts `--json` and then gives the raw output. For the full list
+of flags, run `vantik-cli task --help`, or `vantik-cli task <command> --help`.
 
 ## The product axis
 
-A team says who works on something. The second axis says what the software is
-made of: a **product** is what the workspace ships, a **module** is where the
-code is (a repository, a path in one, a service), and a **capability** is what
-the software does for its users.
+A team says who does the work. The second axis says what the software is made
+of. A **product** is what the workspace ships. A **module** is where the code
+is: a repository, a path in a repository, or a service. A **capability** is what
+the software does for the people who use it.
 
 ```bash
-# Read the map. `modules` lists the repositories each module sits in, which is
-# what answers "which module is this checkout?"
+# Read the map. `modules` gives the repositories of each module, so you can
+# find the module of a checkout.
 vantik-cli products
 vantik-cli modules
 vantik-cli capabilities
 
-# Place work on it
+# Put work on the map
 vantik-cli task create Rate-limit the webhook --module server --capability "Webhooks"
 vantik-cli task update ENG-42 --module server webapp
 vantik-cli task update ENG-42 --no-capability
 
-# Ask what else is in flight around the code you are about to change
+# Find the other open work on the code that you are about to change
 vantik-cli task list --module server --category STARTED
 vantik-cli task list --product cloud
 ```
 
-Filtering by `--product` widens to the modules that product owns and links to,
-because an issue records modules and never a product. Naming both narrows to the
-intersection.
+An issue records its modules, and it never records a product. Therefore
+`--product` finds the modules that the product owns, and also the modules that
+the product links to. If you give `--product` and `--module` together, the
+command finds only the modules in both sets.
 
-The listings are read-only on purpose: a workspace's map is drawn in the app by
-the people who own the code.
+These listings are read-only, and that is the intent. The people who own the
+code draw the map of a workspace in the app.
 
 ### No opinions here
 
-The CLI is deliberately neutral: it files whatever you tell it to, with no view
-on whether an issue is "substantial enough", or on when a body of work deserves
-a project. That opinion lives only in the MCP `create_task` / `create_project`
-tools and the `working-vantik-issues` skill, which steer an agent toward few,
-meaty issues grouped under projects. A human at a terminal is trusted to know
-what they want — so `task create tweak` just works.
+The CLI is neutral, and that is the intent. It files what you tell it to file.
+It has no view on the size of an issue, and no view on the work that deserves a
+project. That opinion lives in two places only: the MCP tools `create_task` and
+`create_project`, and the `working-vantik-issues` skill. Those two guide an
+agent to a small number of large issues under projects. A person at a terminal
+knows what that person wants, so `task create tweak` works.
 
-## Deploying actions
+## How to deploy actions
 
-See the [actions docs](../../apps/docs/docs/actions) for `init`, `deploy`, and
-the action config format.
+For `init`, `deploy`, and the format of the action configuration, read the
+[documentation for actions](../../apps/docs/docs/actions).

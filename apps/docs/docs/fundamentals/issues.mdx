@@ -5,45 +5,65 @@ sidebar_label: "Issues"
 
 ## Overview
 
-An issue is a clearly defined, manageable unit of work. This could involve tasks like documenting specific requirements, writing a portion of code, or fixing a minor bug. Each issue should be specific enough to understand the goal and its contribution to project progress.
+An issue is one unit of work with a clear limit. An issue can be a record of a
+requirement, a part of the code, or a correction of a small fault. Each issue
+must be specific. A reader must see the goal of the issue, and the contribution
+of that issue to the project.
 
-If an issue involves multiple tasks that need independent tracking, break it down into sub-issues. This ensures clarity and allows you to monitor the progress of each smaller step within the larger issue.
+If an issue holds more than one task, and each task needs its own record, divide
+the issue into sub-issues. The work is then clear, and you see the progress of
+each smaller step.
 
 
-## Create an issue
+## How to create an issue
 
-- Open the Create Issue Screen: Press the keyboard shortcut `C` or click the `+` icon in the bottom left corner of the left-side navigation bar.
-- AI-generated Title: The system will automatically generate a title based on your description. Focus on providing a well-defined explanation of the issue.
-- AI-powered Assistance: As you write, the system will suggest relevant labels and assignees to streamline the creation process.
+- **Open the screen for a new issue.** Press the `C` key, or click the `+` icon
+  at the bottom left of the navigation bar.
+- **Let the AI write the title.** The system writes a title from your
+  description. Give a full explanation of the issue, and the system does the
+  rest.
+- **Let the AI help you.** As you write, the system offers a label and an
+  assignee for the issue.
 
 :::note
-The AI-assisted features require an OpenAI-compatible endpoint to be
-configured on your instance — hosted or local — see
-[AI features](/docs/oss/self-deployment#ai-features). Without one they are
-hidden rather than shown and broken, and issue creation works normally with
-manually entered titles and metadata.
+The AI features need an endpoint with the OpenAI interface. Your instance can
+use a hosted endpoint or a local one. See
+[AI features](/docs/oss/self-deployment#ai-features). If your instance has no
+endpoint, the interface hides these features. It does not show a control that
+cannot work. You then create an issue as normal, and you type the title and the
+other properties yourself.
 :::
 
 
-## Edit an issue
+## How to edit an issue
 
-All workspace members can edit the title and description of any issue. This allows for clear communication and ensures everyone has the latest information. Feel free to refine the AI-suggested title or add details to the description for better clarity.
+Every member of the workspace can edit the title and the description of any
+issue. Communication is therefore clear, and every person has the latest
+information. You can improve the title that the AI wrote, or add more detail to
+the description.
 
 
-## Boards Layouts
+## The board layouts
 
-Teams can view the issues with two interactive layouts - List and Kanban
-- Interactive Views: Both layouts let you directly update key details like status, assignee, and priority with a simple click.
-- Focus on What Matters: Important information like sub-tasks and blocked/blocking issues are highlighted for quick identification, keeping you on top of critical dependencies.
+A team sees its issues in two layouts: List and Kanban. Both layouts respond to
+you:
 
-### List View
+- **Change a value directly.** In both layouts, one click changes the status,
+  the assignee, or the priority.
+- **See what is important.** Both layouts mark the sub-tasks, and the issues
+  that block other issues. You therefore find a critical dependency quickly.
 
-Perfect for scanning issues. See them displayed in an ordered list, grouped by status by default. Need to focus? Collapse sections to streamline your view.
+### The list view
+
+The list view is the best layout to read many issues. It shows them in order,
+and it groups them by status. To make the view smaller, close a group.
 
 ![](/img/docs/list_view.png)
 
-### Kanban View
+### The Kanban view
 
-Ideal for visualising workflow. Group issues in a Kanban board format, typically by status, for a quick assessment of progress.
+The Kanban view is the best layout to see the workflow. It puts the issues in
+the columns of a Kanban board, usually one column for each status. You then see
+the progress immediately.
 
 ![](/img/docs/kanban_view.png)

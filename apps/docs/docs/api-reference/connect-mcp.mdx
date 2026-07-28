@@ -1,15 +1,16 @@
 ---
-title: Connecting an MCP client
-sidebar_label: Connecting an MCP client
-description: Point Claude Code or any MCP client at Vantik and work issues as an agent
+title: How to connect an MCP client
+sidebar_label: How to connect an MCP client
+description: How to point Claude Code or another MCP client at Vantik, and work issues as an agent
 ---
 
-Vantik speaks the [Model Context Protocol](https://modelcontextprotocol.io) so
-an LLM agent — Claude Code, Cursor, or anything that speaks MCP — can create,
-pick up, note and close issues, and search past work, without you wiring up the
-REST API by hand. The server exposes a task-shaped set of tools; the messy
-parts (resolving `ENG-42` to an id, markdown conversion, posting a resolution
-before closing) happen on the server side.
+Vantik speaks the [Model Context Protocol](https://modelcontextprotocol.io). An
+LLM agent therefore creates, picks up, notes, and closes an issue, and it
+searches the past work. Claude Code, Cursor, and any other client with MCP can
+do this, and you connect no REST endpoint by hand. The server gives a set of
+tools with the shape of a task. The difficult parts happen on the server: it
+finds the id of `ENG-42`, it converts the markdown, and it posts a resolution
+before it closes an issue.
 
 The endpoint is:
 
@@ -17,27 +18,31 @@ The endpoint is:
 POST /v1/mcp
 ```
 
-It is a stateless [Streamable HTTP](https://modelcontextprotocol.io/docs/concepts/transports)
-MCP server and uses the same [personal access token
-authentication](./overview.mdx) as the rest of the API — the token travels in
-the `Authorization` header.
+It is a stateless MCP server with the
+[Streamable HTTP](https://modelcontextprotocol.io/docs/concepts/transports)
+transport. It uses the same
+[authentication with a personal access token](./overview.mdx) as the other parts
+of the API. The token travels in the `Authorization` header.
 
-## Get a token
+## How to get a token
 
-Provision one in **Vantik → Settings → Agents**. An agent account is a distinct
-identity in the workspace, so the issues it creates and the notes it writes are
-attributed to the agent rather than to you. Creating one shows the token once,
-along with a ready-to-paste `.mcp.json` and `claude mcp add` command — copy
-them then, as the token is not retrievable afterwards.
+Make a token in **Vantik → Settings → Agents**. An agent account is a separate
+identity in the workspace. The workspace therefore records each issue and each
+note against the agent, and not against you. When you make the account, the page
+shows the token one time. It also shows a `.mcp.json` file and a `claude mcp add`
+command that you can copy. Copy them at that moment, because you cannot read the
+token again.
 
 :::note
-Provisioning an agent is admin-only. If you don't see **Settings → Agents**,
-ask a workspace admin to create the agent and hand you its config.
+Only an administrator can make an agent. If you do not see **Settings →
+Agents**, ask an administrator of the workspace to make the agent and to give
+you its configuration.
 :::
 
-## Connect Claude Code
+## How to connect Claude Code
 
-Add the server to a project's `.mcp.json` (replace the host and token):
+Add the server to the `.mcp.json` file of a project. Use your own host and your
+own token:
 
 ```json
 {
@@ -51,7 +56,7 @@ Add the server to a project's `.mcp.json` (replace the host and token):
 }
 ```
 
-Or register it from the command line:
+You can also register the server from the command line:
 
 ```bash
 claude mcp add --transport http vantik https://your-vantik-host/api/v1/mcp \
@@ -59,83 +64,87 @@ claude mcp add --transport http vantik https://your-vantik-host/api/v1/mcp \
 ```
 
 :::warning
-A project's `.mcp.json` is usually committed, and this one holds a live token
-that can read and write the workspace. Either keep it out of version control or
-register the server per-user instead — `claude mcp add` writes to `~/.claude.json`,
-which is not in the repo. If a token does get committed, revoke that agent in
-**Settings → Agents** and generate a new one.
+Do not commit a live token. The `.mcp.json` file of a project usually goes into
+version control, and this file holds a token that reads and writes the
+workspace. Keep the file out of version control, or register the server for your
+user only. `claude mcp add` writes to `~/.claude.json`, which is not in the
+repository. If a commit does hold a token, revoke that agent in **Settings →
+Agents** and make a new one.
 :::
 
-## Connect another client
+## How to connect another client
 
-Any MCP client that supports the Streamable HTTP transport works the same way:
-point it at `https://your-vantik-host/api/v1/mcp` and send the token as an
-`Authorization: Bearer` header. The `/api` prefix is the webapp proxy in front
-of the server; if you call the server directly, drop it and use `/v1/mcp`.
+Any MCP client with the Streamable HTTP transport connects in the same way.
+Point it at `https://your-vantik-host/api/v1/mcp`, and send the token in an
+`Authorization: Bearer` header. The `/api` prefix is the webapp proxy in front of
+the server. If you call the server directly, remove that prefix and use
+`/v1/mcp`.
 
 ## The tools
 
 | Tool | What it does |
 | --- | --- |
-| `list_tasks` | List tasks (lean rows), filterable by team, assignee, state, labels, priority, project. |
-| `get_task` | Everything about one task in a single call: description, notes, history, sub-tasks, relations. |
-| `search_tasks` | Search titles, descriptions **and notes**; set `stateCategory: ["COMPLETED"]` to find prior fixes with their resolution. |
-| `find_similar_tasks` | Prior tasks resembling one, with how each was resolved. |
-| `create_task` | File an issue. Holds the issue to a floor — a real description, and acceptance criteria for a top-level issue. |
-| `update_task` | Change a task's title, description, state, labels, priority, assignee or project. |
-| `list_projects` | The workspace's projects — the objectives issues are grouped under. |
-| `create_project` | Open a project for an objective that genuinely needs several issues. |
-| `pick_up_task` | Take ownership: assign it and move it to the in-progress state. |
-| `add_note` | Post a searchable markdown note on a task. |
-| `close_task` | Close a task, recording the resolution as a note first so the fix stays findable. |
+| `list_tasks` | Lists the tasks as small rows. You can filter by team, assignee, state, labels, priority, and project. |
+| `get_task` | Gives everything about one task in one call: the description, the notes, the history, the sub-tasks, and the relations. |
+| `search_tasks` | Searches the titles, the descriptions, **and the notes**. Set `stateCategory: ["COMPLETED"]` to find an earlier fix with its resolution. |
+| `find_similar_tasks` | Gives the earlier tasks that are similar to one task, and the resolution of each. |
+| `create_task` | Files an issue. It holds an issue to a minimum: a real description, and acceptance criteria for a top-level issue. |
+| `update_task` | Changes the title, the description, the state, the labels, the priority, the assignee, or the project of a task. |
+| `list_projects` | Gives the projects of the workspace. A project is an objective, and the issues group under it. |
+| `create_project` | Opens a project for an objective that truly needs several issues. |
+| `pick_up_task` | Takes ownership of a task. It assigns the task and moves it to the in-progress state. |
+| `add_note` | Puts a markdown note on a task, and the search finds that note. |
+| `close_task` | Closes a task. It first records the resolution as a note, so the search finds the fix later. |
 
-Everything a tool does maps onto the REST API documented in [Working with
-agents](./agents.mdx) — reach for that page when you want the endpoints
-underneath, or are building against the API directly instead of over MCP.
+Each tool uses the REST API from
+[How to work with agents](./agents.mdx). Read that page for the endpoints below
+the tools, or for a client that you build directly against the API.
 
 ## Rate limits
 
-The endpoint is rate limited per token, so an agent stuck in a loop throttles
-only itself. Over the limit you get HTTP `429` with a `Retry-After` header and a
-JSON-RPC error body carrying the same wait in `data.retryAfter`.
+The endpoint has a rate limit for each token. An agent in a loop therefore
+limits only itself. Above the limit you get HTTP `429`, a `Retry-After` header,
+and a JSON-RPC error body. The body holds the same wait time in
+`data.retryAfter`.
 
 | Variable | Default | What it sets |
 | --- | --- | --- |
-| `MCP_RATE_LIMIT` | `120` | Requests one token may make per window. `0` turns the limit off. |
-| `MCP_RATE_LIMIT_WINDOW_MS` | `60000` | Length of the window, in milliseconds. |
+| `MCP_RATE_LIMIT` | `120` | The number of requests that one token can make in one window. `0` stops the limit. |
+| `MCP_RATE_LIMIT_WINDOW_MS` | `60000` | The length of the window, in milliseconds. |
 
-Counters live in the server process, so across several replicas the effective
-ceiling is the limit times the replica count. That is enough to stop a runaway
-loop; if you need a real quota, put your own limiter in front and set
-`MCP_RATE_LIMIT=0`.
+The counters live in the server process. Across several replicas, the real limit
+is therefore the limit multiplied by the number of replicas. That is enough to
+stop a loop that runs away. For a true quota, put your own limiter in front of
+the server and set `MCP_RATE_LIMIT=0`.
 
-## Optional: house style for filing issues
+## Optional: a house style for a new issue
 
-The config above is all an agent needs to read and file issues. Left to itself,
-though, an agent tends to file a long tail of one-line tickets — a note it could
-have added to an existing issue becomes a new issue, and a single piece of work
-arrives as six.
+The configuration above is all that an agent needs to read and to file an issue.
+But an agent alone files many small issues. It opens a new issue where a note on
+an issue that exists is enough, and it divides one piece of work into six
+issues.
 
-**working-vantik-issues** is a short written guide that pushes the other way: file
-fewer, larger issues; group the ones that serve a single objective under a
-project; add a note to an existing issue rather than open a near-duplicate; and
-say what "done" looks like before filing at all.
+**working-vantik-issues** is a short guide that corrects this behaviour. It says
+to file fewer and larger issues. It says to group the issues of one objective
+under a project. It says to add a note to an issue that exists, and not to open
+a near-duplicate. It also says to write the definition of "done" before you file
+the issue.
 
-**Settings → Agents** hands it to you in whatever form your tool reads — pick the
-harness tab and take the download and the one-line install next to it. The server
-serves the files at `/v1/agent-skill/:file`:
+**Settings → Agents** gives you this guide in the form that your tool reads.
+Select the tab for your harness, and take the download and the install command
+next to it. The server serves the files at `/v1/agent-skill/:file`:
 
 | Tool | File | Where it goes |
 | --- | --- | --- |
 | Claude Code | `SKILL.md` | `.claude/skills/working-vantik-issues/SKILL.md` |
-| Claude Code | `CLAUDE.md` | `CLAUDE.md`, to keep it always in context instead |
+| Claude Code | `CLAUDE.md` | `CLAUDE.md`, to hold it in the context always |
 | Cursor | `working-vantik-issues.mdc` | `.cursor/rules/` |
-| Codex, and anything else | `AGENTS.md` | your project root |
+| Codex, and any other tool | `AGENTS.md` | the root of your project |
 
-Two of those are derived on the way out from the same authored snippet, so there
-is one source of truth rather than four copies drifting apart. The originals live
-in `apps/docs/skills/working-vantik-issues/`.
+The server makes two of these files from the same source text, so there is one
+source of truth and not four copies that become different. The originals are in
+`apps/docs/skills/working-vantik-issues/`.
 
-This sits above the `create_task` tool, which already refuses an issue with no
-description or no acceptance criteria. The tool sets a floor; the guide is the
-judgment about what to file in the first place.
+This guide sits above the `create_task` tool, and that tool already refuses an
+issue with no description or no acceptance criteria. The tool sets the minimum.
+The guide gives the judgement about what to file.

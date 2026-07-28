@@ -39,7 +39,7 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'category',
-          label: 'Writing an Action',
+          label: 'How to write an action',
           items: [
             'actions/writing-action/introduction',
             'actions/writing-action/general-example',
@@ -68,16 +68,16 @@ const sidebars: SidebarsConfig = {
       ],
     },
   ],
-  // Auto-generated entries come from docusaurus-plugin-openapi-docs
-  // (npm run gen-api-docs vantik) - don't hand-edit docs/api-reference/sidebar.ts,
-  // it's overwritten every time that command runs. 'api-reference/overview',
-  // 'api-reference/connect-mcp' and 'api-reference/agents' are the hand-written
-  // pages in this section and need re-adding here if they ever get wiped out by
-  // a regen.
+  // docusaurus-plugin-openapi-docs makes the other entries. The command is
+  // `npm run gen-api-docs vantik`. Do not edit docs/api-reference/sidebar.ts by
+  // hand, because that command replaces the file each time that it runs. A
+  // person wrote these three pages: 'api-reference/overview',
+  // 'api-reference/connect-mcp', and 'api-reference/agents'. If the command
+  // removes them, put them here again.
   apiSidebar: [
-    {type: 'doc', id: 'api-reference/overview', label: 'Overview & Authentication'},
-    {type: 'doc', id: 'api-reference/connect-mcp', label: 'Connecting an MCP client'},
-    {type: 'doc', id: 'api-reference/agents', label: 'Working with agents'},
+    {type: 'doc', id: 'api-reference/overview', label: 'Overview and authentication'},
+    {type: 'doc', id: 'api-reference/connect-mcp', label: 'How to connect an MCP client'},
+    {type: 'doc', id: 'api-reference/agents', label: 'How to work with agents'},
     ...apiSidebar,
   ],
 };

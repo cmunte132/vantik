@@ -1,40 +1,50 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# webapp
 
-## Getting Started
+This is the Vantik user interface. It is a [Next.js](https://nextjs.org/)
+application, and it uses the pages router. People use it to review and to audit
+the work that agents do.
 
-First, run the development server:
+The webapp talks to the API server. It does not talk to the database.
+
+## How to start
+
+Run the whole stack from the root of the repository, and not from this
+directory. The root scripts give the apps their environment variables:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This command starts the API server on port 3001 and the webapp on port 3000.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+Read the [root README](../../README.md) for the services that you must start
+first.
 
-[API routes](https://nextjs.org/docs/api-routes/introduction) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
+## The directories
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/api-routes/introduction) instead of React pages.
+| Directory | What is in it |
+| --- | --- |
+| `src/pages` | The routes. `[workspaceSlug]` holds the pages of a workspace. |
+| `src/modules` | The features, one directory for each feature: issues, projects, cycles, views, search, settings, and more. |
+| `src/components` | The user interface parts that many modules use. |
+| `src/store` | The client state, and the local database for the real-time sync. |
+| `src/services` | The calls to the API server. |
+| `src/hooks` | The React hooks that many modules use. |
+| `src/common` | The types and the helpers that many modules use. |
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+## Configuration
 
-## Learn More
+The webapp reads its runtime configuration from the API server at
+`/api/v1/config`. A self-hosted installation therefore sets the `NEXT_PUBLIC_*`
+values when the container starts, and no rebuild is necessary.
 
-To learn more about Next.js, take a look at the following resources:
+## The scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+| Command | What it does |
+| --- | --- |
+| `pnpm dev` | Runs the development server, with hot reload. |
+| `pnpm build` | Builds the production output with Turbopack. |
+| `pnpm test` | Runs the tests one time with Vitest. |
+| `pnpm typecheck` | Checks the types, and emits no output. |
+| `pnpm lint` | Runs ESLint, and corrects what it can. |

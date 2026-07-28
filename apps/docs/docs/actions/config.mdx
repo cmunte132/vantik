@@ -3,9 +3,10 @@ title: 'Config'
 sidebar_label: "config.json"
 ---
 
-Let’s take a look at a basic config.json file. This file is used to configure your action and how it gets triggered.
+This page describes a basic `config.json` file. This file configures your
+action, and it sets the events that start the action.
 
-### Example config.json
+### An example of config.json
 
 ```json
 {
@@ -26,55 +27,70 @@ Let’s take a look at a basic config.json file. This file is used to configure 
 ```
 
 
-## `config.json` Documentation
+## The `config.json` file
 
-The `config.json` file is used to configure actions in Vantik. Each action has a unique set of properties that define how it behaves, when it is triggered, and which integrations it interacts with. Below is an explanation of the fields used in the configuration file:
+The `config.json` file configures an action in Vantik. Each action has its own
+set of properties. These properties give the behaviour of the action, the events
+that start it, and the integrations that it uses. The fields are below.
 
-### Fields Overview
+### The fields
 
 #### `slug`
 - **Type:** `string`
-- **Description:** A unique identifier for each action. This is used internally by Vantik to trigger the corresponding action when specific conditions are met.
+- **Description:** the unique identifier of the action. Vantik uses this value
+  internally to start the correct action.
 - **Example:** `"slug": "discord"`
 
 #### `name`
 - **Type:** `string`
-- **Description:** The display name of the action. This name is shown in various places within Vantik where the action has made changes, such as when an issue is created or commented on.
+- **Description:** the name of the action for a reader. Vantik shows this name
+  where the action makes a change, for example on a new issue or on a new
+  comment.
 - **Example:** `"name": "Discord"`
 
 ### `triggers`
 
-The `triggers` field defines the conditions under which the action is executed. This is a list of objects, each specifying a type of trigger and the entities it applies to.
+The `triggers` field gives the conditions that start the action. It is a list of
+objects. Each object gives one type of trigger and the entities for that
+trigger.
 
 #### `type`
 - **Type:** `string`
-- **Description:** The type of trigger that activates the action. The available types are:
-  - `on_create`: Triggered when an entity is created.
-  - `on_update`: Triggered when an entity is updated.
-  - `on_delete`: Triggered when an entity is deleted.
-  - `source_webhook`: Used when the action should be triggered by an external event, typically received from an integration like Discord or GitHub.
+- **Description:** the type of trigger that starts the action. These are the
+  types:
+  - `on_create`: Vantik starts the action when a person makes an entity.
+  - `on_update`: Vantik starts the action when a person changes an entity.
+  - `on_delete`: Vantik starts the action when a person deletes an entity.
+  - `source_webhook`: an external event starts the action. That event usually
+    comes from an integration such as Discord or GitHub.
 - **Example:**
   ```json
   {
     "type": "on_create"
   }
+  ```
 
 #### `entities`
-- **Type:** array of strings
-- **Description:** Specifies the entities that the trigger applies to. Entities represent different objects or records within Vantik, such as issues or comments. Common entities include:
-  - `Issue`: Refers to an issue in the project management system.
-  - `IssueComment`: Refers to a comment made on an issue.
-  - `LinkedIssue`: Refers to an when a url is linked to an issue.
+- **Type:** an array of strings
+- **Description:** the entities for the trigger. An entity is an object or a
+  record in Vantik, such as an issue or a comment. These entities are common:
+  - `Issue`: an issue in the project management system.
+  - `IssueComment`: a comment on an issue.
+  - `LinkedIssue`: a URL that a person links to an issue.
 
-Entities when used `source_webhook` as type are integrations
+  With the `source_webhook` type, each entity is an integration.
 
 ### `integrations`
 
-The integrations field lists the external systems that the action interacts with. These are the integrations that the action will require access to in order to perform its tasks.
-- **Type:** `array of string`
-- **Description:** Specifies which integrations the action will utilize. For example, if the action is meant to post updates to Discord, discord would be listed here.
+The `integrations` field lists the external systems of the action. The action
+needs access to each of these systems to do its work.
+
+- **Type:** an array of strings
+- **Description:** the integrations that the action uses. For example, an
+  action that sends an update to Discord lists `discord` here.
 - **Example:**
   ```json
   {
     "integrations": [ "discord" ]
   }
+  ```

@@ -3,28 +3,32 @@ title: 'Use Cases: Overview'
 sidebar_label: "Overview"
 ---
 
-This section showcases the use cases we've implemented, ready for you to deploy and use in Vantik. We're dedicated to making Vantik your all-in-one solution for issue tracking. Have an idea for a new action? We'd love to hear from you! Simply create a GitHub issue to share your suggestions—we value your feedback!
+This section shows the use cases that the maintainers built. Each one is ready,
+and you deploy it and use it in Vantik. The goal is one tool for all your
+issues. If you have an idea for a new action, create an issue on GitHub. The
+maintainers read every suggestion.
 
-## General Actions
-These are the actions which an event gets triggered from any changes inside vantik.
+## General actions
 
+A change inside Vantik starts each of these actions.
 
-- **[Bug Enricher](/docs/actions/marketplace/bug-enricher)** - Comment a potential solution for issues labeled as `bug`, using your configured AI model
+- **[Bug Enricher](/docs/actions/marketplace/bug-enricher)** - Adds a possible
+  solution as a comment on each issue with the `bug` label. It uses the AI model
+  that you configure.
+- **[Issue View Summary](/docs/actions/marketplace/issue-view-summary)** - Gives
+  a summary of the important changes to the issues in a custom view. You select
+  how frequently it does this.
 
+## Actions with an integration
 
-  - **[Issue View Summary](/docs/actions/marketplace/issue-view-summary)** - Summarize key issue updates in a customized view, delivered at your chosen frequency
+These actions get data from a third-party tool, such as GitHub, and they
+authenticate with it.
 
+- **[Email](/docs/actions/marketplace/email-actions)** - Makes an issue in
+  Vantik triage from an email.
 
-  ## Integration Based Actions
- Actions that gather data and authenticate with third-party tools like GitHub.
+## Scheduled actions
 
- 
-- **[Email](/docs/actions/marketplace/email-actions)** - Create issues from email in Vantik Triage
-
-
-
-  ## Scheduled Based Actions
-
-  :::note
-This feature is planned and will be implemented soon.
+:::note
+This feature is in the plan, and the maintainers add it soon.
 :::

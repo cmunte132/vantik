@@ -3,33 +3,37 @@ title: "Action: Bug Enricher Example"
 sidebar_label: "Bug Enricher Example"
 ---
 
-Below is an example to help you understand how you can create a action on any Vantik event.
+This example shows you how to make an action for any Vantik event.
 
-## Example Action
+## An example action
 
 #### Bug Enricher
 
-Whenever an issue is created in Vantik and labeled as `bug` then create an action that asks the configured AI model to search for a possible solution and posts that solution in a comment on the issue.
+A person creates an issue in Vantik and puts the `bug` label on it. The action
+below then asks the AI model that you configure for a possible solution, and it
+puts that solution in a comment on the issue.
 
-1.  Create a new folder for this action
+1. Make a new folder for this action.
 
 ```bash
 mkdir bug-resolution
 ```
 
-2. Now run our cli command, this will login the cli into Vantik.
+2. Run the CLI command below. It signs the CLI in to Vantik.
 
 ```bash
 npx @vantikhq/cli login
 ```
 
-3. Let's now initialize the project, this will create the basic folder structure for action.
+3. Initialize the project. This command makes the basic folder structure of an
+   action.
 
 ```bash
 npx @vantikhq/cli init && npm install
 ```
 
-4. Let's edit the config.json as below to tell Vantik to trigger the function when issue is created.
+4. Edit `config.json` as below. This file tells Vantik to call the function when
+   a person creates an issue.
 
 ```json bug-resolution/config.json
 {
@@ -45,7 +49,7 @@ npx @vantikhq/cli init && npm install
 }
 ```
 
-5. Then let's edit the `index.ts` with the below content
+5. Put the content below in `index.ts`.
 
 ```ts bug-resolution/index.ts
 import { ActionEventPayload } from "@vantikhq/sdk";
@@ -111,7 +115,7 @@ export async function run(eventPayload: ActionEventPayload) {
 }
 ```
 
-6. Let's create a new file `utils.ts` and add prompt to that.
+6. Make a new file `utils.ts`, and put the prompt in it.
 
 ```ts
 export const PARTIAL_SOLUTION_PROMPT = `[TASK]
@@ -223,15 +227,16 @@ Here’s an example assuming you are using Laravel Mail:
 `;
 ```
 
-You can check full prompt [here](https://github.com/vantikhq/vantik/blob/main/actions/bug-enricher/utils.ts).
+The full prompt is
+[in the repository](https://github.com/vantikhq/vantik/blob/main/actions/bug-enricher/utils.ts).
 
-7. Run the action in dev mode and create a issue with bug as label
+7. Run the action in dev mode. Then create an issue with the `bug` label.
 
 ```bash
 npx @vantikhq/cli dev
 ```
 
 :::tip
-You can find the whole code for this example action
-  [here](https://github.com/vantikhq/vantik/tree/main/actions/bug-enricher)
+The full code of this example action is
+[in the repository](https://github.com/vantikhq/vantik/tree/main/actions/bug-enricher).
 :::

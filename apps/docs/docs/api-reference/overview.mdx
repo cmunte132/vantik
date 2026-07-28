@@ -1,23 +1,23 @@
 ---
-title: Overview & Authentication
-sidebar_label: Overview & Authentication
-description: Using the Vantik API
+title: Overview and authentication
+sidebar_label: Overview and authentication
+description: How to use the Vantik API
 ---
 
 ## Overview
 
-The Vantik REST API supports CRUD operations on issues, comments, labels,
-linked issues, and more — everything an agent or script needs to plan and
-track work. The full endpoint reference is in the sidebar.
+The Vantik REST API creates, reads, updates, and deletes an issue, a comment, a
+label, a linked issue, and more. An agent or a script therefore plans and tracks
+its work through this API. The sidebar holds the reference for every endpoint.
 
-The API is served by your own instance under `/api` (e.g.
-`http://localhost:3001/api` in local development, or
-`https://your-domain.com/api` behind the webapp proxy).
+Your own instance serves the API under `/api`. In local development the address
+is `http://localhost:3001/api`. Behind the webapp proxy the address is
+`https://your-domain.com/api`.
 
 ## Authentication
 
-Create a **personal access token (PAT)** in the webapp under
-**Settings → My Account → Api**, and send it with each request:
+Make a **personal access token (PAT)** in the webapp, under
+**Settings → My Account → Api**. Then send the token with each request:
 
 ```bash
 curl -H "Authorization: Bearer $VANTIK_TOKEN" \
@@ -26,22 +26,23 @@ curl -H "Authorization: Bearer $VANTIK_TOKEN" \
   https://your-domain.com/api/v1/issues
 ```
 
-A PAT stays valid until you delete it under the same settings page, which is
-what makes it usable for long-running agents and scheduled jobs. Treat it as a
-password: it carries the full permissions of the user who created it.
+A PAT stays valid until you delete it on the same settings page. An agent that
+runs for a long time, and a scheduled job, can therefore use it. Keep a PAT as
+safe as a password, because it holds all the permissions of the user who made
+it.
 
-## TypeScript SDK
+## The TypeScript SDK
 
-The repository contains a typed Node.js SDK in
+The repository holds a Node.js SDK with types, in
 [`packages/vantik-sdk`](https://github.com/cmunte132/vantik/tree/main/packages/vantik-sdk).
-It is **not published to npm** — use it from the workspace (or build it from
-source) if you're developing inside the monorepo:
+The maintainers **do not publish it to npm**. If you work inside the monorepo,
+use it from the workspace. If you work outside, build it from the source:
 
 ```ts
 import { configure, createIssue } from "@vantikhq/sdk";
 
 configure({
-  // Optional if the VANTIK_TOKEN environment variable is set
+  // You can omit this if the VANTIK_TOKEN environment variable holds the token
   token: "<token>",
 });
 

@@ -1,17 +1,25 @@
 ## Overview
 
-Effortlessly integrate Vantik with Slack to transform your project communication and management:
+This action connects Vantik to WhatsApp. It creates issues from WhatsApp
+messages, and it keeps a WhatsApp chat and a Vantik issue in step.
 
-1. Create Issues from Slack Messages:
+1. Create an issue from a WhatsApp message.
 
-   - Use the "..." menu on any Slack message to effortlessly create a Vantik issue.
+   - WhatsApp sends the message to the action on a webhook.
+   - The action makes a triage issue in Vantik for the team that you configure.
+   - The action ignores a status message from WhatsApp.
 
-2. Automate Issue Creation with Emoji 👀:
+2. Keep the comments in step.
 
-   - Assign 👀 emoji to a Slack thread to automatically trigger Vantik AI to create a triage issue.
-   - This feature empowers even non-Vantik users to easily report issues.
+   - The action links the issue to the WhatsApp chat of the first message.
+   - Each later message in that chat becomes a comment on the linked issue.
+   - Each new comment on the issue goes back to the WhatsApp chat.
 
-3. Synchronized Conversation Threads:
-   - When issues are reported in Slack, a synced comment thread is automatically created within the corresponding Vantik issue.
-   - Vantik comments are automatically reflected in the Slack thread, keeping everyone in the loop and vice versa.
-   - Both the Slack thread and the Vantik comments update in real-time, ensuring everyone stays on the same page regardless of their chosen platform.
+3. Report a change of the issue.
+
+   - When a person changes the issue, the action sends the change to the
+     WhatsApp chat.
+   - The person who made the report therefore sees the progress of the work.
+
+With this action a person who does not use Vantik can report a problem. That
+person only sends a WhatsApp message.

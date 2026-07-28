@@ -1,84 +1,90 @@
 ---
-title: Working with agents
-sidebar_label: Working with agents
-description: Endpoints and conventions for LLM agents using the Vantik API
+title: How to work with agents
+sidebar_label: How to work with agents
+description: The endpoints and the conventions for an LLM agent that uses the Vantik API
 ---
 
-Agents are just another API client — there is no separate "agent API". This
-page collects the endpoints and conventions that matter most when the caller is
-an LLM: reading a task's full context in one request, keeping payloads small,
-exchanging markdown instead of rich-text JSON, and searching past work to find
-out whether a problem was already solved.
+An agent is one more client of the API, and there is no separate "agent API".
+This page collects the endpoints and the conventions that are most important
+when the caller is an LLM. The agent reads the full context of a task in one
+request, keeps each payload small, exchanges markdown and not rich-text JSON,
+and searches the past work to see if somebody solved the problem before.
 
-Everything here uses the same [personal access token
-authentication](./overview.mdx) as the rest of the API.
+Everything on this page uses the same
+[authentication with a personal access token](./overview.mdx) as the other parts
+of the API.
 
 :::tip
-Most agents should connect over MCP rather than call these endpoints directly —
-see [Connecting an MCP client](./connect-mcp.mdx). The tools there map onto the
-REST layer described below; this page is what sits underneath, for building
-against the API directly.
+The better method for most agents is a connection over MCP, and not a direct
+call to these endpoints. See
+[How to connect an MCP client](./connect-mcp.mdx). The tools there use the REST
+layer below. This page describes that layer, for a client that you build
+directly against the API.
 :::
 
-## Agent accounts and what they may do
+## An agent account, and what it can do
 
-An agent account is its own identity in the workspace, so its edits are
-attributed to the agent rather than to the person who connected it. Provision
-one from **Settings → Agents**, or with `POST /v1/users/agents` (admin only).
+An agent account is its own identity in the workspace. The workspace therefore
+records each edit against the agent, and not against the person who connected
+it. Make an agent account from **Settings → Agents**, or with
+`POST /v1/users/agents`. Only an administrator can use that endpoint.
 
-Agents are held to scopes, checked on every request:
+An agent has scopes, and the server checks them on every request:
 
-| Scope | Covers |
+| Scope | What it covers |
 | --- | --- |
-| `read` | Reading the board, searching, fetching a task. |
-| `write` | Filing, updating, commenting, closing. |
-| `delete` | Removing issues, comments, labels and the rest. |
+| `read` | Read the board, search, and get a task. |
+| `write` | File, update, comment, and close. |
+| `delete` | Remove an issue, a comment, a label, and the other records. |
 
-The scope a request needs comes from its HTTP method — `GET` reads, `DELETE`
-deletes, anything else writes — except where a route declares otherwise. A few
-reads arrive as a `POST` because their input travels in the body (`POST
-/v1/issues/filter` is the board itself) and count as reads.
+The HTTP method of a request gives the scope that the request needs. `GET`
+reads, `DELETE` deletes, and every other method writes. A route can declare
+something different. A few reads arrive as a `POST`, because their input travels
+in the body. `POST /v1/issues/filter` is the board itself, and it counts as a
+read.
 
-A new agent gets `read` and `write`. Deletion is granted deliberately, so an
-agent can run the whole issue workflow without holding the one verb that cannot
-be undone. Pass `scopes` when provisioning to change that:
+A new agent gets `read` and `write`. You give `delete` deliberately, so an agent
+does the whole issue workflow without the one verb that nobody can undo. To
+change the scopes, send `scopes` when you make the account:
 
 ```json
 { "name": "Release Bot", "scopes": ["read", "write", "delete"] }
 ```
 
-A request outside an agent's scopes gets `403` naming the scope it needed. An
-agent provisioned before scopes existed is treated as having the default rather
-than everything. People are not scoped — this applies to agent accounts only.
+A request outside the scopes of an agent gets a `403`, and the error names the
+scope that the request needed. An agent from a time before the scopes has the
+default scopes, and not all of them. A person has no scopes, because this
+applies to an agent account only.
 
-The MCP endpoint itself is exempt, because one `POST` there covers every tool
-including read-only ones; its tools reach the API over loopback, so the work
-they actually do is scope-checked on the way through.
+The MCP endpoint is an exception, because one `POST` there covers every tool,
+and some of those tools only read. The tools reach the API over loopback, so the
+server checks the scope of the work that they do.
 
-## Markdown, not Tiptap JSON
+## Markdown, and not Tiptap JSON
 
-Rich-text fields (issue descriptions, comment bodies) are stored as Tiptap
-JSON. The API converts at the edge so agents never have to touch that format:
+The server holds a rich-text field as Tiptap JSON. An issue description and a
+comment body are rich-text fields. The API converts the format at the edge, so
+an agent never touches Tiptap:
 
 | Direction | Issue field | Comment field |
 | --- | --- | --- |
 | Read | `descriptionMarkdown` | `bodyMarkdown` |
 | Write | `descriptionMarkdown` | `bodyMarkdown` |
 
-Reads return the markdown field alongside the raw `description` / `body`.
-Writes accept either — **if both the raw field and the markdown field are sent,
-the raw Tiptap field wins**, so send only `descriptionMarkdown` /
-`bodyMarkdown` unless you are deliberately writing Tiptap.
+A read returns the markdown field with the raw `description` or `body`. A write
+accepts one field or the other. **If you send the raw field and the markdown
+field together, the raw Tiptap field wins.** Therefore send only
+`descriptionMarkdown` or `bodyMarkdown`, unless you write Tiptap deliberately.
 
-## Read a task's full context in one call
+## How to read the full context of a task in one call
 
 ```
 GET /v1/issues/:issueId/context
 ```
 
-Returns everything needed to start work on an issue, with every id already
-resolved to a human-readable name — no follow-up call is needed to translate a
-UUID, and no raw Tiptap JSON appears anywhere in the response.
+This endpoint returns everything that an agent needs to start work on an issue.
+Each id already has its name for a reader, so you make no second call to
+translate a UUID. No raw Tiptap JSON is in the response.
 
 ```jsonc
 {
@@ -118,90 +124,94 @@ UUID, and no raw Tiptap JSON appears anywhere in the response.
 
 Notes:
 
-- Deleted comments, relations and sub-issues are excluded.
-- `relations[].type` is always written from the perspective of the requested
-  issue: a stored `ENG-50 BLOCKS ENG-42` row reads as `BLOCKED` when you ask
-  for ENG-42's context.
-- `history` is condensed: one entry per readable change (`state`, `assignee`,
-  `priority`, `estimate`, `team`, `project`, `cycle`, `parent`, `label`), with
-  ids resolved to names. Rows where nothing readable changed are dropped.
+- The response holds no deleted comment, no deleted relation, and no deleted
+  sub-issue.
+- `relations[].type` always takes the point of view of the issue that you ask
+  for. The database holds the row `ENG-50 BLOCKS ENG-42`. When you ask for the
+  context of ENG-42, that row reads as `BLOCKED`.
+- `history` is short. It holds one entry for each change that a person can read:
+  `state`, `assignee`, `priority`, `estimate`, `team`, `project`, `cycle`,
+  `parent`, and `label`. Each id has its name. The response holds no row where
+  nothing changed for a reader.
 
-Two slices of the same data are available on their own when that is all you
-need:
+Two parts of the same data have their own endpoint, for when you need only that
+part:
 
 ```
-GET /v1/issues/:issueId/comments   # chronological, replies nested one level
-GET /v1/issues/:issueId/history    # the condensed history array
+GET /v1/issues/:issueId/comments   # in time order, with the replies one level below
+GET /v1/issues/:issueId/history    # the short history array
 ```
 
-## Closing an issue with a resolution
+## How to close an issue with a resolution
 
-There is no dedicated "close" endpoint. Closing means moving the issue to a
-workflow state whose `category` is `COMPLETED`:
+There is no endpoint for "close". To close an issue, move it to a workflow state
+with the `COMPLETED` category:
 
-1. `GET /v1/:teamId/workflows` and pick the state with
+1. Send `GET /v1/:teamId/workflows` and select the state with
    `category: "COMPLETED"`.
-2. Post the explanation as a comment
-   (`POST /v1/issue_comments?issueId=…` with `bodyMarkdown`).
-3. `POST /v1/issues/:issueId?teamId=…` with `{ "stateId": "<completed state>" }`.
+2. Send the explanation as a comment. Use
+   `POST /v1/issue_comments?issueId=…` with `bodyMarkdown`.
+3. Send `POST /v1/issues/:issueId?teamId=…` with
+   `{ "stateId": "<completed state>" }`.
 
-Posting the comment before the state change matters: the last top-level comment
-at or before the transition into `COMPLETED` is what search returns as the
-issue's resolution (see below).
+The order is important, and you send the comment before the change of state. The
+search returns the resolution of an issue from the last top-level comment at or
+before the change into `COMPLETED`. The next section gives more detail.
 
-## Finding out whether something was fixed before
+## How to find a fix from the past
 
 ```
 GET /v1/search?workspaceId=…&query=pg+pool&stateCategory=COMPLETED
 ```
 
-The search index covers issue titles, descriptions **and comment bodies**, so a
-fix described only in a comment is findable. Parameters:
+The search index covers the title of an issue, its description, **and the bodies
+of its comments**. You therefore find a fix that only a comment describes. These
+are the parameters:
 
-| Param | Description |
+| Parameter | Description |
 | --- | --- |
 | `query` | Free text. |
-| `workspaceId` | Optional. Defaults to the workspace from your session. |
-| `limit` | Max hits, default 10, clamped to 100. |
-| `threshold` | Vector distance threshold, default 0.8. |
-| `stateCategory` | Comma-separated workflow categories to restrict to, e.g. `COMPLETED` or `STARTED,COMPLETED`. |
+| `workspaceId` | Optional. The default is the workspace of your session. |
+| `limit` | The maximum number of hits. The default is 10, and the maximum is 100. |
+| `threshold` | The threshold for the vector distance. The default is 0.8. |
+| `stateCategory` | The workflow categories for the search, with a comma between two of them. For example `COMPLETED`, or `STARTED,COMPLETED`. |
 
-Only `query` is required; `workspaceId` defaults to the workspace from your session, and the numeric parameters fall back to
-their defaults when omitted or unparseable rather than failing the request.
+Only `query` is necessary. `workspaceId` defaults to the workspace of your
+session. If you omit a numeric parameter, or if the server cannot parse it, the
+server uses the default value. The request does not fail.
 
-Each hit carries `descriptionMarkdown`, `stateCategory` and `resolutionSnippet`
-— the first 500 characters of the comment that explains how the issue was
-resolved — so "a similar issue exists **and** here is how it was fixed" is a
-single call.
-`GET /v1/search/similar_issues?workspaceId=…&issueId=…` returns the same
-fields.
+Each hit holds `descriptionMarkdown`, `stateCategory`, and `resolutionSnippet`.
+The snippet is the first 500 characters of the comment that explains the
+resolution. One call therefore tells you that a similar issue exists, **and**
+how somebody fixed it. `GET /v1/search/similar_issues?workspaceId=…&issueId=…`
+returns the same fields.
 
-Embeddings are refreshed asynchronously whenever an issue or one of its
-comments changes, so a freshly posted comment becomes searchable within
-seconds rather than instantly.
+The server makes the embeddings again after a change to an issue or to one of
+its comments. It does this work asynchronously, so a new comment becomes
+searchable in a few seconds, and not immediately.
 
-Search runs entirely inside your deployment: Typesense generates the embeddings
-in-process with a built-in model, and no issue title, description or comment is
-sent to any external service.
+The search runs fully inside your deployment. Typesense makes the embeddings in
+its own process, with a model that it includes. The server sends no title, no
+description, and no comment to an external service.
 
-## Keeping list payloads small
+## How to keep a list payload small
 
 ```
 POST /v1/issues/filter
 ```
 
-By default this endpoint returns every matching issue as a full row, which is
-expensive for a context window. Sending any of `page`, `perPage`, `orderBy` or
-`view` switches it to a paginated envelope:
+By default this endpoint returns a full row for every issue that matches, and
+that payload is expensive for a context window. If you send `page`, `perPage`,
+`orderBy`, or `view`, the endpoint returns pages instead:
 
 ```jsonc
 {
   "filters": { "state": { "filterType": "IS", "value": ["<stateId>"] } },
   "workspaceId": "…",
-  "page": 1,        // default 1
-  "perPage": 50,    // default 50; above 200 is rejected with 400
-  "orderBy": "updatedAt", // updatedAt (default) | createdAt | number | priority, always descending
-  "view": "list"    // list (default) | full
+  "page": 1,        // the default is 1
+  "perPage": 50,    // the default is 50; a value above 200 gets a 400
+  "orderBy": "updatedAt", // updatedAt (the default) | createdAt | number | priority, always from high to low
+  "view": "list"    // list (the default) | full
 }
 ```
 
@@ -210,9 +220,10 @@ expensive for a context window. Sending any of `page`, `perPage`, `orderBy` or
 ```
 
 - `view: "list"` returns `id`, `key`, `title`, `stateId`, `stateCategory`,
-  `assigneeId`, `priority`, `labelIds`, `projectId` and `updatedAt` — no
-  description at all.
-- `view: "full"` returns every issue column plus `descriptionMarkdown`.
+  `assigneeId`, `priority`, `labelIds`, `projectId`, and `updatedAt`. It returns
+  no description.
+- `view: "full"` returns every column of the issue, and `descriptionMarkdown`.
 
-Omitting all four parameters keeps the original behaviour — a bare array of
-full issues — so existing clients are unaffected.
+If you send none of the four parameters, the endpoint keeps its original
+behaviour and returns an array of full issues. A client from an earlier time
+therefore continues to work.

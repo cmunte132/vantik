@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   CreateIssueDto,
   CreateIssueRelationDto,
@@ -16,10 +17,13 @@ import { LoggerService } from 'modules/logger/logger.service';
 import { VectorService } from 'modules/vector/vector.service';
 
 import {
+  dismissedModuleIds,
   getAiFilter,
   getIssueTitle,
   getSuggestedLabels,
+  getSuggestedModules,
   getSummary,
+  withDismissedModule,
 } from './issues-ai.utils';
 import {
   AIInput,
@@ -113,22 +117,35 @@ export default class IssuesAIService {
   }
 
   /**
-   * Generates issue suggestions for a given issue.
-   * If the issue already has labels, returns undefined.
-   * If similar issues exist, uses their label IDs for suggestions.
-   * Otherwise, fetches suggested labels from OpenAI based on the issue description.
-   * Upserts the issue suggestion with the suggested label IDs.
-   * @param issue The issue to generate suggestions for.
-   * @returns The upserted issue suggestion or undefined if the issue already has labels.
+   * This method suggests labels and modules for an issue.
+   *
+   * The two are guarded on their own. An issue that has labels but no module
+   * still gets a module suggested, which is the ordinary case: a person who
+   * labels an issue by hand has said nothing about the code it changes.
+   *
+   * Nothing here writes to the issue. Both lists land on `IssueSuggestion`, and
+   * a person accepts or dismisses them.
    */
   async issueSuggestions(issue: IssueWithRelations) {
-    // If the issue already has labels, return undefined
-    if (issue.labelIds.length >= 1) {
+    const wantsLabels = issue.labelIds.length === 0;
+    const wantsModules = (issue.moduleIds ?? []).length === 0;
+
+    if (!wantsLabels && !wantsModules) {
       this.logger.info({
-        message: `Issue ${issue.id} already has labels, skipping suggestions.`,
+        message: `Issue ${issue.id} already has labels and modules, skipping suggestions.`,
         where: `IssuesAIService.issueSuggestions`,
       });
       return undefined;
+    }
+
+    const suggestedModuleIds = wantsModules
+      ? await this.suggestModules(issue)
+      : [];
+
+    if (!wantsLabels) {
+      // The labels are a person's already. Only the modules are written, and
+      // the label suggestion the row holds is left as it was.
+      return await this.saveSuggestion(issue.id, { suggestedModuleIds });
     }
 
     // Fetch labels for the workspace or team, and similar issues
@@ -199,27 +216,170 @@ export default class IssuesAIService {
       labelIds = suggestedLabels.map((label) => label.id);
     }
 
-    // Upsert the issue suggestion with the suggested label IDs
-    // If the issue suggestion exists, update it; otherwise, create a new one
+    return await this.saveSuggestion(issue.id, {
+      suggestedLabelIds: labelIds,
+      suggestedModuleIds,
+    });
+  }
+
+  /**
+   * This method asks the model which modules an issue would change.
+   *
+   * A module that a person dismissed on this issue is removed from the answer.
+   * The classifier has no memory, so it names the same module on every run, and
+   * without this the chip a person closed comes back.
+   */
+  private async suggestModules(issue: IssueWithRelations): Promise<string[]> {
+    const [modules, existing] = await Promise.all([
+      this.prisma.module.findMany({
+        where: { workspaceId: issue.team.workspaceId, deleted: null },
+        select: { id: true, name: true, description: true },
+      }),
+      this.prisma.issueSuggestion.findUnique({
+        where: { issueId: issue.id },
+        select: { metadata: true },
+      }),
+    ]);
+
+    const suggested = await getSuggestedModules(
+      this.prisma,
+      this.aiRequestsService,
+      modules,
+      convertTiptapJsonToText(issue.description),
+      issue.team.workspaceId,
+    );
+
+    const dismissed = new Set(dismissedModuleIds(existing?.metadata));
+
+    return suggested.filter((moduleId) => !dismissed.has(moduleId));
+  }
+
+  /**
+   * This method writes the suggestion, and leaves alone what it was not given.
+   *
+   * The two halves are written on their own runs, so an update that carried
+   * both would clear the labels each time only the modules were asked for.
+   */
+  private async saveSuggestion(
+    issueId: string,
+    values: { suggestedLabelIds?: string[]; suggestedModuleIds?: string[] },
+  ) {
+    const labelIds = values.suggestedLabelIds
+      ? [...new Set(values.suggestedLabelIds)]
+      : undefined;
+    const moduleIds = values.suggestedModuleIds
+      ? [...new Set(values.suggestedModuleIds)]
+      : undefined;
+
     const suggestion = await this.prisma.issueSuggestion.upsert({
-      where: { issueId: issue.id },
+      where: { issueId },
       create: {
-        issueId: issue.id,
-        issue: { connect: { id: issue.id } },
-        suggestedLabelIds: [...new Set(labelIds)], // Use a Set to ensure unique label IDs
+        issueId,
+        issue: { connect: { id: issueId } },
+        suggestedLabelIds: labelIds ?? [],
+        suggestedModuleIds: moduleIds ?? [],
       },
       update: {
-        suggestedLabelIds: [...new Set(labelIds)], // Use a Set to ensure unique label IDs
+        ...(labelIds ? { suggestedLabelIds: labelIds } : {}),
+        ...(moduleIds ? { suggestedModuleIds: moduleIds } : {}),
       },
     });
 
     this.logger.info({
-      message: `Upserted issue suggestion for issue ${issue.id} with ${suggestion.suggestedLabelIds.length} suggested labels.`,
+      message: `Upserted issue suggestion for issue ${issueId}: ${suggestion.suggestedLabelIds.length} label(s), ${suggestion.suggestedModuleIds.length} module(s).`,
       where: `IssuesAIService.issueSuggestions`,
     });
 
-    // Return the upserted issue suggestion
     return suggestion;
+  }
+
+  /**
+   * This method promotes a suggested module to a module of the issue.
+   *
+   * Accepting is the act of a person, and it moves the module to the top tier
+   * of confidence: the pull request router adds to `Issue.moduleIds` and never
+   * removes from it, so nothing overwrites this later.
+   *
+   * The module leaves the suggestion, because it is no longer a suggestion.
+   */
+  async acceptModuleSuggestion(issueId: string, moduleId: string) {
+    const [issue, suggestion] = await Promise.all([
+      this.prisma.issue.findFirst({
+        where: { id: issueId, deleted: null },
+        select: { id: true, moduleIds: true },
+      }),
+      this.prisma.issueSuggestion.findUnique({
+        where: { issueId },
+        select: { suggestedModuleIds: true },
+      }),
+    ]);
+
+    if (!issue) {
+      return undefined;
+    }
+
+    await this.prisma.issue.update({
+      where: { id: issueId },
+      data: { moduleIds: [...new Set([...issue.moduleIds, moduleId])] },
+    });
+
+    if (suggestion) {
+      await this.prisma.issueSuggestion.update({
+        where: { issueId },
+        data: {
+          suggestedModuleIds: suggestion.suggestedModuleIds.filter(
+            (id) => id !== moduleId,
+          ),
+        },
+      });
+    }
+
+    this.logger.info({
+      message: `A person accepted module ${moduleId} on issue ${issueId}`,
+      where: `IssuesAIService.acceptModuleSuggestion`,
+    });
+
+    return { issueId, moduleId, accepted: true };
+  }
+
+  /**
+   * This method removes a suggested module and remembers that it was removed.
+   *
+   * The issue itself is not touched. The classifier has no memory and names the
+   * same module on the next run, so the dismissal is recorded in the metadata
+   * of the suggestion and read back before the next answer is written.
+   */
+  async dismissModuleSuggestion(issueId: string, moduleId: string) {
+    const suggestion = await this.prisma.issueSuggestion.findUnique({
+      where: { issueId },
+      select: { suggestedModuleIds: true, metadata: true },
+    });
+
+    if (!suggestion) {
+      return undefined;
+    }
+
+    await this.prisma.issueSuggestion.update({
+      where: { issueId },
+      data: {
+        suggestedModuleIds: suggestion.suggestedModuleIds.filter(
+          (id) => id !== moduleId,
+        ),
+        // Prisma types a Json column as its own union rather than as an
+        // object, so the shape built here is cast at the boundary.
+        metadata: withDismissedModule(
+          suggestion.metadata,
+          moduleId,
+        ) as Prisma.InputJsonValue,
+      },
+    });
+
+    this.logger.info({
+      message: `A person dismissed module ${moduleId} on issue ${issueId}`,
+      where: `IssuesAIService.dismissModuleSuggestion`,
+    });
+
+    return { issueId, moduleId, dismissed: true };
   }
 
   /**

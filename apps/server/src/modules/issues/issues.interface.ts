@@ -73,6 +73,12 @@ export const filterKeyReplacers: Record<FilterKey, string> = {
   [FilterKeyEnum.createdAt]: 'createdAt',
   [FilterKeyEnum.updatedAt]: 'updatedAt',
   [FilterKeyEnum.project]: 'projectId',
+  // Issue.moduleIds is a list and Issue.capabilityId is a single column, which
+  // is why one takes INCLUDES and the other takes IS. There is no product key:
+  // an issue holds no product, so a caller filtering by product sends the ids
+  // of that product's modules instead.
+  [FilterKeyEnum.module]: 'moduleIds',
+  [FilterKeyEnum.capability]: 'capabilityId',
   [BooleanFilterKeyEnum.isParent]: 'parent',
   [BooleanFilterKeyEnum.isSubIssue]: 'subIssue',
   [BooleanFilterKeyEnum.isBlocked]: IssueRelationType.BLOCKED,

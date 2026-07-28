@@ -256,3 +256,152 @@ export async function assertTeamInWorkspace(
     throw new NotFoundException({ message: `Team ${teamId} not found` });
   }
 }
+
+/**
+ * Proves a project belongs to the given workspace.
+ *
+ * The project routes address the row by id alone, and a project now names the
+ * capabilities it builds — so an unchecked id is a write into another
+ * workspace's graph and not only a read of its name.
+ */
+export async function assertProjectInWorkspace(
+  prisma: PrismaService,
+  projectId: string,
+  workspaceId: string,
+): Promise<void> {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!project) {
+    throw new NotFoundException({ message: `Project ${projectId} not found` });
+  }
+}
+
+/**
+ * Proves a product belongs to the given workspace.
+ *
+ * The update and delete routes name the product by id and nothing else, which
+ * is the same shape as the cycle routes above and the same risk: an unchecked
+ * id renames or removes another workspace's product.
+ */
+export async function assertProductInWorkspace(
+  prisma: PrismaService,
+  productId: string,
+  workspaceId: string,
+): Promise<void> {
+  const product = await prisma.product.findFirst({
+    where: { id: productId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!product) {
+    throw new NotFoundException({ message: `Product ${productId} not found` });
+  }
+}
+
+/**
+ * Proves a module belongs to the given workspace.
+ *
+ * A moduleId also arrives in the body, where it names the owner or a link, so
+ * this runs for both the path and the lists that a write carries.
+ */
+export async function assertModuleInWorkspace(
+  prisma: PrismaService,
+  moduleId: string,
+  workspaceId: string,
+): Promise<void> {
+  const module = await prisma.module.findFirst({
+    where: { id: moduleId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!module) {
+    throw new NotFoundException({ message: `Module ${moduleId} not found` });
+  }
+}
+
+/** Proves a capability belongs to the given workspace. */
+export async function assertCapabilityInWorkspace(
+  prisma: PrismaService,
+  capabilityId: string,
+  workspaceId: string,
+): Promise<void> {
+  const capability = await prisma.capability.findFirst({
+    where: { id: capabilityId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!capability) {
+    throw new NotFoundException({
+      message: `Capability ${capabilityId} not found`,
+    });
+  }
+}
+
+/**
+ * Proves a module repository belongs to the given module, and that module to
+ * the given workspace.
+ *
+ * `ModuleRepo` carries no workspace of its own, so checking the `:moduleId` in
+ * the path proved nothing about the `:moduleRepoId` beside it: a caller could
+ * name a module of their own and a repository row of anybody's, and the update
+ * addressed the row by id alone. Both halves are checked here, because either
+ * one on its own leaves the row reachable.
+ */
+export async function assertModuleRepoInWorkspace(
+  prisma: PrismaService,
+  moduleRepoId: string,
+  moduleId: string,
+  workspaceId: string,
+): Promise<void> {
+  // Prisma drops an undefined key from a `where`, which would turn the check
+  // below into "any repository of this workspace". A route that names the
+  // repository must name the module too.
+  if (!moduleId) {
+    throw new NotFoundException({
+      message: `Module repository ${moduleRepoId} not found`,
+    });
+  }
+
+  const repo = await prisma.moduleRepo.findFirst({
+    where: {
+      id: moduleRepoId,
+      deleted: null,
+      moduleId,
+      module: { workspaceId, deleted: null },
+    },
+    select: { id: true },
+  });
+
+  if (!repo) {
+    throw new NotFoundException({
+      message: `Module repository ${moduleRepoId} not found`,
+    });
+  }
+}
+
+/**
+ * Proves an integration account belongs to the given workspace.
+ *
+ * A module repository names the account its repository came from, and the id
+ * arrives in the body. An unchecked one points a row of this workspace at
+ * another workspace's connection.
+ */
+export async function assertIntegrationAccountInWorkspace(
+  prisma: PrismaService,
+  integrationAccountId: string,
+  workspaceId: string,
+): Promise<void> {
+  const account = await prisma.integrationAccount.findFirst({
+    where: { id: integrationAccountId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!account) {
+    throw new NotFoundException({
+      message: `Integration account ${integrationAccountId} not found`,
+    });
+  }
+}

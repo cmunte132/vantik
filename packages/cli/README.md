@@ -38,6 +38,37 @@ vantik-cli task close ENG-42 --resolution "Bumped the pool to 20"
 Every command takes `--json` for raw output. Run `vantik-cli task --help` (or
 `… <command> --help`) for the full flag list.
 
+## The product axis
+
+A team says who works on something. The second axis says what the software is
+made of: a **product** is what the workspace ships, a **module** is where the
+code is (a repository, a path in one, a service), and a **capability** is what
+the software does for its users.
+
+```bash
+# Read the map. `modules` lists the repositories each module sits in, which is
+# what answers "which module is this checkout?"
+vantik-cli products
+vantik-cli modules
+vantik-cli capabilities
+
+# Place work on it
+vantik-cli task create Rate-limit the webhook --module server --capability "Webhooks"
+vantik-cli task update ENG-42 --module server webapp
+vantik-cli task update ENG-42 --no-capability
+
+# Ask what else is in flight around the code you are about to change
+vantik-cli task list --module server --category STARTED
+vantik-cli task list --product cloud
+```
+
+Filtering by `--product` widens to the modules that product owns and links to,
+because an issue records modules and never a product. Naming both narrows to the
+intersection.
+
+The listings are read-only on purpose: a workspace's map is drawn in the app by
+the people who own the code.
+
 ### No opinions here
 
 The CLI is deliberately neutral: it files whatever you tell it to, with no view

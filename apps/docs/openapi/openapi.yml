@@ -537,6 +537,406 @@ paths:
       tags:
         - Issue
 
+  /api/v1/products:
+    get:
+      summary: List products
+      description: >-
+        What this workspace ships. A product holds no code and no issues: it
+        groups the modules, and the issues hang off those.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+        "401":
+          description: Unauthorized
+      tags:
+        - Product
+    post:
+      summary: Create product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductDto"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          description: Invalid request parameters
+        "401":
+          description: Unauthorized
+      tags:
+        - Product
+
+  /api/v1/products/{productId}:
+    post:
+      summary: Update product
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductDto"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+      tags:
+        - Product
+    delete:
+      summary: Delete product
+      description: Soft delete. The row stays and `deleted` is stamped.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+      tags:
+        - Product
+
+  /api/v1/modules:
+    get:
+      summary: List modules
+      description: >-
+        Where the code is: usually one repository, sometimes a path inside one,
+        sometimes one service. Modules are flat — a module has no parent module.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Module"
+        "401":
+          description: Unauthorized
+      tags:
+        - Module
+    post:
+      summary: Create module
+      description: >-
+        Send exactly one of `ownerTeamId` or `ownerProductId`. Sending both, or
+        neither, is refused with 400 — and a check constraint in the database
+        refuses the row as well.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateModuleDto"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Module"
+        "400":
+          description: Two owners, or no owner
+        "401":
+          description: Unauthorized
+      tags:
+        - Module
+
+  /api/v1/modules/{moduleId}:
+    post:
+      summary: Update module
+      description: >-
+        To move the owner, send the new owner and null for the old one. A change
+        that would leave the module with two owners or none is refused.
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateModuleDto"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Module"
+        "400":
+          description: Two owners, or no owner
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+      tags:
+        - Module
+    delete:
+      summary: Delete module
+      description: >-
+        Soft delete. The id is also removed from every `Capability.moduleIds`
+        and `Issue.moduleIds` that held it, so nothing is left pointing at a
+        module that no longer exists.
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Module"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+      tags:
+        - Module
+
+  /api/v1/modules/{moduleId}/repos:
+    get:
+      summary: List the repositories of a module
+      description: >-
+        These rows are not replicated to clients, so every screen that shows
+        them asks for them.
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ModuleRepo"
+        "401":
+          description: Unauthorized
+      tags:
+        - Module
+    post:
+      summary: Point a module at a repository
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateModuleRepoDto"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleRepo"
+        "401":
+          description: Unauthorized
+      tags:
+        - Module
+
+  /api/v1/modules/{moduleId}/repos/{moduleRepoId}:
+    post:
+      summary: Update a module repository
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: moduleRepoId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateModuleRepoDto"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleRepo"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+      tags:
+        - Module
+    delete:
+      summary: Unpoint a module from a repository
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: moduleRepoId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleRepo"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+      tags:
+        - Module
+
+  /api/v1/capabilities:
+    get:
+      summary: List capabilities
+      description: >-
+        What the software does for the people who use it, as opposed to what it
+        is built from. A capability is defined by the modules that hold its
+        code, and belongs to no product directly.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Capability"
+        "401":
+          description: Unauthorized
+      tags:
+        - Capability
+    post:
+      summary: Create capability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCapabilityDto"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Capability"
+        "400":
+          description: Invalid request parameters
+        "401":
+          description: Unauthorized
+      tags:
+        - Capability
+
+  /api/v1/capabilities/{capabilityId}:
+    post:
+      summary: Update capability
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCapabilityDto"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Capability"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+      tags:
+        - Capability
+    delete:
+      summary: Delete capability
+      description: Soft delete. Issues that named it keep the id.
+      parameters:
+        - name: capabilityId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Capability"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+      tags:
+        - Capability
+
   /api/v1/labels:
     get:
       summary: Get labels
@@ -1666,6 +2066,364 @@ components:
         issueSuggestionId:
           type: string
           nullable: true
+        moduleIds:
+          type: array
+          description: >-
+            The modules this issue changes. An issue can touch more than one,
+            and the list can be empty.
+          items:
+            type: string
+        capabilityId:
+          type: string
+          description: The capability this issue delivers. One, or none.
+          nullable: true
+
+    Product:
+      type: object
+      description: >-
+        A thing the company ships. Before this model a team was the only thing
+        that could stand for a product, and a company shipping two things needed
+        two workspaces. A team is still the permission boundary, still holds the
+        cycles, and still namespaces the issue numbers.
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+          nullable: true
+        name:
+          type: string
+        key:
+          type: string
+          description: A short name, for example "cloud". Unique in the workspace.
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        leadUserId:
+          type: string
+          nullable: true
+        workspaceId:
+          type: string
+
+    CreateProductDto:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        key:
+          type: string
+          description: The server makes one from the name if you send none.
+        description:
+          type: string
+        status:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+        leadUserId:
+          type: string
+
+    UpdateProductDto:
+      type: object
+      properties:
+        name:
+          type: string
+        key:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+        leadUserId:
+          type: string
+
+    Module:
+      type: object
+      description: >-
+        Usually one repository, sometimes a path inside one, sometimes one
+        service. A module has exactly one owner, a team or a product. The linked
+        lists name the other teams and products that use it, and a link carries
+        no authority.
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+          nullable: true
+        name:
+          type: string
+        key:
+          type: string
+          description: A short name, for example "server". Unique in the workspace.
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        icon:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        leadUserId:
+          type: string
+          nullable: true
+        ownerTeamId:
+          type: string
+          nullable: true
+        ownerProductId:
+          type: string
+          nullable: true
+        linkedTeamIds:
+          type: array
+          items:
+            type: string
+        linkedProductIds:
+          type: array
+          items:
+            type: string
+        workspaceId:
+          type: string
+
+    CreateModuleDto:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        key:
+          type: string
+          description: The server makes one from the name if you send none.
+        description:
+          type: string
+        status:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+        leadUserId:
+          type: string
+        ownerTeamId:
+          type: string
+          description: >-
+            Send this or ownerProductId, never both and never neither.
+        ownerProductId:
+          type: string
+        linkedTeamIds:
+          type: array
+          items:
+            type: string
+        linkedProductIds:
+          type: array
+          items:
+            type: string
+
+    UpdateModuleDto:
+      type: object
+      properties:
+        name:
+          type: string
+        key:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        icon:
+          type: string
+        color:
+          type: string
+        leadUserId:
+          type: string
+        ownerTeamId:
+          type: string
+          description: To move the owner, send the new one and null for the old.
+          nullable: true
+        ownerProductId:
+          type: string
+          nullable: true
+        linkedTeamIds:
+          type: array
+          items:
+            type: string
+        linkedProductIds:
+          type: array
+          items:
+            type: string
+
+    ModuleRepo:
+      type: object
+      description: >-
+        Where the code of a module is. An empty `pathPrefixes` means the module
+        is the whole repository; a monorepo becomes several modules on one
+        repository, each with its own prefixes.
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+          nullable: true
+        moduleId:
+          type: string
+        integrationAccountId:
+          type: string
+          nullable: true
+        externalRepoId:
+          type: string
+        fullName:
+          type: string
+          description: '"owner/name" on the provider.'
+        pathPrefixes:
+          type: array
+          items:
+            type: string
+        bidirectional:
+          type: boolean
+        isDefault:
+          type: boolean
+
+    CreateModuleRepoDto:
+      type: object
+      required:
+        - externalRepoId
+        - fullName
+      properties:
+        externalRepoId:
+          type: string
+        fullName:
+          type: string
+        integrationAccountId:
+          type: string
+        pathPrefixes:
+          type: array
+          items:
+            type: string
+        bidirectional:
+          type: boolean
+        isDefault:
+          type: boolean
+
+    UpdateModuleRepoDto:
+      type: object
+      properties:
+        pathPrefixes:
+          type: array
+          items:
+            type: string
+        bidirectional:
+          type: boolean
+        isDefault:
+          type: boolean
+
+    Capability:
+      type: object
+      description: >-
+        Something the software does for the people who use it. Defined by the
+        modules that hold its code, and belonging to no product directly — one
+        capability can span modules owned by several products.
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+          description: planned, active, live or deprecated.
+        moduleIds:
+          type: array
+          description: >-
+            The modules that hold the code. An empty list means nobody has built
+            it yet.
+          items:
+            type: string
+        workspaceId:
+          type: string
+
+    CreateCapabilityDto:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          description: Defaults to planned.
+        moduleIds:
+          type: array
+          items:
+            type: string
+
+    UpdateCapabilityDto:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        moduleIds:
+          type: array
+          items:
+            type: string
 
     LinkedComment:
       type: object
@@ -1828,6 +2586,14 @@ components:
           type: object
           additionalProperties:
             type: string
+        moduleIds:
+          type: array
+          description: The modules this issue changes.
+          items:
+            type: string
+        capabilityId:
+          type: string
+          description: The capability this issue delivers.
 
     LinkIssueDto:
       type: object
@@ -1921,6 +2687,11 @@ components:
 
     FilterKeyEnum:
       type: string
+      description: >-
+        `module` matches against a list, so it takes INCLUDES and EXCLUDES.
+        `capability` is a single column, so it takes IS and IS_NOT. There is no
+        product key: an issue holds no product, so filter by the ids of that
+        product's modules instead.
       enum:
         - label
         - status
@@ -1929,6 +2700,9 @@ components:
         - dueDate
         - updatedAt
         - createdAt
+        - project
+        - module
+        - capability
 
     BooleanFilterKeyEnum:
       type: string
@@ -1988,6 +2762,15 @@ components:
           type: object
           additionalProperties:
             type: string
+        moduleIds:
+          type: array
+          description: Replaces the modules this issue changes.
+          items:
+            type: string
+        capabilityId:
+          type: string
+          description: The capability this issue delivers. Send null to clear it.
+          nullable: true
 
     CreateLabelDto:
       type: object

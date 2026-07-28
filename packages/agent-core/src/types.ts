@@ -68,6 +68,58 @@ export interface User {
   email?: string;
 }
 
+/**
+ * A thing the company ships. A product holds no code and no issues: it groups
+ * the modules, and the issues hang off those.
+ */
+export interface Product {
+  id: string;
+  name: string;
+  /** A short name, for example "cloud". Unique in the workspace. */
+  key: string;
+  description: string | null;
+  status: string | null;
+}
+
+/**
+ * Usually one repository, sometimes a path inside one, sometimes one service.
+ *
+ * A module has exactly one owner — a team or a product, never both. The linked
+ * lists name the other teams and products that use it, and a link carries no
+ * authority.
+ */
+export interface Module {
+  id: string;
+  name: string;
+  /** A short name, for example "server". Unique in the workspace. */
+  key: string;
+  description: string | null;
+  status: string | null;
+  owner: { kind: 'team' | 'product'; id: string } | null;
+  linkedTeamIds: string[];
+  linkedProductIds: string[];
+  /**
+   * Where the code is. Empty `pathPrefixes` means the whole repository; a
+   * monorepo becomes several modules on one repository, each with its own
+   * prefixes.
+   *
+   * Absent unless it was asked for: the repositories of a module live behind
+   * their own endpoint, so filling this in costs one request per module.
+   */
+  repos?: Array<{ repository: string; pathPrefixes: string[] }>;
+}
+
+/** Something the software does for the people who use it. */
+export interface Capability {
+  id: string;
+  name: string;
+  description: string | null;
+  /** planned, active, live or deprecated. */
+  status: string | null;
+  /** The modules that hold the code. Empty means nobody has built it yet. */
+  moduleIds: string[];
+}
+
 export interface TaskRef {
   id: string;
   key: string;
@@ -125,6 +177,10 @@ export interface TaskContext {
   dueDate: string | null;
   project: { id: string; name: string } | null;
   cycle: { id: string; name: string } | null;
+  /** The modules this task changes, named. Empty when it names none. */
+  modules: Array<{ id: string; name: string }>;
+  /** The capability this task delivers, named. */
+  capability: { id: string; name: string } | null;
   parent: TaskRef | null;
   subTasks: Array<TaskRef & { stateCategory: WorkflowCategory }>;
   relations: Array<{ type: RelationType; task: TaskRef }>;

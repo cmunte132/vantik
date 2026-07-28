@@ -1,3 +1,4 @@
+import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import { Loader } from '@vantikhq/ui/components/loader';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
@@ -6,7 +7,7 @@ import { useRouter } from 'next/router';
 import { Header } from 'modules/settings/header';
 import { SettingSection } from 'modules/settings/setting-section';
 
-import { getIcon, toProperCase, type IconType } from 'common';
+import { getIcon, type IconType } from 'common';
 import { ContentBox } from 'common/layouts/content-box';
 import { SettingsLayout } from 'common/layouts/settings-layout';
 
@@ -20,6 +21,12 @@ interface IntegrationCardProps {
   href: string;
 
   icon: string;
+
+  /**
+   * The deployment has what this integration needs. A card that says
+   * otherwise saves a person the walk to a dead Connect button.
+   */
+  configured: boolean;
 }
 
 function IntegrationCard({
@@ -27,6 +34,7 @@ function IntegrationCard({
   description,
   href,
   icon,
+  configured,
 }: IntegrationCardProps) {
   const { push } = useRouter();
   const currentWorkspace = useCurrentWorkspace();
@@ -39,15 +47,21 @@ function IntegrationCard({
         push(`/${currentWorkspace.slug}/settings/integrations/${href}`)
       }
     >
-      <div className="flex items-center gap-2">
-        <div className="border p-1 rounded-md dark:bg-foreground">
+      <div className="flex items-center gap-3">
+        <div className="shrink-0 border p-1 rounded-md dark:bg-foreground">
           <Icon size={24} className="dark:text-background" />
         </div>
-        <div className="grow">
-          <div className="font-medium"> {name} </div>
+        {/*
+          `min-w-0` lets this column shrink under the width of its text. A
+          flex child keeps the width of its content without it, and a long
+          description then pushes the badge and the button off the card.
+        */}
+        <div className="grow min-w-0">
+          <div className="font-medium">{name}</div>
           <div className="text-muted-foreground">{description}</div>
         </div>
-        <div>
+        <div className="flex shrink-0 items-center gap-2">
+          {!configured && <Badge variant="outline">Needs credentials</Badge>}
           <Button variant="secondary"> View </Button>
         </div>
       </div>
@@ -71,13 +85,14 @@ export function Integrations() {
       description="Manage your workspace integrations"
     >
       <div className="flex flex-col gap-2">
-        {integrations.map((integration) => (
+        {(integrations ?? []).map((integration) => (
           <IntegrationCard
             key={integration.id}
-            name={toProperCase(integration.name)}
+            name={integration.name}
             description={integration.description}
             href={integration.id}
             icon={integration.icon}
+            configured={integration.configured !== false}
           />
         ))}
       </div>

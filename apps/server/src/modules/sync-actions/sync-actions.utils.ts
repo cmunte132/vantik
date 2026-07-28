@@ -181,6 +181,24 @@ export async function getWorkspaceId(
       });
       return projectMilestone.project.workspaceId;
 
+    case ModelName.Product:
+      const product = await prisma.product.findUnique({
+        where: { id: modelId },
+      });
+      return product.workspaceId;
+
+    case ModelName.Module:
+      const productModule = await prisma.module.findUnique({
+        where: { id: modelId },
+      });
+      return productModule.workspaceId;
+
+    case ModelName.Capability:
+      const capability = await prisma.capability.findUnique({
+        where: { id: modelId },
+      });
+      return capability.workspaceId;
+
     case ModelName.Company:
       const company = await prisma.company.findUnique({
         where: { id: modelId },
@@ -375,6 +393,9 @@ export async function getModelData(
     PageHistory: prisma.pageHistory,
     Project: prisma.project,
     ProjectMilestone: prisma.projectMilestone,
+    Product: prisma.product,
+    Module: prisma.module,
+    Capability: prisma.capability,
     Support: prisma.support,
     People: prisma.people,
     Company: prisma.company,

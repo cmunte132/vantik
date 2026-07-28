@@ -3,12 +3,18 @@ import { PrismaService } from 'nestjs-prisma';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import {
+  assertCapabilityInWorkspace,
   assertChecklistItemInWorkspace,
   assertCycleInWorkspace,
+  assertIntegrationAccountInWorkspace,
   assertIssueCommentInWorkspace,
   assertIssueInWorkspace,
+  assertModuleInWorkspace,
+  assertModuleRepoInWorkspace,
   assertPageEntryInWorkspace,
   assertPageInWorkspace,
+  assertProductInWorkspace,
+  assertProjectInWorkspace,
   assertTeamInWorkspace,
   resolveWorkspaceId,
 } from 'common/workspace-access';
@@ -49,14 +55,26 @@ export class WorkspaceResourceGuard implements CanActivate {
       request.query?.workspaceId,
     );
 
-    const { issueId, issueCommentId, checklistItemId, pageEntryId, cycleId } =
-      request.params ?? {};
+    const {
+      issueId,
+      issueCommentId,
+      checklistItemId,
+      pageEntryId,
+      cycleId,
+      projectId,
+      productId,
+      moduleId,
+      moduleRepoId,
+      capabilityId,
+    } = request.params ?? {};
 
     // The bulk routes carry their ids inside a body array, one per issue, so
     // the path and query alone do not describe everything the request touches.
-    const bulkIssues = Array.isArray(request.body?.issues)
-      ? request.body.issues
-      : [];
+    // An issue also carries its own sub-issues, and each of those is a whole
+    // issue body again — so the ids of a write are the ids of a tree, not of
+    // one object. Reading only the top level let a caller hang a foreign module
+    // or capability off a sub-issue, which is the same hole one level down.
+    const bodies = issueBodies(request.body);
 
     // Comment creation names its issue in the query rather than the path, so
     // a guard reading only params would let a caller comment on an issue in
@@ -64,15 +82,14 @@ export class WorkspaceResourceGuard implements CanActivate {
     const issueIds = unique([
       issueId,
       request.query?.issueId,
-      ...bulkIssues.map((issue: { issueId?: string }) => issue?.issueId),
+      ...bodies.map((body) => body?.issueId),
     ]);
 
     // teamId selects the team a write lands in: a query param on update, the
     // body on create and move, and per-entry on bulk create.
     const teamIds = unique([
       request.query?.teamId,
-      request.body?.teamId,
-      ...bulkIssues.map((issue: { teamId?: string }) => issue?.teamId),
+      ...bodies.map((body) => body?.teamId),
     ]);
 
     for (const id of issueIds) {
@@ -132,10 +149,144 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertPageEntryInWorkspace(this.prisma, id, workspaceId);
     }
 
+    // The product axis. Each of the three is addressed by id on update and
+    // delete, the same shape as the cycle routes. The bodies matter as much as
+    // the paths: a module names its owner and its links by id, and a capability
+    // names the modules that hold its code, so a write with a foreign id would
+    // pull another workspace's rows into this one's graph.
+    const productIds = unique([
+      productId,
+      ...bodies.map((body) => body?.ownerProductId),
+      ...bodies.flatMap((body) => list(body?.linkedProductIds)),
+    ]);
+
+    for (const id of productIds) {
+      await assertProductInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    // Issue.moduleIds is a plain string array with no foreign key behind it, so
+    // this check is the only thing standing between the column and any id a
+    // caller cares to send.
+    const moduleIds = unique([
+      moduleId,
+      ...bodies.flatMap((body) => list(body?.moduleIds)),
+    ]);
+
+    for (const id of moduleIds) {
+      await assertModuleInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    // A module repository is addressed by its own id, and the row carries no
+    // workspace — only the module above it does. So the check needs both ids,
+    // and proving the module alone proves nothing about the repository.
+    if (moduleRepoId) {
+      await assertModuleRepoInWorkspace(
+        this.prisma,
+        moduleRepoId,
+        moduleId,
+        workspaceId,
+      );
+    }
+
+    const integrationAccountIds = unique(
+      bodies.map((body) => body?.integrationAccountId),
+    );
+
+    for (const id of integrationAccountIds) {
+      await assertIntegrationAccountInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    const capabilityIds = unique([
+      capabilityId,
+      ...bodies.map((body) => body?.capabilityId),
+      ...bodies.flatMap((body) => list(body?.capabilityIds)),
+    ]);
+
+    for (const id of capabilityIds) {
+      await assertCapabilityInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    // A module names its owning team, and a link names any number of teams. A
+    // project names the teams working on it in `teams`. All go through the same
+    // team check the issue routes use.
+    const linkedTeamIds = unique([
+      ...bodies.map((body) => body?.ownerTeamId),
+      ...bodies.flatMap((body) => list(body?.linkedTeamIds)),
+      ...bodies.flatMap((body) => list(body?.teams)),
+    ]);
+
+    for (const id of linkedTeamIds) {
+      await assertTeamInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    // A project is addressed by id on update and delete, and it now names the
+    // capabilities it builds, so the row has to be proved before the body is
+    // written into it.
+    const projectIds = unique([projectId, request.query?.projectId]);
+
+    for (const id of projectIds) {
+      await assertProjectInWorkspace(this.prisma, id, workspaceId);
+    }
+
     return true;
   }
 }
 
-function unique(ids: Array<string | undefined>): string[] {
-  return [...new Set(ids.filter(Boolean))] as string[];
+/** One object in a request body that can carry ids this guard checks. */
+interface IdBearingBody {
+  issueId?: string;
+  teamId?: string;
+  ownerTeamId?: string;
+  ownerProductId?: string;
+  capabilityId?: string;
+  integrationAccountId?: string;
+  moduleIds?: unknown;
+  capabilityIds?: unknown;
+  linkedTeamIds?: unknown;
+  linkedProductIds?: unknown;
+  teams?: unknown;
+  issues?: unknown;
+  subIssues?: unknown;
+}
+
+/** The depth beyond which a body is refused rather than walked. */
+const MAX_ISSUE_DEPTH = 10;
+
+/**
+ * Flattens a request body into every object whose ids have to be checked.
+ *
+ * An issue body nests twice over: `issues` on the bulk routes, and `subIssues`
+ * on any issue, recursively. A guard that read only the top level checked the
+ * ids of the parent and none of the children, so a foreign module or capability
+ * arrived on a sub-issue untouched.
+ *
+ * The depth limit is a guard against a body built to make this walk expensive,
+ * not against anything the app itself sends: a person nests a sub-issue once,
+ * and never ten deep.
+ */
+function issueBodies(body: unknown, depth = 0): IdBearingBody[] {
+  if (!body || typeof body !== 'object' || depth > MAX_ISSUE_DEPTH) {
+    return [];
+  }
+
+  const current = body as IdBearingBody;
+  const nested = [...list(current.issues), ...list(current.subIssues)];
+
+  return [
+    current,
+    ...nested.flatMap((child) => issueBodies(child, depth + 1)),
+  ];
+}
+
+/** Reads a value that should be an array, and refuses to guess when it is not. */
+function list(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function unique(ids: Array<unknown>): string[] {
+  return [
+    ...new Set(
+      ids.filter((id): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  ];
 }

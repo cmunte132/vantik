@@ -28,6 +28,16 @@ const projectRef = z
   .string()
   .describe('Project name or id. Call list_projects to see what exists.');
 
+const moduleRef = z
+  .string()
+  .describe('Module key such as server, its name, or its id.');
+
+const capabilityRef = z
+  .string()
+  .describe(
+    'Capability name or id. Call list_capabilities to see what exists.',
+  );
+
 /** Tool results travel as text; JSON keeps them parseable by the model. */
 function text(value: string) {
   return { content: [{ type: 'text' as const, text: value }] };
@@ -170,8 +180,11 @@ export function registerVantikTools(
       title: 'List tasks',
       description:
         'List tasks in the workspace, newest first. Use this to see what is ' +
-        'open, what is in progress, or what is assigned to someone. Returns ' +
-        'lean rows without descriptions — call get_task for the full picture.',
+        'open, what is in progress, or what is assigned to someone. Filter by ' +
+        'product, module or capability to ask what else is in flight around ' +
+        'the code you are about to change — that is how you find the work ' +
+        'that will collide with yours before you start it. Returns lean rows ' +
+        'without descriptions — call get_task for the full picture.',
       inputSchema: {
         team: z
           .string()
@@ -192,6 +205,20 @@ export function registerVantikTools(
         project: projectRef
           .optional()
           .describe('Only tasks in this project. Name or id.'),
+        product: z
+          .string()
+          .optional()
+          .describe(
+            'Only tasks touching a module this product owns or links to. ' +
+              'Product key, name or id.',
+          ),
+        modules: z
+          .array(moduleRef)
+          .optional()
+          .describe('Only tasks touching any of these modules.'),
+        capability: capabilityRef
+          .optional()
+          .describe('Only tasks delivering this capability.'),
         page: z.number().int().min(1).optional(),
         perPage: z.number().int().min(1).max(200).optional(),
       },
@@ -245,6 +272,59 @@ export function registerVantikTools(
     handler((input) => agent.createProject(input)),
   );
 
+  // ------------------------------------------------- the product axis
+  //
+  // A project says which objective an issue serves. This axis says what the
+  // software is made of, and it is read-only here on purpose: a workspace's
+  // products, modules and capabilities are its map, drawn by the people who
+  // own the code. An agent reads the map to place its work on it.
+
+  server.registerTool(
+    'list_products',
+    {
+      title: 'List products',
+      description:
+        'What this workspace ships. A product holds no code and no issues — ' +
+        'it groups the modules, and the issues hang off those. Read this to ' +
+        'find out which part of the business the work you are about to do ' +
+        'belongs to.',
+      inputSchema: {},
+    },
+    handler(() => agent.listProducts()),
+  );
+
+  server.registerTool(
+    'list_modules',
+    {
+      title: 'List modules',
+      description:
+        'Where the code is: usually one repository, sometimes a path inside ' +
+        'one, sometimes one service. Each module carries the repositories it ' +
+        'sits in, so this is what answers "which module am I working in?" — ' +
+        'match the checkout you are in against the repository and the path ' +
+        'prefixes, and you have the module this work touches. A module has ' +
+        'one owner, a team or a product; the linked lists name everyone else ' +
+        'who uses it and carry no authority.',
+      inputSchema: {},
+    },
+    handler(() => agent.listModules({ withRepos: true })),
+  );
+
+  server.registerTool(
+    'list_capabilities',
+    {
+      title: 'List capabilities',
+      description:
+        'What the software does for the people who use it, as opposed to ' +
+        'what it is built from. Read this before you file: an issue names one ' +
+        'capability, and naming the one that already exists is how the work ' +
+        'joins up with everything else serving it. `moduleIds` on each ' +
+        'capability says which modules hold that code.',
+      inputSchema: {},
+    },
+    handler(() => agent.listCapabilities()),
+  );
+
   server.registerTool(
     'get_task',
     {
@@ -252,7 +332,8 @@ export function registerVantikTools(
       description:
         'Everything about one task in a single call: description, its ' +
         'Definition of Done, notes, full change history, sub-tasks, blocking ' +
-        'relations and links. Call this before starting work on a task. The ' +
+        'relations, links, and the modules and capability it touches. Call ' +
+        'this before starting work on a task. The ' +
         'Definition of Done is the standard the work is judged against — read ' +
         'it rather than inferring one from the description, and tick each ' +
         'criterion off with update_criteria as you meet it.',
@@ -269,13 +350,22 @@ export function registerVantikTools(
         'Search across task titles, descriptions AND notes. Set ' +
         'stateCategory to ["COMPLETED"] to find out whether something was ' +
         'fixed before — hits include the resolution text explaining how. Do ' +
-        'this before filing a new task, to avoid duplicates.',
+        'this before filing a new task, to avoid duplicates. Narrow with ' +
+        '`modules` when you are about to change a piece of code and want ' +
+        'only what has been filed against it.',
       inputSchema: {
         query: z
           .string()
           .describe('Free text, e.g. "connection pool timeout".'),
         stateCategory: z.array(stateCategory).optional(),
         limit: z.number().int().min(1).max(100).optional(),
+        modules: z
+          .array(moduleRef)
+          .optional()
+          .describe('Only hits touching any of these modules.'),
+        capability: capabilityRef
+          .optional()
+          .describe('Only hits delivering this capability.'),
       },
     },
     handler((input) => agent.searchTasks(input)),
@@ -344,13 +434,34 @@ export function registerVantikTools(
             'The objective this issue serves. Use it whenever the work spans ' +
               'more than this one issue.',
           ),
+        capability: capabilityRef
+          .optional()
+          .describe(
+            'What this issue makes the software do, named from ' +
+              'list_capabilities. One capability, or none. Name the one that ' +
+              'already exists rather than describing the same thing in your ' +
+              'own words — that is what joins this issue to the rest of the ' +
+              'work serving it.',
+          ),
+        modules: z
+          .array(moduleRef)
+          .optional()
+          .describe(
+            'The modules this issue changes, named from list_modules. Set ' +
+              'this only when you know, because you are working in that code ' +
+              'or you matched the paths against a module’s repositories. Do ' +
+              'not guess it from the wording of the issue: a wrong module is ' +
+              'worse than none, because it puts the work under code that ' +
+              'nobody will change. Leave it out and a pull request will set ' +
+              'it from the files it actually touches.',
+          ),
       },
     },
     handler((input) => {
       // The opinion lives here, not in agent-core: hold the issue to the floor,
       // then hand the criteria to the neutral client, which files them as real
       // checklist items rather than as markdown in the description.
-      const { acceptanceCriteria, description, ...rest } = input;
+      const { acceptanceCriteria, description, modules, ...rest } = input;
       const criteria: string[] = (acceptanceCriteria ?? [])
         .map((item: string) => item.trim())
         .filter(Boolean);
@@ -362,6 +473,10 @@ export function registerVantikTools(
         ...rest,
         description: body,
         acceptanceCriteria: criteria,
+        // The tool says `modules` because that is what a person calls them and
+        // it matches list_tasks. The client says `moduleIds` because that is
+        // the field of the issue.
+        ...(modules?.length ? { moduleIds: modules } : {}),
       });
     }),
   );
@@ -372,9 +487,9 @@ export function registerVantikTools(
       title: 'Update task',
       description:
         'Change a task’s title, description, state, labels, priority, ' +
-        'assignee or project. Use `project` to gather issues that turned out ' +
-        'to serve one objective under it, after the fact. To close a task use ' +
-        'close_task instead, so the resolution is recorded.',
+        'assignee, project or capability. Use `project` to gather issues that ' +
+        'turned out to serve one objective under it, after the fact. To close ' +
+        'a task use close_task instead, so the resolution is recorded.',
       inputSchema: {
         task: taskRef,
         title: z.string().optional(),
@@ -384,6 +499,12 @@ export function registerVantikTools(
         priority: priority.optional(),
         assignee: z.string().optional(),
         project: projectRef.optional(),
+        capability: capabilityRef
+          .optional()
+          .describe(
+            'What this issue makes the software do. Set it when the work ' +
+              'turns out to serve a capability the issue did not name.',
+          ),
       },
     },
     handler(({ task, ...rest }) => agent.updateTask(task, rest)),

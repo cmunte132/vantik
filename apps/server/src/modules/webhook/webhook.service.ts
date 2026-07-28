@@ -16,6 +16,7 @@ import { actionRun } from 'trigger/action-run';
 import { prepareTriggerPayload } from 'modules/action-event/action-event.utils';
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 import { LoggerService } from 'modules/logger/logger.service';
+import { ModuleRoutingQueue } from 'modules/modules/module-routing.queue';
 
 @Injectable()
 export default class WebhookService {
@@ -24,6 +25,7 @@ export default class WebhookService {
   constructor(
     private prisma: PrismaService,
     private integrations: IntegrationsService,
+    private moduleRoutingQueue: ModuleRoutingQueue,
   ) {}
 
   async handleEvents(
@@ -85,6 +87,14 @@ export default class WebhookService {
     }
 
     const workspaceId = integrationAccount.workspaceId;
+
+    await this.routeCodeChange(
+      sourceName,
+      eventBody,
+      integrationAccount.id,
+      workspaceId,
+    );
+
     const actionEntities = await this.prisma.actionEntity.findMany({
       where: {
         type: ActionTypesEnum.SOURCE_WEBHOOK,
@@ -116,5 +126,39 @@ export default class WebhookService {
     });
 
     return { status: 200 };
+  }
+
+  /**
+   * This method hands the webhook to the queue that routes it to modules.
+   *
+   * Only the enqueue happens here. Finding the modules means asking the provider
+   * for the files a pull request changed, which is paged and can be thirty round
+   * trips — far longer than the ten seconds GitHub waits before it abandons the
+   * delivery and sends it again.
+   *
+   * The try stays, because module routing is an addition to a webhook and never
+   * its purpose. A queue that cannot be reached must not stop the actions that
+   * the same webhook triggers.
+   */
+  private async routeCodeChange(
+    sourceName: string,
+    eventBody: EventBody,
+    integrationAccountId: string,
+    workspaceId: string,
+  ) {
+    try {
+      await this.moduleRoutingQueue.routeWebhook({
+        sourceName,
+        eventBody,
+        integrationAccountId,
+        workspaceId,
+      });
+    } catch (error) {
+      this.logger.error({
+        message: `Could not queue the code change of a ${sourceName} webhook`,
+        where: 'WebhookService.routeCodeChange',
+        error,
+      });
+    }
   }
 }

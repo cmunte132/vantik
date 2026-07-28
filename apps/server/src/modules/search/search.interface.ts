@@ -29,6 +29,19 @@ export class SearchInputData {
   @IsOptional()
   @IsString()
   stateCategory?: string;
+
+  /**
+   * Comma-separated module ids. A hit matches when the issue names any one of
+   * them, because an issue records the modules it changes as a list.
+   */
+  @IsOptional()
+  @IsString()
+  moduleIds?: string;
+
+  /** One capability id. An issue delivers one capability, or none. */
+  @IsOptional()
+  @IsString()
+  capabilityId?: string;
 }
 
 export class SimilarIssueData {
@@ -83,5 +96,23 @@ export function parseStateCategories(stateCategory?: string): string[] {
   return stateCategory
     .split(',')
     .map((category) => category.trim().toUpperCase())
+    .filter(Boolean);
+}
+
+/**
+ * This function reads a comma-separated list of ids.
+ *
+ * A query string carries one value, so a caller asking for several modules
+ * sends them joined. An empty entry is dropped, so a trailing comma is not an
+ * id that matches nothing.
+ */
+export function parseIds(ids?: string): string[] {
+  if (!ids) {
+    return [];
+  }
+
+  return ids
+    .split(',')
+    .map((id) => id.trim())
     .filter(Boolean);
 }

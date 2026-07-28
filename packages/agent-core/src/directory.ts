@@ -1,7 +1,10 @@
 import { VantikClient } from './client';
 import { VantikAmbiguousError, VantikNotFoundError } from './errors';
 import {
+  Capability,
   Label,
+  Module,
+  Product,
   Project,
   Team,
   User,
@@ -42,6 +45,73 @@ function forget<V>(loading: Promise<V>, clear: () => void): Promise<V> {
   return loading;
 }
 
+/** The API rows behind the product axis, before they are trimmed for an agent. */
+interface RawProduct {
+  id: string;
+  name: string;
+  key: string;
+  description?: string | null;
+  status?: string | null;
+}
+
+interface RawModule extends RawProduct {
+  ownerTeamId?: string | null;
+  ownerProductId?: string | null;
+  linkedTeamIds?: string[];
+  linkedProductIds?: string[];
+}
+
+interface RawModuleRepo {
+  /** "owner/name" on the provider. */
+  fullName: string;
+  pathPrefixes?: string[];
+}
+
+interface RawCapability {
+  id: string;
+  name: string;
+  description?: string | null;
+  status?: string | null;
+  moduleIds?: string[];
+}
+
+/**
+ * Resolves one row of the product axis by id or by any of its names, and says
+ * what there was to choose from when it cannot.
+ *
+ * Products, modules and capabilities are resolved the same way and differ only
+ * in which fields count as a name, so the message an agent gets back for a typo
+ * is written once here rather than three times.
+ */
+function resolveNamed<T extends { id: string; name: string }>(
+  rows: T[],
+  reference: string,
+  kind: string,
+  namesOf: (row: T) => string[],
+): T {
+  const needle = reference.trim().toLowerCase();
+  const matches = rows.filter(
+    (row) =>
+      row.id === reference ||
+      namesOf(row).some((name) => name?.toLowerCase() === needle),
+  );
+
+  if (matches.length === 0) {
+    throw new VantikNotFoundError(
+      `No ${kind} "${reference}". Existing ${kind}s: ${
+        rows.map((row) => row.name).join(', ') || 'none yet'
+      }.`,
+    );
+  }
+  if (matches.length > 1) {
+    throw new VantikAmbiguousError(
+      `"${reference}" matches ${matches.length} ${kind}s; use its id.`,
+    );
+  }
+
+  return matches[0];
+}
+
 export function parseIssueKey(
   reference: string,
 ): { identifier: string; number: number } | null {
@@ -64,6 +134,9 @@ export function parseIssueKey(
 export class Directory {
   private teams?: Promise<Team[]>;
   private projects?: Promise<Project[]>;
+  private products?: Promise<Product[]>;
+  private modules?: Promise<Module[]>;
+  private capabilities?: Promise<Capability[]>;
   private readonly statesByTeam = new Map<string, Promise<WorkflowState[]>>();
   private readonly labelsByWorkspace = new Map<string, Promise<Label[]>>();
   private readonly membersByTeam = new Map<string, Promise<User[]>>();
@@ -79,6 +152,9 @@ export class Directory {
   refresh(): void {
     this.teams = undefined;
     this.projects = undefined;
+    this.products = undefined;
+    this.modules = undefined;
+    this.capabilities = undefined;
     this.me = undefined;
     this.statesByTeam.clear();
     this.labelsByWorkspace.clear();
@@ -201,6 +277,148 @@ export class Directory {
     }
 
     return matches[0];
+  }
+
+  /**
+   * The workspace's products, modules and capabilities — the second axis, which
+   * says what the software is made of rather than who is going to work on it.
+   *
+   * Cached like the rest of the directory: an agent resolving three module names
+   * on one issue should not fetch the list three times.
+   */
+  getProducts(): Promise<Product[]> {
+    this.products ??= forget(
+      this.client.get<RawProduct[]>('/products').then((products) =>
+        products.map((product) => ({
+          id: product.id,
+          name: product.name,
+          key: product.key,
+          description: product.description ?? null,
+          status: product.status ?? null,
+        })),
+      ),
+      () => {
+        this.products = undefined;
+      },
+    );
+
+    return this.products;
+  }
+
+  getModules(): Promise<Module[]> {
+    this.modules ??= forget(
+      this.client.get<RawModule[]>('/modules').then((modules) =>
+        modules.map((module) => ({
+          id: module.id,
+          name: module.name,
+          key: module.key,
+          description: module.description ?? null,
+          status: module.status ?? null,
+          owner: module.ownerProductId
+            ? { kind: 'product' as const, id: module.ownerProductId }
+            : module.ownerTeamId
+              ? { kind: 'team' as const, id: module.ownerTeamId }
+              : null,
+          linkedTeamIds: module.linkedTeamIds ?? [],
+          linkedProductIds: module.linkedProductIds ?? [],
+        })),
+      ),
+      () => {
+        this.modules = undefined;
+      },
+    );
+
+    return this.modules;
+  }
+
+  /**
+   * The same modules, each carrying the repositories its code sits in.
+   *
+   * One request per module, which is why it is not what `getModules` returns.
+   * A workspace holds tens of modules rather than thousands, and the question
+   * this answers — "which module am I in?" — cannot be answered without them.
+   */
+  async getModulesWithRepos(): Promise<Module[]> {
+    const modules = await this.getModules();
+
+    return Promise.all(
+      modules.map(async (module) => ({
+        ...module,
+        repos: (
+          await this.client.get<RawModuleRepo[]>(`/modules/${module.id}/repos`)
+        ).map((repo) => ({
+          repository: repo.fullName,
+          pathPrefixes: repo.pathPrefixes ?? [],
+        })),
+      })),
+    );
+  }
+
+  getCapabilities(): Promise<Capability[]> {
+    this.capabilities ??= forget(
+      this.client.get<RawCapability[]>('/capabilities').then((capabilities) =>
+        capabilities.map((capability) => ({
+          id: capability.id,
+          name: capability.name,
+          description: capability.description ?? null,
+          status: capability.status ?? null,
+          moduleIds: capability.moduleIds ?? [],
+        })),
+      ),
+      () => {
+        this.capabilities = undefined;
+      },
+    );
+
+    return this.capabilities;
+  }
+
+  /** Resolves a product by key ("cloud"), name or id. */
+  async resolveProduct(reference: string): Promise<Product> {
+    return resolveNamed(
+      await this.getProducts(),
+      reference,
+      'product',
+      (product) => [product.key, product.name],
+    );
+  }
+
+  /** Resolves a module by key ("server"), name or id. */
+  async resolveModule(reference: string): Promise<Module> {
+    return resolveNamed(
+      await this.getModules(),
+      reference,
+      'module',
+      (module) => [module.key, module.name],
+    );
+  }
+
+  /** Resolves a capability by name or id. Capabilities carry no key. */
+  async resolveCapability(reference: string): Promise<Capability> {
+    return resolveNamed(
+      await this.getCapabilities(),
+      reference,
+      'capability',
+      (capability) => [capability.name],
+    );
+  }
+
+  /** Every module a product owns, plus every module it links to. */
+  async modulesForProduct(reference: string): Promise<Module[]> {
+    const product = await this.resolveProduct(reference);
+    const modules = await this.getModules();
+
+    return modules.filter(
+      (module) =>
+        module.owner?.kind === 'product' &&
+        module.owner.id === product.id,
+    ).concat(
+      modules.filter(
+        (module) =>
+          module.owner?.id !== product.id &&
+          module.linkedProductIds.includes(product.id),
+      ),
+    );
   }
 
   /**

@@ -106,6 +106,7 @@
     "./tailwind.config": "./tailwind.config.ts",
     "./lib/utils": "./src/lib/utils.tsx",
     "./lib/color-utils": "./src/lib/color-utils.ts",
+    "./lib/icon-tile": "./src/lib/icon-tile.ts",
     "./components": "./src/components/ui/index.ts",
     "./components/theme-provider": "./src/components/theme-provider.tsx",
     "./components/logo": "./src/components/logo.tsx",

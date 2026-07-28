@@ -19,7 +19,10 @@ import {
   IntegrationDefinitionListQuery,
   IntegrationDefinitionUpdateBody,
 } from './integration-definition.interface';
-import { IntegrationDefinitionService } from './integration-definition.service';
+import {
+  IntegrationDefinitionService,
+  toPublicDefinition,
+} from './integration-definition.service';
 
 @Controller({
   version: '1',
@@ -41,11 +44,14 @@ export class IntegrationDefinitionController {
     @Query()
     workspaceDto: IntegrationDefinitionListQuery,
   ) {
-    return await this.integrationDefinitionService.getIntegrationDefinitions(
-      sessionWorkspaceId,
-      userId,
-      workspaceDto.workspaceId,
-    );
+    const definitions =
+      await this.integrationDefinitionService.getIntegrationDefinitions(
+        sessionWorkspaceId,
+        userId,
+        workspaceDto.workspaceId,
+      );
+
+    return definitions.map(toPublicDefinition);
   }
 
   // /**
@@ -57,9 +63,12 @@ export class IntegrationDefinitionController {
     @Param()
     integrationDefinitionRequestIdBody: IntegrationDefinitionIdDto,
   ) {
-    return await this.integrationDefinitionService.getIntegrationDefinitionWithSpec(
-      integrationDefinitionRequestIdBody.integrationDefinitionId,
-    );
+    const definition =
+      await this.integrationDefinitionService.getIntegrationDefinitionWithSpec(
+        integrationDefinitionRequestIdBody.integrationDefinitionId,
+      );
+
+    return toPublicDefinition(definition);
   }
 
   // /**
@@ -89,22 +98,12 @@ export class IntegrationDefinitionController {
     @Body()
     integrationDefinitionUpdateBody: IntegrationDefinitionUpdateBody,
   ): Promise<IntegrationDefinition> {
-    return await this.integrationDefinitionService.updateIntegrationDefinition(
-      integrationDefinitionUpdateBody,
-      integrationDefinitionRequestIdBody.integrationDefinitionId,
-    );
-  }
+    const definition =
+      await this.integrationDefinitionService.updateIntegrationDefinition(
+        integrationDefinitionUpdateBody,
+        integrationDefinitionRequestIdBody.integrationDefinitionId,
+      );
 
-  /**
-   * Get a integration definition in a workspace
-   */
-  @Get(':integrationDefinitionId')
-  async getIntegrationDefinitionWithId(
-    @Param()
-    integrationDefinitionRequestIdBody: IntegrationDefinitionIdDto,
-  ): Promise<IntegrationDefinition> {
-    return await this.integrationDefinitionService.getIntegrationDefinitionWithId(
-      integrationDefinitionRequestIdBody,
-    );
+    return toPublicDefinition(definition);
   }
 }

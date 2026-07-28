@@ -12,6 +12,37 @@ import { resolveWorkspaceId } from 'common/workspace-access';
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 
 import { IntegrationDefinitionUpdateBody } from './integration-definition.interface';
+import { integrationSeeds } from './integration-definition.seed';
+
+/**
+ * This function removes the secrets of a definition before it leaves the
+ * server.
+ *
+ * The `clientSecret` and `config` columns hold the credentials of the whole
+ * deployment. A member of a workspace has no use for them, so a response to
+ * the browser carries a boolean in their place.
+ */
+export function toPublicDefinition(
+  definition: IntegrationDefinition,
+): IntegrationDefinition {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { clientSecret, config, ...rest } = definition;
+
+  const seed = integrationSeeds.find((entry) => entry.slug === definition.slug);
+
+  // An integration that has no pair of environment variables needs no
+  // credentials. The local repository integration is one of them, and it is
+  // ready as soon as its row exists.
+  const configured = seed?.credentialEnv
+    ? Boolean(definition.clientId && clientSecret)
+    : true;
+
+  return {
+    ...rest,
+    configured,
+    credentialEnv: seed?.credentialEnv,
+  } as IntegrationDefinition;
+}
 
 @Injectable()
 export class IntegrationDefinitionService {

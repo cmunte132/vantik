@@ -21,6 +21,8 @@ export const Issue = types.model('Issue', {
   cycleId: types.union(types.string, types.null, types.undefined),
   projectId: types.union(types.string, types.null, types.undefined),
   projectMilestoneId: types.union(types.string, types.null, types.undefined),
+  moduleIds: types.optional(types.array(types.string), []),
+  capabilityId: types.union(types.string, types.null, types.undefined),
   sourceMetadata: types.union(types.string, types.null, types.undefined),
   children: types.array(types.string),
 });

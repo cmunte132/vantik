@@ -20,6 +20,7 @@ import { AgentScopeGuard } from 'modules/auth/agent-scope.guard';
 import { AuthModule } from 'modules/auth/auth.module';
 import { BullConfigModule } from 'modules/bull/bull.module';
 import { CachceModule } from 'modules/cache/cache.module';
+import { CapabilitiesModule } from 'modules/capabilities/capabilities.module';
 import { ChecklistItemsModule } from 'modules/checklist-items/checklist-items.module';
 import { ClientConfigModule } from 'modules/client-config/client-config.module';
 import { CompanyModule } from 'modules/company/company.modules';
@@ -36,12 +37,16 @@ import { IssueRelationModule } from 'modules/issue-relation/issue-relation.modul
 import { IssuesModule } from 'modules/issues/issues.module';
 import { LabelsModule } from 'modules/labels/labels.module';
 import { LinkedIssueModule } from 'modules/linked-issue/linked-issue.module';
+import { LocalRepoModule } from 'modules/local-repo/local-repo.module';
 import { McpModule } from 'modules/mcp/mcp.module';
+import { ModulesModule } from 'modules/modules/modules.module';
 import { NotificationsModule } from 'modules/notifications/notifications.module';
 import { OAuthCallbackModule } from 'modules/oauth-callback/oauth-callback.module';
 import { PagesModule } from 'modules/pages/pages.module';
 import { PeopleModule } from 'modules/people/people.module';
+import { ProductsModule } from 'modules/products/products.module';
 import { ProjectsModule } from 'modules/projects/projects.module';
+import { PromptsModule } from 'modules/prompts/prompts.module';
 import { ReplicationModule } from 'modules/replication/replication.module';
 import { SearchModule } from 'modules/search/search.module';
 import { SupportModule } from 'modules/support/support.module';
@@ -124,6 +129,9 @@ import { AppService } from './app.service';
     ActionModule,
     AIRequestsModule,
     ProjectsModule,
+    ProductsModule,
+    ModulesModule,
+    CapabilitiesModule,
     PagesModule,
     CyclesModule,
     WebhookSubscriptionModule,
@@ -135,9 +143,11 @@ import { AppService } from './app.service';
     SyncModule,
 
     IntegrationDefinitionModule,
+    PromptsModule,
     OAuthCallbackModule,
     IntegrationAccountModule,
     IntegrationsModule,
+    LocalRepoModule,
 
     BullConfigModule,
 

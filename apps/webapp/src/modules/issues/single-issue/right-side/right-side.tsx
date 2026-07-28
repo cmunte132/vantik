@@ -14,12 +14,18 @@ import {
   IssueStatusDropdownVariant,
 } from 'modules/issues/components';
 import {
+  CapabilityDropdown,
+  ModuleDropdown,
+  ModuleSuggestions,
+} from 'modules/issues/components/issue-metadata/product-axis';
+import {
   ProjectDropdown,
   ProjectDropdownVariant,
   ProjectMilestoneDropdown,
   ProjectMilestoneDropdownVariant,
 } from 'modules/issues/components/issue-metadata/project';
 import { useCompletionGuard } from 'modules/issues/components/use-completion-guard';
+import { withoutArchived } from 'modules/product-axis/archive';
 
 import { useIssueData } from 'hooks/issues';
 import { useTeamWithId } from 'hooks/teams';
@@ -36,9 +42,15 @@ import { SupportProperties } from './support-properties';
 export const RightSide = observer(() => {
   const issue = useIssueData();
   const { mutate: updateIssue } = useUpdateIssueMutation({});
-  const { projectsStore } = useContextStore();
+  const { projectsStore, modulesStore, capabilitiesStore } = useContextStore();
   const team = useTeamWithId(issue?.teamId);
   const hasProjectsForTeam = projectsStore.hasProjects(team.id);
+
+  // A workspace that has not adopted the product axis has no modules and no
+  // capabilities. Two empty controls would just be two more rows to scroll past.
+  const hasModules = withoutArchived(modulesStore.getModules).length > 0;
+  const hasCapabilities =
+    withoutArchived(capabilitiesStore.getCapabilities).length > 0;
 
   // Warns, rather than blocks, when this would complete the issue with criteria
   // still open. Shared with every other place that can change a status.
@@ -69,6 +81,17 @@ export const RightSide = observer(() => {
 
   const projectMilestoneChange = (projectMilestoneId: string) => {
     updateIssue({ id: issue.id, projectMilestoneId, teamId: issue.teamId });
+  };
+
+  // A person's choice is the top tier of confidence on this issue. Nothing
+  // overwrites it: an LLM writes to IssueSuggestion instead, and a pull request
+  // replaces only what the LLM proposed.
+  const modulesChange = (moduleIds: string[]) => {
+    updateIssue({ id: issue.id, moduleIds, teamId: issue.teamId });
+  };
+
+  const capabilityChange = (capabilityId: string | null) => {
+    updateIssue({ id: issue.id, capabilityId, teamId: issue.teamId });
   };
 
   const priorityChange = (priority: number) => {
@@ -126,6 +149,37 @@ export const RightSide = observer(() => {
               teamIdentifier={team.identifier}
             />
           </div>
+
+          {hasModules && (
+            <div className={cn('flex flex-col items-start')}>
+              <div className="text-xs text-left">Modules</div>
+
+              <ModuleDropdown
+                value={issue.moduleIds}
+                onChange={modulesChange}
+              />
+
+              {/*
+                Under the modules the issue has, because that is the order of
+                confidence: what is true first, what is proposed second.
+              */}
+              <ModuleSuggestions
+                issueId={issue.id}
+                moduleIds={issue.moduleIds}
+              />
+            </div>
+          )}
+
+          {hasCapabilities && (
+            <div className={cn('flex flex-col items-start')}>
+              <div className="text-xs text-left">Capability</div>
+
+              <CapabilityDropdown
+                value={issue.capabilityId}
+                onChange={capabilityChange}
+              />
+            </div>
+          )}
 
           {hasProjectsForTeam && (
             <div className={cn('flex flex-col items-start')}>

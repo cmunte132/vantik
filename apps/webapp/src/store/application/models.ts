@@ -17,6 +17,13 @@ export const FiltersModel = types.model({
   project: types.union(types.undefined, FilterModel),
   cycle: types.union(types.undefined, FilterModel),
 
+  // The product axis. An issue holds `moduleIds` and `capabilityId`, and it
+  // holds no product. A product filter reads as the modules of that product,
+  // which `getFilters` works out from the module store.
+  product: types.union(types.undefined, FilterModel),
+  module: types.union(types.undefined, FilterModel),
+  capability: types.union(types.undefined, FilterModel),
+
   // For issues coming from Github
   source: types.union(types.undefined, FilterModel),
 
@@ -37,6 +44,8 @@ export const DisplaySettingsModel = types.model({
     'label',
     'project',
     'team',
+    'module',
+    'capability',
   ]),
   ordering: types.enumeration([
     'assignee',

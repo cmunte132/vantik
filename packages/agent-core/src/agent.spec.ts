@@ -552,6 +552,190 @@ describe('listTasks', () => {
   });
 });
 
+describe('the product axis', () => {
+  const products = [
+    { id: 'product-cloud', name: 'Cloud', key: 'cloud' },
+    { id: 'product-docs', name: 'Docs', key: 'docs' },
+  ];
+
+  const modules = [
+    {
+      id: 'module-server',
+      name: 'Server',
+      key: 'server',
+      ownerProductId: 'product-cloud',
+      linkedProductIds: [] as string[],
+    },
+    {
+      id: 'module-webapp',
+      name: 'Webapp',
+      key: 'webapp',
+      ownerProductId: 'product-cloud',
+      linkedProductIds: [] as string[],
+    },
+    {
+      id: 'module-design',
+      name: 'Design system',
+      key: 'design',
+      ownerTeamId: 'team-eng',
+      linkedProductIds: ['product-cloud', 'product-docs'],
+    },
+    {
+      id: 'module-site',
+      name: 'Site',
+      key: 'site',
+      ownerProductId: 'product-docs',
+      linkedProductIds: [] as string[],
+    },
+  ];
+
+  const capabilities = [
+    {
+      id: 'capability-tracking',
+      name: 'Issue tracking',
+      moduleIds: ['module-server'],
+    },
+  ];
+
+  const axisRoutes = {
+    ...baseRoutes,
+    'GET /products': products,
+    'GET /modules': modules,
+    'GET /capabilities': capabilities,
+    'POST /issues/filter': {
+      issues: [] as unknown[],
+      page: 1,
+      perPage: 50,
+      total: 0,
+    },
+  };
+
+  function filterBody(calls: RecordedCall[]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return calls.find((call) => call.path === '/issues/filter')?.body as any;
+  }
+
+  it('resolves module keys to ids for the filter', async () => {
+    const { agent, calls } = makeAgent(axisRoutes);
+
+    await agent.listTasks({ modules: ['server', 'Webapp'] });
+
+    expect(filterBody(calls).filters.module).toEqual({
+      filterType: 'INCLUDES',
+      value: ['module-server', 'module-webapp'],
+    });
+  });
+
+  /**
+   * An issue records modules and never a product, so a product filter has to
+   * widen to that product's modules — the ones it owns *and* the ones it links
+   * to, since a shared module is still where its code lives.
+   */
+  it('widens a product to the modules it owns and links to', async () => {
+    const { agent, calls } = makeAgent(axisRoutes);
+
+    await agent.listTasks({ product: 'cloud' });
+
+    expect(filterBody(calls).filters.module.value.sort()).toEqual([
+      'module-design',
+      'module-server',
+      'module-webapp',
+    ]);
+  });
+
+  it('narrows to the named modules the product actually holds', async () => {
+    const { agent, calls } = makeAgent(axisRoutes);
+
+    await agent.listTasks({ product: 'cloud', modules: ['server', 'site'] });
+
+    // `site` belongs to Docs, so asking for Cloud AND site is a contradiction
+    // that should narrow rather than widen.
+    expect(filterBody(calls).filters.module.value).toEqual(['module-server']);
+  });
+
+  /**
+   * The empty list is the whole point: a product with no modules matches no
+   * issue. Dropping the filter instead would silently return every issue in
+   * the workspace, which is the opposite of what was asked.
+   */
+  it('sends an empty filter rather than none for a product holding nothing', async () => {
+    const { agent, calls } = makeAgent({
+      ...axisRoutes,
+      'GET /modules': [] as unknown[],
+    });
+
+    await agent.listTasks({ product: 'cloud' });
+
+    expect(filterBody(calls).filters.module).toEqual({
+      filterType: 'INCLUDES',
+      value: [],
+    });
+  });
+
+  it('resolves a capability by name', async () => {
+    const { agent, calls } = makeAgent(axisRoutes);
+
+    await agent.listTasks({ capability: 'Issue tracking' });
+
+    expect(filterBody(calls).filters.capability).toEqual({
+      filterType: 'IS',
+      value: ['capability-tracking'],
+    });
+  });
+
+  it('names what exists when a module reference is wrong', async () => {
+    const { agent } = makeAgent(axisRoutes);
+
+    await expect(agent.listTasks({ modules: ['sever'] })).rejects.toThrow(
+      VantikNotFoundError,
+    );
+  });
+
+  it('files an issue against a capability named by name', async () => {
+    const { agent, calls } = makeAgent({
+      ...axisRoutes,
+      'POST /issues': {
+        id: 'issue-99',
+        number: 99,
+        title: 'Tidy the board',
+        teamId: 'team-eng',
+      },
+      'GET /checklist_items': [],
+    });
+
+    await agent.createTask({
+      title: 'Tidy the board',
+      capability: 'Issue tracking',
+      moduleIds: ['server'],
+    });
+
+    const created = calls.find(
+      (call) => call.method === 'POST' && call.path === '/issues',
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(created?.body as any).toMatchObject({
+      capabilityId: 'capability-tracking',
+      moduleIds: ['module-server'],
+    });
+  });
+
+  it('clears the capability when told to, and leaves it alone otherwise', async () => {
+    const { agent, calls } = makeAgent({
+      ...axisRoutes,
+      'POST /issues/issue-42': { id: 'issue-42', number: 42, title: 'x' },
+    });
+
+    await agent.updateTask('ENG-42', { capability: null });
+    await agent.updateTask('ENG-42', { title: 'Renamed' });
+
+    const updates = calls.filter((call) => call.path === '/issues/issue-42');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((updates[0].body as any).capabilityId).toBeNull();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect('capabilityId' in (updates[1].body as any)).toBe(false);
+  });
+});
+
 describe('searchTasks', () => {
   it('passes the category filter through and surfaces the resolution', async () => {
     const { agent, calls } = makeAgent({

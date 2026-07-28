@@ -113,4 +113,14 @@ export class CreateIssueDto {
   @IsOptional()
   @IsObject()
   supportData?: SupportDto;
+
+  /** The modules this issue changes. An issue can touch more than one. */
+  @IsOptional()
+  @IsArray()
+  moduleIds?: string[];
+
+  /** What the issue makes the software do. One capability, or none. */
+  @IsOptional()
+  @IsString()
+  capabilityId?: string;
 }

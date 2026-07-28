@@ -29,7 +29,9 @@ import NextLink from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
-import type { TeamType } from 'common/types';
+import { withoutArchived } from 'modules/product-axis/archive';
+
+import type { ModuleType, TeamType } from 'common/types';
 
 import { useCurrentTeam } from 'hooks/teams';
 import { useCurrentWorkspace } from 'hooks/workspace';
@@ -37,11 +39,13 @@ import { useCurrentWorkspace } from 'hooks/workspace';
 import { useContextStore } from 'store/global-context-provider';
 import { UserContext } from 'store/user-context';
 
+import { ModuleRow, useIssueCountByModule } from './module-row';
 import { checkIsActive, type Link } from './nav';
 
 export const TeamList = observer(() => {
   const currentUser = React.useContext(UserContext);
-  const { teamsStore, workspaceStore } = useContextStore();
+  const { teamsStore, workspaceStore, modulesStore } = useContextStore();
+  const countByModule = useIssueCountByModule();
   const pathname = usePathname();
   // If the team exists in the route path
   const team = useCurrentTeam();
@@ -116,6 +120,22 @@ export const TeamList = observer(() => {
             checkIsActive(pathname, link.href, link.activePaths, link.strict),
           );
 
+          /*
+           * A team owns the modules of internal tools: code that ships to
+           * nobody, so no product owns it. Those modules have no other home in
+           * this sidebar, and a team is where a person looks for them.
+           *
+           * Only the ones it owns. A module a team merely links is already on
+           * screen under the product that owns it, usually a few rows above, so
+           * listing it again here says nothing the reader cannot see — it just
+           * puts the same name in the sidebar twice.
+           */
+          const owned: ModuleType[] = withoutArchived<ModuleType>(
+            modulesStore.getModulesOwnedByTeam(teamItem.id),
+          );
+          const moduleHref = (module: ModuleType) =>
+            `/${workspace.slug}/module/${module.key}`;
+
           return (
             <Collapsible
               key={teamItem.id}
@@ -141,7 +161,7 @@ export const TeamList = observer(() => {
                     <TeamIcon
                       preferences={teamItem.preferences}
                       name={teamItem.name}
-                      className="!h-4 !w-4 shrink-0 [&>svg]:!h-3 [&>svg]:!w-3"
+                      size="md"
                     />
                     <span className="flex-1 truncate">{teamItem.name}</span>
                     <span data-rail-hide className="flex shrink-0">
@@ -174,6 +194,16 @@ export const TeamList = observer(() => {
                           </NextLink>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
+                    ))}
+
+                    {owned.map((module) => (
+                      <ModuleRow
+                        key={module.id}
+                        module={module}
+                        href={moduleHref(module)}
+                        pathname={pathname}
+                        count={countByModule.get(module.id) ?? 0}
+                      />
                     ))}
                   </SidebarMenuSub>
                 </CollapsibleContent>

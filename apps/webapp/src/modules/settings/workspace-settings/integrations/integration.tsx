@@ -11,6 +11,7 @@ import { SettingsLayout } from 'common/layouts/settings-layout';
 import { useGetIntegrationDefinition } from 'services/integration-definition';
 
 import { IntegrationAuth } from './integration-auth';
+import { LocalRepositories } from './local-repositories';
 
 export function Integration() {
   const { integrationDefinitionId } = useParams();
@@ -28,17 +29,30 @@ export function Integration() {
                 title={integrationDefinition.name}
                 description={integrationDefinition.description}
               >
-                <>
-                  <IntegrationAuth
-                    integrationDefinition={integrationDefinition}
+                {/*
+                  An integration that declares `local_auth` has no account to
+                  authorise. It gets a form here, where the others get a
+                  Connect button that starts an OAuth flow.
+                */}
+                {integrationDefinition.spec?.local_auth ? (
+                  <LocalRepositories
+                    instruction={
+                      integrationDefinition.spec.local_auth.instruction
+                    }
                   />
-                  {integrationDefinition.spec.personal_auth && (
+                ) : (
+                  <>
                     <IntegrationAuth
                       integrationDefinition={integrationDefinition}
-                      personal
                     />
-                  )}
-                </>
+                    {integrationDefinition.spec?.personal_auth && (
+                      <IntegrationAuth
+                        integrationDefinition={integrationDefinition}
+                        personal
+                      />
+                    )}
+                  </>
+                )}
               </SettingSection>
             )}
 

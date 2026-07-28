@@ -41,6 +41,34 @@ export class IssuesAIController {
     );
   }
 
+  /**
+   * Promotes a suggested module to a module of the issue.
+   *
+   * `WorkspaceResourceGuard` reads `issueId` and `moduleId` from the path, so
+   * an issue or a module of another workspace is refused before this runs.
+   */
+  @Post('suggestions/:issueId/modules/:moduleId/accept')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async acceptModuleSuggestion(
+    @Param('issueId') issueId: string,
+    @Param('moduleId') moduleId: string,
+  ) {
+    return await this.issuesAiService.acceptModuleSuggestion(issueId, moduleId);
+  }
+
+  /** Removes a suggested module, and remembers not to suggest it again. */
+  @Post('suggestions/:issueId/modules/:moduleId/dismiss')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async dismissModuleSuggestion(
+    @Param('issueId') issueId: string,
+    @Param('moduleId') moduleId: string,
+  ) {
+    return await this.issuesAiService.dismissModuleSuggestion(
+      issueId,
+      moduleId,
+    );
+  }
+
   @Post('ai_filters')
   @UseGuards(AuthGuard)
   async aiFilters(@Body() filterInput: FilterInput) {

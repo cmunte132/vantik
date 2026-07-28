@@ -76,6 +76,99 @@ export async function getAiFilter(
   }
 }
 
+/** A module, as the classifier sees it. */
+export interface ClassifiableModule {
+  id: string;
+  name: string;
+  description?: string | null;
+}
+
+/**
+ * This function asks the model which modules an issue would change.
+ *
+ * It returns the ids of the modules that the model named. A name the model
+ * invented reaches no module and is dropped, so the caller never gets an id it
+ * cannot resolve.
+ *
+ * The answer is a suggestion. Nothing here writes to the issue.
+ */
+export async function getSuggestedModules(
+  prisma: PrismaService,
+  aiRequestsService: AIRequestsService,
+  modules: ClassifiableModule[],
+  description: string,
+  workspaceId: string,
+): Promise<string[]> {
+  // A workspace that has drawn no modules has nothing to choose from, and a
+  // deployment with no model configured answers nothing. Neither is a fault.
+  if (!isLLMConfigured() || modules.length === 0 || !description) {
+    return [];
+  }
+
+  const prompt = await prisma.prompt.findUnique({
+    where: { name_workspaceId: { name: 'ModuleClassifier', workspaceId } },
+  });
+
+  // The prompt row is seeded at each start of the server. A workspace made in
+  // the seconds before that finishes has none, and a suggestion is not worth
+  // an error.
+  if (!prompt) {
+    return [];
+  }
+
+  const answer = await aiRequestsService.getLLMRequest(
+    {
+      messages: [
+        { role: 'system', content: prompt.prompt },
+        {
+          role: 'user',
+          content: `Text Description - ${description}\n Modules -\n${modules
+            .map(
+              (module) =>
+                `${module.name}: ${module.description ?? 'no description'}`,
+            )
+            .join('\n')}`,
+        },
+      ],
+      llmModel: prompt.model,
+      model: 'ModuleSuggestion',
+    },
+    workspaceId,
+  );
+
+  return matchModuleNames(answer, modules);
+}
+
+/**
+ * This function turns the answer of the model into module ids.
+ *
+ * The model returns names, and it returns them in whatever case and spacing it
+ * chose. A name that matches no module is dropped rather than guessed at: the
+ * model inventing "Frontend" for a workspace that has no such module must add
+ * nothing to the issue.
+ */
+export function matchModuleNames(
+  answer: string | null | undefined,
+  modules: ClassifiableModule[],
+): string[] {
+  if (!answer) {
+    return [];
+  }
+
+  const byName = new Map(
+    modules.map((module) => [module.name.trim().toLowerCase(), module.id]),
+  );
+
+  const ids = answer
+    .split(/[,\n]/)
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean)
+    .map((name) => byName.get(name))
+    .filter(Boolean) as string[];
+
+  return [...new Set(ids)];
+}
+
 export async function getSuggestedLabels(
   prisma: PrismaService,
   aiRequestsService: AIRequestsService,
@@ -132,4 +225,52 @@ export async function getSummary(
     },
     workspaceId,
   );
+}
+
+/** The key that holds the dismissed modules inside `IssueSuggestion.metadata`. */
+export const DISMISSED_MODULES_KEY = 'dismissedModuleIds';
+
+/**
+ * This function reads the modules a person dismissed on an issue.
+ *
+ * The list lives in `IssueSuggestion.metadata`, which is a free Json column, so
+ * it needs no migration and no field of its own. A row written before this
+ * feature has no key, and an older row can hold anything, so every shape that
+ * is not a list of strings reads as an empty list.
+ */
+export function dismissedModuleIds(metadata: unknown): string[] {
+  if (!metadata || typeof metadata !== 'object') {
+    return [];
+  }
+
+  const value = (metadata as Record<string, unknown>)[DISMISSED_MODULES_KEY];
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((id): id is string => typeof id === 'string');
+}
+
+/**
+ * This function returns the metadata to write when a person dismisses a module.
+ *
+ * It keeps every other key of the metadata, because this column belongs to more
+ * than this feature.
+ */
+export function withDismissedModule(
+  metadata: unknown,
+  moduleId: string,
+): Record<string, unknown> {
+  const existing =
+    metadata && typeof metadata === 'object'
+      ? (metadata as Record<string, unknown>)
+      : {};
+
+  return {
+    ...existing,
+    [DISMISSED_MODULES_KEY]: [
+      ...new Set([...dismissedModuleIds(metadata), moduleId]),
+    ],
+  };
 }

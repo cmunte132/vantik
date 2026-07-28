@@ -59,13 +59,14 @@
   --custom-color-8: #a165a1;
   --custom-color-9: #997d1d;
   --custom-color-10: #2b9684;
-  --custom-color-11: #2b9684;
+  /* Was a second copy of the teal above, so the twelve colours were really
+     eleven and two names could not be told apart. Indigo is the one gap the
+     other eleven leave, between the blue and the violet. */
+  --custom-color-11: #6a6fc4;
   --custom-color-12: #b0617c;
 
-  /* Team Colors */
-  --team-color-1: #89c794;
-  --team-color-2: #d2a1bb;
-  --team-color-3: #90c5d6;
+  /* A team has no palette of its own. It takes an avatar colour above, the same
+     as a person, a product and a module, so that one list holds one palette. */
 
   /* Brand green, taken from the logo. Hex rather than oklch components like
      the rest of the theme, because these two are fixed brand constants and
@@ -121,10 +122,6 @@
   --status-pill-6: #5d9151;
   --status-icon-6: #5d9151;
 
-  /* Team Colors */
-  --team-color-1: #54935b;
-  --team-color-2: #a165a1;
-  --team-color-3: #4187c0;
 
   /* The lighter of the two logo greens, so the mark still carries on a dark
      ground; the foreground pairs against it rather than against white. */

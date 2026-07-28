@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import React from 'react';
 
 import { type WorkflowType } from 'common/types';
-import type { IssueType, LabelType } from 'common/types';
+import type { IssueType, LabelType, ModuleType } from 'common/types';
 
 import { useComputedLabels } from 'hooks/labels';
 
@@ -182,8 +182,23 @@ export function getFilters(
   workflows: WorkflowType[],
   labels: LabelType[],
   userId?: string,
+  /**
+   * Every module of the workspace. A product filter needs them, because an
+   * issue names its modules and never its product.
+   */
+  modules: ModuleType[] = [],
 ) {
-  const { status, assignee, label, priority, project, cycle } = filters;
+  const {
+    status,
+    assignee,
+    label,
+    priority,
+    project,
+    cycle,
+    product,
+    module,
+    capability,
+  } = filters;
   const { showSubIssues, completedFilter } = displaySettings;
 
   const finalFilters: FilterType[] = [];
@@ -267,6 +282,47 @@ export function getFilters(
     });
   }
 
+  // A product owns modules and borrows others, and its issues are the issues of
+  // all of them. This turns the product into that list of modules. A product
+  // with no module gives an empty list, and then the page shows nothing, which
+  // is the truth.
+  if (product) {
+    const ids = modules
+      .filter(
+        (candidate) =>
+          product.value.includes(candidate.ownerProductId) ||
+          (candidate.linkedProductIds ?? []).some((linked: string) =>
+            product.value.includes(linked),
+          ),
+      )
+      .map((candidate) => candidate.id);
+
+    finalFilters.push({
+      key: 'moduleIds',
+      filterType: FilterTypeEnum.INCLUDES,
+      value: ids,
+    });
+  }
+
+  // An issue can change more than one module, so this reads an array and takes
+  // the INCLUDES path in filterIssue, the same as labels.
+  if (module) {
+    finalFilters.push({
+      key: 'moduleIds',
+      filterType: module.filterType,
+      value: module.value,
+    });
+  }
+
+  // One capability, or none, so this compares a single value.
+  if (capability) {
+    finalFilters.push({
+      key: 'capabilityId',
+      filterType: capability.filterType,
+      value: capability.value,
+    });
+  }
+
   if (!showSubIssues) {
     finalFilters.push({
       key: 'parentId',
@@ -333,8 +389,10 @@ export function useFilterIssues(
     linkedIssuesStore,
     issuesStore,
     issueRelationsStore,
+    modulesStore,
   } = useContextStore();
   const { labels } = useComputedLabels();
+  const modules: ModuleType[] = modulesStore.getModules;
 
   const isCompleted = (stateId: string) => {
     const filteredWorkflows = workflows.filter(
@@ -355,6 +413,7 @@ export function useFilterIssues(
       workflows,
       labels,
       pathname.includes('my-issues') ? user.id : undefined,
+      modules,
     );
 
     const silentFilters = filterSilent
@@ -364,6 +423,7 @@ export function useFilterIssues(
           workflows,
           labels,
           pathname.includes('my-issues') ? user.id : undefined,
+          modules,
         )
       : [];
 
@@ -381,6 +441,20 @@ export function useFilterIssues(
     return sort(filteredIssues).by(
       getSortArray(applicationStore.displaySettings),
     );
+    // The silent filters belong in this list. They are what scopes a page to
+    // one module, product or capability, and a memo that does not watch them
+    // returns the previous answer: the product page then shows every issue in
+    // the workspace, which reads as a working page with wrong contents. The
+    // insight views never showed this because they change a visible filter at
+    // the same time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applicationStore.filters, applicationStore.displaySettings, issues]);
+  }, [
+    applicationStore.filters,
+    applicationStore.silentFilters,
+    applicationStore.displaySettings,
+    issues,
+    // A product filter reads the modules, so a module that arrives or changes
+    // owner has to make this run again.
+    modules,
+  ]);
 }

@@ -31,6 +31,10 @@ export async function saveIssuesData(
         cycleId: record.data.cycleId,
         projectId: record.data.projectId,
         projectMilestoneId: record.data.projectMilestoneId,
+        // A record written before the product axis arrived carries neither
+        // field, and the model refuses an array that is not there.
+        moduleIds: record.data.moduleIds ?? [],
+        capabilityId: record.data.capabilityId,
         sourceMetadata: JSON.stringify(record.data.sourceMetadata),
       };
 

@@ -100,6 +100,9 @@ export function configureTaskCommands(program: Command) {
     .option('--label <label...>', 'Labels to include')
     .option('-p, --priority <priority>', 'none | urgent | high | medium | low')
     .option('--project <project>', 'Only tasks in this project')
+    .option('--product <product>', 'Only tasks touching this product’s modules')
+    .option('--module <module...>', 'Only tasks touching these modules')
+    .option('--capability <capability>', 'Only tasks delivering this capability')
     .option('-n, --limit <n>', 'Rows per page', (v) => parseInt(v, 10))
     .option('--json', 'Output raw JSON')
     .action(async (options) => {
@@ -113,6 +116,9 @@ export function configureTaskCommands(program: Command) {
             labels: options.label,
             priority: asPriority(options.priority),
             project: options.project,
+            product: options.product,
+            modules: options.module,
+            capability: options.capability,
             perPage: options.limit,
           }),
         renderList,
@@ -178,6 +184,8 @@ export function configureTaskCommands(program: Command) {
     .option('-a, --assignee <who>', 'Member email, name, or "me"')
     .option('--parent <task>', 'Create as a sub-task of this task')
     .option('--project <project>', 'File under this project')
+    .option('--module <module...>', 'Modules this task changes')
+    .option('--capability <capability>', 'Capability this task delivers')
     .option('--json', 'Output raw JSON')
     .action(async (title, options) => {
       await run(
@@ -193,6 +201,8 @@ export function configureTaskCommands(program: Command) {
             assignee: options.assignee,
             parent: options.parent,
             project: options.project,
+            moduleIds: options.module,
+            capability: options.capability,
           }),
         (ref) => renderRef(ref, 'Created'),
       );
@@ -209,6 +219,9 @@ export function configureTaskCommands(program: Command) {
     .option('-p, --priority <priority>', 'none | urgent | high | medium | low')
     .option('-a, --assignee <who>', 'Member email, name, or "me"')
     .option('--project <project>', 'Move under this project')
+    .option('--module <module...>', 'Replace the modules this task changes')
+    .option('--capability <capability>', 'Capability this task delivers')
+    .option('--no-capability', 'Clear the capability')
     .option('--json', 'Output raw JSON')
     .action(async (ref, options) => {
       await run(
@@ -222,6 +235,15 @@ export function configureTaskCommands(program: Command) {
             priority: asPriority(options.priority),
             assignee: options.assignee,
             project: options.project,
+            moduleIds: options.module,
+            // Commander turns --no-capability into `false`, which is how
+            // clearing the field is told apart from leaving it alone. Anything
+            // else is passed through, including undefined for "not mentioned".
+            ...(options.capability === false
+              ? { capability: null }
+              : options.capability
+                ? { capability: options.capability }
+                : {}),
           }),
         (updated) => renderRef(updated, 'Updated'),
       );

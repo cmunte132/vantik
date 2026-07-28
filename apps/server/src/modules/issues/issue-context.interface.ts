@@ -92,6 +92,15 @@ export interface IssueContext {
   dueDate: Date | null;
   project: ContextNamedEntity | null;
   cycle: ContextNamedEntity | null;
+  /**
+   * What the issue touches, named rather than left as ids.
+   *
+   * The whole point of this endpoint is that an agent can start from one
+   * request. Modules and the capability arrive resolved for the same reason the
+   * state and the labels do: an id tells a reader nothing.
+   */
+  modules: ContextNamedEntity[];
+  capability: ContextNamedEntity | null;
   parent: ContextIssueRef | null;
   subIssues: ContextIssueRef[];
   relations: ContextRelation[];

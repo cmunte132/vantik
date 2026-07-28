@@ -10,18 +10,15 @@ export interface GithubRepositories {
   private: boolean;
 }
 
-export interface GithubMappings {
-  teamId: string;
-  id: string;
-  isBidirectional: string;
-}
-
+/**
+ * A `mappings` list lived here, and each entry carried a `teamId`. A repository
+ * now maps to a module through `ModuleRepo`, and `ModuleRoutingService` reads
+ * those rows once for each webhook.
+ */
 export interface GithubIntegrationSettings {
   orgAvatarURL: string;
   orgLogin: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   repositories: GithubRepositories[];
-  mappings: GithubMappings[];
 }
 
 export interface GithubPersonalIntegrationSettings {

@@ -1,4 +1,9 @@
-import { RiDiscordFill, RiGithubFill, RiMailFill } from '@remixicon/react';
+import {
+  RiDiscordFill,
+  RiGitRepositoryLine,
+  RiGithubFill,
+  RiMailFill,
+} from '@remixicon/react';
 import { Actions, StackLine, Whatsapp } from '@vantikhq/ui/icons';
 
 export const ICON_MAPPING = {
@@ -6,6 +11,7 @@ export const ICON_MAPPING = {
   discord: RiDiscordFill,
   github: RiGithubFill,
   whatsapp: Whatsapp,
+  'local-repo': RiGitRepositoryLine,
 
   // Default icon
   integration: StackLine,

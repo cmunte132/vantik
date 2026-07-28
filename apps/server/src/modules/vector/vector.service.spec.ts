@@ -429,3 +429,182 @@ describe('VectorService.createIssuesCollection', () => {
     expect(create).toHaveBeenCalled();
   });
 });
+
+/**
+ * Narrowing a search to the second axis.
+ *
+ * The index carries no module and no capability. Adding them means a schema
+ * change and a reindex of every issue, for a filter that the postgres read at
+ * the end of a search already pays for. So the filter runs there, and the
+ * search asks typesense for a wider page to make up for the rows it removes.
+ */
+describe('VectorService.searchEmbeddings with an axis filter', () => {
+  const hit = (id: string) => ({
+    document: {
+      id,
+      title: id,
+      description: '',
+      descriptionString: '',
+      stateId: 'state-1',
+      stateCategory: 'STARTED',
+      resolutionText: '',
+      teamId: 'team-1',
+      number: 1,
+      issueNumber: `ENG-1`,
+    },
+  });
+
+  function buildSearchDeps(hitIds: string[], liveIds: string[]) {
+    const perform = jest.fn().mockResolvedValue({
+      results: [{ hits: hitIds.map(hit) }],
+    });
+
+    const findMany = jest
+      .fn()
+      .mockImplementation(({ where }) =>
+        Promise.resolve(
+          liveIds
+            .filter((id) => (where.id?.in ?? liveIds).includes(id))
+            .map((id) => ({ id })),
+        ),
+      );
+
+    const prisma = { issue: { findMany } } as unknown as PrismaService;
+    const typesense = {
+      multiSearch: { perform },
+    } as unknown as TypesenseClient;
+
+    return { prisma, typesense, perform, findMany };
+  }
+
+  it('asks postgres for the modules the caller named', async () => {
+    const { prisma, typesense, findMany } = buildSearchDeps(
+      ['issue-1'],
+      ['issue-1'],
+    );
+
+    await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool timeout',
+      10,
+      0.8,
+      [],
+      { moduleIds: ['module-server'] },
+    );
+
+    expect(findMany.mock.calls[0][0].where).toMatchObject({
+      moduleIds: { hasSome: ['module-server'] },
+    });
+  });
+
+  it('asks postgres for the capability the caller named', async () => {
+    const { prisma, typesense, findMany } = buildSearchDeps(
+      ['issue-1'],
+      ['issue-1'],
+    );
+
+    await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool timeout',
+      10,
+      0.8,
+      [],
+      { capabilityId: 'capability-sync' },
+    );
+
+    expect(findMany.mock.calls[0][0].where).toMatchObject({
+      capabilityId: 'capability-sync',
+    });
+  });
+
+  it('adds no axis condition when the caller named none', async () => {
+    const { prisma, typesense, findMany } = buildSearchDeps(
+      ['issue-1'],
+      ['issue-1'],
+    );
+
+    await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool timeout',
+      10,
+    );
+
+    const where = findMany.mock.calls[0][0].where;
+    expect(where).not.toHaveProperty('moduleIds');
+    expect(where).not.toHaveProperty('capabilityId');
+  });
+
+  /**
+   * The filter takes rows out of the page that came back, so a request for ten
+   * hits would return two. The wider page is what keeps the answer full.
+   */
+  it('asks typesense for a wider page when it will filter the result', async () => {
+    const { prisma, typesense, perform } = buildSearchDeps(
+      ['issue-1'],
+      ['issue-1'],
+    );
+
+    await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool timeout',
+      10,
+      0.8,
+      [],
+      { moduleIds: ['module-server'] },
+    );
+
+    expect(perform.mock.calls[0][0].searches[0].per_page).toBeGreaterThan(10);
+  });
+
+  it('asks for exactly the page it was told to when there is no filter', async () => {
+    const { prisma, typesense, perform } = buildSearchDeps(
+      ['issue-1'],
+      ['issue-1'],
+    );
+
+    await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool timeout',
+      10,
+    );
+
+    expect(perform.mock.calls[0][0].searches[0].per_page).toBe(10);
+  });
+
+  it('never returns more hits than the caller asked for', async () => {
+    const ids = Array.from(
+      { length: 30 },
+      (_unused, index) => `issue-${index}`,
+    );
+    const { prisma, typesense } = buildSearchDeps(ids, ids);
+
+    const hits = await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool timeout',
+      5,
+      0.8,
+      [],
+      { moduleIds: ['module-server'] },
+    );
+
+    expect(hits).toHaveLength(5);
+  });
+
+  it('drops a hit whose issue does not match the module', async () => {
+    const { prisma, typesense } = buildSearchDeps(
+      ['issue-1', 'issue-2'],
+      ['issue-2'],
+    );
+
+    const hits = await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool timeout',
+      10,
+      0.8,
+      [],
+      { moduleIds: ['module-server'] },
+    );
+
+    expect(hits.map((found) => found.id)).toEqual(['issue-2']);
+  });
+});

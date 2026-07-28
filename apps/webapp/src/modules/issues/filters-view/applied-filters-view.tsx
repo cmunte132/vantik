@@ -10,6 +10,9 @@ import {
   IssuePriorityDropdown,
   IssueProjectDropdown,
   IssueCycleDropdown,
+  IssueProductDropdown,
+  IssueModuleDropdown,
+  IssueCapabilityDropdown,
 } from './filter-dropdowns';
 import { FilterItemView } from './filter-item-view';
 import { isEmpty } from './filter-utils';
@@ -66,6 +69,28 @@ export const AppliedFiltersView = observer(() => {
             filterKey="project"
             filter={filters.project}
             Component={IssueProjectDropdown}
+          />
+
+          <FilterItemView
+            name="Product"
+            filterKey="product"
+            filter={filters.product}
+            Component={IssueProductDropdown}
+          />
+
+          <FilterItemView
+            name="Module"
+            filterKey="module"
+            filter={filters.module}
+            isArray
+            Component={IssueModuleDropdown}
+          />
+
+          <FilterItemView
+            name="Capability"
+            filterKey="capability"
+            filter={filters.capability}
+            Component={IssueCapabilityDropdown}
           />
 
           <FilterItemView

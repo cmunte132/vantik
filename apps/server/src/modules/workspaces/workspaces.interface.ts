@@ -5,6 +5,7 @@ import {
   issueLabelPrompt,
   issueSummarizePrompt,
   issueTitlePrompt,
+  moduleClassifierPrompt,
   subIssuesPrompt,
   viewNameDescriptionPrompt,
 } from '@vantikhq/types';
@@ -113,5 +114,13 @@ export const promptsSeedData = [
     name: 'IssueDescription',
     prompt: issueDescriptionPrompt,
     model: 'smart',
+  },
+  {
+    // Names the modules an issue would change. `fast` on purpose: the answer
+    // is a suggestion a person accepts or dismisses, never a write to the
+    // issue, so the cost of a wrong one is a chip nobody clicks.
+    name: 'ModuleClassifier',
+    prompt: moduleClassifierPrompt,
+    model: 'fast',
   },
 ];

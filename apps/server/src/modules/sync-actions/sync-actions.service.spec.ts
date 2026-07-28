@@ -234,7 +234,12 @@ describe('deletes of records that are physically gone', () => {
       [],
     );
 
-    const { syncActions } = await service.getDelta('Issue', 5n, WORKSPACE, USER);
+    const { syncActions } = await service.getDelta(
+      'Issue',
+      5n,
+      WORKSPACE,
+      USER,
+    );
 
     // The regression: dropping this leaves the row in the client's cache for
     // good, clickable and opening a page the server will 404.
@@ -248,7 +253,12 @@ describe('deletes of records that are physically gone', () => {
     // would ask the client to store a record that does not exist.
     const service = buildService([action('issue-gone', 'I', 10n)], []);
 
-    const { syncActions } = await service.getDelta('Issue', 5n, WORKSPACE, USER);
+    const { syncActions } = await service.getDelta(
+      'Issue',
+      5n,
+      WORKSPACE,
+      USER,
+    );
 
     expect(syncActions).toHaveLength(0);
   });
@@ -291,5 +301,46 @@ describe('SyncActionsService.getDelta on a sequence it cannot serve', () => {
 
     expect(delta.resync).toBeUndefined();
     expect(delta.syncActions).toEqual([]);
+  });
+});
+
+/**
+ * The boundary that a bootstrap draws.
+ *
+ * A client asks for a workspace and gets every record of that workspace. There
+ * is no team in the query, and there is none in the socket room either:
+ * `SyncGateway` joins a client to `workspaceId`. So a member of one team holds
+ * the issues of every team in the same workspace, and `UsersOnWorkspaces.teamIds`
+ * decides which teams appear in the sidebar and nothing more.
+ *
+ * These tests pin the boundary that exists rather than the one a reader might
+ * assume. A product page rolls issues up across teams by design, and it can only
+ * be as narrow as this query is.
+ */
+describe('SyncActionsService.getBootstrap scope', () => {
+  it('reads only the workspace it was asked for', async () => {
+    const service = buildService([action('issue-live', 'I', 10n)]);
+
+    await service.getBootstrap('Issue', WORKSPACE, USER);
+
+    const calls = (
+      (service as unknown as { prisma: PrismaService }).prisma.syncAction
+        .findMany as jest.Mock
+    ).mock.calls;
+
+    expect(calls[0][0].where.workspaceId).toBe(WORKSPACE);
+  });
+
+  it('puts no team in the query', async () => {
+    const service = buildService([action('issue-live', 'I', 10n)]);
+
+    await service.getBootstrap('Issue', WORKSPACE, USER);
+
+    const where = (
+      (service as unknown as { prisma: PrismaService }).prisma.syncAction
+        .findMany as jest.Mock
+    ).mock.calls[0][0].where;
+
+    expect(Object.keys(where)).toEqual(['workspaceId', 'modelName']);
   });
 });

@@ -10,6 +10,7 @@ import {
   ContextIssueRef,
   ContextLabel,
   ContextLinkedIssue,
+  ContextNamedEntity,
   ContextRelation,
   ContextUser,
   IssueContext,
@@ -52,6 +53,7 @@ export default class IssueContextService {
         team: true,
         project: { select: { id: true, name: true } },
         cycle: { select: { id: true, name: true } },
+        capability: { select: { id: true, name: true } },
         parent: { include: { team: { select: { identifier: true } } } },
         subIssue: {
           where: { deleted: null },
@@ -135,8 +137,16 @@ export default class IssueContextService {
       toParentId,
     ]);
 
-    const [states, labels, users, teams, projects, cycles, historyIssues] =
-      await Promise.all([
+    const [
+      states,
+      labels,
+      users,
+      teams,
+      projects,
+      cycles,
+      historyIssues,
+      modules,
+    ] = await Promise.all([
         this.prisma.workflow.findMany({
           where: { id: { in: unique(stateIds) } },
           select: { id: true, name: true, category: true },
@@ -162,6 +172,13 @@ export default class IssueContextService {
           select: { id: true, name: true },
         }),
         this.getIssueRefRows(unique(parentIds)),
+        // Named in the same round trip as everything else. A deleted module
+        // keeps its row, so this resolves an id the issue still carries rather
+        // than dropping it silently.
+        this.prisma.module.findMany({
+          where: { id: { in: unique(issue.moduleIds) } },
+          select: { id: true, name: true },
+        }),
       ]);
 
     const stateById = byId(states);
@@ -172,6 +189,7 @@ export default class IssueContextService {
     const cycleById = byId(cycles);
     const relatedIssueById = byId(relatedIssues);
     const historyIssueById = byId(historyIssues);
+    const moduleById = byId(modules);
 
     const state = stateById.get(issue.stateId);
 
@@ -217,6 +235,12 @@ export default class IssueContextService {
       dueDate: issue.dueDate,
       project: issue.project ?? null,
       cycle: issue.cycle ?? null,
+      // Kept in the order the issue records them, so a reader sees the list the
+      // way it was written rather than in whatever order the rows came back.
+      modules: issue.moduleIds
+        .map((moduleId) => moduleById.get(moduleId))
+        .filter(Boolean) as ContextNamedEntity[],
+      capability: issue.capability ?? null,
       parent: issue.parent
         ? this.toIssueRef(issue.parent as IssueRefRow, stateById)
         : null,

@@ -46,6 +46,14 @@ export interface FiltersModelType {
   project?: FilterModelType;
   cycle?: FilterModelType;
 
+  // The product axis. `module` compares against Issue.moduleIds, which is an
+  // array, so it uses INCLUDES the way `label` does. `capability` compares
+  // against one id and uses IS. `product` names no field on an issue at all:
+  // `getFilters` turns it into the modules of that product.
+  product?: FilterModelType;
+  module?: FilterModelType;
+  capability?: FilterModelType;
+
   // For issues coming from Github
   source?: FilterModelType;
 
@@ -62,6 +70,8 @@ export enum GroupingEnum {
   priority = 'priority',
   project = 'project',
   team = 'team',
+  module = 'module',
+  capability = 'capability',
 }
 
 export enum TimeBasedFilterEnum {

@@ -67,6 +67,22 @@
     "MCP_LOOPBACK_URL",
     "MCP_RATE_LIMIT",
     "MCP_RATE_LIMIT_WINDOW_MS",
+    // The directory that holds every local repository. It is empty on a
+    // machine that one person runs, and then any absolute path is allowed.
+    "LOCAL_REPO_ROOT",
+    // The seed of the integration definitions reads these pairs. A pair that
+    // the environment does not hold leaves its integration without
+    // credentials, and the settings page says so.
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+    "DISCORD_CLIENT_ID",
+    "DISCORD_CLIENT_SECRET",
+    "EMAIL_CLIENT_ID",
+    "EMAIL_CLIENT_SECRET",
+    "WHATSAPP_CLIENT_ID",
+    "WHATSAPP_CLIENT_SECRET",
+    "WHATSAPP_BUSINESS_CLIENT_ID",
+    "WHATSAPP_BUSINESS_CLIENT_SECRET",
     "VANTIK_URL",
     "VANTIK_TOKEN",
     "TRIGGER_DB",

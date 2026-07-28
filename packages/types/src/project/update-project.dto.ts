@@ -28,4 +28,9 @@ export class UpdateProjectDto {
   @IsOptional()
   @IsArray()
   teams?: string[];
+
+  /** The capabilities this project builds or changes. Replaces the list. */
+  @IsOptional()
+  @IsArray()
+  capabilityIds?: string[];
 }

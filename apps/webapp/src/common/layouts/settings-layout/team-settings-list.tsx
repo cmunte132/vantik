@@ -77,7 +77,7 @@ export const TeamSettingsList = observer(() => {
                   <TeamIcon
                     preferences={team.preferences}
                     name={team.name}
-                    className="!h-4 !w-4 shrink-0 [&>svg]:!h-3 [&>svg]:!w-3"
+                    size="md"
                   />
                   <span className="flex-1 truncate">{team.name}</span>
                   <ChevronRight

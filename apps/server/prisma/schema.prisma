@@ -1051,7 +1051,14 @@ model SyncAction {
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
 
+  // The team that owns the announced record, when a team owns it. A team is a
+  // visibility boundary, so a client reads only the actions of its own teams
+  // and the actions that no team owns. A physically deleted row cannot be read
+  // to find its team, so the log has to remember it.
+  teamId String?
+
   @@unique([modelId, action])
+  @@index([workspaceId, teamId, sequenceId])
 }
 
 model Team {

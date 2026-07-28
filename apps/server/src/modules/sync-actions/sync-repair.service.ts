@@ -4,6 +4,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
+import { getTeamId } from './sync-actions.utils';
 import { tablesToSendMessagesFor } from '../replication/replication.interface';
 
 /** Rows examined per model before giving up and saying so. */
@@ -93,7 +94,12 @@ export class SyncRepairService {
         const vanished = await this.vanishedSince(delegate, modelName);
 
         for (const modelId of vanished) {
-          const recorded = await this.record(sequence++, 'D', modelName, modelId);
+          const recorded = await this.record(
+            sequence++,
+            'D',
+            modelName,
+            modelId,
+          );
           summary.deletesRecovered += recorded ? 1 : 0;
         }
       } catch (error) {
@@ -199,6 +205,11 @@ export class SyncRepairService {
    * the same reasoning as a live delete: it is the only place that still knows
    * once the row is gone, and a record nobody was ever told about needs no
    * correction.
+   *
+   * The team is resolved from the record when the record is still there, and
+   * from the log when it is not. A team is a visibility boundary (ENG-79), so a
+   * repaired action with no team would go to the whole workspace — which would
+   * make a period of downtime the way past the boundary.
    */
   private async record(
     sequenceId: bigint,
@@ -215,19 +226,47 @@ export class SyncRepairService {
       return false;
     }
 
+    const teamId =
+      (await getTeamId(this.prisma, modelName as never, modelId)) ??
+      (await this.announcedTeam(modelName, modelId));
+
     await this.prisma.syncAction.upsert({
       where: { modelId_action: { modelId, action } },
-      update: { sequenceId },
+      update: { sequenceId, teamId: teamId ?? null },
       create: {
         action,
         modelName: modelName as never,
         modelId,
         workspaceId: announced.workspaceId,
+        teamId: teamId ?? null,
         sequenceId,
       },
     });
 
     return true;
+  }
+
+  /**
+   * The team an announcement already carries for this record.
+   *
+   * A vanished record cannot be read, so the log is the only source. The
+   * announcements that are searched are the ones that named the record while it
+   * existed, which is where a team was written.
+   */
+  private async announcedTeam(
+    modelName: ModelNameEnum,
+    modelId: string,
+  ): Promise<string | undefined> {
+    const announced = await this.prisma.syncAction.findFirst({
+      where: {
+        modelId,
+        modelName: modelName as never,
+        teamId: { not: null },
+      },
+      select: { teamId: true },
+    });
+
+    return announced?.teamId ?? undefined;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -10,6 +10,8 @@ import {
 } from 'pg-logical-replication';
 import { v4 as uuidv4 } from 'uuid';
 
+import { announcementRoom } from 'common/team-access';
+
 import ActionEventService from 'modules/action-event/action-event.service';
 import { LoggerService } from 'modules/logger/logger.service';
 import { SyncGateway } from 'modules/sync/sync.gateway';
@@ -68,15 +70,13 @@ export default class ReplicationService {
     //
     // Deliberately not awaited into startup: a slow reconcile should delay
     // clients catching up, not the server accepting requests.
-    this.syncRepair
-      .reconcile()
-      .catch((error) =>
-        this.logger.error({
-          message: `Could not repair the sync log after downtime: ${error}`,
-          where: 'ReplicationService.init',
-          error: error instanceof Error ? error : undefined,
-        }),
-      );
+    this.syncRepair.reconcile().catch((error) =>
+      this.logger.error({
+        message: `Could not repair the sync log after downtime: ${error}`,
+        where: 'ReplicationService.init',
+        error: error instanceof Error ? error : undefined,
+      }),
+    );
   }
 
   async deleteOrphanedSlots() {
@@ -284,7 +284,8 @@ export default class ReplicationService {
       // ever removes a cached row is a delete action, and none was written.
       // A stale row is not inert either: it is clickable, and it opens a page
       // for something the server will 404.
-      const newRow = (log.tag === 'delete' ? log.key ?? log.old : log.new) ?? {};
+      const newRow =
+        (log.tag === 'delete' ? (log.key ?? log.old) : log.new) ?? {};
       const isDeleted = log.tag === 'delete' || !!newRow.deleted;
       const modelId = newRow.id;
 
@@ -313,13 +314,18 @@ export default class ReplicationService {
           return;
         }
 
+        // Three models belong to one person and go to that person's own room.
+        // Everything else goes to the room of the team that owns it, and to the
+        // workspace room when no team does. Before this, one room held every
+        // member of the workspace, so a change to any issue of any team reached
+        // all of them (ENG-79).
         const recipientId = [
           ModelNameEnum.Notification,
           ModelNameEnum.Conversation,
           ModelNameEnum.ConversationHistory,
         ].includes(modelName)
           ? (syncActionData.data.recipientId ?? syncActionData.data.userId)
-          : syncActionData.workspaceId;
+          : announcementRoom(syncActionData.workspaceId, syncActionData.teamId);
 
         this.syncGateway.wss
           .to(recipientId)

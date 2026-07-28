@@ -347,6 +347,7 @@ export class VectorService implements OnModuleInit {
     vectorDistance: number = 0.8,
     stateCategories: string[] = [],
     axis: AxisFilter = {},
+    visibleTeamIds?: string[],
   ) {
     // Set a default value of 0.8 for vectorDistance if it is NaN
     if (isNaN(vectorDistance)) {
@@ -373,7 +374,11 @@ export class VectorService implements OnModuleInit {
           collection: 'issues',
           q: searchQuery,
           query_by: ISSUE_QUERY_BY,
-          filter_by: buildFilterBy(workspaceId, stateCategories),
+          filter_by: buildFilterBy(
+            workspaceId,
+            stateCategories,
+            visibleTeamIds,
+          ),
           sort_by: '_text_match:desc',
           vector_query: `embeddings:([], distance_threshold:${vectorDistance})`,
           exclude_fields: 'embeddings',
@@ -390,6 +395,7 @@ export class VectorService implements OnModuleInit {
     const kept = await this.dropDeletedIssues(
       mapSearchHits(searchResults),
       axis,
+      visibleTeamIds,
     );
 
     return kept.slice(0, limit);
@@ -411,6 +417,7 @@ export class VectorService implements OnModuleInit {
   private async dropDeletedIssues(
     hits: IssueSearchHit[],
     axis: AxisFilter = {},
+    visibleTeamIds?: string[],
   ): Promise<IssueSearchHit[]> {
     if (hits.length === 0) {
       return hits;
@@ -420,6 +427,12 @@ export class VectorService implements OnModuleInit {
       where: {
         id: { in: hits.map((hit) => hit.id) },
         deleted: null,
+        // A team is a visibility boundary (ENG-79). The team rides on this
+        // query for the same reason the module and the capability do: the
+        // index holds neither, and this read already happens on every search.
+        // The alternative is a field in Typesense and a reindex of every
+        // issue, for a filter that costs nothing here.
+        ...(visibleTeamIds ? { teamId: { in: visibleTeamIds } } : {}),
         // An issue records the modules it changes as a list, so a request for
         // several modules matches an issue that names any one of them.
         ...(axis.moduleIds?.length
@@ -443,7 +456,11 @@ export class VectorService implements OnModuleInit {
     return live;
   }
 
-  async similarIssues(workspaceId: string, issueId: string) {
+  async similarIssues(
+    workspaceId: string,
+    issueId: string,
+    visibleTeamIds?: string[],
+  ) {
     // Prepare the search request for Typesense
     const searchRequests = {
       searches: [
@@ -453,7 +470,7 @@ export class VectorService implements OnModuleInit {
           // Anchored on an existing document, so the wildcard `q` is correct
           // here — the vector comes from the issue, not from query text.
           vector_query: `embeddings:([], id:${issueId}, distance_threshold:${SIMILAR_ISSUE_DISTANCE_THRESHOLD})`,
-          filter_by: buildFilterBy(workspaceId, []),
+          filter_by: buildFilterBy(workspaceId, [], visibleTeamIds),
           exclude_fields: 'embeddings',
           page: 1,
         },
@@ -466,7 +483,11 @@ export class VectorService implements OnModuleInit {
 
     // The vector query already excludes anything past the distance threshold,
     // so the hits come back ranked by similarity.
-    return this.dropDeletedIssues(mapSearchHits(searchResults));
+    return this.dropDeletedIssues(
+      mapSearchHits(searchResults),
+      {},
+      visibleTeamIds,
+    );
   }
 
   // ------------------------------------------------------- knowledge bank
@@ -751,7 +772,11 @@ const ALLOWED_STATE_CATEGORIES = new Set(Object.values(WorkflowCategoryEnum));
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function buildFilterBy(workspaceId: string, stateCategories: string[]): string {
+function buildFilterBy(
+  workspaceId: string,
+  stateCategories: string[],
+  visibleTeamIds?: string[],
+): string {
   if (!UUID_REGEX.test(workspaceId)) {
     throw new Error('Invalid workspaceId format');
   }
@@ -765,6 +790,29 @@ function buildFilterBy(workspaceId: string, stateCategories: string[]): string {
   if (allowedCategories.length > 0) {
     filters.push(
       `stateCategory:=[${allowedCategories.map((c) => `\`${c}\``).join(',')}]`,
+    );
+  }
+
+  // A team is a visibility boundary (ENG-79). The document holds `teamId`
+  // already, so the filter runs inside the search: a page of hits then comes
+  // back full, where a filter applied to the results would return fewer rows
+  // than the caller asked for. `dropDeletedIssues` applies the same limit
+  // against postgres, which is the authority — the index is a cache, and a
+  // stale document must not decide who reads what.
+  //
+  // Each id is checked against the uuid pattern before it reaches the string.
+  // A filter expression is not a parameterised query, so an id that is not a
+  // uuid is a way to write a new expression.
+  if (visibleTeamIds) {
+    const teamIds = visibleTeamIds.filter((id) => UUID_REGEX.test(id));
+
+    // Typesense has no expression for "match nothing", and an empty list is
+    // silently dropped. A member of no team must get no issue, so the filter
+    // names an id that no row can hold.
+    filters.push(
+      teamIds.length > 0
+        ? `teamId:=[${teamIds.map((id) => `\`${id}\``).join(',')}]`
+        : 'teamId:=`none`',
     );
   }
 

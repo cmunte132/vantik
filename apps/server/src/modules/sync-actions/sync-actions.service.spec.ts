@@ -16,6 +16,8 @@ import SyncActionsService from './sync-actions.service';
 
 const USER = 'user-1';
 const WORKSPACE = 'workspace-1';
+const TEAM_OWN = 'team-own';
+const TEAM_OTHER = 'team-other';
 
 interface FakeSyncAction {
   modelId: string;
@@ -23,7 +25,35 @@ interface FakeSyncAction {
   action: string;
   sequenceId: bigint;
   workspaceId: string;
-  [field: string]: string | bigint;
+  // Optional so that a hit off `getBootstrap` can be read as one of these. The
+  // shared `SyncAction` type has no team, and the assertions below only ever
+  // read `modelId` and `action` off the result.
+  teamId?: string | null;
+  [field: string]: string | bigint | null | undefined;
+}
+
+interface FakeWhere {
+  OR?: Array<Record<string, unknown>>;
+  sequenceId?: { gt: bigint };
+}
+
+/**
+ * Stands in for the team clause that `syncActionTeamWhere` builds.
+ *
+ * A null team means no team owns the record, so it reaches every member of the
+ * workspace. The fake honours that as the query does; a fake that ignored it
+ * would let a test prove only that the fake agrees with itself.
+ */
+function matchesTeam(row: FakeSyncAction, where?: FakeWhere) {
+  if (!where?.OR) {
+    return true;
+  }
+
+  return where.OR.some((clause) =>
+    clause.teamId === null
+      ? row.teamId === null
+      : (clause.teamId as { in: string[] }).in.includes(row.teamId as string),
+  );
 }
 
 /**
@@ -53,7 +83,11 @@ function findMany(rows: FakeSyncAction[], args: FindManyArgs) {
   });
 }
 
-function buildService(rows: FakeSyncAction[], liveIssueIds?: string[]) {
+function buildService(
+  rows: FakeSyncAction[],
+  liveIssueIds?: string[],
+  callerTeamIds: string[] = [TEAM_OWN, TEAM_OTHER],
+) {
   // `undefined` keeps the old behaviour for the bootstrap tests: every issue
   // still exists. A list makes rows outside it physically gone, which is what
   // a hard delete leaves behind.
@@ -67,10 +101,11 @@ function buildService(rows: FakeSyncAction[], liveIssueIds?: string[]) {
         // that here, a "client is already current" case would still be handed
         // rows and the test would be asserting against a fake, not the service.
         const after = args?.where?.sequenceId?.gt;
-        const candidates =
+        const candidates = (
           after === undefined
             ? rows
-            : rows.filter((row) => row.sequenceId > after);
+            : rows.filter((row) => row.sequenceId > after)
+        ).filter((row) => matchesTeam(row, args?.where));
 
         return Promise.resolve(findMany(candidates, args));
       }),
@@ -95,7 +130,11 @@ function buildService(rows: FakeSyncAction[], liveIssueIds?: string[]) {
       ),
     },
     usersOnWorkspaces: {
-      findUnique: jest.fn(() => Promise.resolve({ status: 'ACTIVE' })),
+      // Two callers with two different `select`s: `resolveWorkspaceId` reads
+      // the status, and `visibleTeamIds` reads the teams.
+      findUnique: jest.fn(() =>
+        Promise.resolve({ status: 'ACTIVE', teamIds: callerTeamIds }),
+      ),
     },
   } as unknown as PrismaService;
 
@@ -106,12 +145,14 @@ const action = (
   modelId: string,
   action: string,
   sequenceId: bigint,
+  teamId: string | null = TEAM_OWN,
 ): FakeSyncAction => ({
   modelId,
   modelName: 'Issue',
   action,
   sequenceId,
   workspaceId: WORKSPACE,
+  teamId,
 });
 
 describe('SyncActionsService.getBootstrap', () => {
@@ -307,15 +348,16 @@ describe('SyncActionsService.getDelta on a sequence it cannot serve', () => {
 /**
  * The boundary that a bootstrap draws.
  *
- * A client asks for a workspace and gets every record of that workspace. There
- * is no team in the query, and there is none in the socket room either:
- * `SyncGateway` joins a client to `workspaceId`. So a member of one team holds
- * the issues of every team in the same workspace, and `UsersOnWorkspaces.teamIds`
- * decides which teams appear in the sidebar and nothing more.
+ * A team is a visibility boundary (ENG-79). It has to hold here, because this
+ * query and `getDelta` are what fill a client's IndexedDB — a screen that
+ * filters what it draws hides nothing, since the record is already on the
+ * machine.
  *
- * These tests pin the boundary that exists rather than the one a reader might
- * assume. A product page rolls issues up across teams by design, and it can only
- * be as narrow as this query is.
+ * This file used to pin the opposite. Until ENG-79 the query named only the
+ * workspace, and the tests below said so, on the reasoning that a product page
+ * rolls issues up across teams and can be no narrower than the query behind it.
+ * The decision went the other way: a product page shows the issues of that
+ * module which the viewer may see, and no others.
  */
 describe('SyncActionsService.getBootstrap scope', () => {
   it('reads only the workspace it was asked for', async () => {
@@ -331,8 +373,10 @@ describe('SyncActionsService.getBootstrap scope', () => {
     expect(calls[0][0].where.workspaceId).toBe(WORKSPACE);
   });
 
-  it('puts no team in the query', async () => {
-    const service = buildService([action('issue-live', 'I', 10n)]);
+  it('names the teams of the caller in the query', async () => {
+    const service = buildService([action('issue-live', 'I', 10n)], undefined, [
+      TEAM_OWN,
+    ]);
 
     await service.getBootstrap('Issue', WORKSPACE, USER);
 
@@ -341,6 +385,140 @@ describe('SyncActionsService.getBootstrap scope', () => {
         .findMany as jest.Mock
     ).mock.calls[0][0].where;
 
-    expect(Object.keys(where)).toEqual(['workspaceId', 'modelName']);
+    expect(where.OR).toEqual([
+      { teamId: null },
+      { teamId: { in: [TEAM_OWN] } },
+    ]);
+  });
+
+  it('gives a non-member nothing of another team', async () => {
+    const service = buildService(
+      [
+        action('issue-mine', 'I', 10n, TEAM_OWN),
+        action('issue-theirs', 'I', 20n, TEAM_OTHER),
+      ],
+      undefined,
+      [TEAM_OWN],
+    );
+
+    const { syncActions } = await service.getBootstrap(
+      'Issue',
+      WORKSPACE,
+      USER,
+    );
+
+    expect(syncActions.map((a: FakeSyncAction) => a.modelId)).toEqual([
+      'issue-mine',
+    ]);
+  });
+
+  it('gives a member of no team nothing that a team owns', async () => {
+    const service = buildService(
+      [action('issue-mine', 'I', 10n, TEAM_OWN)],
+      undefined,
+      [],
+    );
+
+    const { syncActions } = await service.getBootstrap(
+      'Issue',
+      WORKSPACE,
+      USER,
+    );
+
+    expect(syncActions).toEqual([]);
+  });
+
+  /**
+   * A Label, a Page and a Project belong to the workspace and not to a team.
+   * The boundary must not swallow them, or a member of one team would lose the
+   * labels that every team shares.
+   */
+  it('still gives everyone the records that no team owns', async () => {
+    const service = buildService(
+      [action('label-1', 'I', 10n, null)],
+      undefined,
+      [],
+    );
+
+    const { syncActions } = await service.getBootstrap(
+      'Issue',
+      WORKSPACE,
+      USER,
+    );
+
+    expect(syncActions.map((a: FakeSyncAction) => a.modelId)).toEqual([
+      'label-1',
+    ]);
+  });
+});
+
+describe('SyncActionsService.getDelta scope', () => {
+  it('gives a non-member no change to another team’s issue', async () => {
+    const service = buildService(
+      [
+        action('issue-mine', 'U', 10n, TEAM_OWN),
+        action('issue-theirs', 'U', 20n, TEAM_OTHER),
+      ],
+      undefined,
+      [TEAM_OWN],
+    );
+
+    const { syncActions } = await service.getDelta(
+      'Issue',
+      5n,
+      WORKSPACE,
+      USER,
+    );
+
+    expect(syncActions.map((a) => a.modelId)).toEqual(['issue-mine']);
+  });
+
+  /**
+   * An issue that moves to another team leaves the client that held it. The
+   * announcement is upserted with the new team, so the next delta no longer
+   * matches for the old team — and the issue stops arriving there.
+   */
+  it('follows an issue that moved to a team the caller cannot see', async () => {
+    const service = buildService(
+      [action('issue-moved', 'U', 20n, TEAM_OTHER)],
+      undefined,
+      [TEAM_OWN],
+    );
+
+    const { syncActions } = await service.getDelta(
+      'Issue',
+      5n,
+      WORKSPACE,
+      USER,
+    );
+
+    expect(syncActions).toEqual([]);
+  });
+});
+
+/**
+ * The team of an announcement.
+ *
+ * `upsertSyncAction` writes it, and a physical delete recovers it from the log
+ * exactly as the workspace is recovered — the row is gone, so the announcement
+ * that named it while it existed is the last thing that knows.
+ */
+describe('the team on a sync action', () => {
+  it('recovers the team of a record that is physically gone', async () => {
+    const service = buildService(
+      [action('issue-gone', 'I', 10n, TEAM_OTHER)],
+      [],
+    );
+
+    const result = await service.upsertSyncAction(
+      '0/1F',
+      'delete',
+      'Issue' as never,
+      'issue-gone',
+    );
+
+    // Without this the delete would carry no team, land in the workspace room,
+    // and reach every member — which is the leak the boundary exists to stop.
+    expect(result?.teamId).toBe(TEAM_OTHER);
   });
 });

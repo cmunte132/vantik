@@ -304,6 +304,7 @@ export async function getCreateIssueInput(
 export function getFilterWhere(
   getIssuesByFilter: GetIssuesByFilterDTO,
   workspaceId: string,
+  visibleTeamIds?: string[],
 ) {
   const { filters: filterData } = getIssuesByFilter;
 
@@ -321,6 +322,15 @@ export function getFilterWhere(
   // It also skewed the paginated `total`, which counts through this clause.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: Record<string, any> = { team: { workspaceId }, deleted: null };
+
+  // A team is a visibility boundary (ENG-79). This clause is what applies it to
+  // every list an agent reads over the API, and so to the MCP tools, which are
+  // clients of these same routes. The parameter is optional because the
+  // internal callers of this function serve no user and legitimately read the
+  // whole workspace; a route that serves a person always passes the list.
+  if (visibleTeamIds) {
+    where.teamId = { in: visibleTeamIds };
+  }
 
   for (const [filterKey, filterValue] of Object.entries(
     filterData as Record<FilterKey, FilterValue>,

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
+import { visibleTeamIds } from 'common/team-access';
 import { resolveWorkspaceId } from 'common/workspace-access';
 
 import { AxisFilter } from 'modules/vector/vector.interface';
@@ -41,6 +42,10 @@ export default class SearchService {
       // otherwise narrows this search to nothing, which reads as "no results"
       // rather than as the mistake it is.
       await this.axisInWorkspace(axis, workspaceId),
+      // A team is a visibility boundary (ENG-79). Search is the widest read in
+      // the product — it crosses every team by design — so it is the one that
+      // needs the limit most.
+      await visibleTeamIds(this.prisma, userId, workspaceId),
     );
 
     return searchData;
@@ -94,6 +99,7 @@ export default class SearchService {
     const similarIssues = await this.vectorService.similarIssues(
       workspaceId,
       issueId,
+      await visibleTeamIds(this.prisma, userId, workspaceId),
     );
 
     return similarIssues;

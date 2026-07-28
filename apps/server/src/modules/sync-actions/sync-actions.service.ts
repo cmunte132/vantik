@@ -3,6 +3,7 @@ import { ModelName } from '@prisma/client';
 import { ModelNameEnum, SyncAction } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { syncActionTeamWhere, visibleTeamIds } from 'common/team-access';
 import { resolveWorkspaceId } from 'common/workspace-access';
 
 import {
@@ -11,6 +12,7 @@ import {
   getLastSequenceId,
   getModelData,
   getSyncActionsData,
+  getTeamId,
   getWorkspaceId,
 } from './sync-actions.utils';
 
@@ -42,6 +44,15 @@ export default class SyncActionsService {
       return undefined;
     }
 
+    // The team is recorded for the same reason the workspace is, and it is
+    // recovered the same way after a physical delete: the row is gone, so the
+    // only place that still knows which team owned it is the announcement that
+    // named it while it existed.
+    const teamId =
+      actionType === 'D'
+        ? await this.teamOfDeleted(modelName, modelId)
+        : await getTeamId(this.prisma, modelName, modelId);
+
     const syncActionData = await this.prisma.syncAction.upsert({
       where: {
         modelId_action: {
@@ -52,12 +63,17 @@ export default class SyncActionsService {
       update: {
         sequenceId,
         action: actionType,
+        // A record moves between teams: `moveIssue` is a supported operation,
+        // and the issues that hang off it move with it. The announcement has
+        // to follow, or the delta keeps serving the issue to the old team.
+        teamId: teamId ?? null,
       },
       create: {
         action: actionType,
         modelName: modelName as ModelName,
         modelId,
         workspaceId,
+        teamId: teamId ?? null,
         sequenceId,
       },
     });
@@ -96,6 +112,34 @@ export default class SyncActionsService {
     return announced?.workspaceId;
   }
 
+  /**
+   * The team a now-deleted record belonged to.
+   *
+   * Read from the sync log, for the same reason as the workspace above. The
+   * announcement that named the record while it existed is the last thing that
+   * knows which team owned it.
+   *
+   * The insert and the update announcements are searched, and not the delete
+   * that is being written: a delete row carries whatever a previous pass put
+   * on it, which for a record announced before this column existed is nothing.
+   */
+  private async teamOfDeleted(
+    modelName: ModelNameEnum,
+    modelId: string,
+  ): Promise<string | undefined> {
+    const announced = await this.prisma.syncAction.findFirst({
+      where: {
+        modelId,
+        modelName: modelName as ModelName,
+        action: { not: 'D' },
+        teamId: { not: null },
+      },
+      select: { teamId: true },
+    });
+
+    return announced?.teamId ?? undefined;
+  }
+
   async getBootstrap(
     modelNames: string,
     sessionWorkspaceId: string,
@@ -116,10 +160,17 @@ export default class SyncActionsService {
     // record back to the client as an insert. Those resurrected rows are
     // undeletable: the client shows them, but every write against them 404s at
     // WorkspaceResourceGuard, which only matches `deleted: null`.
+    // A team is a visibility boundary (ENG-79), and this is one of the two
+    // reads that decide what a client holds. Filtering the screens instead
+    // would hide nothing: the record would already sit in the client's own
+    // IndexedDB, whatever the screen drew.
+    const teamIds = await visibleTeamIds(this.prisma, userId, workspaceId);
+
     const latestPerModel = await this.prisma.syncAction.findMany({
       where: {
         workspaceId,
         modelName: { in: modelNames.split(',') as ModelName[] },
+        ...syncActionTeamWhere(teamIds),
       },
       orderBy: {
         sequenceId: 'desc',
@@ -173,11 +224,16 @@ export default class SyncActionsService {
       };
     }
 
+    // The same boundary as the bootstrap. A client that was given nothing for
+    // a team must not be given the changes to it either.
+    const teamIds = await visibleTeamIds(this.prisma, userId, workspaceId);
+
     const syncActions = await this.prisma.syncAction.findMany({
       where: {
         workspaceId,
         sequenceId: { gt: lastSequenceId },
         modelName: { in: modelNames.split(',') as ModelName[] },
+        ...syncActionTeamWhere(teamIds),
       },
       orderBy: {
         sequenceId: 'asc',

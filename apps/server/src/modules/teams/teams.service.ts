@@ -9,6 +9,7 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { SyncGateway } from 'modules/sync/sync.gateway';
 import { UserIdParams } from 'modules/users/users.interface';
 
 import {
@@ -19,7 +20,10 @@ import {
 
 @Injectable()
 export default class TeamsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private syncGateway: SyncGateway,
+  ) {}
 
   async getTeam(TeamRequestParams: TeamRequestParams): Promise<Team> {
     return await this.prisma.team.findUnique({
@@ -222,6 +226,15 @@ export default class TeamsService {
     });
   }
 
+  /**
+   * This method puts one person in one team.
+   *
+   * A team is a visibility boundary (ENG-79), so this changes what the person
+   * may read. `refreshTeamRooms` carries that to any browser the person has
+   * open: the socket joins the new team's room, and the client reads again from
+   * the start. A delta alone cannot do it — the records of the new team sit
+   * below the sequence id the client already holds, so no delta will name them.
+   */
   async addTeamMember(
     teamId: string,
     workspaceId: string,
@@ -243,7 +256,7 @@ export default class TeamsService {
       ? existingTeamIds.teamIds
       : [...(existingTeamIds?.teamIds || []), teamId];
 
-    return await this.prisma.usersOnWorkspaces.update({
+    const membership = await this.prisma.usersOnWorkspaces.update({
       where: {
         userId_workspaceId: {
           userId,
@@ -253,6 +266,10 @@ export default class TeamsService {
       data: { teamIds: updatedTeamIds },
       include: { user: true },
     });
+
+    await this.syncGateway.refreshTeamRooms(userId, workspaceId);
+
+    return membership;
   }
 
   async getTeamMembers(
@@ -264,6 +281,14 @@ export default class TeamsService {
     });
   }
 
+  /**
+   * This method takes one person out of one team.
+   *
+   * The refresh matters more here than when a person joins. An open socket that
+   * nobody removes from the room goes on receiving the work of a team the
+   * person has left, and the records already in that client's store stay there
+   * until it reads again from the start.
+   */
   async removeTeamMember(
     teamRequestParams: TeamRequestParams,
     workspaceId: string,
@@ -293,7 +318,7 @@ export default class TeamsService {
       (id) => id !== teamRequestParams.teamId,
     );
 
-    return await this.prisma.usersOnWorkspaces.update({
+    const membership = await this.prisma.usersOnWorkspaces.update({
       where: {
         userId_workspaceId: {
           userId: teamMemberData.userId,
@@ -303,5 +328,9 @@ export default class TeamsService {
       data: { teamIds: updatedTeamIds },
       include: { user: true },
     });
+
+    await this.syncGateway.refreshTeamRooms(teamMemberData.userId, workspaceId);
+
+    return membership;
   }
 }

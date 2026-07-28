@@ -27,6 +27,7 @@ import { createObjectCsvStringifier } from 'csv-writer';
 import { PrismaService } from 'nestjs-prisma';
 import { notificationHandler } from 'trigger/notification';
 
+import { visibleTeamIds } from 'common/team-access';
 import {
   convertMarkdownToTiptapJson,
   convertTiptapJsonToMarkdown,
@@ -116,6 +117,10 @@ export default class IssuesService {
       where: {
         team: { workspaceId, ...(teamId && { id: teamId }) },
         ...(issueIds?.length && { id: { in: issueIds } }),
+        // A team is a visibility boundary (ENG-79). This route names its ids in
+        // a query string and has no `WorkspaceResourceGuard` in front of it, so
+        // the limit belongs in the query.
+        teamId: { in: await visibleTeamIds(this.prisma, userId, workspaceId) },
         deleted: null,
       },
       include: { team: true },
@@ -683,12 +688,20 @@ export default class IssuesService {
    * @param workspaceParams The workspace query parameters.
    * @returns A Promise that resolves to the CSV string of exported issues.
    */
-  async exportIssues(workspaceId: string): Promise<string> {
+  async exportIssues(workspaceId: string, userId: string): Promise<string> {
     // Find all issues for the given workspace, including related data. Deleted
     // issues are excluded: an export is a snapshot of the workspace as it
     // stands, not of every row ever written.
+    //
+    // A team is a visibility boundary (ENG-79), so the snapshot is of what this
+    // person may see. An export that ignored it would be the cheapest way past
+    // every other check in this file.
     const issues = await this.prisma.issue.findMany({
-      where: { team: { workspaceId }, deleted: null },
+      where: {
+        team: { workspaceId },
+        teamId: { in: await visibleTeamIds(this.prisma, userId, workspaceId) },
+        deleted: null,
+      },
       include: {
         parent: true,
         team: true,
@@ -917,6 +930,9 @@ export default class IssuesService {
     const where = getFilterWhere(
       getIssuesByFilterData,
       workspaceId,
+      // A team is a visibility boundary (ENG-79). This route serves a person or
+      // an agent, so the list is theirs and not the workspace's.
+      await visibleTeamIds(this.prisma, userId, workspaceId),
     ) as Prisma.IssueWhereInput;
 
     const isPaginated =

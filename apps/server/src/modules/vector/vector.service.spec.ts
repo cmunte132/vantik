@@ -608,3 +608,181 @@ describe('VectorService.searchEmbeddings with an axis filter', () => {
     expect(hits.map((found) => found.id)).toEqual(['issue-2']);
   });
 });
+
+/**
+ * A team is a visibility boundary (ENG-79).
+ *
+ * Search is the widest read in the product — it crosses every team by design —
+ * so it is the one that needs the limit most. The filter goes into the typesense
+ * expression because the document holds `teamId` already, and a filter applied
+ * to the results would return a short page. `dropDeletedIssues` applies the same
+ * limit against postgres, which is the authority: the index is a cache, and a
+ * stale document must not decide who reads what.
+ */
+describe('VectorService.searchEmbeddings with a team boundary', () => {
+  const TEAM_OWN = '00000000-0000-0000-0000-0000000000a1';
+  const TEAM_OTHER = '00000000-0000-0000-0000-0000000000a2';
+
+  function buildDeps(liveIds: string[] = ['issue-own']) {
+    const perform = jest.fn().mockResolvedValue({
+      results: [
+        {
+          hits: [
+            {
+              document: {
+                id: 'issue-own',
+                title: 'Mine',
+                description: '',
+                descriptionString: '',
+                stateId: 'state-1',
+                stateCategory: 'STARTED',
+                resolutionText: '',
+                teamId: TEAM_OWN,
+                number: 1,
+                issueNumber: 'ENG-1',
+                workspaceId: TEST_WORKSPACE_ID,
+                assigneeId: '',
+              },
+              vector_distance: 0.2,
+            },
+          ],
+        },
+      ],
+    });
+
+    const findMany = jest
+      .fn()
+      .mockImplementation(async ({ where }) =>
+        liveIds
+          .filter(
+            (id) =>
+              where.id.in.includes(id) &&
+              (!where.teamId || where.teamId.in.includes(TEAM_OWN)),
+          )
+          .map((id) => ({ id })),
+      );
+
+    return {
+      prisma: { issue: { findMany } } as unknown as PrismaService,
+      typesense: { multiSearch: { perform } } as unknown as TypesenseClient,
+      perform,
+      findMany,
+    };
+  }
+
+  it('names the caller-s teams in the typesense filter', async () => {
+    const { prisma, typesense, perform } = buildDeps();
+
+    await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool',
+      10,
+      0.8,
+      [],
+      {},
+      [TEAM_OWN, TEAM_OTHER],
+    );
+
+    expect(perform.mock.calls[0][0].searches[0].filter_by).toBe(
+      `workspaceId:=\`${TEST_WORKSPACE_ID}\` && teamId:=[\`${TEAM_OWN}\`,\`${TEAM_OTHER}\`]`,
+    );
+  });
+
+  /**
+   * Typesense has no expression for "match nothing", and an empty list is
+   * dropped rather than refused — which would turn a member of no team into a
+   * caller who sees every issue in the workspace.
+   */
+  it('matches nothing for a member of no team', async () => {
+    const { prisma, typesense, perform } = buildDeps();
+
+    await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool',
+      10,
+      0.8,
+      [],
+      {},
+      [],
+    );
+
+    expect(perform.mock.calls[0][0].searches[0].filter_by).toContain(
+      'teamId:=`none`',
+    );
+  });
+
+  /**
+   * A filter expression is not a parameterised query, so an id that is not a
+   * uuid is a way to write a new expression.
+   */
+  it('drops a team id that is not a uuid', async () => {
+    const { prisma, typesense, perform } = buildDeps();
+
+    await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool',
+      10,
+      0.8,
+      [],
+      {},
+      [TEAM_OWN, '` || workspaceId:=`*'],
+    );
+
+    expect(perform.mock.calls[0][0].searches[0].filter_by).toBe(
+      `workspaceId:=\`${TEST_WORKSPACE_ID}\` && teamId:=[\`${TEAM_OWN}\`]`,
+    );
+  });
+
+  it('checks the team against postgres as well as the index', async () => {
+    const { prisma, typesense, findMany } = buildDeps();
+
+    await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool',
+      10,
+      0.8,
+      [],
+      {},
+      [TEAM_OWN],
+    );
+
+    // The index is a cache. A document left behind by a failed reindex, or an
+    // issue that moved team since it was indexed, must not decide the answer.
+    expect(findMany.mock.calls[0][0].where.teamId).toEqual({
+      in: [TEAM_OWN],
+    });
+  });
+
+  it('drops a hit whose issue belongs to another team', async () => {
+    const { prisma, typesense } = buildDeps();
+
+    const hits = await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool',
+      10,
+      0.8,
+      [],
+      {},
+      [TEAM_OTHER],
+    );
+
+    expect(hits).toEqual([]);
+  });
+
+  it('leaves the search unfiltered when no teams are given', async () => {
+    const { prisma, typesense, perform, findMany } = buildDeps();
+
+    // The internal callers serve no user and read the whole workspace. Passing
+    // nothing must not silently become "no teams", which would return nothing.
+    await new VectorService(prisma, typesense).searchEmbeddings(
+      TEST_WORKSPACE_ID,
+      'pool',
+      10,
+    );
+
+    expect(perform.mock.calls[0][0].searches[0].filter_by).not.toContain(
+      'teamId',
+    );
+    expect(findMany.mock.calls[0][0].where.teamId).toBeUndefined();
+  });
+});

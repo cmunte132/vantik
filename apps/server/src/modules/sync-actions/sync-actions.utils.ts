@@ -244,6 +244,117 @@ export async function getWorkspaceId(
 }
 
 /**
+ * This function returns the team that owns one record, or undefined.
+ *
+ * A team is a visibility boundary (ENG-79), and the sync log is where that is
+ * enforced. Every announcement carries the answer this function gives, so a
+ * read of the log can filter by team without a join to each model in turn.
+ *
+ * Undefined means no team owns the record. A Label, a Page and a Project are
+ * workspace-wide, and every member of the workspace reads them.
+ *
+ * This function mirrors `getWorkspaceId`. The two are separate because a record
+ * always has a workspace and only sometimes has a team.
+ */
+export async function getTeamId(
+  prisma: PrismaService,
+  modelName: ModelName,
+  modelId: string,
+): Promise<string | undefined> {
+  switch (modelName) {
+    // A team owns itself. A person who is not in a team does not learn that
+    // the team exists.
+    case ModelName.Team:
+      return modelId;
+
+    case ModelName.Issue:
+      return (
+        await prisma.issue.findUnique({
+          where: { id: modelId },
+          select: { teamId: true },
+        })
+      )?.teamId;
+
+    case ModelName.Cycle:
+      return (
+        await prisma.cycle.findUnique({
+          where: { id: modelId },
+          select: { teamId: true },
+        })
+      )?.teamId;
+
+    case ModelName.Workflow:
+      return (
+        await prisma.workflow.findUnique({
+          where: { id: modelId },
+          select: { teamId: true },
+        })
+      )?.teamId;
+
+    case ModelName.IssueComment:
+      return (
+        await prisma.issueComment.findUnique({
+          where: { id: modelId },
+          select: { issue: { select: { teamId: true } } },
+        })
+      )?.issue?.teamId;
+
+    case ModelName.ChecklistItem:
+      return (
+        await prisma.checklistItem.findUnique({
+          where: { id: modelId },
+          select: { issue: { select: { teamId: true } } },
+        })
+      )?.issue?.teamId;
+
+    case ModelName.IssueHistory:
+      return (
+        await prisma.issueHistory.findUnique({
+          where: { id: modelId },
+          select: { issue: { select: { teamId: true } } },
+        })
+      )?.issue?.teamId;
+
+    case ModelName.LinkedIssue:
+      return (
+        await prisma.linkedIssue.findUnique({
+          where: { id: modelId },
+          select: { issue: { select: { teamId: true } } },
+        })
+      )?.issue?.teamId;
+
+    case ModelName.IssueRelation:
+      return (
+        await prisma.issueRelation.findUnique({
+          where: { id: modelId },
+          select: { issue: { select: { teamId: true } } },
+        })
+      )?.issue?.teamId;
+
+    case ModelName.Support:
+      return (
+        await prisma.support.findUnique({
+          where: { id: modelId },
+          select: { issue: { select: { teamId: true } } },
+        })
+      )?.issue?.teamId;
+
+    // The issue names the suggestion, and the suggestion does not name the
+    // issue, so this one is read from the other side.
+    case ModelName.IssueSuggestion:
+      return (
+        await prisma.issue.findUnique({
+          where: { issueSuggestionId: modelId },
+          select: { teamId: true },
+        })
+      )?.teamId;
+
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Resolves the row behind a sync action.
  *
  * `userId` is what scopes the three per-user models — Conversation,

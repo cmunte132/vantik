@@ -188,4 +188,44 @@ describe('getFilterWhere', () => {
       getFilterWhere({ filters: {} } as GetIssuesByFilterDTO, ''),
     ).toThrow();
   });
+
+  /**
+   * A team is a visibility boundary (ENG-79). This clause is what carries it to
+   * the list routes, and so to the MCP tools, which are clients of those same
+   * routes rather than a second way into the database.
+   */
+  describe('the team boundary', () => {
+    it('limits the read to the teams it is given', () => {
+      const where = getFilterWhere(
+        { filters: {} } as GetIssuesByFilterDTO,
+        SESSION_WORKSPACE,
+        ['team-own'],
+      );
+
+      expect(where.teamId).toEqual({ in: ['team-own'] });
+    });
+
+    it('returns nothing for a caller in no team', () => {
+      const where = getFilterWhere(
+        { filters: {} } as GetIssuesByFilterDTO,
+        SESSION_WORKSPACE,
+        [],
+      );
+
+      // An empty list, and not an absent clause. `teamId: { in: [] }` matches
+      // no row; leaving the key off would match every row in the workspace.
+      expect(where.teamId).toEqual({ in: [] });
+    });
+
+    it('leaves the read unlimited when no teams are given', () => {
+      // The internal callers serve no user and legitimately read the whole
+      // workspace, so an absent list must not become an empty one.
+      const where = getFilterWhere(
+        { filters: {} } as GetIssuesByFilterDTO,
+        SESSION_WORKSPACE,
+      );
+
+      expect(where.teamId).toBeUndefined();
+    });
+  });
 });

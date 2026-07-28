@@ -13,6 +13,7 @@ import { PrismaService } from 'nestjs-prisma';
 import { SyncRepairService, nextSequence } from './sync-repair.service';
 
 const WORKSPACE = 'workspace-1';
+const TEAM = 'team-1';
 const CUTOFF = new Date('2026-07-27T10:00:00.000Z');
 const AFTER = new Date('2026-07-27T11:00:00.000Z');
 
@@ -26,6 +27,7 @@ interface Written {
   modelId: string;
   action: string;
   sequenceId: bigint;
+  teamId: string | null;
 }
 
 function buildService(options: {
@@ -53,10 +55,15 @@ function buildService(options: {
             : [],
         ),
       ),
+      // Two callers with two different questions: the workspace of a record
+      // that was announced at all, and the team an announcement already
+      // carries for a record that has vanished.
       findFirst: jest.fn(({ where }) =>
         Promise.resolve(
           options.announced.some((row) => row.modelId === where.modelId)
-            ? { workspaceId: WORKSPACE }
+            ? where.teamId
+              ? { teamId: TEAM }
+              : { workspaceId: WORKSPACE }
             : null,
         ),
       ),
@@ -65,11 +72,20 @@ function buildService(options: {
           modelId: create.modelId,
           action: create.action,
           sequenceId: create.sequenceId,
+          teamId: create.teamId,
         });
         return Promise.resolve(create);
       }),
     },
     issue: {
+      // `getTeamId` reads the team off the record while the record is there.
+      findUnique: jest.fn(({ where }) =>
+        Promise.resolve(
+          options.issues.some((issue) => issue.id === where.id)
+            ? { teamId: TEAM }
+            : null,
+        ),
+      ),
       findMany: jest.fn(({ where, select }) => {
         // Existence check for the vanished-record pass.
         if (where.id?.in) {
@@ -216,5 +232,47 @@ describe('nextSequence', () => {
 
   it('handles a log that has never been written', () => {
     expect(nextSequence(null)).toBeGreaterThan(0n);
+  });
+});
+
+/**
+ * A repair must not be the way past the team boundary.
+ *
+ * A team is a visibility boundary (ENG-79), and it is enforced by the team on
+ * each announcement. This service writes announcements of its own, so an
+ * announcement written here with no team would reach the whole workspace — and
+ * a period of downtime would become the way to see another team's work.
+ */
+describe('SyncRepairService and the team boundary', () => {
+  it('carries the team of a record that is still there', async () => {
+    const { service, written } = buildService({
+      issues: [{ id: 'issue-1', updatedAt: AFTER, deleted: null }],
+      announced: [{ modelId: 'issue-1', action: 'I' }],
+    });
+
+    await service.reconcile();
+
+    expect(written).toContainEqual(
+      expect.objectContaining({ modelId: 'issue-1', teamId: TEAM }),
+    );
+  });
+
+  it('recovers the team of a record that vanished, from the log', async () => {
+    const { service, written } = buildService({
+      issues: [],
+      announced: [{ modelId: 'issue-gone', action: 'I' }],
+    });
+
+    await service.reconcile();
+
+    // The row is gone, so nothing can be read off it. The announcement that
+    // named it while it existed is the last thing that knows its team.
+    expect(written).toContainEqual(
+      expect.objectContaining({
+        modelId: 'issue-gone',
+        action: 'D',
+        teamId: TEAM,
+      }),
+    );
   });
 });

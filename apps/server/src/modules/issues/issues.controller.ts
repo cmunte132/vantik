@@ -206,9 +206,13 @@ export class IssuesController {
   @UseGuards(AuthGuard)
   async exportIssues(
     @Workspace() workspaceId: string,
+    @UserId() userId: string,
     @Res() res: Response,
   ): Promise<void> {
-    const csvString = await this.issuesService.exportIssues(workspaceId);
+    const csvString = await this.issuesService.exportIssues(
+      workspaceId,
+      userId,
+    );
 
     const csvBuffer = Buffer.from(csvString, 'utf-8');
     const csvStream = new Readable();

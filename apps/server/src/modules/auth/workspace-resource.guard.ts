@@ -3,6 +3,14 @@ import { PrismaService } from 'nestjs-prisma';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import {
+  assertChecklistItemsVisible,
+  assertCyclesVisible,
+  assertIssueCommentsVisible,
+  assertIssuesVisible,
+  assertTeamsVisible,
+  visibleTeamIds,
+} from 'common/team-access';
+import {
   assertCapabilityInWorkspace,
   assertChecklistItemInWorkspace,
   assertCycleInWorkspace,
@@ -87,7 +95,7 @@ export class WorkspaceResourceGuard implements CanActivate {
 
     // teamId selects the team a write lands in: a query param on update, the
     // body on create and move, and per-entry on bulk create.
-    const teamIds = unique([
+    const requestTeamIds = unique([
       request.query?.teamId,
       ...bodies.map((body) => body?.teamId),
     ]);
@@ -96,7 +104,7 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertIssueInWorkspace(this.prisma, id, workspaceId);
     }
 
-    for (const id of teamIds) {
+    for (const id of requestTeamIds) {
       await assertTeamInWorkspace(this.prisma, id, workspaceId);
     }
 
@@ -228,6 +236,31 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertProjectInWorkspace(this.prisma, id, workspaceId);
     }
 
+    // A team is a visibility boundary inside the workspace (ENG-79), so the
+    // checks above are necessary and not sufficient: they prove the row is a
+    // tenant's own, and say nothing about whether this caller may see it. Every
+    // id that names a team-owned row is checked again here, against the teams
+    // the caller belongs to.
+    //
+    // This runs last so the answers stay consistent. A row of another workspace
+    // and a row of another team both give not-found, and the workspace check
+    // gets there first for the ids it covers.
+    const teamIds = await visibleTeamIds(this.prisma, userId, workspaceId);
+
+    await assertTeamsVisible([...linkedTeamIds, ...requestTeamIds], teamIds);
+    await assertIssuesVisible(this.prisma, issueIds, teamIds);
+    await assertIssueCommentsVisible(
+      this.prisma,
+      issueCommentId ? [issueCommentId] : [],
+      teamIds,
+    );
+    await assertChecklistItemsVisible(
+      this.prisma,
+      checklistItemId ? [checklistItemId] : [],
+      teamIds,
+    );
+    await assertCyclesVisible(this.prisma, cycleId ? [cycleId] : [], teamIds);
+
     return true;
   }
 }
@@ -272,10 +305,7 @@ function issueBodies(body: unknown, depth = 0): IdBearingBody[] {
   const current = body as IdBearingBody;
   const nested = [...list(current.issues), ...list(current.subIssues)];
 
-  return [
-    current,
-    ...nested.flatMap((child) => issueBodies(child, depth + 1)),
-  ];
+  return [current, ...nested.flatMap((child) => issueBodies(child, depth + 1))];
 }
 
 /** Reads a value that should be an array, and refuses to guess when it is not. */
@@ -283,7 +313,7 @@ function list(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function unique(ids: Array<unknown>): string[] {
+function unique(ids: unknown[]): string[] {
   return [
     ...new Set(
       ids.filter((id): id is string => typeof id === 'string' && id.length > 0),

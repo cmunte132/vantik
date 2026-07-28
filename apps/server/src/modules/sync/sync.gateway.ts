@@ -1,5 +1,6 @@
 import {
   OnGatewayConnection,
+  OnGatewayDisconnect,
   OnGatewayInit,
   WebSocketGateway,
   WebSocketServer,
@@ -8,6 +9,7 @@ import { PrismaService } from 'nestjs-prisma';
 import { Server, Socket } from 'socket.io';
 
 import { SERVER_BUILD } from 'common/build-stamp';
+import { teamRoom, visibleTeamIds } from 'common/team-access';
 import { resolveWorkspaceId } from 'common/workspace-access';
 
 import { LoggerService } from 'modules/logger/logger.service';
@@ -23,7 +25,9 @@ import { getAuthenticatedIdentity } from './sync.utils';
     credentials: true,
   },
 })
-export class SyncGateway implements OnGatewayInit, OnGatewayConnection {
+export class SyncGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer() wss: Server;
 
   constructor(private prisma: PrismaService) {}
@@ -80,6 +84,13 @@ export class SyncGateway implements OnGatewayInit, OnGatewayConnection {
     client.join(workspaceId);
     client.join(identity.userId);
 
+    // A team is a visibility boundary (ENG-79). The workspace room carries only
+    // the records that no team owns; an announcement about an issue goes to the
+    // room of its team, so a client hears about a team only when it joins that
+    // team's room. Before this, one room held every member of the workspace and
+    // every issue of every team went to all of them.
+    await this.joinTeamRooms(client, identity.userId, workspaceId);
+
     // A client that connects to a restarted server learns the build immediately.
     // Combined with the fact that a client reconnects after a deploy anyway,
     // this is what closes the gap for an installed PWA window that has been open
@@ -87,6 +98,74 @@ export class SyncGateway implements OnGatewayInit, OnGatewayConnection {
     // poll. The client treats it as a prompt to re-check /api/version, not as an
     // answer — this is the server image's stamp, not the webapp's.
     client.emit('server-version', { build: SERVER_BUILD });
+  }
+
+  /**
+   * This method puts one socket in the room of each team the user belongs to.
+   *
+   * It leaves every other team room first. That matters on the second call: a
+   * person who leaves a team keeps an open socket, and a room that nobody
+   * removes them from carries on delivering that team's work.
+   */
+  private async joinTeamRooms(
+    client: Socket,
+    userId: string,
+    workspaceId: string,
+  ) {
+    const teamIds = await visibleTeamIds(this.prisma, userId, workspaceId);
+    const wanted = new Set(teamIds.map((id) => teamRoom(workspaceId, id)));
+
+    for (const room of client.rooms) {
+      if (room.startsWith(`${workspaceId}:`) && !wanted.has(room)) {
+        client.leave(room);
+      }
+    }
+
+    for (const room of wanted) {
+      client.join(room);
+    }
+  }
+
+  /**
+   * This method makes every socket of one user follow a change of team.
+   *
+   * A person joins or leaves a team while the browser is open. The rooms have
+   * to change with the membership, and the client has to read again from the
+   * start: the records of a team the person just joined sit below the sequence
+   * id the client already holds, so no delta will ever carry them.
+   *
+   * `TeamsService` calls this after it writes the membership.
+   */
+  async refreshTeamRooms(userId: string, workspaceId: string) {
+    for (const [socketId, metadata] of Object.entries(this.clientsMetadata)) {
+      if (metadata.userId !== userId || metadata.workspaceId !== workspaceId) {
+        continue;
+      }
+
+      const socket = this.wss?.sockets?.sockets?.get(socketId);
+
+      if (!socket) {
+        continue;
+      }
+
+      await this.joinTeamRooms(socket, userId, workspaceId);
+
+      // The client answers this by dropping its store and asking for a
+      // bootstrap. It is the same message the server sends when it finds a
+      // client ahead of it, so the webapp already knows how to act on it.
+      socket.emit('resync', { reason: 'team-membership-changed' });
+    }
+  }
+
+  /**
+   * This method forgets a socket that went away.
+   *
+   * `refreshTeamRooms` walks `clientsMetadata` to find the sockets of one
+   * person, so an entry that no socket answers to is work on every membership
+   * change, and the map grew for the life of the process.
+   */
+  handleDisconnect(client: Socket) {
+    delete this.clientsMetadata[client.id];
   }
 
   private disconnect(client: Socket, reason: string) {

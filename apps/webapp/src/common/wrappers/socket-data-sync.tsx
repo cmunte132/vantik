@@ -11,6 +11,7 @@ import { useCurrentWorkspace } from 'hooks/workspace';
 
 import { useContextStore } from 'store/global-context-provider';
 import { MODELS } from 'store/models';
+import { resync } from 'store/resync';
 import { UserContext } from 'store/user-context';
 
 import { saveSocketData } from './socket-data-util';
@@ -151,6 +152,19 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
       // not an answer about the bundle.
       socket.on('server-version', () => {
         noteServerDeployAnnouncement();
+      });
+
+      // A team is a visibility boundary (ENG-79), so a change of team changes
+      // what this client may hold. The server moves the socket between rooms and
+      // then sends this.
+      //
+      // A delta cannot do the work. The records of a team just joined were
+      // announced long ago, and they sit below the sequence id in localStorage —
+      // so the client asks for everything after that id and is told, correctly,
+      // that there is nothing. The store has to be built again from the start.
+      // The same call also drops the records of a team the person has left.
+      socket.on('resync', async () => {
+        await resync();
       });
     }
 

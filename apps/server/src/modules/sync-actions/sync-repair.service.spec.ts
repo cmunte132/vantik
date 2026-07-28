@@ -199,8 +199,19 @@ describe('nextSequence', () => {
     expect(nextSequence(highest)).toBeGreaterThan(highest);
   });
 
+  /**
+   * The clock is read twice — once inside `nextSequence` and once here — and the
+   * millisecond can turn over in between. Reading it before and after and
+   * bracketing the answer is what makes this a statement about the function
+   * rather than about how long the two lines took.
+   */
   it('uses the current instant when the log is behind the clock', () => {
-    expect(nextSequence(1n)).toBeGreaterThan(BigInt(Date.now()) * 1000n - 1n);
+    const before = BigInt(Date.now()) * 1000n;
+    const sequence = nextSequence(1n);
+    const after = BigInt(Date.now()) * 1000n;
+
+    expect(sequence).toBeGreaterThanOrEqual(before);
+    expect(sequence).toBeLessThanOrEqual(after);
   });
 
   it('handles a log that has never been written', () => {

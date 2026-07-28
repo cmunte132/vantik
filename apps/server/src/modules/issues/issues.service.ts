@@ -201,8 +201,13 @@ export default class IssuesService {
 
             // Create issues recursively
             for (const issueData of createIssuesData) {
-              const { parentId, projectId, projectMilestoneId, ...otherData } =
-                issueData;
+              const {
+                parentId,
+                projectId,
+                projectMilestoneId,
+                capabilityId,
+                ...otherData
+              } = issueData;
               const issueInput = await getCreateIssueInput(
                 this.prisma,
                 this.aiRequestsService,
@@ -218,6 +223,11 @@ export default class IssuesService {
                           connect: { id: projectMilestoneId },
                         },
                       }
+                    : {}),
+                  // A capability is a relation, so it connects rather than
+                  // going in as an id beside the relations above.
+                  ...(capabilityId
+                    ? { capability: { connect: { id: capabilityId } } }
                     : {}),
                 },
                 workspace.id,
@@ -313,6 +323,7 @@ export default class IssuesService {
       projectId,
       projectMilestoneId,
       cycleId,
+      capabilityId,
       ...otherIssueData
     } = issueData;
 
@@ -372,6 +383,15 @@ export default class IssuesService {
         ? cycleId === null
           ? { cycle: { disconnect: true } }
           : { cycle: { connect: { id: cycleId } } }
+        : {}),
+
+      // Same shape as the four above. A relation cannot go in as a scalar id
+      // beside them: Prisma allows the checked form or the unchecked form for a
+      // whole update, and never a mixture of the two.
+      ...('capabilityId' in issueData
+        ? capabilityId === null
+          ? { capability: { disconnect: true } }
+          : { capability: { connect: { id: capabilityId } } }
         : {}),
 
       ...(linkIssueData && {

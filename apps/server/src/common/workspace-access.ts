@@ -256,3 +256,64 @@ export async function assertTeamInWorkspace(
     throw new NotFoundException({ message: `Team ${teamId} not found` });
   }
 }
+
+/**
+ * Proves a product belongs to the given workspace.
+ *
+ * The update and delete routes name the product by id and nothing else, which
+ * is the same shape as the cycle routes above and the same risk: an unchecked
+ * id renames or removes another workspace's product.
+ */
+export async function assertProductInWorkspace(
+  prisma: PrismaService,
+  productId: string,
+  workspaceId: string,
+): Promise<void> {
+  const product = await prisma.product.findFirst({
+    where: { id: productId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!product) {
+    throw new NotFoundException({ message: `Product ${productId} not found` });
+  }
+}
+
+/**
+ * Proves a module belongs to the given workspace.
+ *
+ * A moduleId also arrives in the body, where it names the owner or a link, so
+ * this runs for both the path and the lists that a write carries.
+ */
+export async function assertModuleInWorkspace(
+  prisma: PrismaService,
+  moduleId: string,
+  workspaceId: string,
+): Promise<void> {
+  const module = await prisma.module.findFirst({
+    where: { id: moduleId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!module) {
+    throw new NotFoundException({ message: `Module ${moduleId} not found` });
+  }
+}
+
+/** Proves a capability belongs to the given workspace. */
+export async function assertCapabilityInWorkspace(
+  prisma: PrismaService,
+  capabilityId: string,
+  workspaceId: string,
+): Promise<void> {
+  const capability = await prisma.capability.findFirst({
+    where: { id: capabilityId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!capability) {
+    throw new NotFoundException({
+      message: `Capability ${capabilityId} not found`,
+    });
+  }
+}

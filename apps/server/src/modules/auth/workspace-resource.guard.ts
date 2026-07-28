@@ -3,12 +3,15 @@ import { PrismaService } from 'nestjs-prisma';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import {
+  assertCapabilityInWorkspace,
   assertChecklistItemInWorkspace,
   assertCycleInWorkspace,
   assertIssueCommentInWorkspace,
   assertIssueInWorkspace,
+  assertModuleInWorkspace,
   assertPageEntryInWorkspace,
   assertPageInWorkspace,
+  assertProductInWorkspace,
   assertTeamInWorkspace,
   resolveWorkspaceId,
 } from 'common/workspace-access';
@@ -49,8 +52,16 @@ export class WorkspaceResourceGuard implements CanActivate {
       request.query?.workspaceId,
     );
 
-    const { issueId, issueCommentId, checklistItemId, pageEntryId, cycleId } =
-      request.params ?? {};
+    const {
+      issueId,
+      issueCommentId,
+      checklistItemId,
+      pageEntryId,
+      cycleId,
+      productId,
+      moduleId,
+      capabilityId,
+    } = request.params ?? {};
 
     // The bulk routes carry their ids inside a body array, one per issue, so
     // the path and query alone do not describe everything the request touches.
@@ -130,6 +141,51 @@ export class WorkspaceResourceGuard implements CanActivate {
 
     for (const id of entryIds) {
       await assertPageEntryInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    // The product axis. Each of the three is addressed by id on update and
+    // delete, the same shape as the cycle routes. The bodies matter as much as
+    // the paths: a module names its owner and its links by id, and a capability
+    // names the modules that hold its code, so a write with a foreign id would
+    // pull another workspace's rows into this one's graph.
+    const productIds = unique([
+      productId,
+      request.body?.ownerProductId,
+      ...(Array.isArray(request.body?.linkedProductIds)
+        ? request.body.linkedProductIds
+        : []),
+    ]);
+
+    for (const id of productIds) {
+      await assertProductInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    const moduleIds = unique([
+      moduleId,
+      ...(Array.isArray(request.body?.moduleIds) ? request.body.moduleIds : []),
+    ]);
+
+    for (const id of moduleIds) {
+      await assertModuleInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    const capabilityIds = unique([capabilityId, request.body?.capabilityId]);
+
+    for (const id of capabilityIds) {
+      await assertCapabilityInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    // A module names its owning team, and a link names any number of teams. Both
+    // go through the same team check the issue routes use.
+    const linkedTeamIds = unique([
+      request.body?.ownerTeamId,
+      ...(Array.isArray(request.body?.linkedTeamIds)
+        ? request.body.linkedTeamIds
+        : []),
+    ]);
+
+    for (const id of linkedTeamIds) {
+      await assertTeamInWorkspace(this.prisma, id, workspaceId);
     }
 
     return true;

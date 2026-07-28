@@ -17,6 +17,7 @@ export async function saveIssueSuggestionData(
         issueId: record.data.issueId,
         suggestedLabelIds: record.data.suggestedLabelIds,
         suggestedAssigneeId: record.data.suggestedAssigneeId,
+        suggestedModuleIds: record.data.suggestedModuleIds ?? [],
       };
 
       switch (record.action) {

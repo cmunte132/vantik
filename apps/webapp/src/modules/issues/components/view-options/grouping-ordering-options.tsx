@@ -14,11 +14,19 @@ import { useProject } from 'hooks/projects';
 import { useCurrentTeam } from 'hooks/teams';
 
 import { useContextStore } from 'store/global-context-provider';
+import { withoutArchived } from 'modules/product-axis/archive';
 
 export const GroupingOrderingOptions = observer(() => {
-  const { applicationStore } = useContextStore();
+  const { applicationStore, modulesStore, capabilitiesStore } =
+    useContextStore();
   const project = useProject();
   const team = useCurrentTeam();
+
+  // A workspace that has built no module yet would get one group called "No
+  // module", which reads as a fault. The option arrives with the first module.
+  const hasModules = withoutArchived(modulesStore.getModules).length > 0;
+  const hasCapabilities =
+    withoutArchived(capabilitiesStore.getCapabilities).length > 0;
 
   return (
     <div className="flex items-center gap-2">
@@ -43,6 +51,10 @@ export const GroupingOrderingOptions = observer(() => {
             <SelectItem value="label">Label</SelectItem>
             {!project && <SelectItem value="project">Project</SelectItem>}
             {!team && <SelectItem value="team">Team</SelectItem>}
+            {hasModules && <SelectItem value="module">Module</SelectItem>}
+            {hasCapabilities && (
+              <SelectItem value="capability">Capability</SelectItem>
+            )}
           </SelectGroup>
         </SelectContent>
       </Select>

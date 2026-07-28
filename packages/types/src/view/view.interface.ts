@@ -19,6 +19,13 @@ export enum FilterKeyEnum {
   updatedAt = 'updatedAt',
   createdAt = 'createdAt',
   project = 'project',
+  /**
+   * The modules an issue changes. A list, so INCLUDES and EXCLUDES are the
+   * filter types that fit it.
+   */
+  module = 'module',
+  /** The capability an issue delivers. One value, so IS and IS_NOT fit it. */
+  capability = 'capability',
 }
 
 export enum BooleanFilterKeyEnum {

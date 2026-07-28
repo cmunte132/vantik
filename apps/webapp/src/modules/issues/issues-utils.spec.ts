@@ -1,7 +1,12 @@
 import { WorkflowCategoryEnum } from '@vantikhq/types';
 import { describe, expect, it } from 'vitest';
 
-import type { IssueType, LabelType, WorkflowType } from 'common/types';
+import type {
+  IssueType,
+  LabelType,
+  ModuleType,
+  WorkflowType,
+} from 'common/types';
 
 import {
   FilterTypeEnum,
@@ -241,5 +246,180 @@ describe('getFilters', () => {
 
     expect(sourceFilter).toBeDefined();
     expect(() => filterIssue(issue(), sourceFilter)).not.toThrow();
+  });
+});
+
+/**
+ * The second axis as a filter.
+ *
+ * An issue names its modules and its capability. It never names a product, so a
+ * product filter has to become the modules that product owns and borrows. That
+ * translation is the only part of the axis that is not a direct field read, and
+ * it is what every product page and every product filter depends on.
+ */
+describe('getFilters for the product axis', () => {
+  const MODULES = [
+    {
+      id: 'module-server',
+      name: 'Server',
+      ownerProductId: 'product-cloud',
+      ownerTeamId: null,
+      linkedProductIds: [],
+      linkedTeamIds: [],
+    },
+    {
+      id: 'module-shared',
+      name: 'Shared',
+      ownerProductId: 'product-docs',
+      ownerTeamId: null,
+      linkedProductIds: ['product-cloud'],
+      linkedTeamIds: [],
+    },
+    {
+      id: 'module-internal',
+      name: 'Internal tools',
+      ownerProductId: null,
+      ownerTeamId: 'team-1',
+      linkedProductIds: [],
+      linkedTeamIds: [],
+    },
+  ] as unknown as ModuleType[];
+
+  /**
+   * `getFilters` returns a union, and only some members carry a value. Every
+   * assertion below is about a value, so this narrows once.
+   */
+  const valuesOf = (filter: unknown): string[] =>
+    (filter as { value: string[] }).value;
+
+  const forProduct = (value: string[]) =>
+    getFilters(
+      {
+        product: { value, filterType: FilterTypeEnum.IS },
+      } as unknown as FiltersModelType,
+      DISPLAY_SETTINGS,
+      WORKFLOWS,
+      LABELS,
+      undefined,
+      MODULES,
+    ).find((filter) => filter.key === 'moduleIds');
+
+  it('turns a product into the modules it owns and the ones it borrows', () => {
+    expect(forProduct(['product-cloud'])).toEqual({
+      key: 'moduleIds',
+      filterType: FilterTypeEnum.INCLUDES,
+      value: ['module-server', 'module-shared'],
+    });
+  });
+
+  it('leaves a module that belongs to a team out of every product', () => {
+    expect(valuesOf(forProduct(['product-cloud']))).not.toContain(
+      'module-internal',
+    );
+    expect(valuesOf(forProduct(['product-docs']))).not.toContain(
+      'module-internal',
+    );
+  });
+
+  /**
+   * A product with no module gives an empty list, and the page then shows
+   * nothing. That is the truth, and it is better than a filter that quietly
+   * matches everything.
+   */
+  it('gives an empty list for a product that owns nothing', () => {
+    expect(forProduct(['product-nobody'])).toEqual({
+      key: 'moduleIds',
+      filterType: FilterTypeEnum.INCLUDES,
+      value: [],
+    });
+  });
+
+  it('reads a module whose linked list was never set', () => {
+    const filters = getFilters(
+      {
+        product: { value: ['product-cloud'], filterType: FilterTypeEnum.IS },
+      } as unknown as FiltersModelType,
+      DISPLAY_SETTINGS,
+      WORKFLOWS,
+      LABELS,
+      undefined,
+      [
+        {
+          id: 'module-old',
+          ownerProductId: 'product-cloud',
+          linkedProductIds: undefined,
+        },
+      ] as unknown as ModuleType[],
+    );
+
+    expect(
+      valuesOf(filters.find((filter) => filter.key === 'moduleIds')),
+    ).toEqual(['module-old']);
+  });
+
+  it('asks for the modules of an issue as an array, the way labels work', () => {
+    const filters = getFilters(
+      {
+        module: {
+          value: ['module-server'],
+          filterType: FilterTypeEnum.INCLUDES,
+        },
+      } as unknown as FiltersModelType,
+      DISPLAY_SETTINGS,
+      WORKFLOWS,
+      LABELS,
+    );
+
+    expect(filters).toContainEqual({
+      key: 'moduleIds',
+      filterType: FilterTypeEnum.INCLUDES,
+      value: ['module-server'],
+    });
+  });
+
+  it('asks for the capability of an issue as one value', () => {
+    const filters = getFilters(
+      {
+        capability: {
+          value: ['capability-login'],
+          filterType: FilterTypeEnum.IS,
+        },
+      } as unknown as FiltersModelType,
+      DISPLAY_SETTINGS,
+      WORKFLOWS,
+      LABELS,
+    );
+
+    expect(filters).toContainEqual({
+      key: 'capabilityId',
+      filterType: FilterTypeEnum.IS,
+      value: ['capability-login'],
+    });
+  });
+
+  /**
+   * A product page sets the product filter and a person can set a module filter
+   * on top of it. Both land as `moduleIds`, and `filterIssue` runs every filter,
+   * so the two narrow each other rather than one replacing the other.
+   */
+  it('keeps a product scope and a module choice as two filters', () => {
+    const filters = getFilters(
+      {
+        product: { value: ['product-cloud'], filterType: FilterTypeEnum.IS },
+        module: {
+          value: ['module-server'],
+          filterType: FilterTypeEnum.INCLUDES,
+        },
+      } as unknown as FiltersModelType,
+      DISPLAY_SETTINGS,
+      WORKFLOWS,
+      LABELS,
+      undefined,
+      MODULES,
+    );
+
+    expect(filters.filter((filter) => filter.key === 'moduleIds')).toHaveLength(
+      2,
+    );
   });
 });

@@ -11,3 +11,5 @@ export * from './issue-label-dropdown';
 export * from './issue-assignee-dropdown';
 export * from './issue-project-dropdown';
 export * from './issue-cycle-dropdown';
+
+export * from './product-axis-filters';

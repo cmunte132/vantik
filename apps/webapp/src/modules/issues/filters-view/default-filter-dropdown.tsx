@@ -4,7 +4,9 @@ import {
   AssigneeLine,
   BlockedFill,
   BlocksFill,
+  Code,
   Cycle,
+  FocusLine,
   LabelLine,
   ParentIssueLine,
   PriorityHigh,
@@ -79,6 +81,41 @@ export const DefaultFilterDropdown = observer(
             Project
           </CommandItem>
         )}
+
+        {/*
+          The second axis. A team owns issues, and a module owns code, so these
+          three answer a question the filters above cannot: which part of the
+          software this work touches.
+        */}
+        <Separator className="my-1" />
+        <CommandItem
+          key="Product"
+          value="Product"
+          className="flex items-center"
+          onSelect={onSelect}
+        >
+          <Project size={16} className="mr-2" />
+          Product
+        </CommandItem>
+        <CommandItem
+          key="Module"
+          value="Module"
+          className="flex items-center"
+          onSelect={onSelect}
+        >
+          <Code size={16} className="mr-2" />
+          Module
+        </CommandItem>
+        <CommandItem
+          key="Capability"
+          value="Capability"
+          className="flex items-center"
+          onSelect={onSelect}
+        >
+          <FocusLine size={16} className="mr-2" />
+          Capability
+        </CommandItem>
+
         <Separator className="my-1" />
         <CommandItem
           key="parentIssues"

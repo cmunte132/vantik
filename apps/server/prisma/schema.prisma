@@ -149,11 +149,11 @@ model Company {
   updatedAt DateTime  @updatedAt
   deleted   DateTime?
 
-  name       String
-  domain     String?
-  website    String?
+  name        String
+  domain      String?
+  website     String?
   description String?
-  logo       String?
+  logo        String?
 
   industry String?
   size     String?
@@ -336,6 +336,17 @@ model Issue {
   cycle   Cycle?  @relation(fields: [cycleId], references: [id])
   cycleId String?
 
+  /// The modules that this issue changes. The list can be empty, and an issue
+  /// can touch more than one Module. Three things write this list: a person, a
+  /// pull request, and nothing else. The LLM writes to
+  /// IssueSuggestion.suggestedModuleIds instead, and a person accepts the
+  /// suggestion before it arrives here.
+  moduleIds String[]
+
+  /// What the issue makes the software do. One Capability, or none.
+  capability   Capability? @relation(fields: [capabilityId], references: [id])
+  capabilityId String?
+
   createdById String?
   updatedById String?
 
@@ -375,7 +386,7 @@ model ChecklistItem {
   deleted   DateTime?
 
   body      String
-  completed Boolean   @default(false)
+  completed Boolean @default(false)
   // Nullable so rows written before an explicit ordering existed fall back to
   // createdAt until the list is next reordered.
   sortOrder Int?
@@ -479,6 +490,9 @@ model IssueSuggestion {
   issueId             String   @unique
   suggestedLabelIds   String[]
   suggestedAssigneeId String?
+  /// The modules that the LLM proposes for this issue. A suggestion never
+  /// reaches Issue.moduleIds on its own. A person accepts it first.
+  suggestedModuleIds  String[]
   metadata            Json?
   issue               Issue?
 }
@@ -597,6 +611,7 @@ model People {
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
+
   @@unique([email, workspaceId])
 }
 
@@ -612,7 +627,7 @@ model Page {
   updatedAt DateTime  @updatedAt
   deleted   DateTime?
 
-  title String
+  title       String
   /// Tiptap JSON. The API speaks markdown on both sides of this column, so no
   /// caller ever has to parse editor JSON to read a page.
   description String?
@@ -673,7 +688,7 @@ model PageEntry {
 
   /// Who asserted it. An `AGENT`-typed user is what makes this meaningful — an
   /// agent-written claim and a human-written one are identical as text.
-  sourceUserId String?
+  sourceUserId  String?
   /// Opaque harness session id, so a claim can be traced back to the run.
   sourceSession String?
   /// The token the append arrived on. This is what the per-token budget counts,
@@ -721,7 +736,7 @@ model PageKnowledgeGap {
   /// gap rather than two.
   query String
   /// How many times it has been asked. Demand, not just absence.
-  count Int @default(1)
+  count Int    @default(1)
 
   workspaceId String
 
@@ -756,6 +771,150 @@ model PageHistory {
   @@index([pageId])
 }
 
+/// A Product is a thing that the company ships. A Product holds no code and no
+/// issues. It groups the modules.
+///
+/// A workspace is a tenancy. Before this model, a team was the only thing that
+/// could stand for a product, and a company that shipped two things had to make
+/// two workspaces. A Product takes that job from Team. Team keeps the other
+/// three jobs: it is the permission boundary, it holds the cycles, and it is the
+/// namespace for the issue numbers.
+model Product {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  name        String
+  /// A short name, for example "cloud" or "docs".
+  key         String
+  description String?
+  status      String?
+  icon        String?
+  color       String?
+  leadUserId  String?
+
+  modules Module[]
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+
+  @@unique([workspaceId, key])
+}
+
+/// A Module is usually one repository. A Module can also be a path in a
+/// repository, or one service.
+///
+/// Modules are flat: a Module has no parent Module. A parent column is one
+/// nullable field and a recursive render if somebody needs it later. To add it
+/// now makes every filter, every group, and every total choose between a subtree
+/// and a single node, and no usage exists yet to answer that question.
+model Module {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  name        String
+  /// A short name, for example "webapp" or "server".
+  key         String
+  description String?
+  status      String?
+  icon        String?
+  color       String?
+  leadUserId  String?
+
+  /// A Module has one owner. Set ownerTeamId or ownerProductId. Do not set both,
+  /// and do not leave both empty. A team owns a Module that holds internal tools,
+  /// and that Module has no product. A product owns a Module that goes to the
+  /// customers, and many teams can write the code for it. A check constraint in
+  /// the migration makes this rule true in the database, because Prisma cannot
+  /// say it here.
+  ownerTeam      Team?    @relation("ModuleOwner", fields: [ownerTeamId], references: [id])
+  ownerTeamId    String?
+  ownerProduct   Product? @relation(fields: [ownerProductId], references: [id])
+  ownerProductId String?
+
+  /// These lists show the other teams and products that use this Module. A link
+  /// gives no authority, and a list can be empty. Five teams can link to one
+  /// Module, and no team owns it. One Module that holds a design system can link
+  /// to three products.
+  linkedTeamIds    String[]
+  linkedProductIds String[]
+
+  repos ModuleRepo[]
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId, ownerProductId])
+  @@index([workspaceId, ownerTeamId])
+}
+
+/// Where the code of a Module is.
+///
+/// pathPrefixes is what makes a monorepo and a set of small repositories the
+/// same shape. An empty list means that the Module is all of the repository. A
+/// monorepo becomes several modules on one repository, and each one holds its
+/// own prefixes.
+///
+/// The server uses this model, and the client does not. For each webhook, the
+/// server reads this table. It finds the Module from the repository and from the
+/// paths of the changed files. This model is not in the MODELS enum, and the
+/// server does not replicate it. The module page reads it through a plain
+/// request instead.
+model ModuleRepo {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  module   Module @relation(fields: [moduleId], references: [id])
+  moduleId String
+
+  integrationAccountId String?
+  /// The id that the provider gives the repository. A webhook arrives with it.
+  externalRepoId       String
+  fullName             String
+
+  pathPrefixes  String[]
+  bidirectional Boolean  @default(false)
+  isDefault     Boolean  @default(false)
+
+  @@index([moduleId])
+  @@index([externalRepoId])
+}
+
+/// A Capability is what the software does. A Module is where the code is.
+///
+/// The modules in moduleIds give a Capability its identity, because one
+/// capability usually needs code in more than one Module. A Capability has no
+/// product field. To find the product, read the owner of each Module in the
+/// list.
+model Capability {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  name        String
+  description String?
+  /// planned, active, live, or deprecated.
+  status      String?
+
+  /// The modules that hold the code for this Capability. The list can be empty.
+  /// An empty list means that no team wrote the code for this Capability yet.
+  moduleIds String[]
+
+  issues Issue[]
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+
+  @@unique([workspaceId, name])
+}
+
 model Project {
   id        String    @id @default(uuid())
   createdAt DateTime  @default(now())
@@ -769,6 +928,10 @@ model Project {
   endDate     String?
   leadUserId  String?
   teams       String[]
+
+  /// The capabilities that this Project builds or changes. The list can be
+  /// empty.
+  capabilityIds String[]
 
   milestones ProjectMilestone[]
   issues     Issue[]
@@ -824,8 +987,8 @@ model Prompt {
   updatedAt DateTime  @updatedAt
   deleted   DateTime?
 
-  name   String
-  prompt String
+  name        String
+  prompt      String
   // A role — "fast" or "smart" — not a model name. Which model serves each
   // role is deployment configuration (LLM_MODEL_FAST / LLM_MODEL_SMART), so
   // reaching a new model is not a schema change.
@@ -860,7 +1023,7 @@ model Support {
   reportedBy   People? @relation(fields: [reportedById], references: [id])
   reportedById String?
 
-  slaStatus       String?
+  slaStatus String?
 
   actualFrtAt     DateTime?
   firstResponseAt DateTime?
@@ -912,6 +1075,10 @@ model Team {
   workflow    Workflow[]
   preferences Json       @default("{}")
   View        View[]
+
+  /// The modules that this team owns. A team owns a Module that holds internal
+  /// tools. A Module that goes to the customers belongs to a product instead.
+  ownedModules Module[] @relation("ModuleOwner")
 
   @@unique([name, identifier, workspaceId])
 }
@@ -1075,6 +1242,9 @@ model Workspace {
   prompts               Prompt[]
   action                Action[]
   projects              Project[]
+  products              Product[]
+  modules               Module[]
+  capabilities          Capability[]
   pages                 Page[]
   webhookSubscription   WebhookSubscription[]
 
@@ -1084,18 +1254,17 @@ model Workspace {
   People       People[]
 }
 
-
 model WebhookSubscription {
   id        String    @id @default(uuid())
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deleted   DateTime?
 
-  name        String
-  url         String
-  secret      String?
-  isActive    Boolean @default(true)
-  events      String[]
+  name     String
+  url      String
+  secret   String?
+  isActive Boolean  @default(true)
+  events   String[]
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
@@ -1136,11 +1305,21 @@ enum ActionScheduleStatus {
   DELETED
 }
 
+/// The label on a sync action. It names the table that a record came from.
+///
+/// The three agent values are here because the database already holds sync
+/// actions that use them. A value that the schema does not declare stops every
+/// read of this table, and the whole sync log then fails, and not only the rows
+/// of that one model. The models themselves live on another branch.
 enum ModelName {
   Action
   ActionEntity
+  AgentRun
+  AgentRunEvent
+  AgentRunIteration
   Attachment
   AIRequest
+  Capability
   ChecklistItem
   Cycle
   Company
@@ -1159,11 +1338,13 @@ enum ModelName {
   Label
   LinkedComment
   LinkedIssue
+  Module
   Notification
   Page
   PageEntry
   PageHistory
   People
+  Product
   Project
   ProjectMilestone
   Prompt
@@ -1215,7 +1396,7 @@ model PageLink {
   /// Deliberately not a foreign key: one column cannot reference four tables.
   /// The cost is that a dangling edge is possible, so reads resolve targets and
   /// drop the ones that no longer exist rather than trusting the row.
-  entityId String
+  entityId   String
 
   createdById String?
 

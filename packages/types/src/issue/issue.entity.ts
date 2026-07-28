@@ -29,6 +29,13 @@ export class Issue {
   subscriberIds: string[];
   assigneeId: string | null;
   labelIds: string[];
+  /**
+   * The modules this issue changes. A person writes this list, and so does a
+   * pull request. The LLM writes `IssueSuggestion.suggestedModuleIds` instead.
+   */
+  moduleIds: string[];
+  /** What the issue makes the software do. One capability, or none. */
+  capabilityId: string | null;
   stateId: string;
   parent?: Issue | null;
   parentId: string | null;

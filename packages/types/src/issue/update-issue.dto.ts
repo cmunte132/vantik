@@ -102,4 +102,13 @@ export class UpdateIssueDto {
   @IsOptional()
   @IsString()
   projectMilestoneId?: string;
+
+  /** The modules this issue changes. An issue can touch more than one. */
+  @IsOptional()
+  @IsArray()
+  moduleIds?: string[];
+
+  /** What the issue makes the software do. One capability, or none. */
+  @IsOptional()
+  capabilityId?: string | null;
 }

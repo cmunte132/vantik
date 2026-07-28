@@ -12,6 +12,7 @@ import { ModuleDropdown } from 'modules/issues/components/issue-metadata/product
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
 import { SCOPES } from 'common/scopes';
+import { workspaceHref } from 'common/workspace-href';
 import { withApplicationStore } from 'common/wrappers/with-application-store';
 
 import { useScope } from 'hooks';
@@ -58,7 +59,7 @@ export const CapabilityView = withApplicationStore(
             crumbs={[
               {
                 title: 'Capabilities',
-                href: `/${workspaceSlug}/capabilities`,
+                href: workspaceHref(workspaceSlug, 'capabilities'),
               },
               { title: capability.name },
             ]}
@@ -111,7 +112,7 @@ export const CapabilityView = withApplicationStore(
                 {modules.map((module) => (
                   <NextLink
                     key={module.id}
-                    href={`/${workspaceSlug}/module/${module.key}`}
+                    href={workspaceHref(workspaceSlug, 'module', module.key)}
                   >
                     <Badge variant="secondary">{module.name}</Badge>
                   </NextLink>

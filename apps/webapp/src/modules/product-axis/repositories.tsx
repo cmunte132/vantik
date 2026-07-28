@@ -23,6 +23,7 @@ import * as React from 'react';
 import { DropdownItem } from 'modules/issues/components/issue-metadata/dropdown-item';
 
 import type { IntegrationAccountType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useScope } from 'hooks';
 
@@ -154,7 +155,7 @@ export const Repositories = observer(({ moduleId }: { moduleId: string }) => {
         <div className="px-4 py-3 text-muted-foreground">
           This workspace has no repositories yet. Add one in{' '}
           <NextLink
-            href={`/${workspaceSlug}/settings/integrations`}
+            href={workspaceHref(workspaceSlug, 'settings', 'integrations')}
             className="underline"
           >
             Settings → Integrations

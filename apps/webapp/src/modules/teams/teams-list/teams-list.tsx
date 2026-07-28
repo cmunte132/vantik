@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import React from 'react';
 
 import type { TeamType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { RecordTable } from 'components/record-table';
 
@@ -34,7 +35,13 @@ export const TeamsList = observer(() => {
       */
       onRowClick={(team) =>
         router.push(
-          `/${router.query.workspaceSlug}/settings/teams/${team.identifier}/overview`,
+          workspaceHref(
+            router.query.workspaceSlug,
+            'settings',
+            'teams',
+            team.identifier,
+            'overview',
+          ),
         )
       }
     />

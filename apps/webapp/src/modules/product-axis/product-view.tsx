@@ -11,6 +11,7 @@ import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
 import { SCOPES } from 'common/scopes';
 import type { ModuleType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 import { withApplicationStore } from 'common/wrappers/with-application-store';
 
 import { useScope } from 'hooks';
@@ -73,7 +74,10 @@ export const ProductView = withApplicationStore(
         header={
           <Header
             crumbs={[
-              { title: 'Products', href: `/${workspaceSlug}/products` },
+              {
+                title: 'Products',
+                href: workspaceHref(workspaceSlug, 'products'),
+              },
               { title: product.name },
             ]}
           />
@@ -112,7 +116,8 @@ export const ProductView = withApplicationStore(
                       response?.errors?.message ??
                         'That product could not be deleted.',
                     ),
-                  onSuccess: () => router.push(`/${workspaceSlug}/products`),
+                  onSuccess: () =>
+                    router.push(workspaceHref(workspaceSlug, 'products')),
                 },
               )
             }
@@ -153,7 +158,7 @@ export const ProductView = withApplicationStore(
                   <ModuleRow
                     key={module.id}
                     module={module}
-                    href={`/${workspaceSlug}/module/${module.key}`}
+                    href={workspaceHref(workspaceSlug, 'module', module.key)}
                   />
                 ))}
 
@@ -166,7 +171,7 @@ export const ProductView = withApplicationStore(
                   <ModuleRow
                     key={module.id}
                     module={module}
-                    href={`/${workspaceSlug}/module/${module.key}`}
+                    href={workspaceHref(workspaceSlug, 'module', module.key)}
                     borrowed
                   />
                 ))}

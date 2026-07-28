@@ -9,6 +9,7 @@ import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
 import { SCOPES } from 'common/scopes';
 import type { ModuleType, ProductType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 import { withApplicationStore } from 'common/wrappers/with-application-store';
 
 import { RecordTable } from 'components/record-table';
@@ -63,7 +64,9 @@ export const Products = withApplicationStore(
             crumbs={[{ title: 'Products' }]}
             actions={
               <Button variant="secondary" size="sm" className="gap-1" asChild>
-                <NextLink href={`/${workspaceSlug}/settings/new_product`}>
+                <NextLink
+                  href={workspaceHref(workspaceSlug, 'settings', 'new_product')}
+                >
                   <AddLine size={14} />
                   New product
                 </NextLink>
@@ -80,7 +83,7 @@ export const Products = withApplicationStore(
           data={products}
           columns={columns}
           onRowClick={(product) =>
-            router.push(`/${workspaceSlug}/product/${product.key}`)
+            router.push(workspaceHref(workspaceSlug, 'product', product.key))
           }
           empty={
             <span className="text-muted-foreground">
@@ -187,7 +190,7 @@ export const Modules = withApplicationStore(
                 className="flex items-center gap-2 border-b border-border px-4 py-2"
               >
                 <NextLink
-                  href={`/${workspaceSlug}/module/${module.key}`}
+                  href={workspaceHref(workspaceSlug, 'module', module.key)}
                   className="flex flex-1 items-center gap-2 min-w-0 hover:underline"
                 >
                   <span className="flex-1 truncate">{module.name}</span>

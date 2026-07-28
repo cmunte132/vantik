@@ -18,6 +18,7 @@ import { useRouter } from 'next/router';
 import * as React from 'react';
 
 import type { CapabilityType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useScope } from 'hooks';
 
@@ -27,6 +28,7 @@ import {
 } from 'services/product-axis';
 
 import { useContextStore } from 'store/global-context-provider';
+
 import { withoutArchived } from './archive';
 
 /**
@@ -81,7 +83,7 @@ export const CapabilityPicker = observer(
           >
             <FocusLine size={14} className="shrink-0" />
             <NextLink
-              href={`/${workspaceSlug}/capability/${capability.id}`}
+              href={workspaceHref(workspaceSlug, 'capability', capability.id)}
               className="flex-1 truncate hover:underline"
             >
               {capability.name}

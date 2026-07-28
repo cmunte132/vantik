@@ -9,6 +9,7 @@ import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
 import { SCOPES } from 'common/scopes';
 import type { IssueType, ProductType, TeamType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 import { withApplicationStore } from 'common/wrappers/with-application-store';
 
 import { useScope } from 'hooks';
@@ -69,7 +70,10 @@ export const ModuleView = withApplicationStore(
         header={
           <Header
             crumbs={[
-              { title: 'Modules', href: `/${workspaceSlug}/modules` },
+              {
+                title: 'Modules',
+                href: workspaceHref(workspaceSlug, 'modules'),
+              },
               { title: productModule.name },
             ]}
           />
@@ -103,7 +107,10 @@ export const ModuleView = withApplicationStore(
             onDelete={() =>
               deleteModule(
                 { moduleId: productModule.id },
-                { onSuccess: () => router.push(`/${workspaceSlug}/modules`) },
+                {
+                  onSuccess: () =>
+                    router.push(workspaceHref(workspaceSlug, 'modules')),
+                },
               )
             }
           />
@@ -161,7 +168,9 @@ export const ModuleView = withApplicationStore(
             not at every issue in the workspace.
           */}
           <NextLink
-            href={`/${workspaceSlug}/all?module=${productModule.id}`}
+            href={`${workspaceHref(workspaceSlug, 'all')}?module=${encodeURIComponent(
+              productModule.id,
+            )}`}
             className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
           >
             <IssuesLine size={14} />

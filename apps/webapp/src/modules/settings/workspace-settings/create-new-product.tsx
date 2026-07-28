@@ -18,6 +18,8 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import { workspaceHref } from 'common/workspace-href';
+
 import { useCreateProductMutation } from 'services/product-axis';
 
 import { useContextStore } from 'store/global-context-provider';
@@ -77,7 +79,7 @@ export const CreateNewProduct = observer(() => {
       return undefined;
     }
 
-    const href = `/${workspaceSlug}/product/${created.key}`;
+    const href = workspaceHref(workspaceSlug, 'product', created.key);
 
     if (inStore) {
       router.push(href);

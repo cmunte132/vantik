@@ -10,6 +10,7 @@ import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
 import { SCOPES } from 'common/scopes';
 import type { CapabilityType, ModuleType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 import { withApplicationStore } from 'common/wrappers/with-application-store';
 
 import { useScope } from 'hooks';
@@ -82,7 +83,7 @@ export const CapabilitiesList = observer(
               className="flex items-center gap-2 border-b border-border px-4 py-2 hover:bg-grayAlpha-100"
             >
               <NextLink
-                href={`/${workspaceSlug}/capability/${capability.id}`}
+                href={workspaceHref(workspaceSlug, 'capability', capability.id)}
                 className="flex flex-1 items-center gap-2 min-w-0"
               >
                 <span className="flex-1 truncate">{capability.name}</span>
@@ -192,11 +193,14 @@ export const ProductCapabilities = withApplicationStore(
         header={
           <Header
             crumbs={[
-              { title: 'Products', href: `/${workspaceSlug}/products` },
+              {
+                title: 'Products',
+                href: workspaceHref(workspaceSlug, 'products'),
+              },
               {
                 title: product?.name ?? 'Product',
                 href: product
-                  ? `/${workspaceSlug}/product/${product.key}`
+                  ? workspaceHref(workspaceSlug, 'product', product.key)
                   : undefined,
               },
               { title: 'Capabilities' },

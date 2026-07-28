@@ -1,19 +1,10 @@
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@vantikhq/ui/components/table';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import React from 'react';
+
+import type { TeamType } from 'common/types';
+
+import { RecordTable } from 'components/record-table';
 
 import { useContextStore } from 'store/global-context-provider';
 
@@ -30,65 +21,22 @@ export const TeamsList = observer(() => {
   }, [teamsStore.teams.length]);
 
   const columns = useProjectColumns();
-  const table = useReactTable({
-    data,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
-
-  const goToTeam = (teamIdentifier: string) => {
-    router.push(`/${router.query.workspaceSlug}/team/${teamIdentifier}/all`);
-  };
 
   return (
-    <div className="flex items-center w-full">
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
-                return (
-                  <TableHead key={header.id} className="text-sm">
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                  </TableHead>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                data-state={row.getIsSelected() && 'selected'}
-                className="cursor-pointer"
-                onClick={() => {
-                  goToTeam(row.original.identifier);
-                }}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className="w-[90%] py-1">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell
-                colSpan={columns.length}
-                className="h-24 text-center"
-              ></TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
+    <RecordTable<TeamType>
+      data={data}
+      columns={columns}
+      /*
+        A team opens at its settings rather than at its issues. This list is
+        where a person comes to look at a team as a thing — what it is called,
+        who is in it, how it works — and the issues have their own way in from
+        the sidebar.
+      */
+      onRowClick={(team) =>
+        router.push(
+          `/${router.query.workspaceSlug}/settings/teams/${team.identifier}/overview`,
+        )
+      }
+    />
   );
 });

@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { AgentRunConfig, AgentRunRepoConfig } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import IssueContextService from 'modules/issues/issue-context.service';
+import { LocalRepoService } from 'modules/local-repo/local-repo.service';
 
 import { workspaceAgentDefaults } from './agent-run-settings';
+import { chooseVerification } from './module-verification';
+import { chooseRepo, isLocalSource, remoteUrlFor } from './repo-routing';
 
 /**
  * What an agent is handed when it picks up a run.
@@ -63,9 +66,12 @@ export interface ContextPack {
 
 @Injectable()
 export class ContextPackService {
+  private readonly logger = new Logger(ContextPackService.name);
+
   constructor(
     private prisma: PrismaService,
     private issueContext: IssueContextService,
+    private localRepo: LocalRepoService,
   ) {}
 
   /**
@@ -83,7 +89,7 @@ export class ContextPackService {
   ): Promise<ContextPack> {
     const [context, repo] = await Promise.all([
       this.issueContext.getIssueContext(issueId),
-      this.resolveRepo(workspaceId, overrides),
+      this.resolveRepo(issueId, workspaceId, overrides),
     ]);
 
     return {
@@ -140,8 +146,16 @@ export class ContextPackService {
   }
 
   /**
-   * Repo configuration, layered: workspace defaults underneath, the
-   * delegation request's overrides on top.
+   * Repo configuration, layered: workspace defaults underneath, the issue's
+   * own modules over them, the delegation request's overrides on top.
+   *
+   * The middle layer is what makes a workspace with several repositories work
+   * without configuring anything per run. A module records where its code is
+   * and how to check work in it, so an issue filed against a module has
+   * already said which checkout the agent should open and how it proves the
+   * change is sound. The workspace default is the answer for an issue that
+   * names no module; an explicit request still wins over both, because a
+   * person naming a repository knows something the map does not.
    *
    * Delivery is derived rather than defaulted to a constant. A workspace with
    * no remote configured has nowhere to push and no PR to open, so it gets a
@@ -149,24 +163,142 @@ export class ContextPackService {
    * to get something reviewable back.
    */
   private async resolveRepo(
+    issueId: string,
     workspaceId: string,
     overrides?: AgentRunConfig,
   ): Promise<AgentRunRepoConfig> {
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: { preferences: true },
-    });
+    const [workspace, routed] = await Promise.all([
+      this.prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { preferences: true },
+      }),
+      this.repoForModules(issueId, workspaceId),
+    ]);
 
     const defaults = workspaceAgentDefaults(workspace?.preferences);
 
+    // Verification commands used to be configured here, at workspace level,
+    // and a deployment may still hold a set from then. They stay honoured as
+    // the bottom layer, so nothing that worked stops working — but a module
+    // that says how to check its own code wins, because it is the one that
+    // knows.
     const merged: AgentRunRepoConfig = {
       ...defaults.repo,
-      ...stripUndefined(overrides ?? {}),
+      ...routed,
+      ...stripUndefined(repoFieldsOf(overrides)),
     };
 
     merged.delivery ??= merged.repoUrl ? 'pull_request' : 'worktree';
 
     return merged;
+  }
+
+  /**
+   * What the issue's modules say: where the code is, and how to check it.
+   *
+   * Empty when the issue names no module, when its modules have no repository
+   * recorded, or when they disagree — see `chooseRepo` for why disagreement is
+   * not resolved by picking one.
+   *
+   * Verification is resolved separately from the repository and survives a
+   * repository that could not be. The two answers are independent: modules in
+   * two different repositories still agree on how to run the tests often
+   * enough that throwing the commands away with the route would lose something
+   * for nothing.
+   */
+  private async repoForModules(
+    issueId: string,
+    workspaceId: string,
+  ): Promise<Partial<AgentRunRepoConfig>> {
+    const issue = await this.prisma.issue.findUnique({
+      where: { id: issueId },
+      select: { moduleIds: true },
+    });
+
+    if (!issue?.moduleIds?.length) {
+      return {};
+    }
+
+    const [rows, modules] = await Promise.all([
+      this.prisma.moduleRepo.findMany({
+        where: { moduleId: { in: issue.moduleIds }, deleted: null },
+        select: {
+          externalRepoId: true,
+          fullName: true,
+          integrationAccountId: true,
+          pathPrefixes: true,
+        },
+      }),
+      this.prisma.module.findMany({
+        where: { id: { in: issue.moduleIds }, deleted: null },
+        select: { verification: true },
+      }),
+    ]);
+
+    const { verification, conflicts } = chooseVerification(modules);
+
+    if (conflicts.length) {
+      this.logger.warn({
+        message:
+          'The modules of this issue disagree on how to verify work, so the ' +
+          `run does not ${conflicts.join(', ')}`,
+        where: `${ContextPackService.name}.repoForModules`,
+        issueId,
+      });
+    }
+
+    const choice = chooseRepo(rows);
+
+    if (!choice) {
+      if (rows.length > 1) {
+        this.logger.warn({
+          message:
+            'The modules of this issue are in more than one repository, so ' +
+            'the run keeps the repository the workspace configured',
+          where: `${ContextPackService.name}.repoForModules`,
+          issueId,
+        });
+      }
+
+      return verification;
+    }
+
+    const slug = await this.sourceSlug(choice.repo.integrationAccountId);
+    const pathPrefixes = choice.prefixes;
+
+    // A repository on this disk is opened where it already is. The path lives
+    // in the settings of the integration account and not on the ModuleRepo
+    // row, so it is read back rather than stored twice.
+    if (isLocalSource(slug)) {
+      const path = await this.localRepo.pathOf(
+        workspaceId,
+        choice.repo.externalRepoId,
+      );
+
+      return path
+        ? { ...verification, repoPath: path, pathPrefixes }
+        : verification;
+    }
+
+    const repoUrl = remoteUrlFor(slug, choice.repo.fullName);
+
+    return repoUrl ? { ...verification, repoUrl, pathPrefixes } : verification;
+  }
+
+  /** The integration a repository came from, as its catalogue slug. */
+  private async sourceSlug(
+    integrationAccountId: string | null,
+  ): Promise<string | null> {
+    if (!integrationAccountId) {
+      return null;
+    }
+
+    const account = await this.prisma.integrationAccount.findUnique({
+      where: { id: integrationAccountId },
+      select: { integrationDefinition: { select: { slug: true } } },
+    });
+
+    return account?.integrationDefinition?.slug ?? null;
   }
 }
 
@@ -184,6 +316,47 @@ function priorityName(priority: number | null): string | null {
 function issueUrl(key: string): string | null {
   const host = process.env.FRONTEND_HOST?.replace(/\/+$/, '');
   return host ? `${host}/issue/${key}` : null;
+}
+
+/**
+ * The repository fields of a delegation request, and nothing else.
+ *
+ * `AgentRunConfig` is a superset of the repo config — it also carries limits, a
+ * harness command and a dry-run flag, which are the runner's business and not
+ * part of "where is the code". Spreading the whole thing put all of them inside
+ * `pack.repo`, where they mean nothing and read as though the repo had a
+ * budget.
+ */
+function repoFieldsOf(config: AgentRunConfig | undefined): AgentRunRepoConfig {
+  const {
+    repoUrl,
+    repoPath,
+    pathPrefixes,
+    delivery,
+    worktreeRoot,
+    baseBranch,
+    branchPrefix,
+    setupCommands,
+    testCommand,
+    lintCommand,
+    typecheckCommand,
+    buildCommand,
+  } = config ?? {};
+
+  return {
+    repoUrl,
+    repoPath,
+    pathPrefixes,
+    delivery,
+    worktreeRoot,
+    baseBranch,
+    branchPrefix,
+    setupCommands,
+    testCommand,
+    lintCommand,
+    typecheckCommand,
+    buildCommand,
+  };
 }
 
 /** An override that was not supplied must not blank out the default under it. */

@@ -1,3 +1,5 @@
+import type { ThinkingLevel } from './model-providers';
+
 /**
  * One agent's attempt at one issue.
  *
@@ -148,15 +150,45 @@ export interface AgentRunPhaseTimings {
 }
 
 /**
- * How to run and verify this repository.
+ * How a run checks its own work.
  *
- * Verification commands are the highest-leverage thing in here. Whether the
- * agent can run the repo's own tests and react to the output is the difference
- * between a plausible diff and a working one — worth more than a better model.
- * Setup is kept separate from verification because the hosted executor runs
- * them in different phases, with different credentials and different egress.
+ * The highest-leverage thing in the whole context pack. Whether the agent can
+ * run the repo's own tests and react to the output is the difference between a
+ * plausible diff and a working one — worth more than a better model.
+ *
+ * Configured per module, because the command depends on the code and on
+ * nothing else: a workspace holding a Go service and a pnpm monorepo has no
+ * single `testCommand` that is right for both. Setup is kept separate from the
+ * rest because the hosted executor runs it in a different phase, with
+ * different credentials and different egress.
  */
-export interface AgentRunRepoConfig {
+export interface AgentRunVerification {
+  /** Run once, with network and install credentials. */
+  setupCommands?: string[];
+  testCommand?: string;
+  lintCommand?: string;
+  typecheckCommand?: string;
+  buildCommand?: string;
+}
+
+/** Whether a module has anything to say about verifying its code. */
+export function hasVerification(value: AgentRunVerification | undefined) {
+  return Boolean(
+    value?.testCommand ||
+      value?.lintCommand ||
+      value?.typecheckCommand ||
+      value?.buildCommand ||
+      value?.setupCommands?.length,
+  );
+}
+
+/**
+ * Where the code is, how to deliver the work, and how to verify it.
+ *
+ * Verification arrives from the issue's modules; everything else is the
+ * workspace's default or the delegating caller's override.
+ */
+export interface AgentRunRepoConfig extends AgentRunVerification {
   /** Remote to clone. Absent for a run against a local checkout. */
   repoUrl?: string;
   /**
@@ -164,6 +196,16 @@ export interface AgentRunRepoConfig {
    * The runner's own path; the server only stores it.
    */
   repoPath?: string;
+  /**
+   * The part of the repository this run is about, from the modules the issue
+   * names. Empty or absent means the whole of it.
+   *
+   * Advisory, not a fence: it tells the agent where to look first in a
+   * monorepo rather than making the rest of the tree unreadable. A change that
+   * genuinely belongs outside these paths is a change the agent should still
+   * be able to make.
+   */
+  pathPrefixes?: string[];
   /**
    * Where to hand the work back. Defaults to `pull_request` when the
    * workspace has an SCM connected and `worktree` when it does not, so a
@@ -180,12 +222,6 @@ export interface AgentRunRepoConfig {
   baseBranch?: string;
   /** Where the runner should put the work. Templated with the issue key. */
   branchPrefix?: string;
-  /** Run once, with network and install credentials. */
-  setupCommands?: string[];
-  testCommand?: string;
-  lintCommand?: string;
-  typecheckCommand?: string;
-  buildCommand?: string;
 }
 
 export interface AgentRunLimits {
@@ -200,12 +236,24 @@ export interface AgentRunConfig extends AgentRunRepoConfig {
   /** Command to run instead of the bundled default harness. */
   harnessCommand?: string;
   /**
-   * Model the harness asks for, and the provider to route it through when the
-   * id alone is ambiguous. Recorded on the run either way, so two runs of the
-   * same issue can be compared by what actually drove them.
+   * Model the harness asks for, and the provider to route it through.
+   *
+   * The provider is not decoration: it selects which of the workspace's keys
+   * the run uses and which environment variable that key reaches the harness
+   * under. A workspace with keys for more than one provider and a run that
+   * names none is refused rather than resolved.
+   *
+   * Recorded on the run either way, so two runs of the same issue can be
+   * compared by what actually drove them.
    */
   model?: string;
   provider?: string;
+  /**
+   * How hard the model is asked to think — Pi's `--thinking`. The single
+   * largest lever on both cost and quality, which is why it is a first-class
+   * option rather than something buried in a harness command override.
+   */
+  thinking?: ThinkingLevel;
   limits?: AgentRunLimits;
   /** Leave the diff on disk; do not push and do not open a PR. */
   dryRun?: boolean;

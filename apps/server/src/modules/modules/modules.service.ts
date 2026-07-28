@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   CreateModuleDto,
   CreateModuleRepoDto,
@@ -102,14 +103,38 @@ export class ModulesService {
           )
         : undefined;
 
+    // `verification` is taken out of the spread rather than overridden after
+    // it: the DTO types it as a plain record, which is not Prisma's JSON input
+    // type, and a spread keeps the looser type no matter what follows.
+    //
+    // The annotation is the unchecked variant because `data` sets scalar
+    // foreign keys. Left to infer, that same loose field is enough to make
+    // Prisma's union pick the checked variant instead, where `ownerTeamId` is
+    // forbidden — and the error then names the owner rather than the field
+    // that caused it.
+    const { verification, ...rest } = updateModuleDto;
+
+    const data: Prisma.ModuleUncheckedUpdateInput = {
+      ...rest,
+      ownerTeamId,
+      ownerProductId,
+      ...(key ? { key } : {}),
+      // A nullable Json column does not take a plain `null` — Prisma reads
+      // that as "leave it alone" rather than as "clear it". `DbNull` is how a
+      // caller says "no verification here".
+      ...(verification === undefined
+        ? {}
+        : {
+            verification:
+              verification === null
+                ? Prisma.DbNull
+                : (verification as Prisma.InputJsonObject),
+          }),
+    };
+
     return await this.prisma.module.update({
       where: { id: moduleId },
-      data: {
-        ...updateModuleDto,
-        ownerTeamId,
-        ownerProductId,
-        ...(key ? { key } : {}),
-      },
+      data,
     });
   }
 

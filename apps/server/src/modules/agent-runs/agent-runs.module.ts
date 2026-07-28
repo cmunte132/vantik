@@ -5,6 +5,7 @@ import { PrismaModule, PrismaService } from 'nestjs-prisma';
 import { IssueCommentsModule } from 'modules/issue-comments/issue-comments.module';
 import { IssuesModule } from 'modules/issues/issues.module';
 import { LinkedIssueModule } from 'modules/linked-issue/linked-issue.module';
+import { LocalRepoModule } from 'modules/local-repo/local-repo.module';
 import { UsersService } from 'modules/users/users.service';
 
 import { AgentDelegationService } from './agent-delegation.service';
@@ -31,6 +32,9 @@ import { ExecutorRegistry } from './executors/executor.registry';
     IssuesModule,
     IssueCommentsModule,
     LinkedIssueModule,
+    // The issue's modules say which repository a run opens, and a repository on
+    // this disk keeps its path here.
+    LocalRepoModule,
   ],
   controllers: [AgentRunsController, CredentialsController],
   providers: [

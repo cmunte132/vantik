@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class UpdateModuleDto {
   @IsOptional()
@@ -47,4 +47,13 @@ export class UpdateModuleDto {
   @IsOptional()
   @IsArray()
   linkedProductIds?: string[];
+
+  /**
+   * How an agent run checks work in this module, shaped as
+   * `AgentRunVerification`. Send the whole object; it replaces what is stored
+   * rather than merging, so removing a command means sending it absent.
+   */
+  @IsOptional()
+  @IsObject()
+  verification?: Record<string, unknown> | null;
 }

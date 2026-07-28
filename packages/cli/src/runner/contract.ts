@@ -68,6 +68,12 @@ export interface ContextPack {
   relations?: Array<{ type: string; key: string; title: string }>;
   comments?: Array<{ author: string | null; at: string; body: string }>;
   knowledge?: Array<{ scope: string; body: string }>;
+  /**
+   * The repository this run opens. Only the part a harness writing a prompt
+   * needs: which folders of it the issue is about, from the modules the issue
+   * names. Empty or absent means the whole repository.
+   */
+  repo?: { pathPrefixes?: string[] };
 }
 
 export interface VerificationCommands {

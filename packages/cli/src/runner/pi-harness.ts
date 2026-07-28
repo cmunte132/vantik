@@ -523,6 +523,19 @@ function prompt(pack: ContextPack, verification: VerificationCommands): string {
     pack.issue.description || '(no description)',
   ];
 
+  // Where in the tree to start, from the modules the issue names. Said as a
+  // hint and not as a boundary: a monorepo is most of the reason an agent
+  // wastes its first minutes, and a change that genuinely belongs elsewhere is
+  // still a change it should make.
+  if (pack.repo?.pathPrefixes?.length) {
+    parts.push(
+      '',
+      '## Where this lives',
+      '',
+      `This issue is about ${pack.repo.pathPrefixes.join(', ')} in this repository. Start there.`,
+    );
+  }
+
   if (pack.definitionOfDone?.length) {
     parts.push(
       '',

@@ -30,6 +30,7 @@ import { LinkPicker } from './link-picker';
 import { OwnerSelect } from './owner-select';
 import { Repositories } from './repositories';
 import { Section } from './section';
+import { Verification } from './verification';
 
 /**
  * One module, in the order somebody reads it: what it is, who is responsible,
@@ -150,6 +151,13 @@ export const ModuleView = withApplicationStore(
             description="Which repositories, or which paths inside them, hold this module's code. They come from the directories and source control accounts this workspace has added under Settings → Integrations."
           >
             <Repositories moduleId={productModule.id} />
+          </Section>
+
+          <Section
+            title="How to verify the work"
+            description="The commands an agent run uses to check itself when it works on an issue in this module. They live here because the command depends on the code — a workspace with two kinds of project has no single answer. Anything left empty is a step the run skips."
+          >
+            <Verification moduleId={productModule.id} />
           </Section>
 
           <Section

@@ -10,6 +10,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import type { IssueContext } from 'modules/issues/issue-context.interface';
 import type IssueContextService from 'modules/issues/issue-context.service';
+import type { LocalRepoService } from 'modules/local-repo/local-repo.service';
 
 import { ContextPackService } from './context-pack.service';
 
@@ -57,10 +58,48 @@ const issueContext = {
   updatedAt: new Date('2026-07-20T09:00:00.000Z'),
 } as unknown as IssueContext;
 
-function buildService(preferences: unknown = null) {
+interface Routing {
+  /** The modules the issue names. */
+  moduleIds?: string[];
+  /** The `ModuleRepo` rows those modules hold. */
+  moduleRepos?: Array<{
+    externalRepoId: string;
+    fullName: string;
+    integrationAccountId: string | null;
+    pathPrefixes: string[];
+  }>;
+  /** Catalogue slug of the integration those repositories came from. */
+  slug?: string | null;
+  /** What `LocalRepoService.pathOf` answers. */
+  localPath?: string | null;
+  /** The verification blob each of those modules carries. */
+  moduleVerification?: Array<{ verification: unknown }>;
+}
+
+function buildService(preferences: unknown = null, routing: Routing = {}) {
   const prisma = {
     workspace: {
       findUnique: jest.fn(() => Promise.resolve({ preferences })),
+    },
+    issue: {
+      findUnique: jest.fn(() =>
+        Promise.resolve({ moduleIds: routing.moduleIds ?? [] }),
+      ),
+    },
+    moduleRepo: {
+      findMany: jest.fn(() => Promise.resolve(routing.moduleRepos ?? [])),
+    },
+    module: {
+      findMany: jest.fn(() =>
+        Promise.resolve(routing.moduleVerification ?? []),
+      ),
+    },
+    integrationAccount: {
+      findUnique: jest.fn(() =>
+        Promise.resolve({
+          integrationDefinition: { slug: routing.slug ?? null },
+        }),
+      ),
     },
   } as unknown as PrismaService;
 
@@ -68,7 +107,11 @@ function buildService(preferences: unknown = null) {
     getIssueContext: jest.fn(() => Promise.resolve(issueContext)),
   } as unknown as IssueContextService;
 
-  return new ContextPackService(prisma, context);
+  const localRepo = {
+    pathOf: jest.fn(() => Promise.resolve(routing.localPath ?? null)),
+  } as unknown as LocalRepoService;
+
+  return new ContextPackService(prisma, context, localRepo);
 }
 
 describe('ContextPackService', () => {
@@ -274,5 +317,245 @@ issues come back in results.",
     process.env.FRONTEND_HOST = 'https://vantik.test';
 
     expect(pack.issue.url).toBeNull();
+  });
+
+  /**
+   * Routing by module is what makes a workspace with several repositories
+   * usable. Without it every run opens whichever checkout the workspace
+   * default happens to name, which is right for one repository and wrong for
+   * the rest.
+   */
+  describe('the repository an issue points at', () => {
+    const LOCAL = {
+      moduleIds: ['module-server'],
+      moduleRepos: [
+        {
+          externalRepoId: 'repo-1',
+          fullName: 'vantik',
+          integrationAccountId: 'account-1',
+          pathPrefixes: ['apps/server/'],
+        },
+      ],
+      slug: 'local-repo',
+      localPath: '/Users/dev/code/vantik',
+    };
+
+    it('opens the checkout the issue’s module names', async () => {
+      const service = buildService(null, LOCAL);
+
+      await expect(service.build('issue-1', WORKSPACE)).resolves.toMatchObject({
+        repo: {
+          repoPath: '/Users/dev/code/vantik',
+          pathPrefixes: ['apps/server/'],
+          delivery: 'worktree',
+        },
+      });
+    });
+
+    it('beats the workspace default, which is the answer for an issue that names nothing', async () => {
+      const configured = { agentRuns: { repo: { repoPath: '/srv/fallback' } } };
+
+      await expect(
+        buildService(configured, LOCAL).build('issue-1', WORKSPACE),
+      ).resolves.toMatchObject({ repo: { repoPath: '/Users/dev/code/vantik' } });
+
+      await expect(
+        buildService(configured, {}).build('issue-1', WORKSPACE),
+      ).resolves.toMatchObject({ repo: { repoPath: '/srv/fallback' } });
+    });
+
+    it('loses to an explicit request, because a person knows what the map does not', async () => {
+      const service = buildService(null, LOCAL);
+
+      await expect(
+        service.build('issue-1', WORKSPACE, { repoPath: '/tmp/somewhere-else' }),
+      ).resolves.toMatchObject({ repo: { repoPath: '/tmp/somewhere-else' } });
+    });
+
+    it('clones a remote when the module’s repository is not on this disk', async () => {
+      const service = buildService(null, {
+        moduleIds: ['module-server'],
+        moduleRepos: [
+          {
+            externalRepoId: '123',
+            fullName: 'acme/app',
+            integrationAccountId: 'account-2',
+            pathPrefixes: [],
+          },
+        ],
+        slug: 'github',
+      });
+
+      await expect(service.build('issue-1', WORKSPACE)).resolves.toMatchObject({
+        repo: {
+          repoUrl: 'https://github.com/acme/app.git',
+          // A remote to push to is what makes a pull request possible, so the
+          // delivery follows from the routing rather than from configuration.
+          delivery: 'pull_request',
+        },
+      });
+    });
+
+    it('keeps the prefixes of every module on one repository', async () => {
+      const service = buildService(null, {
+        ...LOCAL,
+        moduleIds: ['module-server', 'module-webapp'],
+        moduleRepos: [
+          {
+            externalRepoId: 'repo-1',
+            fullName: 'vantik',
+            integrationAccountId: 'account-1',
+            pathPrefixes: ['apps/server/'],
+          },
+          {
+            externalRepoId: 'repo-1',
+            fullName: 'vantik',
+            integrationAccountId: 'account-1',
+            pathPrefixes: ['apps/webapp/', 'packages/ui/'],
+          },
+        ],
+      });
+
+      await expect(service.build('issue-1', WORKSPACE)).resolves.toMatchObject({
+        repo: {
+          repoPath: '/Users/dev/code/vantik',
+          pathPrefixes: ['apps/server/', 'apps/webapp/', 'packages/ui/'],
+        },
+      });
+    });
+
+    /**
+     * The one that matters. A run in the wrong repository is worse than a run
+     * that did not start, so two repositories with no way to choose between
+     * them must not resolve to whichever came back first.
+     */
+    it('refuses to guess when the modules are in different repositories', async () => {
+      const service = buildService(
+        { agentRuns: { repo: { repoPath: '/srv/fallback' } } },
+        {
+          moduleIds: ['module-server', 'module-other'],
+          moduleRepos: [
+            {
+              externalRepoId: 'repo-1',
+              fullName: 'vantik',
+              integrationAccountId: 'account-1',
+              pathPrefixes: [],
+            },
+            {
+              externalRepoId: 'repo-2',
+              fullName: 'other',
+              integrationAccountId: 'account-1',
+              pathPrefixes: [],
+            },
+          ],
+          slug: 'local-repo',
+          localPath: '/Users/dev/code/vantik',
+        },
+      );
+
+      const pack = await service.build('issue-1', WORKSPACE);
+
+      expect(pack.repo.repoPath).toBe('/srv/fallback');
+      expect(pack.repo.pathPrefixes).toBeUndefined();
+    });
+
+    it('falls back rather than half-routing when the path cannot be read back', async () => {
+      const service = buildService(
+        { agentRuns: { repo: { repoPath: '/srv/fallback' } } },
+        { ...LOCAL, localPath: null },
+      );
+
+      await expect(service.build('issue-1', WORKSPACE)).resolves.toMatchObject({
+        repo: { repoPath: '/srv/fallback' },
+      });
+    });
+  });
+
+  /**
+   * How a run checks itself comes from the modules the issue names, for the
+   * same reason the repository does: the command depends on the code. A
+   * workspace holding a Go service and a pnpm monorepo has no single
+   * `testCommand` that is right for both.
+   *
+   * `chooseVerification` covers how several modules are reconciled. These
+   * cover that the answer actually reaches the pack, and how it layers.
+   */
+  describe('how the run verifies its work', () => {
+    const WITH_COMMANDS = {
+      ...{
+        moduleIds: ['module-server'],
+        moduleRepos: [
+          {
+            externalRepoId: 'repo-1',
+            fullName: 'vantik',
+            integrationAccountId: 'account-1',
+            pathPrefixes: ['apps/server/'],
+          },
+        ],
+        slug: 'local-repo',
+        localPath: '/Users/dev/code/vantik',
+      },
+      moduleVerification: [
+        { verification: { testCommand: 'pnpm --filter server test' } },
+      ],
+    };
+
+    it('takes the commands from the issue’s module', async () => {
+      const pack = await buildService(null, WITH_COMMANDS).build(
+        'issue-1',
+        WORKSPACE,
+      );
+
+      expect(pack.repo.testCommand).toBe('pnpm --filter server test');
+    });
+
+    it('beats a workspace default left over from when this was configured there', async () => {
+      const pack = await buildService(
+        { agentRuns: { repo: { testCommand: 'pnpm turbo test' } } },
+        WITH_COMMANDS,
+      ).build('issue-1', WORKSPACE);
+
+      expect(pack.repo.testCommand).toBe('pnpm --filter server test');
+    });
+
+    it('leaves an old workspace default in place when no module says otherwise', async () => {
+      // Nothing that worked before this moved stops working.
+      const pack = await buildService(
+        { agentRuns: { repo: { testCommand: 'pnpm turbo test' } } },
+        {},
+      ).build('issue-1', WORKSPACE);
+
+      expect(pack.repo.testCommand).toBe('pnpm turbo test');
+    });
+
+    it('survives a repository the modules could not agree on', async () => {
+      // The two answers are independent. Modules in different repositories
+      // still often agree on how to run the tests, and throwing the commands
+      // away along with the route would lose that for nothing.
+      const pack = await buildService(null, {
+        moduleIds: ['module-server', 'module-other'],
+        moduleRepos: [
+          {
+            externalRepoId: 'repo-1',
+            fullName: 'vantik',
+            integrationAccountId: 'account-1',
+            pathPrefixes: [],
+          },
+          {
+            externalRepoId: 'repo-2',
+            fullName: 'other',
+            integrationAccountId: 'account-1',
+            pathPrefixes: [],
+          },
+        ],
+        moduleVerification: [
+          { verification: { testCommand: 'make test' } },
+          { verification: { testCommand: 'make test' } },
+        ],
+      }).build('issue-1', WORKSPACE);
+
+      expect(pack.repo.repoPath).toBeUndefined();
+      expect(pack.repo.testCommand).toBe('make test');
+    });
   });
 });

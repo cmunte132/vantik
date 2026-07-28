@@ -222,6 +222,30 @@ export const ISSUE_QUERY_BY =
  */
 export const SIMILAR_ISSUE_DISTANCE_THRESHOLD = 0.7;
 
+/**
+ * The second axis, as a filter on a search.
+ *
+ * A module and a capability are not fields of the search index. They live in
+ * postgres, and the search already reads postgres once for each set of hits, so
+ * the filter rides on that read.
+ */
+export interface AxisFilter {
+  /** An issue matches when it names any one of these modules. */
+  moduleIds?: string[];
+  capabilityId?: string;
+}
+
+/**
+ * How many extra rows a search asks for when an axis filter is set.
+ *
+ * The filter runs after the search, so it takes rows out of the page that came
+ * back. Without the extra rows a request for ten hits returns two.
+ */
+export const AXIS_OVERFETCH = 5;
+
+/** Typesense refuses a page larger than this. */
+export const MAX_TYPESENSE_PER_PAGE = 250;
+
 export interface IssueSearchHit {
   id: string;
   title: string;

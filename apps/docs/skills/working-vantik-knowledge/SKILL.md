@@ -3,8 +3,9 @@ name: working-vantik-knowledge
 description: >-
   How to use the Vantik knowledge bank as an agent over MCP: load context
   before starting work, remember one fact at a time, supersede rather than
-  contradict, and consolidate instead of piling up. Use whenever recalling or
-  recording what a workspace knows.
+  contradict, and consolidate instead of piling up. Use before starting work
+  on any unfamiliar area, and whenever recalling or recording what a workspace
+  knows.
 ---
 
 # Working the Vantik knowledge bank

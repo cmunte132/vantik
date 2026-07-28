@@ -5,6 +5,7 @@ import {
   DEFAULT_VECTOR_DISTANCE,
   MAX_SEARCH_LIMIT,
   SearchInputData,
+  parseIds,
   parseSearchLimit,
   parseStateCategories,
   parseVectorDistance,
@@ -75,5 +76,45 @@ describe('parseStateCategories', () => {
   it('returns an empty list when unset', () => {
     expect(parseStateCategories(undefined)).toEqual([]);
     expect(parseStateCategories('')).toEqual([]);
+  });
+});
+
+/**
+ * A search can be narrowed to the modules an agent is about to change. The ids
+ * ride in one query parameter, joined, because a query string carries one
+ * value per key.
+ */
+describe('parseIds', () => {
+  it('reads one id', () => {
+    expect(parseIds('module-server')).toEqual(['module-server']);
+  });
+
+  it('reads several ids', () => {
+    expect(parseIds('module-server,module-webapp')).toEqual([
+      'module-server',
+      'module-webapp',
+    ]);
+  });
+
+  it('trims the space a caller leaves after a comma', () => {
+    expect(parseIds('module-server, module-webapp')).toEqual([
+      'module-server',
+      'module-webapp',
+    ]);
+  });
+
+  /**
+   * An empty entry has to disappear rather than become an id. An id of "" in
+   * the filter matches no issue, which reads as "nothing found" instead of as
+   * the trailing comma it was.
+   */
+  it('drops an empty entry', () => {
+    expect(parseIds('module-server,')).toEqual(['module-server']);
+    expect(parseIds(',,')).toEqual([]);
+  });
+
+  it('returns nothing when the caller asked for no module', () => {
+    expect(parseIds(undefined)).toEqual([]);
+    expect(parseIds('')).toEqual([]);
   });
 });

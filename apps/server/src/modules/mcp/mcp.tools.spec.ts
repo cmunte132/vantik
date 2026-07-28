@@ -11,7 +11,13 @@ import { registerVantikTools } from './mcp.tools';
  * The Vantik API itself is faked at the fetch boundary.
  */
 async function connect(routes: Record<string, unknown>) {
-  const requests: Array<{ method: string; path: string; body: unknown }> = [];
+  const requests: Array<{
+    method: string;
+    path: string;
+    /** The query string, so a test can assert on a filter the tool applied. */
+    query: string;
+    body: unknown;
+  }> = [];
 
   const fetchImpl = (async (url: string, init: RequestInit = {}) => {
     const parsed = new URL(url);
@@ -20,6 +26,7 @@ async function connect(routes: Record<string, unknown>) {
     requests.push({
       method,
       path,
+      query: parsed.search,
       body: init.body ? JSON.parse(init.body as string) : undefined,
     });
 
@@ -121,7 +128,10 @@ describe('vantik MCP tools', () => {
       'get_task',
       'knowledge_gaps',
       'link_page',
+      'list_capabilities',
+      'list_modules',
       'list_pages',
+      'list_products',
       'list_projects',
       'list_tasks',
       'load_context',
@@ -186,6 +196,162 @@ describe('vantik MCP tools', () => {
     ]);
 
     expect(jsonOf(result)).toMatchObject({ key: 'ENG-99' });
+  });
+
+  /**
+   * The second axis, from an agent's side.
+   *
+   * An agent that is about to change a piece of code should be able to ask
+   * what has been filed against it, and to say what its own issue changes.
+   * Both take the same reference — a key, a name or an id — because a model
+   * that learned one form for list_tasks must not have to learn another.
+   */
+  describe('the product axis', () => {
+    const modules = [
+      { id: 'module-server', key: 'server', name: 'Server', workspaceId: 'ws' },
+      { id: 'module-webapp', key: 'webapp', name: 'Webapp', workspaceId: 'ws' },
+    ];
+    const capabilities = [
+      {
+        id: 'capability-sync',
+        name: 'Real-time sync',
+        moduleIds: [] as string[],
+      },
+    ];
+
+    const axisRoutes = {
+      ...baseRoutes,
+      'GET /modules': modules,
+      'GET /capabilities': capabilities,
+    };
+
+    const queryOf = (
+      requests: Array<{ path: string; query: string }>,
+      path: string,
+    ) => requests.find((request) => request.path === path)?.query ?? '';
+
+    it('narrows a search to a module named by key', async () => {
+      const { client, requests } = await connect({
+        ...axisRoutes,
+        'GET /search': [],
+      });
+
+      await client.callTool({
+        name: 'search_tasks',
+        arguments: { query: 'pool timeout', modules: ['server'] },
+      });
+
+      expect(queryOf(requests, '/search')).toContain('moduleIds=module-server');
+    });
+
+    it('narrows a search to a capability named by name', async () => {
+      const { client, requests } = await connect({
+        ...axisRoutes,
+        'GET /search': [],
+      });
+
+      await client.callTool({
+        name: 'search_tasks',
+        arguments: { query: 'pool timeout', capability: 'Real-time sync' },
+      });
+
+      expect(queryOf(requests, '/search')).toContain(
+        'capabilityId=capability-sync',
+      );
+    });
+
+    it('sends no axis filter when the search asks for none', async () => {
+      const { client, requests } = await connect({
+        ...axisRoutes,
+        'GET /search': [],
+      });
+
+      await client.callTool({
+        name: 'search_tasks',
+        arguments: { query: 'pool timeout' },
+      });
+
+      const query = queryOf(requests, '/search');
+      expect(query).not.toContain('moduleIds');
+      expect(query).not.toContain('capabilityId');
+    });
+
+    it('files an issue against the modules it changes', async () => {
+      const { client, requests } = await connect({
+        ...axisRoutes,
+        'POST /issues': {
+          id: 'issue-99',
+          number: 99,
+          title: 'Pool exhausted',
+          teamId: 'team-eng',
+          stateId: 'state-backlog',
+        },
+      });
+
+      await client.callTool({
+        name: 'create_task',
+        arguments: {
+          title: 'Pool exhausted',
+          description: 'The pool is exhausted under load in the checkout path.',
+          acceptanceCriteria: ['Checkout holds at 200 rps'],
+          modules: ['server', 'Webapp'],
+        },
+      });
+
+      const created = requests.find((request) => request.path === '/issues');
+      expect(created?.body).toMatchObject({
+        moduleIds: ['module-server', 'module-webapp'],
+      });
+    });
+
+    /**
+     * Leaving the field out has to mean "nobody said", and not "no modules".
+     * An empty list on the issue is what a pull request later fills in.
+     */
+    it('sends no modules when the issue names none', async () => {
+      const { client, requests } = await connect({
+        ...axisRoutes,
+        'POST /issues': {
+          id: 'issue-99',
+          number: 99,
+          title: 'Pool exhausted',
+          teamId: 'team-eng',
+          stateId: 'state-backlog',
+        },
+      });
+
+      await client.callTool({
+        name: 'create_task',
+        arguments: {
+          title: 'Pool exhausted',
+          description: 'The pool is exhausted under load in the checkout path.',
+          acceptanceCriteria: ['Checkout holds at 200 rps'],
+        },
+      });
+
+      const created = requests.find((request) => request.path === '/issues');
+      expect(created?.body).not.toHaveProperty('moduleIds');
+    });
+
+    /**
+     * A wrong module points the reader at code nobody will change, so the tool
+     * has to say when not to set it. The warning is in the tool, not in
+     * agent-core, which stays neutral.
+     */
+    it('warns the model against guessing a module', async () => {
+      const { client } = await connect(axisRoutes);
+      const { tools } = await client.listTools();
+      const create = tools.find((tool) => tool.name === 'create_task');
+      const properties = (
+        create?.inputSchema as {
+          properties: Record<string, { description?: string }>;
+        }
+      ).properties;
+      const field = properties.modules.description;
+
+      expect(field).toMatch(/only when you know/i);
+      expect(field).toMatch(/not guess/i);
+    });
   });
 
   it('rejects a thin issue with guidance instead of filing it', async () => {

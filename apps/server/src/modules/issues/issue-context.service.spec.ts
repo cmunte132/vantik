@@ -149,6 +149,13 @@ const users = [
   { id: 'user-2', fullname: 'Sam Roe' },
 ];
 
+// Deliberately not in the order the issue records them, so a test that only
+// checks membership cannot pass for a service that returns them out of order.
+const modules = [
+  { id: 'module-webapp', name: 'Webapp' },
+  { id: 'module-server', name: 'Server' },
+];
+
 interface FindManyArgs {
   where?: { id?: { in?: string[] } };
 }
@@ -175,6 +182,10 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     updatedAt: new Date('2026-01-01T12:00:00Z'),
     project: null,
     cycle: null,
+    // The second axis: what this issue changes, and what it makes the software
+    // do. Both arrive as ids on the row and have to come back named.
+    moduleIds: ['module-server', 'module-webapp'],
+    capability: { id: 'capability-1', name: 'Issue tracking' },
     parent: issueRows[3],
     subIssue: [issueRows[2]],
     comments,
@@ -243,6 +254,11 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     team: { findMany: jest.fn().mockResolvedValue([]) },
     project: { findMany: jest.fn().mockResolvedValue([]) },
     cycle: { findMany: jest.fn().mockResolvedValue([]) },
+    module: {
+      findMany: jest.fn(({ where }: FindManyArgs) =>
+        Promise.resolve(byIdFilter(modules, where)),
+      ),
+    },
     ...overrides,
   } as unknown as PrismaService;
 }
@@ -279,6 +295,58 @@ describe('IssueContextService', () => {
           title: 'PR #12',
         },
       ]);
+    });
+
+    it('names the modules an issue touches, in the order it records them', async () => {
+      const service = new IssueContextService(buildPrisma());
+
+      const context = await service.getIssueContext('issue-1');
+
+      // The issue lists server before webapp; the rows come back the other way
+      // round. An agent reading this should see the list as it was written.
+      expect(context.modules).toEqual([
+        { id: 'module-server', name: 'Server' },
+        { id: 'module-webapp', name: 'Webapp' },
+      ]);
+      expect(context.capability).toEqual({
+        id: 'capability-1',
+        name: 'Issue tracking',
+      });
+    });
+
+    it('reads as touching nothing when the issue names no module', async () => {
+      const service = new IssueContextService(
+        buildPrisma({
+          issue: {
+            findFirst: jest.fn().mockResolvedValue({
+              ...issueRows[0],
+              description: tiptap('No module named'),
+              labelIds: [],
+              moduleIds: [],
+              capability: null,
+              project: null,
+              cycle: null,
+              parent: null,
+              subIssue: [],
+              comments: [],
+              history: [],
+              checklistItems: [],
+              linkedIssue: [],
+              issueRelations: [],
+              createdAt: new Date('2026-01-01T08:00:00Z'),
+              updatedAt: new Date('2026-01-01T12:00:00Z'),
+            }),
+            findMany: jest.fn().mockResolvedValue([]),
+          },
+        }),
+      );
+
+      const context = await service.getIssueContext('issue-1');
+
+      // Empty rather than absent: a caller should not have to guard the field
+      // to find out that an issue is not on the map yet.
+      expect(context.modules).toEqual([]);
+      expect(context.capability).toBeNull();
     });
 
     it('converts rich text to markdown and never leaks tiptap json', async () => {

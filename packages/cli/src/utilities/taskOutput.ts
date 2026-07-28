@@ -1,5 +1,8 @@
 import type {
+  Capability,
+  Module,
   Paginated,
+  Product,
   TaskContext,
   TaskListItem,
   TaskNote,
@@ -66,6 +69,14 @@ export function renderTask(task: TaskContext): string {
   if (task.parent) {
     meta.push(`parent: ${task.parent.key}`);
   }
+  if (task.modules.length) {
+    meta.push(
+      `modules: ${task.modules.map((module) => module.name).join(', ')}`,
+    );
+  }
+  if (task.capability) {
+    meta.push(`capability: ${task.capability.name}`);
+  }
   lines.push(chalkGrey(meta.join('  |  ')));
 
   if (task.description.trim()) {
@@ -126,4 +137,83 @@ export function renderNote(note: TaskNote): string {
 
 export function renderRef(ref: TaskRef, verb: string): string {
   return `${chalkGreen('✓')} ${verb} ${chalkGreen(ref.key)}  ${ref.title}`;
+}
+
+export function renderProducts(products: Product[]): string {
+  if (products.length === 0) {
+    return chalkGrey('No products yet.');
+  }
+
+  const table = new Table({
+    head: ['Key', 'Name', 'Status', 'Description'],
+    style: { head: [], border: [] },
+  });
+
+  for (const product of products) {
+    table.push([
+      chalkGreen(product.key),
+      product.name,
+      product.status ?? '—',
+      truncate(product.description ?? '', 50),
+    ]);
+  }
+
+  return table.toString();
+}
+
+/**
+ * Modules with the repositories they sit in, because "which module is this
+ * checkout?" is the question this listing is usually answering.
+ */
+export function renderModules(modules: Module[]): string {
+  if (modules.length === 0) {
+    return chalkGrey('No modules yet.');
+  }
+
+  const table = new Table({
+    head: ['Key', 'Name', 'Owner', 'Repositories'],
+    style: { head: [], border: [] },
+  });
+
+  for (const module of modules) {
+    table.push([
+      chalkGreen(module.key),
+      module.name,
+      module.owner ? module.owner.kind : '—',
+      truncate(
+        (module.repos ?? [])
+          .map((repo) =>
+            repo.pathPrefixes.length
+              ? `${repo.repository}:${repo.pathPrefixes.join(',')}`
+              : repo.repository,
+          )
+          .join(' ') || '—',
+        50,
+      ),
+    ]);
+  }
+
+  return table.toString();
+}
+
+export function renderCapabilities(capabilities: Capability[]): string {
+  if (capabilities.length === 0) {
+    return chalkGrey('No capabilities yet.');
+  }
+
+  const table = new Table({
+    head: ['Name', 'Status', 'Modules', 'Description'],
+    style: { head: [], border: [] },
+  });
+
+  for (const capability of capabilities) {
+    table.push([
+      chalkGreen(capability.name),
+      capability.status ?? '—',
+      String(capability.moduleIds.length),
+      truncate(capability.description ?? '', 50),
+    ]);
+  }
+
+  return table.toString();
 }

@@ -12,6 +12,8 @@ import { IssueWithRelations } from 'modules/issues/issues.interface';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import {
+  AXIS_OVERFETCH,
+  AxisFilter,
   INDEXED_STATUSES,
   ISSUE_QUERY_BY,
   IssueSearchHit,
@@ -22,6 +24,7 @@ import {
   KnowledgeSearchHit,
   KnowledgeSearchResult,
   MAX_COMMENTS_TEXT_LENGTH,
+  MAX_TYPESENSE_PER_PAGE,
   PAGE_QUERY_BY,
   RESOLUTION_SNIPPET_LENGTH,
   SIMILAR_ISSUE_DISTANCE_THRESHOLD,
@@ -343,11 +346,22 @@ export class VectorService implements OnModuleInit {
     limit: number,
     vectorDistance: number = 0.8,
     stateCategories: string[] = [],
+    axis: AxisFilter = {},
   ) {
     // Set a default value of 0.8 for vectorDistance if it is NaN
     if (isNaN(vectorDistance)) {
       vectorDistance = 0.8;
     }
+
+    // The index holds no module and no capability, so the axis filter runs
+    // after the search and not inside it. A page of the requested size would
+    // then come back short, because the filter takes rows out of it. Asking
+    // for more rows costs one wider page and keeps the answer full.
+    const filtersAxis = Boolean(axis.moduleIds?.length || axis.capabilityId);
+    const perPage = Math.min(
+      filtersAxis ? limit * AXIS_OVERFETCH : limit,
+      MAX_TYPESENSE_PER_PAGE,
+    );
 
     // Define search parameters for Typesense multiSearch. `q` must carry the
     // actual query text: with the wildcard `*` typesense skips both the
@@ -364,7 +378,7 @@ export class VectorService implements OnModuleInit {
           vector_query: `embeddings:([], distance_threshold:${vectorDistance})`,
           exclude_fields: 'embeddings',
           page: 1,
-          per_page: limit,
+          per_page: perPage,
         },
       ],
     };
@@ -373,27 +387,46 @@ export class VectorService implements OnModuleInit {
     const searchResults =
       await this.typesenseClient.multiSearch.perform(searchParameters);
 
-    return this.dropDeletedIssues(mapSearchHits(searchResults));
+    const kept = await this.dropDeletedIssues(
+      mapSearchHits(searchResults),
+      axis,
+    );
+
+    return kept.slice(0, limit);
   }
 
   /**
-   * Drops hits whose issue no longer exists.
+   * Drops hits whose issue no longer exists, and hits the axis filter excludes.
    *
    * The index is a cache and postgres is the truth. Removal is queued when an
    * issue is deleted, but a failed job, a restore from an older snapshot, or a
    * reindex against a stale collection all leave documents behind — and a
    * search that confidently reports a deleted issue is worse than one that
    * misses it. One indexed lookup per search is a cheap guarantee.
+   *
+   * The module and the capability of an issue ride on the same query. They are
+   * not in the index, and adding them there means a schema change and a
+   * reindex of every issue, for a filter that this read already pays for.
    */
   private async dropDeletedIssues(
     hits: IssueSearchHit[],
+    axis: AxisFilter = {},
   ): Promise<IssueSearchHit[]> {
     if (hits.length === 0) {
       return hits;
     }
 
     const liveIssues = await this.prisma.issue.findMany({
-      where: { id: { in: hits.map((hit) => hit.id) }, deleted: null },
+      where: {
+        id: { in: hits.map((hit) => hit.id) },
+        deleted: null,
+        // An issue records the modules it changes as a list, so a request for
+        // several modules matches an issue that names any one of them.
+        ...(axis.moduleIds?.length
+          ? { moduleIds: { hasSome: axis.moduleIds } }
+          : {}),
+        ...(axis.capabilityId ? { capabilityId: axis.capabilityId } : {}),
+      },
       select: { id: true },
     });
     const liveIds = new Set(liveIssues.map((issue) => issue.id));
@@ -402,7 +435,7 @@ export class VectorService implements OnModuleInit {
 
     if (live.length !== hits.length) {
       this.logger.info({
-        message: `Search index is stale: dropped ${hits.length - live.length} hit(s) for deleted issues`,
+        message: `Search dropped ${hits.length - live.length} hit(s): deleted, or outside the module and capability asked for`,
         where: `VectorService.dropDeletedIssues`,
       });
     }

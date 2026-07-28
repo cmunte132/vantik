@@ -6,6 +6,7 @@ import { UserId, Workspace } from 'modules/auth/session.decorator';
 import {
   SearchInputData,
   SimilarIssueData,
+  parseIds,
   parseSearchLimit,
   parseStateCategories,
   parseVectorDistance,
@@ -34,6 +35,10 @@ export class SearchController {
       parseSearchLimit(searchData.limit),
       parseVectorDistance(searchData.threshold),
       parseStateCategories(searchData.stateCategory),
+      {
+        moduleIds: parseIds(searchData.moduleIds),
+        capabilityId: searchData.capabilityId,
+      },
     );
   }
 

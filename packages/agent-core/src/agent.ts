@@ -27,9 +27,12 @@ import {
   WritePageInput,
 } from './knowledge';
 import {
+  Capability,
   DefinitionOfDone,
+  Module,
   Paginated,
   PriorityName,
+  Product,
   Project,
   TaskContext,
   TaskListItem,
@@ -74,6 +77,9 @@ interface RawContext {
   dueDate: string | null;
   project: { id: string; name: string } | null;
   cycle: { id: string; name: string } | null;
+  /** Absent from a server that predates the product axis. */
+  modules?: Array<{ id: string; name: string }>;
+  capability?: { id: string; name: string } | null;
   parent: { id: string; key: string; title: string } | null;
   subIssues: Array<{
     id: string;
@@ -142,6 +148,17 @@ export interface CreateTaskInput {
   parent?: string;
   /** Project name or id, to file this under a body of work. */
   project?: string;
+  /**
+   * The modules this task changes, by key, name or id.
+   *
+   * Neutral about who is allowed to set it, and about when it is wise to. The
+   * advice — set it from code you are in, never from the wording of an issue —
+   * belongs to the surface talking to the model, and it is in the description
+   * of the MCP tool.
+   */
+  moduleIds?: string[];
+  /** The capability this task delivers, by name or id. One, or none. */
+  capability?: string;
 }
 
 export interface UpdateTaskInput {
@@ -153,6 +170,10 @@ export interface UpdateTaskInput {
   assignee?: string;
   /** Project name or id. Moves the task under that project. */
   project?: string;
+  /** The modules this task changes, by key, name or id. Replaces the list. */
+  moduleIds?: string[];
+  /** Capability name or id. `null` clears it. */
+  capability?: string | null;
 }
 
 export interface ListTasksInput {
@@ -164,6 +185,16 @@ export interface ListTasksInput {
   priority?: PriorityName;
   /** Project name or id; restricts the list to that project's tasks. */
   project?: string;
+  /**
+   * Product key, name or id. An issue holds no product, so this widens to the
+   * modules that product owns or links to, and matches an issue that touches
+   * any of them.
+   */
+  product?: string;
+  /** Module keys, names or ids. Matches a task touching any of them. */
+  modules?: string[];
+  /** Capability name or id. */
+  capability?: string;
   page?: number;
   perPage?: number;
   orderBy?: 'updatedAt' | 'createdAt' | 'number' | 'priority';
@@ -183,6 +214,10 @@ export interface SearchTasksInput {
   query: string;
   stateCategory?: WorkflowCategory | WorkflowCategory[];
   limit?: number;
+  /** Only hits touching any of these modules. Key, name or id. */
+  modules?: string[];
+  /** Only hits delivering this capability. Name or id. */
+  capability?: string;
 }
 
 export interface CloseTaskInput {
@@ -271,6 +306,23 @@ export class VantikAgent {
       filters.project = { filterType: 'IS', value: [project.id] };
     }
 
+    // A product and a set of modules both land on the same filter, because an
+    // issue records modules and never a product. Asking for both means the
+    // narrower of the two wins: the modules named, kept to those the product
+    // holds.
+    const moduleIds = await this.moduleIdsForFilter(input);
+
+    if (moduleIds) {
+      filters.module = { filterType: 'INCLUDES', value: moduleIds };
+    }
+
+    if (input.capability) {
+      const capability = await this.directory.resolveCapability(
+        input.capability,
+      );
+      filters.capability = { filterType: 'IS', value: [capability.id] };
+    }
+
     const response = await this.client.post<{
       issues: Array<{
         id: string;
@@ -327,20 +379,88 @@ export class VantikAgent {
       ? toArray(input.stateCategory).join(',')
       : undefined;
 
+    // The search endpoint takes ids, and a caller names a module the way a
+    // person does. Resolution happens here so that `list_tasks` and
+    // `search_tasks` accept the same references.
+    const [moduleIds, capability] = await Promise.all([
+      this.resolveModuleIds(input.modules),
+      input.capability
+        ? this.directory.resolveCapability(input.capability)
+        : Promise.resolve(undefined),
+    ]);
+
     const hits = await this.client.get<RawSearchHit[]>('/search', {
       query: {
         query: input.query,
         limit: input.limit ?? 10,
         stateCategory: categories,
+        moduleIds: moduleIds?.length ? moduleIds.join(',') : undefined,
+        capabilityId: capability?.id,
       },
     });
 
     return (hits ?? []).map((hit) => this.toSearchHit(hit));
   }
 
+  /**
+   * The module ids a list request should match, or undefined when it asked for
+   * no product and no modules.
+   *
+   * An empty array is a real answer and not the same as undefined: a product
+   * with no modules yet matches no issue, and returning undefined there would
+   * silently widen the request to every issue in the workspace.
+   */
+  private async moduleIdsForFilter(
+    input: ListTasksInput,
+  ): Promise<string[] | undefined> {
+    const named = input.modules?.length
+      ? await Promise.all(
+          input.modules.map((reference) =>
+            this.directory.resolveModule(reference),
+          ),
+        )
+      : undefined;
+
+    if (!input.product) {
+      return named?.map((module) => module.id);
+    }
+
+    const inProduct = await this.directory.modulesForProduct(input.product);
+
+    if (!named) {
+      return inProduct.map((module) => module.id);
+    }
+
+    const held = new Set(inProduct.map((module) => module.id));
+    return named.map((module) => module.id).filter((id) => held.has(id));
+  }
+
   /** The workspace's projects — the bodies of work tasks can be filed under. */
   listProjects(): Promise<Project[]> {
     return this.directory.getProjects();
+  }
+
+  /** The workspace's products — what it ships, above the modules. */
+  listProducts(): Promise<Product[]> {
+    return this.directory.getProducts();
+  }
+
+  /**
+   * The workspace's modules — where the code is.
+   *
+   * `withRepos` fills in the repositories each module sits in, at one request
+   * per module. It is what answers "which module is this checkout?", so a
+   * surface that needs to place work on the map should ask for it.
+   */
+  listModules(options: { withRepos?: boolean } = {}): Promise<Module[]> {
+    return options.withRepos
+      ? this.directory.getModulesWithRepos()
+      : this.directory.getModules();
+  }
+
+  /** The workspace's capabilities — what the software does for its users. */
+  listCapabilities(): Promise<Capability[]> {
+    return this.directory.getCapabilities();
   }
 
   /** Prior work resembling this one, with how each was resolved. */
@@ -390,17 +510,24 @@ export class VantikAgent {
     // Only the team has to be known first; the rest are independent lookups, so
     // they go out together rather than one round trip at a time. Over the MCP
     // server each of these is a full loopback request through the guard stack.
-    const [state, labelIds, assignee, parent, project] = await Promise.all([
-      input.state
-        ? this.directory.resolveState(team.id, input.state)
-        : this.directory.stateForCategory(team.id, 'BACKLOG'),
-      this.directory.resolveLabels(input.labels ?? [], team.workspaceId),
-      input.assignee
-        ? this.directory.resolveUser(team.id, input.assignee)
-        : undefined,
-      input.parent ? this.resolveTask(input.parent) : undefined,
-      input.project ? this.directory.resolveProject(input.project) : undefined,
-    ]);
+    const [state, labelIds, assignee, parent, project, moduleIds, capability] =
+      await Promise.all([
+        input.state
+          ? this.directory.resolveState(team.id, input.state)
+          : this.directory.stateForCategory(team.id, 'BACKLOG'),
+        this.directory.resolveLabels(input.labels ?? [], team.workspaceId),
+        input.assignee
+          ? this.directory.resolveUser(team.id, input.assignee)
+          : undefined,
+        input.parent ? this.resolveTask(input.parent) : undefined,
+        input.project
+          ? this.directory.resolveProject(input.project)
+          : undefined,
+        this.resolveModuleIds(input.moduleIds),
+        input.capability
+          ? this.directory.resolveCapability(input.capability)
+          : undefined,
+      ]);
 
     const issue = await this.client.post<RawIssue>('/issues', {
       body: {
@@ -415,6 +542,8 @@ export class VantikAgent {
         ...(input.priority ? { priority: priorityByName[input.priority] } : {}),
         ...(parent ? { parentId: parent.id } : {}),
         ...(project ? { projectId: project.id } : {}),
+        ...(moduleIds ? { moduleIds } : {}),
+        ...(capability ? { capabilityId: capability.id } : {}),
       },
     });
 
@@ -576,16 +705,23 @@ export class VantikAgent {
     const task = await this.resolveTask(reference);
 
     // Independent of one another once the task is known, so resolved together.
-    const [state, assignee, labelIds, project] = await Promise.all([
-      input.state
-        ? this.directory.resolveState(task.teamId, input.state)
-        : undefined,
-      input.assignee
-        ? this.directory.resolveUser(task.teamId, input.assignee)
-        : undefined,
-      input.labels ? this.directory.resolveLabels(input.labels) : undefined,
-      input.project ? this.directory.resolveProject(input.project) : undefined,
-    ]);
+    const [state, assignee, labelIds, project, moduleIds, capability] =
+      await Promise.all([
+        input.state
+          ? this.directory.resolveState(task.teamId, input.state)
+          : undefined,
+        input.assignee
+          ? this.directory.resolveUser(task.teamId, input.assignee)
+          : undefined,
+        input.labels ? this.directory.resolveLabels(input.labels) : undefined,
+        input.project
+          ? this.directory.resolveProject(input.project)
+          : undefined,
+        this.resolveModuleIds(input.moduleIds),
+        input.capability
+          ? this.directory.resolveCapability(input.capability)
+          : undefined,
+      ]);
 
     await this.client.post<RawIssue>(`/issues/${task.id}`, {
       query: { teamId: task.teamId },
@@ -599,10 +735,36 @@ export class VantikAgent {
         ...(labelIds ? { labelIds } : {}),
         ...(input.priority ? { priority: priorityByName[input.priority] } : {}),
         ...(project ? { projectId: project.id } : {}),
+        ...(moduleIds ? { moduleIds } : {}),
+        // `null` clears the capability, and the API tells that apart from "not
+        // mentioned" by whether the key is present at all.
+        ...('capability' in input
+          ? { capabilityId: capability ? capability.id : null }
+          : {}),
       },
     });
 
     return task;
+  }
+
+  /**
+   * Turns module keys or names into ids, resolving them together.
+   *
+   * An empty array is passed through rather than dropped: clearing the modules
+   * on a task is a real edit, and it is the only way to say it.
+   */
+  private async resolveModuleIds(
+    references?: string[],
+  ): Promise<string[] | undefined> {
+    if (!references) {
+      return undefined;
+    }
+
+    const modules = await Promise.all(
+      references.map((reference) => this.directory.resolveModule(reference)),
+    );
+
+    return modules.map((module) => module.id);
   }
 
   /**
@@ -692,7 +854,9 @@ export class VantikAgent {
 
   /** The workspace's pages, as a flat list with their parents. */
   async listPages(): Promise<
-    Array<KnowledgePageRef & { parentId: string | null; entryPolicy: EntryPolicy }>
+    Array<
+      KnowledgePageRef & { parentId: string | null; entryPolicy: EntryPolicy }
+    >
   > {
     const pages = await this.pageIndex();
 
@@ -787,9 +951,9 @@ export class VantikAgent {
   async pageLinks(page: string): Promise<PageLink[]> {
     const resolved = await this.resolvePage(page);
 
-    return (await this.client.get<PageLink[]>(
-      `/pages/${resolved.id}/links`,
-    )) ?? [];
+    return (
+      (await this.client.get<PageLink[]>(`/pages/${resolved.id}/links`)) ?? []
+    );
   }
 
   /**
@@ -866,17 +1030,14 @@ export class VantikAgent {
     const existing = await this.findPage(input.title);
 
     if (existing) {
-      const updated = await this.client.post<RawPage>(
-        `/pages/${existing.id}`,
-        {
-          body: {
-            ...(input.body !== undefined
-              ? { descriptionMarkdown: input.body }
-              : {}),
-            ...(input.entryPolicy ? { entryPolicy: input.entryPolicy } : {}),
-          },
+      const updated = await this.client.post<RawPage>(`/pages/${existing.id}`, {
+        body: {
+          ...(input.body !== undefined
+            ? { descriptionMarkdown: input.body }
+            : {}),
+          ...(input.entryPolicy ? { entryPolicy: input.entryPolicy } : {}),
         },
-      );
+      });
 
       return { id: updated.id, title: updated.title };
     }
@@ -949,17 +1110,12 @@ export class VantikAgent {
     entryId: string,
     changes: { content?: string; scope?: string | null },
   ): Promise<KnowledgeEntry> {
-    const entry = await this.client.post<RawEntry>(
-      `/page_entries/${entryId}`,
-      {
-        body: {
-          ...(changes.content !== undefined
-            ? { content: changes.content }
-            : {}),
-          ...(changes.scope !== undefined ? { scope: changes.scope } : {}),
-        },
+    const entry = await this.client.post<RawEntry>(`/page_entries/${entryId}`, {
+      body: {
+        ...(changes.content !== undefined ? { content: changes.content } : {}),
+        ...(changes.scope !== undefined ? { scope: changes.scope } : {}),
       },
-    );
+    });
 
     return toEntry(entry);
   }
@@ -1198,12 +1354,19 @@ export class VantikAgent {
       criteria,
       comments,
       history,
+      modules,
+      capability,
       ...rest
     } = context;
 
     return {
       ...rest,
       description: descriptionMarkdown ?? '',
+      // A server that predates the product axis sends neither. "Touches
+      // nothing recorded" is the honest reading there, and it keeps a caller
+      // that only wanted the description from having to guard the field.
+      modules: modules ?? [],
+      capability: capability ?? null,
       state: state ?? {
         id: '',
         name: 'unknown',

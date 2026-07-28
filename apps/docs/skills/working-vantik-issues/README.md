@@ -1,10 +1,17 @@
 # working-vantik-issues
 
 An opinionated guide that teaches an LLM agent to work Vantik's issue tracker
-well: keep issues **few and meaty**, file well-formed work, and consolidate
-instead of proliferating. It is the judgment layer above the `create_task`
-tool's built-in floor (which already requires a real description and, for a
-top-level issue, acceptance criteria).
+well: **keep the tracker current while the work happens** — pick the issue up
+before the first edit, tick the Definition of Done as each criterion is met,
+close with a resolution — and keep issues **few and meaty** rather than many and
+thin. It is the judgment layer above the `create_task` tool's built-in floor
+(which already requires a real description and, for a top-level issue,
+acceptance criteria).
+
+The two halves pull in opposite directions on purpose: restraint on filing,
+generosity on progress. An agent that reads only the filing half goes quiet, and
+a tracker that learns what happened only at close time is one nobody can trust
+mid-flight.
 
 The guidance is authored in two forms here, and Vantik serves four: **Settings →
 Agents** offers a download and a one-line install for whichever file your tool
@@ -34,8 +41,14 @@ cp SKILL.md .claude/skills/working-vantik-issues/
 ```
 
 Or place it in `~/.claude/skills/` to make it available across all projects.
-Claude invokes it automatically when you create, update, or close Vantik
-issues; you can also call it explicitly with `/working-vantik-issues`.
+Claude invokes it automatically before starting a substantial piece of work and
+whenever it creates, updates, or closes Vantik issues; you can also call it
+explicitly with `/working-vantik-issues`.
+
+If an agent still works quietly and only reports at the end, the on-demand
+loading is usually why: nothing in the task looked like "issue work" until it
+was over. Install `AGENTS.md` or the derived `CLAUDE.md` instead (Option B) —
+always-in-context guidance is what makes the tracker-first habit stick.
 
 ## Option B — AGENTS.md snippet (portable)
 

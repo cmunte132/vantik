@@ -126,7 +126,12 @@ export async function changedPathsOf(
       `https://api.github.com/repos/${ref.fullName}/pulls/${ref.pullNumber}` +
       `/files?per_page=${FILES_PER_PAGE}&page=${page}`;
 
-    const { data } = await axios.get(url, getGithubHeaders(accessToken));
+    // A page that fails ends the loop and keeps the pages before it. A rate
+    // limit part way through a large pull request is the usual reason, and the
+    // modules of the files already read are a better answer than none. Without
+    // this the error left the function, which is not what its caller was told
+    // to expect.
+    const data = await pageOrNull(url, accessToken);
 
     if (!Array.isArray(data) || data.length === 0) {
       break;
@@ -150,6 +155,23 @@ export async function changedPathsOf(
   }
 
   return paths;
+}
+
+/**
+ * Reads one page of files, and returns null rather than throwing.
+ *
+ * eslint-disable is for the shape GitHub returns, which is a list of objects
+ * this file reads two fields from and does not otherwise model.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function pageOrNull(url: string, accessToken: string): Promise<any> {
+  try {
+    const { data } = await axios.get(url, getGithubHeaders(accessToken));
+
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 /**

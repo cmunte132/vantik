@@ -16,7 +16,7 @@ import { actionRun } from 'trigger/action-run';
 import { prepareTriggerPayload } from 'modules/action-event/action-event.utils';
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 import { LoggerService } from 'modules/logger/logger.service';
-import { ModuleRoutingService } from 'modules/modules/module-routing.service';
+import { ModuleRoutingQueue } from 'modules/modules/module-routing.queue';
 
 @Injectable()
 export default class WebhookService {
@@ -25,7 +25,7 @@ export default class WebhookService {
   constructor(
     private prisma: PrismaService,
     private integrations: IntegrationsService,
-    private moduleRouting: ModuleRoutingService,
+    private moduleRoutingQueue: ModuleRoutingQueue,
   ) {}
 
   async handleEvents(
@@ -129,15 +129,16 @@ export default class WebhookService {
   }
 
   /**
-   * This method gives an issue the modules that a pull request changed.
+   * This method hands the webhook to the queue that routes it to modules.
    *
-   * An integration that does not answer `GET_CODE_CHANGE`, and a webhook that
-   * describes something other than a change to code, both give null here. That
-   * is the ordinary case for most webhooks, and it is not a fault.
+   * Only the enqueue happens here. Finding the modules means asking the provider
+   * for the files a pull request changed, which is paged and can be thirty round
+   * trips — far longer than the ten seconds GitHub waits before it abandons the
+   * delivery and sends it again.
    *
-   * The whole method is inside a try, because module routing is an addition to
-   * a webhook and never its purpose. A repository that the server cannot read
-   * must not stop the actions that the same webhook triggers.
+   * The try stays, because module routing is an addition to a webhook and never
+   * its purpose. A queue that cannot be reached must not stop the actions that
+   * the same webhook triggers.
    */
   private async routeCodeChange(
     sourceName: string,
@@ -146,20 +147,15 @@ export default class WebhookService {
     workspaceId: string,
   ) {
     try {
-      const change = await this.integrations.loadIntegration(sourceName, {
-        event: IntegrationPayloadEventType.GET_CODE_CHANGE,
-        integrationAccountId,
+      await this.moduleRoutingQueue.routeWebhook({
+        sourceName,
         eventBody,
+        integrationAccountId,
+        workspaceId,
       });
-
-      if (!change?.issueKeys?.length) {
-        return;
-      }
-
-      await this.moduleRouting.routeCodeChange(change, workspaceId);
     } catch (error) {
       this.logger.error({
-        message: `Could not route the code change of a ${sourceName} webhook`,
+        message: `Could not queue the code change of a ${sourceName} webhook`,
         where: 'WebhookService.routeCodeChange',
         error,
       });

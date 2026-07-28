@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   CreateModuleDto,
   CreateModuleRepoDto,
@@ -35,10 +35,7 @@ export class ModulesService {
 
     const key = await uniqueKey(
       toKey(createModuleDto.key ?? createModuleDto.name, 'module'),
-      async (candidate) =>
-        (await this.prisma.module.count({
-          where: { workspaceId, key: candidate, deleted: null },
-        })) > 0,
+      (candidate) => this.keyTaken(workspaceId, candidate),
     );
 
     // workspaceId is set here rather than through `workspace: { connect }`:
@@ -62,12 +59,26 @@ export class ModulesService {
    * A caller who moves a module from a team to a product sends both fields: the
    * new product, and null for the team. A caller who changes only the name sends
    * neither. So the check runs on the row as it will be, and not on the request.
+   *
+   * A rename gets a free key the same way create does, because the unique index
+   * refuses a repeat on update just as it does on insert.
    */
   async updateModule(updateModuleDto: UpdateModuleDto, moduleId: string) {
-    const current = await this.prisma.module.findUnique({
-      where: { id: moduleId },
-      select: { ownerTeamId: true, ownerProductId: true },
+    const current = await this.prisma.module.findFirst({
+      where: { id: moduleId, deleted: null },
+      select: {
+        workspaceId: true,
+        key: true,
+        ownerTeamId: true,
+        ownerProductId: true,
+      },
     });
+
+    // A missing row read as a TypeError on the next line, which surfaced as a
+    // 500 for what is an ordinary not-found.
+    if (!current) {
+      throw new NotFoundException({ message: `Module ${moduleId} not found` });
+    }
 
     const ownerTeamId =
       updateModuleDto.ownerTeamId === undefined
@@ -80,17 +91,38 @@ export class ModulesService {
 
     assertSingleOwner(ownerTeamId, ownerProductId);
 
+    const requested = updateModuleDto.key
+      ? toKey(updateModuleDto.key, 'module')
+      : undefined;
+
+    const key =
+      requested && requested !== current.key
+        ? await uniqueKey(requested, (candidate) =>
+            this.keyTaken(current.workspaceId, candidate),
+          )
+        : undefined;
+
     return await this.prisma.module.update({
       where: { id: moduleId },
       data: {
         ...updateModuleDto,
         ownerTeamId,
         ownerProductId,
-        ...(updateModuleDto.key
-          ? { key: toKey(updateModuleDto.key, 'module') }
-          : {}),
+        ...(key ? { key } : {}),
       },
     });
+  }
+
+  /**
+   * Reports whether a key is in use, counting the deleted rows too.
+   *
+   * Deletion is soft and the unique index is not partial, so a deleted module
+   * still holds its key against the workspace.
+   */
+  private async keyTaken(workspaceId: string, key: string): Promise<boolean> {
+    return (
+      (await this.prisma.module.count({ where: { workspaceId, key } })) > 0
+    );
   }
 
   async deleteModule(moduleId: string) {

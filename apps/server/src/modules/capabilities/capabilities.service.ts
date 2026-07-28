@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateCapabilityDto, UpdateCapabilityDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -20,6 +24,8 @@ export class CapabilitiesService {
     createCapabilityDto: CreateCapabilityDto,
     workspaceId: string,
   ) {
+    await this.assertNameFree(workspaceId, createCapabilityDto.name);
+
     return await this.prisma.capability.create({
       data: {
         ...createCapabilityDto,
@@ -34,9 +40,60 @@ export class CapabilitiesService {
     updateCapabilityDto: UpdateCapabilityDto,
     capabilityId: string,
   ) {
+    const current = await this.prisma.capability.findFirst({
+      where: { id: capabilityId, deleted: null },
+      select: { workspaceId: true, name: true },
+    });
+
+    if (!current) {
+      throw new NotFoundException({
+        message: `Capability ${capabilityId} not found`,
+      });
+    }
+
+    if (updateCapabilityDto.name && updateCapabilityDto.name !== current.name) {
+      await this.assertNameFree(current.workspaceId, updateCapabilityDto.name);
+    }
+
     return await this.prisma.capability.update({
       where: { id: capabilityId },
       data: updateCapabilityDto,
+    });
+  }
+
+  /**
+   * Refuses a name that this workspace already uses for a capability.
+   *
+   * A name is the identity of a capability — there is no key to fall back on —
+   * so a repeat cannot be quietly renamed the way a product key can. The unique
+   * index says the same thing, and without this the caller saw it as a 500 with
+   * a constraint name in it rather than as a sentence.
+   *
+   * The count covers the deleted rows too, because the index does. A name held
+   * by a deleted capability is one this workspace cannot use again, and saying
+   * so is better than an insert that fails.
+   */
+  private async assertNameFree(
+    workspaceId: string,
+    name: string,
+  ): Promise<void> {
+    if (!name) {
+      return;
+    }
+
+    const clash = await this.prisma.capability.findFirst({
+      where: { workspaceId, name },
+      select: { id: true, deleted: true },
+    });
+
+    if (!clash) {
+      return;
+    }
+
+    throw new BadRequestException({
+      message: clash.deleted
+        ? `A deleted capability still holds the name "${name}". Give this one another name.`
+        : `This workspace already has a capability called "${name}".`,
     });
   }
 

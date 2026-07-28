@@ -15,13 +15,21 @@ import { PrismaService } from 'nestjs-prisma';
  *
  * "Cloud Platform" becomes "cloud-platform". A name of symbols alone leaves
  * nothing behind, so the caller gets a fallback instead of an empty key.
+ *
+ * The split does the whole job in one pass. A second regular expression to trim
+ * the dashes off the ends read as the obvious way to write this, but a trimming
+ * pattern anchored at one end only is the shape that a scanner reads as a slow
+ * one, and there is nothing here that needs a second pattern at all: splitting
+ * on the runs and dropping the empty pieces leaves no leading or trailing dash
+ * to trim.
  */
 export function toKey(name: string, fallback = 'item'): string {
   const key = name
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .join('-');
 
   return key || fallback;
 }
@@ -33,6 +41,12 @@ export function toKey(name: string, fallback = 'item'): string {
  * named "Docs" in the same workspace fails the insert. A person who types the
  * same name twice gets "docs-2" and not an error, because the key is a detail of
  * the schema and not something they asked for.
+ *
+ * `taken` must count the deleted rows as well as the live ones. Deletion here is
+ * soft and the index is not partial, so the row that holds "docs" still holds it
+ * after somebody deletes it: a `taken` that filtered on `deleted: null` reported
+ * the key free and the insert then failed on the constraint, which is the error
+ * this function exists to prevent.
  */
 export async function uniqueKey(
   candidate: string,

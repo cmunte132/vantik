@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateProductDto, UpdateProductDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -21,10 +25,7 @@ export class ProductsService {
   async createProduct(createProductDto: CreateProductDto, workspaceId: string) {
     const key = await uniqueKey(
       toKey(createProductDto.key ?? createProductDto.name, 'product'),
-      async (candidate) =>
-        (await this.prisma.product.count({
-          where: { workspaceId, key: candidate, deleted: null },
-        })) > 0,
+      (candidate) => this.keyTaken(workspaceId, candidate),
     );
 
     return await this.prisma.product.create({
@@ -37,16 +38,55 @@ export class ProductsService {
     });
   }
 
+  /**
+   * Updates a product, and finds a free key when the caller renames it.
+   *
+   * The create path has always done this. Update did not, and a rename on to a
+   * key another product holds reached the unique index and came back as a 500
+   * with a constraint name in it.
+   */
   async updateProduct(updateProductDto: UpdateProductDto, productId: string) {
+    const current = await this.prisma.product.findFirst({
+      where: { id: productId, deleted: null },
+      select: { workspaceId: true, key: true },
+    });
+
+    if (!current) {
+      throw new NotFoundException({
+        message: `Product ${productId} not found`,
+      });
+    }
+
+    const requested = updateProductDto.key
+      ? toKey(updateProductDto.key, 'product')
+      : undefined;
+
+    const key =
+      requested && requested !== current.key
+        ? await uniqueKey(requested, (candidate) =>
+            this.keyTaken(current.workspaceId, candidate),
+          )
+        : undefined;
+
     return await this.prisma.product.update({
       where: { id: productId },
       data: {
         ...updateProductDto,
-        ...(updateProductDto.key
-          ? { key: toKey(updateProductDto.key, 'product') }
-          : {}),
+        ...(key ? { key } : {}),
       },
     });
+  }
+
+  /**
+   * Reports whether a key is in use, counting the deleted rows too.
+   *
+   * The unique index covers every row and not only the live ones, so a key that
+   * a deleted product holds is still a key this workspace cannot reuse.
+   */
+  private async keyTaken(workspaceId: string, key: string): Promise<boolean> {
+    return (
+      (await this.prisma.product.count({ where: { workspaceId, key } })) > 0
+    );
   }
 
   /**

@@ -159,11 +159,31 @@ export async function resolveRepositoryPath(
 }
 
 /**
+ * The directory that a repository path must sit inside.
+ *
+ * `LOCAL_REPO_ROOT` sets it. With the variable unset the root is the home
+ * directory of the account that runs the server, and not the whole disk: a
+ * checkout lives in somebody's home directory, and `/etc`, `/proc` and the rest
+ * of the filesystem are never the answer to "where is my repository?".
+ *
+ * There is no way to turn the fence off, because the alternative to a wrong
+ * root is a right root and not an open one.
+ */
+export function repositoryRoot(): string {
+  return resolve(process.env.LOCAL_REPO_ROOT || homedir());
+}
+
+/**
  * This function checks one path and returns it in its absolute form.
  *
  * It throws a `BadRequestException` with the reason if the path is not a git
- * repository that this server can read. The message names the path, because
- * the person who typed it is the person who reads the message.
+ * repository that this server can read, or if it falls outside
+ * `repositoryRoot()`. The message names the path, because the person who typed
+ * it is the person who reads the message.
+ *
+ * The containment check runs before any read of the disk. Nothing here reaches
+ * the filesystem until the path is known to be inside the root, so a path that
+ * is refused cannot report whether it existed.
  */
 export async function inspectPath(candidate: string): Promise<string> {
   const trimmed = (candidate ?? '').trim();
@@ -182,15 +202,14 @@ export async function inspectPath(candidate: string): Promise<string> {
     );
   }
 
+  // `resolve` collapses every `..` before the comparison, so a path that climbs
+  // out of the root fails the check rather than reaching the disk.
   const path = resolve(expanded);
-  const root = process.env.LOCAL_REPO_ROOT;
+  const root = repositoryRoot();
 
-  // A deployment that many people share can hold the paths inside one
-  // directory. The variable is empty on a machine that one person runs, and
-  // then any absolute path is allowed.
-  if (root && !isInside(resolve(root), path)) {
+  if (!isInside(root, path)) {
     throw new BadRequestException(
-      `This server takes repositories only from inside ${resolve(root)}.`,
+      `This server takes repositories only from inside ${root}. Set LOCAL_REPO_ROOT to move that directory.`,
     );
   }
 

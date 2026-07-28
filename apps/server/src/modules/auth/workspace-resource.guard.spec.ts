@@ -11,6 +11,12 @@ const OWN_TEAM = 'team-own';
 const FOREIGN_TEAM = 'team-foreign';
 const OWN_COMMENT = 'comment-own';
 const FOREIGN_COMMENT = 'comment-foreign';
+const OWN_MODULE = 'module-own';
+const FOREIGN_MODULE = 'module-foreign';
+const OWN_CAPABILITY = 'capability-own';
+const FOREIGN_CAPABILITY = 'capability-foreign';
+const OWN_REPO = 'repo-own';
+const FOREIGN_REPO = 'repo-foreign';
 
 /**
  * Rows are keyed by id; the fixtures place the "own" ones in OWN_WORKSPACE and
@@ -19,7 +25,14 @@ const FOREIGN_COMMENT = 'comment-foreign';
  */
 function buildPrisma() {
   const inWorkspace = (id: string) =>
-    [OWN_ISSUE, OWN_TEAM, OWN_COMMENT].includes(id);
+    [
+      OWN_ISSUE,
+      OWN_TEAM,
+      OWN_COMMENT,
+      OWN_MODULE,
+      OWN_CAPABILITY,
+      OWN_REPO,
+    ].includes(id);
 
   const finder =
     () =>
@@ -33,6 +46,21 @@ function buildPrisma() {
     issue: { findFirst: jest.fn(finder()) },
     team: { findFirst: jest.fn(finder()) },
     issueComment: { findFirst: jest.fn(finder()) },
+    module: { findFirst: jest.fn(finder()) },
+    capability: { findFirst: jest.fn(finder()) },
+    product: { findFirst: jest.fn(finder()) },
+    project: { findFirst: jest.fn(finder()) },
+    integrationAccount: { findFirst: jest.fn(finder()) },
+    // A repository is found only when it is in the workspace *and* hangs off
+    // the module the path names, which is the pair the real query checks.
+    moduleRepo: {
+      findFirst: jest.fn(
+        async ({ where }: { where: { id: string; moduleId?: string } }) =>
+          inWorkspace(where.id) && where.moduleId === OWN_MODULE
+            ? { id: where.id }
+            : null,
+      ),
+    },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }
@@ -170,5 +198,155 @@ describe('WorkspaceResourceGuard', () => {
     const ctx = buildContext({});
 
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
+  });
+
+  /**
+   * A module repository carries no workspace of its own — only the module above
+   * it does. So the repository routes were guarded on the `:moduleId` beside the
+   * id, which proved nothing about the id itself: a caller naming a module of
+   * their own and a repository row of anybody's rewrote that row's path
+   * prefixes, and the prefixes are what route a pull request to a module.
+   */
+  describe('module repositories', () => {
+    it('allows a repository that hangs off the module in the path', async () => {
+      const ctx = buildContext({
+        params: { moduleId: OWN_MODULE, moduleRepoId: OWN_REPO },
+      });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+
+    it('rejects a foreign repository named beside a module of the caller', async () => {
+      const ctx = buildContext({
+        params: { moduleId: OWN_MODULE, moduleRepoId: FOREIGN_REPO },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects a repository that belongs to a different module', async () => {
+      const ctx = buildContext({
+        params: { moduleId: FOREIGN_MODULE, moduleRepoId: OWN_REPO },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects a foreign integration account named in the body', async () => {
+      const ctx = buildContext({
+        params: { moduleId: OWN_MODULE },
+        body: { integrationAccountId: 'account-foreign' },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  /**
+   * An issue body nests: `subIssues` on any issue, and `issues` on the bulk
+   * routes. Reading only the top level checked the parent and none of the
+   * children, and `Issue.moduleIds` has no foreign key behind it, so this guard
+   * is the only thing between that column and any id a caller sends.
+   */
+  describe('the product axis inside a nested body', () => {
+    it('rejects a foreign module hidden on a sub-issue', async () => {
+      const ctx = buildContext({
+        body: {
+          teamId: OWN_TEAM,
+          subIssues: [{ moduleIds: [FOREIGN_MODULE] }],
+        },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects a foreign capability hidden on a sub-issue', async () => {
+      const ctx = buildContext({
+        body: {
+          teamId: OWN_TEAM,
+          subIssues: [{ capabilityId: FOREIGN_CAPABILITY }],
+        },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects a foreign module two levels down', async () => {
+      const ctx = buildContext({
+        body: {
+          subIssues: [{ subIssues: [{ moduleIds: [FOREIGN_MODULE] }] }],
+        },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects a foreign module inside a bulk create body', async () => {
+      const ctx = buildContext({
+        body: {
+          issues: [
+            { teamId: OWN_TEAM, moduleIds: [OWN_MODULE] },
+            { teamId: OWN_TEAM, moduleIds: [FOREIGN_MODULE] },
+          ],
+        },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('allows a nested body whose axis ids are all in the workspace', async () => {
+      const ctx = buildContext({
+        body: {
+          teamId: OWN_TEAM,
+          moduleIds: [OWN_MODULE],
+          capabilityId: OWN_CAPABILITY,
+          subIssues: [
+            { moduleIds: [OWN_MODULE], capabilityId: OWN_CAPABILITY },
+          ],
+        },
+      });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+
+    it('rejects a foreign capability in a project-s capabilityIds', async () => {
+      const ctx = buildContext({
+        body: { capabilityIds: [OWN_CAPABILITY, FOREIGN_CAPABILITY] },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    /**
+     * A body built to make the walk expensive is refused by the depth limit
+     * rather than followed. Nothing the app sends nests anywhere near this far.
+     */
+    it('does not follow a body nested past the depth limit', async () => {
+      let body = { moduleIds: [FOREIGN_MODULE] };
+
+      for (let depth = 0; depth < 40; depth++) {
+        body = { subIssues: [body] } as never;
+      }
+
+      const ctx = buildContext({ body });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
   });
 });

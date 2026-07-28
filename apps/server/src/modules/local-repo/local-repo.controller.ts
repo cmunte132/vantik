@@ -22,6 +22,11 @@ import { LocalRepoService } from './local-repo.service';
  *
  * Each route takes the workspace from the session and never from the body. A
  * member of one workspace cannot read or change the repositories of another.
+ *
+ * Adding and removing need an admin of that workspace, which the service proves
+ * from the membership row. A path here names a directory on the machine that
+ * runs the server, so allowing every member to add one hands every member a way
+ * to ask what exists on that disk.
  */
 @Controller({
   version: '1',

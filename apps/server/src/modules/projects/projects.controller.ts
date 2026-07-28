@@ -18,6 +18,7 @@ import {
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { Workspace } from 'modules/auth/session.decorator';
+import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
 import { ProjectsService } from './projects.service';
 
@@ -28,6 +29,14 @@ import { ProjectsService } from './projects.service';
 export class ProjectsController {
   constructor(private projects: ProjectsService) {}
 
+  /*
+    The write routes carry WorkspaceResourceGuard because a project names ids
+    that belong to other tables: the teams working on it, and now the
+    capabilities it builds. Neither is a foreign key, so nothing below this
+    point would notice an id from another workspace. The guard also proves the
+    `:projectId` itself, which these routes previously took on trust.
+  */
+
   @Get()
   @UseGuards(AuthGuard)
   async getProjects(@Workspace() workspace: string) {
@@ -35,7 +44,7 @@ export class ProjectsController {
   }
 
   @Post()
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createProject(
     @Workspace() workspace: string,
     @Body() projectData: CreateProjectDto,
@@ -56,7 +65,7 @@ export class ProjectsController {
   }
 
   @Post(':projectId/milestone')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createProjectMilestone(
     @Param() projectParams: ProjectRequestParamsDto,
     @Body() projectMilestoneData: CreateProjectMilestoneDto,
@@ -68,7 +77,7 @@ export class ProjectsController {
   }
 
   @Post(':projectId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateProject(
     @Param() projectParams: ProjectRequestParamsDto,
     @Body() projectData: UpdateProjectDto,
@@ -90,7 +99,7 @@ export class ProjectsController {
   }
 
   @Delete(':projectId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async deleteProject(@Param() projectParams: ProjectRequestParamsDto) {
     return await this.projects.deleteProject(projectParams.projectId);
   }

@@ -6,12 +6,18 @@ import { TriggerdevModule } from 'modules/triggerdev/triggerdev.module';
 import { UsersService } from 'modules/users/users.service';
 
 import { IntegrationDefinitionController } from './integration-definition.controller';
+import { IntegrationDefinitionSeeder } from './integration-definition.seeder';
 import { IntegrationDefinitionService } from './integration-definition.service';
 
 @Module({
   imports: [PrismaModule, TriggerdevModule, IntegrationsModule],
   controllers: [IntegrationDefinitionController],
-  providers: [PrismaService, IntegrationDefinitionService, UsersService],
+  providers: [
+    PrismaService,
+    IntegrationDefinitionService,
+    IntegrationDefinitionSeeder,
+    UsersService,
+  ],
   exports: [IntegrationDefinitionService],
 })
 export class IntegrationDefinitionModule {}

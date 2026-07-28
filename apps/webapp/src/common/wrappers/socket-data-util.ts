@@ -3,6 +3,7 @@ import { runInAction } from 'mobx';
 import type { SyncActionRecord } from 'common/types';
 
 import { saveActionData } from 'store/action';
+import { saveCapabilityData } from 'store/capabilities';
 import { saveChecklistItemData } from 'store/checklist-items';
 import { saveCommentsData } from 'store/comments';
 import { saveCompanyData } from 'store/company';
@@ -17,10 +18,12 @@ import { saveIssuesData } from 'store/issues';
 import { saveLabelData } from 'store/labels';
 import { saveLinkedIssueData } from 'store/linked-issues';
 import { MODELS } from 'store/models';
+import { saveModuleData } from 'store/modules';
 import { saveNotificationData } from 'store/notifications';
 import { savePageEntryData } from 'store/page-entries';
 import { savePageData } from 'store/pages';
 import { savePeopleData } from 'store/people';
+import { saveProductData } from 'store/products';
 import {
   saveProjectData,
   saveProjectMilestoneData,
@@ -57,6 +60,9 @@ export const SAVE_HANDLERS: Record<string, Function> = {
   [MODELS.Action]: saveActionData,
   [MODELS.Project]: saveProjectData,
   [MODELS.ProjectMilestone]: saveProjectMilestoneData,
+  [MODELS.Product]: saveProductData,
+  [MODELS.Module]: saveModuleData,
+  [MODELS.Capability]: saveCapabilityData,
   [MODELS.Cycle]: saveCyclesData,
   [MODELS.Conversation]: saveConversationData,
   [MODELS.ConversationHistory]: saveConversationHistorytData,

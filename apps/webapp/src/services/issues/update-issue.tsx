@@ -27,6 +27,11 @@ export interface UpdateIssueParams {
   projectId?: string;
   projectMilestoneId?: string;
 
+  // The product axis. Null clears the capability, which is why it is not just
+  // an optional string: an absent key changes nothing, and null removes it.
+  moduleIds?: string[];
+  capabilityId?: string | null;
+
   issueRelation?: {
     issueId: string;
     relatedIssueId: string;

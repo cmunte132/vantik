@@ -30,6 +30,10 @@ export interface IssueType {
   cycleId?: string;
   projectMilestoneId?: string;
 
+  /** The modules this issue changes, and the capability it serves. */
+  moduleIds: string[];
+  capabilityId?: string | null;
+
   // for frontend usage
   // TODO: fix this circular dependency
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -106,4 +110,6 @@ export interface IssueSuggestionType {
   issueId: string;
   suggestedLabelIds: string[];
   suggestedAssigneeId?: string;
+  /** The modules the classifier proposes. A person accepts or dismisses each. */
+  suggestedModuleIds: string[];
 }

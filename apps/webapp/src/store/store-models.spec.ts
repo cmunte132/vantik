@@ -3,6 +3,7 @@ import type { IAnyType, IModelType } from 'mobx-state-tree';
 import { describe, expect, it } from 'vitest';
 
 import { Action } from './action/models';
+import { Capability } from './capabilities/models';
 import { ChecklistItem } from './checklist-items/models';
 import { Comment } from './comments/models';
 import { Company } from './company/models';
@@ -17,10 +18,12 @@ import { Issue } from './issues/models';
 import { Label } from './labels/models';
 import { LinkedIssue } from './linked-issues/models';
 import { MODELS } from './models';
+import { ProductModule } from './modules/models';
 import { Notification } from './notifications/models';
 import { PageEntry } from './page-entries/models';
 import { Page } from './pages/models';
 import { People } from './people/models';
+import { Product } from './products/models';
 import { Project, ProjectMilestone } from './projects/models';
 import { Support } from './support/models';
 import { Team } from './teams/models';
@@ -119,6 +122,13 @@ const MODELS_UNDER_TEST: ModelUnderTest[] = [
     model: ProjectMilestone,
   },
   { syncName: MODELS.Project, prismaName: 'Project', model: Project },
+  { syncName: MODELS.Product, prismaName: 'Product', model: Product },
+  { syncName: MODELS.Module, prismaName: 'Module', model: ProductModule },
+  {
+    syncName: MODELS.Capability,
+    prismaName: 'Capability',
+    model: Capability,
+  },
   { syncName: MODELS.Support, prismaName: 'Support', model: Support },
   { syncName: MODELS.Team, prismaName: 'Team', model: Team },
   { syncName: MODELS.Template, prismaName: 'Template', model: Template },

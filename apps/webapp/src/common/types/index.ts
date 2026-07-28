@@ -14,6 +14,7 @@ export * from './user';
 export * from './application';
 export * from './action';
 export * from './project';
+export * from './product-axis';
 export * from './cycle';
 export * from './conversation';
 export * from './template';

@@ -22,6 +22,13 @@ export enum MODELS {
   PageEntry = 'PageEntry',
   Project = 'Project',
   ProjectMilestone = 'ProjectMilestone',
+
+  // The product axis. Product groups the modules and holds no code. Module is
+  // usually one repository. Capability is what the software does, and it names
+  // the modules that hold its code.
+  Product = 'Product',
+  Module = 'Module',
+  Capability = 'Capability',
   Cycle = 'Cycle',
   Conversation = 'Conversation',
   ConversationHistory = 'ConversationHistory',

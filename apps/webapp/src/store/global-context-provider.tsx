@@ -3,6 +3,7 @@ import React from 'react';
 
 import { ActionsStore } from './action';
 import { ApplicationStore, defaultApplicationStoreValue } from './application';
+import { CapabilitiesStore } from './capabilities';
 import { ChecklistItemsStore } from './checklist-items';
 import { CommentsStore } from './comments';
 import { CommonStore, defaultCommonStoreValue } from './common';
@@ -19,8 +20,10 @@ import { PagesStore } from './pages';
 import { IssuesStore } from './issues';
 import { LabelsStore } from './labels';
 import { LinkedIssuesStore } from './linked-issues';
+import { ModulesStore } from './modules';
 import { NotificationsStore } from './notifications';
 import { PeopleStore } from './people';
+import { ProductsStore } from './products';
 import { ProjectMilestonesStore, ProjectsStore } from './projects';
 import { SupportStore } from './support';
 import { TeamsStore } from './teams';
@@ -50,6 +53,9 @@ const StoreContextModel = types.model({
   issueSuggestionsStore: IssueSuggestionsStore,
   projectsStore: ProjectsStore,
   projectMilestonesStore: ProjectMilestonesStore,
+  productsStore: ProductsStore,
+  modulesStore: ModulesStore,
+  capabilitiesStore: CapabilitiesStore,
   cyclesStore: CyclesStore,
   commonStore: CommonStore,
   conversationsStore: ConversationsStore,
@@ -130,6 +136,18 @@ export const storeContextStore = StoreContextModel.create({
   },
   projectMilestonesStore: {
     milestones: [],
+  },
+  productsStore: {
+    products: [],
+    workspaceId: undefined,
+  },
+  modulesStore: {
+    modules: [],
+    workspaceId: undefined,
+  },
+  capabilitiesStore: {
+    capabilities: [],
+    workspaceId: undefined,
   },
   cyclesStore: {
     cycles: [],

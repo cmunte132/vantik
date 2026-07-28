@@ -4,12 +4,15 @@ import Dexie from 'dexie';
 
 import type {
   ActionType,
+  CapabilityType,
   CompanyType,
   ConversationHistoryType,
   ConversationType,
   CycleType,
   IntegrationAccountType,
+  ModuleType,
   PeopleType,
+  ProductType,
   ProjectMilestoneType,
   ProjectType,
   SupportType,
@@ -55,6 +58,9 @@ export class VantikDatabase extends Dexie {
   issueSuggestions: Dexie.Table<IssueSuggestionType, string>;
   projects: Dexie.Table<ProjectType, string>;
   projectMilestones: Dexie.Table<ProjectMilestoneType, string>;
+  products: Dexie.Table<ProductType, string>;
+  modules: Dexie.Table<ModuleType, string>;
+  capabilities: Dexie.Table<CapabilityType, string>;
   cycles: Dexie.Table<CycleType, string>;
   conversations: Dexie.Table<ConversationType, string>;
   conversationHistory: Dexie.Table<ConversationHistoryType, string>;
@@ -75,7 +81,7 @@ export class VantikDatabase extends Dexie {
       [MODELS.Workflow]:
         'id,createdAt,updatedAt,name,position,color,category,teamId,description',
       [MODELS.Issue]:
-        'id,createdAt,updatedAt,title,number,description,priority,dueDate,sortOrder,estimate,teamId,createdById,assigneeId,labelIds,parentId,stateId,sourceMetadata.projectId,projectMilestoneId,cycleId',
+        'id,createdAt,updatedAt,title,number,description,priority,dueDate,sortOrder,estimate,teamId,createdById,assigneeId,labelIds,parentId,stateId,sourceMetadata.projectId,projectMilestoneId,cycleId,moduleIds,capabilityId',
       [MODELS.UsersOnWorkspaces]:
         'id,createdAt,updatedAt,userId,workspaceId,teamIds,settings,role,status',
       [MODELS.IssueHistory]:
@@ -102,6 +108,14 @@ export class VantikDatabase extends Dexie {
         'id,createdAt,updatedAt,workspaceId,name,description,status,startDate,endDate,leadUserId,teams',
       [MODELS.ProjectMilestone]:
         'id,createdAt,updatedAt,projectId,name,description,endDate',
+      [MODELS.Product]:
+        'id,createdAt,updatedAt,workspaceId,name,key,description,status,icon,color,leadUserId',
+      // ownerProductId and ownerTeamId are indexed because every read of this
+      // table is "the modules of this product" or "the modules of this team".
+      [MODELS.Module]:
+        'id,createdAt,updatedAt,workspaceId,name,key,description,status,icon,color,leadUserId,ownerProductId,ownerTeamId,linkedTeamIds,linkedProductIds',
+      [MODELS.Capability]:
+        'id,createdAt,updatedAt,workspaceId,name,description,status,moduleIds',
       [MODELS.Cycle]:
         'id,createdAt,updatedAt,teamId,name,description,endDate,startDate,preferences,number,status,closedAt',
       [MODELS.Conversation]: 'id,createdAt,updatedAt,title,userId,workspaceId',
@@ -141,6 +155,9 @@ export class VantikDatabase extends Dexie {
     this.actions = this.table(MODELS.Action);
     this.projects = this.table(MODELS.Project);
     this.projectMilestones = this.table(MODELS.ProjectMilestone);
+    this.products = this.table(MODELS.Product);
+    this.modules = this.table(MODELS.Module);
+    this.capabilities = this.table(MODELS.Capability);
     this.cycles = this.table(MODELS.Cycle);
     this.conversations = this.table(MODELS.Conversation);
     this.conversationHistory = this.table(MODELS.ConversationHistory);

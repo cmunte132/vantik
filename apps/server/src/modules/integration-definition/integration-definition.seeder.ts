@@ -62,9 +62,12 @@ export class IntegrationDefinitionSeeder implements OnModuleInit {
           slug: seed.slug,
           description: seed.description,
           icon: seed.icon,
-          // The credentials stay as they are when the environment holds none.
-          // An operator can also set them through the update route, and a
-          // restart must not remove that work.
+          // The environment is the authority on a credential that it holds.
+          // For a credential that it does not hold, the row keeps the value it
+          // has. An operator can set a credential through the update route,
+          // and a restart must not remove that work. `readSeedCredentials`
+          // therefore gives a field only for a variable that is set, and this
+          // spread then names only the columns that the environment supplies.
           ...(credentials ?? {}),
           deleted: null,
         },

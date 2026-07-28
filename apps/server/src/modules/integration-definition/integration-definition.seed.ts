@@ -95,10 +95,16 @@ export const integrationSeeds: IntegrationSeed[] = [
  * This function reads the OAuth credentials of one integration from the
  * environment. If the integration needs no credentials, or if the environment
  * holds neither of them, this function returns null.
+ *
+ * The result holds a field only for a variable that the environment sets. The
+ * seeder spreads this result over the row at each start of the server, so a
+ * field that is present here replaces the value in the database. An empty
+ * field for an unset variable erases a credential that an operator set through
+ * the API, and one set variable of the pair is enough to make that happen.
  */
 export function readSeedCredentials(
   seed: IntegrationSeed,
-): { clientId: string; clientSecret: string } | null {
+): Partial<{ clientId: string; clientSecret: string }> | null {
   if (!seed.credentialEnv) {
     return null;
   }
@@ -110,5 +116,8 @@ export function readSeedCredentials(
     return null;
   }
 
-  return { clientId: clientId ?? '', clientSecret: clientSecret ?? '' };
+  return {
+    ...(clientId ? { clientId } : {}),
+    ...(clientSecret ? { clientSecret } : {}),
+  };
 }

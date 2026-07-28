@@ -90,8 +90,15 @@ export class IntegrationDefinitionController {
 
   /**
    * Update a integration definition in a workspace
+   *
+   * This route writes `clientId`, `clientSecret` and `config` on a row that is
+   * global to the deployment. It had no guard, and the two other routes of
+   * this controller have one, so any caller on the network could replace the
+   * OAuth credentials of every integration. That was of no consequence while
+   * each row was empty. The seed puts real credentials in these rows.
    */
   @Post(':integrationDefinitionId')
+  @UseGuards(AuthGuard)
   async updateIntegrationDefinition(
     @Param()
     integrationDefinitionRequestIdBody: IntegrationDefinitionIdDto,

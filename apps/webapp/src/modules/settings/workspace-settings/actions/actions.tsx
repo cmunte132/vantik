@@ -14,26 +14,14 @@ import { Header } from 'modules/settings/header';
 
 import { ContentBox } from 'common/layouts/content-box';
 import { SettingsLayout } from 'common/layouts/settings-layout';
-import type { ActionType } from 'common/types';
-
-import {
-  useGetAllActionsQuery,
-  type ActionExternalConfig,
-} from 'services/action';
 
 import { useContextStore } from 'store/global-context-provider';
 
 import { ActionCard } from './action-card';
-import { ActionCardExternal } from './action-card-external';
 
 export const Actions = observer(() => {
   const { actionsStore } = useContextStore();
   const actions = actionsStore.allActions;
-  const { data, isLoading } = useGetAllActionsQuery();
-
-  const isInstalled = (slug: string) => {
-    return !!actions.find((action: ActionType) => action.slug === slug);
-  };
 
   return (
     <div>
@@ -63,22 +51,6 @@ export const Actions = observer(() => {
           ))}
         </div>
       </div>
-
-      {!isLoading && (
-        <div className="mt-6">
-          <h2 className="text-md mb-4"> All actions</h2>
-
-          <div className="grid grid-cols-4 gap-4">
-            {data
-              .filter(
-                (action: ActionExternalConfig) => !isInstalled(action.slug),
-              )
-              .map((action: ActionExternalConfig) => (
-                <ActionCardExternal key={action.slug} action={action} />
-              ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 });

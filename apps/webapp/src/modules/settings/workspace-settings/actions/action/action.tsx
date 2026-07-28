@@ -1,17 +1,4 @@
-import { buttonVariants } from '@vantikhq/ui/components/button';
-import {
-  Editor,
-  EditorExtensions,
-  suggestionItems,
-} from '@vantikhq/ui/components/editor/index';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@vantikhq/ui/components/tabs';
-import { cn } from '@vantikhq/ui/lib/utils';
 import { useParams } from 'next/navigation';
 
 import { Header } from 'modules/settings/header';
@@ -20,8 +7,6 @@ import { SettingSection } from 'modules/settings/setting-section';
 import { ContentBox } from 'common/layouts/content-box';
 import { SettingsLayout } from 'common/layouts/settings-layout';
 import { ActionAccessGuard } from 'common/wrappers/action-access-guard';
-
-import { useGetExternalActionDataQuery } from 'services/action';
 
 import { useContextStore } from 'store/global-context-provider';
 
@@ -34,18 +19,11 @@ export const Action = () => {
   const { actionsStore } = useContextStore();
   const action = actionsStore.getAction(actionSlug);
 
-  const { data: latestAction, isLoading } =
-    useGetExternalActionDataQuery(actionSlug);
-
   const metadata = (
     <div className="mt-3 flex gap-2">
       <Metadata />
     </div>
   );
-
-  if (isLoading) {
-    return null;
-  }
 
   if (!action) {
     return null;
@@ -61,52 +39,7 @@ export const Action = () => {
             description={action.description}
             metadata={metadata}
           >
-            <Tabs defaultValue="overview">
-              <TabsList className="bg-transparent flex gap-2 justify-start px-0">
-                <>
-                  <TabsTrigger
-                    value="overview"
-                    className={cn(
-                      buttonVariants({
-                        variant: 'secondary',
-                      }),
-                    )}
-                  >
-                    Overview
-                  </TabsTrigger>
-
-                  <TabsTrigger
-                    value="configuration"
-                    className={cn(
-                      buttonVariants({
-                        variant: 'secondary',
-                      }),
-                    )}
-                  >
-                    Configuration
-                  </TabsTrigger>
-                </>
-              </TabsList>
-              <TabsContent value="overview">
-                <div className="flex gap-2 bg-background-3 p-6 rounded-md">
-                  <div>
-                    <Editor
-                      className="new-issue-editor min-h-[200px] text-base"
-                      value={latestAction?.guide}
-                      editable={false}
-                      editorClassName="min-h-[300px]"
-                      extensions={[]}
-                    >
-                      <EditorExtensions suggestionItems={suggestionItems} />
-                    </Editor>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="configuration">
-                <Configuration />
-              </TabsContent>
-            </Tabs>
+            <Configuration />
 
             <div className="flex justify-end pt-2">
               <DeleteActionButton id={action.id} />

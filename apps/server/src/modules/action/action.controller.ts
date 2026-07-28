@@ -27,11 +27,6 @@ import {
 
 import { ActionGuard } from './action.guard';
 import ActionService from './action.service';
-import {
-  getActionConfig,
-  getExternalActions,
-  getExternalActionWithSlug,
-} from './action.utils';
 
 @Controller({
   version: '1',
@@ -62,16 +57,6 @@ export class ActionController {
     return await this.actionService.delete(actionIdDto.actionId);
   }
 
-  @Get('external')
-  async getExternalActions() {
-    return await getExternalActions();
-  }
-
-  @Get('external/:slug')
-  async getExternalActionWithSlug(@Param() slugDto: { slug: string }) {
-    return await getExternalActionWithSlug(slugDto.slug);
-  }
-
   @Get(':slug/inputs')
   @UseGuards(AuthGuard)
   async getInputsForSlug(
@@ -79,11 +64,6 @@ export class ActionController {
     @Param() slugDto: { slug: string },
   ) {
     return await this.actionService.getInputsForSlug(slugDto.slug, workspaceId);
-  }
-
-  @Get(':slug')
-  async getActionConfig(@Param() slugDto: { slug: string }) {
-    return await getActionConfig(slugDto.slug);
   }
 
   @Get()

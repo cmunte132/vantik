@@ -2,17 +2,18 @@ import { Badge } from '@vantikhq/ui/components/badge';
 import { observer } from 'mobx-react-lite';
 import { useParams } from 'next/navigation';
 
-import { useGetExternalActionDataQuery } from 'services/action';
+import { useContextStore } from 'store/global-context-provider';
 
 export const Metadata = observer(() => {
   const { actionSlug } = useParams<{ actionSlug: string }>();
-  const { data: latestAction } = useGetExternalActionDataQuery(actionSlug);
+  const { actionsStore } = useContextStore();
+  const action = actionsStore.getAction(actionSlug);
 
   return (
     <div className="grow flex flex-col gap-4">
       <div className="min-w-[80px] flex flex-col gap-1">
         <div className="flex gap-1">
-          {latestAction?.integrations.map((integration: string) => (
+          {action?.integrations.map((integration: string) => (
             <Badge
               variant="secondary"
               key={integration}

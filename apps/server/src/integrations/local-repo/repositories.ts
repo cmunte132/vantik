@@ -206,8 +206,19 @@ export async function inspectPath(candidate: string): Promise<string> {
   // out of the root fails the check rather than reaching the disk.
   const path = resolve(expanded);
   const root = repositoryRoot();
+  const prefix = root.endsWith(sep) ? root : root + sep;
 
-  if (!isInside(root, path)) {
+  // One test, on `path` itself, and nothing joined to it. The shape matters as
+  // much as the result: `a && b` leaves a disjunction on the branch that
+  // carries on, so neither a reader nor an analyser can say which half held,
+  // and a test on `` `${path}${sep}` `` is a statement about a different string
+  // than the one that goes on to the disk. This one says the path is under the
+  // root, and it says it about the value that `stat` is given.
+  //
+  // The root itself does not pass, because the prefix ends in a separator. That
+  // is the right answer: the root is the directory the repositories sit in, not
+  // a repository.
+  if (!path.startsWith(prefix)) {
     throw new BadRequestException(
       `This server takes repositories only from inside ${root}. Set LOCAL_REPO_ROOT to move that directory.`,
     );
@@ -236,12 +247,6 @@ export async function inspectPath(candidate: string): Promise<string> {
   }
 
   return path;
-}
-
-function isInside(root: string, path: string): boolean {
-  return (
-    path === root || path.startsWith(root.endsWith(sep) ? root : root + sep)
-  );
 }
 
 async function statOrNull(path: string) {

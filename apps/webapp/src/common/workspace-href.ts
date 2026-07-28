@@ -1,6 +1,21 @@
 /** Copyright (c) 2024, Vantik, all rights reserved. **/
 
 /**
+ * What a workspace slug is allowed to contain.
+ *
+ * A slug is generated, not typed: letters, digits and dashes. So the answer to
+ * a value that is not one is to refuse it, not to encode it. Encoding would
+ * make `/evil.com` into a harmless-looking `%2Fevil.com` segment and send the
+ * person to a workspace page that cannot exist; refusing sends them to the app
+ * root, which is where somebody with no workspace belongs.
+ *
+ * Refusing is also the stronger statement. An encoder has to be right about
+ * every character that could change what a URL means. A list of the characters
+ * a slug may contain has to be right about the slug.
+ */
+const SAFE_SLUG = /^[A-Za-z0-9_-]+$/;
+
+/**
  * Builds a path inside a workspace from parts that came out of the URL.
  *
  * Almost every navigation in the app is a template literal starting
@@ -27,7 +42,14 @@ export function workspaceHref(
   workspaceSlug: string | string[] | undefined,
   ...parts: Array<string | number | undefined | null>
 ): string {
-  const slug = segment(workspaceSlug);
+  const raw = Array.isArray(workspaceSlug) ? workspaceSlug[0] : workspaceSlug;
+  const candidate = typeof raw === 'string' ? raw.trim() : '';
+
+  // Tested here rather than inside a helper. This is the check that decides
+  // whether a value out of the URL is allowed to become part of a destination,
+  // and putting it behind a function call hides it from a reader and from an
+  // analyser tracing where a router value can reach.
+  const slug = SAFE_SLUG.test(candidate) ? candidate : '';
 
   // With no slug there is no workspace path to build. The app root is where a
   // person with no workspace belongs, and it is a destination on this origin,
@@ -41,23 +63,4 @@ export function workspaceHref(
     .map((part) => encodeURIComponent(String(part)));
 
   return `/${[slug, ...rest].join('/')}`;
-}
-
-/**
- * Reduces a router value to one encoded path segment.
- *
- * Next gives a catch-all route an array, and a value it decoded from the URL
- * can hold anything a person managed to put there. Encoding is what keeps it to
- * one segment: a slash inside it becomes `%2F` and stops being a separator.
- */
-function segment(value: string | string[] | undefined): string {
-  const raw = Array.isArray(value) ? value[0] : value;
-
-  if (typeof raw !== 'string') {
-    return '';
-  }
-
-  const trimmed = raw.trim();
-
-  return trimmed ? encodeURIComponent(trimmed) : '';
 }

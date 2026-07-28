@@ -41,11 +41,24 @@ describe('workspaceHref', () => {
     expect(workspaceHref('', 'products')).toBe('/');
   });
 
-  it('keeps a slug holding a slash to one segment', () => {
-    expect(workspaceHref('/evil.com', 'products')).toBe(
-      '/%2Fevil.com/products',
+  /**
+   * A slug is generated and always plain, so anything else is refused outright
+   * rather than encoded into a segment that cannot name a real workspace.
+   */
+  it('refuses a slug that is not a slug', () => {
+    expect(workspaceHref('/evil.com', 'products')).toBe('/');
+    expect(workspaceHref('a/b', 'products')).toBe('/');
+    expect(workspaceHref('..', 'products')).toBe('/');
+    expect(workspaceHref('has space', 'products')).toBe('/');
+    expect(workspaceHref('javascript:alert(1)', 'products')).toBe('/');
+  });
+
+  it('accepts the slugs a workspace actually has', () => {
+    expect(workspaceHref('acme', 'products')).toBe('/acme/products');
+    expect(workspaceHref('acme-corp-2', 'products')).toBe(
+      '/acme-corp-2/products',
     );
-    expect(workspaceHref('a/b', 'products')).toBe('/a%2Fb/products');
+    expect(workspaceHref('Acme_Corp', 'products')).toBe('/Acme_Corp/products');
   });
 
   it('encodes a part so a name with a slash cannot add a segment', () => {

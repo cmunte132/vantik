@@ -16,6 +16,7 @@ import { actionRun } from 'trigger/action-run';
 import { prepareTriggerPayload } from 'modules/action-event/action-event.utils';
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 import { LoggerService } from 'modules/logger/logger.service';
+import { ModuleRoutingService } from 'modules/modules/module-routing.service';
 
 @Injectable()
 export default class WebhookService {
@@ -24,6 +25,7 @@ export default class WebhookService {
   constructor(
     private prisma: PrismaService,
     private integrations: IntegrationsService,
+    private moduleRouting: ModuleRoutingService,
   ) {}
 
   async handleEvents(
@@ -85,6 +87,14 @@ export default class WebhookService {
     }
 
     const workspaceId = integrationAccount.workspaceId;
+
+    await this.routeCodeChange(
+      sourceName,
+      eventBody,
+      integrationAccount.id,
+      workspaceId,
+    );
+
     const actionEntities = await this.prisma.actionEntity.findMany({
       where: {
         type: ActionTypesEnum.SOURCE_WEBHOOK,
@@ -116,5 +126,43 @@ export default class WebhookService {
     });
 
     return { status: 200 };
+  }
+
+  /**
+   * This method gives an issue the modules that a pull request changed.
+   *
+   * An integration that does not answer `GET_CODE_CHANGE`, and a webhook that
+   * describes something other than a change to code, both give null here. That
+   * is the ordinary case for most webhooks, and it is not a fault.
+   *
+   * The whole method is inside a try, because module routing is an addition to
+   * a webhook and never its purpose. A repository that the server cannot read
+   * must not stop the actions that the same webhook triggers.
+   */
+  private async routeCodeChange(
+    sourceName: string,
+    eventBody: EventBody,
+    integrationAccountId: string,
+    workspaceId: string,
+  ) {
+    try {
+      const change = await this.integrations.loadIntegration(sourceName, {
+        event: IntegrationPayloadEventType.GET_CODE_CHANGE,
+        integrationAccountId,
+        eventBody,
+      });
+
+      if (!change?.issueKeys?.length) {
+        return;
+      }
+
+      await this.moduleRouting.routeCodeChange(change, workspaceId);
+    } catch (error) {
+      this.logger.error({
+        message: `Could not route the code change of a ${sourceName} webhook`,
+        where: 'WebhookService.routeCodeChange',
+        error,
+      });
+    }
   }
 }

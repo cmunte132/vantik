@@ -5,6 +5,7 @@ import {
 
 import { integrationCreate } from './account-create';
 import { getToken } from './get-token';
+import { codeChangeOf } from './pull-request';
 import { spec } from './spec';
 
 export default async function run(eventPayload: IntegrationEventPayload) {
@@ -25,6 +26,15 @@ export default async function run(eventPayload: IntegrationEventPayload) {
 
     case IntegrationPayloadEventType.GET_TOKEN:
       return await getToken(eventPayload.integrationAccountId);
+
+    // A pull request says which files it changes, and the server turns those
+    // paths into modules. The bot token is the one that reads a private
+    // repository of the installation.
+    case IntegrationPayloadEventType.GET_CODE_CHANGE: {
+      const { botToken } = await getToken(eventPayload.integrationAccountId);
+
+      return await codeChangeOf(eventPayload.eventBody, botToken);
+    }
 
     case IntegrationPayloadEventType.IS_ACTION_SUPPORTED_EVENT:
       return true;

@@ -5,6 +5,7 @@ import { IntegrationsModule } from 'modules/integrations/integrations.module';
 import IssueCommentsService from 'modules/issue-comments/issue-comments.service';
 import { IssuesModule } from 'modules/issues/issues.module';
 import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
+import { ModuleRoutingService } from 'modules/modules/module-routing.service';
 
 import { WebhookController } from './webhook.controller';
 import WebhookService from './webhook.service';
@@ -17,6 +18,7 @@ import WebhookService from './webhook.service';
     WebhookService,
     IssueCommentsService,
     LinkedIssueService,
+    ModuleRoutingService,
   ],
   exports: [],
 })

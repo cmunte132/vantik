@@ -201,19 +201,46 @@ one.
 
 ### File attachments
 
-Google Cloud Storage or Amazon S3 holds the attachments of an issue. If you
-configure no provider, a person cannot upload an attachment. Every other feature
-works.
+The attachments of an issue go to a disk that the server mounts. This is the
+default, and it needs no configuration. `docker compose up` gives you a working
+upload immediately.
+
+`STORAGE_PROVIDER` selects the backend:
+
+| Value | Where the files go |
+| --- | --- |
+| `local` | A disk that the server mounts. This is the default. |
+| `s3` | Amazon S3, or any store that answers the S3 protocol. |
+
+An empty value means `local`. If you give a name that the server does not have,
+the server stops at startup and tells you. If you select a backend but you do
+not give it the settings it needs, the server also stops at startup and names
+the settings. The server does not start and then fail on the first file.
+
+#### Files on a disk
 
 ```bash
-# Google Cloud Storage
-STORAGE_PROVIDER=GCP
-BUCKET_NAME=your-bucket-name
-GCP_SERVICE_ACCOUNT_FILE=/path/to/service-account.json  # Storage Object Admin role
+# STORAGE_PROVIDER=local is the default. These settings are optional.
+LOCAL_STORAGE_PATH=/data/attachments
 PUBLIC_ATTACHMENT_URL=https://your-domain.com/api
+```
 
+The compose file mounts the volume `attachment-data` at `/data/attachments`.
+Keep that volume in your backup. If you remove it, you remove the files.
+
+The server signs the URL of each attachment, and the signature expires. The
+server makes the secret that signs them on first start, and keeps it beside the
+files. Set `ATTACHMENT_URL_SECRET` yourself in two cases: more than one server
+shares the volume, or you want to hold the secret.
+
+#### Object storage
+
+One backend speaks to Amazon S3 and to every store that answers the same
+protocol. `S3_ENDPOINT` points it at a store other than Amazon.
+
+```bash
 # Amazon S3
-STORAGE_PROVIDER=AWS
+STORAGE_PROVIDER=s3
 BUCKET_NAME=your-bucket-name
 AWS_REGION=your-region
 AWS_ACCESS_KEY_ID=your-access-key
@@ -221,7 +248,64 @@ AWS_SECRET_ACCESS_KEY=your-secret-key
 PUBLIC_ATTACHMENT_URL=https://your-domain.com/api
 ```
 
-Your bucket needs a CORS configuration that accepts the origin of your frontend:
+Leave the key and the secret empty on a host that already has credentials, for
+example a host with an instance role. The AWS SDK finds them.
+
+For a store that is not Amazon, add `S3_ENDPOINT`:
+
+| Store | `S3_ENDPOINT` | `AWS_REGION` |
+| --- | --- | --- |
+| Cloudflare R2 | `https://<account-id>.r2.cloudflarestorage.com` | `auto` |
+| MinIO | `http://minio:9000` | any value |
+| Google Cloud Storage | `https://storage.googleapis.com` | `auto` |
+| DigitalOcean Spaces | `https://<region>.digitaloceanspaces.com` | your region |
+| Backblaze B2 | `https://s3.<region>.backblazeb2.com` | your region |
+
+`S3_FORCE_PATH_STYLE` puts the name of the bucket in the path and not in the
+host name. It becomes true by itself when you set `S3_ENDPOINT`, because most
+stores that are not Amazon need it. Set it only if your store needs the other
+behaviour.
+
+To try object storage before you pay for it, start the MinIO in the compose
+file:
+
+```bash
+docker compose --profile s3 up -d minio minio-bucket
+```
+
+Then set `STORAGE_PROVIDER=s3`, `S3_ENDPOINT=http://minio:9000`,
+`BUCKET_NAME=vantik-attachments`, and the user and password of MinIO as the
+access key and the secret.
+
+#### If you used the GCP backend before
+
+The server no longer has a Google Cloud Storage backend of its own. Google Cloud
+Storage still works, through the S3 backend and the interoperability endpoint.
+Your files stay where they are.
+
+1. Make an HMAC key for the service account that owns the bucket. In the Cloud
+   Console, open **Cloud Storage > Settings > Interoperability**.
+2. Change your `.env`:
+
+```bash
+STORAGE_PROVIDER=s3
+S3_ENDPOINT=https://storage.googleapis.com
+AWS_REGION=auto
+AWS_ACCESS_KEY_ID=your-hmac-key
+AWS_SECRET_ACCESS_KEY=your-hmac-secret
+BUCKET_NAME=your-bucket-name   # no change
+```
+
+3. Remove `GCP_SERVICE_ACCOUNT_FILE`. It has no effect.
+
+A server that still has `STORAGE_PROVIDER=gcp` stops at startup and prints these
+steps.
+
+#### CORS
+
+A bucket needs a CORS configuration that accepts the origin of your frontend.
+The `local` backend needs no CORS configuration, because the server sends the
+files itself.
 
 ```json
 [
@@ -400,7 +484,11 @@ You lose
 the Actions and the user notifications.
 
 **Q: Which storage providers can hold the attachments?**
-A: Google Cloud Storage and Amazon S3.
+A: A disk that the server mounts, which is the default and needs no
+configuration. Also Amazon S3 and every store that answers the S3 protocol:
+Cloudflare R2, MinIO, DigitalOcean Spaces, Backblaze B2, Wasabi, and Google
+Cloud Storage through its interoperability endpoint. Read
+[File attachments](#file-attachments).
 
 If this page does not answer your question, open an issue on
 [GitHub](https://github.com/cmunte132/vantik/issues).

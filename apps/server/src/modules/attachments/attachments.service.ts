@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   Attachment,
@@ -15,8 +16,10 @@ import { v4 as uuidv4 } from 'uuid'; // Add this import at the top with other im
 import { LoggerService } from 'modules/logger/logger.service';
 
 import { AttachmentRequestParams } from './attachments.interface';
+import { LocalStorageProvider } from './providers/local-storage.provider';
 import { StorageProvider } from './storage-provider.interface';
 import { StorageFactory } from './storage.factory';
+import { InvalidSignedUrlError, verifyUrlToken } from './url-signer';
 @Injectable()
 export class AttachmentService {
   private readonly logger: LoggerService = new LoggerService(
@@ -139,24 +142,82 @@ export class AttachmentService {
     return `${process.env.PUBLIC_ATTACHMENT_URL}/v1/attachment/actions/${uniqueId}`;
   }
 
-  async getFileForAction(attachmentId: string) {
+  /**
+   * Reads the JavaScript of an action. The remote module loader asks for this
+   * over HTTP, and the server sends the bytes it holds rather than a redirect
+   * to storage.
+   */
+  async getActionFileContents(attachmentId: string): Promise<Buffer> {
     const filePath = `actions/${attachmentId}.js`;
 
     if (!(await this.storageProvider.fileExists(filePath))) {
       throw new BadRequestException('File not found');
     }
 
-    const metadata = await this.storageProvider.getMetadata(filePath);
-    const signedUrl = await this.storageProvider.getSignedUrl(filePath, {
-      action: 'read',
-      expires: Date.now() + 60 * 60 * 1000,
-      responseDisposition: 'inline',
-    });
+    return await this.storageProvider.downloadFile(filePath);
+  }
+
+  /**
+   * The local backend has no bucket to sign against, so its signed URLs come
+   * back to this server and this method answers them. Only that backend makes
+   * such URLs, so the route does not exist for any other one.
+   */
+  private localProvider(): LocalStorageProvider {
+    if (!(this.storageProvider instanceof LocalStorageProvider)) {
+      throw new NotFoundException('Not found');
+    }
+
+    return this.storageProvider;
+  }
+
+  /**
+   * The token carries the whole right to the file, so the checks here are the
+   * only thing between a caller and the bytes. An expired token, a changed
+   * token, and a write token used to read all fail.
+   */
+  private claimsFor(token: string, action: 'read' | 'write') {
+    const provider = this.localProvider();
+
+    let claims;
+    try {
+      claims = verifyUrlToken(token, provider.getSecret());
+    } catch (error) {
+      if (error instanceof InvalidSignedUrlError) {
+        throw new NotFoundException('Not found');
+      }
+      throw error;
+    }
+
+    if (claims.action !== action) {
+      throw new NotFoundException('Not found');
+    }
+
+    return claims;
+  }
+
+  async readSignedLocalFile(token: string) {
+    const claims = this.claimsFor(token, 'read');
+    const provider = this.localProvider();
+
+    if (!(await provider.fileExists(claims.filePath))) {
+      throw new NotFoundException('Not found');
+    }
+
+    const metadata = await provider.getMetadata(claims.filePath);
 
     return {
-      signedUrl,
-      size: metadata.size,
+      buffer: await provider.downloadFile(claims.filePath),
+      contentType: claims.responseType || metadata.contentType,
+      disposition: claims.responseDisposition || 'inline',
     };
+  }
+
+  async writeSignedLocalFile(token: string, buffer: Buffer) {
+    const claims = this.claimsFor(token, 'write');
+
+    await this.localProvider().uploadFile(claims.filePath, buffer, {
+      contentType: claims.contentType || 'application/octet-stream',
+    });
   }
 
   async getFileFromStorage(

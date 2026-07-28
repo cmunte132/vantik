@@ -12,20 +12,41 @@ import {
   StorageProvider,
   StorageUploadOptions,
   SignedUrlOptions,
-} from './storage-provider.interface';
+} from '../storage-provider.interface';
 
+/**
+ * Speaks the S3 protocol, to Amazon S3 or to any store that answers it.
+ *
+ * S3_ENDPOINT is what makes the difference. Point it at Cloudflare R2, MinIO,
+ * DigitalOcean Spaces, Backblaze B2, Wasabi, or the Google Cloud Storage
+ * interoperability endpoint, and this one backend serves all of them.
+ *
+ * Credentials are optional. When the environment holds no key pair, the AWS SDK
+ * looks for credentials the usual way, which is how a server that runs with an
+ * instance role gets them.
+ */
 @Injectable()
 export class S3StorageProvider implements StorageProvider {
   private s3: S3;
   private bucketName: string;
 
   constructor() {
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+    const endpoint = process.env.S3_ENDPOINT;
+
     this.s3 = new S3({
       region: process.env.AWS_REGION,
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      },
+      ...(endpoint ? { endpoint } : {}),
+      // Most stores that are not Amazon put the bucket in the path instead of
+      // the host name, so path style is the right default once an endpoint is
+      // set. An operator can still say otherwise.
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE
+        ? process.env.S3_FORCE_PATH_STYLE === 'true'
+        : Boolean(endpoint),
+      ...(accessKeyId && secretAccessKey
+        ? { credentials: { accessKeyId, secretAccessKey } }
+        : {}),
     });
     this.bucketName = process.env.BUCKET_NAME;
   }
@@ -97,7 +118,12 @@ export class S3StorageProvider implements StorageProvider {
       await this.s3.send(command);
       return true;
     } catch (error) {
-      if (error.name === 'NotFound') {
+      // Amazon answers NotFound. Some compatible stores answer 404 with a
+      // different name, so the status is the reliable test.
+      if (
+        error.name === 'NotFound' ||
+        error.$metadata?.httpStatusCode === 404
+      ) {
         return false;
       }
       throw error;

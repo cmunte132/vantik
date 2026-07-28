@@ -5,6 +5,11 @@
 #
 # Webapp on :3000, API on :3001. The server applies database migrations on startup.
 #
+# Uploaded files go to a disk, in the attachment-data volume, and that needs no
+# configuration. To put them in object storage instead, set STORAGE_PROVIDER=s3
+# and the settings beside it in .env. To try that first, start the MinIO in this
+# file: docker compose --profile s3 up -d minio minio-bucket
+#
 # For local development, run the apps on the host and start only the backing
 # services from this file:
 #
@@ -104,6 +109,12 @@ services:
       TRIGGER_ACCESS_TOKEN: tr_pat_${TRIGGER_TOKEN:-}
     ports:
       - "3001:3001"
+    volumes:
+      # Attachments go to a disk unless STORAGE_PROVIDER says otherwise, so this
+      # volume holds every uploaded file. It also holds the secret that signs
+      # attachment URLs, which the server makes on first start. Remove the
+      # volume and the files go with it.
+      - attachment-data:/data/attachments
     networks:
       - vantik
     healthcheck:
@@ -212,6 +223,60 @@ services:
       timeout: 5s
       retries: 10
 
+  # Object storage that speaks the S3 protocol. It is not part of the default
+  # stack — attachments go to a disk unless an operator sets STORAGE_PROVIDER —
+  # so it sits behind a profile and starts only when it is asked for:
+  #
+  #   docker compose --profile s3 up -d minio minio-bucket
+  #
+  # Use it to try the S3 backend before you point it at a real store, and to run
+  # the storage conformance tests against something other than a disk:
+  #
+  #   TEST_S3_ENDPOINT=http://127.0.0.1:9000 \
+  #   TEST_S3_ACCESS_KEY_ID=vantik TEST_S3_SECRET_ACCESS_KEY=vantik-secret \
+  #   TEST_S3_BUCKET=vantik-attachments \
+  #     pnpm --filter server test -- storage-provider.conformance
+  minio:
+    container_name: vantik-minio
+    profiles: ["s3"]
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-vantik}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-vantik-secret}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - vantik
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # MinIO serves no bucket until one is made, and the server does not make its
+  # own. This runs once and stops.
+  minio-bucket:
+    container_name: vantik-minio-bucket
+    profiles: ["s3"]
+    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set vantik http://minio:9000 \
+          "${MINIO_ROOT_USER:-vantik}" "${MINIO_ROOT_PASSWORD:-vantik-secret}"
+        mc mb --ignore-existing "vantik/${BUCKET_NAME:-vantik-attachments}"
+    networks:
+      - vantik
+
 networks:
   vantik:
 
@@ -219,3 +284,5 @@ volumes:
   postgres-data:
   redis-data:
   typesense-data:
+  attachment-data:
+  minio-data:

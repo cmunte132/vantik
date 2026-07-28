@@ -11,6 +11,10 @@ import supertokens from 'supertokens-node';
 
 import type { CorsConfig } from 'common/configs/config.interface';
 
+import {
+  LOCAL_ATTACHMENT_PATH,
+  localAttachmentBodyParser,
+} from 'modules/attachments/attachments.middleware';
 import { SupertokensExceptionFilter } from 'modules/auth/auth.filter';
 import { LoggerService } from 'modules/logger/logger.service';
 import ReplicationService from 'modules/replication/replication.service';
@@ -42,6 +46,8 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({}));
 
   app.use(bodyParser.json({ limit: '50mb' })); // Adjust limit as required
+
+  app.use(LOCAL_ATTACHMENT_PATH, localAttachmentBodyParser());
 
   // Initiate trigger service
   const triggerService = app.get(TriggerdevService);

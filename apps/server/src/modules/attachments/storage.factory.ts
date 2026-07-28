@@ -1,20 +1,16 @@
 import { Injectable } from '@nestjs/common';
 
-import { GCPStorageProvider } from './gcp-storage.provider';
-import { S3StorageProvider } from './s3-storage.provider';
 import { StorageProvider } from './storage-provider.interface';
+import { createStorageProvider } from './storage.registry';
 
+/**
+ * The injectable face of the registry. The choice of backend and the check on
+ * its configuration live in storage.registry.ts, so a test can call them
+ * without Nest.
+ */
 @Injectable()
 export class StorageFactory {
   createStorageProvider(): StorageProvider {
-    const provider = process.env.STORAGE_PROVIDER?.toLowerCase() || 'gcp';
-
-    switch (provider) {
-      case 'aws':
-        return new S3StorageProvider();
-      case 'gcp':
-      default:
-        return new GCPStorageProvider();
-    }
+    return createStorageProvider();
   }
 }

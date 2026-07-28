@@ -1,5 +1,3 @@
-import https from 'https';
-
 import {
   Body,
   Controller,
@@ -7,6 +5,8 @@ import {
   Get,
   Param,
   Post,
+  Put,
+  Req,
   Res,
   UploadedFiles,
   UseGuards,
@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { SignedURLBody } from '@vantikhq/types';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
@@ -84,7 +84,7 @@ export class AttachmentController {
 
   @Get('get-signed-url/:attachmentId')
   @UseGuards(AuthGuard)
-  async getFileFromGCSSignedURL(
+  async getSignedUrlForFile(
     @Workspace() workspaceId: string,
     @Param() attachementRequestParams: AttachmentRequestParams,
   ) {
@@ -104,8 +104,8 @@ export class AttachmentController {
     @Res() res: Response,
   ) {
     try {
-      const { signedUrl } =
-        await this.attachementService.getFileForAction(attachmentId);
+      const buffer =
+        await this.attachementService.getActionFileContents(attachmentId);
 
       // Set content disposition header with the original filename
       res.set({
@@ -114,23 +114,58 @@ export class AttachmentController {
         'Cache-Control': 'public, immutable, max-age=31536000', // Cache for 1 year (effectively infinite)
       });
 
-      https.get(signedUrl, (stream) => {
-        stream.pipe(res);
-      });
+      res.send(buffer);
     } catch (error) {
       res.status(404).send('File not found');
     }
   }
 
+  /**
+   * Serves a signed URL that the local backend made. The token is the whole
+   * authority here, so there is no session guard: the signature proves the
+   * server made the URL, and the claims inside say which file and until when.
+   */
+  @Get('local/:token')
+  async readLocalSignedFile(
+    @Param('token') token: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, contentType, disposition } =
+      await this.attachementService.readSignedLocalFile(token);
+
+    res.set({
+      'Content-Type': contentType,
+      'Content-Disposition': disposition,
+      // The token expires, so a shared cache must not keep the answer.
+      'Cache-Control': 'private, max-age=0, no-store',
+    });
+
+    res.send(buffer);
+  }
+
+  @Put('local/:token')
+  async writeLocalSignedFile(
+    @Param('token') token: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    await this.attachementService.writeSignedLocalFile(
+      token,
+      req.body as Buffer,
+    );
+
+    res.status(200).send();
+  }
+
   @Get(':workspaceId/:attachmentId')
   @UseGuards(AuthGuard)
-  async getFileFromGCSForWorkspace(
+  async getFileForWorkspace(
     @Param() attachementRequestParams: AttachmentRequestParams,
     @Res() res: Response,
   ) {
     try {
-      const { signedUrl, contentType } =
-        await this.attachementService.getFileFromStorageSignedUrl(
+      const { buffer, contentType } =
+        await this.attachementService.getFileFromStorage(
           attachementRequestParams,
           attachementRequestParams.workspaceId,
         );
@@ -142,9 +177,7 @@ export class AttachmentController {
         'Cache-Control': 'public, immutable, max-age=31536000', // Cache for 1 year (effectively infinite)
       });
 
-      https.get(signedUrl, (stream) => {
-        stream.pipe(res);
-      });
+      res.send(buffer);
     } catch (error) {
       res.status(404).send('File not found');
     }
@@ -152,14 +185,14 @@ export class AttachmentController {
 
   @Get(':attachmentId')
   @UseGuards(AuthGuard)
-  async getFileFromGCS(
+  async getFile(
     @Workspace() workspaceId: string,
     @Param() attachementRequestParams: AttachmentRequestParams,
     @Res() res: Response,
   ) {
     try {
-      const { signedUrl, contentType } =
-        await this.attachementService.getFileFromStorageSignedUrl(
+      const { buffer, contentType } =
+        await this.attachementService.getFileFromStorage(
           attachementRequestParams,
           workspaceId,
         );
@@ -171,9 +204,7 @@ export class AttachmentController {
         'Cache-Control': 'public, immutable, max-age=31536000', // Cache for 1 year (effectively infinite)
       });
 
-      https.get(signedUrl, (stream) => {
-        stream.pipe(res);
-      });
+      res.send(buffer);
     } catch (error) {
       res.status(404).send('File not found');
     }

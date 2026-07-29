@@ -228,6 +228,36 @@ issues come back in results.",
 `);
   });
 
+  it('carries guidance as its own field, beside the Definition of Done', async () => {
+    const service = buildService({});
+
+    const pack = await service.build(
+      'issue-1',
+      WORKSPACE,
+      undefined,
+      'Follow the spec style in this folder. Do not touch the migration.',
+    );
+
+    // Its own field on purpose. A criterion is what the work is judged
+    // against, the description is the problem, and this is how the person
+    // wants it approached — folding it into either would also make the pack
+    // lie about what the issue says.
+    expect(pack.guidance).toBe(
+      'Follow the spec style in this folder. Do not touch the migration.',
+    );
+    expect(pack.issue.description).not.toContain('migration');
+  });
+
+  it('leaves guidance out entirely rather than carrying a blank one', async () => {
+    const service = buildService({});
+
+    // A blank string becomes a blank heading in the prompt, which reads to a
+    // model as an instruction it failed to receive.
+    expect((await service.build('issue-1', WORKSPACE, undefined, '   ')).guidance)
+      .toBeUndefined();
+    expect((await service.build('issue-1', WORKSPACE)).guidance).toBeUndefined();
+  });
+
   it('carries the repo’s verification commands, not just its address', async () => {
     const service = buildService({
       agentRuns: {

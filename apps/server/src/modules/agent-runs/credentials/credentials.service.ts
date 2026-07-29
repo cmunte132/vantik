@@ -75,6 +75,42 @@ export class CredentialsService {
   }
 
   /**
+   * What this workspace's keys can actually drive.
+   *
+   * The catalogue was already fetched and stored when each key was saved, so
+   * this is a read rather than a round trip to every provider. Separate from
+   * `list` because that one is admin-only and rightly so — it carries hints,
+   * rotation times and base urls. Choosing a model when delegating is an
+   * ordinary member action, and it needs exactly the model ids and nothing
+   * else about the credential they came from.
+   *
+   * Empty is a real answer: a provider with no catalogue endpoint stores a
+   * working key and no list. The caller falls back to the workspace default,
+   * which is what would have been used anyway.
+   */
+  async models(
+    workspaceId: string,
+  ): Promise<Array<{ provider: string; id: string; label: string }>> {
+    const rows = await this.prisma.workspaceCredential.findMany({
+      where: { workspaceId, deleted: null, kind: 'MODEL_API_KEY' },
+      select: { provider: true, models: true },
+      orderBy: { provider: 'asc' },
+    });
+
+    return rows.flatMap((row) => {
+      const models = (row.models ?? []) as unknown as CatalogueModel[];
+
+      return Array.isArray(models)
+        ? models.map((model) => ({
+            provider: row.provider,
+            id: model.id,
+            label: model.label ?? model.id,
+          }))
+        : [];
+    });
+  }
+
+  /**
    * Stores or rotates a secret, and hands back only a masked handle.
    *
    * A model key is checked against its provider before it is stored, and a key

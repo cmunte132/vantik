@@ -310,6 +310,82 @@ export class UsersService {
   }
 
   /**
+   * An identity for one run, which nobody has to manage.
+   *
+   * Delegating to a hosted sandbox should not first require somebody to
+   * provision an agent account, choose it from a list of thirteen, and keep it
+   * alive afterwards. Vantik runs the agent, so Vantik owns the identity: it is
+   * created when the run is created, named something a person can tell apart in
+   * a comment feed, and never offered as a thing to configure.
+   *
+   * **It is given no token.** That is the security property, not an omission:
+   * a hosted run never calls the API as itself — the sandbox reports to the
+   * host and the host does the writing — so there is nothing for a credential
+   * to be needed for, and a credential that exists is one that can leak. It is
+   * also what keeps the identity out of `listAgentAccounts`, which only shows a
+   * hidden agent when it still has a live token.
+   *
+   * The row stays after the run, like every other agent identity, because it
+   * authored a comment and may have opened a pull request. Attribution that
+   * disappears is worse than a row nobody looks at.
+   */
+  async provisionRunIdentity(workspaceId: string, name: string) {
+    const email = `run-${randomBytes(8).toString('hex')}@agents.vantik.local`;
+
+    const signUp = await Passwordless.signInUp({ tenantId: 'public', email });
+    if (signUp.status !== 'OK') {
+      throw new InternalServerErrorException(
+        `Could not create the run identity: ${signUp.status}`,
+      );
+    }
+
+    await this.upsertUserForIdentity(
+      signUp.recipeUserId.getAsString(),
+      'passwordless',
+      email,
+      name,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { email },
+        data: { fullname: name, type: UserTypeEnum.Agent },
+      });
+
+      const teamIds = (
+        await tx.team.findMany({
+          where: { workspaceId },
+          select: { id: true },
+        })
+      ).map((team) => team.id);
+
+      await tx.usersOnWorkspaces.create({
+        data: {
+          userId: user.id,
+          workspaceId,
+          role: RoleEnum.AGENT,
+          teamIds,
+          joinedAt: new Date(),
+          // `hiddenAt` from birth: this is not an account, and listing it
+          // beside the ones somebody deliberately made would turn Settings →
+          // Agents into a list of every run the workspace has ever done.
+          settings: {
+            agent: {
+              ownership: 'workspace',
+              ownerUserId: null,
+              scopes: [],
+              ephemeral: true,
+              hiddenAt: new Date().toISOString(),
+            },
+          },
+        },
+      });
+
+      return { id: user.id, name };
+    });
+  }
+
+  /**
    * Provisions an agent account: a login-less identity that acts as itself in
    * the workspace, so an agent's edits are attributed to the agent rather than
    * to the person who connected it.

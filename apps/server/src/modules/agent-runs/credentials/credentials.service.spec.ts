@@ -203,6 +203,71 @@ describe('CredentialsService model access', () => {
       expect(Boolean(key)).toBe(access.source !== 'none');
     }
   });
+
+  describe('the model list the delegation sheet reads', () => {
+    /** A store whose model keys carry catalogues, as a stored key does. */
+    function serviceWithCatalogues(
+      rows: Array<{ provider: string; models: unknown }>,
+    ) {
+      const prisma = {
+        workspaceCredential: {
+          findMany: jest.fn(async () => rows),
+        },
+      };
+
+      return new CredentialsService(prisma as never);
+    }
+
+    it('flattens each provider’s catalogue into one list of choices', async () => {
+      const service = serviceWithCatalogues([
+        {
+          provider: 'openrouter',
+          // The shape a stored catalogue actually has: id and label, nothing
+          // else. Checked against a real row in the dev database.
+          models: [
+            { id: '~anthropic/claude-fable-latest', label: '~anthropic/claude-fable-latest' },
+            { id: 'google/gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
+          ],
+        },
+      ]);
+
+      expect(await service.models('ws-1')).toEqual([
+        {
+          provider: 'openrouter',
+          id: '~anthropic/claude-fable-latest',
+          label: '~anthropic/claude-fable-latest',
+        },
+        {
+          provider: 'openrouter',
+          id: 'google/gemini-3.6-flash',
+          label: 'Gemini 3.6 Flash',
+        },
+      ]);
+    });
+
+    it('survives a key stored without a catalogue', async () => {
+      // Ordinary: a provider with no catalogue endpoint stores a working key
+      // and no list, and one whose provider was unreachable stores null. The
+      // provider still has to appear in the picker, which is why the sheet
+      // reads providers separately from models.
+      const service = serviceWithCatalogues([
+        { provider: 'google', models: null },
+        { provider: '', models: [] },
+      ]);
+
+      expect(await service.models('ws-1')).toEqual([]);
+    });
+
+    it('falls back to the id when the provider named no label', async () => {
+      const service = serviceWithCatalogues([
+        { provider: 'openai', models: [{ id: 'gpt-5' }] },
+      ]);
+
+      expect(await service.models('ws-1')).toEqual([
+        { provider: 'openai', id: 'gpt-5', label: 'gpt-5' },
+      ]);
+    });
+  });
 });
 
 function restore(name: string, value: string | undefined): void {

@@ -17,3 +17,6 @@ dist
 
 # Local development data, including a signing secret
 .dev-data/
+
+# Local attachment storage for a dev server (LOCAL_STORAGE_PATH)
+.attachments/

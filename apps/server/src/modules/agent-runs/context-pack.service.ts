@@ -45,6 +45,17 @@ export interface ContextPack {
    * from a sentence it can paraphrase.
    */
   definitionOfDone: Array<{ id: string; body: string; completed: boolean }>;
+  /**
+   * What the person delegating said, beyond what the issue records.
+   *
+   * Beside the Definition of Done rather than folded into the description, for
+   * the same reason the criteria are: they are the standard the work is judged
+   * against, the description is the problem, and this is neither — it is how
+   * the person wants it approached. Folding it into the description would also
+   * make the pack lie about what the issue says, and "what was the agent told"
+   * has to stay answerable afterwards.
+   */
+  guidance?: string;
   subTasks: Array<{ key: string; title: string; done: boolean }>;
   /** Blocking and related work, so the agent knows what it must not break. */
   relations: Array<{ type: string; key: string; title: string }>;
@@ -86,6 +97,7 @@ export class ContextPackService {
     issueId: string,
     workspaceId: string,
     overrides?: AgentRunConfig,
+    guidance?: string,
   ): Promise<ContextPack> {
     const [context, repo] = await Promise.all([
       this.issueContext.getIssueContext(issueId),
@@ -118,6 +130,10 @@ export class ContextPackService {
         body: criterion.body,
         completed: criterion.completed,
       })),
+      // Trimmed, and absent rather than empty: a blank string in the pack
+      // becomes a blank heading in the prompt, which reads to a model as an
+      // instruction it failed to receive.
+      ...(guidance?.trim() ? { guidance: guidance.trim() } : {}),
       subTasks: context.subIssues.map((sub) => ({
         key: sub.key,
         title: sub.title,
@@ -143,6 +159,25 @@ export class ContextPackService {
       // executor gets them without a single adapter changing.
       knowledge: [],
     };
+  }
+
+  /**
+   * What a run against this issue would open, without opening one.
+   *
+   * The delegation sheet states the executor, repository and base branch it is
+   * about to use rather than making somebody expand a disclosure to find out.
+   * That answer is the layered resolution below, and re-deriving it in the
+   * client would mean two definitions of "which checkout" — with the client's
+   * being the one that cannot see workspace preferences at all.
+   *
+   * Builds no pack: this is the cheap half, and it runs on every open of the
+   * sheet.
+   */
+  async plan(
+    issueId: string,
+    workspaceId: string,
+  ): Promise<AgentRunRepoConfig> {
+    return this.resolveRepo(issueId, workspaceId);
   }
 
   /**

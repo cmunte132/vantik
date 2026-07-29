@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  AGENT_RUN_DEFAULT_LIMITS,
   AgentRunFilterDto,
   AgentRunRequestParamsDto,
   AppendAgentRunEventDto,
@@ -22,6 +23,8 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { UsersService } from 'modules/users/users.service';
+
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { RequiresScope } from 'modules/auth/agent-scope';
 import { Role, UserId, Workspace } from 'modules/auth/session.decorator';
@@ -29,7 +32,10 @@ import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
 import { AgentDelegationService } from './agent-delegation.service';
 import { AgentRunsService, type AgentRunScope } from './agent-runs.service';
+import { ContextPackService } from './context-pack.service';
+import { CredentialsService } from './credentials/credentials.service';
 import { ExecutorRegistry } from './executors/executor.registry';
+import { runIdentityName } from './run-identity';
 
 /**
  * The run lifecycle over HTTP.
@@ -47,6 +53,9 @@ export class AgentRunsController {
     private agentRuns: AgentRunsService,
     private delegation: AgentDelegationService,
     private registry: ExecutorRegistry,
+    private credentials: CredentialsService,
+    private contextPacks: ContextPackService,
+    private users: UsersService,
     private prisma: PrismaService,
   ) {}
 
@@ -114,6 +123,7 @@ export class AgentRunsController {
       workspaceId: workspace,
       agentUserId,
       createdById: userId,
+      guidance: body.guidance,
       executor: body.executor,
       config: body.config,
       force: body.force,
@@ -197,6 +207,33 @@ export class AgentRunsController {
     );
   }
 
+  /**
+   * The models this workspace's keys can drive.
+   *
+   * Read by the delegation sheet, so choosing a model is a list rather than a
+   * typed string that fails an hour later at run time. Deliberately reachable
+   * by any member: delegating is not an administrative act, and the answer
+   * carries model ids only — never a hint, a base url, or anything else about
+   * the credential the list came from.
+   */
+  @Get('meta/models')
+  @UseGuards(AuthGuard)
+  async listModels(@Workspace() workspace: string) {
+    const [providers, models] = await Promise.all([
+      this.credentials.providers(workspace),
+      this.credentials.models(workspace),
+    ]);
+
+    // Providers are listed separately rather than derived from the models,
+    // because a provider whose catalogue could not be fetched has a working
+    // key and no models — and a key you configured vanishing from the picker
+    // is worse than a picker with nothing under it.
+    return {
+      providers: providers.filter(Boolean),
+      models,
+    };
+  }
+
   /** What this deployment can run work on, and whether each is usable here. */
   @Get('meta/executors')
   @UseGuards(AuthGuard)
@@ -208,6 +245,36 @@ export class AgentRunsController {
         ...(await executor.availability(workspace)),
       })),
     );
+  }
+
+  /**
+   * What a run against this issue would open, without opening one.
+   *
+   * The repository, base branch and delivery the delegation sheet states up
+   * front. Resolved here because it is the layering of workspace defaults, the
+   * issue's modules and the request — none of which the client can see.
+   */
+  @Get('meta/plan')
+  @UseGuards(AuthGuard)
+  async plan(
+    @Workspace() workspace: string,
+    @Query('issueId') issueId: string,
+  ) {
+    if (!issueId) {
+      throw new BadRequestException({
+        message: 'Name the issue to plan a run for.',
+      });
+    }
+
+    const repo = await this.contextPacks.plan(issueId, workspace);
+
+    return {
+      repoUrl: repo.repoUrl ?? null,
+      repoPath: repo.repoPath ?? null,
+      baseBranch: repo.baseBranch ?? null,
+      delivery: repo.delivery ?? null,
+      limits: AGENT_RUN_DEFAULT_LIMITS,
+    };
   }
 
   /**
@@ -322,49 +389,51 @@ export class AgentRunsController {
   }
 
   /**
-   * Which agent to delegate to.
+   * Which identity the work is attributed to.
    *
-   * Named explicitly, or inferred when the workspace has exactly one agent —
-   * making a caller look up a uuid to use the only agent there is would be
-   * friction for nothing. Two or more and it has to be said, because picking
-   * one for the user would attribute work to an identity they did not choose.
+   * Named explicitly by a caller that has an agent account it wants credited —
+   * a BYO runner authenticating as itself, or a script. Otherwise the run gets
+   * a fresh identity of its own, created here and managed by nobody.
+   *
+   * This used to refuse when the workspace had more than one agent, on the
+   * reasoning that picking one would attribute work to an identity the user did
+   * not choose. That reasoning was right and the conclusion was wrong: the fix
+   * is not to make somebody choose, it is to stop making a run borrow an
+   * account that belongs to something else. Vantik runs the agent, so Vantik
+   * owns the identity — and a workspace that has never provisioned anything can
+   * now delegate, which is the point.
    */
   private async resolveAgent(
     workspaceId: string,
     requested?: string,
   ): Promise<string> {
-    const agents = await this.prisma.usersOnWorkspaces.findMany({
-      // UsersOnWorkspaces has no soft-delete column; a revoked agent is marked
-      // by status rather than removed.
-      where: { workspaceId, role: RoleEnum.AGENT, status: 'ACTIVE' },
-      select: { userId: true },
-    });
-
     if (requested) {
-      if (!agents.some((agent) => agent.userId === requested)) {
+      const agent = await this.prisma.usersOnWorkspaces.findFirst({
+        // UsersOnWorkspaces has no soft-delete column; a revoked agent is
+        // marked by status rather than removed.
+        where: {
+          workspaceId,
+          userId: requested,
+          role: RoleEnum.AGENT,
+          status: 'ACTIVE',
+        },
+        select: { userId: true },
+      });
+
+      if (!agent) {
         throw new BadRequestException({
           message: `${requested} is not an agent in this workspace.`,
         });
       }
-      return requested;
+
+      return agent.userId;
     }
 
-    if (agents.length === 0) {
-      throw new BadRequestException({
-        message:
-          'This workspace has no agent accounts. Create one in Settings → ' +
-          'Agents before delegating.',
-      });
-    }
+    const minted = await this.users.provisionRunIdentity(
+      workspaceId,
+      runIdentityName(),
+    );
 
-    if (agents.length > 1) {
-      throw new BadRequestException({
-        message:
-          `This workspace has ${agents.length} agents; name the one to ` +
-          'delegate to with agentUserId.',
-      });
-    }
-
-    return agents[0].userId;
+    return minted.id;
   }
 }

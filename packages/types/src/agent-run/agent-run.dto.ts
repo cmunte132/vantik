@@ -129,6 +129,22 @@ export class CreateAgentRunDto {
   issueId: string;
 
   /**
+   * What the person delegating knows that the issue does not say.
+   *
+   * Its own field rather than something folded into the description, and not a
+   * criterion either: a criterion is a thing the work is judged against, and
+   * this is a thing the work should take into account — "follow the spec style
+   * in this folder", "do not touch the migration". Three different objects, so
+   * three different fields.
+   *
+   * The highest-leverage input a delegating human has, and the only one with
+   * no sensible default.
+   */
+  @IsOptional()
+  @IsString()
+  guidance?: string;
+
+  /**
    * The AGENT user to delegate to. Optional: with one agent in the workspace
    * the caller should not have to name it.
    */

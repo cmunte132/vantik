@@ -64,6 +64,8 @@ export interface ContextPack {
     url?: string | null;
   };
   definitionOfDone?: Array<{ body: string; completed: boolean }>;
+  /** What the person delegating said, beyond what the issue records. */
+  guidance?: string;
   subTasks?: Array<{ key: string; title: string; done: boolean }>;
   relations?: Array<{ type: string; key: string; title: string }>;
   comments?: Array<{ author: string | null; at: string; body: string }>;
@@ -91,12 +93,57 @@ export interface HarnessLimits {
   maxCostUsd?: number;
 }
 
+/**
+ * What a step was, as opposed to what it printed.
+ *
+ * A reader scanning a run asks which files it touched, what it searched for,
+ * and which command broke — none of which is answerable from a string. A kind
+ * is what lets the app draw an icon, say the step in English, merge four reads
+ * into one row, and open a failure where it failed.
+ *
+ * Deliberately small and closed. Every harness has its own tool names; this is
+ * the set every harness can be mapped onto, and a client that meets a kind it
+ * does not know falls back to the message, so adding one later breaks nothing.
+ */
+export type AgentStepKind = 'read' | 'write' | 'search' | 'bash' | 'test';
+
+/**
+ * The structured half of a progress event.
+ *
+ * Mirrored in `@vantikhq/types` for the server and the app, the same way
+ * `PI_VERSION` is: this package publishes on its own and must not depend on
+ * the server's type surface.
+ */
+export interface AgentStepData extends Record<string, unknown> {
+  kind: AgentStepKind;
+  /**
+   * The tool call this step belongs to.
+   *
+   * A step is reported when it starts, so a live run shows work in flight
+   * rather than nothing for the length of a test suite. Its outcome arrives
+   * later as a second event carrying the same ref, which is what lets a reader
+   * — and the app — put the two together.
+   */
+  ref?: string;
+  /** What it acted on: a path for read and write, a query for a search. */
+  target?: string;
+  /** The command, for bash and test. */
+  command?: string;
+  /** Set on the outcome event: false means the step failed. */
+  ok?: boolean;
+  exit?: number;
+  /** What it printed, kept only when it failed. Success output is noise. */
+  output?: string;
+  passed?: number;
+  failed?: number;
+}
+
 export interface HarnessEvent {
   level?: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
   message: string;
   /** Which phase this belongs to: `setup`, `implement`, `verify`, `report`. */
   phase?: string;
-  data?: Record<string, unknown>;
+  data?: AgentStepData | Record<string, unknown>;
 }
 
 export interface HarnessResult {

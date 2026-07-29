@@ -101,7 +101,11 @@ async function handleRun(run: ClaimedRun, options: DaemonOptions) {
 
   const note = async (
     text: string,
-    extra: { phase?: string; level?: string } = {},
+    extra: {
+      phase?: string;
+      level?: string;
+      data?: Record<string, unknown>;
+    } = {},
   ) => {
     await appendFile(logPath, `${new Date().toISOString()} ${text}\n`).catch(
       () => undefined,
@@ -179,7 +183,13 @@ async function handleRun(run: ClaimedRun, options: DaemonOptions) {
       },
       limits: config.limits ?? {},
       onEvent: (event) =>
-        void note(event.message, { phase: event.phase, level: event.level }),
+        // `data` is the whole point of the typed events: dropping it here is
+        // what left the app with nothing but strings to draw a timeline from.
+        void note(event.message, {
+          phase: event.phase,
+          level: event.level,
+          data: event.data,
+        }),
       signal: controller.signal,
     });
     phaseTimings.implement = Date.now() - implementStart;
@@ -288,6 +298,11 @@ async function handleRun(run: ClaimedRun, options: DaemonOptions) {
         filesChanged: stat.filesChanged,
         insertions: stat.insertions,
         deletions: stat.deletions,
+        // What it cost. Reported on the failure path already, and its absence
+        // here meant a run that worked was the one run you could not find a
+        // price for — which is the wrong way round for deciding whether to
+        // delegate the next one.
+        ...(result.costUsd ? { costUsd: result.costUsd } : {}),
         ...(result.promptTokens ? { promptTokens: result.promptTokens } : {}),
         ...(result.completionTokens
           ? { completionTokens: result.completionTokens }

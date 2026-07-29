@@ -49,6 +49,11 @@ export const AgentRunEvent = types.model({
   level: types.string,
   message: types.string,
   phase: types.union(types.string, types.null, types.undefined),
+  // What the step was — kind, target, exit code, output. Frozen for the same
+  // reason `result` is: a client must not reject an event because a newer
+  // harness reported a kind this bundle has never heard of. The timeline reads
+  // what it recognises and renders the message for the rest.
+  data: types.frozen(),
   runId: types.string,
 });
 

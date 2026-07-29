@@ -42,6 +42,8 @@ export interface DelegateInput {
   agentUserId: string;
   /** The member delegating. Never derived from issue content. */
   createdById: string | null;
+  /** What the delegating member knows that the issue does not say. */
+  guidance?: string;
   executor?: string | null;
   config?: AgentRunConfig;
   force?: boolean;
@@ -96,6 +98,7 @@ export class AgentDelegationService {
       input.issueId,
       input.workspaceId,
       input.config,
+      input.guidance,
     );
 
     // What to run on, layered the same way everything else is: the workspace's
@@ -275,7 +278,7 @@ export class AgentDelegationService {
       },
     });
 
-    await this.postSummary(run.issueId, run.agentUserId, {
+    await this.postSummary(run.issueId, run.agentUserId, runId, {
       status,
       summary: report.summary,
       error: report.error,
@@ -333,6 +336,7 @@ export class AgentDelegationService {
   private async postSummary(
     issueId: string,
     agentUserId: string,
+    runId: string,
     outcome: {
       status: AgentRunStatus;
       summary?: string;
@@ -383,6 +387,12 @@ export class AgentDelegationService {
     try {
       await this.comments.createIssueComment({ issueId }, agentUserId, {
         bodyMarkdown: lines.join('\n'),
+        // Names the run this comment reports on. The issue view renders it as
+        // the run's card rather than as prose, so the handback is one object in
+        // the feed instead of a card and a paraphrase of it side by side. Every
+        // other reader — the API, MCP, mail — still gets the markdown, which is
+        // why this stays a comment rather than becoming a client-only card.
+        sourceMetadata: { source: 'agent-run', agentRunId: runId },
       });
     } catch (error) {
       this.logger.error({

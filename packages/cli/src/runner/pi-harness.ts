@@ -5,8 +5,10 @@ import {
 
 import { breach, newSpend } from './budget';
 import type {
+  AgentStepKind,
   ContextPack,
   Harness,
+  HarnessEvent,
   HarnessRequest,
   HarnessResult,
   VerificationCommands,
@@ -372,9 +374,7 @@ function parseLine(line: string): Record<string, never> | null {
 }
 
 /** Turns a harness event into a progress line worth storing, or nothing. */
-export function describe(
-  event: Record<string, never>,
-): { message: string; phase?: string; level?: 'INFO' | 'WARN' | 'ERROR' } | null {
+export function describe(event: Record<string, never>): HarnessEvent | null {
   const type = String(event.type ?? '');
 
   // Pi's names, not the ones an earlier draft of this file guessed. It emits
@@ -384,12 +384,67 @@ export function describe(
   if (type === 'tool_execution_start') {
     const name = String(event.toolName ?? 'a tool');
     const detail = describeToolArgs(event.args);
+    const kind = kindOf(name, detail);
 
     return {
       message: detail ? `${name}: ${detail}` : `Running ${name}`,
       phase: 'implement',
+      data: {
+        kind,
+        ...(event.toolCallId ? { ref: String(event.toolCallId) } : {}),
+        ...(detail
+          ? kind === 'bash' || kind === 'test'
+            ? { command: detail }
+            : { target: detail }
+          : {}),
+      },
     };
   }
+
+  // A test result that passed, which is the one success worth a second event.
+  //
+  // "The read worked" says nothing a reader wanted; "6 passed" is the fact the
+  // whole run is arranged to produce. Recognised from the output rather than
+  // from the tool name, because at this point the command is no longer in
+  // hand — output that states a pass count is a test result whatever ran it.
+  if (type === 'tool_execution_end' && !event.isError) {
+    const counts = testCountsOf(textOf(event.result));
+
+    return counts
+      ? {
+          message: `Tests passed: ${counts.passed}`,
+          phase: 'implement',
+          data: {
+            kind: 'test',
+            ...(event.toolCallId ? { ref: String(event.toolCallId) } : {}),
+            ok: true,
+            ...counts,
+          },
+        }
+      : null;
+  }
+
+  // Otherwise only a failure. A step that worked has already been reported by
+  // its start event, and repeating every one of them to say "and it was fine"
+  // is how the log filled up with lines nobody read in the first place.
+  if (type === 'tool_execution_end' && event.isError) {
+    const name = String(event.toolName ?? 'a tool');
+    const output = textOf(event.result);
+
+    return {
+      message: `${name} failed`,
+      level: 'ERROR',
+      phase: 'implement',
+      data: {
+        kind: kindOf(name, null),
+        ...(event.toolCallId ? { ref: String(event.toolCallId) } : {}),
+        ok: false,
+        ...(exitCodeOf(output) != null ? { exit: exitCodeOf(output) } : {}),
+        ...(output ? { output: output.slice(-OUTPUT_LIMIT) } : {}),
+      },
+    };
+  }
+
   if (type === 'auto_retry_start') {
     return {
       message: 'The model call failed; retrying',
@@ -407,14 +462,52 @@ export function describe(
       phase: 'implement',
     };
   }
-  if (type === 'turn_end') {
-    return { message: 'Finished a turn', phase: 'implement' };
-  }
+
+  // `turn_end` is deliberately not a progress line. Pi emits one after every
+  // tool call, and in a real 43-line run nineteen of them said "Finished a
+  // turn" — the single biggest reason the log was unreadable. The turn still
+  // counts towards iterations and idleness in `onLine`; it just is not
+  // something the agent *did*.
 
   // Everything else is transcript noise. Storing it would make a failed run
   // harder to read, not easier.
   return null;
 }
+
+/** How much of a failing command's output is worth keeping. */
+const OUTPUT_LIMIT = 2000;
+
+/**
+ * Which of the five kinds a tool is.
+ *
+ * Pi's own tool set — bash, edit, find, grep, ls, read, write — maps onto them
+ * exactly, which is a good sign the vocabulary is the right size. Anything a
+ * future Pi adds falls through to `bash`, and a client that cannot draw it
+ * still has the message.
+ */
+function kindOf(toolName: string, detail: string | null): AgentStepKind {
+  const name = toolName.toLowerCase();
+
+  if (name === 'read' || name === 'ls') {
+    return 'read';
+  }
+  if (name === 'write' || name === 'edit') {
+    return 'write';
+  }
+  if (name === 'grep' || name === 'find') {
+    return 'search';
+  }
+
+  // A test run is a bash call that matters more than the others: it is the
+  // step a reader looks for first, and the one whose failure they came to see.
+  // Recognised by shape rather than by comparing against the configured test
+  // command, because an agent runs one suite, one file and one case, and only
+  // the first of those would ever match.
+  return detail && TEST_COMMAND.test(detail) ? 'test' : 'bash';
+}
+
+const TEST_COMMAND =
+  /(^|\s|\/)(jest|vitest|pytest|rspec|mocha|ava|phpunit)(\s|$)|\b(test|tests)\b/i;
 
 /** The one fact about a tool call worth a log line: what it acted on. */
 function describeToolArgs(args: unknown): string | null {
@@ -423,11 +516,79 @@ function describeToolArgs(args: unknown): string | null {
   }
 
   const record = args as Record<string, unknown>;
-  const interesting = record.command ?? record.path ?? record.file_path;
+  const interesting =
+    record.command ?? record.path ?? record.file_path ?? record.pattern;
 
   return typeof interesting === 'string'
     ? (interesting.split('\n')[0] ?? '').slice(0, 120) || null
     : null;
+}
+
+/** A tool result as text, whatever shape the harness reported it in. */
+function textOf(result: unknown): string {
+  if (typeof result === 'string') {
+    return result;
+  }
+  if (result && typeof result === 'object') {
+    const content = (result as { content?: unknown; text?: unknown }).content;
+
+    if (Array.isArray(content)) {
+      return content
+        .map((part) =>
+          part && typeof part === 'object'
+            ? String((part as { text?: unknown }).text ?? '')
+            : '',
+        )
+        .join('\n')
+        .trim();
+    }
+
+    const text = (result as { text?: unknown }).text;
+    if (typeof text === 'string') {
+      return text;
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Pass and fail counts, when the output stated them.
+ *
+ * Every runner words its summary differently — `6 passed`, `Tests: 6 passed`,
+ * `6 passing` — but all of them put the number immediately beside the word,
+ * which is the only part worth relying on. No match means this was not a test
+ * run, or was one whose reporter says nothing countable, and the step keeps
+ * the plainer "Ran the tests".
+ */
+function testCountsOf(
+  output: string,
+): { passed: number; failed?: number } | null {
+  const passed = /(\d+) (?:passed|passing)\b/i.exec(output);
+
+  if (!passed) {
+    return null;
+  }
+
+  const failed = /(\d+) (?:failed|failing)\b/i.exec(output);
+
+  return {
+    passed: Number(passed[1]),
+    ...(failed ? { failed: Number(failed[1]) } : {}),
+  };
+}
+
+/**
+ * The exit code Pi's bash tool states in the text it throws.
+ *
+ * It reports failure by throwing `…Command exited with code N` rather than by
+ * carrying a status field, so this is where the number is. No match means the
+ * step failed some other way — a timeout, an abort — and `ok: false` already
+ * says the part that matters.
+ */
+function exitCodeOf(output: string): number | undefined {
+  const match = /Command exited with code (\d+)/.exec(output);
+  return match ? Number(match[1]) : undefined;
 }
 
 /** Tokens and dollars from one message, when the provider reported them. */
@@ -533,6 +694,20 @@ function prompt(pack: ContextPack, verification: VerificationCommands): string {
       '## Where this lives',
       '',
       `This issue is about ${pack.repo.pathPrefixes.join(', ')} in this repository. Start there.`,
+    );
+  }
+
+  // Above the Definition of Done on purpose. It is how the person wants the
+  // work approached, and an instruction about approach is worth nothing once
+  // the approach has been chosen.
+  if (pack.guidance) {
+    parts.push(
+      '',
+      '## What the person delegating asked for',
+      '',
+      'Said directly to you, and not recorded on the issue. Follow it:',
+      '',
+      pack.guidance,
     );
   }
 

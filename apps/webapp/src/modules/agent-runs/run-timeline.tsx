@@ -1,16 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Badge } from '@vantikhq/ui/components/badge';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@vantikhq/ui/components/collapsible';
-import { ChevronDown, ChevronRight } from '@vantikhq/ui/icons';
+  CheckLine,
+  ChevronDown,
+  ChevronRight,
+  Code,
+  CrossLine,
+  DocumentLine,
+  EditLine,
+  SearchLine,
+} from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
-import { PHASE_LABEL, PHASE_ORDER, isLive } from './run-vocabulary';
+import { PHASE_LABEL, PHASE_ORDER, formatMs, isLive } from './run-vocabulary';
 
 interface Props {
   run: any;
@@ -18,17 +21,20 @@ interface Props {
 }
 
 /**
- * What the agent did, as the phases it moved through rather than as a log.
+ * What the agent did, as one continuous rail.
  *
- * A raw transcript is the thing this screen exists not to be. The events
- * already carry the phase the runner was in, so they group into steps a person
- * thinks in — set up, do the work, run the checks, hand it back — and each one
- * collapses to a heading with a count and a duration. Scanning a finished run,
- * the questions are which phase took the time and which one broke, and neither
- * is answerable from a flat list of lines.
+ * A run is one thing that progressed, so it is drawn as one line with nodes on
+ * it. Four bordered accordions — which is what this was — draw four unrelated
+ * things and rank none of them.
  *
- * The phase still running stays open. Finished phases start closed, because a
- * finished phase is a heading and a duration until somebody asks for more.
+ * Three rules do most of the work. Adjacent steps of the same kind merge into
+ * one row with a count, because twenty file reads are worth one line of
+ * vertical space and not twenty. A step that failed opens itself and shows its
+ * output, because that is the whole reason anyone opens this page after a bad
+ * run. Everything else is a heading until somebody asks.
+ *
+ * A live run and a finished one render identically — the last node pulses and
+ * new steps append. Nothing reflows when the run ends.
  */
 export const RunTimeline = observer(({ run, events }: Props) => {
   const phases = groupByPhase(events);
@@ -37,7 +43,7 @@ export const RunTimeline = observer(({ run, events }: Props) => {
 
   if (phases.length === 0) {
     return (
-      <p className="p-3 text-muted-foreground">
+      <p className="text-muted-foreground">
         {live
           ? 'Waiting for the runner to report something.'
           : 'This run recorded no progress events.'}
@@ -45,82 +51,339 @@ export const RunTimeline = observer(({ run, events }: Props) => {
     );
   }
 
-  const lastPhase = phases[phases.length - 1]?.phase;
-
   return (
-    <div className="flex flex-col divide-y divide-border">
-      {phases.map(({ phase, lines }) => (
-        <Phase
+    <div className="flex flex-col">
+      {phases.map(({ phase, lines }, index) => (
+        <PhaseNode
           key={phase}
           phase={phase}
-          lines={lines}
+          steps={toSteps(lines)}
           durationMs={timings[phase]}
-          defaultOpen={live && phase === lastPhase}
+          running={live && index === phases.length - 1}
+          last={index === phases.length - 1}
         />
       ))}
     </div>
   );
 });
 
-const Phase = observer(
+const PhaseNode = observer(
   ({
     phase,
-    lines,
+    steps,
     durationMs,
-    defaultOpen,
+    running,
+    last,
   }: {
     phase: string;
-    lines: any[];
+    steps: Step[];
     durationMs?: number;
-    defaultOpen: boolean;
+    running: boolean;
+    last: boolean;
   }) => {
-    const [open, setOpen] = React.useState(defaultOpen);
-    const broke = lines.some((line) => line.level === 'ERROR');
+    const broke = steps.some((step) => step.failed);
 
     return (
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-grayAlpha-100">
-          {open ? (
-            <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
-          )}
+      <div className="flex flex-col">
+        <div className="flex items-center gap-2.5 py-2">
+          <Node state={running ? 'now' : broke ? 'fail' : 'done'} line={!last} />
 
-          <span className={cn('grow truncate', broke && 'text-destructive')}>
+          <span className="grow truncate font-medium">
             {PHASE_LABEL[phase] ?? phase}
           </span>
 
           {durationMs ? (
             <span className="shrink-0 font-mono text-xs text-muted-foreground">
-              {Math.round(durationMs / 1000)}s
+              {formatMs(durationMs)}
             </span>
           ) : null}
+        </div>
 
-          <Badge variant="secondary" className="shrink-0">
-            {lines.length}
-          </Badge>
-        </CollapsibleTrigger>
+        {steps.length > 0 && (
+          <div className="flex">
+            {/* The rail continues past the steps, so the phases read as one
+                line rather than as a stack of blocks. */}
+            <div className="relative w-5 shrink-0">
+              {!last && (
+                <span className="absolute inset-y-0 left-1/2 -ml-px w-px bg-border" />
+              )}
+            </div>
 
-        <CollapsibleContent>
-          <ul className="flex flex-col gap-0.5 px-3 pb-3 pl-8">
-            {lines.map((line) => (
-              <li
-                key={line.id}
-                className={cn(
-                  'font-mono text-xs leading-relaxed text-muted-foreground',
-                  line.level === 'ERROR' && 'text-destructive',
-                  line.level === 'WARN' && 'text-amber-600 dark:text-amber-500',
-                )}
-              >
-                {line.message}
-              </li>
-            ))}
-          </ul>
-        </CollapsibleContent>
-      </Collapsible>
+            <div className="flex min-w-0 grow flex-col pb-2">
+              {steps.map((step) => (
+                <StepRow key={step.id} step={step} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     );
   },
 );
+
+const Node = ({
+  state,
+  line,
+}: {
+  state: 'done' | 'fail' | 'now';
+  line: boolean;
+}) => (
+  <span className="relative grid w-5 shrink-0 place-items-center self-stretch">
+    {line && (
+      <span className="absolute inset-y-0 left-1/2 -ml-px w-px bg-border" />
+    )}
+
+    <span
+      className={cn(
+        'z-10 grid size-[18px] place-items-center rounded-full border bg-background',
+        state === 'done' && 'border-green-500/45 text-green-600',
+        state === 'fail' && 'border-destructive/50 text-destructive',
+        state === 'now' && 'animate-pulse border-primary/55 text-primary',
+      )}
+    >
+      {state === 'fail' ? (
+        <CrossLine size={10} />
+      ) : state === 'now' ? (
+        <span className="size-1.5 rounded-full bg-current" />
+      ) : (
+        <CheckLine size={10} />
+      )}
+    </span>
+  </span>
+);
+
+const StepRow = observer(({ step }: { step: Step }) => {
+  // A failure opens itself. Everything else waits to be asked.
+  const [open, setOpen] = React.useState(step.failed);
+  const expandable = step.targets.length > 1 || Boolean(step.output);
+
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        disabled={!expandable}
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'flex min-w-0 items-center gap-2 rounded px-2 py-1 text-left',
+          expandable && 'hover:bg-grayAlpha-100',
+          step.failed && 'text-destructive',
+        )}
+      >
+        <StepIcon step={step} />
+
+        <span className="min-w-0 grow truncate">{phrase(step)}</span>
+
+        {step.count > 1 && (
+          <span className="shrink-0 font-mono text-xs text-muted-foreground">
+            {step.count}
+          </span>
+        )}
+
+        {expandable &&
+          (open ? (
+            <ChevronDown size={12} className="shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight size={12} className="shrink-0 text-muted-foreground" />
+          ))}
+      </button>
+
+      {open && step.targets.length > 1 && (
+        <ul className="ml-7 flex flex-col gap-0.5 border-l border-border pl-3">
+          {step.targets.map((target, index) => (
+            <li
+              key={`${target}-${index}`}
+              className="truncate font-mono text-xs text-muted-foreground"
+            >
+              {target}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {open && step.output && (
+        <pre className="ml-7 my-1 max-h-64 overflow-auto rounded bg-grayAlpha-100 p-2 font-mono text-xs whitespace-pre-wrap">
+          {step.output}
+        </pre>
+      )}
+    </div>
+  );
+});
+
+const StepIcon = ({ step }: { step: Step }) => {
+  const className = cn(
+    'shrink-0',
+    step.failed ? 'text-destructive' : 'text-muted-foreground',
+  );
+
+  switch (step.kind) {
+    case 'read':
+      return <DocumentLine size={13} className={className} />;
+    case 'write':
+      return <EditLine size={13} className={className} />;
+    case 'search':
+      return <SearchLine size={13} className={className} />;
+    case 'test':
+      return step.failed ? (
+        <CrossLine size={13} className={className} />
+      ) : (
+        <CheckLine size={13} className={className} />
+      );
+    case 'bash':
+      return <Code size={13} className={className} />;
+    default:
+      // No kind, or one this bundle has never heard of. The row still appears,
+      // carrying its message — an older run, or a newer harness, must not
+      // produce a blank timeline.
+      return <span className={cn(className, 'w-[13px]')} />;
+  }
+};
+
+export interface Step {
+  id: string;
+  kind?: string;
+  /** What the harness said, and the only thing an unknown kind can show. */
+  message: string;
+  targets: string[];
+  command?: string;
+  count: number;
+  failed: boolean;
+  output?: string;
+  exit?: number;
+  /** Test counts, when the run's reporter stated them. */
+  passed?: number;
+  failedCount?: number;
+}
+
+/** The kinds where four in a row are one fact, not four. */
+const MERGES = ['read', 'search'];
+
+/**
+ * Events into steps.
+ *
+ * Two transformations, both of which need the events in order. An outcome
+ * event carrying a `ref` is not a step of its own — it is the ending of one
+ * already on screen, so it is folded back into it. And adjacent steps of a
+ * mergeable kind collapse into one row that counts them.
+ */
+export function toSteps(events: any[]): Step[] {
+  const steps: Step[] = [];
+  const byRef = new Map<string, Step>();
+
+  for (const event of events) {
+    const data = (event.data ?? undefined) as
+      | {
+          kind?: string;
+          ref?: string;
+          target?: string;
+          command?: string;
+          ok?: boolean;
+          exit?: number;
+          output?: string;
+          passed?: number;
+          failed?: number;
+        }
+      | undefined;
+
+    // The ending of a step already reported. Never its own row: the step is
+    // where the reader is looking, and a second line saying the same call also
+    // finished is the log this screen exists to replace.
+    if (data?.ok != null && data.ref) {
+      const started = byRef.get(data.ref);
+
+      if (started) {
+        started.failed = data.ok === false;
+        started.output = data.output;
+        started.exit = data.exit;
+        started.passed = data.passed;
+        started.failedCount = data.failed;
+        continue;
+      }
+    }
+
+    const detail = data?.target ?? data?.command;
+    const previous = steps[steps.length - 1];
+
+    if (
+      data?.kind &&
+      MERGES.includes(data.kind) &&
+      previous?.kind === data.kind &&
+      !previous.failed
+    ) {
+      previous.count += 1;
+      if (detail) {
+        previous.targets.push(detail);
+      }
+      continue;
+    }
+
+    const step: Step = {
+      id: event.id,
+      kind: data?.kind,
+      message: event.message,
+      targets: detail ? [detail] : [],
+      command: data?.command,
+      count: 1,
+      failed: event.level === 'ERROR',
+      ...(data?.output ? { output: data.output } : {}),
+      ...(data?.exit != null ? { exit: data.exit } : {}),
+    };
+
+    steps.push(step);
+
+    if (data?.ref) {
+      byRef.set(data.ref, step);
+    }
+  }
+
+  return steps;
+}
+
+/** A step said the way a person would say it. */
+export function phrase(step: Step): string {
+  const first = step.targets[0];
+
+  switch (step.kind) {
+    case 'read':
+      if (!first) {
+        return 'Read a file';
+      }
+      return step.count > 1
+        ? `Read ${basename(first)} and ${step.count - 1} more`
+        : `Read ${basename(first)}`;
+
+    case 'write':
+      return first ? `Wrote ${basename(first)}` : 'Wrote a file';
+
+    case 'search':
+      if (!first) {
+        return 'Searched the code';
+      }
+      return step.count > 1
+        ? `Searched for ${first} and ${step.count - 1} more`
+        : `Searched for ${first}`;
+
+    case 'test':
+      if (step.failed) {
+        return step.failedCount != null
+          ? `Ran the tests — ${step.failedCount} failed`
+          : 'Ran the tests — failed';
+      }
+      return step.passed != null
+        ? `Ran the tests — ${step.passed} passed`
+        : 'Ran the tests';
+
+    case 'bash':
+      return step.command ?? step.message;
+
+    default:
+      return step.message;
+  }
+}
+
+/** The end of a path, which is the part that identifies it to a reader. */
+function basename(path: string): string {
+  return path.split('/').filter(Boolean).pop() ?? path;
+}
 
 /**
  * Events into phases, in the order the run moves through them.

@@ -30,29 +30,145 @@ describe('describe', () => {
       describeEvent({
         type: 'tool_execution_start',
         toolName: 'bash',
-        args: { command: 'pnpm test' },
+        args: { command: 'pnpm lint' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any),
-    ).toEqual({ message: 'bash: pnpm test', phase: 'implement' });
+    ).toEqual({
+      message: 'bash: pnpm lint',
+      phase: 'implement',
+      data: { kind: 'bash', command: 'pnpm lint' },
+    });
   });
 
   it('says what a file tool touched', () => {
     expect(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       describeEvent({ type: 'tool_execution_start', toolName: 'edit', args: { path: 'apps/server/src/main.ts' } } as any),
-    ).toEqual({ message: 'edit: apps/server/src/main.ts', phase: 'implement' });
+    ).toEqual({
+      message: 'edit: apps/server/src/main.ts',
+      phase: 'implement',
+      data: { kind: 'write', target: 'apps/server/src/main.ts' },
+    });
   });
 
   it('falls back to the tool name when the arguments say nothing useful', () => {
     expect(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       describeEvent({ type: 'tool_execution_start', toolName: 'read', args: {} } as any),
-    ).toEqual({ message: 'Running read', phase: 'implement' });
+    ).toEqual({
+      message: 'Running read',
+      phase: 'implement',
+      data: { kind: 'read' },
+    });
+  });
+
+  it('maps Pi’s tool set onto the five kinds the app can draw', () => {
+    const kindOf = (toolName: string, args: Record<string, string> = {}) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (describeEvent({ type: 'tool_execution_start', toolName, args } as any)
+        ?.data as { kind: string })?.kind;
+
+    expect(kindOf('read')).toBe('read');
+    expect(kindOf('ls')).toBe('read');
+    expect(kindOf('write')).toBe('write');
+    expect(kindOf('edit')).toBe('write');
+    expect(kindOf('grep', { pattern: 'LOCAL_REPO_SLUG' })).toBe('search');
+    expect(kindOf('find')).toBe('search');
+    expect(kindOf('bash', { command: 'git status' })).toBe('bash');
+  });
+
+  it('calls a test run a test, because it is the step a reader looks for', () => {
+    const data = describeEvent({
+      type: 'tool_execution_start',
+      toolName: 'bash',
+      args: { command: 'cd apps/server && pnpm exec jest repo-routing' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)?.data as { kind: string };
+
+    expect(data.kind).toBe('test');
+  });
+
+  it('carries the ref, so an outcome can be matched to the step it belongs to', () => {
+    const start = describeEvent({
+      type: 'tool_execution_start',
+      toolName: 'bash',
+      toolCallId: 'call_7',
+      args: { command: 'pnpm build' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    const end = describeEvent({
+      type: 'tool_execution_end',
+      toolName: 'bash',
+      toolCallId: 'call_7',
+      isError: true,
+      result: 'boom\n\nCommand exited with code 2',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    expect((start?.data as { ref: string }).ref).toBe('call_7');
+    expect(end?.level).toBe('ERROR');
+    expect(end?.data).toEqual({
+      kind: 'bash',
+      ref: 'call_7',
+      ok: false,
+      exit: 2,
+      output: 'boom\n\nCommand exited with code 2',
+    });
+  });
+
+  it('reads output out of the content blocks a tool result arrives in', () => {
+    const end = describeEvent({
+      type: 'tool_execution_end',
+      toolName: 'bash',
+      isError: true,
+      result: { content: [{ type: 'text', text: "Cannot find module '.prisma/client'" }] },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    expect((end?.data as { output: string }).output).toBe(
+      "Cannot find module '.prisma/client'",
+    );
+  });
+
+  it('counts a passing test run, which is the one success worth reporting', () => {
+    const end = describeEvent({
+      type: 'tool_execution_end',
+      toolName: 'bash',
+      toolCallId: 'call_9',
+      isError: false,
+      result: 'Tests: 6 passed, 6 total',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    expect(end?.data).toEqual({
+      kind: 'test',
+      ref: 'call_9',
+      ok: true,
+      passed: 6,
+    });
+  });
+
+  it('says nothing about a step that worked', () => {
+    // The start event already reported it. Repeating every success to say it
+    // was fine is how the log filled with lines nobody read.
+    expect(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      describeEvent({ type: 'tool_execution_end', toolName: 'read', isError: false } as any),
+    ).toBeNull();
   });
 
   it('records a retry as a warning, because a run that retries is a run in trouble', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(describeEvent({ type: 'auto_retry_start' } as any)?.level).toBe('WARN');
+  });
+
+  it('no longer logs a line per turn', () => {
+    // Nineteen of the forty-three lines in a real run were this one event.
+    // The turn still counts towards iterations in `onLine`; it is just not
+    // something the agent did.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(describeEvent({ type: 'turn_end' } as any)).toBeNull();
   });
 
   it('keeps everything else out of the log', () => {

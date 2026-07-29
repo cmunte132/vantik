@@ -259,6 +259,57 @@ export interface AgentRunConfig extends AgentRunRepoConfig {
   dryRun?: boolean;
 }
 
+/**
+ * What a step was, as opposed to what it printed.
+ *
+ * The reading half of the vocabulary the harness writes. Mirrored from
+ * `packages/cli/src/runner/contract.ts` rather than imported: the CLI is
+ * published on its own and must not depend on this package. The consumers
+ * treat an unknown kind as absent and fall back to the message, so the two
+ * sides drifting costs a nicer row rather than a broken screen.
+ */
+/**
+ * The ceilings a run is held to when nobody sets one.
+ *
+ * Mirrored from `BUDGET_DEFAULTS` in `packages/cli/src/runner/budget.ts`,
+ * which is the authority — the runner is what actually stops a run, and it is
+ * published on its own without this package. Held here so the delegation sheet
+ * can state the ceiling before somebody spends it, instead of a run ending
+ * with `BUDGET_EXHAUSTED` and reading as a bug.
+ *
+ * `run-limits.spec.ts` on the server reads the other file and fails if the two
+ * disagree, so a raised ceiling cannot leave the app quoting the old number.
+ */
+export const AGENT_RUN_DEFAULT_LIMITS = {
+  maxIterations: 50,
+  maxCostUsd: 5,
+} as const;
+
+export const AGENT_STEP_KINDS = [
+  'read',
+  'write',
+  'search',
+  'bash',
+  'test',
+] as const;
+
+export type AgentStepKind = (typeof AGENT_STEP_KINDS)[number];
+
+export interface AgentStepData {
+  kind: AgentStepKind;
+  /** The tool call, so an outcome event can be matched to the step it ends. */
+  ref?: string;
+  /** What it acted on: a path for read and write, a query for a search. */
+  target?: string;
+  command?: string;
+  /** Present on an outcome event. False means the step failed. */
+  ok?: boolean;
+  exit?: number;
+  output?: string;
+  passed?: number;
+  failed?: number;
+}
+
 export class AgentRunEvent {
   id: string;
   createdAt: Date;
@@ -266,7 +317,7 @@ export class AgentRunEvent {
   level: AgentRunEventLevel;
   message: string;
   phase: string | null;
-  data: unknown;
+  data: AgentStepData | null;
   runId: string;
 }
 

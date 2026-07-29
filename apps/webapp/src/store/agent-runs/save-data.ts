@@ -74,6 +74,9 @@ export async function saveAgentRunEventData(
         level: record.data.level,
         message: record.data.message,
         phase: record.data.phase,
+        // What the step was. Dropped here, the timeline has only strings to
+        // draw from and every step looks the same as every other one.
+        data: record.data.data ?? null,
         runId: record.data.runId,
       };
 

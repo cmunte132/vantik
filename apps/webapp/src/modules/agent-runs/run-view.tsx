@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import { LinkLine } from '@vantikhq/ui/icons';
-import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
@@ -16,7 +14,11 @@ import { withApplicationStore } from 'common/wrappers/with-application-store';
 import { useScope } from 'hooks';
 import { useUsersData } from 'hooks/users';
 
-import { useCancelRunMutation, useRetryRunMutation } from 'services/agent-runs';
+import {
+  useCancelRunMutation,
+  useExecutors,
+  useRetryRunMutation,
+} from 'services/agent-runs';
 
 import { useContextStore } from 'store/global-context-provider';
 
@@ -24,7 +26,6 @@ import { Header } from './header';
 import { RunTimeline } from './run-timeline';
 import {
   FAILURE_PROSE,
-  STATUS_LABEL,
   duration,
   isLive,
   whereTheWorkWent,
@@ -47,6 +48,8 @@ export const RunView = withApplicationStore(
 
     const { agentRunsStore, issuesStore } = useContextStore();
     const { users } = useUsersData(false);
+
+    const { data: executors } = useExecutors();
 
     const { mutate: cancelRun } = useCancelRunMutation();
     const { mutate: retryRun } = useRetryRunMutation();
@@ -153,36 +156,80 @@ export const RunView = withApplicationStore(
           />
         }
       >
-        <div className="flex max-w-3xl flex-col gap-6 p-4">
-          <div className="flex flex-col gap-2">
-            {/* Everything a run has to carry for two runs of one issue to be
-                told apart afterwards. */}
-            <div className="flex flex-wrap items-center gap-1">
-              <Badge
-                variant={failure ? 'destructive' : 'secondary'}
-                className={cn(live && 'animate-pulse')}
-              >
-                {STATUS_LABEL[run.status] ?? run.status}
-              </Badge>
+        <div className="flex max-w-3xl flex-col gap-4 p-4">
+          {/* The outcome as a sentence. Four grey pills of equal weight rank
+              nothing, and ranking is the entire job of the top of this page. */}
+          <h1 className="text-lg leading-snug font-medium">
+            {verdict(run, agent?.fullname, failure)}
+          </h1>
 
-              <Badge variant="secondary">{run.executor}</Badge>
-              {run.modelId && <Badge variant="secondary">{run.modelId}</Badge>}
-              {run.harnessVersion && (
-                <Badge variant="secondary">{run.harnessVersion}</Badge>
+          {/* The identifiers drop below it. They are what makes two runs of one
+              issue tellable apart afterwards, which is a different question
+              from the one a reader arrives with. */}
+          <p className="text-muted-foreground">
+            {[
+              duration(run),
+              run.iterationCount
+                ? `${run.iterationCount} iteration${run.iterationCount === 1 ? '' : 's'}`
+                : '',
+              run.result?.costUsd != null
+                ? `$${Number(run.result.costUsd).toFixed(2)}`
+                : '',
+              run.attempt > 1 ? `attempt ${run.attempt}` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+            {run.modelId ? (
+              <>
+                {' · '}
+                <span className="font-mono">{run.modelId}</span>
+              </>
+            ) : null}
+            {` on ${executorLabel(executors, run.executor)}`}
+          </p>
+
+          {/* Where the work went is why most people opened this page, so it is
+              a target above the timeline rather than a bordered box below it. */}
+          {(where || live) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {where?.kind === 'pull_request' && (
+                <Button size="sm" asChild>
+                  <a href={where.value} target="_blank" rel="noreferrer">
+                    <LinkLine className="mr-1 size-3.5" />
+                    Review the pull request
+                  </a>
+                </Button>
               )}
-              {run.attempt > 1 && (
-                <Badge variant="secondary">attempt {run.attempt}</Badge>
+
+              {where?.kind === 'worktree' && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    navigator.clipboard?.writeText(`cd ${where.value}`)
+                  }
+                >
+                  Copy cd path
+                </Button>
+              )}
+
+              {/* Beside the pull request rather than instead of it: a reviewer
+                  opens the PR, and somebody pulling the work locally wants the
+                  branch. The raw url is not shown — the button is the target,
+                  and a wrapped git url is just noise under it. */}
+              {run.result?.branch && where?.kind !== 'worktree' && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    navigator.clipboard?.writeText(run.result.branch)
+                  }
+                >
+                  Copy branch
+                </Button>
               )}
             </div>
-
-            <p className="text-muted-foreground">
-              {agent?.fullname ?? 'An agent'}
-              {duration(run) ? ` · ${duration(run)}` : ''}
-              {run.iterationCount
-                ? ` · ${run.iterationCount} iteration${run.iterationCount === 1 ? '' : 's'}`
-                : ''}
-            </p>
-          </div>
+          )}
 
           {failure && (
             <div className="flex flex-col gap-1 rounded-md border border-destructive/30 bg-destructive/5 p-3">
@@ -193,68 +240,63 @@ export const RunView = withApplicationStore(
             </div>
           )}
 
-          {run.summary && (
-            <Block title="What it says it did">
-              <p className="whitespace-pre-wrap p-3">{run.summary}</p>
-            </Block>
-          )}
+          {run.summary && <p className="whitespace-pre-wrap">{run.summary}</p>}
 
-          {where && (
-            <Block title="Where the work went">
-              <div className="p-3">
-                <WorkLocation where={where} />
-              </div>
-            </Block>
-          )}
-
-          <Block title="What it did">
+          <div className="border-t border-border pt-2">
             <RunTimeline run={run} events={events} />
-          </Block>
+          </div>
         </div>
       </MainLayout>
     );
   }),
 );
 
-/** A titled block, in the shape the product and module pages use. */
-function Block({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+/**
+ * The executor as a person would name it, not as a key.
+ *
+ * Read from the executors endpoint rather than from a table copied into this
+ * bundle: the server already publishes a label per backend, and a second copy
+ * here would be the one that goes stale when a backend is added.
+ */
+function executorLabel(executors: any, key: string): string {
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="font-medium">{title}</h2>
-      <div className="rounded-md border border-border">{children}</div>
-    </section>
-  );
+    ((executors as any[]) ?? []).find((entry: any) => entry.key === key)
+      ?.label ?? key
+  ).toLowerCase();
 }
 
-function WorkLocation({
-  where,
-}: {
-  where: { kind: string; value: string };
-}): React.ReactElement {
-  if (where.kind === 'pull_request') {
-    return (
-      <a
-        href={where.value}
-        target="_blank"
-        rel="noreferrer"
-        className="flex items-center gap-2 text-primary hover:underline"
-      >
-        <LinkLine className="size-3.5 shrink-0" />
-        {where.value}
-      </a>
-    );
+/**
+ * How the run ended, in one line.
+ *
+ * Written rather than composed from a status enum, because the sentence a
+ * reader needs is not the same for a run that is still going, one that
+ * produced a pull request, and one that stopped at a ceiling.
+ */
+function verdict(
+  run: any,
+  agentName: string | undefined,
+  failure?: { what: string },
+): string {
+  const who = agentName ?? 'The agent';
+
+  if (isLive(run.status)) {
+    return `${who} is working on this.`;
   }
 
-  // Selectable, because the only useful thing to do with a path is copy it.
-  return (
-    <code className="select-all font-mono text-xs">
-      {where.kind === 'worktree' ? `cd ${where.value}` : where.value}
-    </code>
-  );
+  if (failure) {
+    return `${who} could not finish — ${failure.what}.`;
+  }
+
+  switch (run.status) {
+    case 'SUCCEEDED':
+      return run.result?.prUrl
+        ? `${who} finished and opened a pull request.`
+        : `${who} finished the work.`;
+    case 'NEEDS_REVIEW':
+      return `${who} finished, but somebody has to judge whether it is right.`;
+    case 'CANCELED':
+      return `${who} was stopped before it finished.`;
+    default:
+      return `${who} could not finish this run.`;
+  }
 }

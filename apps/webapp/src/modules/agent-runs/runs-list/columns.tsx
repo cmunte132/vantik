@@ -13,9 +13,9 @@ import {
   STATUS_LABEL,
   age,
   duration,
-  isLive,
   whereTheWorkWent,
 } from '../run-vocabulary';
+import { StatusDot } from '../status-dot';
 
 /**
  * The columns of the runs list.
@@ -126,26 +126,6 @@ export const useRunColumns = (): Array<ColumnDef<any>> => {
     },
   ];
 };
-
-export const StatusDot = ({
-  status,
-  className,
-}: {
-  status: string;
-  className?: string;
-}) => (
-  <span
-    className={cn(
-      'size-2 shrink-0 rounded-full',
-      isLive(status) && 'animate-pulse bg-primary',
-      status === 'SUCCEEDED' && 'bg-green-500',
-      status === 'NEEDS_REVIEW' && 'bg-amber-500',
-      ['FAILED', 'EXPIRED'].includes(status) && 'bg-destructive',
-      status === 'CANCELED' && 'bg-muted-foreground',
-      className,
-    )}
-  />
-);
 
 /** Enough of a path or url to recognise it, from the end that identifies it. */
 function tail(value: string): string {

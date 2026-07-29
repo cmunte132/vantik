@@ -197,10 +197,31 @@ export function whereTheWorkWent(result: {
  */
 export const PHASE_ORDER = ['setup', 'specify', 'implement', 'verify', 'report'];
 
+/**
+ * Past tense, because a timeline is a record of what happened.
+ *
+ * The present participle read as a claim about now — "Doing the work" on a run
+ * that finished four hours ago. A phase still in flight is marked by its
+ * pulsing node, which says it better than a tense can.
+ */
 export const PHASE_LABEL: Record<string, string> = {
-  setup: 'Setting up environment',
-  specify: 'Writing the tests first',
-  implement: 'Doing the work',
-  verify: 'Running the checks',
-  report: 'Handing the work back',
+  setup: 'Set up the environment',
+  specify: 'Wrote the tests first',
+  implement: 'Did the work',
+  verify: 'Ran the checks',
+  report: 'Handed the work back',
 };
+
+/**
+ * A duration in milliseconds, said the way the rest of the app says one.
+ *
+ * `84s` is arithmetic; `1m 24s` is a duration. Above a minute a reader has to
+ * do the division themselves, which is exactly the work a label exists to save.
+ */
+export function formatMs(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+
+  return seconds < 60
+    ? `${seconds}s`
+    : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}

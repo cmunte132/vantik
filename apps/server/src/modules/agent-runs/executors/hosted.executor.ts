@@ -1,17 +1,25 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import type { AgentExecutor, ExecutorAvailability } from './executor.interface';
+import type { SandboxHandle } from '../sandbox/sandbox.interface';
 import type { AgentRun } from '@prisma/client';
+
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  PI_PACKAGE,
+  PI_REQUIRED_FLAGS,
+  THINKING_LEVELS,
+  isSafeModelId,
+  providerById,
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
 import { AgentRunsService } from '../agent-runs.service';
+import { ExecutorRegistry } from './executor.registry';
 import { CredentialsService } from '../credentials/credentials.service';
 import { GitProxyService } from '../sandbox/git-proxy.service';
 import { GondolinRuntime } from '../sandbox/gondolin.runtime';
-import type { SandboxHandle } from '../sandbox/sandbox.interface';
 import { scrubSecrets } from '../sandbox/scrub';
-import { ExecutorRegistry } from './executor.registry';
-import type { AgentExecutor, ExecutorAvailability } from './executor.interface';
 
 export const HOSTED_EXECUTOR_KEY = 'hosted';
 
@@ -21,16 +29,66 @@ export const HOSTED_EXECUTOR_KEY = 'hosted';
  * Exported for the security spec, because "the guest cannot reach a git host"
  * is a property worth asserting rather than trusting a comment about.
  */
-export function egressAllowlistForTest(
-  modelBaseUrl: string | null,
-): string[] {
-  return egressAllowlist(modelBaseUrl);
+export function egressAllowlistForTest(modelHost: string | null): string[] {
+  return egressAllowlist(modelHost);
 }
 
-function egressAllowlist(modelBaseUrl: string | null): string[] {
+/**
+ * The host this provider's traffic goes to.
+ *
+ * The provider's fixed host, unless the workspace configured an endpoint of
+ * its own — which is how Azure works, where every customer has a different
+ * one. Getting this wrong does not leak anything, but it does block the
+ * model call: the sandbox denies egress to everything not on the list.
+ */
+function modelHost(provider: { host: string }, baseUrl: string | null): string {
+  return baseUrl ? hostOf(baseUrl) : provider.host;
+}
+
+/**
+ * The bundled harness invocation, for this run.
+ *
+ * Built from parts rather than written as a string so the required security
+ * flags cannot be dropped by an edit to the model options beside them, and so
+ * the package stays pinned to the version recorded on the run.
+ *
+ * Ids are validated rather than escaped. This string is executed by a shell in
+ * the sandbox, and `config.model` arrives from whoever delegated — so a value
+ * outside the safe set is dropped, not quoted. Dropping it costs a run its
+ * model preference; getting the quoting subtly wrong costs command execution.
+ */
+export function piCommand(options: {
+  provider?: string;
+  model?: string;
+  thinking?: string;
+}): string {
+  const args = ['npx', '--yes', PI_PACKAGE, ...PI_REQUIRED_FLAGS];
+
+  if (options.provider && isSafeModelId(options.provider)) {
+    args.push('--provider', options.provider);
+  }
+
+  if (options.model && isSafeModelId(options.model)) {
+    args.push('--model', options.model);
+  }
+
+  // Checked against the list rather than passed through: Pi rejects a level it
+  // does not know, and a run that dies on a typo in a settings field is a poor
+  // way to find out about it.
+  if (
+    options.thinking &&
+    (THINKING_LEVELS as readonly string[]).includes(options.thinking)
+  ) {
+    args.push('--thinking', options.thinking);
+  }
+
+  return args.join(' ');
+}
+
+function egressAllowlist(modelHost: string | null): string[] {
   return [
-    // The model endpoint the workspace configured.
-    ...(modelBaseUrl ? [hostOf(modelBaseUrl)] : []),
+    // The provider this run calls, and only that one.
+    ...(modelHost ? [modelHost] : []),
     // Package registries, because a setup phase that cannot install is a
     // setup phase that always fails.
     'registry.npmjs.org',
@@ -108,7 +166,10 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       };
     }
 
-    if (!(await this.credentials.has(workspaceId, 'MODEL_API_KEY'))) {
+    // A deployment that supplies its own key makes hosted execution available
+    // to a workspace that has brought nothing, so this asks where the key comes
+    // from rather than whether the workspace owns one.
+    if ((await this.credentials.modelAccess(workspaceId)).source === 'none') {
       return {
         available: false,
         reason:
@@ -154,10 +215,38 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pack = (run.contextPack ?? {}) as any;
 
-    const model = await this.credentials.reveal(run.workspaceId, 'MODEL_API_KEY');
+    // The provider the run asked for, or the workspace's only one. A workspace
+    // holding keys for several providers and a run that named none is refused
+    // rather than resolved: choosing would spend their money at a company they
+    // did not pick for this run.
+    const model = await this.credentials.revealModelKey(
+      run.workspaceId,
+      config.provider,
+    );
 
     if (!model) {
-      await this.fail(run, 'ENVIRONMENT_SETUP_FAILED', 'No model key is configured.');
+      await this.fail(
+        run,
+        'ENVIRONMENT_SETUP_FAILED',
+        config.provider
+          ? `This workspace has no ${config.provider} key configured.`
+          : 'No model key is configured, or more than one provider is set up and this run named none.',
+      );
+      return;
+    }
+
+    const provider = providerById(model.provider);
+
+    if (!provider) {
+      // The stored provider is not one this build knows. Refusing beats
+      // guessing an environment variable: the key would reach the harness
+      // under a name it does not read, and the run would fail later with a
+      // model error that says nothing about the real cause.
+      await this.fail(
+        run,
+        'ENVIRONMENT_SETUP_FAILED',
+        `This workspace's model key is for "${model.provider}", which this version does not know how to run.`,
+      );
       return;
     }
 
@@ -190,20 +279,28 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           'context.json': JSON.stringify(pack, null, 2),
         },
         env: {
-          ...(model.baseUrl ? { LLM_BASE_URL: model.baseUrl } : {}),
+          // The provider's own variable, for the providers that have one.
+          // There is no generic base-url variable Pi reads.
+          ...(model.baseUrl && provider.baseUrl
+            ? { [provider.baseUrl.envVar]: model.baseUrl }
+            : {}),
         },
         secrets: {
-          // The guest gets a placeholder under this name; the runtime swaps
-          // the real key in on requests to the model host and nowhere else.
-          // So the agent can call the model, and an agent that dumps its
-          // whole environment dumps nothing worth having.
+          // Under the exact name this provider's SDK reads — ANTHROPIC_API_KEY,
+          // OPENAI_API_KEY, GEMINI_API_KEY and so on. Pi has no generic key
+          // variable, so a name of our own choosing authenticates nothing.
+          //
+          // The guest gets a placeholder under it; the runtime swaps the real
+          // key in on requests to the model host and nowhere else. So the
+          // agent can call the model, and an agent that dumps its whole
+          // environment dumps nothing worth having.
           //
           // There is no git token here and no code path that would add one:
           // pushing happens host-side, so the guest holds neither the token
           // nor a placeholder for it.
-          LLM_API_KEY: {
+          [provider.envVar]: {
             value: model.secret,
-            hosts: model.baseUrl ? [hostOf(model.baseUrl)] : [],
+            hosts: [modelHost(provider, model.baseUrl)].filter(Boolean),
           },
         },
         limits: {
@@ -213,7 +310,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           cpus: 2,
           maxLogBytes: 256 * 1024,
         },
-        egress: { allow: egressAllowlist(model.baseUrl) },
+        egress: { allow: egressAllowlist(modelHost(provider, model.baseUrl)) },
       });
 
       this.running.set(run.id, sandbox);
@@ -292,7 +389,6 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       // would be asking the thing under test what it was given.
       const baseCommit = checkout.baseCommit;
 
-
       await this.agentRuns.transition(run.id, 'RUNNING', {
         startedAt: new Date(),
         baseCommit,
@@ -301,18 +397,16 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       // ---- Phase 2: agent. Reduced egress, no install credentials. ----
       await note('Running the agent', 'implement');
 
-      // `--no-extensions` is a security control, not a preference: Pi
-      // auto-discovers extensions from `.pi/extensions/*.ts` in the project
-      // directory and runs them with full access, which for an agent pointed
-      // at arbitrary repositories is a code-execution path the repository
-      // controls.
-      //
-      // A configured harness command replaces it, which is how a deployment
-      // runs something other than Pi — and how this path is exercised without
-      // spending model credits.
+      // A configured harness command replaces the bundled one, which is how a
+      // deployment runs something other than Pi — and how this path is
+      // exercised without spending model credits.
       const harness =
         config.harnessCommand ??
-        'npx --yes @earendil-works/pi-coding-agent --mode rpc --no-extensions --no-approve';
+        piCommand({
+          provider: provider.id,
+          model: config.model,
+          thinking: config.thinking,
+        });
 
       const agent = await sandbox.exec(
         `cd /workspace/repo && ${harness} < /workspace/context.json`,

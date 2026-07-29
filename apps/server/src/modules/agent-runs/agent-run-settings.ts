@@ -1,4 +1,10 @@
-import type { AgentRunRepoConfig } from '@vantikhq/types';
+import {
+  THINKING_LEVELS,
+  isSafeModelId,
+  type AgentRunRepoConfig,
+  type ModelChoice,
+  type ThinkingLevel,
+} from '@vantikhq/types';
 
 import { agentSettings } from 'modules/auth/agent-scope';
 
@@ -15,6 +21,15 @@ export interface WorkspaceAgentDefaults {
   /** Executor key used when neither the request nor the agent names one. */
   defaultExecutor: string | null;
   repo: AgentRunRepoConfig;
+  /**
+   * What runs pick up when the person delegating does not say.
+   *
+   * A workspace default rather than a per-run requirement because most runs
+   * should not be a decision. Somebody configures a key, picks a model once,
+   * and delegating is a single click after that — the per-run override exists
+   * for the issue where the default is the wrong trade, not for every issue.
+   */
+  model: ModelChoice;
   /**
    * Which ENG-62 phases the workspace runs. Absent means none, and none is
    * the shipped default: the null hypothesis is that implement plus
@@ -38,8 +53,40 @@ export function workspaceAgentDefaults(
   return {
     defaultExecutor: agentRuns?.defaultExecutor ?? null,
     repo: isObject(agentRuns?.repo) ? agentRuns.repo : {},
+    model: modelChoiceOf(agentRuns?.model),
     phases: isObject(agentRuns?.phases) ? agentRuns.phases : {},
   };
+}
+
+/**
+ * A stored model choice, read back with every field checked.
+ *
+ * Free-form JSON that reaches a command line, so nothing is trusted: an
+ * unknown thinking level would be rejected by Pi and kill the run, and a model
+ * id outside the safe set has no legitimate form.
+ */
+function modelChoiceOf(value: unknown): ModelChoice {
+  if (!isObject(value)) {
+    return {};
+  }
+
+  const raw = value as Record<string, unknown>;
+  const choice: ModelChoice = {};
+
+  if (typeof raw.provider === 'string' && isSafeModelId(raw.provider)) {
+    choice.provider = raw.provider;
+  }
+  if (typeof raw.model === 'string' && isSafeModelId(raw.model)) {
+    choice.model = raw.model;
+  }
+  if (
+    typeof raw.thinking === 'string' &&
+    (THINKING_LEVELS as readonly string[]).includes(raw.thinking)
+  ) {
+    choice.thinking = raw.thinking as ThinkingLevel;
+  }
+
+  return choice;
 }
 
 /**

@@ -1,13 +1,15 @@
+import { createHash } from 'node:crypto';
+
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   AgentRunConfig,
   AgentRunFailure,
   AgentRunStatus,
+  type ModelChoice,
   ReportAgentRunDto,
   RoleEnum,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
-import { createHash } from 'node:crypto';
 
 import { convertTiptapJsonToMarkdown } from 'common/utils/tiptap.utils';
 
@@ -96,15 +98,24 @@ export class AgentDelegationService {
       input.config,
     );
 
+    // What to run on, layered the same way everything else is: the workspace's
+    // default underneath, this request's choice on top. Stored on the run
+    // rather than resolved again at dispatch, so a later change to the
+    // workspace default cannot rewrite what a finished run was asked to do.
+    const config = {
+      ...contextPack.repo,
+      ...(await this.resolveModel(input)),
+    };
+
     const run = await this.agentRuns.createRun({
       workspaceId: input.workspaceId,
       issueId: input.issueId,
       agentUserId: input.agentUserId,
       createdById: input.createdById,
       executor: executor.key,
-      config: contextPack.repo,
+      config,
       contextPack,
-      configHash: hashConfig(contextPack.repo, executor.key),
+      configHash: hashConfig(config, executor.key),
     });
 
     // A dispatch that fails has to land as a visible state on the run. The
@@ -227,7 +238,11 @@ export class AgentDelegationService {
 
     const delivery =
       report.delivery ??
-      (report.prUrl ? 'pull_request' : report.worktreePath ? 'worktree' : undefined);
+      (report.prUrl
+        ? 'pull_request'
+        : report.worktreePath
+          ? 'worktree'
+          : undefined);
 
     // Linking before the transition, so a finished run never renders without
     // the artifact it is pointing at.
@@ -462,6 +477,31 @@ export class AgentDelegationService {
     });
   }
 
+  /**
+   * The provider, model and thinking level this run should use.
+   *
+   * The workspace default, with anything the request named over it — field by
+   * field, so a run that overrides only the thinking level keeps the
+   * workspace's provider and model rather than losing them.
+   */
+  private async resolveModel(input: DelegateInput): Promise<ModelChoice> {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: input.workspaceId },
+      select: { preferences: true },
+    });
+
+    const fallback = workspaceAgentDefaults(workspace?.preferences).model;
+
+    return {
+      ...fallback,
+      ...stripUndefined({
+        provider: input.config?.provider,
+        model: input.config?.model,
+        thinking: input.config?.thinking,
+      }),
+    };
+  }
+
   private async isAgent(userId: string, workspaceId: string) {
     const membership = await this.prisma.usersOnWorkspaces.findFirst({
       where: { userId, workspaceId, status: 'ACTIVE' },
@@ -516,7 +556,10 @@ function plainText(description: string | null): string {
     }
   }
 
-  return body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return body
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 const FAILURE_PROSE: Record<AgentRunFailure, string> = {
@@ -535,4 +578,16 @@ const FAILURE_PROSE: Record<AgentRunFailure, string> = {
 
 function describeFailure(failure: AgentRunFailure): string {
   return FAILURE_PROSE[failure] ?? failure.toLowerCase().replace(/_/g, ' ');
+}
+
+/**
+ * An override that was not supplied must not blank out the default under it.
+ *
+ * `{...defaults, ...{model: undefined}}` sets model to undefined, which is how
+ * a run that overrode only the thinking level would lose the workspace's model.
+ */
+function stripUndefined<T extends object>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as Partial<T>;
 }

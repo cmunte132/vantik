@@ -99,9 +99,11 @@ describe('workspace credential store', () => {
   it('does not leak the secret through the listing either', async () => {
     const { service } = buildCredentials();
 
+    // A git token, so this asserts the listing and nothing else. A model key
+    // would call out to its provider to validate, which is a different test.
     await service.put({
       workspaceId: WORKSPACE,
-      kind: 'MODEL_API_KEY',
+      kind: 'GIT_TOKEN',
       secret: PLANTED,
     });
 
@@ -209,10 +211,8 @@ describe('egress policy', () => {
     expect(allow.some((host) => host.includes('github'))).toBe(false);
   });
 
-  it('allows the model endpoint the workspace configured', () => {
-    expect(egressAllowlistForTest('https://openrouter.ai/api/v1')).toContain(
-      'openrouter.ai',
-    );
+  it('allows the model host this run calls', () => {
+    expect(egressAllowlistForTest('openrouter.ai')).toContain('openrouter.ai');
   });
 
   it('allows a package registry, because setup has to be able to install', () => {
@@ -261,8 +261,15 @@ describe('the git token never enters the guest', () => {
       has: async (): Promise<boolean> => true,
       reveal: async (_workspace: string, kind: string) =>
         kind === 'GIT_TOKEN'
-          ? { secret: GIT_TOKEN, baseUrl: null }
-          : { secret: MODEL_KEY, baseUrl: 'https://openrouter.ai/api/v1' },
+          ? { secret: GIT_TOKEN, baseUrl: null as string | null }
+          : { secret: MODEL_KEY, baseUrl: null as string | null },
+      // The provider travels with the secret: it decides the variable the key
+      // is handed over under and the host the guest may reach.
+      revealModelKey: async () => ({
+        provider: 'openrouter',
+        secret: MODEL_KEY,
+        baseUrl: null as string | null,
+      }),
     };
 
     const agentRuns = {
@@ -316,19 +323,33 @@ describe('the git token never enters the guest', () => {
     // The contrast is the point: one credential is made usable because the
     // guest cannot work without it, the other never is because it does not
     // need it.
-    expect(spec?.secrets.LLM_API_KEY.value).toBe(MODEL_KEY);
+    expect(spec?.secrets.OPENROUTER_API_KEY.value).toBe(MODEL_KEY);
+  });
+
+  it('hands it over under the name the harness actually reads', async () => {
+    const spec = await captureSandboxSpec();
+
+    // Pi has no generic key variable — it reads ANTHROPIC_API_KEY,
+    // OPENAI_API_KEY, OPENROUTER_API_KEY and the rest by name. A key delivered
+    // under a name of our own choosing is a key that authenticates nothing,
+    // and the run then fails with a model error that says nothing about why.
+    expect(Object.keys(spec?.secrets ?? {})).toEqual(['OPENROUTER_API_KEY']);
+    expect(spec?.secrets.LLM_API_KEY).toBeUndefined();
   });
 
   it('scopes the model key to the model host, and keeps it out of plain env', async () => {
     const spec = await captureSandboxSpec();
 
-    // The guest reads a placeholder under LLM_API_KEY; the real value is
-    // substituted host-side, and only for the model endpoint. Putting it in
-    // `env` instead would hand the whole key to anything that can read the
-    // environment — which is the exfiltration path prompt injection uses.
-    expect(spec?.env.LLM_API_KEY).toBeUndefined();
+    // The guest reads a placeholder under the provider's variable; the real
+    // value is substituted host-side, and only for that provider's host.
+    // Putting it in `env` instead would hand the whole key to anything that
+    // can read the environment — the exfiltration path prompt injection uses.
+    expect(spec?.env.OPENROUTER_API_KEY).toBeUndefined();
     expect(JSON.stringify(spec?.env)).not.toContain(MODEL_KEY);
-    expect(spec?.secrets.LLM_API_KEY.hosts).toEqual(['openrouter.ai']);
+    // From the provider table, not from a base URL: most providers have one
+    // fixed host and nothing to configure, and before this an unconfigured
+    // base URL meant the model host was on no allowlist at all.
+    expect(spec?.secrets.OPENROUTER_API_KEY.hosts).toEqual(['openrouter.ai']);
   });
 });
 

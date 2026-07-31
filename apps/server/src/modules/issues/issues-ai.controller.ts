@@ -10,8 +10,11 @@ import {
 } from '@nestjs/common';
 import { IssueRequestParamsDto, TeamRequestParamsDto } from '@vantikhq/types';
 import { Response } from 'express';
+import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { getAppUserId } from 'modules/auth/session-user';
+import { Session as SessionDecorator } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
 import IssuesAIService from './issues-ai.service';
@@ -69,10 +72,23 @@ export class IssuesAIController {
     );
   }
 
+  /**
+   * Builds a filter from a sentence.
+   *
+   * Takes the caller's id because the labels and the people it offers are
+   * drawn from real teams, and a team is a visibility boundary. Without it the
+   * suggestions are assembled from every team in the workspace.
+   */
   @Post('ai_filters')
   @UseGuards(AuthGuard)
-  async aiFilters(@Body() filterInput: FilterInput) {
-    return await this.issuesAiService.aiFilters(filterInput);
+  async aiFilters(
+    @Body() filterInput: FilterInput,
+    @SessionDecorator() session: SessionContainer,
+  ) {
+    return await this.issuesAiService.aiFilters(
+      filterInput,
+      getAppUserId(session),
+    );
   }
 
   @Post('ai_title')

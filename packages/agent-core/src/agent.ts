@@ -27,8 +27,10 @@ import {
   WritePageInput,
 } from './knowledge';
 import {
+  AgentRunSummary,
   Capability,
   DefinitionOfDone,
+  DelegateTaskInput,
   Module,
   Paginated,
   PriorityName,
@@ -45,6 +47,50 @@ import {
   priorityByName,
   priorityNames,
 } from './types';
+
+/** The run record as the API returns it, before it is narrowed for an agent. */
+interface RawAgentRun {
+  id: string;
+  issueId: string;
+  status: AgentRunSummary['status'];
+  executor: string;
+  attempt: number;
+  failure: string | null;
+  summary: string | null;
+  error: string | null;
+  result: {
+    branch?: string;
+    prUrl?: string;
+    worktreePath?: string;
+  } | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+/**
+ * Flattens the run record for a caller that just wants to know what happened.
+ *
+ * `result` is a JSON blob on the row because its shape varies by delivery;
+ * pulling branch, PR url and worktree path up to the top level means a caller
+ * never has to know that.
+ */
+function toAgentRunSummary(run: RawAgentRun): AgentRunSummary {
+  return {
+    id: run.id,
+    taskId: run.issueId,
+    status: run.status,
+    executor: run.executor,
+    attempt: run.attempt,
+    failure: run.failure ?? null,
+    summary: run.summary ?? null,
+    error: run.error ?? null,
+    branch: run.result?.branch ?? null,
+    prUrl: run.result?.prUrl ?? null,
+    worktreePath: run.result?.worktreePath ?? null,
+    createdAt: run.createdAt,
+    finishedAt: run.finishedAt ?? null,
+  };
+}
 
 interface RawChecklistItem {
   id: string;
@@ -208,6 +254,28 @@ export interface CreateProjectInput {
   /** ISO dates, as the API stores them. */
   startDate?: string;
   endDate?: string;
+}
+
+/**
+ * Changes to a project. Every field optional, and an omitted field is left
+ * alone — so correcting a description does not require restating the dates.
+ *
+ * Lives here beside `CreateProjectInput` rather than in `types.ts`, which holds
+ * the shapes the API hands back; the `*Input` types all sit with the methods
+ * that take them.
+ */
+export interface UpdateProjectInput {
+  name?: string;
+  description?: string;
+  /** Free text, e.g. "Backlog", "In Progress", "Completed". */
+  status?: string;
+  /** ISO dates, as the API stores them. */
+  startDate?: string;
+  endDate?: string;
+  /** Member id of the project lead. */
+  leadUserId?: string;
+  /** Team ids the project belongs to; replaces the existing set. */
+  teams?: string[];
 }
 
 export interface SearchTasksInput {
@@ -440,6 +508,16 @@ export class VantikAgent {
     return this.directory.getProjects();
   }
 
+  /**
+   * One project by name or id.
+   *
+   * Served from the same listing the resolver uses rather than a per-project
+   * endpoint, because the API has none — `/projects` is the only read.
+   */
+  getProject(reference: string): Promise<Project> {
+    return this.directory.resolveProject(reference);
+  }
+
   /** The workspace's products — what it ships, above the modules. */
   listProducts(): Promise<Product[]> {
     return this.directory.getProducts();
@@ -502,6 +580,148 @@ export class VantikAgent {
     await this.directory.cacheProject(project);
 
     return project;
+  }
+
+  /**
+   * Changes a project that already exists: its name, description, status,
+   * dates, lead or teams.
+   *
+   * The counterpart to `createProject`, and the reason a project is not
+   * write-once over this surface. An agent that opens a project, works its
+   * issues and finishes them can now say so — record what was decided in the
+   * description, move the status to Completed — instead of leaving project
+   * state to drift permanently out of step with the issues underneath it.
+   *
+   * Neutral, like the rest of this client: it changes what it is told to
+   * change. Whether the project deserved to exist is not its question.
+   */
+  async updateProject(
+    reference: string,
+    input: UpdateProjectInput,
+  ): Promise<Project> {
+    const { id } = await this.directory.resolveProject(reference);
+
+    const updated = await this.client.post<Project>(`/projects/${id}`, {
+      // Spread rather than field-by-field so that an explicit empty string —
+      // "clear this description" — survives, where a truthiness check would
+      // silently drop it. Undefined keys are omitted by JSON.stringify, so an
+      // untouched field never reaches the server.
+      body: {
+        name: input.name,
+        description: input.description,
+        status: input.status,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        leadUserId: input.leadUserId,
+        teams: input.teams,
+      },
+    });
+
+    const project: Project = {
+      id: updated.id,
+      name: updated.name,
+      description: updated.description ?? null,
+      status: updated.status ?? null,
+    };
+
+    // A rename has to reach the cache, or the resolver keeps answering to the
+    // old name for the life of the process.
+    await this.directory.cacheProject(project);
+
+    return project;
+  }
+
+  /**
+   * Hands a task to an agent to work in the background.
+   *
+   * The server assembles what the agent is told and picks the backend, so this
+   * carries no opinion about either. It returns as soon as the run is queued —
+   * the work happens elsewhere, and `getAgentRun` is how you find out how it
+   * went.
+   */
+  async delegateTask(
+    reference: string,
+    input: DelegateTaskInput = {},
+  ): Promise<AgentRunSummary> {
+    const { id } = await this.resolveTask(reference);
+
+    const run = await this.client.post<RawAgentRun>('/agent_runs', {
+      body: {
+        issueId: id,
+        ...(input.agent ? { agentUserId: input.agent } : {}),
+        ...(input.executor ? { executor: input.executor } : {}),
+        ...(input.repo ? { config: input.repo } : {}),
+        ...(input.force ? { force: true } : {}),
+      },
+    });
+
+    return toAgentRunSummary(run);
+  }
+
+  /** How a delegated run is going, or how it went. */
+  async getAgentRun(runId: string): Promise<AgentRunSummary> {
+    return toAgentRunSummary(
+      await this.client.get<RawAgentRun>(`/agent_runs/${runId}`),
+    );
+  }
+
+  /** Runs for one task, newest first — every attempt, not just the live one. */
+  async listAgentRuns(reference: string): Promise<AgentRunSummary[]> {
+    const { id } = await this.resolveTask(reference);
+
+    const page = await this.client.get<{ items: RawAgentRun[] }>(
+      '/agent_runs',
+      { query: { issueId: id } },
+    );
+
+    return (page.items ?? []).map(toAgentRunSummary);
+  }
+
+  /** Every agent run in the workspace, newest first. */
+  async listWorkspaceAgentRuns(
+    input: { perPage?: number; status?: string[] } = {},
+  ): Promise<Paginated<AgentRunSummary>> {
+    const page = await this.client.get<{
+      items: RawAgentRun[];
+      page: number;
+      perPage: number;
+      total: number;
+    }>('/agent_runs', {
+      query: {
+        ...(input.perPage ? { perPage: String(input.perPage) } : {}),
+        ...(input.status?.length ? { status: input.status.join(',') } : {}),
+      },
+    });
+
+    return {
+      items: (page.items ?? []).map(toAgentRunSummary),
+      page: page.page,
+      perPage: page.perPage,
+      total: page.total,
+    };
+  }
+
+  /** Progress lines from a run, oldest first. */
+  async agentRunEvents(
+    runId: string,
+  ): Promise<Array<{ at: string; level: string; message: string }>> {
+    const events = await this.client.get<
+      Array<{ at: string; level: string; message: string }>
+    >(`/agent_runs/${runId}/events`);
+
+    return events ?? [];
+  }
+
+  /** Stops a run. Nothing is destroyed; the record and its log remain. */
+  async cancelAgentRun(
+    runId: string,
+    reason?: string,
+  ): Promise<AgentRunSummary> {
+    return toAgentRunSummary(
+      await this.client.post<RawAgentRun>(`/agent_runs/${runId}/cancel`, {
+        body: reason ? { reason } : {},
+      }),
+    );
   }
 
   async createTask(input: CreateTaskInput): Promise<TaskRef> {

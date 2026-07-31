@@ -74,6 +74,36 @@ export async function resolveAdminWorkspaceId(
   sessionWorkspaceId: string,
   requestedWorkspaceId?: string,
 ): Promise<string> {
+  const workspaceId = await resolveMemberWorkspaceId(
+    prisma,
+    userId,
+    sessionWorkspaceId,
+    requestedWorkspaceId,
+  );
+
+  await assertWorkspaceAdmin(prisma, userId, workspaceId);
+
+  return workspaceId;
+}
+
+/**
+ * Resolves the workspace a write should land in, and proves the caller is an
+ * active member of it — but says nothing about their role.
+ *
+ * Split out of `resolveAdminWorkspaceId`, which was quietly doing two jobs.
+ * That mattered the moment something needed the *first* job alone: minting a
+ * personal agent is an ordinary member action, and any path reaching for
+ * workspace resolution would otherwise inherit an admin gate nobody intended.
+ * Personal ownership and admin-gating are contradictory, and before this the
+ * gate won — which made the feature unavailable to most of the people it was
+ * built for.
+ */
+export async function resolveMemberWorkspaceId(
+  prisma: PrismaService,
+  userId: string,
+  sessionWorkspaceId: string,
+  requestedWorkspaceId?: string,
+): Promise<string> {
   const workspaceId = requestedWorkspaceId || sessionWorkspaceId;
 
   if (!workspaceId || !userId) {
@@ -84,7 +114,7 @@ export async function resolveAdminWorkspaceId(
 
   const membership = await prisma.usersOnWorkspaces.findUnique({
     where: { userId_workspaceId: { userId, workspaceId } },
-    select: { status: true, role: true },
+    select: { status: true },
   });
 
   if (!membership || membership.status !== 'ACTIVE') {
@@ -93,13 +123,33 @@ export async function resolveAdminWorkspaceId(
     });
   }
 
-  if (membership.role !== RoleEnum.ADMIN) {
+  return workspaceId;
+}
+
+/**
+ * Proves the caller administers a workspace they are already known to belong
+ * to.
+ *
+ * The role comes from the membership row rather than the access token, because
+ * the token carries the user's *first* workspace and its role there — someone
+ * who administers workspace A but is only a member of B would otherwise pass
+ * while acting on B.
+ */
+export async function assertWorkspaceAdmin(
+  prisma: PrismaService,
+  userId: string,
+  workspaceId: string,
+): Promise<void> {
+  const membership = await prisma.usersOnWorkspaces.findUnique({
+    where: { userId_workspaceId: { userId, workspaceId } },
+    select: { role: true },
+  });
+
+  if (membership?.role !== RoleEnum.ADMIN) {
     throw new ForbiddenException({
       message: 'Only workspace admins can do this',
     });
   }
-
-  return workspaceId;
 }
 
 /**
@@ -164,6 +214,32 @@ export async function assertChecklistItemInWorkspace(
   if (!checklistItem) {
     throw new NotFoundException({
       message: `Checklist item ${checklistItemId} not found`,
+    });
+  }
+}
+
+/**
+ * Proves an agent run belongs to the given workspace.
+ *
+ * Every run route addresses the row by id alone — cancel, retry, heartbeat,
+ * report, append event — with no issue or team anywhere in the request. The
+ * service scopes its own queries too; this is the check at the HTTP boundary,
+ * where the untrusted id actually arrives, and it means a foreign run id is
+ * refused before any handler runs.
+ */
+export async function assertAgentRunInWorkspace(
+  prisma: PrismaService,
+  agentRunId: string,
+  workspaceId: string,
+): Promise<void> {
+  const run = await prisma.agentRun.findFirst({
+    where: { id: agentRunId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!run) {
+    throw new NotFoundException({
+      message: `Agent run ${agentRunId} not found`,
     });
   }
 }

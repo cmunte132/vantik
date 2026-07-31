@@ -1,9 +1,9 @@
 import { Loader } from '@vantikhq/ui/components/loader';
-import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { useRouter } from 'next/router';
 import * as React from 'react';
 
 import { ContentBox } from 'common/layouts/content-box';
+import { SCROLLABLE_BOX, SCROLLABLE_CONTENT } from 'common/layouts/main-layout';
 import { SettingsLayout } from 'common/layouts/settings-layout';
 
 import { UserContext } from 'store/user-context';
@@ -27,13 +27,13 @@ export function PersonalSettings() {
 
   return (
     <div className="h-[100vh] flex flex-col w-full">
-      <ContentBox>
+      <ContentBox innerClassName={SCROLLABLE_BOX}>
         <Header title={SECTION_TITLES[settingsSection]} />
-        <ScrollArea className="flex grow h-full">
+        <div className={SCROLLABLE_CONTENT}>
           <div className="w-full p-4">
             {userData ? <SectionComponent /> : <Loader />}
           </div>
-        </ScrollArea>
+        </div>
       </ContentBox>
     </div>
   );

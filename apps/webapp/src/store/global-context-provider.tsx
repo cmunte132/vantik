@@ -3,6 +3,7 @@ import React from 'react';
 
 import { ActionsStore } from './action';
 import { ApplicationStore, defaultApplicationStoreValue } from './application';
+import { AgentRunsStore } from './agent-runs';
 import { CapabilitiesStore } from './capabilities';
 import { ChecklistItemsStore } from './checklist-items';
 import { CommentsStore } from './comments';
@@ -35,6 +36,7 @@ import { WorkspaceStore } from './workspace';
 const StoreContextModel = types.model({
   commentsStore: CommentsStore,
   checklistItemsStore: ChecklistItemsStore,
+  agentRunsStore: AgentRunsStore,
   pagesStore: PagesStore,
   pageEntriesStore: PageEntriesStore,
   issuesHistoryStore: IssueHistoryStore,
@@ -69,6 +71,10 @@ const StoreContextModel = types.model({
 export const storeContextStore = StoreContextModel.create({
   commentsStore: {
     comments: {},
+  },
+  agentRunsStore: {
+    agentRuns: [],
+    events: {},
   },
   checklistItemsStore: {
     checklistItems: {},

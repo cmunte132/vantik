@@ -1,4 +1,5 @@
 import type {
+  AgentRunSummary,
   Capability,
   Module,
   Paginated,
@@ -212,6 +213,57 @@ export function renderCapabilities(capabilities: Capability[]): string {
       capability.status ?? '—',
       String(capability.moduleIds.length),
       truncate(capability.description ?? '', 50),
+    ]);
+  }
+
+  return table.toString();
+}
+
+/**
+ * A run's outcome in one line.
+ *
+ * Delivery is the interesting bit and it varies: a pull request where a git
+ * host is connected, otherwise a path to `cd` into. Printing whichever exists
+ * saves the reader working out which kind of run this was.
+ */
+export function renderAgentRun(run: AgentRunSummary): string {
+  const head = `${chalkGreen('✓')} Delegated  ${chalkGrey(run.id)}`;
+  const where = run.prUrl
+    ? `\n  ${chalkGrey('pull request:')} ${run.prUrl}`
+    : run.worktreePath
+      ? `\n  ${chalkGrey('worktree:')} ${run.worktreePath}`
+      : '';
+
+  return `${head}\n  ${chalkGrey('status:')} ${run.status}  ${chalkGrey(
+    'executor:',
+  )} ${run.executor}${where}`;
+}
+
+export function renderAgentRuns(runs: AgentRunSummary[]): string {
+  if (runs.length === 0) {
+    return chalkGrey('No agent runs for this task.');
+  }
+
+  const table = new Table({
+    head: ['Attempt', 'Status', 'Executor', 'Outcome', 'Started'],
+    style: { head: [], border: [] },
+  });
+
+  for (const run of runs) {
+    // A failed run's category is what the reader is actually after; for a
+    // finished one it is where the work ended up.
+    const outcome =
+      run.failure ??
+      run.prUrl ??
+      run.worktreePath ??
+      (run.summary ? truncate(run.summary, 40) : '—');
+
+    table.push([
+      String(run.attempt),
+      run.status,
+      run.executor,
+      truncate(outcome, 44),
+      new Date(run.createdAt).toISOString().slice(0, 16).replace('T', ' '),
     ]);
   }
 

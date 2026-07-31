@@ -9,6 +9,7 @@ import {
 import {
   BookLine,
   BuildingLine,
+  CodingLine,
   Inbox,
   MyIssues,
   Project,
@@ -103,6 +104,15 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
                   title: 'Pages',
                   icon: BookLine,
                   href: `/${workspaceSlug}/pages`,
+                },
+                // Background work is only background if there is somewhere to
+                // go and look at it. The page existed and nothing linked to
+                // it, which made a delegated run findable only by opening the
+                // issue you had already walked away from.
+                {
+                  title: 'Agents',
+                  icon: CodingLine,
+                  href: `/${workspaceSlug}/agent-runs`,
                 },
                 {
                   title: 'Teams',

@@ -10,6 +10,11 @@ export const tablesToSendMessagesFor = new Map([
   [ModelNameEnum.Template, true],
   [ModelNameEnum.IssueComment, true],
   [ModelNameEnum.ChecklistItem, true],
+  // Runs and their event stream ride the existing delta, so the run panel
+  // tails live rather than polling. Iterations too, for the ENG-62 loop.
+  [ModelNameEnum.AgentRun, true],
+  [ModelNameEnum.AgentRunEvent, true],
+  [ModelNameEnum.AgentRunIteration, true],
   [ModelNameEnum.IssueHistory, true],
   [ModelNameEnum.UsersOnWorkspaces, true],
   [ModelNameEnum.IntegrationAccount, true],

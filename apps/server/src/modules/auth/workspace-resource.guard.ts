@@ -11,6 +11,7 @@ import {
   visibleTeamIds,
 } from 'common/team-access';
 import {
+  assertAgentRunInWorkspace,
   assertCapabilityInWorkspace,
   assertChecklistItemInWorkspace,
   assertCycleInWorkspace,
@@ -74,6 +75,7 @@ export class WorkspaceResourceGuard implements CanActivate {
       moduleId,
       moduleRepoId,
       capabilityId,
+      agentRunId,
     } = request.params ?? {};
 
     // The bulk routes carry their ids inside a body array, one per issue, so
@@ -132,6 +134,13 @@ export class WorkspaceResourceGuard implements CanActivate {
         checklistItemId,
         workspaceId,
       );
+    }
+
+    // Cancel, retry, heartbeat, report and event append all name the run by id
+    // and nothing else, so without this a caller could stop or hijack an agent
+    // run in another workspace.
+    if (agentRunId) {
+      await assertAgentRunInWorkspace(this.prisma, agentRunId, workspaceId);
     }
 
     // Pages are reached by path on read and edit, and by query when appending

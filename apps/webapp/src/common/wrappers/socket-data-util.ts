@@ -3,6 +3,7 @@ import { runInAction } from 'mobx';
 import type { SyncActionRecord } from 'common/types';
 
 import { saveActionData } from 'store/action';
+import { saveAgentRunData, saveAgentRunEventData } from 'store/agent-runs';
 import { saveCapabilityData } from 'store/capabilities';
 import { saveChecklistItemData } from 'store/checklist-items';
 import { saveCommentsData } from 'store/comments';
@@ -49,6 +50,8 @@ export const SAVE_HANDLERS: Record<string, Function> = {
   [MODELS.IssueHistory]: saveIssueHistoryData,
   [MODELS.IssueComment]: saveCommentsData,
   [MODELS.ChecklistItem]: saveChecklistItemData,
+  [MODELS.AgentRun]: saveAgentRunData,
+  [MODELS.AgentRunEvent]: saveAgentRunEventData,
   [MODELS.Page]: savePageData,
   [MODELS.PageEntry]: savePageEntryData,
   [MODELS.IntegrationAccount]: saveIntegrationAccountData,

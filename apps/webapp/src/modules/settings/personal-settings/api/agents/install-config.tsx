@@ -1,19 +1,27 @@
-import { RiCheckLine, RiClipboardLine, RiDownloadLine } from '@remixicon/react';
+import { RiDownloadLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
-import copy from 'copy-to-clipboard';
 import * as React from 'react';
 
+import { CopyBlock } from '../copy-block';
 import { type Harness, TOKEN_PLACEHOLDER, harnessConfigs } from './harnesses';
 
 /**
- * Turns an agent token into ready-to-paste connection config, one tab per agent
- * harness. Used both right after provisioning (token present, shown once) and in
- * the connect panel as a live preview (token still a placeholder). It only ever
+ * Ready-to-paste connection config, one tab per agent harness. It only ever
  * formats the same endpoint + token, never a second source of truth.
+ *
+ * Rendered once on the page, and the token is what changes rather than the
+ * instructions. Read before anything has been created it shows the steps with a
+ * placeholder where the token goes — worth reading precisely because you are
+ * deciding whether to set an agent up at all — and the moment one is minted the
+ * same blocks carry the real value. Which also means the tab you were reading
+ * is still the tab you get, filled in.
+ *
+ * Revealing the secret is not this component's job: the create form does that,
+ * where the "copy it now, it is shown once" warning belongs.
  */
 interface InstallConfigProps {
-  /** The real token, once minted. Omit to preview with a placeholder. */
+  /** The real token. Omit for the instructions, which use a placeholder. */
   token?: string;
 }
 
@@ -26,38 +34,8 @@ function mcpUrl(): string {
   return `${origin}/api/v1/mcp`;
 }
 
-function CopyBlock({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = React.useState(false);
-
-  const onCopy = () => {
-    copy(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">{label}</span>
-        <Button variant="ghost" size="xs" onClick={onCopy}>
-          {copied ? (
-            <RiCheckLine size={14} className="mr-1" />
-          ) : (
-            <RiClipboardLine size={14} className="mr-1" />
-          )}
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
-      </div>
-      <pre className="bg-background-3 rounded p-3 text-xs overflow-x-auto whitespace-pre">
-        {value}
-      </pre>
-    </div>
-  );
-}
-
 export function InstallConfig({ token }: InstallConfigProps) {
   const url = mcpUrl();
-  const hasToken = Boolean(token);
   const harnesses = harnessConfigs(url, token ?? TOKEN_PLACEHOLDER);
   const [activeId, setActiveId] = React.useState(harnesses[0].id);
   const active =
@@ -65,15 +43,6 @@ export function InstallConfig({ token }: InstallConfigProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      {hasToken && (
-        <div className="flex flex-col gap-1">
-          <p className="text-sm">
-            Copy the token now — it is shown once and cannot be retrieved again.
-          </p>
-          <CopyBlock label="Token" value={token as string} />
-        </div>
-      )}
-
       <HarnessTabs
         harnesses={harnesses}
         activeId={active.id}

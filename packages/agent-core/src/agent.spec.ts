@@ -396,6 +396,146 @@ describe('projects', () => {
     ).toHaveLength(1);
   });
 
+  it('resolves a project by name before updating it', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /projects': projects,
+      'POST /projects/project-search': {
+        id: 'project-search',
+        name: 'Search rewrite',
+        description: 'Now with the decisions written down',
+        status: 'Completed',
+      },
+    });
+
+    await expect(
+      agent.updateProject('Search rewrite', { status: 'Completed' }),
+    ).resolves.toMatchObject({ id: 'project-search', status: 'Completed' });
+
+    const update = calls.find((call) => call.method === 'POST');
+    expect(update?.path).toBe('/projects/project-search');
+  });
+
+  it('accepts a project id as readily as a name', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /projects': projects,
+      'POST /projects/project-search': projects[0],
+    });
+
+    await agent.updateProject('project-search', { name: 'Search rewrite' });
+
+    expect(
+      calls.some((call) => call.path === '/projects/project-search'),
+    ).toBe(true);
+  });
+
+  it('names the alternatives when the project does not exist', async () => {
+    const { agent } = makeAgent({ 'GET /projects': projects });
+
+    await expect(agent.updateProject('Billing', {})).rejects.toBeInstanceOf(
+      VantikNotFoundError,
+    );
+    await expect(agent.updateProject('Billing', {})).rejects.toThrow(
+      /Search rewrite/,
+    );
+  });
+
+  it('asks for an id when a name matches more than one project', async () => {
+    const { agent } = makeAgent({
+      'GET /projects': [
+        { id: 'project-a', name: 'Search', description: null, status: null },
+        { id: 'project-b', name: 'search', description: null, status: null },
+      ],
+    });
+
+    await expect(agent.updateProject('Search', {})).rejects.toBeInstanceOf(
+      VantikAmbiguousError,
+    );
+  });
+
+  it('round-trips a markdown description without touching it', async () => {
+    const markdown =
+      '## Why\n\nThe `AgentRun` record, and **why** it exists.\n\n- one\n- two';
+
+    const { agent, calls } = makeAgent({
+      'GET /projects': projects,
+      'POST /projects/project-search': (call: RecordedCall) => ({
+        ...projects[0],
+        description: (call.body as { description: string }).description,
+      }),
+    });
+
+    const updated = await agent.updateProject('Search rewrite', {
+      description: markdown,
+    });
+
+    // Sent as markdown and handed back as markdown — no tiptap JSON anywhere
+    // on this path, in either direction.
+    expect(
+      (calls.find((call) => call.method === 'POST')?.body as {
+        description: string;
+      }).description,
+    ).toBe(markdown);
+    expect(updated.description).toBe(markdown);
+  });
+
+  it('keeps a renamed project resolvable under its new name only', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /projects': projects,
+      'POST /projects/project-search': {
+        id: 'project-search',
+        name: 'Search v2',
+        description: null,
+        status: 'In Progress',
+      },
+    });
+
+    await agent.updateProject('Search rewrite', { name: 'Search v2' });
+
+    await expect(agent.getProject('Search v2')).resolves.toMatchObject({
+      id: 'project-search',
+    });
+    // The old name is gone rather than lingering as a second cache entry.
+    await expect(agent.getProject('Search rewrite')).rejects.toBeInstanceOf(
+      VantikNotFoundError,
+    );
+    // And none of that cost a refetch.
+    expect(
+      calls.filter(
+        (call) => call.path === '/projects' && call.method === 'GET',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('omits untouched fields rather than blanking them', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /projects': projects,
+      'POST /projects/project-search': projects[0],
+    });
+
+    await agent.updateProject('Search rewrite', { status: 'Completed' });
+
+    const body = calls.find((call) => call.method === 'POST')?.body as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(body)).toEqual(['status']);
+  });
+
+  it('sends an empty description rather than dropping it', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /projects': projects,
+      'POST /projects/project-search': { ...projects[0], description: '' },
+    });
+
+    await agent.updateProject('Search rewrite', { description: '' });
+
+    const body = calls.find((call) => call.method === 'POST')?.body as Record<
+      string,
+      unknown
+    >;
+    expect(body).toEqual({ description: '' });
+  });
+
   it('restricts a list to one project', async () => {
     const { agent, calls } = makeAgent({
       ...baseRoutes,

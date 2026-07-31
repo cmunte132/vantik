@@ -41,7 +41,7 @@ function buildService(memberOf: string[] = [SESSION_WORKSPACE]) {
     },
   } as unknown as PrismaService;
 
-  const service = new IssuesService(prisma, null, null, null, null, null, null);
+  const service = new IssuesService(prisma, null, null, null, null, null, null, null);
 
   return { service, prisma };
 }

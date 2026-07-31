@@ -32,8 +32,11 @@ export class TeamsController {
 
   @Get()
   @UseGuards(AuthGuard)
-  async getTeams(@Workspace() workspaceId: string): Promise<Team[]> {
-    return await this.teamsService.getTeams(workspaceId);
+  async getTeams(
+    @Workspace() workspaceId: string,
+    @UserId() userId: string,
+  ): Promise<Team[]> {
+    return await this.teamsService.getTeams(workspaceId, userId);
   }
 
   @Get('user')
@@ -50,8 +53,10 @@ export class TeamsController {
   async getTeam(
     @Param()
     teamId: TeamRequestParams,
+    @UserId() userId: string,
+    @Workspace() workspaceId: string,
   ): Promise<Team> {
-    return await this.teamsService.getTeam(teamId);
+    return await this.teamsService.getTeam(teamId, userId, workspaceId);
   }
 
   @Get('name/:teamName')
@@ -59,8 +64,13 @@ export class TeamsController {
   async getTeamByName(
     @Param('teamName') teamName: string,
     @Workspace() workspaceId: string,
+    @UserId() userId: string,
   ): Promise<Team> {
-    return await this.teamsService.getTeamByName(workspaceId, teamName);
+    return await this.teamsService.getTeamByName(
+      workspaceId,
+      teamName,
+      userId,
+    );
   }
 
   @Post()
@@ -139,7 +149,13 @@ export class TeamsController {
   async getTeamMembers(
     @Param()
     teamRequestParams: TeamRequestParams,
+    @UserId() userId: string,
+    @Workspace() workspaceId: string,
   ): Promise<UsersOnWorkspaces[]> {
-    return await this.teamsService.getTeamMembers(teamRequestParams);
+    return await this.teamsService.getTeamMembers(
+      teamRequestParams,
+      userId,
+      workspaceId,
+    );
   }
 }

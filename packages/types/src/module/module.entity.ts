@@ -26,5 +26,11 @@ export class Module {
   linkedTeamIds: string[];
   linkedProductIds: string[];
 
+  /**
+   * How an agent run checks work in this module, shaped as
+   * `AgentRunVerification`. Null means the run does no checking of its own.
+   */
+  verification: unknown;
+
   workspaceId: string;
 }

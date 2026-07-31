@@ -82,12 +82,6 @@ export class WorkspacesController {
     );
   }
 
-  @Get()
-  @UseGuards(AuthGuard)
-  async getWorkspace(@WorkspaceD() workspaceId: string): Promise<Workspace> {
-    return await this.workspacesService.getWorkspace(workspaceId);
-  }
-
   @Post('preferences')
   @UseGuards(AuthGuard)
   async updateWorkspacePreferences(

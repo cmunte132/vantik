@@ -143,7 +143,12 @@ export class UsersController {
 
   /**
    * The agent accounts in this workspace, without tokens (a token exists only
-   * at creation). Admin-only, mirroring the create path.
+   * at creation).
+   *
+   * `scope=mine` is the account-settings view — the agents you own, readable
+   * by any member. The default `all` is the admin view of every agent
+   * operating in the workspace, since agents author changes attributed to them
+   * and an admin needs to be able to see and cut off one they did not create.
    */
   @Get('agents')
   @UseGuards(AuthGuard)
@@ -151,8 +156,35 @@ export class UsersController {
     @Workspace() workspaceId: string,
     @SessionDecorator() session: SessionContainer,
     @Query('workspaceId') requestedWorkspaceId?: string,
+    @Query('scope') scope?: 'mine' | 'all',
   ): Promise<AgentSummary[]> {
     return await this.users.listAgentAccounts(
+      workspaceId,
+      getAppUserId(session),
+      requestedWorkspaceId,
+      scope === 'mine' ? 'mine' : 'all',
+    );
+  }
+
+  /**
+   * Clears revoked agents out of the listing.
+   *
+   * Hides, never deletes. These accounts authored issues and comments, so
+   * removing the user would break attribution on records that still reference
+   * them; a revoked agent cannot authenticate, so the listing row is the only
+   * thing left worth removing. Live agents are untouched.
+   *
+   * Declared above `agents/:agentId/revoke` so the literal path is matched
+   * before the parameterised one.
+   */
+  @Post('agents/clear_revoked')
+  @UseGuards(AuthGuard)
+  async clearRevokedAgents(
+    @Workspace() workspaceId: string,
+    @SessionDecorator() session: SessionContainer,
+    @Query('workspaceId') requestedWorkspaceId?: string,
+  ): Promise<{ hidden: number }> {
+    return await this.users.clearRevokedAgents(
       workspaceId,
       getAppUserId(session),
       requestedWorkspaceId,
@@ -162,6 +194,9 @@ export class UsersController {
   /**
    * Revokes an agent's access by deleting its tokens. The account is kept so
    * its past edits stay attributed; it simply can no longer authenticate.
+   *
+   * An owner can always revoke their own agent; revoking anyone else's needs
+   * admin.
    */
   @Post('agents/:agentId/revoke')
   @UseGuards(AuthGuard)

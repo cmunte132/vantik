@@ -9,6 +9,8 @@ import { Command } from 'commander';
 import { resolveAgent } from '../utilities/agent';
 import { chalkError } from '../utilities/cliOutput';
 import {
+  renderAgentRun,
+  renderAgentRuns,
   renderHits,
   renderList,
   renderNote,
@@ -274,6 +276,54 @@ export function configureTaskCommands(program: Command) {
         options.json,
         () => resolveAgent().addNote(ref, body.join(' ')),
         renderNote,
+      );
+    });
+
+  task
+    .command('delegate')
+    .description('Hand a task to an agent to work in the background')
+    .argument('<task>', 'Task key or id')
+    .option('--agent <agent>', 'Agent account id; omit if there is only one')
+    .option('--executor <executor>', 'Backend key, e.g. byo')
+    .option('--repo <path>', 'Local repository to work in')
+    .option('--repo-url <url>', 'Remote to clone instead of a local path')
+    .option('-b, --base <branch>', 'Base branch')
+    .option('--test <command>', 'How to run the tests')
+    .option('--lint <command>', 'How to run the linter')
+    .option('--typecheck <command>', 'How to typecheck')
+    .option('--force', 'Start even if this task already has a live run')
+    .option('--json', 'Output raw JSON')
+    .action(async (ref, options) => {
+      await run(
+        options.json,
+        () =>
+          resolveAgent().delegateTask(ref, {
+            agent: options.agent,
+            executor: options.executor,
+            force: options.force,
+            repo: {
+              repoPath: options.repo,
+              repoUrl: options.repoUrl,
+              baseBranch: options.base,
+              testCommand: options.test,
+              lintCommand: options.lint,
+              typecheckCommand: options.typecheck,
+            },
+          }),
+        renderAgentRun,
+      );
+    });
+
+  task
+    .command('runs')
+    .description('Show every agent run for a task, newest first')
+    .argument('<task>', 'Task key or id')
+    .option('--json', 'Output raw JSON')
+    .action(async (ref, options) => {
+      await run(
+        options.json,
+        () => resolveAgent().listAgentRuns(ref),
+        renderAgentRuns,
       );
     });
 

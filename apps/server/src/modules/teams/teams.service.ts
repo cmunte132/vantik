@@ -9,6 +9,8 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { assertTeamsVisible, readableTeamIds } from 'common/team-access';
+
 import { SyncGateway } from 'modules/sync/sync.gateway';
 import { UserIdParams } from 'modules/users/users.interface';
 
@@ -25,7 +27,21 @@ export default class TeamsService {
     private syncGateway: SyncGateway,
   ) {}
 
-  async getTeam(TeamRequestParams: TeamRequestParams): Promise<Team> {
+  /**
+   * One team by id, if the caller may read it.
+   *
+   * The workspace is now required. Without it this looked a team up by id
+   * alone, so any authenticated caller anywhere could read any team on the
+   * server — a tenancy hole rather than only a team one.
+   */
+  async getTeam(
+    TeamRequestParams: TeamRequestParams,
+    userId: string,
+    workspaceId: string,
+  ): Promise<Team> {
+    const readable = await readableTeamIds(this.prisma, userId, workspaceId);
+    await assertTeamsVisible([TeamRequestParams.teamId], readable);
+
     return await this.prisma.team.findUnique({
       where: {
         id: TeamRequestParams.teamId,
@@ -36,11 +52,19 @@ export default class TeamsService {
     });
   }
 
-  async getTeams(workspaceId: string): Promise<Team[]> {
+  /**
+   * The teams of this workspace the caller may read: their own, or every one
+   * of them for an admin. See `readableTeamIds` for why the role widens this
+   * and never widens what issues they can see.
+   */
+  async getTeams(workspaceId: string, userId: string): Promise<Team[]> {
+    const readable = await readableTeamIds(this.prisma, userId, workspaceId);
+
     return await this.prisma.team.findMany({
       where: {
         workspaceId,
         deleted: null,
+        id: { in: readable },
       },
       include: {
         workspace: true,
@@ -68,13 +92,23 @@ export default class TeamsService {
     });
   }
 
+  /**
+   * One team by name or identifier. Filtered rather than checked afterwards,
+   * so a name the caller may not read simply finds nothing — the same answer
+   * an imaginary name gives, which is what stops this route being used to
+   * enumerate the other teams' names.
+   */
   async getTeamByName(
     workspaceId: string,
     nameOrIdentifier: string,
+    userId: string,
   ): Promise<Team | null> {
+    const readable = await readableTeamIds(this.prisma, userId, workspaceId);
+
     return await this.prisma.team.findFirst({
       where: {
         workspaceId,
+        id: { in: readable },
         OR: [
           {
             name: {
@@ -272,11 +306,23 @@ export default class TeamsService {
     return membership;
   }
 
+  /**
+   * The roster of one team, if the caller may read that team.
+   *
+   * The workspace is pinned as well as the team. A bare `has` on a team id is
+   * workspace-agnostic, so it would return memberships from another workspace
+   * if two ever shared a team id.
+   */
   async getTeamMembers(
     teamRequestParams: TeamRequestParams,
+    userId: string,
+    workspaceId: string,
   ): Promise<UsersOnWorkspaces[]> {
+    const readable = await readableTeamIds(this.prisma, userId, workspaceId);
+    await assertTeamsVisible([teamRequestParams.teamId], readable);
+
     return await this.prisma.usersOnWorkspaces.findMany({
-      where: { teamIds: { has: teamRequestParams.teamId } },
+      where: { workspaceId, teamIds: { has: teamRequestParams.teamId } },
       include: { user: true },
     });
   }

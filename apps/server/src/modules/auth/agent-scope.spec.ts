@@ -41,6 +41,8 @@ describe('agentSettings', () => {
       ownership: 'workspace',
       ownerUserId: null,
       scopes: ['read', 'delete'],
+      hiddenAt: null,
+      disabledAt: null,
     });
   });
 
@@ -52,6 +54,8 @@ describe('agentSettings', () => {
       ownership: 'personal',
       ownerUserId: null,
       scopes: DEFAULT_AGENT_SCOPES,
+      hiddenAt: null,
+      disabledAt: null,
     });
   });
 
@@ -108,7 +112,12 @@ describe('AgentScopeGuard', () => {
   ) {
     const prisma = {
       personalAccessToken: {
+        // The guard records the token's last use as it passes. Not awaited and
+        // its failure is swallowed, so the double only has to exist.
+        update: jest.fn().mockResolvedValue({}),
         findFirst: jest.fn().mockResolvedValue({
+          id: 'pat-1',
+          lastUsedAt: null,
           userId: 'agent-1',
           workspaceId: 'ws-1',
           user: {

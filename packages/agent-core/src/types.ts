@@ -232,6 +232,63 @@ export interface TaskSearchHit {
   score?: number;
 }
 
+/**
+ * One agent's attempt at one task, as the agent surface sees it.
+ *
+ * Lean like the rest of this file: the fields a caller acts on, not every
+ * column the run record keeps. The reproducibility fields (config hash, phase
+ * timings) are deliberately absent — they exist to compare runs in aggregate,
+ * which is a job for the webapp and not for whoever is watching this one.
+ */
+export interface AgentRunSummary {
+  id: string;
+  taskId: string;
+  status:
+    | 'QUEUED'
+    | 'CLAIMED'
+    | 'RUNNING'
+    | 'SUCCEEDED'
+    | 'FAILED'
+    | 'CANCELED'
+    | 'EXPIRED'
+    | 'NEEDS_REVIEW';
+  /** Which backend is running it — `byo`, `hosted`, later others. */
+  executor: string;
+  attempt: number;
+  /** Typed reason a run ended badly; null while it is alive or if it worked. */
+  failure: string | null;
+  summary: string | null;
+  error: string | null;
+  /** Branch, and either a PR url or the worktree it was left in. */
+  branch: string | null;
+  prUrl: string | null;
+  worktreePath: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+/** Options for handing a task to an agent. */
+export interface DelegateTaskInput {
+  /** The agent account to attribute the work to. Optional when there is one. */
+  agent?: string;
+  /** Executor key. Resolved from the agent and the workspace when omitted. */
+  executor?: string;
+  /** Repo, branch and the commands that verify a change. */
+  repo?: {
+    repoUrl?: string;
+    repoPath?: string;
+    baseBranch?: string;
+    delivery?: 'pull_request' | 'worktree';
+    setupCommands?: string[];
+    testCommand?: string;
+    lintCommand?: string;
+    typecheckCommand?: string;
+    buildCommand?: string;
+  };
+  /** Start a run even though the task already has one in flight. */
+  force?: boolean;
+}
+
 export interface Paginated<T> {
   items: T[];
   page: number;

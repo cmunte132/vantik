@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { Prisma, Issue as PrismaIssue } from '@prisma/client';
 import { tasks } from '@trigger.dev/sdk/v3';
 import {
@@ -35,6 +36,8 @@ import {
 } from 'common/utils/tiptap.utils';
 import { resolveWorkspaceId } from 'common/workspace-access';
 
+import type { AgentDelegationService } from 'modules/agent-runs/agent-delegation.service';
+import { AGENT_DELEGATION_SERVICE } from 'modules/agent-runs/agent-runs.interface';
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
 import IssuesHistoryService from 'modules/issue-history/issue-history.service';
 import IssueRelationService from 'modules/issue-relation/issue-relation.service';
@@ -67,7 +70,35 @@ export default class IssuesService {
     private aiRequestsService: AIRequestsService,
     private linkedIssueService: LinkedIssueService,
     private supportService: SupportService,
+    // Resolved lazily rather than injected. Delegation reads the issue graph to
+    // build its context pack and posts comments through IssueCommentsService,
+    // which itself depends on this service — injecting it would make the module
+    // graph circular in a way forwardRef cannot untangle, because the cycle runs
+    // through a third module. Looking it up at call time keeps the dependency
+    // one-directional: agent-runs imports issues, and issues imports nothing
+    // back.
+    private moduleRef: ModuleRef,
   ) {}
+
+  /**
+   * The delegation service, if this deployment has one wired up.
+   *
+   * `strict: false` searches the whole container rather than this module's
+   * imports, which is what lets the dependency stay one-directional. Returns
+   * undefined rather than throwing when it cannot be found, so the tests that
+   * construct this service directly — and any future build that leaves
+   * agent-runs out — keep working.
+   */
+  private agentDelegation(): AgentDelegationService | undefined {
+    try {
+      return this.moduleRef?.get<AgentDelegationService>(
+        AGENT_DELEGATION_SERVICE,
+        { strict: false },
+      );
+    } catch {
+      return undefined;
+    }
+  }
 
   async getIssueById(issueParams: IssueRequestParamsDto): Promise<Issue> {
     const issue = await this.prisma.issue.findUnique({
@@ -438,6 +469,22 @@ export default class IssuesService {
       message: `Issue with ID ${issueParams.issueId} updated successfully`,
       where: `IssueService.updateIssueApi`,
     });
+
+    // Assigning an issue to an agent is the gesture for "you do this", so it
+    // enqueues a run; moving it back to a human withdraws one that has not
+    // started. Deliberately not awaited into the response — delegation is a
+    // consequence of the assignment, and a queue that will not accept work
+    // must not fail the assignment the user actually asked for. It swallows
+    // its own errors rather than becoming an unhandled rejection.
+    if ('assigneeId' in issueData) {
+      await this.agentDelegation()?.onAssigneeChanged(
+        updatedIssue.id,
+        updatedIssue.team.workspaceId,
+        currentIssue.assigneeId,
+        updatedIssue.assigneeId,
+        userId,
+      );
+    }
 
     // Get the difference between the updated and current issue
     const issueDiff = await getIssueDiff(updatedIssue, currentIssue);

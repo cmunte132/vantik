@@ -122,6 +122,28 @@ export async function getWorkspaceId(
       });
       return checklistItem.issue.team.workspaceId;
 
+    // AgentRun carries its own workspaceId — the run is workspace-scoped from
+    // the first query, not inferred through the issue it happens to be about.
+    case ModelName.AgentRun:
+      const agentRun = await prisma.agentRun.findUnique({
+        where: { id: modelId },
+      });
+      return agentRun.workspaceId;
+
+    case ModelName.AgentRunEvent:
+      const agentRunEvent = await prisma.agentRunEvent.findUnique({
+        where: { id: modelId },
+        include: { run: true },
+      });
+      return agentRunEvent.run.workspaceId;
+
+    case ModelName.AgentRunIteration:
+      const agentRunIteration = await prisma.agentRunIteration.findUnique({
+        where: { id: modelId },
+        include: { run: true },
+      });
+      return agentRunIteration.run.workspaceId;
+
     case ModelName.IssueHistory:
       const issueHistory = await prisma.issueHistory.findUnique({
         where: { id: modelId },
@@ -339,6 +361,34 @@ export async function getTeamId(
         })
       )?.issue?.teamId;
 
+    // A run is work on one issue, so it takes that issue's team. The event
+    // log and the iteration record quote what the agent read and wrote, which
+    // is issue content again, so they follow the run rather than the
+    // workspace.
+    case ModelName.AgentRun:
+      return (
+        await prisma.agentRun.findUnique({
+          where: { id: modelId },
+          select: { issue: { select: { teamId: true } } },
+        })
+      )?.issue?.teamId;
+
+    case ModelName.AgentRunEvent:
+      return (
+        await prisma.agentRunEvent.findUnique({
+          where: { id: modelId },
+          select: { run: { select: { issue: { select: { teamId: true } } } } },
+        })
+      )?.run?.issue?.teamId;
+
+    case ModelName.AgentRunIteration:
+      return (
+        await prisma.agentRunIteration.findUnique({
+          where: { id: modelId },
+          select: { run: { select: { issue: { select: { teamId: true } } } } },
+        })
+      )?.run?.issue?.teamId;
+
     // The issue names the suggestion, and the suggestion does not name the
     // issue, so this one is read from the other side.
     case ModelName.IssueSuggestion:
@@ -388,6 +438,9 @@ export async function getModelData(
     Workspace: prisma.workspace,
     Action: prisma.action,
     ActionEntity: prisma.actionEntity,
+    AgentRun: prisma.agentRun,
+    AgentRunEvent: prisma.agentRunEvent,
+    AgentRunIteration: prisma.agentRunIteration,
     Conversation: {
       findUnique: () => {
         if (userId) {

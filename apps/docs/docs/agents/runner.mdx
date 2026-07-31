@@ -1,0 +1,194 @@
+---
+title: Running agent work on your own machine
+sidebar_label: BYO runner
+---
+
+# BYO runner
+
+Delegate an issue to an agent and a **run** is queued. Something has to pick it
+up. `vantik agent work` is that something: a process on your machine or in your
+CI that claims queued runs, drives a coding harness against an isolated
+checkout, and hands the work back.
+
+It holds your model credentials and your repository access. **The server never
+sees either**, and refuses to store them. That is the property that makes this
+worth having alongside a hosted sandbox.
+
+```bash
+vantik-cli agent work --repo ~/code/my-app --base main
+```
+
+## What it does with a run
+
+1. **Claim** — asks for the next queued run it is eligible for. Long-poll, so
+   it survives restarts and works through CI proxies.
+2. **Prepare** — clones your repository into a scratch directory and branches
+   from the base commit. Never your working copy: an agent has a shell and full
+   write access, and `git checkout` in a directory you are working in is a way
+   to lose uncommitted work.
+3. **Run the harness** against that checkout, streaming progress back.
+4. **Deliver** — a pull request, or a worktree (see below).
+5. **Report** — outcome, counters and timings. The server writes the issue
+   comment and links the pull request; the runner never touches the issue.
+
+Throughout, it renews a **lease**. Miss enough heartbeats — the machine sleeps,
+the process dies — and the server expires the run and re-queues it as the next
+attempt, so work is never stranded on a laptop that went away.
+
+## Two ways work comes back
+
+**Pull request**, when the repository has a remote. The branch is pushed and a
+PR is opened through the `gh` CLI, so your existing GitHub credentials are
+used and no token ever reaches Vantik. Without `gh` installed the branch is
+still pushed and the run reports it.
+
+**Worktree**, when there is no remote — a local checkout, a self-hosted install
+with no git host, an air-gapped repository. The run commits to a branch and
+leaves it checked out beside your repository:
+
+```bash
+cd ../my-app-worktrees/eng-42
+git diff main
+```
+
+This is a first-class delivery, not a degraded one. It gets the same commit,
+the same summary comment and the same counters; only the artifact differs. A
+feature that only works with GitHub attached is a feature most self-hosters
+cannot use.
+
+Which one you get is **derived, not configured**: a workspace with a remote
+gets pull requests, one without gets worktrees. Override per run with
+`delivery` in the run config.
+
+`--dry-run` is a different thing again: it leaves an uncommitted diff in the
+scratch checkout and does nothing outward-facing. A debugging aid, not a
+delivery.
+
+## The harness
+
+The default is [Pi](https://github.com/earendil-works/pi), pinned, driven over
+its RPC mode. It was chosen on licence and model-neutrality grounds — MIT,
+TypeScript, twenty-odd providers — rather than benchmark scores.
+
+Point `--harness` at anything else and the daemon does not care:
+
+```bash
+vantik-cli agent work --harness "my-agent --headless"
+```
+
+### The contract
+
+A harness is a process. It **receives** on stdin one JSON line:
+
+```json
+{ "type": "prompt", "message": "…the issue, its Definition of Done, and how to verify a change…" }
+```
+
+It **emits** LF-delimited JSON lines on stdout. These become progress events on
+the run:
+
+| Line | Meaning |
+| --- | --- |
+| `{"type":"tool_call","name":"edit"}` | Something is happening; shown in the run panel |
+| `{"type":"turn_end"}` | One iteration finished; counted |
+| `{"type":"message","text":"…"}` | Prose summary; the last one becomes the run summary |
+| `{"type":"error","message":"…"}` | Recorded at ERROR level |
+
+Anything else is ignored, so a chatty harness is not a problem.
+
+It **signals outcome** by exit code: `0` for finished, non-zero for crashed.
+
+Three rules that are not obvious:
+
+- **Do not commit, branch, push, or open a pull request.** The daemon does all
+  of it. A harness that commits will have its commits rewritten.
+- **Do not report the patch.** The daemon computes it as `git diff` against the
+  recorded base commit. Asking a model to emit a unified diff measures 19.1%
+  against 73.4% for `git diff` with the same model — a gap that is line
+  numbers, hunk headers and trailing newlines, not intelligence.
+- **Write scratch under `.pi/` or `.vantik-run/`** if you must write scratch at
+  all. Those are removed before the diff is taken. Anything else you leave
+  behind lands in the commit.
+
+### Verification commands
+
+The prompt carries the repository's own test, lint, typecheck and build
+commands, taken from the workspace configuration. This is the highest-leverage
+thing in the whole pack: whether the agent can run your tests and react to the
+output is the difference between a plausible diff and a working one, and *"the
+agent could not run anything"* is the most common failure these systems have.
+
+Configure them once on the workspace, or per run.
+
+### Extensions are not loaded from your repository
+
+Pi auto-discovers extensions from `.pi/extensions/*.ts` **in the project
+directory** and executes them with full system access. For an agent pointed at
+arbitrary repositories that is a code-execution path controlled by anyone who
+can land a file in the repo. The runner therefore always passes
+`--no-extensions`, so extensions load only from a directory Vantik controls.
+
+The harness also runs with `VANTIK_TOKEN` and `ACCESS_TOKEN` removed from its
+environment. It has a shell; anything left there is readable by a
+prompt-injected agent.
+
+### Ceilings
+
+An agent with a shell, a model and no ceiling is an open-ended bill. A run
+therefore stops on the first of these, whether or not anybody configured
+anything:
+
+| Ceiling | Default | Why it is there |
+| --- | --- | --- |
+| Turns | 50 | A run that needs more is usually an issue that should have been split. |
+| Spend | $5 | The cap denominated in the thing that is being spent. |
+| Turns with no tool call | 5 | A model that talks and never touches the repository. Nothing else catches this early. |
+| Provider retries in a row | 5 | An endpoint that is failing will fail again. |
+| Wall clock | 30 minutes | `--timeout`. The blunt one, and the last to fire. |
+
+Override the first three per run with `limits` in the run config
+(`maxIterations`, `maxCostUsd`, `maxTokens`). A run that hits a ceiling reports
+`BUDGET_EXHAUSTED` **and says which one**, because "it stopped" is not
+something you can act on.
+
+The turns-with-no-tool-call ceiling is the one that matters most in practice.
+The other two catch a spiral only after paying for it.
+
+## When something goes wrong
+
+Failures are typed, because each one sends you somewhere different:
+
+| Category | What to do |
+| --- | --- |
+| `ENVIRONMENT_SETUP_FAILED` | Check the repo path, base branch and setup commands from a clean clone |
+| `HARNESS_CRASHED` | Run the harness by hand against the same checkout |
+| `BUDGET_EXHAUSTED` | Raise `--timeout`, or narrow the issue |
+| `NO_DIFF_PRODUCED` | The issue usually does not say clearly enough what to change |
+| `VERIFICATION_FAILED` | The repo's own checks did not pass |
+| `PUSH_REJECTED` | Branch protection, a stale base, or a token that cannot write |
+| `PR_CREATION_FAILED` | The branch is up — open the PR by hand |
+| `EGRESS_DENIED` | A blocked network call; allowlist the host if it is legitimate |
+| `LEASE_LOST` | The machine slept or went offline |
+
+Every run prints a log path on start, so a run you wandered away from is
+findable:
+
+```
+Run 4b71820f… (attempt 1)
+  ENG-42: Search returns deleted issues
+  tail -f ~/.vantik/runs/4b71820f….log
+```
+
+## Options
+
+| Flag | Default | |
+| --- | --- | --- |
+| `--repo <path>` | cwd | Repository to work in |
+| `--base <branch>` | repo default | Base branch |
+| `--harness <command>` | bundled Pi | Harness to drive |
+| `--worktree-root <path>` | beside the repo | Where worktrees are created |
+| `--poll <seconds>` | 10 | Poll interval when idle |
+| `--timeout <minutes>` | 30 | Per-run wall clock |
+| `--once` | off | Take one run and exit — useful in CI |
+| `--dry-run` | off | Leave the diff on disk; never push |
+| `--log-dir <path>` | `~/.vantik/runs` | Per-run logs |

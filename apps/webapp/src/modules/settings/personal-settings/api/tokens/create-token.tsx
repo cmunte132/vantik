@@ -15,8 +15,19 @@ import { useCreateAgentMutation } from 'services/users/create-agent';
 import { useCreatePatMutation } from 'services/users/create-pat';
 import { GetPats } from 'services/users/get-pats';
 
-import { InstallConfig } from '../agents/install-config';
+import { CopyBlock } from '../copy-block';
 import { DEFAULT_ROLE_ID, TOKEN_ROLES, roleById } from './roles';
+
+interface CreateTokenProps {
+  workspaceId: string;
+  /**
+   * The token this form just minted, held by the page rather than here. It is
+   * shown once, and the setup instructions further down the page are what a
+   * person does with it, so the page is where both can see it.
+   */
+  token: string | null;
+  onToken: (token: string | null) => void;
+}
 
 /**
  * Minting an access token: who it is, and what it may do.
@@ -30,13 +41,12 @@ import { DEFAULT_ROLE_ID, TOKEN_ROLES, roleById } from './roles';
  * choice in that case and says so rather than offering one that would be
  * ignored.
  */
-export function CreateToken({ workspaceId }: { workspaceId: string }) {
+export function CreateToken({ workspaceId, token, onToken }: CreateTokenProps) {
   const queryClient = useQueryClient();
 
   const [name, setName] = React.useState('');
   const [identity, setIdentity] = React.useState('agent');
   const [roleId, setRoleId] = React.useState(DEFAULT_ROLE_ID);
-  const [token, setToken] = React.useState<string | null>(null);
   const [createdName, setCreatedName] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
 
@@ -45,7 +55,7 @@ export function CreateToken({ workspaceId }: { workspaceId: string }) {
   const { mutate: createAgent, isPending: creatingAgent } =
     useCreateAgentMutation({
       onError: setError,
-      onSuccess: (data) => setToken(data.token),
+      onSuccess: (data) => onToken(data.token),
     });
 
   const { mutate: createPat, isPending: creatingPat } = useCreatePatMutation({
@@ -55,7 +65,7 @@ export function CreateToken({ workspaceId }: { workspaceId: string }) {
       // live on refetched by hand. Without this the token is created and never
       // appears in the list beside it.
       queryClient.invalidateQueries({ queryKey: [GetPats] });
-      setToken(data?.token ?? null);
+      onToken(data?.token ?? null);
     },
   });
 
@@ -83,13 +93,19 @@ export function CreateToken({ workspaceId }: { workspaceId: string }) {
   };
 
   const reset = () => {
-    setToken(null);
+    onToken(null);
     setName('');
     setError(null);
   };
 
   // The one moment the credential exists. Dismissing is deliberate, because
   // navigating away loses it for good.
+  //
+  // The secret itself is all this shows. It used to render the whole connection
+  // guide underneath, which put a second copy of the harness tabs, the config
+  // blocks and the skill install on a page that already had them in their own
+  // section below — the same instructions twice, differing only in whether the
+  // token in them was real. Now the section below fills itself in instead.
   if (token) {
     return (
       <div className="flex flex-col gap-4 mb-4">
@@ -99,14 +115,20 @@ export function CreateToken({ workspaceId }: { workspaceId: string }) {
           lose it, revoke it and create another.
         </p>
 
-        <InstallConfig token={token} />
+        {/* Its own bordered region rather than a line of body text: this is the
+            only moment the credential exists, and it has to look like it. */}
+        <div className="flex flex-col gap-2 rounded-md border border-warning/50 bg-warning/10 p-3">
+          <CopyBlock label="Token — copy it now" value={token} />
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          Connecting a client, below, is filled in with it until you dismiss
+          this.
+        </p>
 
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={reset}>
             Done
-          </Button>
-          <Button variant="ghost" size="sm" onClick={reset}>
-            Create another
           </Button>
         </div>
       </div>

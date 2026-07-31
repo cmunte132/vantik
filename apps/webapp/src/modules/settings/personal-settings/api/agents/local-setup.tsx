@@ -15,7 +15,12 @@ import { InstallConfig } from './install-config';
  * strength, with a placeholder where the token goes. The surrounding
  * `SettingSection` already says the token arrives when you create an agent, so
  * nothing here has to apologise for not having one.
+ *
+ * And when one has just been created, this is where it lands. The create form
+ * used to render its own copy of all of this with the real token in it, so the
+ * page carried the instructions twice; the token now comes down here instead,
+ * which leaves one set of steps that is simply live while the value exists.
  */
-export function LocalSetup() {
-  return <InstallConfig />;
+export function LocalSetup({ token }: { token?: string }) {
+  return <InstallConfig token={token} />;
 }

@@ -1,20 +1,24 @@
-import { RiCheckLine, RiClipboardLine, RiDownloadLine } from '@remixicon/react';
+import { RiDownloadLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
-import copy from 'copy-to-clipboard';
 import * as React from 'react';
 
+import { CopyBlock } from '../copy-block';
 import { type Harness, TOKEN_PLACEHOLDER, harnessConfigs } from './harnesses';
 
 /**
  * Ready-to-paste connection config, one tab per agent harness. It only ever
  * formats the same endpoint + token, never a second source of truth.
  *
- * Two callers, and the difference is only whether a token exists yet. As
- * instructions, read before anything has been created, it shows the steps with
- * a placeholder where the token goes — worth reading precisely because you are
- * deciding whether to set an agent up at all. After creating one, the same
- * blocks carry the real token, which is the only moment that value exists.
+ * Rendered once on the page, and the token is what changes rather than the
+ * instructions. Read before anything has been created it shows the steps with a
+ * placeholder where the token goes — worth reading precisely because you are
+ * deciding whether to set an agent up at all — and the moment one is minted the
+ * same blocks carry the real value. Which also means the tab you were reading
+ * is still the tab you get, filled in.
+ *
+ * Revealing the secret is not this component's job: the create form does that,
+ * where the "copy it now, it is shown once" warning belongs.
  */
 interface InstallConfigProps {
   /** The real token. Omit for the instructions, which use a placeholder. */
@@ -30,35 +34,6 @@ function mcpUrl(): string {
   return `${origin}/api/v1/mcp`;
 }
 
-function CopyBlock({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = React.useState(false);
-
-  const onCopy = () => {
-    copy(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">{label}</span>
-        <Button variant="ghost" size="xs" onClick={onCopy}>
-          {copied ? (
-            <RiCheckLine size={14} className="mr-1" />
-          ) : (
-            <RiClipboardLine size={14} className="mr-1" />
-          )}
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
-      </div>
-      <pre className="bg-background-3 rounded p-3 text-xs overflow-x-auto whitespace-pre">
-        {value}
-      </pre>
-    </div>
-  );
-}
-
 export function InstallConfig({ token }: InstallConfigProps) {
   const url = mcpUrl();
   const harnesses = harnessConfigs(url, token ?? TOKEN_PLACEHOLDER);
@@ -68,14 +43,6 @@ export function InstallConfig({ token }: InstallConfigProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Its own bordered region rather than a line of body text: this is the
-          only moment the credential exists, and it has to look like it. */}
-      {token && (
-        <div className="flex flex-col gap-2 rounded-md border border-warning/50 bg-warning/10 p-3">
-          <CopyBlock label="Token — copy it now" value={token} />
-        </div>
-      )}
-
       <HarnessTabs
         harnesses={harnesses}
         activeId={active.id}

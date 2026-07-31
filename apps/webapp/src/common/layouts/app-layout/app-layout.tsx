@@ -23,6 +23,7 @@ import * as React from 'react';
 
 import { GlobalShortcuts, IssueShortcutDialogs } from 'modules/shortcuts';
 
+import { workspaceHref } from 'common/workspace-href';
 import { AllProviders } from 'common/wrappers/all-providers';
 
 import { useCurrentTeam } from 'hooks/teams';
@@ -81,29 +82,29 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
                 {
                   title: 'Inbox',
                   icon: Inbox,
-                  href: `/${workspaceSlug}/inbox`,
+                  href: workspaceHref(workspaceSlug, 'inbox'),
                   count: notificationsStore.unReadCount,
                   unread: true,
                 },
                 {
                   title: 'My issues',
                   icon: MyIssues,
-                  href: `/${workspaceSlug}/my-issues`,
+                  href: workspaceHref(workspaceSlug, 'my-issues'),
                 },
                 {
                   title: 'Views',
                   icon: StackLine,
-                  href: `/${workspaceSlug}/views`,
+                  href: workspaceHref(workspaceSlug, 'views'),
                 },
                 {
                   title: 'Projects',
                   icon: Project,
-                  href: `/${workspaceSlug}/projects`,
+                  href: workspaceHref(workspaceSlug, 'projects'),
                 },
                 {
                   title: 'Pages',
                   icon: BookLine,
-                  href: `/${workspaceSlug}/pages`,
+                  href: workspaceHref(workspaceSlug, 'pages'),
                 },
                 // Background work is only background if there is somewhere to
                 // go and look at it. The page existed and nothing linked to
@@ -112,12 +113,12 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
                 {
                   title: 'Agents',
                   icon: CodingLine,
-                  href: `/${workspaceSlug}/agent-runs`,
+                  href: workspaceHref(workspaceSlug, 'agent-runs'),
                 },
                 {
                   title: 'Teams',
                   icon: TeamLine,
-                  href: `/${workspaceSlug}/teams`,
+                  href: workspaceHref(workspaceSlug, 'teams'),
                 },
                 // The group below lists the products one by one, and its label
                 // is a label. This row is the way to the whole list, and it
@@ -126,7 +127,7 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
                 {
                   title: 'Products',
                   icon: BuildingLine,
-                  href: `/${workspaceSlug}/products`,
+                  href: workspaceHref(workspaceSlug, 'products'),
                 },
               ]}
             />

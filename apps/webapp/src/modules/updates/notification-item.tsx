@@ -5,6 +5,7 @@ import React from 'react';
 import ReactTimeAgo from 'react-time-ago';
 
 import { NotificationTypeEnum, type NotificationType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useTeamWithId } from 'hooks/teams';
 import { useUserData } from 'hooks/users';
@@ -85,7 +86,13 @@ export const NotificationItem = observer(
             'bg-grayAlpha-100',
         )}
         onClick={() => {
-          push(`/${workspaceSlug}/inbox/${team.identifier}-${issue.number}`);
+          push(
+            workspaceHref(
+              workspaceSlug,
+              'inbox',
+              `${team.identifier}-${issue.number}`,
+            ),
+          );
           if (!notification.readAt) {
             updateNotification({
               notificationId: notification.id,

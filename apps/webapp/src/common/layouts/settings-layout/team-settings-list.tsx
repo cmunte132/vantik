@@ -24,6 +24,7 @@ import { useRouter } from 'next/router';
 import React from 'react';
 
 import type { TeamType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useContextStore } from 'store/global-context-provider';
 import { UserContext } from 'store/user-context';
@@ -50,7 +51,7 @@ export const TeamSettingsList = observer(() => {
       <SidebarGroupLabel>
         Teams
         <SidebarGroupAction asChild aria-label="Add team">
-          <Link href={`/${workspaceSlug}/settings/new_team`}>
+          <Link href={workspaceHref(workspaceSlug, 'settings', 'new_team')}>
             <AddLine />
           </Link>
         </SidebarGroupAction>
@@ -99,7 +100,13 @@ export const TeamSettingsList = observer(() => {
                         }
                       >
                         <Link
-                          href={`/${workspaceSlug}/settings/teams/${team.identifier}/${item.href}`}
+                          href={workspaceHref(
+                            workspaceSlug,
+                            'settings',
+                            'teams',
+                            team.identifier,
+                            item.href,
+                          )}
                         >
                           <span className="flex-1 truncate">{item.title}</span>
                         </Link>

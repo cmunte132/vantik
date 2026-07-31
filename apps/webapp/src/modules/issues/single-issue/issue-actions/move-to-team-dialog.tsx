@@ -12,6 +12,7 @@ import { useRouter } from 'next/router';
 import React from 'react';
 
 import type { IssueType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useCurrentTeam } from 'hooks/teams';
 
@@ -38,7 +39,7 @@ export function MoveToTeamDialog({
   const onDeleteIssue = () => {
     deleteIssue({ issueId: issue.id, teamId: currentTeam.id });
     setMoveToTeamDialog(false);
-    push(`/${workspaceSlug}/team/${currentTeam.identifier}/all`);
+    push(workspaceHref(workspaceSlug, 'team', currentTeam.identifier, 'all'));
   };
 
   return (

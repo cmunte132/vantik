@@ -16,6 +16,8 @@ import { usePathname } from 'next/navigation';
 import { useRouter } from 'next/router';
 import React from 'react';
 
+import { workspaceHref } from 'common/workspace-href';
+
 import { useContextStore } from 'store/global-context-provider';
 
 import {
@@ -56,7 +58,12 @@ export function SidebarNav() {
           type="button"
           onClick={() => {
             push(
-              `/${query.workspaceSlug}/team/${teamsStore.teams[0].identifier}/all`,
+              workspaceHref(
+                query.workspaceSlug,
+                'team',
+                teamsStore.teams[0].identifier,
+                'all',
+              ),
             );
           }}
           className="flex h-9 w-full items-center gap-1.5 rounded px-2 text-left font-medium
@@ -78,7 +85,9 @@ export function SidebarNav() {
                   asChild
                   isActive={!teamIdentifier && isActive(item)}
                 >
-                  <Link href={`/${workspaceSlug}/settings/${item.href}`}>
+                  <Link
+                    href={workspaceHref(workspaceSlug, 'settings', item.href)}
+                  >
                     <span className="flex-1 truncate">{item.title}</span>
                   </Link>
                 </SidebarMenuButton>
@@ -97,7 +106,12 @@ export function SidebarNav() {
                   isActive={settingsSection === item.href}
                 >
                   <Link
-                    href={`/${workspaceSlug}/settings/account/${item.href}`}
+                    href={workspaceHref(
+                      workspaceSlug,
+                      'settings',
+                      'account',
+                      item.href,
+                    )}
                   >
                     <span className="flex-1 truncate">{item.title}</span>
                   </Link>

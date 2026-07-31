@@ -15,6 +15,7 @@ import React from 'react';
 
 import type { TeamType } from 'common/types';
 import type { IssueType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useMoveIssueToTeamMutation } from 'services/issues';
 
@@ -66,7 +67,13 @@ export const MoveIssueToTeamDialog = observer(
       onSuccess: (data: IssueType) => {
         const team = teamsStore.getTeamWithId(data.teamId);
         const issueNumber = data.number;
-        push(`/${workspaceSlug}/issue/${team.identifier}-${issueNumber}`);
+        push(
+          workspaceHref(
+            workspaceSlug,
+            'issue',
+            `${team.identifier}-${issueNumber}`,
+          ),
+        );
       },
     });
 

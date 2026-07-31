@@ -5,6 +5,7 @@ import ReactTimeAgo from 'react-time-ago';
 
 import { convertToTitleCase } from 'common/common-utils';
 import { StatusMapping, type ActionType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 interface ActionProps {
   action: ActionType;
@@ -27,7 +28,7 @@ export function Action({ action, noBorder }: ActionProps) {
         actionSlug === action.slug && 'bg-grayAlpha-200',
       )}
       onClick={() => {
-        push(`/${workspaceSlug}/actions/${action.slug}`);
+        push(workspaceHref(workspaceSlug, 'actions', action.slug));
       }}
     >
       <div

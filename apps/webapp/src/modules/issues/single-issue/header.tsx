@@ -13,6 +13,7 @@ import { useRouter } from 'next/router';
 import React from 'react';
 
 import { HeaderLayout } from 'common/header-layout';
+import { workspaceHref } from 'common/workspace-href';
 import { TooltipWrapper } from 'common/wrappers/tooltip-wrapper';
 
 import { IssueViewContext } from 'components/side-issue-view';
@@ -41,7 +42,13 @@ export const Header = observer(({ sideView }: HeaderProps) => {
   const openInFull = () => {
     const team = teamsStore.getTeamWithId(issue.teamId);
     closeIssueView();
-    push(`/${workspaceSlug}/issue/${team.identifier}-${issue.number}`);
+    push(
+      workspaceHref(
+        workspaceSlug,
+        'issue',
+        `${team.identifier}-${issue.number}`,
+      ),
+    );
   };
 
   return (
@@ -52,7 +59,12 @@ export const Header = observer(({ sideView }: HeaderProps) => {
             <BreadcrumbLink
               as={Link}
               className="flex items-center gap-2"
-              href={`/${workspaceSlug}/team/${team.identifier}/all`}
+              href={workspaceHref(
+                workspaceSlug,
+                'team',
+                team.identifier,
+                'all',
+              )}
             >
               <TeamIcon preferences={team.preferences} name={team.name} />
               <span className="inline-block">{team.name}</span>

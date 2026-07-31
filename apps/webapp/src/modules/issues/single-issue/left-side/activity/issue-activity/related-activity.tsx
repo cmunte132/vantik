@@ -6,6 +6,7 @@ import { useRouter } from 'next/router';
 
 import { IssueRelationEnum } from 'common/types';
 import { type IssueHistoryType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useTeamWithId } from 'hooks/teams';
 
@@ -65,7 +66,11 @@ export function RelatedActivity({
           </span>
           <a
             className="text-foreground mx-1"
-            href={`/${workspaceSlug}/issue/${team.identifier}-${relatedIssue.number}`}
+            href={workspaceHref(
+              workspaceSlug,
+              'issue',
+              `${team.identifier}-${relatedIssue.number}`,
+            )}
           >
             {team.identifier}-{relatedIssue.number}
           </a>
@@ -83,7 +88,11 @@ export function RelatedActivity({
           </span>
           <a
             className="text-foreground mx-1"
-            href={`/${workspaceSlug}/issue/${team.identifier}-${relatedIssue.number}`}
+            href={workspaceHref(
+              workspaceSlug,
+              'issue',
+              `${team.identifier}-${relatedIssue.number}`,
+            )}
           >
             {team.identifier}-{relatedIssue.number}
           </a>
@@ -101,7 +110,11 @@ export function RelatedActivity({
           </span>
           <a
             className="text-foreground mx-1"
-            href={`/${workspaceSlug}/issue/${team.identifier}-${relatedIssue.number}`}
+            href={workspaceHref(
+              workspaceSlug,
+              'issue',
+              `${team.identifier}-${relatedIssue.number}`,
+            )}
           >
             {team.identifier}-{relatedIssue.number}
           </a>
@@ -119,7 +132,11 @@ export function RelatedActivity({
           </span>
           <a
             className="text-foreground mx-1"
-            href={`/${workspaceSlug}/issue/${team.identifier}-${relatedIssue.number}`}
+            href={workspaceHref(
+              workspaceSlug,
+              'issue',
+              `${team.identifier}-${relatedIssue.number}`,
+            )}
           >
             {team.identifier}-{relatedIssue.number}
           </a>
@@ -137,7 +154,11 @@ export function RelatedActivity({
           </span>
           <a
             className="text-foreground mx-1"
-            href={`/${workspaceSlug}/issue/${team.identifier}-${relatedIssue.number}`}
+            href={workspaceHref(
+              workspaceSlug,
+              'issue',
+              `${team.identifier}-${relatedIssue.number}`,
+            )}
           >
             {team.identifier}-{relatedIssue.number}
           </a>

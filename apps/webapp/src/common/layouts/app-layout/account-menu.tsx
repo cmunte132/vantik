@@ -17,6 +17,7 @@ import React from 'react';
 import { signOut } from 'supertokens-auth-react/recipe/session';
 
 import { deleteCookies } from 'common/common-utils';
+import { workspaceHref } from 'common/workspace-href';
 
 import { UserContext } from 'store/user-context';
 
@@ -60,7 +61,14 @@ export const AccountMenu = observer(() => {
         <DropdownMenuGroup>
           <DropdownMenuItem
             onClick={() => {
-              push(`/${query.workspaceSlug}/settings/account/profile`);
+              push(
+                workspaceHref(
+                  query.workspaceSlug,
+                  'settings',
+                  'account',
+                  'profile',
+                ),
+              );
             }}
           >
             Preferences

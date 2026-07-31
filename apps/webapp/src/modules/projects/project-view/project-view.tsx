@@ -4,6 +4,7 @@ import React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { workspaceHref } from 'common/workspace-href';
 import { withApplicationStore } from 'common/wrappers/with-application-store';
 
 import { useProject } from 'hooks/projects';
@@ -54,7 +55,7 @@ export const ProjectView = withApplicationStore(() => {
           isProjectView
           view={view}
           setView={setView}
-          href={`/${workspaceSlug}/projects`}
+          href={workspaceHref(workspaceSlug, 'projects')}
         />
       }
     >

@@ -11,6 +11,8 @@ import {
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import { useRouter } from 'next/router';
 
+import { workspaceHref } from 'common/workspace-href';
+
 import { useCurrentTeam } from 'hooks/teams';
 
 import { useDeleteViewMutation } from 'services/views';
@@ -38,10 +40,15 @@ export function DeleteViewAlert({
 
       if (team) {
         router.push(
-          `/${router.query.workspaceSlug}/team/${team.identifier}/views`,
+          workspaceHref(
+            router.query.workspaceSlug,
+            'team',
+            team.identifier,
+            'views',
+          ),
         );
       } else {
-        router.push(`/${router.query.workspaceSlug}/views`);
+        router.push(workspaceHref(router.query.workspaceSlug, 'views'));
       }
     },
   });

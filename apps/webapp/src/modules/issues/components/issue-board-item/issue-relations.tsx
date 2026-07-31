@@ -8,6 +8,7 @@ import React from 'react';
 import { getWorkflowColor } from 'common/status-color';
 import { IssueRelationEnum } from 'common/types';
 import type { IssueType, WorkflowType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 import { getWorkflowIcon } from 'common/workflow-icons';
 
 import { useTeamWithId } from 'hooks/teams';
@@ -59,7 +60,11 @@ export const IssueRelations = observer(({ issue }: IssueRelationsProps) => {
         )}
         onClick={() => {
           push(
-            `/${workspaceSlug}/issue/${team.identifier}-${parentIssue.number}`,
+            workspaceHref(
+              workspaceSlug,
+              'issue',
+              `${team.identifier}-${parentIssue.number}`,
+            ),
           );
         }}
       >

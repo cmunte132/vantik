@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { SettingSection } from 'modules/settings/setting-section';
 
 import type { TeamType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useCurrentTeam } from 'hooks/teams/use-current-team';
 
@@ -39,7 +40,15 @@ export const Overview = observer(() => {
 
   const { mutate: updateTeam } = useUpdateTeamMutation({
     onSuccess: (data: TeamType) => {
-      replace(`/${workspaceSlug}/settings/teams/${data.identifier}/overview`);
+      replace(
+        workspaceHref(
+          workspaceSlug,
+          'settings',
+          'teams',
+          data.identifier,
+          'overview',
+        ),
+      );
 
       toast({
         title: 'Team updated',

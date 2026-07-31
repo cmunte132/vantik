@@ -15,6 +15,8 @@ import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import React from 'react';
 
+import { workspaceHref } from 'common/workspace-href';
+
 import { useContextStore } from 'store/global-context-provider';
 
 import { useProjectColumns } from './columns';
@@ -37,7 +39,9 @@ export const ProjectsList = observer(() => {
   });
 
   const goToProject = (projectId: string) => {
-    router.push(`/${router.query.workspaceSlug}/projects/${projectId}`);
+    router.push(
+      workspaceHref(router.query.workspaceSlug, 'projects', projectId),
+    );
   };
 
   return (

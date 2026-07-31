@@ -20,6 +20,8 @@ import { DeleteLine, MoreLine } from '@vantikhq/ui/icons';
 import { useRouter } from 'next/router';
 import React from 'react';
 
+import { workspaceHref } from 'common/workspace-href';
+
 import { useProject } from 'hooks/projects';
 
 import { useDeleteProjectMutation } from 'services/projects';
@@ -69,7 +71,9 @@ export function ProjectDetailsDropdown() {
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => {
-                  router.push(`/${router.query.workspaceSlug}/projects`);
+                  router.push(
+                    workspaceHref(router.query.workspaceSlug, 'projects'),
+                  );
                   mutate(project.id);
                 }}
               >

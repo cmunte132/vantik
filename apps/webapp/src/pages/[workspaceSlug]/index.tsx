@@ -5,6 +5,7 @@ import React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import type { TeamType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useContextStore } from 'store/global-context-provider';
 
@@ -26,7 +27,7 @@ export const WorkspaceRedirect = observer(() => {
       )[0];
 
       if (team) {
-        push(`/${workspaceSlug}/team/${team.identifier}/all`);
+        push(workspaceHref(workspaceSlug, 'team', team.identifier, 'all'));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -13,6 +13,7 @@ import { useRouter } from 'next/router';
 import React from 'react';
 
 import { HeaderLayout } from 'common/header-layout';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useCurrentTeam } from 'hooks/teams';
 
@@ -34,7 +35,7 @@ export const Header = observer(({ title }: HeaderProps) => {
           buttonVariants({ variant: 'link' }),
           'flex items-center justify-start my-2 w-full gap-2 bg-grayAlpha-100 rounded-sm px-2 py-1',
         )}
-        href={`/${workspaceSlug}/settings/new_team`}
+        href={workspaceHref(workspaceSlug, 'settings', 'new_team')}
       >
         <AddLine size={14} />
         Create Team
@@ -50,7 +51,12 @@ export const Header = observer(({ title }: HeaderProps) => {
             <BreadcrumbLink
               as={Link}
               className="flex items-center gap-2 font-medium"
-              href={`/${workspaceSlug}/team/${team.identifier}/all`}
+              href={workspaceHref(
+                workspaceSlug,
+                'team',
+                team.identifier,
+                'all',
+              )}
             >
               <TeamIcon preferences={team.preferences} name={team.name} />
 

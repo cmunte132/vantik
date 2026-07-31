@@ -22,6 +22,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import type { ViewType } from 'common/types';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useCurrentTeam } from 'hooks/teams';
 import { useCurrentWorkspace } from 'hooks/workspace';
@@ -70,9 +71,17 @@ export const NewViewDialog = observer(
 
         setOpen(false);
         if (team) {
-          push(`/${workspaceSlug}/team/${team.identifier}/views/${data.id}`);
+          push(
+            workspaceHref(
+              workspaceSlug,
+              'team',
+              team.identifier,
+              'views',
+              data.id,
+            ),
+          );
         } else {
-          push(`/${workspaceSlug}/views/${data.id}`);
+          push(workspaceHref(workspaceSlug, 'views', data.id));
         }
       },
     });

@@ -8,6 +8,7 @@ import { getWorkflowColor } from 'common/status-color';
 import type { IssueRelationType } from 'common/types';
 import type { IssueType } from 'common/types';
 import { getWorkflowIcon } from 'common/workflow-icons';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useTeamWithId } from 'hooks/teams';
 import { useAllWorkflows } from 'hooks/workflows';
@@ -47,7 +48,13 @@ export const RelatedIssueItem = observer(
         <Button
           variant="ghost"
           onClick={() => {
-            push(`/${workspaceSlug}/issue/${team.identifier}-${issue.number}`);
+            push(
+              workspaceHref(
+                workspaceSlug,
+                'issue',
+                `${team.identifier}-${issue.number}`,
+              ),
+            );
           }}
           className={cn(
             'flex gap-2 px-0 hover:px-0 shadow-none justify-start font-normal focus-visible:ring-1 focus-visible:border-primary',

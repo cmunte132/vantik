@@ -13,6 +13,8 @@ import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import React from 'react';
 
+import { workspaceHref } from 'common/workspace-href';
+
 import { useContextStore } from 'store/global-context-provider';
 
 /**
@@ -63,14 +65,14 @@ export const WorkspaceSwitcher = observer(() => {
         <DropdownMenuGroup>
           <DropdownMenuItem
             onClick={() => {
-              push(`/${query.workspaceSlug}/settings/overview`);
+              push(workspaceHref(query.workspaceSlug, 'settings', 'overview'));
             }}
           >
             Workspace settings
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
-              push(`/${query.workspaceSlug}/settings/members`);
+              push(workspaceHref(query.workspaceSlug, 'settings', 'members'));
             }}
           >
             Invite &amp; manage members

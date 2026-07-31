@@ -12,6 +12,8 @@ import { Button } from '@vantikhq/ui/components/button';
 import { useRouter } from 'next/router';
 import React from 'react';
 
+import { workspaceHref } from 'common/workspace-href';
+
 import { useDeleteActionMutation } from 'services/action';
 export const DeleteActionButton = ({ id }: { id: string }) => {
   const [open, setOpen] = React.useState(false);
@@ -23,7 +25,7 @@ export const DeleteActionButton = ({ id }: { id: string }) => {
 
   const deleteAction = () => {
     deleteActionAPI({ actionId: id });
-    push(`/${workspaceSlug}/settings/actions`);
+    push(workspaceHref(workspaceSlug, 'settings', 'actions'));
   };
 
   return (

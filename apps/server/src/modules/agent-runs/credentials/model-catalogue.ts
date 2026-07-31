@@ -141,6 +141,23 @@ async function ask(
   return { outcome: 'ok', response };
 }
 
+/**
+ * A base URL without the trailing slashes somebody pasted with it.
+ *
+ * Counted back rather than matched with `/\/+$/`, because the base URL is
+ * typed into a settings form: an anchored `+` retries from every position, so
+ * a value that is nothing but slashes costs time in the square of its length.
+ */
+function withoutTrailingSlashes(value: string): string {
+  let end = value.length;
+
+  while (end > 0 && value[end - 1] === '/') {
+    end -= 1;
+  }
+
+  return value.slice(0, end);
+}
+
 /** The URL and headers this provider wants, per its authentication style. */
 function requestFor(
   provider: ModelProvider,
@@ -154,8 +171,12 @@ function requestFor(
     throw new Error('This provider has no catalogue endpoint.');
   }
 
-  const base = baseUrl?.trim()
-    ? target.replace(/^https?:\/\/[^/]+/, baseUrl.trim().replace(/\/+$/, ''))
+  const trimmed = baseUrl?.trim();
+
+  // Substituted through a function so that a base URL containing `$&` is put
+  // in as it was typed rather than read as a replacement pattern.
+  const base = trimmed
+    ? target.replace(/^https?:\/\/[^/]+/, () => withoutTrailingSlashes(trimmed))
     : target;
 
   const headers: Record<string, string> = { ...(catalogue.headers ?? {}) };

@@ -141,6 +141,32 @@ describe('checking a key against its provider', () => {
     expect(seen[2].headers.Authorization).toBeUndefined();
   });
 
+  it('asks the base URL somebody typed, however they punctuated it', async () => {
+    const seen: string[] = [];
+    const record = (async (url: string) => {
+      seen.push(url);
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const openai = providerById('openai')!;
+
+    await fetchCatalogue(openai, 'sk-oai', ' https://proxy.acme.dev// ', record);
+    // The provider's own host is replaced, and its path is kept.
+    expect(seen[0]).toBe('https://proxy.acme.dev/v1/models');
+
+    // A run of separators that comes to nothing is the worst case for the
+    // trailing-slash strip: `/\/+$/` retried it from every position and took
+    // twelve seconds over a base URL of this length. Counting back is instant,
+    // and a settings form is waiting on this call.
+    const pathological = `https://proxy.acme.dev/${'/'.repeat(200_000)}x`;
+    const started = Date.now();
+
+    await fetchCatalogue(openai, 'sk-oai', pathological, record);
+
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(seen[1]).toBe(`${pathological}/v1/models`);
+  });
+
   it('says so rather than failing when a provider publishes no list', async () => {
     const azure = providerById('azure-openai-responses')!;
 

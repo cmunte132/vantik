@@ -29,6 +29,7 @@ import {
 import { z } from 'zod';
 
 import { AuthLayout } from 'common/layouts/auth-layout';
+import { safeRedirectPath } from 'common/safe-redirect';
 import { AuthGuard } from 'common/wrappers/auth-guard';
 
 export const AuthSchema = z.object({
@@ -65,7 +66,7 @@ export function Auth() {
   }, []);
 
   const onAuthenticated = () => {
-    router.replace(redirectToPath ? (redirectToPath as string) : '/');
+    router.replace(safeRedirectPath(redirectToPath));
   };
 
   const passkeyError = (description: string) => {
@@ -208,7 +209,7 @@ export function Auth() {
         ) {
           posthog.capture('user_signed_up', { email: response.user.emails[0] });
         }
-        router.replace(redirectToPath ? (redirectToPath as string) : '/');
+        router.replace(safeRedirectPath(redirectToPath));
       } else if (response.status === 'INCORRECT_USER_INPUT_CODE_ERROR') {
         const left =
           response.maximumCodeInputAttempts -

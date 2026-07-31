@@ -8,6 +8,7 @@ import {
   clearLoginAttemptInfo,
 } from 'supertokens-web-js/recipe/passwordless';
 
+import { safeRedirectPath } from 'common/safe-redirect';
 import { AuthGuard } from 'common/wrappers/auth-guard';
 
 export function Verify() {
@@ -40,7 +41,7 @@ export function Verify() {
             description: 'Sign in successfully!',
           });
         }
-        router.replace(redirectToPath ? (redirectToPath as string) : '/');
+        router.replace(safeRedirectPath(redirectToPath));
       } else {
         // this can happen if the magic link has expired or is invalid
         // or if it was denied due to security reasons in case of automatic account linking

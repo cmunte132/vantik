@@ -70,6 +70,56 @@ export async function visibleTeamIds(
 }
 
 /**
+ * This function returns the teams whose *own record* one caller may read.
+ *
+ * This is a wider question than `visibleTeamIds`, and the difference is the
+ * decision ENG-82 records. `visibleTeamIds` answers "whose issues may I read",
+ * and the answer is the caller's own teams — nothing widens it. This answers
+ * "whose name, identifier, preferences and roster may I read", and there an
+ * admin reads every team in the workspace, by role rather than by membership.
+ *
+ * The reason is that the two cannot be the same answer here. `createTeam` adds
+ * every admin at the time to a new team, but an admin who predates a team is
+ * not in it — so narrowing the roster routes to membership alone would take the
+ * team management screen away from exactly the person who administers it. The
+ * alternative considered was backfilling every admin into every team, which
+ * keeps membership as the single source of truth; it was not taken, because it
+ * makes "admin" mean "reads every team's issues" permanently and by accident,
+ * rather than by a policy anyone chose.
+ *
+ * **So the role widens the roster and never the content.** An admin reading a
+ * team's name here still reads only their own teams' issues through
+ * `visibleTeamIds`, which no role touches. Anything that serves team-owned
+ * *records* must keep calling `visibleTeamIds`; this function is only for the
+ * `/v1/teams` routes, which serve the team object itself.
+ */
+export async function readableTeamIds(
+  prisma: PrismaService,
+  userId: string,
+  workspaceId: string,
+): Promise<string[]> {
+  const membership = await prisma.usersOnWorkspaces.findUnique({
+    where: { userId_workspaceId: { userId, workspaceId } },
+    select: { teamIds: true, role: true },
+  });
+
+  if (!membership) {
+    return [];
+  }
+
+  if (membership.role !== 'ADMIN') {
+    return membership.teamIds ?? [];
+  }
+
+  const teams = await prisma.team.findMany({
+    where: { workspaceId, deleted: null },
+    select: { id: true },
+  });
+
+  return teams.map((team) => team.id);
+}
+
+/**
  * This function returns the name of the socket room for one team.
  *
  * The room carries the workspace as well as the team, because a team id is

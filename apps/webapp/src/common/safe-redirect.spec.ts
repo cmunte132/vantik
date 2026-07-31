@@ -56,8 +56,11 @@ describe('safeRedirectPath', () => {
     expect(safeRedirectPath([])).toBe('/');
   });
 
-  it('does not backtrack on a long value', () => {
-    // The check runs on a value from the URL, so it has to stay linear.
+  it('stays fast on a long value', () => {
+    // The check runs on a value from the URL, so it has to stay linear. It is
+    // three `startsWith`/`includes` calls now rather than a regular
+    // expression, so there is nothing left to backtrack — this holds the next
+    // person who reaches for one to the same bound.
     const started = Date.now();
 
     expect(safeRedirectPath(`/${'a/'.repeat(200_000)}x`)).toContain('/a/');

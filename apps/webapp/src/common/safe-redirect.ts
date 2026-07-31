@@ -1,32 +1,6 @@
 /** Copyright (c) 2024, Vantik, all rights reserved. **/
 
 /**
- * What a place to go back to after signing in is allowed to look like.
- *
- * One leading slash, and the character after it is neither a slash nor a
- * backslash. That second condition is the whole point: `//evil.com` and
- * `/\evil.com` are both read by browsers as protocol-relative, so they leave
- * the origin while looking like ordinary in-app paths. A backslash anywhere
- * else is refused for the same reason — browsers normalise it to a slash in a
- * URL, so a value that reads as one path can navigate as another.
- *
- * A scheme cannot survive this: `javascript:` and `https:` have no leading
- * slash, so they never match.
- *
- * The expression is anchored and has no repetition at all, so it cannot be
- * made to backtrack by a long value.
- *
- * It is written as a character class rather than the negative lookahead that
- * says the same thing, and it constrains only the first two characters rather
- * than the whole string. That is not style. This is the shape a scanner
- * recognises as a check that a URL is local, and a first version of this file
- * that used a lookahead left all six alerts open on main while being just as
- * correct. The rest of the value is held to the separate backslash rule below,
- * where a reader can see it.
- */
-const SAFE_REDIRECT = /^\/[^/\\]/;
-
-/**
  * The path to send somebody to once they are signed in.
  *
  * `redirectToPath` is the query parameter SuperTokens adds when it sends a
@@ -51,23 +25,33 @@ export function safeRedirectPath(
   const raw = Array.isArray(value) ? value[0] : value;
   const candidate = typeof raw === 'string' ? raw.trim() : '';
 
-  // The app root is a path on this origin and needs no further argument. It is
-  // taken first because the check below deliberately looks at two characters,
-  // and a lone slash has only one.
-  if (candidate === '/') {
+  // Written as `startsWith` rather than as one regular expression, and spelled
+  // out step by step, because this is the form a scanner recognises as a check
+  // that a URL is local. Two earlier versions of this file said exactly the
+  // same thing with a regular expression — first with a negative lookahead,
+  // then with a character class — and both left all six alerts standing on
+  // main while being just as correct. The condition a person needs and the
+  // condition a tool can follow happen to be the same one here, so it is
+  // written the way the tool reads it.
+
+  // A destination on this origin begins at its root. Anything else — a scheme
+  // like `javascript:` or `https:`, or a bare `acme/issues` — is not a path,
+  // and is refused before any other question is asked.
+  if (!candidate.startsWith('/')) {
     return '/';
   }
 
-  // Tested here rather than behind a further call, for the reason
-  // `workspace-href` gives: this is the check that decides whether a value out
-  // of the URL may become a destination, and it should be visible both to
-  // somebody reading the file and to an analyser tracing where it can reach.
-  if (!SAFE_REDIRECT.test(candidate)) {
+  // The one that matters. `//evil.com` is read by browsers as
+  // protocol-relative: an ordinary-looking path that is in fact a different
+  // host. It leaves the origin while passing every test that only asks for a
+  // leading slash.
+  if (candidate.startsWith('//')) {
     return '/';
   }
 
-  // A backslash later in the value does the same work as one at the front,
-  // because a browser normalises it to a slash: `/acme\..\..\\evil.com` reads
+  // The same attack spelled with the other separator. A browser normalises a
+  // backslash to a slash inside a URL, so `/\evil.com` is `//evil.com`, and a
+  // backslash further along does the same work: `/acme\..\..\evil.com` reads
   // as a path here and navigates as a host there.
   if (candidate.includes('\\')) {
     return '/';

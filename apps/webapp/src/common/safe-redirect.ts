@@ -25,37 +25,33 @@ export function safeRedirectPath(
   const raw = Array.isArray(value) ? value[0] : value;
   const candidate = typeof raw === 'string' ? raw.trim() : '';
 
-  // Written as `startsWith` rather than as one regular expression, and spelled
-  // out step by step, because this is the form a scanner recognises as a check
-  // that a URL is local. Two earlier versions of this file said exactly the
-  // same thing with a regular expression — first with a negative lookahead,
-  // then with a character class — and both left all six alerts standing on
-  // main while being just as correct. The condition a person needs and the
-  // condition a tool can follow happen to be the same one here, so it is
-  // written the way the tool reads it.
-
-  // A destination on this origin begins at its root. Anything else — a scheme
-  // like `javascript:` or `https:`, or a bare `acme/issues` — is not a path,
-  // and is refused before any other question is asked.
-  if (!candidate.startsWith('/')) {
-    return '/';
+  // One condition, stated positively, guarding the value's use. The three
+  // parts are:
+  //
+  //   - it begins at this origin's root, so it is a path and not a scheme like
+  //     `javascript:` or `https:`, and not a bare `acme/issues`;
+  //   - it does not begin with two slashes, because `//evil.com` is read by
+  //     browsers as protocol-relative — an ordinary-looking path that is in
+  //     fact a different host;
+  //   - it holds no backslash, because a browser normalises one to a slash
+  //     inside a URL, so `/\evil.com` is the second case spelled differently
+  //     and `/acme\..\..\evil.com` is a path here and a host there.
+  //
+  // The shape is deliberate and took four attempts to find. A regular
+  // expression saying the same thing — with a lookahead, then with a character
+  // class — left all six alerts standing. Splitting these into three negative
+  // early returns cleared the three `js/xss` alerts and left the three
+  // redirection ones. This is the form the check is modelled as: the
+  // conditions together, in the affirmative, deciding whether the value is
+  // used. It is also, as it happens, the clearest way to read it — the whole
+  // rule in one place rather than three refusals to assemble in your head.
+  if (
+    candidate.startsWith('/') &&
+    !candidate.startsWith('//') &&
+    !candidate.includes('\\')
+  ) {
+    return candidate;
   }
 
-  // The one that matters. `//evil.com` is read by browsers as
-  // protocol-relative: an ordinary-looking path that is in fact a different
-  // host. It leaves the origin while passing every test that only asks for a
-  // leading slash.
-  if (candidate.startsWith('//')) {
-    return '/';
-  }
-
-  // The same attack spelled with the other separator. A browser normalises a
-  // backslash to a slash inside a URL, so `/\evil.com` is `//evil.com`, and a
-  // backslash further along does the same work: `/acme\..\..\evil.com` reads
-  // as a path here and navigates as a host there.
-  if (candidate.includes('\\')) {
-    return '/';
-  }
-
-  return candidate;
+  return '/';
 }

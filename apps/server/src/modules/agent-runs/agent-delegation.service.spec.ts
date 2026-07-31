@@ -14,6 +14,7 @@ import { PrismaService } from 'nestjs-prisma';
 import type IssueCommentsService from 'modules/issue-comments/issue-comments.service';
 import type LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 
+import { RunHandbackService } from './run-handback.service';
 import { AgentDelegationService } from './agent-delegation.service';
 import type { AgentRunsService } from './agent-runs.service';
 import type { ContextPackService } from './context-pack.service';
@@ -149,7 +150,7 @@ function build(options: {
     contextPacks,
     registry,
     linkedIssues,
-    comments,
+    new RunHandbackService(prisma, comments),
   );
 
   return { service, prisma, agentRuns, registry, created, posted, linked, linkedIssues };

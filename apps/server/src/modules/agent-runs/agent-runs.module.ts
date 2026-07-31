@@ -22,6 +22,7 @@ import {
 import { AgentRunsProcessor, AgentRunsScheduler } from './agent-runs.processor';
 import { AgentRunsService } from './agent-runs.service';
 import { ContextPackService } from './context-pack.service';
+import { RunHandbackService } from './run-handback.service';
 import { ByoExecutor } from './executors/byo.executor';
 import { ExecutorRegistry } from './executors/executor.registry';
 
@@ -44,6 +45,7 @@ import { ExecutorRegistry } from './executors/executor.registry';
     // without a value import back into this module.
     { provide: AGENT_DELEGATION_SERVICE, useExisting: AgentDelegationService },
     ContextPackService,
+    RunHandbackService,
     ExecutorRegistry,
     ByoExecutor,
     HostedExecutor,

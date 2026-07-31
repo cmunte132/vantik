@@ -13,7 +13,6 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { convertTiptapJsonToMarkdown } from 'common/utils/tiptap.utils';
 
-import IssueCommentsService from 'modules/issue-comments/issue-comments.service';
 import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
@@ -25,6 +24,7 @@ import { AGENT_RUN_WORKSPACE_CONCURRENCY } from './agent-runs.interface';
 import { AgentRunsService } from './agent-runs.service';
 import { ContextPackService } from './context-pack.service';
 import { ExecutorRegistry } from './executors/executor.registry';
+import { RunHandbackService } from './run-handback.service';
 
 /** States in which a run still counts against the concurrency cap. */
 const LIVE_STATUSES: AgentRunStatus[] = ['QUEUED', 'CLAIMED', 'RUNNING'];
@@ -66,7 +66,7 @@ export class AgentDelegationService {
     private contextPacks: ContextPackService,
     private registry: ExecutorRegistry,
     private linkedIssues: LinkedIssueService,
-    private comments: IssueCommentsService,
+    private handback: RunHandbackService,
   ) {}
 
   // ------------------------------------------------------------- delegating
@@ -278,7 +278,7 @@ export class AgentDelegationService {
       },
     });
 
-    await this.postSummary(run.issueId, run.agentUserId, runId, {
+    await this.handback.post(run.issueId, run.agentUserId, runId, {
       status,
       summary: report.summary,
       error: report.error,
@@ -322,84 +322,6 @@ export class AgentDelegationService {
         error: error instanceof Error ? error : undefined,
       });
       return undefined;
-    }
-  }
-
-  /**
-   * The agent-authored summary comment.
-   *
-   * Rendered here rather than accepted from the executor, so an executor
-   * cannot post arbitrary markdown to an issue as the agent identity — and so
-   * a failed run reads as usefully as a successful one, which is the half
-   * everybody skips.
-   */
-  private async postSummary(
-    issueId: string,
-    agentUserId: string,
-    runId: string,
-    outcome: {
-      status: AgentRunStatus;
-      summary?: string;
-      error?: string;
-      failure?: AgentRunFailure;
-      branch?: string;
-      prUrl?: string;
-      worktreePath?: string;
-      attempt: number;
-    },
-  ) {
-    const lines: string[] = [];
-
-    if (outcome.status === 'SUCCEEDED') {
-      lines.push(outcome.summary ?? 'Finished the work.');
-    } else if (outcome.status === 'NEEDS_REVIEW') {
-      lines.push(
-        `**Needs a human.** ${outcome.summary ?? 'The run finished but could not confirm it met the Definition of Done.'}`,
-      );
-    } else {
-      lines.push(
-        `**Could not finish** (attempt ${outcome.attempt})${
-          outcome.failure ? ` — ${describeFailure(outcome.failure)}` : ''
-        }.`,
-      );
-      if (outcome.error) {
-        lines.push('', '```', outcome.error.slice(0, 1500), '```');
-      }
-    }
-
-    if (outcome.prUrl) {
-      lines.push('', `Pull request: ${outcome.prUrl}`);
-    } else if (outcome.worktreePath) {
-      // No remote to push to, so the work is a branch in a worktree on the
-      // machine that ran it. Give the reader the command, not just the path.
-      lines.push(
-        '',
-        `Ready for review in a worktree${outcome.branch ? ` on \`${outcome.branch}\`` : ''}:`,
-        '',
-        '```bash',
-        `cd ${outcome.worktreePath}`,
-        '```',
-      );
-    } else if (outcome.branch) {
-      lines.push('', `Branch: \`${outcome.branch}\``);
-    }
-
-    try {
-      await this.comments.createIssueComment({ issueId }, agentUserId, {
-        bodyMarkdown: lines.join('\n'),
-        // Names the run this comment reports on. The issue view renders it as
-        // the run's card rather than as prose, so the handback is one object in
-        // the feed instead of a card and a paraphrase of it side by side. Every
-        // other reader — the API, MCP, mail — still gets the markdown, which is
-        // why this stays a comment rather than becoming a client-only card.
-        sourceMetadata: { source: 'agent-run', agentRunId: runId },
-      });
-    } catch (error) {
-      this.logger.error({
-        message: `Could not post the agent summary on issue ${issueId}: ${error}`,
-        where: 'AgentDelegationService.postSummary',
-        error: error instanceof Error ? error : undefined,
-      });
     }
   }
 
@@ -570,24 +492,6 @@ function plainText(description: string | null): string {
     .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-const FAILURE_PROSE: Record<AgentRunFailure, string> = {
-  ENVIRONMENT_SETUP_FAILED: 'the environment would not build',
-  HARNESS_CRASHED: 'the harness crashed',
-  BUDGET_EXHAUSTED: 'it ran out of budget',
-  NO_DIFF_PRODUCED: 'it finished without changing anything',
-  VERIFICATION_FAILED: 'the checks did not pass',
-  PUSH_REJECTED: 'the push was rejected',
-  PR_CREATION_FAILED: 'the branch went up but the pull request did not',
-  EGRESS_DENIED: 'the sandbox blocked a network call it needed',
-  LEASE_LOST: 'the runner stopped responding',
-  NOT_TEST_SPECIFIABLE: 'this issue cannot be pinned down with tests',
-  REWARD_HACK_SUSPECTED: 'it was optimising the tests rather than the problem',
-};
-
-function describeFailure(failure: AgentRunFailure): string {
-  return FAILURE_PROSE[failure] ?? failure.toLowerCase().replace(/_/g, ' ');
 }
 
 /**

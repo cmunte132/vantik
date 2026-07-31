@@ -5,6 +5,8 @@ import * as React from 'react';
 
 import { useRevokeAgentMutation } from 'services/users/revoke-agent';
 
+import { agentRetirement } from './retirement';
+
 interface AgentItemProps {
   agent: AgentSummary;
   workspaceId: string;
@@ -20,12 +22,9 @@ export function AgentItem({ agent, workspaceId }: AgentItemProps) {
   });
 
   // Two verbs for one control, because the two ownerships lose different
-  // things. A personal agent holds a token somebody pasted into a client, and
-  // revoking kills that credential. A workspace agent never held one, so there
-  // is nothing to revoke — what the button does is switch the identity off.
-  // Saying "revoke" there would name a credential the reader would then go
-  // looking for.
-  const isWorkspaceAgent = agent.ownership === 'workspace';
+  // things. Decided in `retirement.ts` so the distinction is tested rather
+  // than spelled out inline three times.
+  const { verb, retiredBadge, usageDetail } = agentRetirement(agent);
 
   return (
     <div className="group flex items-center justify-between mb-2 bg-background-3 rounded-lg p-2 px-4">
@@ -33,11 +32,7 @@ export function AgentItem({ agent, workspaceId }: AgentItemProps) {
         <div className="flex items-center gap-2">
           <span>{agent.name}</span>
           <Badge variant="secondary">{agent.ownership}</Badge>
-          {!agent.active && (
-            <Badge variant="outline">
-              {isWorkspaceAgent ? 'disabled' : 'revoked'}
-            </Badge>
-          )}
+          {!agent.active && <Badge variant="outline">{retiredBadge}</Badge>}
           {/* The signal that an account is a leftover rather than something
               live. Only worth saying about an agent that could still act — a
               revoked one that was never used is not a loose end.
@@ -45,13 +40,13 @@ export function AgentItem({ agent, workspaceId }: AgentItemProps) {
               Never said about a workspace agent: last use is derived from its
               tokens, and it has none, so the badge would be permanently true
               and would mean nothing. */}
-          {agent.active && !agent.lastUsedAt && !isWorkspaceAgent && (
+          {agent.active && !agent.lastUsedAt && !usageDetail && (
             <Badge variant="outline">never used</Badge>
           )}
         </div>
         <span className="text-sm text-muted-foreground">
           {agent.email} · can {agent.scopes.join(', ')} ·{' '}
-          {isWorkspaceAgent ? 'holds no token' : used(agent)}
+          {usageDetail ?? used(agent)}
         </span>
         {error && <span className="text-sm text-destructive">{error}</span>}
       </div>
@@ -62,7 +57,7 @@ export function AgentItem({ agent, workspaceId }: AgentItemProps) {
           isLoading={isPending}
           onClick={() => revoke({ agentId: agent.id, workspaceId })}
         >
-          {isWorkspaceAgent ? 'disable' : 'revoke'}
+          {verb}
         </Button>
       )}
     </div>

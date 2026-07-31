@@ -51,11 +51,49 @@ export function workspaceAgentDefaults(
   )?.agentRuns;
 
   return {
-    defaultExecutor: agentRuns?.defaultExecutor ?? null,
+    defaultExecutor: executorKeyOf(agentRuns?.defaultExecutor),
     repo: isObject(agentRuns?.repo) ? agentRuns.repo : {},
     model: modelChoiceOf(agentRuns?.model),
-    phases: isObject(agentRuns?.phases) ? agentRuns.phases : {},
+    phases: phaseFlagsOf(agentRuns?.phases),
   };
+}
+
+const PHASE_NAMES = ['specify', 'score', 'review'] as const;
+
+/**
+ * Stored phase switches, read back with each flag's type checked.
+ *
+ * Dropping a value of the wrong type rather than passing it through is the
+ * whole point. These are spread over the runner's defaults, so a stored
+ * `"false"` — a string, and every non-empty string is truthy — would turn a
+ * phase *on* to say that it is off. A flag that is dropped falls back to the
+ * default instead, which is what an unreadable value should do.
+ */
+function phaseFlagsOf(value: unknown): WorkspaceAgentDefaults['phases'] {
+  if (!isObject(value)) {
+    return {};
+  }
+
+  const raw = value as Record<string, unknown>;
+  const phases: WorkspaceAgentDefaults['phases'] = {};
+
+  for (const name of PHASE_NAMES) {
+    if (typeof raw[name] === 'boolean') {
+      phases[name] = raw[name] as boolean;
+    }
+  }
+
+  return phases;
+}
+
+/**
+ * An executor key, which is a registry lookup rather than free text.
+ *
+ * Anything that is not a non-empty string reads back as absent, so the
+ * registry is asked for an executor by name or is not asked at all.
+ */
+function executorKeyOf(value: unknown): string | null {
+  return typeof value === 'string' && value ? value : null;
 }
 
 /**
@@ -99,9 +137,7 @@ function modelChoiceOf(value: unknown): ModelChoice {
 export function agentBoundExecutor(settings: unknown): string | null {
   const agent = (settings as { agent?: { executor?: unknown } } | null)?.agent;
 
-  return typeof agent?.executor === 'string' && agent.executor
-    ? agent.executor
-    : null;
+  return executorKeyOf(agent?.executor);
 }
 
 /** Re-exported so callers reading agent settings have one import, not two. */

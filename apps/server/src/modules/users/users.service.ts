@@ -390,17 +390,20 @@ export class UsersService {
    * the workspace, so an agent's edits are attributed to the agent rather than
    * to the person who connected it.
    *
-   * An agent authenticates only with a personal access token. It is still given
-   * a passwordless credential it never uses interactively — the synthetic
-   * address receives nothing — so its identity resolves the same way a person's
-   * does. The token is returned once and is not retrievable afterwards.
+   * Every agent is given a passwordless credential it never uses
+   * interactively — the synthetic address receives nothing — so its identity
+   * resolves the same way a person's does.
    *
-   * The membership records whether the agent is `personal` — owned by the
-   * person who made it, to drive their own client — or `workspace`-owned, a
-   * shared credential for CI, a scheduled job or a shared runner, stored with a
-   * null `ownerUserId` so an admin rather than an owner retires it. An agent is
-   * never a BOT: that role is for the actions feature's automations, a separate
-   * kind of principal.
+   * **Ownership decides whether a token is minted at all.** A `personal` agent
+   * belongs to the person who made it and gets one, returned once and not
+   * retrievable afterwards, because a person has to paste it into `.mcp.json`
+   * or a runner daemon — the visible token is the product. A `workspace` agent
+   * belongs to no individual, is stored with a null `ownerUserId` so an admin
+   * rather than an owner retires it, and gets **no token**: a standing
+   * credential nobody owns has unbounded blast radius and nobody to rotate it.
+   *
+   * An agent is never a BOT: that role is for the actions feature's
+   * automations, a separate kind of principal.
    *
    * It also records the agent's scopes. The default is read and write but not
    * delete, so an agent can do the whole issue workflow without holding the one
@@ -461,8 +464,7 @@ export class UsersService {
     // provision. An account marked `type: Agent` with a live credential but no
     // membership is invisible to `listAgentAccounts` (which reads memberships)
     // and unreachable by `revokeAgent` (which requires one), so it could only be
-    // cleaned up by hand in the database. An agent with a membership but no
-    // token would show on the screen as permanently revoked.
+    // cleaned up by hand in the database.
     const { user, token } = await this.prisma.$transaction(async (tx) => {
       // The passwordless sign-up derives a name from the synthetic address, so
       // set the display name explicitly — this is how the agent reads in
@@ -497,6 +499,14 @@ export class UsersService {
         },
       });
 
+      // A workspace agent stops here: the identity exists and nothing can
+      // authenticate as it. Returning early rather than minting and discarding
+      // means there is no moment at which the credential existed to be logged,
+      // replicated or read off a crashed transaction.
+      if (ownership !== 'personal') {
+        return { user, token: undefined };
+      }
+
       // Inlined rather than calling createPersonalAccessToken, which holds its
       // own client and so would commit outside this transaction.
       const token = generatePersonalAccessToken();
@@ -515,24 +525,29 @@ export class UsersService {
     });
 
     this.logger.info({
-      message: `Provisioned ${ownership} agent account ${user.id} in workspace ${workspaceId} with scopes ${scopes.join(', ')} (by ${createdByUserId})`,
+      message: `Provisioned ${ownership} agent account ${user.id} in workspace ${workspaceId} with scopes ${scopes.join(', ')}${ownership === 'personal' ? '' : ' and no token'} (by ${createdByUserId})`,
       where: 'UsersService.createAgentAccount',
     });
 
-    return {
+    const identity: Omit<AgentAccount, 'ownership' | 'token'> = {
       id: user.id,
       name,
       email,
-      ownership,
       ownerUserId,
       scopes,
-      token,
       // Minted a moment ago and not yet used for anything. Null rather than
       // omitted, because "never used" is the flag the settings list puts on a
       // leftover, and it has to be true from the start for that to mean
       // anything.
       lastUsedAt: null,
     };
+
+    // The two branches are built separately rather than spreading a `token`
+    // that may be undefined, so the union does the checking: there is no
+    // expression here that could put a credential on the workspace branch.
+    return token
+      ? { ...identity, ownership: 'personal', token }
+      : { ...identity, ownership: 'workspace' };
   }
 
   /**
@@ -609,6 +624,24 @@ export class UsersService {
       }
     }
 
+    /**
+     * Whether this agent can still act, which is a different question for the
+     * two ownerships.
+     *
+     * A personal agent acts by presenting its token, so a live token is the
+     * whole answer. A workspace agent never holds one — there is nothing to
+     * delete and nothing to count — so asking about tokens would report every
+     * workspace agent as revoked from the moment it was created. What retires
+     * one is `disabledAt` on the identity.
+     */
+    const isActive = (membership: (typeof memberships)[number]) => {
+      const { ownership, disabledAt } = agentSettings(membership.settings);
+
+      return ownership === 'personal'
+        ? activeTokenUserIds.has(membership.userId)
+        : !disabledAt;
+    };
+
     return memberships
       .filter((membership) => {
         // A cleared agent leaves the listing but keeps its account, its
@@ -616,15 +649,18 @@ export class UsersService {
         // and comments still resolves. Only ever hides a revoked one — hiding a
         // live agent would conceal something that can still act.
         const hidden = agentSettings(membership.settings).hiddenAt;
-        return !hidden || activeTokenUserIds.has(membership.userId);
+        return !hidden || isActive(membership);
       })
       .map((membership) => {
         // Read through the same helper the guard uses, so the screen shows what
-        // is actually enforced rather than what happens to be stored. `hiddenAt`
-        // is a listing concern and has no business on the wire.
-        const { hiddenAt: _hiddenAt, ...granted } = agentSettings(
-          membership.settings,
-        );
+        // is actually enforced rather than what happens to be stored. Neither
+        // `hiddenAt` nor `disabledAt` goes on the wire: the first is a listing
+        // concern, and the second is already answered by `active`.
+        const {
+          hiddenAt: _hiddenAt,
+          disabledAt: _disabledAt,
+          ...granted
+        } = agentSettings(membership.settings);
 
         return {
           id: membership.user.id,
@@ -634,7 +670,7 @@ export class UsersService {
           createdAt: (
             membership.joinedAt ?? membership.user.createdAt
           ).toISOString(),
-          active: activeTokenUserIds.has(membership.user.id),
+          active: isActive(membership),
           lastUsedAt:
             lastUsedByUser.get(membership.user.id)?.toISOString() ?? null,
         };
@@ -698,10 +734,19 @@ export class UsersService {
   }
 
   /**
-   * Revokes an agent's access by soft-deleting its tokens in this workspace.
-   * The account and its authored history are left intact; only its ability to
-   * authenticate is removed. Scoped to the workspace and to agent-typed tokens
-   * so it can never touch a person's PATs.
+   * Stops an agent acting. The account and its authored history are left
+   * intact; only its ability to act is removed.
+   *
+   * **One verb, two mechanisms, chosen by ownership.** A personal agent is
+   * stopped by soft-deleting its tokens — scoped to the workspace and to
+   * agent-typed tokens, so it can never touch a person's own PATs. A workspace
+   * agent holds no token to delete, so what stops it is `disabledAt` on the
+   * identity.
+   *
+   * Doing only the token half would silently succeed on a workspace agent
+   * while leaving it exactly as able to act as before, which is the worst
+   * shape a destructive control can have: it reports success and changes
+   * nothing.
    */
   async revokeAgent(
     sessionWorkspaceId: string,
@@ -725,20 +770,41 @@ export class UsersService {
       );
     }
 
+    const { ownerUserId, ownership } = agentSettings(membership.settings);
+
     // An owner may always cut off their own agent; anyone else needs admin.
     // Checked after the membership lookup so a foreign agent id is a 404
     // rather than a 403 that confirms the agent exists.
-    if (agentSettings(membership.settings).ownerUserId !== userId) {
+    if (ownerUserId !== userId) {
       await assertWorkspaceAdmin(this.prisma, userId, workspaceId);
     }
 
+    // Both halves run for a personal agent. The token deletion is what stops
+    // it; `disabledAt` is written too so that an agent whose tokens were
+    // deleted by hand cannot come back by having one re-issued.
     await this.prisma.personalAccessToken.updateMany({
       where: { workspaceId, userId: agentId, type: 'agent', deleted: null },
       data: { deleted: new Date() },
     });
 
+    const settings = (membership.settings ?? {}) as Record<string, unknown>;
+    const agentBlob = (settings.agent ?? {}) as Record<string, unknown>;
+
+    await this.prisma.usersOnWorkspaces.update({
+      where: { userId_workspaceId: { userId: agentId, workspaceId } },
+      data: {
+        settings: {
+          ...settings,
+          agent: { ...agentBlob, disabledAt: new Date().toISOString() },
+        },
+      },
+    });
+
     this.logger.info({
-      message: `Revoked agent account ${agentId} in workspace ${workspaceId}`,
+      message:
+        ownership === 'personal'
+          ? `Revoked agent account ${agentId} in workspace ${workspaceId}`
+          : `Disabled workspace agent identity ${agentId} in workspace ${workspaceId}`,
       where: 'UsersService.revokeAgent',
     });
   }

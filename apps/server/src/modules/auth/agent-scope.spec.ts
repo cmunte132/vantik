@@ -42,6 +42,7 @@ describe('agentSettings', () => {
       ownerUserId: null,
       scopes: ['read', 'delete'],
       hiddenAt: null,
+      disabledAt: null,
     });
   });
 
@@ -54,6 +55,7 @@ describe('agentSettings', () => {
       ownerUserId: null,
       scopes: DEFAULT_AGENT_SCOPES,
       hiddenAt: null,
+      disabledAt: null,
     });
   });
 

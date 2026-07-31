@@ -184,6 +184,42 @@ describe('UsersService.createAgentAccount', () => {
     expect(result.ownerUserId).toBeNull();
   });
 
+  /**
+   * The rule this whole change exists for. A standing credential belonging to
+   * no individual has unbounded blast radius, no expiry, and nobody whose job
+   * it is to rotate it — so a workspace agent is never issued one at all.
+   */
+  it('mints no token at all for a workspace-owned agent', async () => {
+    const result = await provision('House Agent', 'workspace');
+
+    expect(prisma.personalAccessToken.create).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      id: 'agent-user-1',
+      name: 'House Agent',
+      email: expect.stringMatching(/@agents\.vantik\.local$/),
+      ownership: 'workspace',
+      ownerUserId: null,
+      scopes: DEFAULT_AGENT_SCOPES,
+      lastUsedAt: null,
+    });
+    // Not merely undefined — the key is absent, so nothing downstream can
+    // serialise it as a field that looks like a credential someone mislaid.
+    expect('token' in result).toBe(false);
+  });
+
+  it('still gives the identity a membership and a name when it mints no token', async () => {
+    await provision('House Agent', 'workspace');
+
+    // The identity is the point: it is what the agent's edits are attributed
+    // to, so provisioning must not degrade into doing nothing.
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { fullname: 'House Agent', type: UserTypeEnum.Agent },
+      }),
+    );
+    expect(prisma.usersOnWorkspaces.upsert).toHaveBeenCalledTimes(1);
+  });
+
   it('issues an agent-typed PAT and returns it once', async () => {
     const result = await provision();
 
@@ -242,10 +278,11 @@ describe('UsersService.listAgentAccounts', () => {
       deleted: Date | null;
       lastUsedAt: Date | null;
     }> = [],
+    memberships: unknown[] = [membership],
   ) {
     return {
       usersOnWorkspaces: {
-        findMany: jest.fn().mockResolvedValue([membership]),
+        findMany: jest.fn().mockResolvedValue(memberships),
         findUnique: jest
           .fn()
           .mockResolvedValue({ status: 'ACTIVE', role: RoleEnum.ADMIN }),
@@ -266,6 +303,77 @@ describe('UsersService.listAgentAccounts', () => {
       },
     };
   }
+
+  /** A workspace agent with a `workspace` membership and, by design, no token. */
+  const workspaceMembership = {
+    userId: 'agent-ws',
+    joinedAt: new Date('2026-07-01T00:00:00.000Z'),
+    settings: {
+      agent: { ownership: 'workspace', ownerUserId: null as string | null },
+    },
+    user: {
+      id: 'agent-ws',
+      fullname: 'House Agent',
+      email: 'agent-house-abcd1234@agents.vantik.local',
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+    },
+  };
+
+  /**
+   * `active` used to mean "has a live token", which is the right question only
+   * for a personal agent. Asked of a workspace agent — which never has one —
+   * it reported every single one as revoked from the moment it was created.
+   */
+  it('counts a workspace agent as active despite having no token', async () => {
+    const prisma = listPrisma([], [], [workspaceMembership]);
+    const [agent] = await serviceWith(prisma).listAgentAccounts(
+      'ws-1',
+      'admin-1',
+    );
+
+    expect(agent).toMatchObject({
+      id: 'agent-ws',
+      ownership: 'workspace',
+      active: true,
+      lastUsedAt: null,
+    });
+  });
+
+  it('counts a disabled workspace agent as inactive', async () => {
+    const prisma = listPrisma(
+      [],
+      [],
+      [
+        {
+          ...workspaceMembership,
+          settings: {
+            agent: {
+              ownership: 'workspace',
+              ownerUserId: null,
+              disabledAt: '2026-07-30T00:00:00.000Z',
+            },
+          },
+        },
+      ],
+    );
+    const [agent] = await serviceWith(prisma).listAgentAccounts(
+      'ws-1',
+      'admin-1',
+    );
+
+    expect(agent.active).toBe(false);
+  });
+
+  it('never puts disabledAt on the wire; active is the whole answer', async () => {
+    const prisma = listPrisma([], [], [workspaceMembership]);
+    const [agent] = await serviceWith(prisma).listAgentAccounts(
+      'ws-1',
+      'admin-1',
+    );
+
+    expect('disabledAt' in agent).toBe(false);
+    expect('hiddenAt' in agent).toBe(false);
+  });
 
   it('reads ownership from the membership and marks a live token active', async () => {
     const prisma = listPrisma(['agent-1']);
@@ -355,15 +463,16 @@ describe('UsersService.listAgentAccounts', () => {
 });
 
 describe('UsersService.revokeAgent', () => {
-  function revokePrisma(found: boolean) {
+  function revokePrisma(found: boolean, settings?: unknown) {
     return {
       usersOnWorkspaces: {
         findFirst: jest
           .fn()
-          .mockResolvedValue(found ? { userId: 'agent-1' } : null),
+          .mockResolvedValue(found ? { userId: 'agent-1', settings } : null),
         findUnique: jest
           .fn()
           .mockResolvedValue({ status: 'ACTIVE', role: RoleEnum.ADMIN }),
+        update: jest.fn().mockResolvedValue({}),
       },
       personalAccessToken: {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -395,5 +504,56 @@ describe('UsersService.revokeAgent', () => {
       serviceWith(prisma).revokeAgent('ws-1', 'not-an-agent', 'admin-1'),
     ).rejects.toThrow(/No agent/);
     expect(prisma.personalAccessToken.updateMany).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A workspace agent holds no token, so deleting tokens is not what stops it.
+   * Without a mark on the identity, revoking one would report success and
+   * change nothing — the worst shape a destructive control can have.
+   */
+  it('disables the identity of a workspace agent, which has no token to delete', async () => {
+    const prisma = revokePrisma(true, {
+      agent: { ownership: 'workspace', ownerUserId: null },
+    });
+
+    await serviceWith(prisma).revokeAgent('ws-1', 'agent-1', 'admin-1');
+
+    expect(prisma.usersOnWorkspaces.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId_workspaceId: { userId: 'agent-1', workspaceId: 'ws-1' } },
+        data: {
+          settings: {
+            agent: expect.objectContaining({
+              ownership: 'workspace',
+              disabledAt: expect.any(String),
+            }),
+          },
+        },
+      }),
+    );
+  });
+
+  it('marks a personal agent disabled as well, so a re-issued token cannot revive it', async () => {
+    const prisma = revokePrisma(true, {
+      agent: { ownership: 'personal', ownerUserId: 'someone' },
+    });
+
+    await serviceWith(prisma).revokeAgent('ws-1', 'agent-1', 'admin-1');
+
+    expect(prisma.personalAccessToken.updateMany).toHaveBeenCalled();
+    expect(prisma.usersOnWorkspaces.update).toHaveBeenCalled();
+  });
+
+  it('keeps the rest of the settings blob when it disables an agent', async () => {
+    const prisma = revokePrisma(true, {
+      somethingElse: { kept: true },
+      agent: { ownership: 'workspace', scopes: ['read'] },
+    });
+
+    await serviceWith(prisma).revokeAgent('ws-1', 'agent-1', 'admin-1');
+
+    const { data } = prisma.usersOnWorkspaces.update.mock.calls[0][0];
+    expect(data.settings.somethingElse).toEqual({ kept: true });
+    expect(data.settings.agent.scopes).toEqual(['read']);
   });
 });

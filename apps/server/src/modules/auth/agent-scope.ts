@@ -95,6 +95,15 @@ export function agentSettings(settings: unknown): {
    * can no longer do anything, never as a way of restricting one that can.
    */
   hiddenAt: string | null;
+  /**
+   * When a workspace agent's identity was disabled, or null.
+   *
+   * Permission, unlike `hiddenAt`. A workspace agent holds no token — there is
+   * no credential to soft-delete — so retiring one has to be recorded on the
+   * identity itself. A personal agent has no use for this: deleting its token
+   * is what stops it, and that is a stronger statement than a flag.
+   */
+  disabledAt: string | null;
 } {
   const agent = (
     settings as {
@@ -103,6 +112,7 @@ export function agentSettings(settings: unknown): {
         ownerUserId?: string | null;
         scopes?: unknown;
         hiddenAt?: string | null;
+        disabledAt?: string | null;
       };
     } | null
   )?.agent;
@@ -112,5 +122,6 @@ export function agentSettings(settings: unknown): {
     ownerUserId: agent?.ownerUserId ?? null,
     scopes: sanitizeScopes(agent?.scopes),
     hiddenAt: agent?.hiddenAt ?? null,
+    disabledAt: agent?.disabledAt ?? null,
   };
 }

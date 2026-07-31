@@ -19,6 +19,10 @@ import { ExecutorRegistry } from './executor.registry';
 import { CredentialsService } from '../credentials/credentials.service';
 import { GitProxyService } from '../sandbox/git-proxy.service';
 import { GondolinRuntime } from '../sandbox/gondolin.runtime';
+import { RunHandbackService } from '../run-handback.service';
+import { buildAgentPrompt } from '../agent-prompt';
+import { skillArguments, skillFiles } from '../agent-skills';
+import { parsePiEvents } from './pi-events';
 import { scrubSecrets } from '../sandbox/scrub';
 
 export const HOSTED_EXECUTOR_KEY = 'hosted';
@@ -29,8 +33,11 @@ export const HOSTED_EXECUTOR_KEY = 'hosted';
  * Exported for the security spec, because "the guest cannot reach a git host"
  * is a property worth asserting rather than trusting a comment about.
  */
-export function egressAllowlistForTest(modelHost: string | null): string[] {
-  return egressAllowlist(modelHost);
+export function egressAllowlistForTest(
+  modelHost: string | null,
+  moduleHosts: string[] = [],
+): string[] {
+  return egressAllowlist(modelHost, moduleHosts);
 }
 
 /**
@@ -61,8 +68,18 @@ export function piCommand(options: {
   provider?: string;
   model?: string;
   thinking?: string;
+  /** Absolute guest paths. Additive even under `--no-skills`. */
+  skills?: string[];
 }): string {
   const args = ['npx', '--yes', PI_PACKAGE, ...PI_REQUIRED_FLAGS];
+
+  // Explicit, because discovery is off. `--no-skills` stops Pi reading skills
+  // out of the checkout — where they would be instructions written by whoever
+  // can land a file in the repository — and `--skill` still loads the ones we
+  // chose, which is the same shape as `--no-extensions`.
+  for (const skill of options.skills ?? []) {
+    args.push('--skill', skill);
+  }
 
   if (options.provider && isSafeModelId(options.provider)) {
     args.push('--provider', options.provider);
@@ -85,15 +102,21 @@ export function piCommand(options: {
   return args.join(' ');
 }
 
-function egressAllowlist(modelHost: string | null): string[] {
+function egressAllowlist(
+  modelHost: string | null,
+  moduleHosts: string[] = [],
+): string[] {
   return [
     // The provider this run calls, and only that one.
     ...(modelHost ? [modelHost] : []),
-    // Package registries, because a setup phase that cannot install is a
-    // setup phase that always fails.
+    // npm, unconditionally: the harness itself is fetched with `npx`, so a run
+    // that cannot reach the npm registry has no agent at all.
     'registry.npmjs.org',
-    'pypi.org',
-    'files.pythonhosted.org',
+    // What this run's module declared, and nothing else. The module already
+    // owns how it installs itself; this is the half of that statement a
+    // command string cannot make. A Go module names the Go proxy here; a pnpm
+    // one names nothing and gets nothing extra.
+    ...moduleHosts,
     // Deliberately absent: the git host. The guest never pushes — the host
     // does, on its behalf — so it has no reason to reach one, and an attempt
     // to is a signal rather than a need.
@@ -139,6 +162,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     private runtime: GondolinRuntime,
     private credentials: CredentialsService,
     private gitProxy: GitProxyService,
+    private handback: RunHandbackService,
     private agentRuns: AgentRunsService,
     private prisma: PrismaService,
   ) {}
@@ -271,12 +295,67 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         claimedAt: new Date(),
       });
 
+      // ---- Phase 0: the checkout, host-side, before anything boots. ----
+      //
+      // Ordered ahead of the guest deliberately. The egress allowlist is fixed
+      // at VM creation and cannot be widened afterwards, and what a run is
+      // allowed to reach depends on the toolchain its module needs — so the
+      // checkout has to exist before the machine does. It also means a run
+      // that could never proceed no longer pays for a microVM first: the
+      // repository check below used to run after a boot.
+      await note('Fetching the repository', 'setup');
+
+      // A path is as good a remote as a URL. `git clone` takes either, the
+      // proxy already declines to demand a credential for one, and its own
+      // reasoning says the local and self-hosted setups are the ones hosted
+      // execution should serve first. Insisting on a URL here contradicted
+      // that: a workspace whose modules point at a repository on this disk —
+      // which is what the local-repo integration produces — could not run a
+      // single issue in the sandbox.
+      const cloneUrl = config.repoUrl ?? config.repoPath;
+      if (!cloneUrl) {
+        await this.fail(
+          run,
+          'ENVIRONMENT_SETUP_FAILED',
+          'This run has no repository to open. Point the issue\u2019s modules at ' +
+            'one, or set a default in Settings \u2192 Agents.',
+        );
+        return;
+      }
+
+      let checkout;
+      try {
+        checkout = await this.gitProxy.materializeCheckout({
+          workspaceId: run.workspaceId,
+          repoUrl: cloneUrl,
+          baseBranch: config.baseBranch ?? 'main',
+        });
+      } catch (error) {
+        await this.fail(
+          run,
+          'ENVIRONMENT_SETUP_FAILED',
+          scrubSecrets(
+            error instanceof Error ? error.message : String(error),
+            secrets,
+          ),
+        );
+        return;
+      }
+
       sandbox = await this.runtime.create({
         runId: run.id,
         files: {
-          // The context pack goes in as a file rather than an argument, so it
-          // never appears in a process listing the guest can read.
+          // The prompt goes in as a file rather than an argument, so it never
+          // appears in a process listing the guest can read — and so nothing
+          // from an issue body is ever interpolated into a shell command.
+          'prompt.md': buildAgentPrompt(pack),
+          // The pack itself, for the record. Nothing reads it; it is here so
+          // that "what was this run given" is answerable from inside a guest
+          // somebody is debugging.
           'context.json': JSON.stringify(pack, null, 2),
+          // What the agent knows before it reads the repository: how to read a
+          // Vantik issue, and how to write a change worth reviewing.
+          ...skillFiles(),
         },
         env: {
           // The provider's own variable, for the providers that have one.
@@ -310,46 +389,20 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           cpus: 2,
           maxLogBytes: 256 * 1024,
         },
-        egress: { allow: egressAllowlist(modelHost(provider, model.baseUrl)) },
+        // Base hosts plus exactly what this module declared. A Go module opens
+        // the Go proxy; a pnpm one does not.
+        egress: {
+          allow: egressAllowlist(
+            modelHost(provider, model.baseUrl),
+            config.egressHosts,
+          ),
+        },
       });
 
       this.running.set(run.id, sandbox);
 
       // ---- Phase 1: setup. Network and install credentials present. ----
       await note('Preparing the sandbox', 'setup');
-
-      const cloneUrl = config.repoUrl;
-      if (!cloneUrl) {
-        await this.fail(
-          run,
-          'ENVIRONMENT_SETUP_FAILED',
-          'Hosted execution needs a repo url to clone; this run has none.',
-        );
-        return;
-      }
-
-      // Cloned by the host and seeded in, so the guest never holds a
-      // credential that could reach the git host — and never needs to reach
-      // one, which is why no git host is on its allowlist.
-      let checkout;
-      try {
-        checkout = await this.gitProxy.materializeCheckout({
-          workspaceId: run.workspaceId,
-          repoUrl: cloneUrl,
-          baseBranch: config.baseBranch ?? 'main',
-        });
-      } catch (error) {
-        await this.fail(
-          run,
-          'ENVIRONMENT_SETUP_FAILED',
-          scrubSecrets(
-            error instanceof Error ? error.message : String(error),
-            secrets,
-          ),
-          egressDenied,
-        );
-        return;
-      }
 
       await sandbox.writeFile('repo.tar.gz.b64', checkout.archiveBase64);
 
@@ -406,13 +459,42 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           provider: provider.id,
           model: config.model,
           thinking: config.thinking,
+          skills: skillArguments(),
         });
 
+      // `"$(cat …)"` and not the prompt itself. The prompt carries an issue
+      // body written by whoever can file one, and this string is executed by a
+      // shell — but a command substitution inside double quotes expands to a
+      // single word that the shell never rescans for operators, so nothing in
+      // the file can become part of the command. Redirecting it to stdin
+      // instead is what the previous version did, and Pi in `--mode json`
+      // takes its prompt as an argument.
       const agent = await sandbox.exec(
-        `cd /workspace/repo && ${harness} < /workspace/context.json`,
+        `cd /workspace/repo && ${harness} "$(cat /workspace/prompt.md)"`,
         { timeoutMs: config.limits?.maxDurationMs ?? 30 * 60 * 1000 },
       );
       egressDenied += agent.egressDenied;
+
+      // The event stream is the run's history and the agent's own report on
+      // what it did. Read before the exit code is judged, because a harness
+      // that died halfway still says where it got to, and that is most of what
+      // makes a failed run worth reading.
+      const parsed = parsePiEvents(agent.stdout);
+
+      for (const step of parsed.steps) {
+        await this.agentRuns
+          .appendEvent(
+            run.id,
+            {
+              message: scrubSecrets(step.message, secrets),
+              level: step.level,
+              phase: step.phase,
+              ...(step.data ? { data: step.data } : {}),
+            },
+            { workspaceId: run.workspaceId },
+          )
+          .catch((): undefined => undefined);
+      }
 
       if (agent.exitCode !== 0) {
         await this.fail(
@@ -480,15 +562,34 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         return;
       }
 
+      // What the agent said, not what this file says about it. "Finished in a
+      // hosted sandbox" was true of every run and told a reviewer nothing;
+      // the closing report the prompt asks for is the thing they came to read.
+      const summary = scrubSecrets(
+        parsed.summary ?? 'Finished the work.',
+        secrets,
+      );
+
       await this.agentRuns.transition(run.id, 'SUCCEEDED', {
-        summary: 'Finished in a hosted sandbox.',
+        summary,
+        modelId: parsed.modelId ?? undefined,
+        iterationCount: parsed.iterations,
         result: {
           delivery: 'pull_request',
           branch: pushed.branch,
           prUrl: pushed.prUrl,
           headCommit: pushed.headCommit,
           egressDenied,
+          ...(parsed.costUsd ? { costUsd: parsed.costUsd } : {}),
         },
+      });
+
+      await this.handback.post(run.issueId, run.agentUserId, run.id, {
+        status: 'SUCCEEDED',
+        summary,
+        branch: pushed.branch,
+        prUrl: pushed.prUrl,
+        attempt: run.attempt,
       });
     } catch (error) {
       // Where it broke decides what the user is told to do. Everything before
@@ -526,12 +627,26 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       | 'PUSH_REJECTED',
     error: string,
     egressDenied = 0,
+    summary?: string | null,
   ) {
     await this.agentRuns
       .transition(run.id, 'FAILED', {
         failure,
         error: error.slice(0, 4000),
+        ...(summary ? { summary } : {}),
         result: { egressDenied },
+      })
+      .catch((): undefined => undefined);
+
+    // A failed run says so on the issue too. Silence here is what made a
+    // sandbox failure invisible to everyone not watching the runs list.
+    await this.handback
+      .post(run.issueId, run.agentUserId, run.id, {
+        status: 'FAILED',
+        failure,
+        error,
+        summary,
+        attempt: run.attempt,
       })
       .catch((): undefined => undefined);
   }

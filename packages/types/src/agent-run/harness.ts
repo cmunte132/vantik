@@ -22,17 +22,34 @@ export const PI_PACKAGE = `@earendil-works/pi-coding-agent@${PI_VERSION}`;
  * pointed at arbitrary repositories, is a code-execution path controlled by
  * whoever can land a file in the repo.
  *
+ * `--no-skills` is the same control one layer up. A skill is markdown that
+ * instructs the model, and the standard lets one carry helper scripts the
+ * model is told to run — so a skill discovered from `.pi/skills/` or
+ * `.agents/skills/` in the checkout is, again, whoever can land a file in the
+ * repository writing the agent's instructions. Discovery off, and the skills
+ * a run should have are passed explicitly with `--skill`, which stays additive
+ * under this flag.
+ *
  * `--no-approve` is not security but necessity: there is no human present to
  * approve a tool call, and a harness blocked on a prompt burns its lease
  * waiting for one.
  *
- * Neither is configurable, and nothing in the settings UI offers to change
- * them.
+ * `--mode json` is what a sandbox needs and `--mode rpc` is not. RPC is a
+ * server: it answers prompts sent as JSONL commands on stdin and waits for the
+ * next one, so nothing about finishing the work makes it exit. The hosted
+ * executor has one shot at a command and reads the result afterwards, so it
+ * wants the mode that takes a prompt as an argument, streams its events and
+ * then terminates. The BYO runner keeps RPC, because it drives the process
+ * interactively and closes stdin itself.
+ *
+ * None of these is configurable, and nothing in the settings UI offers to
+ * change them.
  */
 export const PI_REQUIRED_FLAGS = [
   '--mode',
-  'rpc',
+  'json',
   '--no-extensions',
+  '--no-skills',
   '--no-approve',
 ] as const;
 

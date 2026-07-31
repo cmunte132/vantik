@@ -215,8 +215,33 @@ describe('egress policy', () => {
     expect(egressAllowlistForTest('openrouter.ai')).toContain('openrouter.ai');
   });
 
-  it('allows a package registry, because setup has to be able to install', () => {
+  it('allows npm, because the harness itself is fetched with npx', () => {
     expect(egressAllowlistForTest(null)).toContain('registry.npmjs.org');
+  });
+
+  it('opens exactly what the run’s module declared, and nothing else', () => {
+    // Each module can be a different language, so the hosts come from the
+    // module beside its setup commands rather than from a fixed list here. A
+    // command string cannot open a hole in the allowlist, which is why the
+    // module has to be able to say this at all.
+    const allow = egressAllowlistForTest('openrouter.ai', [
+      'proxy.golang.org',
+      'sum.golang.org',
+    ]);
+
+    expect(allow).toContain('proxy.golang.org');
+    expect(allow).toContain('sum.golang.org');
+  });
+
+  it('gives a module that declared nothing no extra reach', () => {
+    // The failure mode this guards against is a shared list that grows into
+    // the union of every language the product has ever met, so that a pnpm
+    // repository quietly gets to call the Go proxy.
+    const allow = egressAllowlistForTest('openrouter.ai');
+
+    expect(allow).not.toContain('proxy.golang.org');
+    expect(allow).not.toContain('dl-cdn.alpinelinux.org');
+    expect(allow).toEqual(['openrouter.ai', 'registry.npmjs.org']);
   });
 });
 
@@ -277,11 +302,23 @@ describe('the git token never enters the guest', () => {
       appendEvent: async (): Promise<undefined> => undefined,
     };
 
+    // The checkout is made host-side before the guest boots, so the proxy has
+    // to answer before there is a spec to capture. It hands back an archive
+    // and never a credential — which is the property the rest of this file is
+    // about.
+    const gitProxy = {
+      materializeCheckout: async () => ({
+        archiveBase64: 'ZmFrZQ==',
+        baseCommit: 'abc123',
+      }),
+    };
+
     const executor = new HostedExecutor(
       { register: (): undefined => undefined } as never,
       runtime as never,
       credentials as never,
-      {} as never,
+      gitProxy as never,
+      { post: async (): Promise<undefined> => undefined } as never,
       agentRuns as never,
       { agentRun: { findMany: async (): Promise<unknown[]> => [] } } as never,
     );
@@ -350,6 +387,27 @@ describe('the git token never enters the guest', () => {
     // fixed host and nothing to configure, and before this an unconfigured
     // base URL meant the model host was on no allowlist at all.
     expect(spec?.secrets.OPENROUTER_API_KEY.hosts).toEqual(['openrouter.ai']);
+  });
+
+  it('carries the prompt and the skills, and no credential', async () => {
+    // The skills are how a built-in agent is competent in a repository nobody
+    // prepared for it. They are seeded rather than discovered, because a skill
+    // found in the checkout is instructions written by whoever can land a file
+    // in the repository.
+    const spec = await captureSandboxSpec();
+
+    expect(Object.keys(spec?.files ?? {})).toEqual(
+      expect.arrayContaining([
+        'prompt.md',
+        'skills/vantik-issues/SKILL.md',
+        'skills/writing-code/SKILL.md',
+      ]),
+    );
+
+    // The prompt is a real instruction, not the context pack dumped to a file
+    // — which is what it used to be, and why no hosted run ever did any work.
+    expect(spec?.files['prompt.md']).toContain('ENG-1');
+    expect(spec?.files['prompt.md']).not.toMatch(/^\s*\{/);
   });
 });
 

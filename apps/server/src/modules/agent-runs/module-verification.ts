@@ -36,6 +36,11 @@ const COMMAND_FIELDS = [
  * duplicates removed. They install things, so two modules asking for two
  * different installs both want to happen — and unlike a test command, running
  * one extra is not a wrong answer.
+ *
+ * Egress hosts are unioned for the same reason and with one more: they exist
+ * to let the setup commands succeed, so dropping them on disagreement would
+ * union the installs and then block half of them. A union here is still
+ * bounded by what the modules of this one issue asked for.
  */
 export function chooseVerification(
   modules: Array<{ verification: unknown }>,
@@ -71,6 +76,14 @@ export function chooseVerification(
     verification.setupCommands = setup;
   }
 
+  const hosts = [
+    ...new Set(found.flatMap((row) => row.egressHosts ?? [])),
+  ].filter(Boolean);
+
+  if (hosts.length) {
+    verification.egressHosts = hosts;
+  }
+
   return { verification, conflicts };
 }
 
@@ -102,6 +115,20 @@ function asVerification(value: unknown): AgentRunVerification | null {
 
     if (commands.length) {
       verification.setupCommands = commands;
+    }
+  }
+
+  // Checked the same way, and more strictly: these widen a sandbox's egress
+  // allowlist, so anything that is not a bare hostname is dropped rather than
+  // normalised. A stored `https://evil/` must not become a host.
+  if (Array.isArray(raw.egressHosts)) {
+    const hosts = raw.egressHosts.filter(
+      (entry): entry is string =>
+        typeof entry === 'string' && /^[a-z0-9.-]+$/i.test(entry),
+    );
+
+    if (hosts.length) {
+      verification.egressHosts = hosts;
     }
   }
 

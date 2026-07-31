@@ -11,7 +11,9 @@ import { chooseVerification } from './module-verification';
 describe('chooseVerification', () => {
   it('takes the commands when one module defines them', () => {
     const { verification, conflicts } = chooseVerification([
-      { verification: { testCommand: 'pnpm test', buildCommand: 'pnpm build' } },
+      {
+        verification: { testCommand: 'pnpm test', buildCommand: 'pnpm build' },
+      },
     ]);
 
     expect(verification).toEqual({
@@ -114,5 +116,41 @@ describe('chooseVerification', () => {
     ]);
 
     expect(verification).toEqual({});
+  });
+});
+
+describe('the hosts a module declares for its setup', () => {
+  it('unions them across the issue’s modules', () => {
+    // Unioned for the same reason setup commands are, plus one more: they
+    // exist so those commands can succeed, and dropping them on disagreement
+    // would union the installs and then block half of them.
+    const { verification } = chooseVerification([
+      { verification: { egressHosts: ['proxy.golang.org'] } },
+      { verification: { egressHosts: ['pypi.org', 'proxy.golang.org'] } },
+    ]);
+
+    expect(verification.egressHosts).toEqual(['proxy.golang.org', 'pypi.org']);
+  });
+
+  it('drops anything that is not a bare hostname', () => {
+    // These widen a sandbox's egress allowlist and the column is free-form
+    // JSON, so a stored URL is refused rather than normalised into a host.
+    const { verification } = chooseVerification([
+      {
+        verification: {
+          egressHosts: ['good.example.com', 'https://evil.example/', '*', 42],
+        },
+      },
+    ]);
+
+    expect(verification.egressHosts).toEqual(['good.example.com']);
+  });
+
+  it('says nothing when no module asked for anything', () => {
+    const { verification } = chooseVerification([
+      { verification: { testCommand: 'go test ./...' } },
+    ]);
+
+    expect(verification.egressHosts).toBeUndefined();
   });
 });

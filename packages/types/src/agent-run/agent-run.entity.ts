@@ -165,6 +165,22 @@ export interface AgentRunPhaseTimings {
 export interface AgentRunVerification {
   /** Run once, with network and install credentials. */
   setupCommands?: string[];
+  /**
+   * Hosts the setup commands are allowed to reach, beyond the model provider
+   * and the npm registry the harness itself comes from.
+   *
+   * Beside the commands because it is the same decision. A hosted run's egress
+   * is an allowlist fixed when the sandbox boots, and a command string cannot
+   * open a hole in it — so a module that says `go mod download` has stated
+   * only half of what it needs, and the other half has nowhere else to live.
+   * A Go module names `proxy.golang.org` here; a pnpm one names nothing and
+   * gets nothing extra.
+   *
+   * Deny-by-default survives: this widens one run's allowlist by exactly what
+   * one module asked for, rather than growing a shared list into the union of
+   * every language the product has ever met.
+   */
+  egressHosts?: string[];
   testCommand?: string;
   lintCommand?: string;
   typecheckCommand?: string;

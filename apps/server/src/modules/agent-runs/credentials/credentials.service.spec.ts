@@ -15,6 +15,23 @@ import { CredentialsService } from './credentials.service';
 describe('CredentialsService model access', () => {
   const SECRET = 'sk-workspace-owned-key-value';
 
+  // `sealed` below runs the service's real encryption, which needs a key.
+  // This suite has to bring its own: `encryptionKey` falls back to
+  // SUPERTOKEN_CONNECTION_URI and then DATABASE_URL, so without one set here
+  // the suite silently borrowed whatever the machine running it happened to
+  // have. That passed on a developer machine, where `.env` supplies a database
+  // URL, and failed on CI, where nothing supplies one.
+  let previousKey: string | undefined;
+
+  beforeAll(() => {
+    previousKey = process.env.CREDENTIAL_ENCRYPTION_KEY;
+    process.env.CREDENTIAL_ENCRYPTION_KEY = 'test-suite-encryption-key';
+  });
+
+  afterAll(() => {
+    restore('CREDENTIAL_ENCRYPTION_KEY', previousKey);
+  });
+
   /**
    * A real sealed row, produced by the service's own encryption.
    *

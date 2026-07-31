@@ -16,6 +16,13 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Stated rather than inherited. Without this the job runs with whatever the
+# repository's default is, which for an older repository is a token that can
+# write to the repository — far more than a job that checks out, typechecks
+# and runs tests has any use for. Reading the checkout is the whole need.
+permissions:
+  contents: read
+
 jobs:
   check:
     name: Typecheck and test

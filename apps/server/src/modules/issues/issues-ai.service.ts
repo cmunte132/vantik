@@ -9,6 +9,7 @@ import {
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
 
+import { assertTeamsVisible, visibleTeamIds } from 'common/team-access';
 import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
@@ -517,25 +518,44 @@ export default class IssuesAIService {
    */
   async aiFilters(
     filterInput: FilterInput,
+    userId: string,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): Promise<Record<string, any>> {
-    // Retrieve labels based on the provided workspace and team IDs
-    let teamIds = [filterInput.teamId];
-    if (!filterInput.teamId) {
-      const teams = await this.prisma.team.findMany({
-        where: { workspaceId: filterInput.workspaceId, deleted: null },
-        select: { id: true },
-      });
+    // A team is a visibility boundary, so the raw material this filter is
+    // built from has to respect it. What comes back is a filter object rather
+    // than issue content, which is why this was left alone by ENG-79 — but the
+    // labels another team invented and the names of the people on it are still
+    // that team's, and a suggestion list is a perfectly good way to read them.
+    const visible = await visibleTeamIds(
+      this.prisma,
+      userId,
+      filterInput.workspaceId,
+    );
 
-      teamIds = teams.map((team) => team.id);
+    // A named team is proved rather than trusted: the id arrives in the request
+    // body, so without this the boundary is whatever the caller typed. Not
+    // found rather than forbidden, matching the rest of team-access — a hidden
+    // team and an imaginary one have to look the same, or the error says which
+    // teams exist.
+    if (filterInput.teamId) {
+      await assertTeamsVisible([filterInput.teamId], visible);
     }
 
+    // With no team named, every team the caller belongs to. Previously every
+    // team in the workspace.
+    const teamIds = filterInput.teamId ? [filterInput.teamId] : visible;
+
+    // A label with no team is workspace-wide and reaches every member; one
+    // that names a team is that team's. The workspace is pinned as an `AND`
+    // rather than sitting inside the `OR`: as an alternative it made every
+    // workspace-scoped label match, and the second branch was `{}` whenever no
+    // team was named — an empty condition, which matches every label on the
+    // server rather than none.
     const labels = await this.prisma.label.findMany({
       where: {
-        OR: [
-          { workspaceId: filterInput.workspaceId },
-          filterInput.teamId ? { teamId: filterInput.teamId } : {},
-        ].filter(Boolean),
+        workspaceId: filterInput.workspaceId,
+        deleted: null,
+        OR: [{ teamId: null }, { teamId: { in: teamIds } }],
       },
     });
 
@@ -546,12 +566,13 @@ export default class IssuesAIService {
       where: `IssuesAIService.aiFilters`,
     });
 
-    // Retrieve assignees based on the team ID
+    // The people on those teams, and the workspace is pinned here too: a bare
+    // `hasSome` on team ids is workspace-agnostic, so it would have reached
+    // memberships in other workspaces had two of them ever shared a team id.
     const assignee = await this.prisma.usersOnWorkspaces.findMany({
       where: {
-        teamIds: filterInput.teamId
-          ? { has: filterInput.teamId }
-          : { hasSome: teamIds },
+        workspaceId: filterInput.workspaceId,
+        teamIds: { hasSome: teamIds },
       },
       include: { user: true },
     });
@@ -563,12 +584,12 @@ export default class IssuesAIService {
       where: `IssuesAIService.aiFilters`,
     });
 
-    // Retrieve workflows based on the team ID
+    // Workflow is team-owned, so it takes the same limit. A workflow's states
+    // name how another team works, which is exactly what a boundary is for.
     const workflow = await this.prisma.workflow.findMany({
       where: {
-        ...(filterInput.teamId
-          ? { teamId: filterInput.teamId }
-          : { team: { workspaceId: filterInput.workspaceId } }),
+        teamId: { in: teamIds },
+        team: { workspaceId: filterInput.workspaceId },
         deleted: null,
       },
     });

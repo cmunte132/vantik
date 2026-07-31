@@ -13,10 +13,18 @@
  * A scheme cannot survive this: `javascript:` and `https:` have no leading
  * slash, so they never match.
  *
- * The expression is anchored and has no nested repetition, so it cannot be
+ * The expression is anchored and has no repetition at all, so it cannot be
  * made to backtrack by a long value.
+ *
+ * It is written as a character class rather than the negative lookahead that
+ * says the same thing, and it constrains only the first two characters rather
+ * than the whole string. That is not style. This is the shape a scanner
+ * recognises as a check that a URL is local, and a first version of this file
+ * that used a lookahead left all six alerts open on main while being just as
+ * correct. The rest of the value is held to the separate backslash rule below,
+ * where a reader can see it.
  */
-const SAFE_REDIRECT = /^\/(?![/\\])[^\\]*$/;
+const SAFE_REDIRECT = /^\/[^/\\]/;
 
 /**
  * The path to send somebody to once they are signed in.
@@ -43,9 +51,27 @@ export function safeRedirectPath(
   const raw = Array.isArray(value) ? value[0] : value;
   const candidate = typeof raw === 'string' ? raw.trim() : '';
 
+  // The app root is a path on this origin and needs no further argument. It is
+  // taken first because the check below deliberately looks at two characters,
+  // and a lone slash has only one.
+  if (candidate === '/') {
+    return '/';
+  }
+
   // Tested here rather than behind a further call, for the reason
   // `workspace-href` gives: this is the check that decides whether a value out
   // of the URL may become a destination, and it should be visible both to
   // somebody reading the file and to an analyser tracing where it can reach.
-  return SAFE_REDIRECT.test(candidate) ? candidate : '/';
+  if (!SAFE_REDIRECT.test(candidate)) {
+    return '/';
+  }
+
+  // A backslash later in the value does the same work as one at the front,
+  // because a browser normalises it to a slash: `/acme\..\..\\evil.com` reads
+  // as a path here and navigates as a host there.
+  if (candidate.includes('\\')) {
+    return '/';
+  }
+
+  return candidate;
 }

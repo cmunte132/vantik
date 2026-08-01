@@ -34,7 +34,6 @@ const sidebars: SidebarsConfig = {
             'actions/marketplace/overview',
             'actions/marketplace/bug-enricher',
             'actions/marketplace/email-actions',
-            'actions/marketplace/issue-view-summary',
           ],
         },
         {

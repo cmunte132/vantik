@@ -1,8 +1,0 @@
-{
-  "name": "Issue View Summary",
-  "slug": "issue-view-summary",
-  "triggers": [ {
-      "type": "on_schedule"
-    } ],
-  "integrations": [ "slack" ]
-}

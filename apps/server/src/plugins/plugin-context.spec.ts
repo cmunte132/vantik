@@ -70,6 +70,7 @@ describe('the plugin context', () => {
       'issues',
       'links',
       'log',
+      'vendor',
       'workspace',
       'workspaceId',
     ]);

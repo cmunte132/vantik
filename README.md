@@ -31,9 +31,12 @@ In July 2026 the maintainer updated the dependencies to NestJS 11, Prisma 6,
 React 19, Next 16, TanStack Query 5, Tiptap 3, AI SDK 7, and zod 4. The webapp
 builds with Turbopack. The webapp reads the `NEXT_PUBLIC_*` settings from the
 server at `/api/v1/config`, so a self-hosted installation sets them when the
-container starts. Two updates are not complete: trigger.dev 4 and the ESLint 9
-flat config. The maintainer must first make a new design for the automations
-subsystem.
+container starts. One update is not complete: the ESLint 9 flat config.
+
+The automations subsystem no longer uses trigger.dev. An integration and an
+action are two halves of one vendor, and they are now one plugin that the server
+loads from `apps/server/src/integrations/<slug>`. The server dispatches the work
+on the redis that the stack already needs.
 
 ## Attribution and license
 
@@ -67,31 +70,27 @@ docker compose logs server | grep -A5 "magic link"
 For a deployment that is not on localhost, do these two steps:
 
 1. Set `FRONTEND_HOST` and `BACKEND_HOST` in `.env` to your domain.
-2. Change `POSTGRES_PASSWORD`, `TYPESENSE_API_KEY`, and `TRIGGER_TOKEN`.
+2. Change `POSTGRES_PASSWORD` and `TYPESENSE_API_KEY`.
 
 ### Scheduled work
 
 Vantik does some of its work on a schedule, and not in response to a request.
 The server process runs this work as Bull repeatable jobs, on the redis that the
-stack already needs. The server does not use trigger.dev for this work, because
-trigger.dev is optional here. No necessary work can depend on an optional
-service. The server registers each job when it starts, and it writes the
-schedule to the log. To see if a job runs, read `docker compose logs server`.
+stack already needs. No necessary work can depend on an optional service. The
+server registers each job when it starts, and it writes the schedule to the log.
+To see if a job runs, read `docker compose logs server`.
 
 | Job | Default | Variable | What it does |
 | --- | --- | --- | --- |
 | Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
 | Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives each knowledge entry that no person triaged and that the server never served. |
+| Action schedules | per action | (set on the action) | This job runs an action that a person put on a schedule. The server reads the schedules at start and it registers one repeatable job for each. |
 
 To stop a job, set its variable to `off`.
 
 These services are optional. If one is absent, the server writes an error to the
 log and continues:
 
-- **trigger.dev** runs the actions and the automations in the background. Read
-  the [trigger.dev guide for a self-hosted deployment](https://trigger.dev/docs/self-hosting).
-  Set `TRIGGER_API_URL` and `TRIGGER_DATABASE_URL` to your trigger.dev
-  deployment and to its database.
 - **an LLM endpoint** runs the AI features. Any endpoint with the OpenAI
   interface works: OpenRouter, OpenAI, or a local LM Studio, Ollama, or vLLM
   server. Set `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL_FAST`, and

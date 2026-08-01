@@ -104,9 +104,7 @@ services:
       SUPERTOKEN_CONNECTION_URI: http://supertokens:3567
       DATABASE_URL: postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${POSTGRES_DB:-vantik}?schema=${DB_SCHEMA:-vantik}&sslmode=prefer
       REPLICATION_DATABASE_URL: postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${POSTGRES_DB:-vantik}
-      TRIGGER_DATABASE_URL: postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${TRIGGER_DB:-trigger}
       OAUTH_CALLBACK_URL: ${FRONTEND_HOST:-http://localhost:3000}/api/v1/oauth/callback
-      TRIGGER_ACCESS_TOKEN: tr_pat_${TRIGGER_TOKEN:-}
     ports:
       - "3001:3001"
     volumes:

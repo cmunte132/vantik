@@ -14,8 +14,6 @@
     "generate": "dotenv -- turbo run generate",
     "start": "dotenv -- turbo run start-prod",
     "create-resources": "dotenv -- turbo run create-resources --filter=server",
-    "trigger-dev": "dotenv -- turbo run trigger-dev",
-    "trigger-deploy": "dotenv -- turbo run trigger-deploy --filter=server --",
     "prisma:studio": "dotenv -- turbo run prisma:studio --filter=server",
     "migrate": "dotenv -- turbo run migrate --filter=server",
     "test": "turbo run test",

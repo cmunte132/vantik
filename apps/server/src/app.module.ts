@@ -55,7 +55,6 @@ import { SyncModule } from 'modules/sync/sync.module';
 import { SyncActionsModule } from 'modules/sync-actions/sync-actions.module';
 import { TeamsModule } from 'modules/teams/teams.module';
 import { TemplatesModule } from 'modules/templates/templates.module';
-import { TriggerdevModule } from 'modules/triggerdev/triggerdev.module';
 import { UsersModule } from 'modules/users/users.module';
 import { ViewsModule } from 'modules/views/views.module';
 import { WebhookModule } from 'modules/webhook/webhook.module';
@@ -127,7 +126,6 @@ import { AppService } from './app.service';
     AgentSkillModule,
     AttachmentModule,
     ViewsModule,
-    TriggerdevModule,
     ActionModule,
     AIRequestsModule,
     ProjectsModule,

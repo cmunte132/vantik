@@ -43,7 +43,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@trigger.dev/sdk": "3.3.13",
     "@vantikhq/services": "workspace:*",
     "@vantikhq/types": "workspace:*",
     "@vantikhq/typescript-config": "workspace:*",

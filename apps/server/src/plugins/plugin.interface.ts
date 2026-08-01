@@ -99,6 +99,40 @@ export interface AiCapability {
 }
 
 /**
+ * Reaching the vendor, without holding the vendor's credential.
+ *
+ * `path` is resolved against the plugin's `baseUrl`; the host attaches the
+ * credential for this account and refuses any host outside `egress`. So a
+ * plugin says *what* to call and never learns the token — the same control
+ * ENG-60 chose for git tokens, where the decisive property was that the
+ * credential never enters the guest.
+ *
+ * The cost, stated rather than discovered: a plugin cannot be handed a vendor
+ * SDK, because a constructed client carries the credential inside it. Of the
+ * six vendors here that affects one — `discord.js`, for two calls that are one
+ * REST request each.
+ */
+export interface VendorCapability {
+  fetch(path: string, init?: RequestInit): Promise<Response>;
+}
+
+/**
+ * What a plugin declares about itself.
+ *
+ * Static, because the host reads it before deciding whether a call is allowed.
+ * A capability that depends on the plugin's own restraint is not a capability,
+ * so the allowlist is declared here and applied by the host.
+ */
+export interface PluginSpec {
+  slug: string;
+  baseUrl?: string;
+  /** Exact hostnames. No wildcards — a wildcard is how an allowlist stops being one. */
+  egress: string[];
+  /** How the host builds the Authorization header from the account. */
+  auth?: (account: Json) => string | undefined;
+}
+
+/**
  * The plugin's own `IntegrationDefinitionV2` row.
  *
  * A plugin needs this when it creates the first account for a workspace and has
@@ -141,6 +175,7 @@ export interface PluginContext {
   readonly workspace: WorkspaceCapability;
   readonly ai: AiCapability;
   readonly definitions: DefinitionCapability;
+  readonly vendor: VendorCapability;
 }
 
 /**

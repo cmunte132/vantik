@@ -83,7 +83,6 @@ model ActionSchedule {
   deleted   DateTime?
 
   cron       String?
-  scheduleId String?
   status     ActionScheduleStatus
   timezone   String?
 

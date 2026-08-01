@@ -16,6 +16,5 @@
     "**/*.ts",
     "**/*.tsx",
     "prisma/scripts/create-number.js",
-    "trigger.config.ts"
   ]
 }

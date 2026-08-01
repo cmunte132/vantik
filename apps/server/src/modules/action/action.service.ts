@@ -21,16 +21,17 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { prepareTriggerPayload } from 'modules/action-event/action-event.utils';
 import { ActionsQueue } from 'modules/action-event/actions.queue';
+
+import { ActionScheduleScheduler } from './action-schedule.processor';
 import { IntegrationsService } from 'modules/integrations/integrations.service';
-import { TriggerdevService } from 'modules/triggerdev/triggerdev.service';
 import { UsersService } from 'modules/users/users.service';
 
 @Injectable()
 export default class ActionService {
   constructor(
     private prisma: PrismaService, // Prisma service for database operations
-    private triggerdev: TriggerdevService, // Service for interacting with TriggerDev
     private actionsQueue: ActionsQueue,
+    private scheduler: ActionScheduleScheduler,
     private usersService: UsersService, // Service for managing users
     private integrationsService: IntegrationsService,
   ) {}
@@ -416,27 +417,21 @@ export default class ActionService {
         },
       });
 
-      try {
-        const scheduleResponse = await this.triggerdev.createScheduleTask({
-          cron: actionSchedule.cron,
-          deduplicationKey: actionSchedule.id,
-          externalId: actionSchedule.id,
-          ...(actionSchedule.timezone
-            ? { timezone: actionSchedule.timezone }
-            : {}),
-        });
+      // Registered on the stack's redis rather than through trigger.dev's API.
+      // `scheduleId` used to hold the id that API returned — a foreign key into
+      // a service that is optional and, by default, not running, so a scheduled
+      // action was registered nowhere. The Bull repeatable is keyed by the
+      // ActionSchedule id itself, so there is no second identifier to keep.
+      await this.scheduler.register(
+        actionSchedule.id,
+        actionSchedule.cron,
+        actionSchedule.timezone,
+      );
 
-        return await tx.actionSchedule.update({
-          where: { id: actionSchedule.id },
-          data: {
-            status: ActionScheduleStatusEnum.ACTIVE,
-            scheduleId: scheduleResponse.id,
-          },
-        });
-      } catch (error) {
-        // If createScheduleTask fails, the transaction will be rolled back automatically
-        throw error;
-      }
+      return await tx.actionSchedule.update({
+        where: { id: actionSchedule.id },
+        data: { status: ActionScheduleStatusEnum.ACTIVE },
+      });
     });
   }
 
@@ -452,20 +447,13 @@ export default class ActionService {
         include: { action: true },
       });
 
-      try {
-        await this.triggerdev.updateScheduleTask(actionScheduleId, {
-          cron: actionSchedule.cron,
-          externalId: actionSchedule.id,
-          ...(actionSchedule.timezone
-            ? { timezone: actionSchedule.timezone }
-            : {}),
-        });
+      await this.scheduler.register(
+        actionSchedule.id,
+        actionSchedule.cron,
+        actionSchedule.timezone,
+      );
 
-        return actionSchedule;
-      } catch (error) {
-        // If updateScheduleTask fails, the transaction will be rolled back automatically
-        throw error;
-      }
+      return actionSchedule;
     });
   }
 
@@ -481,20 +469,12 @@ export default class ActionService {
         include: { action: true },
       });
 
-      try {
-        await this.triggerdev.updateScheduleTask(actionScheduleId, {
-          cron: actionSchedule.cron,
-          externalId: actionSchedule.id,
-          ...(actionSchedule.timezone
-            ? { timezone: actionSchedule.timezone }
-            : {}),
-        });
+      // Removing the repeatable is what actually stops it. Marking the row
+      // deleted without this leaves a job firing against a schedule nobody can
+      // see, until the next restart.
+      await this.scheduler.remove(actionScheduleId);
 
-        return actionSchedule;
-      } catch (error) {
-        // If updateScheduleTask fails, the transaction will be rolled back automatically
-        throw error;
-      }
+      return actionSchedule;
     });
   }
 

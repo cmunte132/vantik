@@ -7,7 +7,7 @@ import IssuesService from 'modules/issues/issues.service';
 import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
-import { type PluginContext } from './plugin.interface';
+import { type PluginContext, type PluginSpec } from './plugin.interface';
 
 /**
  * Builds the context a plugin is given.
@@ -41,7 +41,13 @@ export class PluginContextFactory {
    * the caller rather than resolved here, because only the caller knows whether
    * this is a webhook, a schedule or a reaction to somebody's edit.
    */
-  build(slug: string, workspaceId?: string, userId?: string): PluginContext {
+  build(
+    slug: string,
+    workspaceId?: string,
+    userId?: string,
+    spec?: PluginSpec,
+    accountId?: string,
+  ): PluginContext {
     const logger = new LoggerService(`plugin:${slug}`);
     const prisma = this.prisma;
 
@@ -225,6 +231,74 @@ export class PluginContextFactory {
           prisma.integrationDefinitionV2.findFirst({
             where: { slug: definitionSlug, deleted: null },
           }),
+      },
+
+      /**
+       * The plugin says what to call; the host decides whether it may, and
+       * attaches the credential.
+       *
+       * Two refusals rather than one. Without a spec there is no allowlist, so
+       * every call is refused — a plugin that has not declared where it may go
+       * does not get to go anywhere. With a spec, the resolved host must be on
+       * it, which is what stops a path like `//evil.com/x` or an absolute URL
+       * from leaving the origin the plugin declared.
+       */
+      vendor: {
+        fetch: async (path, init) => {
+          if (!spec?.baseUrl) {
+            throw new Error(
+              `Plugin ${slug} has no baseUrl, so it cannot call a vendor.`,
+            );
+          }
+
+          // The base URL carries a path (`/api/v10`), and `new URL('/x', base)`
+          // resolves from the *origin* and drops it — so a plugin asking for
+          // `/channels/1` would silently hit the wrong endpoint. Anchoring the
+          // base with a trailing slash and stripping one leading slash from the
+          // path keeps the version prefix.
+          //
+          // An absolute or protocol-relative value still resolves to its own
+          // host, which is the point: it reaches the check below rather than
+          // being quietly turned into a path segment.
+          const base = new URL(
+            spec.baseUrl.endsWith('/') ? spec.baseUrl : `${spec.baseUrl}/`,
+          );
+          // One leading slash is stripped, two are not. `//evil.com/x` is
+          // protocol-relative, and stripping a slash would quietly turn it
+          // into a path on the allowed host instead of letting the check
+          // below refuse it. Silently rewriting somebody's escape attempt into
+          // something harmless is worse than refusing it: it hides that a
+          // plugin tried.
+          const relative =
+            path.startsWith('/') && !path.startsWith('//')
+              ? path.slice(1)
+              : path;
+          const url = new URL(relative, base);
+
+          if (!spec.egress?.includes(url.hostname)) {
+            throw new Error(
+              `Plugin ${slug} may not reach ${url.hostname}; ` +
+                `its egress allows ${spec.egress?.join(', ') || 'nothing'}.`,
+            );
+          }
+
+          const account = accountId
+            ? await prisma.integrationAccount.findUnique({
+                where: { id: accountId, deleted: null },
+                include: { integrationDefinition: true },
+              })
+            : null;
+
+          const authorization = spec.auth?.(account);
+
+          return await fetch(url.toString(), {
+            ...init,
+            headers: {
+              ...(init?.headers ?? {}),
+              ...(authorization ? { Authorization: authorization } : {}),
+            },
+          });
+        },
       },
     };
   }

@@ -39,10 +39,16 @@ export class IntegrationsService {
 
       // Call the default function exported by the module
       if (typeof integrationModule.default === 'function') {
+        // A plugin that exports a spec gets `ctx.vendor.fetch`; one that does
+        // not is refused every outbound call, because the spec is where the
+        // egress allowlist lives. Declaring nothing means reaching nothing.
         const ctx = this.contextFactory.build(
           slug,
           payload.workspaceId,
           payload.userId,
+          integrationModule.pluginSpec,
+          payload.integrationAccountId ??
+            payload.integrationAccounts?.[slug]?.id,
         );
 
         return integrationModule.default(payload, ctx);

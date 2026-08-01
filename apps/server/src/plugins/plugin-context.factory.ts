@@ -132,6 +132,18 @@ export class PluginContextFactory {
           });
         },
 
+        personal: (definitionSlug, forWorkspaceId, forUserId) =>
+          prisma.integrationAccount.findFirst({
+            where: {
+              workspaceId: forWorkspaceId,
+              integratedById: forUserId,
+              personal: true,
+              deleted: null,
+              integrationDefinition: { slug: definitionSlug },
+            },
+            include: { integrationDefinition: true },
+          }),
+
         update: (accountId, data) =>
           prisma.integrationAccount.update({ where: { id: accountId }, data }),
       },
@@ -244,7 +256,7 @@ export class PluginContextFactory {
        * from leaving the origin the plugin declared.
        */
       vendor: {
-        fetch: async (path, init) => {
+        fetch: async (target, init) => {
           if (!spec?.baseUrl) {
             throw new Error(
               `Plugin ${slug} has no baseUrl, so it cannot call a vendor.`,
@@ -270,9 +282,9 @@ export class PluginContextFactory {
           // something harmless is worse than refusing it: it hides that a
           // plugin tried.
           const relative =
-            path.startsWith('/') && !path.startsWith('//')
-              ? path.slice(1)
-              : path;
+            target.startsWith('/') && !target.startsWith('//')
+              ? target.slice(1)
+              : target;
           const url = new URL(relative, base);
 
           if (!spec.egress?.includes(url.hostname)) {
@@ -289,7 +301,7 @@ export class PluginContextFactory {
               })
             : null;
 
-          const authorization = spec.auth?.(account);
+          const authorization = spec.auth?.(account, init?.as);
 
           return await fetch(url.toString(), {
             ...init,

@@ -46,6 +46,19 @@ export interface AccountCapability {
    * message somebody sent us.
    */
   byWorkspaceSlug(slug: string, workspaceSlug: string): Promise<Json | null>;
+  /**
+   * The account a *person* connected, as opposed to the workspace installation.
+   *
+   * GitHub is why: a comment synced to a pull request is posted as the person
+   * when they have linked their own account, and as the installation bot when
+   * they have not — so who wrote it is visible on GitHub rather than everything
+   * arriving from one robot.
+   */
+  personal(
+    slug: string,
+    workspaceId: string,
+    userId: string,
+  ): Promise<Json | null>;
   upsert(input: Json): Promise<Json>;
   update(accountId: string, data: Json): Promise<Json>;
 }
@@ -113,7 +126,25 @@ export interface AiCapability {
  * REST request each.
  */
 export interface VendorCapability {
-  fetch(path: string, init?: RequestInit): Promise<Response>;
+  /**
+   * `target` is a path relative to `baseUrl`, or an absolute URL.
+   *
+   * Absolute is allowed because a vendor hands them back: GitHub stores a
+   * comment's `url` on the linked comment, and replying means posting to the
+   * URL it gave us rather than a path we compose. That is not a hole — the
+   * egress check runs on the resolved host either way, so a `sourceData` that
+   * has been tampered with is refused rather than followed.
+   *
+   * `as` names *which identity* to act as, never a credential. GitHub needs
+   * this: a comment is posted as the person when they have connected their own
+   * account, and as the installation bot when they have not. The plugin says
+   * which; `spec.auth` decides what that means and the plugin still never sees
+   * a token.
+   */
+  fetch(
+    target: string,
+    init?: RequestInit & { as?: string },
+  ): Promise<Response>;
 }
 
 /**
@@ -128,8 +159,12 @@ export interface PluginSpec {
   baseUrl?: string;
   /** Exact hostnames. No wildcards — a wildcard is how an allowlist stops being one. */
   egress: string[];
-  /** How the host builds the Authorization header from the account. */
-  auth?: (account: Json) => string | undefined;
+  /**
+   * How the host builds the Authorization header.
+   *
+   * `as` is the identity the plugin asked for, when it asked for one.
+   */
+  auth?: (account: Json, as?: string) => string | undefined;
 }
 
 /**

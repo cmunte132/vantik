@@ -14,10 +14,10 @@ a regression — none of it has ever executed in this deployment, the registry i
 
 Each directory moves into `apps/server/src/integrations/<slug>` as one plugin
 with a `pluginSpec` and a handler, at which point its behaviour executes again
-for the first time. `discord` and `bug-enricher` have moved and are deleted from
-here.
+for the first time. `discord`, `bug-enricher` and `github` have moved and are deleted
+from here.
 
-Remaining: `email`, `github`, `issue-view-summary`, `whatsapp`.
+Remaining: `email`, `issue-view-summary`, `whatsapp`.
 
 Two things a port has to do beyond moving the file:
 

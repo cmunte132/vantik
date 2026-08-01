@@ -1,10 +1,10 @@
+import { RiAddLine } from '@remixicon/react';
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
 } from '@vantikhq/ui/components/breadcrumb';
 import { Button } from '@vantikhq/ui/components/button';
-import { AddLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -46,7 +46,7 @@ export const Header = observer(
         size="sm"
         onClick={onCreate}
       >
-        <AddLine size={14} />
+        <RiAddLine size={14} />
         New page
       </Button>
     ) : null;

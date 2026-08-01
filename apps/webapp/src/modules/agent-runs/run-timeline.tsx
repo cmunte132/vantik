@@ -1,14 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
-  CheckLine,
-  ChevronDown,
-  ChevronRight,
-  Code,
-  CrossLine,
-  DocumentLine,
-  EditLine,
-  SearchLine,
-} from '@vantikhq/ui/icons';
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+  RiCheckLine,
+  RiCloseLine,
+  RiCodeSSlashLine,
+  RiEditLine,
+  RiFileTextLine,
+  RiSearchLine,
+} from '@remixicon/react';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
@@ -86,7 +86,10 @@ const PhaseNode = observer(
     return (
       <div className="flex flex-col">
         <div className="flex items-center gap-2.5 py-2">
-          <Node state={running ? 'now' : broke ? 'fail' : 'done'} line={!last} />
+          <Node
+            state={running ? 'now' : broke ? 'fail' : 'done'}
+            line={!last}
+          />
 
           <span className="grow truncate font-medium">
             {PHASE_LABEL[phase] ?? phase}
@@ -142,11 +145,11 @@ const Node = ({
       )}
     >
       {state === 'fail' ? (
-        <CrossLine size={10} />
+        <RiCloseLine size={10} />
       ) : state === 'now' ? (
         <span className="size-1.5 rounded-full bg-current" />
       ) : (
-        <CheckLine size={10} />
+        <RiCheckLine size={10} />
       )}
     </span>
   </span>
@@ -181,9 +184,15 @@ const StepRow = observer(({ step }: { step: Step }) => {
 
         {expandable &&
           (open ? (
-            <ChevronDown size={12} className="shrink-0 text-muted-foreground" />
+            <RiArrowDownSLine
+              size={12}
+              className="shrink-0 text-muted-foreground"
+            />
           ) : (
-            <ChevronRight size={12} className="shrink-0 text-muted-foreground" />
+            <RiArrowRightSLine
+              size={12}
+              className="shrink-0 text-muted-foreground"
+            />
           ))}
       </button>
 
@@ -217,19 +226,19 @@ const StepIcon = ({ step }: { step: Step }) => {
 
   switch (step.kind) {
     case 'read':
-      return <DocumentLine size={13} className={className} />;
+      return <RiFileTextLine size={13} className={className} />;
     case 'write':
-      return <EditLine size={13} className={className} />;
+      return <RiEditLine size={13} className={className} />;
     case 'search':
-      return <SearchLine size={13} className={className} />;
+      return <RiSearchLine size={13} className={className} />;
     case 'test':
       return step.failed ? (
-        <CrossLine size={13} className={className} />
+        <RiCloseLine size={13} className={className} />
       ) : (
-        <CheckLine size={13} className={className} />
+        <RiCheckLine size={13} className={className} />
       );
     case 'bash':
-      return <Code size={13} className={className} />;
+      return <RiCodeSSlashLine size={13} className={className} />;
     default:
       // No kind, or one this bundle has never heard of. The row still appears,
       // carrying its message — an older run, or a newer harness, must not

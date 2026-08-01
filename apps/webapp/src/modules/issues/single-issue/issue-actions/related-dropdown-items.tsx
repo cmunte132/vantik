@@ -1,3 +1,4 @@
+import { RiFileCopyLine } from '@remixicon/react';
 import {
   DropdownMenuSub,
   DropdownMenuSubTrigger,
@@ -6,12 +7,11 @@ import {
   DropdownMenuItem,
 } from '@vantikhq/ui/components/dropdown-menu';
 import {
-  RelatedIssueLine,
-  ParentIssueLine,
-  SubIssue,
   BlockedFill,
-  DuplicateLine,
   BlocksFill,
+  ParentIssueLine,
+  RelatedIssueLine,
+  SubIssue,
 } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -54,7 +54,7 @@ const relationshipItems = {
     },
     {
       type: IssueRelationEnum.DUPLICATE_OF,
-      Icon: DuplicateLine,
+      Icon: RiFileCopyLine,
       title: 'Duplicate of...',
     },
   ],
@@ -72,7 +72,7 @@ const relationshipItems = {
 
     {
       type: IssueRelationEnum.DUPLICATE_OF,
-      Icon: DuplicateLine,
+      Icon: RiFileCopyLine,
       title: 'Duplicate of...',
     },
   ],

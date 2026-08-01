@@ -1,3 +1,4 @@
+import { RiCalendarLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Calendar } from '@vantikhq/ui/components/calendar';
 import {
@@ -5,7 +6,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { CalendarLine } from '@vantikhq/ui/icons';
 import { format } from 'date-fns';
 import * as React from 'react';
 
@@ -32,7 +32,11 @@ export function ProjectDatePicker({
           role="combobox"
           className="flex items-center px-0 shadow-none justify-between focus-visible:ring-1 focus-visible:border-primary text-xs"
         >
-          {value ? format(value, 'PP') : <CalendarLine className="mr-1" />}
+          {value ? (
+            format(value, 'PP')
+          ) : (
+            <RiCalendarLine className="mr-1" size={18} />
+          )}
         </Button>
       );
     }
@@ -44,7 +48,7 @@ export function ProjectDatePicker({
           role="combobox"
           className="flex items-center px-0 shadow-none justify-between focus-visible:ring-1 focus-visible:border-primary justify-start"
         >
-          <CalendarLine className="mr-1" />
+          <RiCalendarLine className="mr-1" size={18} />
           {value ? format(value, 'PP') : text}
         </Button>
       );
@@ -52,7 +56,7 @@ export function ProjectDatePicker({
 
     return (
       <Button variant="link" className="gap-2 py-2 justify-start">
-        <CalendarLine />
+        <RiCalendarLine size={18} />
         {value ? format(value, 'PP') : text}
       </Button>
     );

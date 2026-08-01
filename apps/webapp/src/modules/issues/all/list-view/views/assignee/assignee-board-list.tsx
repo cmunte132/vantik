@@ -6,8 +6,8 @@ import {
   type DroppableProvided,
   type DroppableStateSnapshot,
 } from '@hello-pangea/dnd';
+import { RiAccountCircleLine } from '@remixicon/react';
 import { AvatarText } from '@vantikhq/ui/components/avatar';
-import { AssigneeLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import {
@@ -267,7 +267,7 @@ export const NoAssigneeView = observer(() => {
           <div className="flex flex-col max-h-[100%] w-[350px]">
             <div className="flex gap-1 items-center mb-2 w-[310px]">
               <div className="flex items-center w-fit h-8 rounded-2xl px-4 py-2 bg-grayAlpha-100">
-                <AssigneeLine size={20} />
+                <RiAccountCircleLine size={20} />
                 <h3 className="pl-2">No Assignee</h3>
               </div>
 

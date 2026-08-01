@@ -1,11 +1,6 @@
+import { RiPriceTag3Line, RiStackLine, RiTeamLine } from '@remixicon/react';
 import { RiAddLine, RiSearch2Line } from '@remixicon/react';
-import {
-  IssuesLine,
-  LabelLine,
-  StackLine,
-  TeamLine,
-  TriageLine,
-} from '@vantikhq/ui/icons';
+import { IssuesLine, TriageLine } from '@vantikhq/ui/icons';
 import { useParams } from 'next/navigation';
 import { useRouter } from 'next/router';
 import React from 'react';
@@ -61,19 +56,19 @@ export function useCommandNavigator({
         group: 'Create',
       },
       {
-        Icon: <LabelLine className="!h-4 !w-4" />,
+        Icon: <RiPriceTag3Line className="!h-4 !w-4" size={18} />,
         text: 'Create label',
         value: ID_MAP.CREATE_LABEL,
         group: 'Create',
       },
       {
-        Icon: <StackLine className="!h-4 !w-4" />,
+        Icon: <RiStackLine className="!h-4 !w-4" size={18} />,
         text: 'Create view',
         value: ID_MAP.CREATE_VIEW,
         group: 'Create',
       },
       {
-        Icon: <TeamLine className="!h-4 !w-4" />,
+        Icon: <RiTeamLine className="!h-4 !w-4" size={18} />,
         text: 'Create new team',
         value: ID_MAP.CREATE_NEW_TEAM,
         group: 'Create',
@@ -93,7 +88,7 @@ export function useCommandNavigator({
         group: 'Navigation',
       },
       {
-        Icon: <StackLine className="!h-4 !w-4" />,
+        Icon: <RiStackLine className="!h-4 !w-4" size={18} />,
         text: 'Go to views',
         value: ID_MAP.GO_VIEWS,
         group: 'Navigation',

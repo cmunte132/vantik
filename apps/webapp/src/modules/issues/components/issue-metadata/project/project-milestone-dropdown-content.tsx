@@ -1,6 +1,6 @@
+import { RiPriceTag3Line } from '@remixicon/react';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import { CommandGroup } from '@vantikhq/ui/components/command';
-import { LabelLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import type { ProjectMilestoneType } from 'common/types';
@@ -70,7 +70,7 @@ export const ProjectMilestoneDropdownContent = observer(
               />
             )}
             <div className="flex grow">
-              <LabelLine size={20} className="mr-2" />
+              <RiPriceTag3Line size={20} className="mr-2" />
               No Project Milestone
             </div>
           </div>
@@ -109,7 +109,7 @@ export const ProjectMilestoneDropdownContent = observer(
                     htmlFor={projectMilestone.name}
                     className="flex gap-2 grow"
                   >
-                    <LabelLine className="h-5 w-5 text-[9px]" />
+                    <RiPriceTag3Line className="h-5 w-5 text-[9px]" size={18} />
 
                     {projectMilestone.name}
                   </label>

@@ -1,3 +1,4 @@
+import { RiRefreshLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Command, CommandInput } from '@vantikhq/ui/components/command';
 import {
@@ -5,7 +6,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { Cycle } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -49,7 +49,10 @@ export const IssueCycleDropdown = observer(
                 <>{value.length} Cycles</>
               ) : (
                 <div className="flex items-center gap-1 shrink min-w-[0px]">
-                  <Cycle className="w-5 h-5 text-[9px] shrink-0" />
+                  <RiRefreshLine
+                    className="w-5 h-5 text-[9px] shrink-0"
+                    size={16}
+                  />
 
                   <div className="truncate"> {getCycle(value[0]).name}</div>
                 </div>

@@ -1,6 +1,6 @@
+import { RiAddLine, RiDeleteBinLine } from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
-import { AddLine, DeleteLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
@@ -114,7 +114,7 @@ export const CapabilitiesList = observer(
                   aria-label={`Delete ${capability.name}`}
                   onClick={() => onDelete(capability.id)}
                 >
-                  <DeleteLine size={14} />
+                  <RiDeleteBinLine size={14} />
                 </Button>
               )}
             </div>
@@ -146,7 +146,7 @@ export const WorkspaceCapabilities = withApplicationStore(
                 className="gap-1"
                 onClick={() => setCreating(true)}
               >
-                <AddLine size={14} />
+                <RiAddLine size={14} />
                 New capability
               </Button>
             }

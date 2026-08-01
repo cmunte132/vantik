@@ -1,11 +1,11 @@
 'use client';
 
+import { RiCheckLine } from '@remixicon/react';
 import { type ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { CheckLine } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import type { TeamType } from 'common/types';
@@ -84,7 +84,7 @@ export const useProjectColumns = (): Array<ColumnDef<TeamType>> => {
           <div className="capitalize pl-4 py-2 flex items-center gap-1">
             {teamAccessList.includes(row.original.id) ? (
               <Badge variant="secondary" className="flex items-center gap-1">
-                <CheckLine size={14} /> Joined
+                <RiCheckLine size={14} /> Joined
               </Badge>
             ) : (
               <Button

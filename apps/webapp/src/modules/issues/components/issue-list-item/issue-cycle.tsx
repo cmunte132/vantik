@@ -1,5 +1,5 @@
+import { RiRefreshLine } from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
-import { Cycle } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useContextStore } from 'store/global-context-provider';
@@ -28,7 +28,7 @@ export const IssueCycle = observer(({ cycleId }: IssueCycleProps) => {
         key={cycle.name}
         className="flex items-center gap-1 shrink min-w-[0px]"
       >
-        <Cycle size={14} className="shrink-0" />
+        <RiRefreshLine size={14} className="shrink-0" />
         <div className="truncate"> {cycle.name}</div>
       </Badge>
     </div>

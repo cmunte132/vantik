@@ -1,6 +1,6 @@
+import { RiSendPlaneLine } from '@remixicon/react';
 import { AdjustableTextArea } from '@vantikhq/ui/components/adjustable-textarea';
 import { Button } from '@vantikhq/ui/components/button';
-import { SendLine } from '@vantikhq/ui/icons';
 import { useState } from 'react';
 
 interface ConversationTextareaProps {
@@ -31,7 +31,7 @@ export function ConversationTextarea({ onSend }: ConversationTextareaProps) {
               setText('');
             }}
           >
-            <SendLine size={20} />
+            <RiSendPlaneLine size={20} />
           </Button>
         </div>
       </div>

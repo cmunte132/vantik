@@ -1,4 +1,4 @@
-import { Check, Trash } from 'lucide-react';
+import { RiCheckLine, RiDeleteBinLine, RiLinkM } from '@remixicon/react';
 import { useEffect, useRef } from 'react';
 
 import { Button } from '@vantikhq/ui/components/button';
@@ -8,7 +8,6 @@ import {
   Popover,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { LinkLine } from '@vantikhq/ui/icons';
 
 import { useEditor } from '../primitives';
 
@@ -60,7 +59,7 @@ export const LinkSelector = ({ open, onOpenChange }: LinkSelectorProps) => {
           variant="ghost"
           className="gap-2 rounded border-none hover:bg-accent hover:text-accent-foreground"
         >
-          <LinkLine size={16} />
+          <RiLinkM size={16} />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-60 p-0" sideOffset={10}>
@@ -90,11 +89,11 @@ export const LinkSelector = ({ open, onOpenChange }: LinkSelectorProps) => {
                 editor.chain().focus().unsetLink().run();
               }}
             >
-              <Trash className="h-4 w-4" />
+              <RiDeleteBinLine className="h-4 w-4" />
             </Button>
           ) : (
             <Button className="h-8" type="submit" variant="secondary">
-              <Check className="h-4 w-4" />
+              <RiCheckLine className="h-4 w-4" />
             </Button>
           )}
         </form>

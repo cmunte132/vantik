@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeftIcon, ArrowRightIcon } from '@radix-ui/react-icons';
+import { RiArrowLeftLine, RiArrowRightLine } from '@remixicon/react';
 import useEmblaCarousel, {
   type UseEmblaCarouselType,
 } from 'embla-carousel-react';
@@ -216,7 +216,7 @@ const CarouselPrevious = React.forwardRef<
       onClick={scrollPrev}
       {...props}
     >
-      <ArrowLeftIcon className="h-4 w-4" />
+      <RiArrowLeftLine className="h-4 w-4" size={15} />
       <span className="sr-only">Previous slide</span>
     </Button>
   );
@@ -245,7 +245,7 @@ const CarouselNext = React.forwardRef<
       onClick={scrollNext}
       {...props}
     >
-      <ArrowRightIcon className="h-4 w-4" />
+      <RiArrowRightLine className="h-4 w-4" size={15} />
       <span className="sr-only">Next slide</span>
     </Button>
   );

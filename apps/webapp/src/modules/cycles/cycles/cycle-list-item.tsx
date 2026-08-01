@@ -1,3 +1,4 @@
+import { RiDeleteBinLine, RiMoreLine } from '@remixicon/react';
 import { CycleStatusEnum } from '@vantikhq/types';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
@@ -8,7 +9,6 @@ import {
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { DeleteLine, MoreLine } from '@vantikhq/ui/icons';
 import { format } from 'date-fns';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
@@ -118,13 +118,13 @@ export const CycleListItem = observer(
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm">
-                      <MoreLine size={16} />
+                      <RiMoreLine size={16} />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
                       <div className="flex items-center gap-1">
-                        <DeleteLine size={16} /> Delete
+                        <RiDeleteBinLine size={16} /> Delete
                       </div>
                     </DropdownMenuItem>
                   </DropdownMenuContent>

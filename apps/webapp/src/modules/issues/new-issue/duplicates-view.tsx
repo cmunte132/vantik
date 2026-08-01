@@ -1,3 +1,4 @@
+import { RiFileCopyLine } from '@remixicon/react';
 import { RiArrowDownSFill, RiArrowRightSFill } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
@@ -5,7 +6,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@vantikhq/ui/components/collapsible';
-import { DuplicateLine2 } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { useRouter } from 'next/router';
 import React from 'react';
@@ -72,7 +72,7 @@ export function DuplicateIssuesView({ description }: DuplicateIssuesViewProps) {
                 ) : (
                   <RiArrowRightSFill size={16} className="mr-2" />
                 )}
-                <DuplicateLine2 size={16} className="mr-2" />
+                <RiFileCopyLine size={16} className="mr-2" />
                 Possible duplicates
               </Button>
             </div>

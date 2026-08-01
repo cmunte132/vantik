@@ -1,3 +1,8 @@
+import {
+  RiAddLine,
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+} from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Collapsible,
@@ -5,7 +10,6 @@ import {
   CollapsibleTrigger,
 } from '@vantikhq/ui/components/collapsible';
 import { Input } from '@vantikhq/ui/components/input';
-import { AddLine, ChevronDown, ChevronRight } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
@@ -67,9 +71,9 @@ export const ChecklistView = observer(({ issueId }: ChecklistViewProps) => {
             <Button variant="link" className="px-0 text-md">
               Definition of Done
               {isOpen ? (
-                <ChevronDown size={16} className="ml-1" />
+                <RiArrowDownSLine size={16} className="ml-1" />
               ) : (
-                <ChevronRight size={16} className="ml-1" />
+                <RiArrowRightSLine size={16} className="ml-1" />
               )}
             </Button>
 
@@ -82,7 +86,7 @@ export const ChecklistView = observer(({ issueId }: ChecklistViewProps) => {
         </CollapsibleTrigger>
 
         <Button variant="ghost" size="xs" onClick={startAdding}>
-          <AddLine size={16} />
+          <RiAddLine size={16} />
         </Button>
       </div>
 

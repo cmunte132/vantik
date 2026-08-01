@@ -1,3 +1,4 @@
+import { RiAddLine, RiCloseLine } from '@remixicon/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@vantikhq/ui/components/button';
 import {
@@ -12,7 +13,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { AddLine, CrossLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import * as React from 'react';
@@ -88,7 +88,7 @@ export const IssuePages = observer(() => {
             aria-label={`Unlink ${page.title || 'Untitled page'}`}
             onClick={() => remove({ pageId: page.id, linkId: page.linkId })}
           >
-            <CrossLine size={12} />
+            <RiCloseLine size={12} />
           </Button>
         </div>
       ))}
@@ -112,7 +112,7 @@ const AddPageLink = observer(
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="sm" className="px-1">
-            <AddLine size={14} />
+            <RiAddLine size={14} />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-[280px] p-0">
@@ -120,23 +120,25 @@ const AddPageLink = observer(
             <CommandInput placeholder="Find a page…" />
             <CommandList>
               <CommandEmpty>No pages match.</CommandEmpty>
-              {pagesStore.getPages.map((page: { id: string; title: string }) => (
-                <CommandItem
-                  key={page.id}
-                  value={`page ${page.title}`}
-                  // The edge is stored against the page, so linking from either
-                  // end is the same write and a repeat is the existing link.
-                  onSelect={() =>
-                    create({
-                      pageId: page.id,
-                      entityType: 'ISSUE',
-                      entityId: issueId,
-                    })
-                  }
-                >
-                  {page.title || 'Untitled page'}
-                </CommandItem>
-              ))}
+              {pagesStore.getPages.map(
+                (page: { id: string; title: string }) => (
+                  <CommandItem
+                    key={page.id}
+                    value={`page ${page.title}`}
+                    // The edge is stored against the page, so linking from either
+                    // end is the same write and a repeat is the existing link.
+                    onSelect={() =>
+                      create({
+                        pageId: page.id,
+                        entityType: 'ISSUE',
+                        entityId: issueId,
+                      })
+                    }
+                  >
+                    {page.title || 'Untitled page'}
+                  </CommandItem>
+                ),
+              )}
             </CommandList>
           </Command>
         </PopoverContent>

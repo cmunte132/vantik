@@ -1,10 +1,11 @@
+import { RiFlashlightLine, RiStackLine } from '@remixicon/react';
 import {
   RiDiscordFill,
   RiGitRepositoryLine,
   RiGithubFill,
   RiMailFill,
 } from '@remixicon/react';
-import { Actions, StackLine, Whatsapp } from '@vantikhq/ui/icons';
+import { Whatsapp } from '@vantikhq/ui/icons';
 
 export const ICON_MAPPING = {
   email: RiMailFill,
@@ -14,8 +15,8 @@ export const ICON_MAPPING = {
   'local-repo': RiGitRepositoryLine,
 
   // Default icon
-  integration: StackLine,
-  action: Actions,
+  integration: RiStackLine,
+  action: RiFlashlightLine,
 };
 
 export type IconType = keyof typeof ICON_MAPPING;

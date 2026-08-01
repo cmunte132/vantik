@@ -1,3 +1,4 @@
+import { RiDeleteBinLine, RiEditLine, RiMoreLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
@@ -5,7 +6,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
-import { DeleteLine, EditLine, MoreLine } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import type { LabelType } from 'common/types';
@@ -38,18 +38,18 @@ export function Label({ label, setEditLabelState }: LabelProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild className="flex items-center">
             <Button variant="ghost" size="sm" className="flex items-center">
-              <MoreLine size={16} />
+              <RiMoreLine size={16} />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => setEditLabelState(label.id)}>
               <div className="flex items-center gap-1">
-                <EditLine size={16} /> Edit
+                <RiEditLine size={16} /> Edit
               </div>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setDeleteAlert(true)}>
               <div className="flex items-center gap-1">
-                <DeleteLine size={16} /> Delete
+                <RiDeleteBinLine size={16} /> Delete
               </div>
             </DropdownMenuItem>
           </DropdownMenuContent>

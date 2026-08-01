@@ -6,7 +6,7 @@ import {
   type DroppableProvided,
   type DroppableStateSnapshot,
 } from '@hello-pangea/dnd';
-import { Project } from '@vantikhq/ui/icons';
+import { RiBox3Line } from '@remixicon/react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import {
@@ -125,7 +125,10 @@ export const ProjectBoardList = observer(
             <div className="flex flex-col max-h-[100%] w-[350px]">
               <div className="flex gap-1 items-center mb-2 w-[310px]">
                 <div className="inline-flex items-center w-fit h-8 rounded-2xl px-4 py-2 gap-1 min-w-[0px] bg-grayAlpha-100">
-                  <Project size={14} className="h-5 w-5 text-[9px] shrink-0" />
+                  <RiBox3Line
+                    size={14}
+                    className="h-5 w-5 text-[9px] shrink-0"
+                  />
                   <div className="truncate"> {project.name}</div>
                 </div>
 
@@ -257,7 +260,7 @@ export const NoProjectView = observer(() => {
           <div className="flex flex-col max-h-[100%] w-[350px]">
             <div className="flex gap-1 items-center mb-2 w-[310px]">
               <div className="flex items-center w-fit h-8 rounded-2xl px-4 py-2 bg-grayAlpha-100">
-                <Project size={20} />
+                <RiBox3Line size={20} />
                 <h3 className="pl-2">No Project</h3>
               </div>
 

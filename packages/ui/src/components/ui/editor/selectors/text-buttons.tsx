@@ -1,12 +1,12 @@
 import type { SelectorItem } from './node-selector';
 
 import {
-  BoldLine,
-  CodingLine,
-  ItalicLine,
-  StrikeLine,
-  UnderlineLine,
-} from '@vantikhq/ui/icons';
+  RiBold,
+  RiItalic,
+  RiStrikethrough,
+  RiTerminalBoxLine,
+  RiUnderline,
+} from '@remixicon/react';
 
 import { cn } from '../../../../lib/utils';
 import { Button } from '../../button';
@@ -22,31 +22,31 @@ export const TextButtons = () => {
       name: 'bold',
       isActive: (editor) => editor.isActive('bold'),
       command: (editor) => editor.chain().focus().toggleBold().run(),
-      icon: BoldLine,
+      icon: RiBold,
     },
     {
       name: 'italic',
       isActive: (editor) => editor.isActive('italic'),
       command: (editor) => editor.chain().focus().toggleItalic().run(),
-      icon: ItalicLine,
+      icon: RiItalic,
     },
     {
       name: 'underline',
       isActive: (editor) => editor.isActive('underline'),
       command: (editor) => editor.chain().focus().toggleUnderline().run(),
-      icon: UnderlineLine,
+      icon: RiUnderline,
     },
     {
       name: 'strike',
       isActive: (editor) => editor.isActive('strike'),
       command: (editor) => editor.chain().focus().toggleStrike().run(),
-      icon: StrikeLine,
+      icon: RiStrikethrough,
     },
     {
       name: 'code',
       isActive: (editor) => editor.isActive('code'),
       command: (editor) => editor.chain().focus().toggleCode().run(),
-      icon: CodingLine,
+      icon: RiTerminalBoxLine,
     },
   ];
   return (

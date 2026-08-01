@@ -1,10 +1,10 @@
+import { RiAddLine, RiArrowRightSLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@vantikhq/ui/components/tooltip';
-import { AddLine, ChevronRight } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
@@ -141,7 +141,7 @@ const TreeNode = observer(
             )}
             onClick={() => setExpanded((open: boolean) => !open)}
           >
-            <ChevronRight
+            <RiArrowRightSLine
               size={12}
               className={cn('transition-transform', expanded && 'rotate-90')}
             />
@@ -169,7 +169,7 @@ const TreeNode = observer(
                   className="shrink-0 h-5 px-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                   onClick={() => onCreateChild(page.id)}
                 >
-                  <AddLine size={12} />
+                  <RiAddLine size={12} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Add a page inside</TooltipContent>

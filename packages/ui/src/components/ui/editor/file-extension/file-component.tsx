@@ -1,9 +1,8 @@
+import { RiFileTextLine } from '@remixicon/react';
 import { RiDownloadLine } from '@remixicon/react';
 import { NodeViewWrapper } from '@tiptap/react';
 import { filesize } from 'filesize';
 import React from 'react';
-
-import { DocumentLine } from '@vantikhq/ui/icons';
 
 import { useSrc } from './use-src';
 import { Button } from '../../button';
@@ -47,7 +46,7 @@ export const FileComponent = (props: any) => {
             <>
               <div className="flex flex-col">
                 <div className="flex gap-2 items-center">
-                  <DocumentLine size={20} />
+                  <RiFileTextLine size={20} />
 
                   <div className="grow text-sm flex flex-col justify-center">
                     <div>{props.node.attrs.alt}</div>

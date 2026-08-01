@@ -1,3 +1,4 @@
+import { RiAddLine, RiCheckLine, RiDeleteBinLine } from '@remixicon/react';
 import { useQuery } from '@tanstack/react-query';
 import { getModuleRepos } from '@vantikhq/services';
 import { Badge } from '@vantikhq/ui/components/badge';
@@ -13,7 +14,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { AddLine, CheckLine, DeleteLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
@@ -141,7 +141,7 @@ export const Repositories = observer(({ moduleId }: { moduleId: string }) => {
             aria-label={`Disconnect ${repo.fullName}`}
             onClick={() => deleteRepo({ moduleId, moduleRepoId: repo.id })}
           >
-            <DeleteLine size={14} />
+            <RiDeleteBinLine size={14} />
           </Button>
         </div>
       ))}
@@ -245,7 +245,7 @@ function RepoPicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="secondary" size="sm" className="gap-1">
-          <AddLine size={14} />
+          <RiAddLine size={14} />
           Connect a repository
         </Button>
       </PopoverTrigger>
@@ -496,7 +496,7 @@ function ScopeRow({
           checked && 'border-primary bg-primary text-primary-foreground',
         )}
       >
-        {checked && <CheckLine size={12} />}
+        {checked && <RiCheckLine size={12} />}
       </span>
       <span className={cn('flex-1 truncate', mono && 'font-mono')}>
         {label}

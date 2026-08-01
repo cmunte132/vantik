@@ -1,5 +1,5 @@
+import { RiAddLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { AddLine } from '@vantikhq/ui/icons';
 import { AI as AII } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
@@ -26,7 +26,7 @@ export const AI = observer(() => {
               commonStore.update({ currentConversationId: undefined });
             }}
           >
-            <AddLine size={16} />
+            <RiAddLine size={16} />
           </Button>
 
           <AIHistoryDropdown />

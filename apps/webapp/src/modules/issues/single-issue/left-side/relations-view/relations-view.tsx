@@ -1,3 +1,4 @@
+import { RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Collapsible,
@@ -7,8 +8,6 @@ import {
 import {
   BlockedFill,
   BlocksFill,
-  ChevronDown,
-  ChevronRight,
   IssuesLine,
   RelatedIssueLine,
 } from '@vantikhq/ui/icons';
@@ -95,9 +94,9 @@ export const RelationsView = observer(({ issueId }: RelationsViewProps) => {
                 <Button variant="link" className="px-0 text-md">
                   Relations
                   {isOpen ? (
-                    <ChevronDown size={16} className="ml-1" />
+                    <RiArrowDownSLine size={16} className="ml-1" />
                   ) : (
-                    <ChevronRight size={16} className="ml-1" />
+                    <RiArrowRightSLine size={16} className="ml-1" />
                   )}
                 </Button>
 

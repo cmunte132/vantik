@@ -1,7 +1,7 @@
+import { RiRefreshLine } from '@remixicon/react';
 import { CyclesModeEnum, CycleStatusEnum } from '@vantikhq/types';
 import { Button } from '@vantikhq/ui/components/button';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
-import { Cycle } from '@vantikhq/ui/icons';
 import { sort } from 'fast-sort';
 import { observer } from 'mobx-react-lite';
 
@@ -44,7 +44,7 @@ export const CycleList = observer(({ onNewCycle }: CycleListProps) => {
   if (cycles.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3">
-        <Cycle size={32} className="text-muted-foreground" />
+        <RiRefreshLine size={32} className="text-muted-foreground" />
         <p className="text-muted-foreground">
           No cycles yet. Create one to start planning work into time boxes.
         </p>

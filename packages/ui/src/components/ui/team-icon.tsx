@@ -1,4 +1,5 @@
-import { HelpCentre, Code } from '../../icons';
+import { RiCodeSSlashLine, RiQuestionLine } from '@remixicon/react';
+
 import { getTeamColor } from '../../lib/color-utils';
 import {
   DEFAULT_ICON_TILE,
@@ -27,7 +28,8 @@ export function TeamIcon({
   preferences,
   size = DEFAULT_ICON_TILE,
 }: TeamIconProps) {
-  const Icon = preferences?.teamType === 'support' ? HelpCentre : Code;
+  const Icon =
+    preferences?.teamType === 'support' ? RiQuestionLine : RiCodeSSlashLine;
   const { tile, glyph } = ICON_TILE[size];
 
   return (

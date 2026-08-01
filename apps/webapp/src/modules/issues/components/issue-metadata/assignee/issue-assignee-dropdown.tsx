@@ -1,3 +1,4 @@
+import { RiAccountCircleLine } from '@remixicon/react';
 import { AvatarText } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
 import { Command, CommandInput } from '@vantikhq/ui/components/command';
@@ -7,7 +8,6 @@ import {
   PopoverPortal,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { AssigneeLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import * as React from 'react';
 
@@ -60,7 +60,10 @@ export function IssueAssigneeDropdown({
             <UserAvatar user={getUserFromUsersData(users, value)} />
           ) : (
             <div className="flex items-center justify-center">
-              <AssigneeLine size={20} className="mr-1 text-muted-foreground" />
+              <RiAccountCircleLine
+                size={20}
+                className="mr-1 text-muted-foreground"
+              />
             </div>
           )}
         </Button>
@@ -87,7 +90,7 @@ export function IssueAssigneeDropdown({
             </>
           ) : (
             <div className="text-muted-foreground flex">
-              <AssigneeLine size={20} className="mr-2" />
+              <RiAccountCircleLine size={20} className="mr-2" />
               No Assignee
             </div>
           )}
@@ -115,7 +118,7 @@ export function IssueAssigneeDropdown({
           </>
         ) : (
           <>
-            <AssigneeLine size={20} className="mr-1" /> No Assignee
+            <RiAccountCircleLine size={20} className="mr-1" /> No Assignee
           </>
         )}
       </Button>

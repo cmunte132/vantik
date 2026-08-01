@@ -1,14 +1,15 @@
-import { Check, ChevronDown } from 'lucide-react';
+import {
+  RiArrowDownSLine,
+  RiCheckLine,
+  RiHeading,
+  RiListOrdered,
+  RiListUnordered,
+  RiTerminalBoxLine,
+  RiText,
+} from '@remixicon/react';
 import React from 'react';
 
-import {
-  BulletListLine,
-  CodingLine,
-  HeadingLine,
-  IssuesLine,
-  NumberedListLine,
-  TextLine,
-} from '@vantikhq/ui/icons';
+import { IssuesLine } from '@vantikhq/ui/icons';
 
 import { Button } from '../../button';
 import { PopoverContent, PopoverTrigger, Popover } from '../../popover';
@@ -24,7 +25,7 @@ export interface SelectorItem {
 const items: SelectorItem[] = [
   {
     name: 'Text',
-    icon: TextLine,
+    icon: RiText,
     command: (editor) => editor.chain().focus().clearNodes().run(),
     // I feel like there has to be a more efficient way to do this – feel free to PR if you know how!
     isActive: (editor) =>
@@ -34,21 +35,21 @@ const items: SelectorItem[] = [
   },
   {
     name: 'Heading 1',
-    icon: HeadingLine,
+    icon: RiHeading,
     command: (editor) =>
       editor.chain().focus().clearNodes().toggleHeading({ level: 1 }).run(),
     isActive: (editor) => editor.isActive('heading', { level: 1 }),
   },
   {
     name: 'Heading 2',
-    icon: HeadingLine,
+    icon: RiHeading,
     command: (editor) =>
       editor.chain().focus().clearNodes().toggleHeading({ level: 2 }).run(),
     isActive: (editor) => editor.isActive('heading', { level: 2 }),
   },
   {
     name: 'Heading 3',
-    icon: HeadingLine,
+    icon: RiHeading,
     command: (editor) =>
       editor.chain().focus().clearNodes().toggleHeading({ level: 3 }).run(),
     isActive: (editor) => editor.isActive('heading', { level: 3 }),
@@ -62,21 +63,21 @@ const items: SelectorItem[] = [
   },
   {
     name: 'Bullet List',
-    icon: BulletListLine,
+    icon: RiListUnordered,
     command: (editor) =>
       editor.chain().focus().clearNodes().toggleBulletList().run(),
     isActive: (editor) => editor.isActive('bulletList'),
   },
   {
     name: 'Numbered List',
-    icon: NumberedListLine,
+    icon: RiListOrdered,
     command: (editor) =>
       editor.chain().focus().clearNodes().toggleOrderedList().run(),
     isActive: (editor) => editor.isActive('orderedList'),
   },
   {
     name: 'Code',
-    icon: CodingLine,
+    icon: RiTerminalBoxLine,
     command: (editor) =>
       editor.chain().focus().clearNodes().toggleCodeBlock().run(),
     isActive: (editor) => editor.isActive('codeBlock'),
@@ -104,7 +105,7 @@ export const NodeSelector = ({ open, onOpenChange }: NodeSelectorProps) => {
           className="gap-2 px-2 hover:bg-accent hover:text-accent-foreground text-base"
         >
           <span className="whitespace-nowrap">{activeItem.name}</span>
-          <ChevronDown className="h-4 w-4" />
+          <RiArrowDownSLine className="h-4 w-4" size={16} />
         </Button>
       </PopoverTrigger>
       <PopoverContent sideOffset={5} align="start" className="w-48 p-1">
@@ -119,7 +120,9 @@ export const NodeSelector = ({ open, onOpenChange }: NodeSelectorProps) => {
           >
             <div className="flex items-center gap-2">
               <div className="w-4">
-                {activeItem.name === item.name && <Check className="h-4 w-4" />}
+                {activeItem.name === item.name && (
+                  <RiCheckLine className="h-4 w-4" />
+                )}
               </div>
               <div className="rounded p-1">
                 <item.icon className="h-5 w-5" />

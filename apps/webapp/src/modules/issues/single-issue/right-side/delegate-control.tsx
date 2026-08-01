@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Popover,
@@ -13,7 +14,6 @@ import {
   SelectValue,
 } from '@vantikhq/ui/components/select';
 import { Textarea } from '@vantikhq/ui/components/textarea';
-import { ChevronDown, ChevronRight } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
@@ -96,7 +96,8 @@ export const DelegateControl = observer(() => {
   );
 
   const current = agentRunsStore.getCurrentRunForIssue(issue?.id);
-  const liveRun = current && LIVE.includes(current.status) ? current : undefined;
+  const liveRun =
+    current && LIVE.includes(current.status) ? current : undefined;
 
   // One configured provider is not a choice, so it is made rather than asked.
   React.useEffect(() => {
@@ -269,15 +270,13 @@ export const DelegateControl = observer(() => {
                 className="flex items-center gap-1.5 text-left text-xs text-muted-foreground hover:text-foreground"
               >
                 {showWhere ? (
-                  <ChevronDown size={12} />
+                  <RiArrowDownSLine size={12} />
                 ) : (
-                  <ChevronRight size={12} />
+                  <RiArrowRightSLine size={12} />
                 )}
                 <span className="truncate">
                   Where it runs — a Vantik sandbox
-                  {plan?.repoUrl || plan?.repoPath
-                    ? `, ${repoName(plan)}`
-                    : ''}
+                  {plan?.repoUrl || plan?.repoPath ? `, ${repoName(plan)}` : ''}
                   {plan?.baseBranch ? `, from ${plan.baseBranch}` : ''}
                 </span>
               </button>
@@ -327,7 +326,13 @@ const THINKING = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 /** The repository, from the end that identifies it. */
 function repoName(plan: { repoUrl: string | null; repoPath: string | null }) {
   const value = plan.repoUrl ?? plan.repoPath ?? '';
-  return value.replace(/\.git$/, '').split('/').filter(Boolean).pop() ?? value;
+  return (
+    value
+      .replace(/\.git$/, '')
+      .split('/')
+      .filter(Boolean)
+      .pop() ?? value
+  );
 }
 
 /** What will exist when it finishes, which is what a reader is agreeing to. */

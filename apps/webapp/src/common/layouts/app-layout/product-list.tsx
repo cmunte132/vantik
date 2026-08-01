@@ -1,5 +1,6 @@
 'use client';
 
+import { RiAddLine, RiArrowRightSLine } from '@remixicon/react';
 import {
   Collapsible,
   CollapsibleContent,
@@ -16,7 +17,6 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from '@vantikhq/ui/components/sidebar';
-import { AddLine, ChevronRight } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -63,7 +63,7 @@ export const ProductList = observer(() => {
         Products
         <SidebarGroupAction asChild aria-label="Add product">
           <NextLink href={`/${workspace.slug}/settings/new_product`}>
-            <AddLine />
+            <RiAddLine size={18} />
           </NextLink>
         </SidebarGroupAction>
       </SidebarGroupLabel>
@@ -118,9 +118,10 @@ export const ProductList = observer(() => {
                     />
                     <span className="flex-1 truncate">{product.name}</span>
                     <span data-rail-hide className="flex shrink-0">
-                      <ChevronRight
+                      <RiArrowRightSLine
                         className="!size-3.5 text-sidebar-muted transition-transform
                           duration-200 group-data-[state=open]/collapsible:rotate-90"
+                        size={16}
                       />
                     </span>
                   </SidebarMenuButton>
@@ -165,7 +166,7 @@ export const ProductList = observer(() => {
                           href={`${productHref}?new=module`}
                           className="text-sidebar-muted"
                         >
-                          <AddLine className="!size-3.5" />
+                          <RiAddLine className="!size-3.5" size={18} />
                           <span className="flex-1 truncate">New module</span>
                         </NextLink>
                       </SidebarMenuSubButton>

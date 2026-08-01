@@ -1,6 +1,6 @@
 'use client';
 
-import { CreateIssueLine, SearchLine } from '@vantikhq/ui/icons';
+import { RiEditBoxLine, RiSearchLine } from '@remixicon/react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
@@ -34,7 +34,7 @@ export const SidebarActions = observer(() => {
               transition-colors hover:bg-grayAlpha-200 focus-visible:ring-1
               focus-visible:ring-ring"
           >
-            <SearchLine size={14} className="shrink-0" />
+            <RiSearchLine size={14} className="shrink-0" />
             <span className="truncate" data-rail-hide>
               Search
             </span>
@@ -58,7 +58,7 @@ export const SidebarActions = observer(() => {
               bg-grayAlpha-100 text-sidebar-foreground outline-none transition-colors
               hover:bg-grayAlpha-200 focus-visible:ring-1 focus-visible:ring-ring"
           >
-            <CreateIssueLine size={16} />
+            <RiEditBoxLine size={16} />
           </button>
         </TooltipWrapper>
       </div>

@@ -1,6 +1,7 @@
+import { RiFileCopyLine } from '@remixicon/react';
 import { RiFileTransferLine } from '@remixicon/react';
 import { TimelineItem } from '@vantikhq/ui/components/timeline';
-import { BlockedFill, BlocksFill, DuplicateLine } from '@vantikhq/ui/icons';
+import { BlockedFill, BlocksFill } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { useRouter } from 'next/router';
 
@@ -33,11 +34,11 @@ const ICON_MAP: Record<string, { icon: any; color: string }> = {
     color: 'text-muted-foreground',
   },
   [IssueRelationEnum.DUPLICATE]: {
-    icon: DuplicateLine,
+    icon: RiFileCopyLine,
     color: 'text-muted-foreground',
   },
   [IssueRelationEnum.DUPLICATE_OF]: {
-    icon: DuplicateLine,
+    icon: RiFileCopyLine,
     color: 'text-muted-foreground',
   },
 };

@@ -1,14 +1,14 @@
-import { ImageIcon } from 'lucide-react';
-
 import {
-  BulletListLine,
-  CodingLine,
-  HeadingLine,
-  IssuesLine,
-  LinkLine,
-  NumberedListLine,
-  TextLine,
-} from '@vantikhq/ui/icons';
+  RiHeading,
+  RiImageLine,
+  RiLinkM,
+  RiListOrdered,
+  RiListUnordered,
+  RiTerminalBoxLine,
+  RiText,
+} from '@remixicon/react';
+
+import { IssuesLine } from '@vantikhq/ui/icons';
 
 import { Command, createSuggestionItems } from './primitives';
 import { uploadFileFn, uploadFn } from './utils';
@@ -19,7 +19,7 @@ export const suggestionItems = createSuggestionItems([
     title: 'Text',
     description: 'Just start typing with plain text.',
     searchTerms: ['p', 'paragraph'],
-    icon: <TextLine size={20} />,
+    icon: <RiText size={20} />,
     command: ({ editor, range }) => {
       editor
         .chain()
@@ -42,7 +42,7 @@ export const suggestionItems = createSuggestionItems([
     title: 'Heading 1',
     description: 'Big section heading.',
     searchTerms: ['title', 'big', 'large'],
-    icon: <HeadingLine size={20} />,
+    icon: <RiHeading size={20} />,
     command: ({ editor, range }) => {
       editor
         .chain()
@@ -56,7 +56,7 @@ export const suggestionItems = createSuggestionItems([
     title: 'Heading 2',
     description: 'Medium section heading.',
     searchTerms: ['subtitle', 'medium'],
-    icon: <HeadingLine size={20} />,
+    icon: <RiHeading size={20} />,
     command: ({ editor, range }) => {
       editor
         .chain()
@@ -70,7 +70,7 @@ export const suggestionItems = createSuggestionItems([
     title: 'Heading 3',
     description: 'Small section heading.',
     searchTerms: ['subtitle', 'small'],
-    icon: <HeadingLine size={20} />,
+    icon: <RiHeading size={20} />,
     command: ({ editor, range }) => {
       editor
         .chain()
@@ -84,7 +84,7 @@ export const suggestionItems = createSuggestionItems([
     title: 'Bullet List',
     description: 'Create a simple bullet list.',
     searchTerms: ['unordered', 'point'],
-    icon: <BulletListLine size={20} />,
+    icon: <RiListUnordered size={20} />,
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).toggleBulletList().run();
     },
@@ -93,7 +93,7 @@ export const suggestionItems = createSuggestionItems([
     title: 'Numbered List',
     description: 'Create a list with numbering.',
     searchTerms: ['ordered'],
-    icon: <NumberedListLine size={20} />,
+    icon: <RiListOrdered size={20} />,
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).toggleOrderedList().run();
     },
@@ -102,7 +102,7 @@ export const suggestionItems = createSuggestionItems([
     title: 'Code',
     description: 'Capture a code snippet.',
     searchTerms: ['codeblock'],
-    icon: <CodingLine size={20} />,
+    icon: <RiTerminalBoxLine size={20} />,
     command: ({ editor, range }) =>
       editor.chain().focus().deleteRange(range).toggleCodeBlock().run(),
   },
@@ -110,7 +110,7 @@ export const suggestionItems = createSuggestionItems([
     title: 'Image',
     description: 'Upload an image from your computer.',
     searchTerms: ['photo', 'picture', 'media'],
-    icon: <ImageIcon size={20} />,
+    icon: <RiImageLine size={20} />,
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).run();
       // upload image
@@ -131,7 +131,7 @@ export const suggestionItems = createSuggestionItems([
     title: 'File upload',
     description: 'Upload an file from your computer.',
     searchTerms: ['photo', 'picture', 'media'],
-    icon: <LinkLine size={20} />,
+    icon: <RiLinkM size={20} />,
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).run();
       // upload image

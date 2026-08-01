@@ -1,7 +1,7 @@
+import { RiLoader4Line as LoaderI } from '@remixicon/react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import { Loader as LoaderI } from '../../icons';
 import { cn } from '../../lib/utils';
 
 const loaderVariants = cva(

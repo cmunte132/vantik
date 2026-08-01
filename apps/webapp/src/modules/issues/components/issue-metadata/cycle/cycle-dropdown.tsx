@@ -1,3 +1,4 @@
+import { RiRefreshLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Command, CommandInput } from '@vantikhq/ui/components/command';
 import {
@@ -5,7 +6,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { Cycle } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import * as React from 'react';
 
@@ -61,7 +61,10 @@ export function CycleDropdown({
               <>{getCycle(value).name}</>
             ) : (
               <div className="flex items-center justify-center">
-                <Cycle size={20} className="mr-1 text-muted-foreground" />
+                <RiRefreshLine
+                  size={20}
+                  className="mr-1 text-muted-foreground"
+                />
               </div>
             )}
           </Button>
@@ -81,12 +84,12 @@ export function CycleDropdown({
         >
           {value ? (
             <>
-              <Cycle className="h-5 w-5 text-[9px] mr-2" />
+              <RiRefreshLine className="h-5 w-5 text-[9px] mr-2" size={16} />
               {getCycle(value).name}
             </>
           ) : (
             <div className="text-muted-foreground flex">
-              <Cycle size={20} className="mr-2" />
+              <RiRefreshLine size={20} className="mr-2" />
               No Cycle
             </div>
           )}
@@ -105,13 +108,13 @@ export function CycleDropdown({
       >
         {value ? (
           <div className="flex items-center gap-1 shrink min-w-[0px]">
-            <Cycle className="w-5 h-5 text-[9px] shrink-0" />
+            <RiRefreshLine className="w-5 h-5 text-[9px] shrink-0" size={16} />
 
             <div className="truncate"> {getCycle(value).name}</div>
           </div>
         ) : (
           <>
-            <Cycle size={20} className="mr-1" /> No Cycle
+            <RiRefreshLine size={20} className="mr-1" /> No Cycle
           </>
         )}
       </Button>

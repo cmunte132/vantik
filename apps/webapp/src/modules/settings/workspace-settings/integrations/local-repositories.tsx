@@ -1,6 +1,6 @@
+import { RiDeleteBinLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Input } from '@vantikhq/ui/components/input';
-import { DeleteLine } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import {
@@ -78,7 +78,7 @@ export function LocalRepositories({ instruction }: { instruction?: string }) {
               aria-label={`Remove ${repository.fullName}`}
               onClick={() => removeRepository({ repositoryId: repository.id })}
             >
-              <DeleteLine size={14} />
+              <RiDeleteBinLine size={14} />
             </Button>
           </div>
         ))}

@@ -1,3 +1,9 @@
+import {
+  RiDeleteBinLine,
+  RiEditLine,
+  RiMoreLine,
+  RiStackLine,
+} from '@remixicon/react';
 import { RiBookmarkFill, RiBookmarkLine } from '@remixicon/react';
 import {
   Breadcrumb,
@@ -11,7 +17,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
-import { DeleteLine, EditLine, MoreLine, StackLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -54,7 +59,7 @@ export const Header = observer(({ title, view, actions }: HeaderProps) => {
               href={`/${workspaceSlug}/team/${team.identifier}/views`}
             >
               <div className={`w-5 h-5 rounded-sm`}>
-                <StackLine size={20} />
+                <RiStackLine size={20} />
               </div>
               <span className="inline-block">Views</span>
             </BreadcrumbLink>
@@ -68,18 +73,18 @@ export const Header = observer(({ title, view, actions }: HeaderProps) => {
       <DropdownMenu>
         <DropdownMenuTrigger asChild className="flex items-center">
           <Button variant="ghost" size="sm" className="flex items-center ml-1">
-            <MoreLine size={16} />
+            <RiMoreLine size={16} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => setEditOpen(true)}>
             <div className="flex items-center gap-1">
-              <EditLine size={16} /> Edit
+              <RiEditLine size={16} /> Edit
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setDeleteAlert(true)}>
             <div className="flex items-center gap-1">
-              <DeleteLine size={16} /> Delete
+              <RiDeleteBinLine size={16} /> Delete
             </div>
           </DropdownMenuItem>
         </DropdownMenuContent>

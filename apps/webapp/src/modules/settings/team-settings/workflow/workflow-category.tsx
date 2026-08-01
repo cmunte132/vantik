@@ -5,9 +5,9 @@ import {
   type DraggableProvided,
   type DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
+import { RiAddLine } from '@remixicon/react';
 import { BoardItem } from '@vantikhq/ui/components/board';
 import { Button } from '@vantikhq/ui/components/button';
-import { AddLine } from '@vantikhq/ui/icons';
 import React from 'react';
 
 import { capitalizeFirstLetter } from 'common/lib/common';
@@ -39,7 +39,7 @@ export function WorkflowCategory({
           className="text-muted-foreground hover:text-foreground"
           onClick={() => setNewWorkflowCreation(true)}
         >
-          <AddLine size={16} />
+          <RiAddLine size={16} />
         </Button>
       </div>
 

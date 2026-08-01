@@ -1,4 +1,4 @@
-import { StepForward } from 'lucide-react';
+import { RiSkipForwardLine } from '@remixicon/react';
 
 import { CommandItem, CommandList } from '@vantikhq/ui/components/command';
 import { SubIssue } from '@vantikhq/ui/icons';
@@ -58,7 +58,7 @@ const AISelectorCommands = ({ onSelect }: AISelectorCommandsProps) => {
           value="continue"
           className="gap-2 px-2"
         >
-          <StepForward className="h-4 w-4" />
+          <RiSkipForwardLine className="h-4 w-4" />
           Continue writing
         </CommandItem>
       </CommandList>

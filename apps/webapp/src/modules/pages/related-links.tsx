@@ -1,3 +1,4 @@
+import { RiAddLine, RiCloseLine } from '@remixicon/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@vantikhq/ui/components/button';
 import {
@@ -13,7 +14,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { AddLine, CrossLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import * as React from 'react';
@@ -121,7 +121,7 @@ export const RelatedLinks = observer(({ pageId }: { pageId: string }) => {
               className="shrink-0 h-6 px-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
               onClick={() => remove({ pageId, linkId: link.id })}
             >
-              <CrossLine size={12} />
+              <RiCloseLine size={12} />
             </Button>
           </div>
         ))}
@@ -165,7 +165,7 @@ const AddLink = observer(
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="sm" className="gap-1 px-1">
-            <AddLine size={14} />
+            <RiAddLine size={14} />
             Link
           </Button>
         </PopoverTrigger>

@@ -1,3 +1,4 @@
+import { RiAddLine, RiCalendarLine, RiFireLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Calendar } from '@vantikhq/ui/components/calendar';
 import {
@@ -5,7 +6,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { AddLine, CalendarLine, Fire } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { differenceInDays, format } from 'date-fns';
 import React from 'react';
@@ -44,14 +44,14 @@ export function DueDate({
 
         return (
           <div className="inline-flex items-center text-red-600 gap-1">
-            <Fire /> <div>{diffDays}d</div>
+            <RiFireLine size={18} /> <div>{diffDays}d</div>
           </div>
         );
       }
 
       return (
         <div className="flex items-center">
-          <CalendarLine size={20} className="mr-2" />
+          <RiCalendarLine size={20} className="mr-2" />
           {format(dueDate, 'MMM dd')}
         </div>
       );
@@ -59,7 +59,7 @@ export function DueDate({
 
     return (
       <div className="flex items-center">
-        <AddLine size={16} className="mr-2" />
+        <RiAddLine size={16} className="mr-2" />
         Add Due date
       </div>
     );

@@ -1,6 +1,6 @@
+import { RiRefreshLine } from '@remixicon/react';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import { CommandGroup } from '@vantikhq/ui/components/command';
-import { Cycle } from '@vantikhq/ui/icons';
 
 import type { CycleType } from 'common/types';
 
@@ -65,7 +65,7 @@ export function CycleDropdownContent({
             />
           )}
           <div className="flex grow">
-            <Cycle size={20} className="mr-2" />
+            <RiRefreshLine size={20} className="mr-2" />
             No Cycle
           </div>
         </div>
@@ -97,7 +97,7 @@ export function CycleDropdownContent({
                 />
               )}
               <label htmlFor={cycle.name} className="flex gap-2 grow">
-                <Cycle className="h-5 w-5 text-[9px]" />
+                <RiRefreshLine className="h-5 w-5 text-[9px]" size={16} />
 
                 {cycle.name}
               </label>

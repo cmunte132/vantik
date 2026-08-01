@@ -1,10 +1,10 @@
 'use client';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import {
-  CheckIcon,
-  ChevronRightIcon,
-  DotFilledIcon,
-} from '@radix-ui/react-icons';
+  RiArrowRightSLine,
+  RiCheckLine,
+  RiCheckboxBlankCircleFill,
+} from '@remixicon/react';
 import { GeistSans } from 'geist/font/sans';
 import * as React from 'react';
 
@@ -38,7 +38,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <ChevronRightIcon className="ml-auto h-3 w-3" />
+    <RiArrowRightSLine className="ml-auto h-3 w-3" size={15} />
   </DropdownMenuPrimitive.SubTrigger>
 ));
 DropdownMenuSubTrigger.displayName =
@@ -115,7 +115,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <CheckIcon className="h-4 w-4" />
+        <RiCheckLine className="h-4 w-4" size={15} />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}
@@ -139,7 +139,7 @@ const DropdownMenuRadioItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <DotFilledIcon className="h-4 w-4 fill-current" />
+        <RiCheckboxBlankCircleFill className="h-4 w-4 fill-current" size={15} />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}

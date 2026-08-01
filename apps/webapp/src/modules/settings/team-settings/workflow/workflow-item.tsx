@@ -1,8 +1,8 @@
 import type { DraggableProvided } from '@hello-pangea/dnd';
 import type { WorkflowCategoryEnum } from '@vantikhq/types';
 
+import { RiEditLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { EditLine } from '@vantikhq/ui/icons';
 import React from 'react';
 
 import { getWorkflowColor } from 'common/status-color';
@@ -63,7 +63,7 @@ export function WorkflowItem({ workflow, provided }: WorkflowItemProps) {
           className="!p-0 !bg-transparent h-4"
           onClick={() => setEdit(true)}
         >
-          <EditLine
+          <RiEditLine
             className="text-slate-500 hover:text-black dark:hover:text-white"
             size={16}
           />

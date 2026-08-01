@@ -1,8 +1,8 @@
+import { RiDeleteBinLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Editor, EditorExtensions } from '@vantikhq/ui/components/editor/index';
 import { FormControl, FormField, FormItem } from '@vantikhq/ui/components/form';
 import { Loader } from '@vantikhq/ui/components/loader';
-import { DeleteLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import { usePathname } from 'next/navigation';
@@ -195,7 +195,7 @@ export const NewIssueForm = observer(
                     subIssueOperations.remove(index);
                   }}
                 >
-                  <DeleteLine size={16} />
+                  <RiDeleteBinLine size={16} />
                 </Button>
               )}
               {!!onClose && (

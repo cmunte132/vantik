@@ -1,3 +1,4 @@
+import { RiDeleteBinLine, RiInboxLine } from '@remixicon/react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +14,6 @@ import { Button } from '@vantikhq/ui/components/button';
 import { Input } from '@vantikhq/ui/components/input';
 // There is no archive icon in the set. `Inbox` is the nearest picture of a box
 // that work goes into, and the label beside it carries the meaning.
-import { DeleteLine, Inbox } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import { ARCHIVED_STATUS } from './archive';
@@ -111,7 +111,7 @@ export function IdentityCard({
           className="gap-1 text-muted-foreground"
           onClick={() => onArchive(!archived)}
         >
-          <Inbox size={14} />
+          <RiInboxLine size={14} />
           {archived ? 'Restore' : 'Archive'}
         </Button>
 
@@ -121,7 +121,7 @@ export function IdentityCard({
           className="gap-1 text-muted-foreground"
           onClick={() => setConfirming(true)}
         >
-          <DeleteLine size={14} />
+          <RiDeleteBinLine size={14} />
           Delete
         </Button>
       </div>

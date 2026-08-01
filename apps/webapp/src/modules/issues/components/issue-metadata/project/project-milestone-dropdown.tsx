@@ -1,3 +1,4 @@
+import { RiPriceTag3Line } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Command, CommandInput } from '@vantikhq/ui/components/command';
 import {
@@ -5,7 +6,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { LabelLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import * as React from 'react';
 
@@ -63,7 +63,10 @@ export function ProjectMilestoneDropdown({
               <>{getProjectMilestone(value)?.name}</>
             ) : (
               <div className="flex items-center justify-center">
-                <LabelLine size={20} className="mr-1 text-muted-foreground" />
+                <RiPriceTag3Line
+                  size={20}
+                  className="mr-1 text-muted-foreground"
+                />
               </div>
             )}
           </Button>
@@ -83,12 +86,12 @@ export function ProjectMilestoneDropdown({
         >
           {value ? (
             <>
-              <LabelLine className="h-5 w-5 text-[9px] mr-2" />
+              <RiPriceTag3Line className="h-5 w-5 text-[9px] mr-2" size={18} />
               {getProjectMilestone(value)?.name}
             </>
           ) : (
             <div className="text-muted-foreground flex">
-              <LabelLine size={20} className="mr-2" />
+              <RiPriceTag3Line size={20} className="mr-2" />
               No Project Milestone
             </div>
           )}
@@ -107,13 +110,13 @@ export function ProjectMilestoneDropdown({
       >
         {value ? (
           <>
-            <LabelLine className="w-5 h-5 text-[9px]" />
+            <RiPriceTag3Line className="w-5 h-5 text-[9px]" size={18} />
 
             {getProjectMilestone(value)?.name}
           </>
         ) : (
           <>
-            <LabelLine size={20} className="mr-1" /> No Project Milestone
+            <RiPriceTag3Line size={20} className="mr-1" /> No Project Milestone
           </>
         )}
       </Button>

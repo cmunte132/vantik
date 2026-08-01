@@ -1,3 +1,4 @@
+import { RiFileTextLine } from '@remixicon/react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -5,7 +6,7 @@ import {
 } from '@vantikhq/ui/components/breadcrumb';
 import { Button } from '@vantikhq/ui/components/button';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
-import { DocumentLine, IssuesLine } from '@vantikhq/ui/icons';
+import { IssuesLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -72,7 +73,7 @@ export const Header = observer(
               isActive={view === 'overview'}
               onClick={() => setView('overview')}
             >
-              <DocumentLine />
+              <RiFileTextLine size={18} />
               Overview
             </Button>
             <Button

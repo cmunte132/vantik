@@ -1,10 +1,6 @@
+import { RiArrowRightSLine } from '@remixicon/react';
 import { Button, buttonVariants } from '@vantikhq/ui/components/button';
-import {
-  BlockedFill,
-  BlocksFill,
-  ChevronRight,
-  SubIssue,
-} from '@vantikhq/ui/icons';
+import { BlockedFill, BlocksFill, SubIssue } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
@@ -13,8 +9,8 @@ import React from 'react';
 import { getWorkflowColor } from 'common/status-color';
 import { IssueRelationEnum } from 'common/types';
 import type { IssueType, WorkflowType } from 'common/types';
-import { workspaceHref } from 'common/workspace-href';
 import { getWorkflowIcon } from 'common/workflow-icons';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useContextStore } from 'store/global-context-provider';
 
@@ -130,11 +126,12 @@ export const IssueRelations = observer(
           <div>Blocked by</div>
           <div className="text-muted-foreground">{blockedIssues.length}</div>
           <div>
-            <ChevronRight
+            <RiArrowRightSLine
               className={cn(
                 'h-3 w-3 transition-transform duration-200',
                 currentView === View.BLOCKED && 'rotate-90',
               )}
+              size={16}
             />
           </div>
         </Button>
@@ -153,11 +150,12 @@ export const IssueRelations = observer(
           <div>Blocks</div>
           <div className="text-muted-foreground">{blocksIssues.length}</div>
           <div>
-            <ChevronRight
+            <RiArrowRightSLine
               className={cn(
                 'h-3 w-3 transition-transform duration-200',
                 currentView === View.BLOCKS && 'rotate-90',
               )}
+              size={16}
             />
           </div>
         </Button>
@@ -176,11 +174,12 @@ export const IssueRelations = observer(
           <div>Sub-issue</div>
           <div className="text-muted-foreground">{subIssues.length}</div>
           <div>
-            <ChevronRight
+            <RiArrowRightSLine
               className={cn(
                 'h-3 w-3 transition-transform duration-200',
                 currentView === View.SUB_ISSUES && 'rotate-90',
               )}
+              size={16}
             />
           </div>
         </Button>

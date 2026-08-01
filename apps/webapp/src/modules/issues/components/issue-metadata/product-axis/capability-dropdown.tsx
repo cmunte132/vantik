@@ -1,3 +1,4 @@
+import { RiFocus3Line } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Command,
@@ -9,7 +10,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { FocusLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -58,7 +58,10 @@ export const CapabilityDropdown = observer(
                 !current && 'text-muted-foreground',
               )}
             >
-              <FocusLine className="h-5 w-5 text-[9px] mr-2 shrink-0" />
+              <RiFocus3Line
+                className="h-5 w-5 text-[9px] mr-2 shrink-0"
+                size={18}
+              />
               <div className="truncate">
                 {current ? current.name : 'No capability'}
               </div>
@@ -99,7 +102,7 @@ function CapabilityDropdownContent({ capabilities, onSelect }: ContentProps) {
           onSelect={() => onSelect(null)}
         >
           <div className="flex gap-2 items-center">
-            <FocusLine className="h-5 w-5 text-[9px]" />
+            <RiFocus3Line className="h-5 w-5 text-[9px]" size={18} />
             No capability
           </div>
         </DropdownItem>
@@ -113,7 +116,7 @@ function CapabilityDropdownContent({ capabilities, onSelect }: ContentProps) {
             onSelect={() => onSelect(capability.id)}
           >
             <div className="flex gap-2 items-center">
-              <FocusLine className="h-5 w-5 text-[9px]" />
+              <RiFocus3Line className="h-5 w-5 text-[9px]" size={18} />
               {capability.name}
             </div>
           </DropdownItem>

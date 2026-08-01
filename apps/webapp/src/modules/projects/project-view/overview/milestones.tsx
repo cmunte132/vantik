@@ -1,4 +1,13 @@
 import {
+  RiAddLine,
+  RiCheckLine,
+  RiCloseLine,
+  RiDeleteBinLine,
+  RiEditLine,
+  RiMoreLine,
+  RiPriceTag3Line,
+} from '@remixicon/react';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -17,15 +26,6 @@ import {
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
 import { Input } from '@vantikhq/ui/components/input';
-import {
-  AddLine,
-  CheckLine,
-  CrossLine,
-  DeleteLine,
-  EditLine,
-  LabelLine,
-  MoreLine,
-} from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
@@ -68,7 +68,7 @@ export const MilestoneItem = observer(
     return (
       <div className="px-3">
         <div className="flex gap-1 items-center px-3 hover:bg-grayAlpha-100 py-2 rounded">
-          <LabelLine size={18} className="flex-shrink-0" />
+          <RiPriceTag3Line size={18} className="flex-shrink-0" />
           <div className="grow">{milestone.name}</div>
           <ProjectDatePicker
             value={milestone.endDate}
@@ -84,19 +84,19 @@ export const MilestoneItem = observer(
                   e.preventDefault();
                 }}
               >
-                <MoreLine size={16} />
+                <RiMoreLine size={16} />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuGroup>
                 <DropdownMenuItem onClick={() => setEdit(milestone)}>
                   <div className="flex items-center gap-1">
-                    <EditLine size={16} /> Edit
+                    <RiEditLine size={16} /> Edit
                   </div>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
                   <div className="flex items-center gap-1">
-                    <DeleteLine size={16} /> Remove
+                    <RiDeleteBinLine size={16} /> Remove
                   </div>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
@@ -169,7 +169,7 @@ export const CreateMilestone = ({
 
   return (
     <div className="flex px-3 py-1 bg-grayAlpha-100 rounded items-center">
-      <LabelLine size={16} className="flex-shrink-0" />
+      <RiPriceTag3Line size={16} className="flex-shrink-0" />
       <Input
         className="bg-transparent"
         placeholder="Milestone"
@@ -182,10 +182,10 @@ export const CreateMilestone = ({
         variant={ProjectDropdownVariant.NO_ICON}
       />
       <Button variant="ghost" size="sm" className="px-1" onClick={onClose}>
-        <CrossLine />
+        <RiCloseLine size={16} />
       </Button>
       <Button variant="ghost" size="sm" className="px-1" onClick={onSubmit}>
-        <CheckLine />
+        <RiCheckLine size={16} />
       </Button>
     </div>
   );
@@ -205,7 +205,7 @@ export const Milestones = observer(() => {
       <div className="flex justify-between px-6 items-center">
         <h3> Milestones</h3>
         <Button variant="ghost" size="sm" onClick={() => setNewMilestone(true)}>
-          <AddLine size={14} />
+          <RiAddLine size={14} />
         </Button>
       </div>
 

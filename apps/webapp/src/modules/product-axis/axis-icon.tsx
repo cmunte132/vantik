@@ -1,10 +1,10 @@
+import { RiBox3Line, RiCodeSSlashLine, RiFocus3Line } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { Code, FocusLine, Project } from '@vantikhq/ui/icons';
 import { getTailwindColor } from '@vantikhq/ui/lib/color-utils';
 import {
   DEFAULT_ICON_TILE,
@@ -54,11 +54,11 @@ export interface AxisIconValue {
 }
 
 const FALLBACK_ICON = {
-  product: Project,
-  module: Code,
+  product: RiBox3Line,
+  module: RiCodeSSlashLine,
   // A capability holds no icon and no colour of its own, so it always gets
   // this glyph and the colour that its name gives.
-  capability: FocusLine,
+  capability: RiFocus3Line,
 };
 
 /** Renders a product, a module or a capability the same way everywhere. */

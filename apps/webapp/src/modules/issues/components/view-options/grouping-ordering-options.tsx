@@ -1,3 +1,4 @@
+import { RiListUnordered, RiStackLine } from '@remixicon/react';
 import {
   Select,
   SelectContent,
@@ -7,14 +8,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@vantikhq/ui/components/select';
-import { BulletListLine, StackLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
+
+import { withoutArchived } from 'modules/product-axis/archive';
 
 import { useProject } from 'hooks/projects';
 import { useCurrentTeam } from 'hooks/teams';
 
 import { useContextStore } from 'store/global-context-provider';
-import { withoutArchived } from 'modules/product-axis/archive';
 
 export const GroupingOrderingOptions = observer(() => {
   const { applicationStore, modulesStore, capabilitiesStore } =
@@ -39,7 +40,7 @@ export const GroupingOrderingOptions = observer(() => {
         }}
       >
         <SelectTrigger className="h-7 py-1 flex gap-1 items-center">
-          <StackLine size={16} />
+          <RiStackLine size={16} />
           <SelectValue placeholder="Select a category" />
         </SelectTrigger>
         <SelectContent>
@@ -67,7 +68,7 @@ export const GroupingOrderingOptions = observer(() => {
         }}
       >
         <SelectTrigger className="h-7 py-1 flex gap-1 items-center">
-          <BulletListLine size={16} />
+          <RiListUnordered size={16} />
           <SelectValue placeholder="Select a category" />
         </SelectTrigger>
         <SelectContent>

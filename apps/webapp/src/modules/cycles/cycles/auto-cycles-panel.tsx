@@ -1,10 +1,10 @@
+import { RiRefreshLine } from '@remixicon/react';
 import {
   DEFAULT_CYCLES_FREQUENCY,
   DEFAULT_UPCOMING_CYCLES,
 } from '@vantikhq/types';
 import { Button } from '@vantikhq/ui/components/button';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { Cycle } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useCurrentTeam } from 'hooks/teams';
@@ -92,7 +92,7 @@ export const AutoCyclesPanel = observer(({ running }: { running: boolean }) => {
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3">
-      <Cycle size={32} className="text-muted-foreground" />
+      <RiRefreshLine size={32} className="text-muted-foreground" />
       <p className="text-muted-foreground max-w-[420px] text-center">
         Cycles run automatically for this team: {weeks}-week cycles, with{' '}
         {upcoming} kept ahead. Start them and the system creates, closes and

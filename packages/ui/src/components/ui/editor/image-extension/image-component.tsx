@@ -1,13 +1,18 @@
 /* eslint-disable @next/next/no-img-element */
-import { RiDownloadLine } from '@remixicon/react';
+import {
+  RiArrowLeftLine,
+  RiArrowRightLine,
+  RiCloseLine,
+  RiDownloadLine,
+  RiFullscreenLine,
+  RiZoomInLine,
+  RiZoomOutLine,
+} from '@remixicon/react';
 import { NodeViewWrapper } from '@tiptap/react';
-import { ArrowRight, ZoomIn, ZoomOut } from 'lucide-react';
 import React from 'react';
 import Lightbox from 'yet-another-react-lightbox';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import 'yet-another-react-lightbox/styles.css';
-
-import { ArrowLeft, Close, FullscreenLine } from '@vantikhq/ui/icons';
 
 import { getNodeTypesWithImageExtension, type AttrType } from './utils';
 import { Button } from '../../button';
@@ -73,7 +78,7 @@ export const ImageComponent = (props: any) => {
                   setOpenViewer(true);
                 }}
               >
-                <FullscreenLine size={16} />
+                <RiFullscreenLine size={16} />
               </Button>
             </div>
           )}
@@ -82,11 +87,11 @@ export const ImageComponent = (props: any) => {
             <Lightbox
               open
               render={{
-                iconPrev: () => <ArrowLeft />,
-                iconNext: () => <ArrowRight />,
-                iconClose: () => <Close />,
-                iconZoomIn: () => <ZoomIn />,
-                iconZoomOut: () => <ZoomOut />,
+                iconPrev: () => <RiArrowLeftLine size={18} />,
+                iconNext: () => <RiArrowRightLine />,
+                iconClose: () => <RiCloseLine size={16} />,
+                iconZoomIn: () => <RiZoomInLine />,
+                iconZoomOut: () => <RiZoomOutLine />,
               }}
               plugins={[Zoom]}
               close={() => setOpenViewer(false)}

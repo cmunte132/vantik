@@ -1,7 +1,7 @@
 'use client';
 
 import { type DialogProps } from '@radix-ui/react-dialog';
-import { MagnifyingGlassIcon } from '@radix-ui/react-icons';
+import { RiSearchLine } from '@remixicon/react';
 import { Command as CommandPrimitive } from 'cmdk';
 import * as React from 'react';
 
@@ -65,7 +65,7 @@ const CommandInput = React.forwardRef<
     cmdk-input-wrapper=""
   >
     {icon && (
-      <MagnifyingGlassIcon className="mr-2 h-5 w-5 shrink-0 opacity-50" />
+      <RiSearchLine className="mr-2 h-5 w-5 shrink-0 opacity-50" size={15} />
     )}
     <CommandPrimitive.Input
       ref={ref}

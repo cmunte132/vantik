@@ -1,6 +1,6 @@
+import { RiTeamLine } from '@remixicon/react';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import { CommandGroup } from '@vantikhq/ui/components/command';
-import { TeamLine } from '@vantikhq/ui/icons';
 
 import { DropdownItem } from 'modules/issues/components/issue-metadata/dropdown-item';
 
@@ -58,7 +58,7 @@ export function TeamsDropdownContent({
                 />
               )}
               <label className="flex grow items-center" htmlFor={team.id}>
-                <TeamLine size={18} className="mr-2" />
+                <RiTeamLine size={18} className="mr-2" />
                 <span className="grow">{team.name}</span>
               </label>
             </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { RiAddLine, RiArrowRightSLine } from '@remixicon/react';
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,7 +18,6 @@ import {
   SidebarMenuSubItem,
 } from '@vantikhq/ui/components/sidebar';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
-import { AddLine, ChevronRight } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -52,7 +52,7 @@ export const TeamSettingsList = observer(() => {
         Teams
         <SidebarGroupAction asChild aria-label="Add team">
           <Link href={workspaceHref(workspaceSlug, 'settings', 'new_team')}>
-            <AddLine />
+            <RiAddLine size={18} />
           </Link>
         </SidebarGroupAction>
       </SidebarGroupLabel>
@@ -81,9 +81,10 @@ export const TeamSettingsList = observer(() => {
                     size="md"
                   />
                   <span className="flex-1 truncate">{team.name}</span>
-                  <ChevronRight
+                  <RiArrowRightSLine
                     className="!size-3.5 shrink-0 text-sidebar-muted transition-transform
                       duration-200 group-data-[state=open]/collapsible:rotate-90"
+                    size={16}
                   />
                 </SidebarMenuButton>
               </CollapsibleTrigger>

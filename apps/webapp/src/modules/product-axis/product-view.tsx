@@ -1,6 +1,6 @@
+import { RiAddLine } from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
-import { AddLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
@@ -133,7 +133,7 @@ export const ProductView = withApplicationStore(
                 className="gap-1"
                 onClick={() => setCreating(true)}
               >
-                <AddLine size={14} />
+                <RiAddLine size={14} />
                 New module
               </Button>
             }

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { RiLinkM } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { LinkLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
@@ -144,9 +144,7 @@ export const RunView = withApplicationStore(
 
                 {/* Retry only where the server allows it. Re-running a success
                     would open a second pull request for the same work. */}
-                {['FAILED', 'EXPIRED', 'NEEDS_REVIEW'].includes(
-                  run.status,
-                ) && (
+                {['FAILED', 'EXPIRED', 'NEEDS_REVIEW'].includes(run.status) && (
                   <Button size="sm" onClick={() => retryRun({ runId: run.id })}>
                     Retry
                   </Button>
@@ -195,7 +193,7 @@ export const RunView = withApplicationStore(
               {where?.kind === 'pull_request' && (
                 <Button size="sm" asChild>
                   <a href={where.value} target="_blank" rel="noreferrer">
-                    <LinkLine className="mr-1 size-3.5" />
+                    <RiLinkM className="mr-1 size-3.5" size={18} />
                     Review the pull request
                   </a>
                 </Button>

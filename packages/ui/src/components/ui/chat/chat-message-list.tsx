@@ -1,4 +1,4 @@
-import { ArrowDown } from 'lucide-react';
+import { RiArrowDownLine } from '@remixicon/react';
 import * as React from 'react';
 
 import { Button } from '../button';
@@ -38,7 +38,7 @@ const ChatMessageList = React.forwardRef<HTMLDivElement, ChatMessageListProps>(
             className="absolute bottom-2 left-1/2 transform -translate-x-1/2 inline-flex rounded-full shadow-md"
             aria-label="Scroll to bottom"
           >
-            <ArrowDown className="h-4 w-4" />
+            <RiArrowDownLine className="h-4 w-4" size={18} />
           </Button>
         )}
       </div>

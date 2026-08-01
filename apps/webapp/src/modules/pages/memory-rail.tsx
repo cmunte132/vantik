@@ -1,3 +1,9 @@
+import {
+  RiAddLine,
+  RiArrowRightSLine,
+  RiSidebarFoldLine,
+  RiSidebarUnfoldLine,
+} from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import {
@@ -13,12 +19,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@vantikhq/ui/components/tooltip';
-import {
-  AddLine,
-  ChevronRight,
-  RightSidebarClosed,
-  RightSidebarOpen,
-} from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -27,9 +27,9 @@ import { PageEntryStatus, type PageEntryType } from 'common/types';
 
 import { useLocalCommonState } from 'hooks/use-local-state';
 
-import { useContextStore } from 'store/global-context-provider';
-
 import { useCreatePageEntryMutation } from 'services/pages';
+
+import { useContextStore } from 'store/global-context-provider';
 
 import { ConsolidateDialog } from './consolidate-dialog';
 import { EntryRow } from './entry-row';
@@ -99,7 +99,7 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
               aria-label="Show agent memory"
               onClick={() => setOpen(true)}
             >
-              <RightSidebarClosed size={16} />
+              <RiSidebarFoldLine size={16} />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left">Agent memory</TooltipContent>
@@ -144,7 +144,7 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
                     aria-label="Hide agent memory"
                     onClick={() => setOpen(false)}
                   >
-                    <RightSidebarOpen size={16} />
+                    <RiSidebarUnfoldLine size={16} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="left">Hide</TooltipContent>
@@ -162,12 +162,10 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
               className="rounded-md border border-border p-2 text-left flex flex-col gap-1 hover:bg-grayAlpha-100 transition-colors"
               onClick={() => setReviewing(true)}
             >
-              <span>
-                {waiting.length} waiting for you
-              </span>
+              <span>{waiting.length} waiting for you</span>
               <span className="text-muted-foreground">
-                No agent is given{' '}
-                {waiting.length === 1 ? 'it' : 'them'} until you decide. Review →
+                No agent is given {waiting.length === 1 ? 'it' : 'them'} until
+                you decide. Review →
               </span>
             </button>
           )}
@@ -242,7 +240,7 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
               className="gap-1 self-start px-1"
               onClick={() => setAdding(true)}
             >
-              <AddLine size={14} />
+              <RiAddLine size={14} />
               Add a fact
             </Button>
           )}
@@ -260,8 +258,8 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
               Facts waiting on this page
             </DialogTitle>
             <p className="text-muted-foreground">
-              Recorded by agents as they worked. None of it is given to an
-              agent until you decide.
+              Recorded by agents as they worked. None of it is given to an agent
+              until you decide.
             </p>
           </DialogHeader>
 
@@ -322,7 +320,7 @@ const Section = observer(
         {/* Nothing said these opened. A count on its own reads as a statistic,
             not a control, so the chevron is always drawn — dimmed rather than
             hidden, which would only move the problem to hover. */}
-        <ChevronRight
+        <RiArrowRightSLine
           size={12}
           className={cn(
             'shrink-0 transition-transform text-muted-foreground',

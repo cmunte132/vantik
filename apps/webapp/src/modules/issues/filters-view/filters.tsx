@@ -1,3 +1,4 @@
+import { RiCloseLine } from '@remixicon/react';
 import { RiLoader4Line } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
@@ -7,7 +8,7 @@ import {
   CommandGroup,
   CommandItem,
 } from '@vantikhq/ui/components/command';
-import { AI, CrossLine } from '@vantikhq/ui/icons';
+import { AI } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
@@ -244,7 +245,7 @@ export const Filters = observer(({ onClose }: FiltersProps) => {
 
       <div className="border-l flex items-start h-full">
         <Button variant="ghost" size="sm" onClick={onClose}>
-          <CrossLine />
+          <RiCloseLine size={16} />
         </Button>
       </div>
     </div>

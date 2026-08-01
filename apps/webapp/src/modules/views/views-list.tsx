@@ -1,6 +1,6 @@
+import { RiBookmarkLine } from '@remixicon/react';
 import { AvatarText } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
-import { BookMark } from '@vantikhq/ui/icons';
 import dayjs from 'dayjs';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
@@ -53,9 +53,9 @@ export function ViewItem({ view }: ViewItemProps) {
             }}
           >
             {view.isBookmarked ? (
-              <BookMark size={14} className="text-amber-600" />
+              <RiBookmarkLine size={14} className="text-amber-600" />
             ) : (
-              <BookMark size={14} />
+              <RiBookmarkLine size={14} />
             )}
           </Button>
         </div>
@@ -89,7 +89,7 @@ export const ViewsList = observer(() => {
   if (views.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-16 px-4 text-center">
-        <BookMark size={20} className="text-muted-foreground" />
+        <RiBookmarkLine size={20} className="text-muted-foreground" />
 
         <div className="font-medium">No views yet</div>
 

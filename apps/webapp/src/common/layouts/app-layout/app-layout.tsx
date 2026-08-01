@@ -1,4 +1,14 @@
 import {
+  RiBookOpenLine,
+  RiBox3Line,
+  RiInboxLine,
+  RiInstanceLine,
+  RiStackLine,
+  RiTaskLine,
+  RiTeamLine,
+  RiTerminalBoxLine,
+} from '@remixicon/react';
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -6,16 +16,6 @@ import {
   SidebarProvider,
   SidebarSeparator,
 } from '@vantikhq/ui/components/sidebar';
-import {
-  BookLine,
-  BuildingLine,
-  CodingLine,
-  Inbox,
-  MyIssues,
-  Project,
-  StackLine,
-  TeamLine,
-} from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
@@ -81,29 +81,29 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
               links={[
                 {
                   title: 'Inbox',
-                  icon: Inbox,
+                  icon: RiInboxLine,
                   href: workspaceHref(workspaceSlug, 'inbox'),
                   count: notificationsStore.unReadCount,
                   unread: true,
                 },
                 {
                   title: 'My issues',
-                  icon: MyIssues,
+                  icon: RiTaskLine,
                   href: workspaceHref(workspaceSlug, 'my-issues'),
                 },
                 {
                   title: 'Views',
-                  icon: StackLine,
+                  icon: RiStackLine,
                   href: workspaceHref(workspaceSlug, 'views'),
                 },
                 {
                   title: 'Projects',
-                  icon: Project,
+                  icon: RiBox3Line,
                   href: workspaceHref(workspaceSlug, 'projects'),
                 },
                 {
                   title: 'Pages',
-                  icon: BookLine,
+                  icon: RiBookOpenLine,
                   href: workspaceHref(workspaceSlug, 'pages'),
                 },
                 // Background work is only background if there is somewhere to
@@ -112,12 +112,12 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
                 // issue you had already walked away from.
                 {
                   title: 'Agents',
-                  icon: CodingLine,
+                  icon: RiTerminalBoxLine,
                   href: workspaceHref(workspaceSlug, 'agent-runs'),
                 },
                 {
                   title: 'Teams',
-                  icon: TeamLine,
+                  icon: RiTeamLine,
                   href: workspaceHref(workspaceSlug, 'teams'),
                 },
                 // The group below lists the products one by one, and its label
@@ -126,7 +126,7 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
                 // page for the two axes.
                 {
                   title: 'Products',
-                  icon: BuildingLine,
+                  icon: RiInstanceLine,
                   href: workspaceHref(workspaceSlug, 'products'),
                 },
               ]}

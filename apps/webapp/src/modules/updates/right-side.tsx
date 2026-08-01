@@ -1,4 +1,4 @@
-import { Inbox } from '@vantikhq/ui/icons';
+import { RiInboxLine } from '@remixicon/react';
 import { observer } from 'mobx-react-lite';
 
 import type { NotificationType } from 'common/types';
@@ -13,7 +13,7 @@ export const NotificationRightSide = observer(() => {
 
   return (
     <>
-      <Inbox className="text-muted-foreground" size={32} />
+      <RiInboxLine className="text-muted-foreground" size={32} />
       <div className="text-muted-foreground">Inbox</div>
       <div className="text-muted-foreground text-sm">
         {notifications.length} unread notifications

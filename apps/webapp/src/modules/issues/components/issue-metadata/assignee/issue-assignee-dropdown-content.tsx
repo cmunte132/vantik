@@ -1,7 +1,7 @@
+import { RiAccountCircleLine } from '@remixicon/react';
 import { AvatarText } from '@vantikhq/ui/components/avatar';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import { CommandGroup } from '@vantikhq/ui/components/command';
-import { AssigneeLine } from '@vantikhq/ui/icons';
 
 import type { User } from 'common/types';
 import { getUserFromUsersData } from 'common/user-util';
@@ -67,7 +67,7 @@ export function IssueAssigneeDropdownContent({
             />
           )}
           <div className="flex grow">
-            <AssigneeLine size={20} className="mr-2" />
+            <RiAccountCircleLine size={20} className="mr-2" />
             No Assignee
           </div>
         </div>

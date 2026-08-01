@@ -1,3 +1,4 @@
+import { RiMoreLine } from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
@@ -12,7 +13,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@vantikhq/ui/components/tooltip';
-import { MoreLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -51,7 +51,11 @@ interface EntryRowProps {
 }
 
 export const EntryRow = observer((props: EntryRowProps) =>
-  props.variant === 'review' ? <ReviewRow {...props} /> : <RailRow {...props} />,
+  props.variant === 'review' ? (
+    <ReviewRow {...props} />
+  ) : (
+    <RailRow {...props} />
+  ),
 );
 
 /** A decision. Reads as one, and states what each choice does. */
@@ -248,7 +252,7 @@ const RowMenu = observer(({ entry }: { entry: PageEntryType }) => {
             open && 'opacity-100',
           )}
         >
-          <MoreLine size={14} />
+          <RiMoreLine size={14} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[260px]">

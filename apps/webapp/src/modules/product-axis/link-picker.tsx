@@ -1,3 +1,4 @@
+import { RiAddLine, RiCloseLine } from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import {
@@ -10,7 +11,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { AddLine, CrossLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
@@ -113,7 +113,7 @@ export const LinkPicker = observer(({ module }: { module: ModuleType }) => {
             aria-label={`Unlink ${team.name}`}
             onClick={() => remove('team', team.id)}
           >
-            <CrossLine size={12} />
+            <RiCloseLine size={12} />
           </button>
         </Badge>
       ))}
@@ -126,7 +126,7 @@ export const LinkPicker = observer(({ module }: { module: ModuleType }) => {
             aria-label={`Unlink ${product.name}`}
             onClick={() => remove('product', product.id)}
           >
-            <CrossLine size={12} />
+            <RiCloseLine size={12} />
           </button>
         </Badge>
       ))}
@@ -155,7 +155,7 @@ function AddLink({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" className="gap-1">
-          <AddLine size={14} />
+          <RiAddLine size={14} />
           Add link
         </Button>
       </PopoverTrigger>

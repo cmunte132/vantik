@@ -1,10 +1,10 @@
+import { RiSidebarFoldLine, RiSidebarUnfoldLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from '@vantikhq/ui/components/resizable';
-import { RightSidebarClosed, RightSidebarOpen } from '@vantikhq/ui/icons';
 import React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
@@ -52,9 +52,9 @@ export const AllIssues = withApplicationStore(() => {
               size="sm"
             >
               {overview ? (
-                <RightSidebarOpen size={18} />
+                <RiSidebarUnfoldLine size={18} />
               ) : (
-                <RightSidebarClosed size={18} />
+                <RiSidebarFoldLine size={18} />
               )}
             </Button>
           }

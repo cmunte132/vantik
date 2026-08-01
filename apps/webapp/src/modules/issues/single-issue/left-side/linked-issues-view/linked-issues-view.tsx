@@ -1,10 +1,14 @@
+import {
+  RiAddLine,
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+} from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@vantikhq/ui/components/collapsible';
-import { AddLine, ChevronDown, ChevronRight } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
@@ -44,9 +48,9 @@ export const LinkedIssuesView = observer(({ issueId }: LinkedIssuesView) => {
                 <Button variant="link" className="px-0 text-md">
                   Links
                   {isOpen ? (
-                    <ChevronDown size={16} className="ml-1" />
+                    <RiArrowDownSLine size={16} className="ml-1" />
                   ) : (
-                    <ChevronRight size={16} className="ml-1" />
+                    <RiArrowRightSLine size={16} className="ml-1" />
                   )}
                 </Button>
 
@@ -65,7 +69,7 @@ export const LinkedIssuesView = observer(({ issueId }: LinkedIssuesView) => {
               size="xs"
               onClick={() => setDialogOpen(true)}
             >
-              <AddLine size={16} />
+              <RiAddLine size={16} />
             </Button>
           </div>
         </div>

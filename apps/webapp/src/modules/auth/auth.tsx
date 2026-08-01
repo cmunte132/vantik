@@ -1,5 +1,6 @@
 /* eslint-disable react/no-unescaped-entities */
 import { zodResolver } from '@hookform/resolvers/zod';
+import { RiArrowLeftLine, RiInboxLine } from '@remixicon/react';
 import { RiFingerprintFill, RiMailFill } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
@@ -11,7 +12,6 @@ import {
 } from '@vantikhq/ui/components/form';
 import { Input } from '@vantikhq/ui/components/input';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { ArrowLeft, Inbox } from '@vantikhq/ui/icons';
 import { useRouter } from 'next/router';
 import posthog from 'posthog-js';
 import React from 'react';
@@ -256,7 +256,7 @@ export function Auth() {
       <AuthLayout>
         <div className="flex flex-col w-[360px] gap-6">
           <div className="flex flex-col gap-4 items-center">
-            <Inbox size={32} />
+            <RiInboxLine size={32} />
             <h1 className="text-lg text-center">Check your email</h1>
             <div className="text-center text-muted-foreground">
               We sent a login code and a magic link to your email. Enter the
@@ -295,7 +295,7 @@ export function Auth() {
                 setEmailSent(false);
               }}
             >
-              <ArrowLeft size={14} />
+              <RiArrowLeftLine size={14} />
               Re-enter email
             </Button>
           </div>

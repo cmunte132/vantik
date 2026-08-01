@@ -14,10 +14,16 @@ a regression — none of it has ever executed in this deployment, the registry i
 
 Each directory moves into `apps/server/src/integrations/<slug>` as one plugin
 with a `pluginSpec` and a handler, at which point its behaviour executes again
-for the first time. `discord`, `bug-enricher` and `github` have moved and are deleted
-from here.
+for the first time. `discord`, `bug-enricher` and `github` have moved and are deleted from here.
+`whatsapp` was deleted outright — the maintainer has no use for it, and it had
+never run.
 
-Remaining: `email`, `issue-view-summary`, `whatsapp`.
+Remaining: `email`, and `issue-view-summary`.
+
+`issue-view-summary` cannot be ported as it stands. It posts its digest to
+Slack, and Slack was removed from this repository in `9324e2a7`, so it depends
+on an integration that no longer exists. Whether it becomes a Discord digest, an
+issue comment, or nothing is a product decision — see ENG-89.
 
 Two things a port has to do beyond moving the file:
 

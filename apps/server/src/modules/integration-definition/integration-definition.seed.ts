@@ -80,26 +80,6 @@ export const integrationSeeds: IntegrationSeed[] = [
       clientSecret: 'EMAIL_CLIENT_SECRET',
     },
   },
-  {
-    name: 'WhatsApp',
-    slug: 'whatsapp',
-    description: 'A WhatsApp conversation through a paired session.',
-    icon: 'whatsapp',
-    credentialEnv: {
-      clientId: 'WHATSAPP_CLIENT_ID',
-      clientSecret: 'WHATSAPP_CLIENT_SECRET',
-    },
-  },
-  {
-    name: 'WhatsApp Business',
-    slug: 'whatsapp-business',
-    description: 'A conversation through the WhatsApp Business API.',
-    icon: 'whatsapp',
-    credentialEnv: {
-      clientId: 'WHATSAPP_BUSINESS_CLIENT_ID',
-      clientSecret: 'WHATSAPP_BUSINESS_CLIENT_SECRET',
-    },
-  },
 ];
 
 /**

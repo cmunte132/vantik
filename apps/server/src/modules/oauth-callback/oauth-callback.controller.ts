@@ -63,17 +63,6 @@ export class OAuthCallbackController {
     );
   }
 
-  @Get('callback/whatsapp')
-  async whatsappCallback(
-    @Query() queryParams: CallbackParams,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    @Res() res: any,
-  ) {
-    return await this.oAuthCallbackService.whatsappCallbackHAndler(
-      queryParams,
-      res,
-    );
-  }
 
   @Get('callback')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

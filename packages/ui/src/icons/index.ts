@@ -23,5 +23,4 @@ export * from './triage-fill';
 export * from './triage-line';
 export * from './unscoped-line';
 export * from './urgent-fill';
-export * from './whatsapp';
 export * from './types';

@@ -3,29 +3,28 @@ title: 'Use Cases: Overview'
 sidebar_label: "Overview"
 ---
 
-This section shows the use cases that the maintainers built. Each one is ready,
-and you deploy it and use it in Vantik. The goal is one tool for all your
-issues. If you have an idea for a new action, create an issue on GitHub. The
-maintainers read every suggestion.
+This section shows the integrations that ship with the server. Each one is
+ready, and you connect it from the settings screen — there is nothing to deploy.
+If you have an idea for a new one, create an issue on GitHub. The maintainers
+read every suggestion.
 
-## General actions
+## Without a third party
 
-A change inside Vantik starts each of these actions.
+A change inside Vantik starts each of these.
 
 - **[Bug Enricher](/docs/actions/marketplace/bug-enricher)** - Adds a possible
   solution as a comment on each issue with the `bug` label. It uses the AI model
   that you configure.
 
-## Actions with an integration
+## With a third party
 
-These actions get data from a third-party tool, such as GitHub, and they
-authenticate with it.
+These connect to an outside tool and authenticate with it.
 
 - **[Email](/docs/actions/marketplace/email-actions)** - Makes an issue in
   Vantik triage from an email.
 
-## Scheduled actions
+## On a schedule
 
-:::note
-This feature is in the plan, and the maintainers add it soon.
-:::
+An integration can also run on a cron. The server registers each schedule as a
+repeatable job on its own redis when it starts, so a scheduled integration runs
+without any other service.

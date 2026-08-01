@@ -86,9 +86,9 @@ later from Settings.
 
 Vantik does some of its work on a schedule, and not in response to a request.
 The server process runs this work as Bull repeatable jobs, on the Redis that
-the stack already needs. These jobs do not use trigger.dev, because trigger.dev
-is optional in this stack. The server registers each job when it starts, and it
-writes the schedule to the log. To see if a job runs, read
+the stack already needs. No necessary work depends on an optional service. The
+server registers each job when it starts, and it writes the schedule to the
+log. To see if a job runs, read
 `docker compose logs server`.
 
 | Job | Default | Variable | What it does |
@@ -319,29 +319,17 @@ files itself.
 ]
 ```
 
-### Background jobs (trigger.dev)
+### Background jobs
 
-[Actions](/docs/actions/overview) are the automation framework, and they run on
-[trigger.dev](https://trigger.dev). The user notifications run there too. The
-core issue tracker works without trigger.dev. The [scheduled
-jobs](#scheduled-jobs) also run without it, inside the server.
+The integrations and the user notifications run inside the server, on the redis
+that the stack already needs. There is no separate service to deploy and nothing
+to configure: if the server runs, they run.
 
-To enable trigger.dev, deploy it yourself. Read the
-[trigger.dev guide for a self-hosted deployment](https://trigger.dev/docs/self-hosting).
-Then point
-Vantik at your deployment in `.env`:
+This was not always true. Until recently both went to trigger.dev, which is
+optional and is not in the compose file, so on a default deployment a
+notification was never delivered and an integration never fired. That is fixed,
+and trigger.dev is no longer part of Vantik.
 
-```bash
-TRIGGER_API_URL=https://your-trigger-instance
-TRIGGER_DATABASE_URL=postgresql://user:pass@host/trigger
-```
-
-:::note
-This fork changes the automation subsystem. See the
-[roadmap](https://github.com/cmunte132/vantik#roadmap-the-plan-not-yet-built).
-The integration with trigger.dev is therefore a legacy feature, and not the
-direction for the future.
-:::
 
 ## Observability
 
@@ -477,11 +465,6 @@ corrects nothing.
 
 **Q: Is there a hosted cloud version?**
 A: No. You host Vantik yourself.
-
-**Q: Can I run Vantik without trigger.dev?**
-A: Yes. All the core functions of the tracker work, and the scheduled jobs work.
-You lose
-the Actions and the user notifications.
 
 **Q: Which storage providers can hold the attachments?**
 A: A disk that the server mounts, which is the default and needs no

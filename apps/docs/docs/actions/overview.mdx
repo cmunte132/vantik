@@ -1,32 +1,54 @@
 ---
-title: 'Actions: Overview'
+title: 'Integrations: Overview'
 sidebar_label: "Overview"
 ---
 
-**Vantik Actions** is a framework. It does the repetitive work of an issue
-tracker for you. For example, an action puts a label on an issue, or it makes a
-sub-issue for the review of a pull request. An action therefore removes a manual
-process. An action also works with the external tools that you use today.
+An **integration** connects Vantik to a tool you already use. It does two
+things, and they used to be two separate systems.
 
-:::note
-An action runs on [trigger.dev](https://trigger.dev), and trigger.dev is an
-optional part of a Vantik deployment. See
-[background jobs](/docs/oss/self-deployment#background-jobs-triggerdev). Without
-trigger.dev, nothing in this section is available. This fork also changes the
-automation subsystem, so this area of the product changes.
-:::
+- It **connects**: the OAuth flow, the account, the token.
+- It **reacts**: an issue changes and the integration mirrors it out, or a
+  webhook arrives and it mirrors something in.
 
-![](/img/docs/actions.svg)
+Both halves live in one directory, `apps/server/src/integrations/<slug>`, and
+ship with the server. The server loads one by the `slug` of its row and calls
+it.
 
-A trigger starts an action. A trigger is an event in Vantik, or an event from an
-external integration that you connect. These are examples of a trigger:
+## What an integration can do
 
-1. A person sends a **message** in a Discord channel.
-2. A person creates an **issue** in GitHub.
-3. A person sends an **email** to your triage address.
-4. A person adds a **comment** to a Vantik issue.
+An integration receives a context and asks the host to act for it. It holds no
+database connection, and no credential.
 
-After the event, Vantik calls an action. An action is TypeScript code, and it
-processes the event. The `actions/` directory of the repository holds several
-actions that you can install. You can change one of them, or you can write a new
-one. A CLI helps you from the first line of an action to its deployment.
+| Capability | What it is for |
+| --- | --- |
+| `issues`, `comments` | Create and update the work |
+| `links` | The mapping between an issue and the thing it mirrors |
+| `workspace` | Teams, users, labels, workflows |
+| `account` | The connected account, and a person's own where they have one |
+| `vendor` | Calling the third party |
+| `attachments`, `ai`, `log` | Files, the model, and the log |
+
+`vendor.fetch` is the one to understand. The integration says *what* to call;
+the server attaches the credential and refuses any host the integration did not
+declare. So an integration never holds a token, and where it runs can change
+without the integration changing.
+
+## What ships
+
+| Integration | What it does |
+| --- | --- |
+| GitHub | Two-way sync of issues, comments and pull requests |
+| Discord | Mirrors a channel thread into an issue, and replies back out |
+| Email | Turns an email into an issue, with its attachments |
+| Bug Enricher | Suggests a resolution on an issue labelled `bug`. No third party |
+| Local repository | A git repository on the disk of this machine |
+
+## Writing one
+
+Integrations ship with the server, so writing one means adding a directory and
+opening a pull request. There is no separate deployment, no bundle to upload and
+no registry to publish to.
+
+Each directory exports a `pluginSpec` — the slug, the hosts it may reach, and
+how the server builds its credential — and a default handler that takes an event
+and the context.

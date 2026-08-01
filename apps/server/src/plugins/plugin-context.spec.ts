@@ -43,6 +43,11 @@ describe('the plugin context', () => {
     getLinkedIssueBySourceId: jest.fn().mockResolvedValue([]),
   };
   const aiService = { getLLMRequest: jest.fn().mockResolvedValue('answer') };
+  const attachmentService = {
+    uploadAttachment: jest
+      .fn()
+      .mockResolvedValue([{ publicURL: 'https://x/1' }]),
+  };
 
   function build(workspaceId = 'ws-1', userId = 'user-1') {
     return new PluginContextFactory(
@@ -51,6 +56,7 @@ describe('the plugin context', () => {
       commentsService as never,
       linkedIssueService as never,
       aiService as never,
+      attachmentService as never,
     ).build('discord', workspaceId, userId);
   }
 
@@ -65,6 +71,7 @@ describe('the plugin context', () => {
     expect(Object.keys(ctx).sort()).toEqual([
       'account',
       'ai',
+      'attachments',
       'comments',
       'definitions',
       'issues',

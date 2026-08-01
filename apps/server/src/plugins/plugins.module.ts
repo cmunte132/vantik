@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule, PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
+import { AttachmentModule } from 'modules/attachments/attachments.module';
 import { IssueCommentsModule } from 'modules/issue-comments/issue-comments.module';
 import { IssuesModule } from 'modules/issues/issues.module';
 import { LinkedIssueModule } from 'modules/linked-issue/linked-issue.module';
@@ -17,7 +18,13 @@ import { PluginContextFactory } from './plugin-context.factory';
  * all see it.
  */
 @Module({
-  imports: [PrismaModule, IssuesModule, IssueCommentsModule, LinkedIssueModule],
+  imports: [
+    PrismaModule,
+    IssuesModule,
+    IssueCommentsModule,
+    LinkedIssueModule,
+    AttachmentModule,
+  ],
   providers: [PluginContextFactory, PrismaService, AIRequestsService],
   exports: [PluginContextFactory],
 })

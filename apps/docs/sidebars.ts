@@ -25,8 +25,6 @@ const sidebars: SidebarsConfig = {
       label: 'Actions',
       items: [
         'actions/overview',
-        'actions/core-concepts',
-        'actions/config',
         {
           type: 'category',
           label: 'Marketplace',
@@ -34,16 +32,6 @@ const sidebars: SidebarsConfig = {
             'actions/marketplace/overview',
             'actions/marketplace/bug-enricher',
             'actions/marketplace/email-actions',
-          ],
-        },
-        {
-          type: 'category',
-          label: 'How to write an action',
-          items: [
-            'actions/writing-action/introduction',
-            'actions/writing-action/general-example',
-            'actions/writing-action/bug-enricher-example',
-            'actions/writing-action/scheduled-actions',
           ],
         },
       ],

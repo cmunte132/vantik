@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
+import { AttachmentService } from 'modules/attachments/attachments.service';
 import IssueCommentsService from 'modules/issue-comments/issue-comments.service';
 import IssuesService from 'modules/issues/issues.service';
 import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
@@ -31,6 +32,7 @@ export class PluginContextFactory {
     private issueCommentsService: IssueCommentsService,
     private linkedIssueService: LinkedIssueService,
     private aiRequestsService: AIRequestsService,
+    private attachmentService: AttachmentService,
   ) {}
 
   /**
@@ -236,6 +238,35 @@ export class PluginContextFactory {
       ai: {
         request: (input) =>
           this.aiRequestsService.getLLMRequest(input, workspaceId),
+      },
+
+      /**
+       * The plugin hands over bytes and the host stores them.
+       *
+       * A `Multer.File` is what the service takes, so one is assembled here.
+       * The plugin never names a path, which is the point: the previous
+       * arrangement wrote `/tmp/${filename}` using a name chosen by whoever
+       * sent the message.
+       */
+      attachments: {
+        upload: async (file) => {
+          const [uploaded] = await this.attachmentService.uploadAttachment(
+            [
+              {
+                buffer: file.bytes,
+                originalname: file.filename,
+                filename: file.filename,
+                mimetype: file.contentType,
+                size: file.bytes.length,
+              } as never,
+            ],
+            userId,
+            workspaceId,
+            { type: slug },
+          );
+
+          return uploaded;
+        },
       },
 
       definitions: {

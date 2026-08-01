@@ -15,7 +15,10 @@ import { TaskItem } from '@tiptap/extension-task-item';
 import { TaskList } from '@tiptap/extension-task-list';
 import { Text } from '@tiptap/extension-text';
 import { Underline } from '@tiptap/extension-underline';
-import { generateHTML } from '@tiptap/html';
+// Server entry, not the browser one. This ran under trigger.dev, which never
+// executed here, so the throw was never reached; notifications deliver in this
+// process now and it would have.
+import { generateHTML } from '@tiptap/html/server';
 import {
   Issue,
   NotificationActionType,

@@ -168,6 +168,23 @@ export interface PluginSpec {
 }
 
 /**
+ * Uploading a file, without touching a filesystem.
+ *
+ * Bytes rather than a path, deliberately. `actions/email` streamed each Gmail
+ * attachment to `/tmp/${attachment.filename}` and read it back, which requires
+ * a writable filesystem, collides when two messages carry the same attachment
+ * name, and uses a filename chosen by whoever sent the email as part of a path.
+ * Taking the bytes removes all three rather than documenting them.
+ */
+export interface AttachmentCapability {
+  upload(file: {
+    filename: string;
+    contentType: string;
+    bytes: Buffer;
+  }): Promise<Json>;
+}
+
+/**
  * The plugin's own `IntegrationDefinitionV2` row.
  *
  * A plugin needs this when it creates the first account for a workspace and has
@@ -211,6 +228,7 @@ export interface PluginContext {
   readonly ai: AiCapability;
   readonly definitions: DefinitionCapability;
   readonly vendor: VendorCapability;
+  readonly attachments: AttachmentCapability;
 }
 
 /**

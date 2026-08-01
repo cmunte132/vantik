@@ -4,6 +4,13 @@
     "baseUrl": "src",
     "module": "commonjs",
     "outDir": "./dist",
+    // Stated rather than inferred. tsc derives the root from the longest
+    // common path of the included files, so the emitted layout used to depend
+    // on `trigger.config.ts` — a file at the package root — being in `include`.
+    // Removing that file silently moved the output from `dist/src/main.js` to
+    // `dist/main.js`, which the entrypoint does not look for, and the container
+    // crash-looped on a build that reported success.
+    "rootDir": "./",
     "paths": {
       // moduleResolution is node10, which cannot read the package's "exports"
       // map. Node resolves this subpath fine at runtime; TypeScript needs the
@@ -15,6 +22,6 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    "prisma/scripts/create-number.js",
+    "prisma/scripts/create-number.js"
   ]
 }

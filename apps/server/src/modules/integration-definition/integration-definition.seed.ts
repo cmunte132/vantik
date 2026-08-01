@@ -39,6 +39,17 @@ export const integrationSeeds: IntegrationSeed[] = [
     description: 'A git repository on the disk of this machine.',
     icon: 'local-repo',
   },
+
+  {
+    name: 'Bug Enricher',
+    slug: 'bug-enricher',
+    description:
+      'Suggests a resolution guide when an issue is labelled as a bug, using the deployment model.',
+    icon: 'bug',
+    // No `credentialEnv`, because there is no third party. This is the plugin
+    // that shows the action/integration split was never about what the code
+    // *is*: it reaches nothing at all. See ENG-89.
+  },
   {
     name: 'GitHub',
     slug: 'github',

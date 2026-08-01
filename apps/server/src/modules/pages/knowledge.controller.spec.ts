@@ -1,11 +1,10 @@
-import type KnowledgeService from './knowledge.service';
-
+import { KnowledgeSearchQueryDto } from '@vantikhq/types';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { PrismaService } from 'nestjs-prisma';
 
 import { KnowledgeController } from './knowledge.controller';
-import { KnowledgeSearchQueryDto } from '../../../../../packages/types/src/page/knowledge.dto';
+import type KnowledgeService from './knowledge.service';
 
 describe('KnowledgeController', () => {
   it('trims and rejects empty or wildcard search queries', async () => {

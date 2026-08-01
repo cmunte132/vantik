@@ -3,11 +3,11 @@ import {
   RiArrowLeftLine,
   RiArrowRightLine,
   RiCloseLine,
+  RiDownloadLine,
   RiFullscreenLine,
   RiZoomInLine,
   RiZoomOutLine,
 } from '@remixicon/react';
-import { RiDownloadLine } from '@remixicon/react';
 import { NodeViewWrapper } from '@tiptap/react';
 import React from 'react';
 import Lightbox from 'yet-another-react-lightbox';

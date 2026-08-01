@@ -113,7 +113,7 @@ export const IssueLabelDropdown = observer(
           <>
             <RiPriceTag3Line
               size={20}
-              className="text-muted-foreground mcr-2"
+              className="text-muted-foreground mr-2"
             />
             {label?.name}
           </>

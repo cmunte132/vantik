@@ -1,75 +1,27 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ActionScheduleStatusEnum } from '@vantikhq/types';
 import axios from 'axios';
-import Knex, { Knex as KnexT } from 'knex';
-import { v4 as uuidv4 } from 'uuid'; // Import uuid for generating unique identifiers
 
 import { LoggerService } from 'modules/logger/logger.service';
 
-import {
-  checkIfProjectExist,
-  createOrg,
-  createPersonalToken,
-  createProject,
-} from './trigger.utils';
-
-export const TriggerProjects = {
-  Common: 'common', // Define a constant for the common project
-};
-
+/**
+ * What is left of the trigger.dev integration: three calls to its HTTP API.
+ *
+ * This class used to also hold a Knex pool against `TRIGGER_DATABASE_URL` and
+ * bootstrap trigger.dev's own schema at every server start — inserting rows
+ * into that product's `User`, `Organization`, `OrgMember`, `Project`,
+ * `PersonalAccessToken` and `RuntimeEnvironment` tables. Two systems sharing
+ * one Postgres role and writing into each other's schemas is not an
+ * integration, it is a shared mutable secret, and it failed on every boot here
+ * because the `trigger` database does not exist.
+ *
+ * The schedule calls below still speak to trigger.dev, and still do not work
+ * without it. They go when `ActionSchedule` moves to a Bull repeatable — see
+ * ENG-89, stage 5.
+ */
 @Injectable()
 export class TriggerdevService {
-  private readonly logger: LoggerService = new LoggerService('TriggerService'); // Logger instance for logging
-  knex: KnexT; // Knex instance for database operations
-
-  constructor() {
-    this.knex = Knex({
-      client: 'pg', // Use PostgreSQL as the database client
-      connection: process.env.TRIGGER_DATABASE_URL, // Database connection URL from environment variable
-    });
-  }
-
-  afterInit() {
-    this.logger.info({
-      message: 'Trigger service Module initiated',
-      where: `TriggerdevService.afterInit`,
-    }); // Log a message after initialization
-  }
-
-  async initCommonProject() {
-    try {
-      await createOrg(this.knex, this.logger);
-
-      const commonProjectExists = await checkIfProjectExist(
-        {
-          slug: 'common', // Check if a project with the slug 'common' exists
-        },
-        this.knex,
-      );
-
-      await createPersonalToken(this.knex); // Create a personal access token
-
-      if (!commonProjectExists) {
-        this.logger.info({
-          message: `Common project doesn't exist`,
-          where: `TriggerdevService.initCommonProject`,
-        }); // Log a message if the common project doesn't exist
-        await createProject(
-          'Common',
-          'common',
-          uuidv4().replace(/-/g, ''),
-          this.knex,
-          this.logger,
-        ); // Create the common project
-      }
-    } catch (error) {
-      this.logger.error({
-        message: `Unable to initialise the trigger.dev common project. Is trigger.dev running and TRIGGER_DATABASE_URL set correctly?`,
-        where: `TriggerdevService.initCommonProject`,
-        error,
-      });
-    }
-  }
+  private readonly logger: LoggerService = new LoggerService('TriggerService');
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async createScheduleTask(payload: any) {

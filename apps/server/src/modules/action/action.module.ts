@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule, PrismaService } from 'nestjs-prisma';
 
+import { ActionEventModule } from 'modules/action-event/action-event.module';
 import { IntegrationsModule } from 'modules/integrations/integrations.module';
 import { TriggerdevService } from 'modules/triggerdev/triggerdev.service';
 import { UsersService } from 'modules/users/users.service';
@@ -10,7 +11,9 @@ import { ActionController } from './action.controller';
 import ActionService from './action.service';
 
 @Module({
-  imports: [PrismaModule, IntegrationsModule],
+  // ActionEventModule for the actions queue: running an action is dispatched,
+  // not called, so the schedule trigger and the inputs request go through it.
+  imports: [PrismaModule, IntegrationsModule, ActionEventModule],
   controllers: [ActionController],
   providers: [
     PrismaService,

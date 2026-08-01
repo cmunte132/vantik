@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionEntity,
   ActionStatusEnum,
@@ -11,9 +10,9 @@ import {
 } from '@vantikhq/types';
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
-import { actionRun } from 'trigger/action-run';
 
 import { prepareTriggerPayload } from 'modules/action-event/action-event.utils';
+import { ActionsQueue } from 'modules/action-event/actions.queue';
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 import { LoggerService } from 'modules/logger/logger.service';
 import { ModuleRoutingQueue } from 'modules/modules/module-routing.queue';
@@ -26,6 +25,7 @@ export default class WebhookService {
     private prisma: PrismaService,
     private integrations: IntegrationsService,
     private moduleRoutingQueue: ModuleRoutingQueue,
+    private actionsQueue: ActionsQueue,
   ) {}
 
   async handleEvents(
@@ -109,21 +109,25 @@ export default class WebhookService {
     });
 
     // TODO (actons): Send all integration accounts based on the ask
-    actionEntities.map(async (actionEntity: ActionEntity) => {
-      tasks.trigger<typeof actionRun>('action-run', {
-        workspaceId,
-        payload: {
+    await Promise.all(
+      actionEntities.map(async (actionEntity: ActionEntity) => {
+        await this.actionsQueue.run({
+          slug: actionEntity.action.slug,
+          workspaceId,
+          actionId: actionEntity.action.id,
           event: ActionTypesEnum.SOURCE_WEBHOOK,
-          eventBody,
-          eventHeaders,
-          ...(await prepareTriggerPayload(
-            this.prisma,
-            this.integrations,
-            actionEntity.action.id,
-          )),
-        },
-      });
-    });
+          payload: {
+            eventBody,
+            eventHeaders,
+            ...(await prepareTriggerPayload(
+              this.prisma,
+              this.integrations,
+              actionEntity.action.id,
+            )),
+          },
+        });
+      }),
+    );
 
     return { status: 200 };
   }

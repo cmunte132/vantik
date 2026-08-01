@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionEntity,
   ActionEvent,
@@ -7,13 +6,13 @@ import {
   ActionTypesEnum,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
-import { actionRun } from 'trigger/action-run';
 
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 import { LoggerService } from 'modules/logger/logger.service';
 import { convertLsnToInt } from 'modules/sync-actions/sync-actions.utils';
 
 import { CreateActionEvent } from './action-event.interface';
+import { ActionsQueue } from './actions.queue';
 import { prepareTriggerPayload } from './action-event.utils';
 
 const SUPPORTED_MODELS = ['Issue', 'IssueComment', 'LinkedIssue'];
@@ -28,6 +27,7 @@ export default class ActionEventService {
     private prisma: PrismaService,
 
     private integrationsService: IntegrationsService,
+    private actionsQueue: ActionsQueue,
   ) {}
 
   async createEvent(event: CreateActionEvent) {
@@ -107,18 +107,18 @@ export default class ActionEventService {
       actionEntity.action.id,
     );
 
-    const triggerHandle = await tasks.trigger<typeof actionRun>('action-run', {
+    return await this.actionsQueue.run({
+      slug: actionEntity.action.slug,
       workspaceId: actionEvent.workspaceId,
+      actionId: actionEntity.action.id,
+      event: actionEvent.eventType,
       payload: {
-        event: actionEvent.eventType,
         changedData: actionEvent.eventData,
         type: actionEvent.modelName,
         modelId: actionEvent.modelId,
         ...addedTaskInfo,
       },
     });
-
-    return triggerHandle.id;
   }
 
   async getActionEntities(actionEvent: ActionEvent) {

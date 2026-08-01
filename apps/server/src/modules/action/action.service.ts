@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { tasks } from '@trigger.dev/sdk/v3';
 import {
   RoleEnum,
   CreateActionDto,
@@ -18,10 +17,10 @@ import {
   User,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
-import { actionRun } from 'trigger/action-run';
 import { v4 as uuidv4 } from 'uuid';
 
 import { prepareTriggerPayload } from 'modules/action-event/action-event.utils';
+import { ActionsQueue } from 'modules/action-event/actions.queue';
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 import { TriggerdevService } from 'modules/triggerdev/triggerdev.service';
 import { UsersService } from 'modules/users/users.service';
@@ -31,6 +30,7 @@ export default class ActionService {
   constructor(
     private prisma: PrismaService, // Prisma service for database operations
     private triggerdev: TriggerdevService, // Service for interacting with TriggerDev
+    private actionsQueue: ActionsQueue,
     private usersService: UsersService, // Service for managing users
     private integrationsService: IntegrationsService,
   ) {}
@@ -382,23 +382,17 @@ export default class ActionService {
       action.id,
     );
 
-    const response = await tasks.triggerAndPoll<typeof actionRun>(
-      'action-run',
-      {
-        workspaceId: action.workspaceId,
-        payload: {
-          event: ActionTypesEnum.GET_INPUTS,
-          workspaceId,
-          ...triggerPayload,
-        },
-      },
-    );
-
-    if (response.status === 'COMPLETED') {
-      return response.output;
-    }
-
-    throw new Error(`Trigger action failed with status: ${response.status}`);
+    // The one call site that waits for an answer rather than firing and
+    // forgetting: a settings form cannot be drawn until the action says what
+    // it wants. `triggerAndPoll` becomes Bull's own `finished()`, which throws
+    // on a failed job rather than reporting a status to inspect.
+    return await this.actionsQueue.runAndWait({
+      slug: action.slug,
+      workspaceId: action.workspaceId,
+      actionId: action.id,
+      event: ActionTypesEnum.GET_INPUTS,
+      payload: { ...triggerPayload },
+    });
   }
 
   async createActionSchedule(
@@ -515,12 +509,12 @@ export default class ActionService {
       action.id,
     );
 
-    return await tasks.trigger<typeof actionRun>('action-run', {
+    return await this.actionsQueue.run({
+      slug: action.slug,
       workspaceId: action.workspaceId,
-      payload: {
-        event: ActionTypesEnum.ON_SCHEDULE,
-        ...addedTaskInfo,
-      },
+      actionId: action.id,
+      event: ActionTypesEnum.ON_SCHEDULE,
+      payload: { ...addedTaskInfo },
     });
   }
 }

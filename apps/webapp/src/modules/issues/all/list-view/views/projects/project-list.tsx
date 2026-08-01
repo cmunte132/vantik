@@ -1,5 +1,5 @@
+import { RiBox3Line } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { Project } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
@@ -69,7 +69,7 @@ export const ProjectList = observer(({ projects }: ProjectListProps) => {
     if (row.key === 'no-value') {
       childContent = (
         <>
-          <Project className="h-5 w-5" />
+          <RiBox3Line className="h-5 w-5" size={18} />
           <h3 className="pl-2">No project</h3>
         </>
       );
@@ -78,7 +78,7 @@ export const ProjectList = observer(({ projects }: ProjectListProps) => {
 
       childContent = (
         <>
-          <Project size={20} />
+          <RiBox3Line size={20} />
 
           <h3 className="pl-2">{project.name}</h3>
         </>

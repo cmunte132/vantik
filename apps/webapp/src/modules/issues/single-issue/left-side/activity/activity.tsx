@@ -1,10 +1,10 @@
+import { RiPulseLine, RiSendPlaneLine } from '@remixicon/react';
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from '@vantikhq/ui/components/tabs';
-import { ActivityLine, SendLine } from '@vantikhq/ui/icons';
 import React from 'react';
 
 import { CommentsActivity } from './comments-activity';
@@ -23,14 +23,14 @@ export function Activity() {
                 value="comments"
                 className="bg-grayAlpha-100 px-2 flex gap-1"
               >
-                <SendLine size={16} />
+                <RiSendPlaneLine size={16} />
                 Comments
               </TabsTrigger>
               <TabsTrigger
                 value="activity"
                 className="bg-grayAlpha-100 flex gap-1"
               >
-                <ActivityLine size={16} />
+                <RiPulseLine size={16} />
                 Activity
               </TabsTrigger>
             </TabsList>

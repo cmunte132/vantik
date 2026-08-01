@@ -1,5 +1,5 @@
+import { RiFilter3Line } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { Filter } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -56,7 +56,7 @@ export const FiltersView = observer(({ Actions }: FilterViewProps) => {
             isActive={filtersShow}
             onClick={() => setFiltersShow(true)}
           >
-            <Filter size={16} className="mr-1" />
+            <RiFilter3Line size={16} className="mr-1" />
             Filter
           </Button>
         </TooltipWrapper>

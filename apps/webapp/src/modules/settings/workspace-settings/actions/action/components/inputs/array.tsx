@@ -1,7 +1,7 @@
 import type { ArrayFieldConfig } from '../types';
 
+import { RiAddLine, RiDeleteBinLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { AddLine, DeleteLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import React from 'react';
 import { useFieldArray, type Control } from 'react-hook-form';
@@ -30,7 +30,7 @@ export function Array({ control, config, name }: ArrayProps) {
           )}
         </div>
         <Button type="button" variant="ghost" onClick={() => append({})}>
-          <AddLine />
+          <RiAddLine size={18} />
         </Button>
       </div>
       {fields.map((item, index: number) => {
@@ -62,7 +62,7 @@ export function Array({ control, config, name }: ArrayProps) {
                   remove(index);
                 }}
               >
-                <DeleteLine />
+                <RiDeleteBinLine size={18} />
               </Button>
             </div>
           </div>

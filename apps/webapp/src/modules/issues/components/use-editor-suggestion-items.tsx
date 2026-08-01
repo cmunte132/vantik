@@ -1,7 +1,7 @@
 import type { Editor, Range } from '@tiptap/core';
 
+import { RiListCheck3 } from '@remixicon/react';
 import { suggestionItems } from '@vantikhq/ui/components/editor/slash-command';
-import { ListEdit } from '@vantikhq/ui/icons';
 import React from 'react';
 
 export const useEditorSuggestionItems = () => {
@@ -11,7 +11,7 @@ export const useEditorSuggestionItems = () => {
         title: 'Continue writing',
         description: 'Continue writing the description',
         searchTerms: ['continue', 'writing'],
-        icon: <ListEdit size={18} className="text-purple-500" />,
+        icon: <RiListCheck3 size={18} className="text-purple-500" />,
 
         command: ({ editor, range }: { editor: Editor; range: Range }) => {
           const description = editor.getText();

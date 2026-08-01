@@ -1,5 +1,6 @@
 'use client';
 
+import { RiArrowLeftSLine } from '@remixicon/react';
 import {
   Sidebar,
   SidebarContent,
@@ -10,7 +11,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@vantikhq/ui/components/sidebar';
-import { ChevronLeft } from '@vantikhq/ui/icons';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'next/router';
@@ -70,7 +70,7 @@ export function SidebarNav() {
             text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-hover
             focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <ChevronLeft size={16} className="shrink-0" />
+          <RiArrowLeftSLine size={16} className="shrink-0" />
           Settings
         </button>
       </SidebarHeader>

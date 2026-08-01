@@ -1,7 +1,7 @@
+import { RiAttachment2 } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { useEditor } from '@vantikhq/ui/components/editor/editor';
 import { uploadFileFn, uploadFn } from '@vantikhq/ui/components/editor/utils';
-import { Paperclip } from 'lucide-react';
 
 interface FileUploadProps {
   withPosition?: boolean;
@@ -33,7 +33,7 @@ export function FileUpload({ withPosition = true }: FileUploadProps) {
   if (!withPosition) {
     return (
       <Button variant="ghost" size="sm" onClick={onClick}>
-        <Paperclip size={16} />
+        <RiAttachment2 size={16} />
       </Button>
     );
   }
@@ -41,7 +41,7 @@ export function FileUpload({ withPosition = true }: FileUploadProps) {
   return (
     <div className="absolute bottom-2 right-2 px-6">
       <Button variant="secondary" onClick={onClick}>
-        <Paperclip size={16} />
+        <RiAttachment2 size={16} />
       </Button>
     </div>
   );

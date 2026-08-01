@@ -1,6 +1,6 @@
+import { RiPriceTag3Line } from '@remixicon/react';
 import { BadgeColor } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
-import { LabelLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
@@ -68,7 +68,7 @@ export const LabelList = observer(({ labels }: LabelListProps) => {
     if (row.key === 'no-value') {
       childContent = (
         <>
-          <LabelLine className="h-5 w-5" />
+          <RiPriceTag3Line className="h-5 w-5" size={18} />
           <h3 className="pl-2">No label</h3>
         </>
       );

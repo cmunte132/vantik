@@ -1,14 +1,12 @@
 'use client';
 
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-} from '@radix-ui/react-icons';
 import * as SelectPrimitive from '@radix-ui/react-select';
+import {
+  RiArrowDownSLine,
+  RiArrowUpSLine,
+  RiCheckLine,
+} from '@remixicon/react';
 import * as React from 'react';
-
-import { ChevronDown } from '@vantikhq/ui/icons';
 
 import { cn } from '../../lib/utils';
 
@@ -32,7 +30,7 @@ const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50" />
+      <RiArrowDownSLine className="h-4 w-4 opacity-50" size={16} />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -50,7 +48,7 @@ const SelectScrollUpButton = React.forwardRef<
     )}
     {...props}
   >
-    <ChevronUpIcon />
+    <RiArrowUpSLine size={15} />
   </SelectPrimitive.ScrollUpButton>
 ));
 SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName;
@@ -67,7 +65,7 @@ const SelectScrollDownButton = React.forwardRef<
     )}
     {...props}
   >
-    <ChevronDownIcon />
+    <RiArrowDownSLine size={15} />
   </SelectPrimitive.ScrollDownButton>
 ));
 SelectScrollDownButton.displayName =
@@ -134,7 +132,7 @@ const SelectItem = React.forwardRef<
   >
     <span className="flex h-3.5 w-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <CheckIcon className="h-4 w-4" />
+        <RiCheckLine className="h-4 w-4" size={15} />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText className="flex gap-1">

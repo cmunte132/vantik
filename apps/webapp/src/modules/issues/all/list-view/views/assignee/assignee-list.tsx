@@ -1,6 +1,6 @@
+import { RiAccountCircleLine } from '@remixicon/react';
 import { AvatarText } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
-import { AssigneeLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
@@ -69,7 +69,7 @@ export const AssigneeList = observer(({ users }: AssigneeListProps) => {
     if (row.key === 'no-value') {
       childContent = (
         <>
-          <AssigneeLine className="h-5 w-5" />
+          <RiAccountCircleLine className="h-5 w-5" size={18} />
           <h3 className="pl-2">No assignee</h3>
         </>
       );

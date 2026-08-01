@@ -1,7 +1,7 @@
 'use client';
 import type { ImperativePanelHandle } from 'react-resizable-panels';
 
-import { DragHandleDots2Icon } from '@radix-ui/react-icons';
+import { RiDraggable } from '@remixicon/react';
 import * as React from 'react';
 import * as ResizablePrimitive from 'react-resizable-panels';
 
@@ -38,7 +38,7 @@ const ResizableHandle = ({
   >
     {withHandle && (
       <div className="z-10 flex h-4 w-3 items-center justify-center rounded-sm border bg-border">
-        <DragHandleDots2Icon className="h-2.5 w-2.5" />
+        <RiDraggable className="h-2.5 w-2.5" size={15} />
       </div>
     )}
   </ResizablePrimitive.PanelResizeHandle>

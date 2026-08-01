@@ -1,7 +1,7 @@
 'use client';
 
+import { RiBox3Line } from '@remixicon/react';
 import { type ColumnDef } from '@tanstack/react-table';
-import { Project } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import type { ProjectType } from 'common/types';
@@ -39,7 +39,7 @@ export const useProjectColumns = (): Array<ColumnDef<ProjectType>> => {
       cell: ({ row }) => {
         return (
           <div className="capitalize pl-4 py-2 flex items-center gap-1">
-            <Project />
+            <RiBox3Line size={18} />
             {row.original.name}
           </div>
         );

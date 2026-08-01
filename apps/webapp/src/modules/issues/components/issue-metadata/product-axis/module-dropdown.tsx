@@ -1,3 +1,4 @@
+import { RiCodeSSlashLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import {
@@ -10,7 +11,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { Code } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -73,14 +73,20 @@ export const ModuleDropdown = observer(
           >
             {selected.length > 0 ? (
               <div className="inline-flex items-center gap-1 pl-1 min-w-[0px]">
-                <Code className="h-5 w-5 text-[9px] mr-2 shrink-0" />
+                <RiCodeSSlashLine
+                  className="h-5 w-5 text-[9px] mr-2 shrink-0"
+                  size={16}
+                />
                 <div className="truncate">
                   {selected.map((module) => module.name).join(', ')}
                 </div>
               </div>
             ) : (
               <div className="inline-flex items-center gap-1 pl-1 text-muted-foreground">
-                <Code className="h-5 w-5 text-[9px] mr-2 shrink-0" />
+                <RiCodeSSlashLine
+                  className="h-5 w-5 text-[9px] mr-2 shrink-0"
+                  size={16}
+                />
                 No module
               </div>
             )}
@@ -129,7 +135,7 @@ function ModuleDropdownContent({ modules, value, toggle }: ContentProps) {
                 }
               />
               <label htmlFor={module.name} className="flex gap-2 grow">
-                <Code className="h-5 w-5 text-[9px]" />
+                <RiCodeSSlashLine className="h-5 w-5 text-[9px]" size={16} />
                 {module.name}
               </label>
             </div>

@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { RiCalendarLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Calendar } from '@vantikhq/ui/components/calendar';
 import {
@@ -23,7 +24,6 @@ import {
 } from '@vantikhq/ui/components/popover';
 import { Textarea } from '@vantikhq/ui/components/textarea';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { CalendarLine } from '@vantikhq/ui/icons';
 import { format } from 'date-fns';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -242,7 +242,7 @@ function CycleDatePicker({ value, onChange }: CycleDatePickerProps) {
           variant="secondary"
           className="w-full justify-start gap-2 font-normal"
         >
-          <CalendarLine size={16} />
+          <RiCalendarLine size={16} />
           {value ? format(new Date(value), 'PP') : 'Pick a date'}
         </Button>
       </PopoverTrigger>

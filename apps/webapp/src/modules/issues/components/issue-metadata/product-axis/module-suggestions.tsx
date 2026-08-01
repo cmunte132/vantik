@@ -1,5 +1,5 @@
+import { RiCheckLine, RiCloseLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { CheckLine, CrossLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
@@ -80,7 +80,7 @@ export const ModuleSuggestions = observer(
                 aria-label={`Accept ${module.name}`}
                 onClick={() => accept({ issueId, moduleId: module.id })}
               >
-                <CheckLine size={12} />
+                <RiCheckLine size={12} />
               </Button>
 
               <Button
@@ -90,7 +90,7 @@ export const ModuleSuggestions = observer(
                 aria-label={`Dismiss ${module.name}`}
                 onClick={() => dismiss({ issueId, moduleId: module.id })}
               >
-                <CrossLine size={12} />
+                <RiCloseLine size={12} />
               </Button>
             </span>
           ))}

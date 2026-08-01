@@ -1,5 +1,6 @@
 'use client';
 
+import { RiArrowRightSLine } from '@remixicon/react';
 import { AvatarText } from '@vantikhq/ui/components/avatar';
 import {
   DropdownMenu,
@@ -8,7 +9,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
-import { ChevronRight } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import React from 'react';
@@ -57,7 +57,10 @@ export const WorkspaceSwitcher = observer(() => {
           `data-rail-hide` passed to one is dropped. The wrapper carries it.
         */}
         <span data-rail-hide className="flex shrink-0">
-          <ChevronRight size={14} className="rotate-90 text-sidebar-muted" />
+          <RiArrowRightSLine
+            size={14}
+            className="rotate-90 text-sidebar-muted"
+          />
         </span>
       </DropdownMenuTrigger>
 

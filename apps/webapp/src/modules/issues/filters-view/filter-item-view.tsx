@@ -1,6 +1,6 @@
+import { RiCloseLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Separator } from '@vantikhq/ui/components/separator';
-import { Close } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useCurrentTeam } from 'hooks/teams';
@@ -89,7 +89,7 @@ export const FilterItemView = observer(
           onClick={removeFilter}
           variant="ghost"
         >
-          <Close size={16} className="hover:text-foreground" />
+          <RiCloseLine size={16} className="hover:text-foreground" />
         </Button>
       </div>
     );

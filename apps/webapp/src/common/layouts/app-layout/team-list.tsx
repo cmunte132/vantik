@@ -1,6 +1,12 @@
 'use client';
 
 import {
+  RiAddLine,
+  RiArrowRightSLine,
+  RiRefreshLine,
+  RiStackLine,
+} from '@remixicon/react';
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -17,13 +23,7 @@ import {
   SidebarMenuSubItem,
 } from '@vantikhq/ui/components/sidebar';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
-import {
-  AddLine,
-  ChevronRight,
-  Cycle,
-  IssuesLine,
-  StackLine,
-} from '@vantikhq/ui/icons';
+import { IssuesLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -70,7 +70,7 @@ export const TeamList = observer(() => {
         Your teams
         <SidebarGroupAction asChild aria-label="Add team">
           <NextLink href={`/${workspace.slug}/settings/new_team`}>
-            <AddLine />
+            <RiAddLine size={18} />
           </NextLink>
         </SidebarGroupAction>
       </SidebarGroupLabel>
@@ -86,7 +86,7 @@ export const TeamList = observer(() => {
             },
             {
               title: 'Views',
-              icon: StackLine,
+              icon: RiStackLine,
               href: `/${workspace.slug}/team/${teamItem.identifier}/views`,
             },
           ];
@@ -97,13 +97,13 @@ export const TeamList = observer(() => {
               ...[
                 {
                   title: 'Cycles',
-                  icon: Cycle,
+                  icon: RiRefreshLine,
                   strict: true,
                   href: `/${workspace.slug}/team/${teamItem.identifier}/cycles`,
                 },
                 {
                   title: 'Current',
-                  icon: Cycle,
+                  icon: RiRefreshLine,
                   href: `/${workspace.slug}/team/${teamItem.identifier}/cycles/current`,
                 },
               ],
@@ -165,9 +165,10 @@ export const TeamList = observer(() => {
                     />
                     <span className="flex-1 truncate">{teamItem.name}</span>
                     <span data-rail-hide className="flex shrink-0">
-                      <ChevronRight
+                      <RiArrowRightSLine
                         className="!size-3.5 text-sidebar-muted transition-transform
                           duration-200 group-data-[state=open]/collapsible:rotate-90"
+                        size={16}
                       />
                     </span>
                   </SidebarMenuButton>

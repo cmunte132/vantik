@@ -1,3 +1,4 @@
+import { RiCloseLine, RiExpandDiagonalLine } from '@remixicon/react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -5,8 +6,6 @@ import {
 } from '@vantikhq/ui/components/breadcrumb';
 import { Button } from '@vantikhq/ui/components/button';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
-import { Close } from '@vantikhq/ui/icons';
-import { MoveDiagonal2 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -84,11 +83,11 @@ export const Header = observer(({ sideView }: HeaderProps) => {
                 size="sm"
                 onClick={() => closeIssueView()}
               >
-                <Close size={16} />
+                <RiCloseLine size={16} />
               </Button>
             </TooltipWrapper>
             <Button variant="ghost" size="sm" onClick={openInFull}>
-              <MoveDiagonal2 size={16} />
+              <RiExpandDiagonalLine size={16} />
             </Button>
           </>
         )}

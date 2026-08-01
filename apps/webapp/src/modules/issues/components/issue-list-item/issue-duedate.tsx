@@ -1,9 +1,9 @@
+import { RiCalendarLine, RiFireLine } from '@remixicon/react';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@vantikhq/ui/components/tooltip';
-import { CalendarLine, Fire } from '@vantikhq/ui/icons';
 import { differenceInDays, format } from 'date-fns';
 
 interface IssueDueDateProps {
@@ -26,7 +26,7 @@ export function IssueDueDate({ dueDate }: IssueDueDateProps) {
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="flex">
-              <Fire /> &nbsp; {diffDays}d
+              <RiFireLine size={18} /> &nbsp; {diffDays}d
             </div>
           </TooltipTrigger>
           <TooltipContent className="p-2">
@@ -39,7 +39,7 @@ export function IssueDueDate({ dueDate }: IssueDueDateProps) {
 
   return (
     <div className="inline-flex min-w-[70px] text-xs gap-1 items-center">
-      <CalendarLine /> &nbsp;
+      <RiCalendarLine size={18} /> &nbsp;
       {format(new Date(dueDate), 'd MMM')}
     </div>
   );

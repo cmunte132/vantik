@@ -1,5 +1,5 @@
+import { RiAddLine, RiDeleteBinLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { AddLine, DeleteLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
@@ -67,7 +67,7 @@ export const Products = withApplicationStore(
                 <NextLink
                   href={workspaceHref(workspaceSlug, 'settings', 'new_product')}
                 >
-                  <AddLine size={14} />
+                  <RiAddLine size={14} />
                   New product
                 </NextLink>
               </Button>
@@ -145,7 +145,7 @@ export const Modules = withApplicationStore(
                 className="gap-1"
                 onClick={() => setCreating(true)}
               >
-                <AddLine size={14} />
+                <RiAddLine size={14} />
                 New module
               </Button>
             }
@@ -219,7 +219,7 @@ export const Modules = withApplicationStore(
                   aria-label={`Delete ${module.name}`}
                   onClick={() => deleteModule({ moduleId: module.id })}
                 >
-                  <DeleteLine size={14} />
+                  <RiDeleteBinLine size={14} />
                 </Button>
               </div>
             ))}

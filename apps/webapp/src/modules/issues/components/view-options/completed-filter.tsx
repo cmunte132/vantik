@@ -1,4 +1,4 @@
-import { CheckLine } from '@vantikhq/ui/icons';
+import { RiCheckLine } from '@remixicon/react';
 import { observer } from 'mobx-react-lite';
 
 import { TimeBasedFilterEnum } from 'store/application';
@@ -19,7 +19,7 @@ function Item({ text, selected = false, onChange }: ItemProps) {
       <span className="flex h-3.5 w-3.5 items-center justify-center">
         {selected && (
           <div>
-            <CheckLine className="h-4 w-4" />
+            <RiCheckLine className="h-4 w-4" size={16} />
           </div>
         )}
       </span>

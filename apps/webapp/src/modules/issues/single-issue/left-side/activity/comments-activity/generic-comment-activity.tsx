@@ -1,3 +1,10 @@
+import {
+  RiDeleteBinLine,
+  RiEditBoxLine,
+  RiEditLine,
+  RiMoreLine,
+  RiReplyLine,
+} from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
@@ -11,15 +18,8 @@ import {
   EditorExtensions,
   suggestionItems,
 } from '@vantikhq/ui/components/editor/index';
-import {
-  DeleteLine,
-  EditLine,
-  MoreLine,
-  NewIssueLine,
-  SubIssue,
-} from '@vantikhq/ui/icons';
+import { SubIssue } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
-import { Reply } from 'lucide-react';
 import * as React from 'react';
 import ReactTimeAgo from 'react-time-ago';
 
@@ -96,28 +96,32 @@ export function GenericCommentActivity(props: GenericCommentActivityProps) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="xs" className="h-5">
-                  <MoreLine size={16} className="text-muted-foreground" />
+                  <RiMoreLine size={16} className="text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
                   {/* `user?.id === currentUser?.id` would be true for two
                       undefineds, offering Edit on someone else's comment. */}
-                  {!sourceMetadata && !!user?.id && user.id === currentUser?.id && (
-                    <DropdownMenuItem onClick={() => setEdit(true)}>
-                      <div className="flex items-center gap-1">
-                        <EditLine size={16} className="mr-1" /> Edit
-                      </div>
-                    </DropdownMenuItem>
-                  )}
+                  {!sourceMetadata &&
+                    !!user?.id &&
+                    user.id === currentUser?.id && (
+                      <DropdownMenuItem onClick={() => setEdit(true)}>
+                        <div className="flex items-center gap-1">
+                          <RiEditLine size={16} className="mr-1" /> Edit
+                        </div>
+                      </DropdownMenuItem>
+                    )}
 
-                  {!sourceMetadata && !!user?.id && user.id === currentUser?.id && (
-                    <DropdownMenuItem onClick={() => setDeleteComment(true)}>
-                      <div className="flex items-center gap-1">
-                        <DeleteLine size={16} className="mr-1" /> Delete
-                      </div>
-                    </DropdownMenuItem>
-                  )}
+                  {!sourceMetadata &&
+                    !!user?.id &&
+                    user.id === currentUser?.id && (
+                      <DropdownMenuItem onClick={() => setDeleteComment(true)}>
+                        <div className="flex items-center gap-1">
+                          <RiDeleteBinLine size={16} className="mr-1" /> Delete
+                        </div>
+                      </DropdownMenuItem>
+                    )}
 
                   <DropdownMenuItem
                     onClick={() => {
@@ -128,8 +132,8 @@ export function GenericCommentActivity(props: GenericCommentActivityProps) {
                     }}
                   >
                     <div className="flex items-center gap-1">
-                      <NewIssueLine size={16} className="mr-1" /> New issue from
-                      comment
+                      <RiEditBoxLine size={16} className="mr-1" /> New issue
+                      from comment
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuItem
@@ -156,7 +160,7 @@ export function GenericCommentActivity(props: GenericCommentActivityProps) {
                 className="h-5"
                 onClick={() => setShowReply(true)}
               >
-                <Reply size={16} />
+                <RiReplyLine size={16} />
               </Button>
             )}
             <div>

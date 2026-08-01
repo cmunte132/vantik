@@ -1,10 +1,14 @@
+import {
+  RiAddLine,
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+} from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@vantikhq/ui/components/collapsible';
-import { AddLine, ChevronDown, ChevronRight } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import { IssueListItem } from 'modules/issues/components';
@@ -33,9 +37,9 @@ export function SubIssueView({ childIssues, issueId }: SubIssueViewProps) {
                 <Button variant="link" className="px-0 text-md">
                   Sub-issues
                   {isOpen ? (
-                    <ChevronDown size={16} className="ml-1" />
+                    <RiArrowDownSLine size={16} className="ml-1" />
                   ) : (
-                    <ChevronRight size={16} className="ml-1" />
+                    <RiArrowRightSLine size={16} className="ml-1" />
                   )}
                 </Button>
 
@@ -55,7 +59,7 @@ export function SubIssueView({ childIssues, issueId }: SubIssueViewProps) {
               onClick={() => setNewIssueDialog(true)}
               disabled={newIssueDialog}
             >
-              <AddLine size={16} />
+              <RiAddLine size={16} />
             </Button>
           </div>
         </div>

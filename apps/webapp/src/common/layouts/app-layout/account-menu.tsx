@@ -1,5 +1,6 @@
 'use client';
 
+import { RiMoreLine } from '@remixicon/react';
 import { AvatarText } from '@vantikhq/ui/components/avatar';
 import {
   DropdownMenu,
@@ -9,7 +10,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
-import { MoreLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import posthog from 'posthog-js';
@@ -53,7 +53,7 @@ export const AccountMenu = observer(() => {
         </div>
 
         <span data-rail-hide className="flex shrink-0">
-          <MoreLine size={14} className="text-sidebar-muted" />
+          <RiMoreLine size={14} className="text-sidebar-muted" />
         </span>
       </DropdownMenuTrigger>
 

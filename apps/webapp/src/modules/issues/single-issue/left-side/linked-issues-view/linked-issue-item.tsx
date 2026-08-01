@@ -1,3 +1,9 @@
+import {
+  RiDeleteBinLine,
+  RiEditLine,
+  RiLinkM,
+  RiMoreLine,
+} from '@remixicon/react';
 import { RiLink } from '@remixicon/react';
 import { RoleEnum } from '@vantikhq/types';
 import {
@@ -18,7 +24,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
-import { DeleteLine, EditLine, LinkLine, MoreLine } from '@vantikhq/ui/icons';
 import React from 'react';
 
 import { getBotIcon } from 'common';
@@ -69,7 +74,7 @@ export function LinkedIssueItem({ linkedIssue }: LinkedIssueItemProps) {
 
         <div className="flex gap-1">
           <Button variant="ghost" size="sm">
-            <LinkLine size={16} className="text-muted-foreground" />
+            <RiLinkM size={16} className="text-muted-foreground" />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -80,19 +85,19 @@ export function LinkedIssueItem({ linkedIssue }: LinkedIssueItemProps) {
                   e.preventDefault();
                 }}
               >
-                <MoreLine size={16} />
+                <RiMoreLine size={16} />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuGroup>
                 <DropdownMenuItem onClick={() => setEditOpen(true)}>
                   <div className="flex items-center gap-1">
-                    <EditLine size={16} /> Edit
+                    <RiEditLine size={16} /> Edit
                   </div>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
                   <div className="flex items-center gap-1">
-                    <DeleteLine size={16} /> Remove
+                    <RiDeleteBinLine size={16} /> Remove
                   </div>
                 </DropdownMenuItem>
               </DropdownMenuGroup>

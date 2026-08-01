@@ -1,7 +1,7 @@
+import { RiInboxLine } from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import { Input } from '@vantikhq/ui/components/input';
-import { Inbox } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
@@ -94,7 +94,7 @@ export const CapabilityView = withApplicationStore(
                 })
               }
             >
-              <Inbox size={14} />
+              <RiInboxLine size={14} />
               {isArchived(capability) ? 'Restore' : 'Archive'}
             </Button>
           </div>

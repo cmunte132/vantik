@@ -1,3 +1,4 @@
+import { RiAddLine, RiCloseLine, RiFocus3Line } from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import {
@@ -11,7 +12,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { AddLine, CrossLine, FocusLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
@@ -81,7 +81,7 @@ export const CapabilityPicker = observer(
             key={capability.id}
             className="flex items-center gap-2 border-b border-border px-4 py-2"
           >
-            <FocusLine size={14} className="shrink-0" />
+            <RiFocus3Line size={14} className="shrink-0" />
             <NextLink
               href={workspaceHref(workspaceSlug, 'capability', capability.id)}
               className="flex-1 truncate hover:underline"
@@ -95,7 +95,7 @@ export const CapabilityPicker = observer(
               aria-label={`Take ${capability.name} off this module`}
               onClick={() => detach(capability)}
             >
-              <CrossLine size={14} />
+              <RiCloseLine size={14} />
             </Button>
           </div>
         ))}
@@ -129,7 +129,7 @@ function AddCapability({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="secondary" size="sm" className="gap-1">
-          <AddLine size={14} />
+          <RiAddLine size={14} />
           Add a capability
         </Button>
       </PopoverTrigger>
@@ -203,7 +203,7 @@ function AddCapabilityContent({
             onSelect={() => onCreate(typed)}
           >
             <div className="flex w-full items-center gap-2">
-              <AddLine size={14} className="shrink-0" />
+              <RiAddLine size={14} className="shrink-0" />
               <span className="truncate">
                 Make <span className="font-medium">{typed}</span>
               </span>

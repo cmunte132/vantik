@@ -1,3 +1,4 @@
+import { RiAddLine } from '@remixicon/react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -5,7 +6,6 @@ import {
 } from '@vantikhq/ui/components/breadcrumb';
 import { buttonVariants } from '@vantikhq/ui/components/button';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
-import { AddLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
@@ -37,7 +37,7 @@ export const Header = observer(({ title }: HeaderProps) => {
         )}
         href={workspaceHref(workspaceSlug, 'settings', 'new_team')}
       >
-        <AddLine size={14} />
+        <RiAddLine size={14} />
         Create Team
       </Link>
     </div>

@@ -1,10 +1,14 @@
+import {
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+  RiFileCopyLine,
+} from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@vantikhq/ui/components/collapsible';
-import { ChevronDown, ChevronRight, DuplicateLine2 } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { useRouter } from 'next/router';
 import React from 'react';
@@ -59,12 +63,12 @@ export function SimilarIssuesView({ issueId }: SimilarIssuesViewProps) {
                 size="sm"
                 className="px-2 pr-2 !bg-transparent"
               >
-                <DuplicateLine2 size={16} className="mr-2" />
+                <RiFileCopyLine size={16} className="mr-2" />
                 Similar Issues
                 {isOpen ? (
-                  <ChevronDown size={16} className="mr-2" />
+                  <RiArrowDownSLine size={16} className="mr-2" />
                 ) : (
-                  <ChevronRight size={16} className="mr-2" />
+                  <RiArrowRightSLine size={16} className="mr-2" />
                 )}
               </Button>
             </div>

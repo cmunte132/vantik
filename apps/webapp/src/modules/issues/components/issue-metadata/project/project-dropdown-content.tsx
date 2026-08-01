@@ -1,6 +1,6 @@
+import { RiBox3Line } from '@remixicon/react';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import { CommandGroup } from '@vantikhq/ui/components/command';
-import { Project } from '@vantikhq/ui/icons';
 
 import type { ProjectType } from 'common/types';
 
@@ -65,7 +65,7 @@ export function ProjectDropdownContent({
             />
           )}
           <div className="flex grow">
-            <Project size={20} className="mr-2" />
+            <RiBox3Line size={20} className="mr-2" />
             No Project
           </div>
         </div>
@@ -97,7 +97,7 @@ export function ProjectDropdownContent({
                 />
               )}
               <label htmlFor={project.name} className="flex gap-2 grow">
-                <Project className="h-5 w-5 text-[9px]" />
+                <RiBox3Line className="h-5 w-5 text-[9px]" size={18} />
 
                 {project.name}
               </label>

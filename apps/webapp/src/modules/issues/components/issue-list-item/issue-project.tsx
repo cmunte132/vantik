@@ -1,5 +1,5 @@
+import { RiBox3Line, RiPriceTag3Line } from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
-import { LabelLine, Project } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useContextStore } from 'store/global-context-provider';
@@ -28,7 +28,7 @@ export const IssueProject = observer(
 
         return (
           <div className="inline-flex items-center gap-1 border-l border-border pl-1 min-w-[0px]">
-            <LabelLine size={14} />
+            <RiPriceTag3Line size={14} />
             <div className="truncate"> {milestone.name}</div>
           </div>
         );
@@ -50,7 +50,7 @@ export const IssueProject = observer(
           key={project.name}
           className="flex items-center gap-1 shrink min-w-[0px]"
         >
-          <Project size={14} className="shrink-0" />
+          <RiBox3Line size={14} className="shrink-0" />
           <div className="truncate"> {project.name}</div>
           {getMilestone()}
         </Badge>

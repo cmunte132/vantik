@@ -1,6 +1,9 @@
+import {
+  RiGridLine,
+  RiLayoutColumnLine,
+  RiListUnordered,
+} from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { BoardLine, ListLine } from '@vantikhq/ui/icons';
-import { Grid3X3 } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 
 import { TooltipWrapper } from 'common/wrappers/tooltip-wrapper';
@@ -24,7 +27,7 @@ export const LayoutSwitch = observer(() => {
           onClick={() => updateView(ViewEnum.list)}
           className="rounded-sm py-1 px-2 h-6"
         >
-          <ListLine size={20} />
+          <RiListUnordered size={20} />
         </Button>
       </TooltipWrapper>
 
@@ -35,7 +38,7 @@ export const LayoutSwitch = observer(() => {
           isActive={applicationStore.displaySettings.view === ViewEnum.board}
           className="rounded-sm py-1 px-2 h-6"
         >
-          <BoardLine size={20} />
+          <RiLayoutColumnLine size={20} />
         </Button>
       </TooltipWrapper>
 
@@ -46,7 +49,7 @@ export const LayoutSwitch = observer(() => {
           isActive={applicationStore.displaySettings.view === ViewEnum.sheet}
           className="rounded-sm py-1 px-2 h-6"
         >
-          <Grid3X3 size={16} />
+          <RiGridLine size={16} />
         </Button>
       </TooltipWrapper>
     </div>

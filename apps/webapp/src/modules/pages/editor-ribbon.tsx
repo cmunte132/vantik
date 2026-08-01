@@ -1,5 +1,17 @@
 import type { Editor as EditorT } from '@tiptap/core';
 
+import {
+  RiBold,
+  RiHeading,
+  RiItalic,
+  RiLinkM,
+  RiListOrdered,
+  RiListUnordered,
+  RiStrikethrough,
+  RiTerminalBoxLine,
+  RiText,
+  RiUnderline,
+} from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Separator } from '@vantikhq/ui/components/separator';
 import {
@@ -7,19 +19,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@vantikhq/ui/components/tooltip';
-import {
-  BoldLine,
-  BulletListLine,
-  CodingLine,
-  HeadingLine,
-  IssuesLine,
-  ItalicLine,
-  LinkLine,
-  NumberedListLine,
-  StrikeLine,
-  TextLine,
-  UnderlineLine,
-} from '@vantikhq/ui/icons';
+import { IssuesLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import * as React from 'react';
 
@@ -54,7 +54,7 @@ const BLOCKS: RibbonAction[] = [
   {
     name: 'Text',
     hint: 'Plain paragraph',
-    icon: TextLine,
+    icon: RiText,
     command: (editor) => editor.chain().focus().clearNodes().run(),
     isActive: (editor) =>
       editor.isActive('paragraph') &&
@@ -64,7 +64,7 @@ const BLOCKS: RibbonAction[] = [
   {
     name: 'Heading 1',
     hint: 'Big heading',
-    icon: HeadingLine,
+    icon: RiHeading,
     command: (editor) =>
       editor.chain().focus().clearNodes().toggleHeading({ level: 1 }).run(),
     isActive: (editor) => editor.isActive('heading', { level: 1 }),
@@ -72,7 +72,7 @@ const BLOCKS: RibbonAction[] = [
   {
     name: 'Heading 2',
     hint: 'Medium heading',
-    icon: HeadingLine,
+    icon: RiHeading,
     command: (editor) =>
       editor.chain().focus().clearNodes().toggleHeading({ level: 2 }).run(),
     isActive: (editor) => editor.isActive('heading', { level: 2 }),
@@ -83,7 +83,7 @@ const LISTS: RibbonAction[] = [
   {
     name: 'Bullet list',
     hint: 'Bulleted list',
-    icon: BulletListLine,
+    icon: RiListUnordered,
     command: (editor) =>
       editor.chain().focus().clearNodes().toggleBulletList().run(),
     isActive: (editor) => editor.isActive('bulletList'),
@@ -91,7 +91,7 @@ const LISTS: RibbonAction[] = [
   {
     name: 'Numbered list',
     hint: 'Numbered list',
-    icon: NumberedListLine,
+    icon: RiListOrdered,
     command: (editor) =>
       editor.chain().focus().clearNodes().toggleOrderedList().run(),
     isActive: (editor) => editor.isActive('orderedList'),
@@ -110,35 +110,35 @@ const MARKS: RibbonAction[] = [
   {
     name: 'Bold',
     hint: 'Bold  ⌘B',
-    icon: BoldLine,
+    icon: RiBold,
     command: (editor) => editor.chain().focus().toggleBold().run(),
     isActive: (editor) => editor.isActive('bold'),
   },
   {
     name: 'Italic',
     hint: 'Italic  ⌘I',
-    icon: ItalicLine,
+    icon: RiItalic,
     command: (editor) => editor.chain().focus().toggleItalic().run(),
     isActive: (editor) => editor.isActive('italic'),
   },
   {
     name: 'Underline',
     hint: 'Underline  ⌘U',
-    icon: UnderlineLine,
+    icon: RiUnderline,
     command: (editor) => editor.chain().focus().toggleUnderline().run(),
     isActive: (editor) => editor.isActive('underline'),
   },
   {
     name: 'Strikethrough',
     hint: 'Strikethrough',
-    icon: StrikeLine,
+    icon: RiStrikethrough,
     command: (editor) => editor.chain().focus().toggleStrike().run(),
     isActive: (editor) => editor.isActive('strike'),
   },
   {
     name: 'Code',
     hint: 'Inline code',
-    icon: CodingLine,
+    icon: RiTerminalBoxLine,
     command: (editor) => editor.chain().focus().toggleCode().run(),
     isActive: (editor) => editor.isActive('code'),
   },
@@ -147,7 +147,7 @@ const MARKS: RibbonAction[] = [
 const LINK: RibbonAction = {
   name: 'Link',
   hint: 'Add a link',
-  icon: LinkLine,
+  icon: RiLinkM,
   command: (editor) => {
     const previous = editor.getAttributes('link').href ?? '';
     // eslint-disable-next-line no-alert

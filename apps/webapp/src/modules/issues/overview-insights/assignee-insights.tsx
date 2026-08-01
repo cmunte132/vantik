@@ -1,7 +1,7 @@
+import { RiAccountCircleLine } from '@remixicon/react';
 import { AvatarText } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
 import { Loader } from '@vantikhq/ui/components/loader';
-import { AssigneeLine } from '@vantikhq/ui/icons';
 import { sort } from 'fast-sort';
 import { observer } from 'mobx-react-lite';
 
@@ -91,7 +91,7 @@ export const AssigneeInsights = observer(
           }
         >
           <div className="flex gap-2 items-center">
-            <AssigneeLine />
+            <RiAccountCircleLine size={18} />
             No user
           </div>
 

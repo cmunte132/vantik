@@ -1,3 +1,4 @@
+import { RiBox3Line } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Editor,
@@ -11,7 +12,6 @@ import {
   FormMessage,
 } from '@vantikhq/ui/components/form';
 import { Textarea } from '@vantikhq/ui/components/textarea';
-import { Project } from '@vantikhq/ui/icons';
 import React from 'react';
 import { type UseFormReturn } from 'react-hook-form';
 
@@ -43,7 +43,7 @@ export function NewProjectForm({
           <FormItem className="grow">
             <FormControl>
               <div className="flex items-center gap-2">
-                <Project size={16} className="mb-1" />
+                <RiBox3Line size={16} className="mb-1" />
                 <Textarea
                   className="border-0 py-0 px-0 resize-none bg-transparent no-scrollbar overflow-hidden outline-none focus-visible:ring-0 text-lg"
                   rows={1}

@@ -1,3 +1,4 @@
+import { RiCornerUpRightLine, RiMoreLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
@@ -6,7 +7,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
-import { ArrowForwardLine, MoreLine } from '@vantikhq/ui/icons';
 import React from 'react';
 
 import { AddIssueRelationModal } from 'modules/issues/components/modals';
@@ -45,13 +45,13 @@ export function IssueOptionsDropdown() {
               e.preventDefault();
             }}
           >
-            <MoreLine size={16} />
+            <RiMoreLine size={16} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           {teamType === TeamTypeEnum.ENGINEERING && (
             <DropdownMenuItem onClick={() => setMoveIssueDialog(true)}>
-              <DropdownItem Icon={ArrowForwardLine} title="Move to team" />
+              <DropdownItem Icon={RiCornerUpRightLine} title="Move to team" />
             </DropdownMenuItem>
           )}
 

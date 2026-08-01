@@ -1,6 +1,6 @@
+import { RiPriceTag3Line } from '@remixicon/react';
 import { Badge, BadgeColor } from '@vantikhq/ui/components/badge';
 import { TimelineItem } from '@vantikhq/ui/components/timeline';
-import { LabelLine } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import type { LabelType } from 'common/types';
@@ -35,7 +35,7 @@ export function LabelActivity({
         date={showTime && issueHistory.updatedAt}
       >
         <div className="flex items-center text-muted-foreground">
-          <LabelLine size={20} className="mr-2" />
+          <RiPriceTag3Line size={20} className="mr-2" />
 
           <div className="flex items-center">
             <span className="mr-2 text-foreground">{fullname}</span>
@@ -64,7 +64,7 @@ export function LabelActivity({
       date={showTime && issueHistory.updatedAt}
     >
       <div className="flex items-center text-muted-foreground">
-        <LabelLine size={20} className="mr-2" />
+        <RiPriceTag3Line size={20} className="mr-2" />
 
         <div className="flex items-center">
           <span className="mr-2 text-foreground">{fullname}</span>

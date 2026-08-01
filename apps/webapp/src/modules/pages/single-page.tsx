@@ -1,5 +1,6 @@
 import type { Editor as EditorT } from '@tiptap/core';
 
+import { RiMoreLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
@@ -16,7 +17,6 @@ import {
 } from '@vantikhq/ui/components/dropdown-menu';
 import { Editor, EditorExtensions } from '@vantikhq/ui/components/editor/index';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
-import { MoreLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import * as React from 'react';
@@ -164,7 +164,7 @@ const SinglePageView = observer(() => {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" aria-label="Page settings">
-          <MoreLine size={16} />
+          <RiMoreLine size={16} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[260px]">

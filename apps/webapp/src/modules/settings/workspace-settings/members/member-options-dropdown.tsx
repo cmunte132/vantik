@@ -1,3 +1,4 @@
+import { RiDeleteBinLine, RiMoreLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
@@ -7,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { CanceledLine, DeleteLine, MoreLine } from '@vantikhq/ui/icons';
+import { CanceledLine } from '@vantikhq/ui/icons';
 import React from 'react';
 
 import { useRemoveTeamMemberMutation } from 'services/team';
@@ -61,7 +62,7 @@ export function MemberOptionsDropdown({
               e.preventDefault();
             }}
           >
-            <MoreLine size={16} />
+            <RiMoreLine size={16} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -91,7 +92,7 @@ export function MemberOptionsDropdown({
                 }}
               >
                 <div className="flex items-center gap-1">
-                  <DeleteLine size={16} /> Remove from team
+                  <RiDeleteBinLine size={16} /> Remove from team
                 </div>
               </DropdownMenuItem>
             )}

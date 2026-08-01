@@ -1,3 +1,4 @@
+import { RiDeleteBinLine, RiInboxLine, RiMoreLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
@@ -6,7 +7,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
-import { DeleteLine, Inbox, MoreLine } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import type { ProductType } from 'common/types';
@@ -48,7 +48,7 @@ export function ProductOptionsDropdown({
             // The row navigates, and this control sits inside it.
             onClick={(event) => event.stopPropagation()}
           >
-            <MoreLine size={16} />
+            <RiMoreLine size={16} />
           </Button>
         </DropdownMenuTrigger>
 
@@ -64,7 +64,7 @@ export function ProductOptionsDropdown({
               }}
             >
               <div className="flex items-center gap-1">
-                <Inbox size={16} /> {archived ? 'Restore' : 'Archive'}
+                <RiInboxLine size={16} /> {archived ? 'Restore' : 'Archive'}
               </div>
             </DropdownMenuItem>
 
@@ -86,7 +86,7 @@ export function ProductOptionsDropdown({
               }}
             >
               <div className="flex items-center gap-1">
-                <DeleteLine size={16} /> Delete
+                <RiDeleteBinLine size={16} /> Delete
               </div>
             </DropdownMenuItem>
           </DropdownMenuGroup>

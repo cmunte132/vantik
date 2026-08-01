@@ -1,9 +1,9 @@
+import { RiInboxLine } from '@remixicon/react';
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
 } from '@vantikhq/ui/components/breadcrumb';
-import { Inbox } from '@vantikhq/ui/icons';
 
 import { HeaderLayout } from 'common/header-layout';
 
@@ -13,7 +13,7 @@ export function Header() {
       <Breadcrumb>
         <BreadcrumbItem>
           <BreadcrumbLink className="flex items-center gap-2">
-            <Inbox size={20} />
+            <RiInboxLine size={20} />
 
             <span className="inline-block"> Inbox</span>
           </BreadcrumbLink>

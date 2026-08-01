@@ -1,5 +1,6 @@
 import type { ActionConfig } from '@vantikhq/types';
 
+import { RiAddLine } from '@remixicon/react';
 import {
   Card,
   CardDescription,
@@ -7,7 +8,6 @@ import {
   CardTitle,
 } from '@vantikhq/ui/components/card';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
-import { AddLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { Header } from 'modules/settings/header';
@@ -35,7 +35,7 @@ export const Actions = observer(() => {
           }}
         >
           <CardHeader>
-            <AddLine size={24} />
+            <RiAddLine size={24} />
             <CardTitle>Create action</CardTitle>
             <CardDescription>Create from scratch</CardDescription>
           </CardHeader>

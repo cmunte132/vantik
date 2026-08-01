@@ -1,6 +1,6 @@
+import { RiAddLine } from '@remixicon/react';
 import { CyclesModeEnum } from '@vantikhq/types';
 import { Button } from '@vantikhq/ui/components/button';
-import { AddLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -45,7 +45,7 @@ const CyclesView = observer(() => {
                   className="gap-1"
                   onClick={() => setNewCycleOpen(true)}
                 >
-                  <AddLine size={14} />
+                  <RiAddLine size={14} />
                   New cycle
                 </Button>
               )}

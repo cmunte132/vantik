@@ -1,6 +1,6 @@
+import { RiCloseLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Input } from '@vantikhq/ui/components/input';
-import { CrossLine } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 /**
@@ -66,7 +66,7 @@ export function InlineCreate({
       </Button>
 
       <Button variant="ghost" size="sm" onClick={onClose} aria-label="Cancel">
-        <CrossLine size={14} />
+        <RiCloseLine size={14} />
       </Button>
     </div>
   );

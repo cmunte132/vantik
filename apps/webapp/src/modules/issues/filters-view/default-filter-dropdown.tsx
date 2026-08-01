@@ -1,16 +1,18 @@
+import {
+  RiAccountCircleLine,
+  RiBox3Line,
+  RiCodeSSlashLine,
+  RiFocus3Line,
+  RiPriceTag3Line,
+  RiRefreshLine,
+} from '@remixicon/react';
 import { CommandGroup, CommandItem } from '@vantikhq/ui/components/command';
 import { Separator } from '@vantikhq/ui/components/separator';
 import {
-  AssigneeLine,
   BlockedFill,
   BlocksFill,
-  Code,
-  Cycle,
-  FocusLine,
-  LabelLine,
   ParentIssueLine,
   PriorityHigh,
-  Project,
   SubIssue,
   UnscopedLine,
 } from '@vantikhq/ui/icons';
@@ -40,7 +42,7 @@ export const DefaultFilterDropdown = observer(
           className="flex items-center"
           onSelect={onSelect}
         >
-          <AssigneeLine size={16} className="mr-2" />
+          <RiAccountCircleLine size={16} className="mr-2" />
           Assignee
         </CommandItem>
         <CommandItem
@@ -49,7 +51,7 @@ export const DefaultFilterDropdown = observer(
           className="flex items-center"
           onSelect={onSelect}
         >
-          <LabelLine size={16} className="mr-2" />
+          <RiPriceTag3Line size={16} className="mr-2" />
           Label
         </CommandItem>
         <CommandItem
@@ -67,7 +69,7 @@ export const DefaultFilterDropdown = observer(
           className="flex items-center"
           onSelect={onSelect}
         >
-          <Cycle size={16} className="mr-2" />
+          <RiRefreshLine size={16} className="mr-2" />
           Cycle
         </CommandItem>
         {!project && (
@@ -77,7 +79,7 @@ export const DefaultFilterDropdown = observer(
             className="flex items-center"
             onSelect={onSelect}
           >
-            <Project size={16} className="mr-2" />
+            <RiBox3Line size={16} className="mr-2" />
             Project
           </CommandItem>
         )}
@@ -94,7 +96,7 @@ export const DefaultFilterDropdown = observer(
           className="flex items-center"
           onSelect={onSelect}
         >
-          <Project size={16} className="mr-2" />
+          <RiBox3Line size={16} className="mr-2" />
           Product
         </CommandItem>
         <CommandItem
@@ -103,7 +105,7 @@ export const DefaultFilterDropdown = observer(
           className="flex items-center"
           onSelect={onSelect}
         >
-          <Code size={16} className="mr-2" />
+          <RiCodeSSlashLine size={16} className="mr-2" />
           Module
         </CommandItem>
         <CommandItem
@@ -112,7 +114,7 @@ export const DefaultFilterDropdown = observer(
           className="flex items-center"
           onSelect={onSelect}
         >
-          <FocusLine size={16} className="mr-2" />
+          <RiFocus3Line size={16} className="mr-2" />
           Capability
         </CommandItem>
 

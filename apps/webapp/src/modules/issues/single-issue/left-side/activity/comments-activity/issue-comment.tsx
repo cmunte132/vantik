@@ -1,3 +1,4 @@
+import { RiSendPlaneLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Editor,
@@ -5,7 +6,6 @@ import {
   suggestionItems,
 } from '@vantikhq/ui/components/editor/index';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { SendLine } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import { getTiptapJSON } from 'common';
@@ -83,7 +83,7 @@ export function IssueComment() {
           <div className="absolute right-1 bottom-1 flex items-center gap-1">
             <FileUpload withPosition={false} />
             <Button variant="ghost" type="submit" onClick={onSubmit}>
-              <SendLine size={20} />
+              <RiSendPlaneLine size={20} />
             </Button>
           </div>
           <EditorExtensions suggestionItems={suggestionItems} />

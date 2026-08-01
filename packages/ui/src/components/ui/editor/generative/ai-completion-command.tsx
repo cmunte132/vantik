@@ -1,4 +1,8 @@
-import { Check, TextQuote, TrashIcon } from 'lucide-react';
+import {
+  RiCheckLine,
+  RiDeleteBinLine,
+  RiDoubleQuotesL,
+} from '@remixicon/react';
 
 import {
   CommandGroup,
@@ -38,7 +42,7 @@ const AICompletionCommands = ({
               .run();
           }}
         >
-          <Check className="h-4 w-4 text-muted-foreground" />
+          <RiCheckLine className="h-4 w-4 text-muted-foreground" />
           Replace selection
         </CommandItem>
         <CommandItem
@@ -53,7 +57,7 @@ const AICompletionCommands = ({
               .run();
           }}
         >
-          <TextQuote className="h-4 w-4 text-muted-foreground" />
+          <RiDoubleQuotesL className="h-4 w-4 text-muted-foreground" />
           Insert below
         </CommandItem>
       </CommandGroup>
@@ -61,7 +65,7 @@ const AICompletionCommands = ({
 
       <CommandGroup>
         <CommandItem onSelect={onDiscard} value="thrash" className="gap-2 px-4">
-          <TrashIcon className="h-4 w-4 text-muted-foreground" />
+          <RiDeleteBinLine className="h-4 w-4 text-muted-foreground" />
           Discard
         </CommandItem>
       </CommandGroup>

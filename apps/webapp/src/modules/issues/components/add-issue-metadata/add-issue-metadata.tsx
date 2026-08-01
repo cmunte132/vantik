@@ -1,3 +1,4 @@
+import { RiAddLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Command, CommandInput } from '@vantikhq/ui/components/command';
 import {
@@ -5,7 +6,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { AddLine } from '@vantikhq/ui/icons';
 import * as React from 'react';
 import { useWatch, type UseFormReturn } from 'react-hook-form';
 
@@ -73,7 +73,7 @@ export function AddIssueMetadata({
     >
       <PopoverTrigger asChild>
         <Button variant="secondary" size="sm" className="py-3">
-          <AddLine size={16} />
+          <RiAddLine size={16} />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start">

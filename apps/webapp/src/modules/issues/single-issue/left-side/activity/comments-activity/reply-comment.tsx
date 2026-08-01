@@ -1,3 +1,4 @@
+import { RiSendPlaneLine } from '@remixicon/react';
 import { AvatarText } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
 import {
@@ -6,7 +7,6 @@ import {
   suggestionItems,
 } from '@vantikhq/ui/components/editor/index';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { SendLine } from '@vantikhq/ui/icons';
 import * as React from 'react';
 
 import { getTiptapJSON } from 'common';
@@ -95,7 +95,7 @@ export function ReplyComment({ issueCommentId }: ReplyCommentProps) {
               size="sm"
               onClick={onSubmit}
             >
-              <SendLine size={20} />
+              <RiSendPlaneLine size={20} />
             </Button>
           </div>
           <EditorExtensions suggestionItems={suggestionItems} />

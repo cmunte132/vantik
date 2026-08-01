@@ -1,10 +1,11 @@
+import { RiAddLine, RiFileTextLine } from '@remixicon/react';
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
 } from '@vantikhq/ui/components/breadcrumb';
 import { Button } from '@vantikhq/ui/components/button';
-import { AddLine, DocumentLine, IssuesLine } from '@vantikhq/ui/icons';
+import { IssuesLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import Link from 'next/link';
 import React from 'react';
@@ -39,7 +40,7 @@ export const Header = observer(
               size="sm"
               onClick={() => setNewProjectDialog(true)}
             >
-              <AddLine size={14} />
+              <RiAddLine size={14} />
               Create project
             </Button>
           </div>
@@ -77,7 +78,7 @@ export const Header = observer(
               isActive={view === 'overview'}
               onClick={() => setView('overview')}
             >
-              <DocumentLine />
+              <RiFileTextLine size={18} />
               Overview
             </Button>
             <Button

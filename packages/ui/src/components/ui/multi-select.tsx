@@ -1,10 +1,8 @@
 'use client';
 
+import { RiCheckLine, RiCloseLine } from '@remixicon/react';
 import { Command as CommandPrimitive } from 'cmdk';
-import { CheckIcon } from 'lucide-react';
 import * as React from 'react';
-
-import { Close } from '@vantikhq/ui/icons';
 
 import { Badge } from './badge';
 import { Command, CommandGroup, CommandItem, CommandList } from './command';
@@ -97,7 +95,10 @@ export function MultiSelect({
                       }}
                       onClick={() => handleUnselect(option)}
                     >
-                      <Close className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                      <RiCloseLine
+                        className="h-3 w-3 text-muted-foreground hover:text-foreground"
+                        size={16}
+                      />
                     </button>
                   </Badge>
                 );
@@ -136,7 +137,7 @@ export function MultiSelect({
                       >
                         <div className="h-4 w-4 flex gap-1 items-center">
                           {value.includes(option.value) && (
-                            <CheckIcon className="h-4 w-4" />
+                            <RiCheckLine className="h-4 w-4" />
                           )}
                         </div>
                         {option.label}

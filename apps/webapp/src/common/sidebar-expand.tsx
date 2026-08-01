@@ -1,5 +1,5 @@
+import { RiSideBarLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { SidebarLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 
 import { useContextStore } from 'store/global-context-provider';
@@ -16,7 +16,7 @@ export const SidebarExpand = observer(() => {
           applicationStore.updateSideBar(!applicationStore.sidebarCollapsed);
         }}
       >
-        <SidebarLine size={20} />
+        <RiSideBarLine size={20} />
       </Button>
     </>
   );

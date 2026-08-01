@@ -1,3 +1,4 @@
+import { RiDeleteBinLine, RiMoreLine } from '@remixicon/react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +17,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
-import { DeleteLine, MoreLine } from '@vantikhq/ui/icons';
 import { useRouter } from 'next/router';
 import React from 'react';
 
@@ -43,14 +43,14 @@ export function ProjectDetailsDropdown() {
               e.preventDefault();
             }}
           >
-            <MoreLine size={16} />
+            <RiMoreLine size={16} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
             <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
               <div className="flex items-center gap-1">
-                <DeleteLine size={16} /> Remove
+                <RiDeleteBinLine size={16} /> Remove
               </div>
             </DropdownMenuItem>
           </DropdownMenuGroup>

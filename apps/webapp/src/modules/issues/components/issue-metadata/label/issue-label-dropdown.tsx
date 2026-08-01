@@ -1,3 +1,4 @@
+import { RiAddLine, RiPriceTag3Line } from '@remixicon/react';
 import { Badge, BadgeColor } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import { Command, CommandInput } from '@vantikhq/ui/components/command';
@@ -7,7 +8,6 @@ import {
   PopoverPortal,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { AddLine, LabelLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -71,7 +71,7 @@ export const IssueLabelDropdown = observer(
                 )}
               >
                 <div className="flex items-center">
-                  <AddLine size={14} className="mr-1" />
+                  <RiAddLine size={14} className="mr-1" />
                 </div>
               </Button>
             ) : (
@@ -111,7 +111,10 @@ export const IssueLabelDropdown = observer(
         const label = labels.find((label: LabelType) => label.id === value[0]);
         return (
           <>
-            <LabelLine size={20} className="text-muted-foreground mcr-2" />
+            <RiPriceTag3Line
+              size={20}
+              className="text-muted-foreground mcr-2"
+            />
             {label?.name}
           </>
         );
@@ -120,7 +123,7 @@ export const IssueLabelDropdown = observer(
       if (value.length > 1) {
         return (
           <>
-            <LabelLine size={20} className="text-muted-foreground mr-2" />
+            <RiPriceTag3Line size={20} className="text-muted-foreground mr-2" />
             {value.length} Labels
           </>
         );
@@ -128,7 +131,7 @@ export const IssueLabelDropdown = observer(
 
       return (
         <div className="flex items-center text-muted-foreground ">
-          <AddLine size={16} className="mr-2" />
+          <RiAddLine size={16} className="mr-2" />
           Add Label
         </div>
       );

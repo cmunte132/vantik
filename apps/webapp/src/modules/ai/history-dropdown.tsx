@@ -1,3 +1,4 @@
+import { RiChat1Line, RiHistoryLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Command,
@@ -12,7 +13,6 @@ import {
 } from '@vantikhq/ui/components/popover';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { sort } from 'fast-sort';
-import { HistoryIcon, MessageSquare } from 'lucide-react';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
@@ -40,7 +40,7 @@ export const AIHistoryDropdown = observer(() => {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="ghost">
-            <HistoryIcon size={16} />
+            <RiHistoryLine size={16} />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-72 p-0" align="end">
@@ -60,7 +60,7 @@ export const AIHistoryDropdown = observer(() => {
                     }}
                   >
                     <div className="flex shrink min-w-[0px] w-full gap-1 items-center">
-                      <MessageSquare size={16} className="shrink-0" />
+                      <RiChat1Line size={16} className="shrink-0" />
                       <div className="truncate">{conversation.title}</div>
                     </div>
                   </CommandItem>

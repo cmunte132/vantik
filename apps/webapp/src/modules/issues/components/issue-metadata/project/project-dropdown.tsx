@@ -1,3 +1,4 @@
+import { RiBox3Line } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Command, CommandInput } from '@vantikhq/ui/components/command';
 import {
@@ -5,7 +6,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { Project } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import * as React from 'react';
 
@@ -63,7 +63,7 @@ export function ProjectDropdown({
               </div>
             ) : (
               <div className="flex items-center justify-center">
-                <Project size={20} className="mr-1 text-muted-foreground" />
+                <RiBox3Line size={20} className="mr-1 text-muted-foreground" />
               </div>
             )}
           </Button>
@@ -83,13 +83,16 @@ export function ProjectDropdown({
         >
           {value ? (
             <div className="inline-flex items-center gap-1 pl-1 min-w-[0px]">
-              <Project className="h-5 w-5 text-[9px] mr-2 shrink-0" />
+              <RiBox3Line
+                className="h-5 w-5 text-[9px] mr-2 shrink-0"
+                size={18}
+              />
 
               <div className="truncate"> {getProject(value).name}</div>
             </div>
           ) : (
             <div className="text-muted-foreground flex">
-              <Project size={20} className="mr-2" />
+              <RiBox3Line size={20} className="mr-2" />
               No Project
             </div>
           )}
@@ -108,13 +111,13 @@ export function ProjectDropdown({
       >
         {value ? (
           <div className="flex items-center gap-1 shrink min-w-[0px]">
-            <Project className="w-5 h-5 text-[9px] shrink-0" />
+            <RiBox3Line className="w-5 h-5 text-[9px] shrink-0" size={18} />
 
             <div className="truncate"> {getProject(value).name}</div>
           </div>
         ) : (
           <>
-            <Project size={20} className="mr-1" /> No Project
+            <RiBox3Line size={20} className="mr-1" /> No Project
           </>
         )}
       </Button>

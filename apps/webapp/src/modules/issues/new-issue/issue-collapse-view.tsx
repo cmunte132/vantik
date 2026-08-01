@@ -1,6 +1,7 @@
+import { RiCornerDownRightLine, RiDeleteBinLine } from '@remixicon/react';
 import { AvatarText } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
-import { ArrowDownRight, DeleteLine, IssuesLine } from '@vantikhq/ui/icons';
+import { IssuesLine } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
@@ -71,7 +72,7 @@ export const IssueCollapseView = observer(
           <p>
             {isSubIssue ? (
               <div className="flex gap-2 items-center">
-                <ArrowDownRight size={16} />
+                <RiCornerDownRightLine size={16} />
                 Sub-issue
               </div>
             ) : (
@@ -120,7 +121,7 @@ export const IssueCollapseView = observer(
                 subIssueOperations.remove(index);
               }}
             >
-              <DeleteLine size={16} />
+              <RiDeleteBinLine size={16} />
             </Button>
           </div>
         )}

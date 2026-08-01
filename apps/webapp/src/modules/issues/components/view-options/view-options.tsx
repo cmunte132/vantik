@@ -1,10 +1,10 @@
+import { RiSettings3Line } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
-import { SettingsLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
@@ -27,7 +27,7 @@ export const ViewOptions = observer(() => {
         <TooltipWrapper tooltip="Display Options">
           <PopoverTrigger asChild>
             <Button variant="ghost">
-              <SettingsLine size={20} />
+              <RiSettings3Line size={20} />
             </Button>
           </PopoverTrigger>
         </TooltipWrapper>

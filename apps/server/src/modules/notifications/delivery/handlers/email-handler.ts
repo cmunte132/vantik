@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
 import {
   ActionEventPayload,
   ActionTypesEnum,
@@ -16,8 +16,6 @@ import {
   getNotificationData,
   getUnassingedNotification,
 } from '../utils';
-
-const prisma = new PrismaClient();
 
 class MailService {
   private transporter: nodemailer.Transporter;
@@ -71,7 +69,11 @@ class MailService {
 
 const mailService = new MailService();
 
-export const emailHandler = async (payload: ActionEventPayload) => {
+/** Takes the server's Prisma client, for the reason `vantik-handler` gives. */
+export const emailHandler = async (
+  prisma: PrismaClient,
+  payload: ActionEventPayload,
+) => {
   await mailService.verify();
   switch (payload.event) {
     case ActionTypesEnum.ON_CREATE:
@@ -145,6 +147,7 @@ export const emailHandler = async (payload: ActionEventPayload) => {
       await Promise.all(
         users.map(async (user) => {
           const emailContent = await getEmailContent(
+            prisma,
             type,
             actionData,
             user.id,
@@ -171,6 +174,7 @@ export const emailHandler = async (payload: ActionEventPayload) => {
 };
 
 async function getEmailContent(
+  prisma: PrismaClient,
   type: NotificationActionType,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   actionData: Record<string, any>,

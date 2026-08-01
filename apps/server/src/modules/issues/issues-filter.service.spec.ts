@@ -49,7 +49,17 @@ function buildService(overrides: Record<string, unknown> = {}) {
     ...overrides,
   } as unknown as PrismaService;
 
-  const service = new IssuesService(prisma, null, null, null, null, null, null, null);
+  const service = new IssuesService(
+    prisma,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+  );
 
   return { service, prisma };
 }

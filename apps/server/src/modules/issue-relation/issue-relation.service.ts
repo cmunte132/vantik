@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Injectable } from '@nestjs/common';
-import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionTypesEnum,
   CreateIssueRelationDto,
@@ -12,7 +11,7 @@ import {
   NotificationEventFrom,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
-import { notificationHandler } from 'trigger/notification';
+import { NotificationsQueue } from 'modules/notifications/notifications.queue';
 
 import {
   IssueRelationWithIssue,
@@ -21,7 +20,10 @@ import {
 
 @Injectable()
 export default class IssueRelationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsQueue: NotificationsQueue,
+  ) {}
 
   async createIssueRelation(
     userId: string,
@@ -82,7 +84,7 @@ export default class IssueRelationService {
           ? issueRelationData.relatedIssueId
           : inverseRelationData.relatedIssueId;
 
-      tasks.trigger<typeof notificationHandler>('notification', {
+      this.notificationsQueue.deliver({
         event: ActionTypesEnum.ON_CREATE,
         notificationType: NotificationEventFrom.IssueBlocks,
         notificationData: {
@@ -134,7 +136,7 @@ export default class IssueRelationService {
           ? issueRelationData.issueId
           : inverseRelationData.issueId;
 
-      tasks.trigger<typeof notificationHandler>('notification', {
+      this.notificationsQueue.deliver({
         event: ActionTypesEnum.ON_DELETE,
         notificationType: NotificationEventFrom.DeleteByEvent,
         notificationData: {

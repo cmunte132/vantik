@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionTypesEnum,
   CreateIssueCommentDto,
@@ -11,7 +10,7 @@ import {
   UpdateIssueCommentDto,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
-import { notificationHandler } from 'trigger/notification';
+import { NotificationsQueue } from 'modules/notifications/notifications.queue';
 
 import {
   convertMarkdownToTiptapJson,
@@ -34,6 +33,7 @@ export default class IssueCommentsService {
     private prisma: PrismaService,
     private issuesService: IssuesService,
     private issuesQueue: IssuesQueue,
+    private notificationsQueue: NotificationsQueue,
   ) {}
 
   async getIssueComment(issueCommentParams: IssueCommentRequestParamsDto) {
@@ -113,7 +113,7 @@ export default class IssueCommentsService {
       subscribersToAdd,
     );
 
-    tasks.trigger<typeof notificationHandler>('notification', {
+    this.notificationsQueue.deliver({
       event: ActionTypesEnum.ON_CREATE,
       notificationType: NotificationEventFrom.NewComment,
       notificationData: {

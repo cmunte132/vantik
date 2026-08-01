@@ -1,6 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionTypesEnum,
   CreateIssueDto,
@@ -16,11 +15,11 @@ import {
   WorkflowCategory,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
-import { notificationHandler } from 'trigger/notification';
 
 import { convertMarkdownToTiptapJson } from 'common/utils/tiptap.utils';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
+import { NotificationsQueue } from 'modules/notifications/notifications.queue';
 
 import { getIssueTitle } from './issues-ai.utils';
 import { filterKeyReplacers, SubscribeType } from './issues.interface';
@@ -208,12 +207,13 @@ export async function getWorkspace(prisma: PrismaService, teamId: string) {
 export async function handlePostCreateIssue(
   prisma: PrismaService,
   issuesQueue: IssuesQueue,
+  notificationsQueue: NotificationsQueue,
   issue: Issue,
   linkMetaData: Record<string, string>,
 ) {
   // Add the issue to the notification queue if there are subscribers
   if (issue.subscriberIds) {
-    tasks.trigger<typeof notificationHandler>('notification', {
+    notificationsQueue.deliver({
       event: ActionTypesEnum.ON_CREATE,
       notificationType: NotificationEventFrom.IssueCreated,
       notificationData: {

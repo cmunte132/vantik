@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { Prisma, Issue as PrismaIssue } from '@prisma/client';
-import { tasks } from '@trigger.dev/sdk/v3';
 import {
   ActionTypesEnum,
   CreateIssueDto,
@@ -26,7 +25,7 @@ import {
 } from '@vantikhq/types';
 import { createObjectCsvStringifier } from 'csv-writer';
 import { PrismaService } from 'nestjs-prisma';
-import { notificationHandler } from 'trigger/notification';
+import { NotificationsQueue } from 'modules/notifications/notifications.queue';
 
 import { visibleTeamIds } from 'common/team-access';
 import {
@@ -66,6 +65,7 @@ export default class IssuesService {
     private prisma: PrismaService,
     private issueHistoryService: IssuesHistoryService,
     private issuesQueue: IssuesQueue,
+    private notificationsQueue: NotificationsQueue,
     private issueRelationService: IssueRelationService,
     private aiRequestsService: AIRequestsService,
     private linkedIssueService: LinkedIssueService,
@@ -299,6 +299,7 @@ export default class IssuesService {
             handlePostCreateIssue(
               this.prisma,
               this.issuesQueue,
+              this.notificationsQueue,
               issue,
               sourceMetadata,
             );
@@ -500,7 +501,7 @@ export default class IssuesService {
 
     // Add the updated issue to the notifications queue if it has subscribers
     if (updatedIssue.subscriberIds) {
-      tasks.trigger<typeof notificationHandler>('notification', {
+      this.notificationsQueue.deliver({
         event: ActionTypesEnum.ON_UPDATE,
         notificationType: NotificationEventFrom.IssueUpdated,
         notificationData: {
@@ -590,7 +591,7 @@ export default class IssuesService {
     // Delete the issue history associated with the deleted issue
     await this.deleteIssueHistory(deleteIssue.id);
 
-    tasks.trigger<typeof notificationHandler>('notification', {
+    this.notificationsQueue.deliver({
       event: ActionTypesEnum.ON_DELETE,
       notificationType: NotificationEventFrom.DeleteIssue,
       notificationData: {

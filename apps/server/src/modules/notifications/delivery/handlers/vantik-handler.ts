@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
 import {
   ActionEventPayload,
   ActionTypesEnum,
@@ -10,9 +10,17 @@ import {
 
 import { getNotificationCreateData } from '../utils';
 
-const prisma = new PrismaClient();
-
-export const vantikHandler = async (payload: ActionEventPayload) => {
+/**
+ * Takes the server's Prisma client rather than opening its own.
+ *
+ * This ran under trigger.dev, in a process that had no Nest container to ask,
+ * so it built a `new PrismaClient()` at module scope. Inside the server that
+ * would be a second connection pool alongside the injected one, for no gain.
+ */
+export const vantikHandler = async (
+  prisma: PrismaClient,
+  payload: ActionEventPayload,
+) => {
   const {
     notificationData: {
       issueId,

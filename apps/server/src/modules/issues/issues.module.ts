@@ -8,6 +8,7 @@ import AIRequestsService from 'modules/ai-requests/ai-requests.services';
 import { IssueHistoryModule } from 'modules/issue-history/issue-history.module';
 import IssueRelationService from 'modules/issue-relation/issue-relation.service';
 import { LinkedIssueModule } from 'modules/linked-issue/linked-issue.module';
+import { NotificationsModule } from 'modules/notifications/notifications.module';
 import { SupportModule } from 'modules/support/support.module';
 import { UsersService } from 'modules/users/users.service';
 import { VectorModule } from 'modules/vector/vector.module';
@@ -29,6 +30,9 @@ import IssuesService from './issues.service';
     VectorModule,
     BullModule.registerQueue({ name: 'issues' }),
     SupportModule,
+    // Also covers the IssueRelationService provided below, which notifies on a
+    // blocking relation and so needs the same queue.
+    NotificationsModule,
   ],
   controllers: [IssuesController, IssuesAIController],
   providers: [

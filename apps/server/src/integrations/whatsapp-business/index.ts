@@ -2,12 +2,16 @@ import {
   IntegrationEventPayload,
   IntegrationPayloadEventType,
 } from '@vantikhq/types';
+import { type PluginContext } from 'plugins/plugin.interface';
 
 import { integrationCreate } from './account-create';
 import { spec } from './spec';
 import { webhookResponse } from './webhook-response';
 
-export default async function run(eventPayload: IntegrationEventPayload) {
+export default async function run(
+  eventPayload: IntegrationEventPayload,
+  ctx: PluginContext,
+) {
   switch (eventPayload.event) {
     /**
      * This is used to identify to which integration account the webhook belongs to
@@ -24,6 +28,7 @@ export default async function run(eventPayload: IntegrationEventPayload) {
     // Used to save settings data
     case IntegrationPayloadEventType.CREATE:
       return await integrationCreate(
+        ctx,
         eventPayload.userId,
         eventPayload.workspaceId,
         eventPayload.data,

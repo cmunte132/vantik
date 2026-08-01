@@ -1,15 +1,11 @@
-import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
+import { type PluginContext } from 'plugins/plugin.interface';
 
-const prisma = new PrismaClient();
-export const getToken = async (integrationAccountId: string) => {
-  const integrationAccount = await prisma.integrationAccount.findUnique({
-    where: {
-      id: integrationAccountId,
-      deleted: null,
-    },
-    include: { integrationDefinition: true },
-  });
+export const getToken = async (
+  ctx: PluginContext,
+  integrationAccountId: string,
+) => {
+  const integrationAccount = await ctx.account.get(integrationAccountId);
 
   if (!integrationAccount) {
     return null;

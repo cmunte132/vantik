@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { IntegrationAccount, IntegrationDefinition } from '@vantikhq/types';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 
 import { githubHeaders } from './types';
+import { type PluginContext } from 'plugins/plugin.interface';
 
 export function getGithubHeaders(token: string) {
   return {
@@ -34,7 +34,7 @@ export async function getBotJWTToken(
 }
 
 export async function getAccessToken(
-  prisma: PrismaClient,
+  ctx: PluginContext,
   integrationAccount: IntegrationAccount,
 ) {
   // Get the integration configuration as a Record<string, string>
@@ -74,9 +74,8 @@ export async function getAccessToken(
     config.refresh_expires_in = (currentDate + refreshExpiresIn).toString();
 
     // Update the integration account in the database with the new configuration
-    await prisma.integrationAccount.update({
-      where: { id: integrationAccount.id },
-      data: { integrationConfiguration: config },
+    await ctx.account.update(integrationAccount.id, {
+      integrationConfiguration: config,
     });
   }
 

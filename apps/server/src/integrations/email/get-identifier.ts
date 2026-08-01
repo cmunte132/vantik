@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { type PluginContext } from 'plugins/plugin.interface';
 
-const prisma = new PrismaClient();
 export const getIdentifier = async (
+  ctx: PluginContext,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any,
 ) => {
@@ -18,12 +18,10 @@ export const getIdentifier = async (
   }
 
   // Update the integration account with the new configuration in the database
-  const integrationAccount = await prisma.integrationAccount.findFirst({
-    where: {
-      workspace: { slug: workspaceSlug },
-      integrationDefinition: { slug: 'email' },
-    },
-  });
+  const integrationAccount = await ctx.account.byWorkspaceSlug(
+    'email',
+    workspaceSlug,
+  );
 
   if (integrationAccount) {
     return integrationAccount.accountId;

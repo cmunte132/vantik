@@ -1,18 +1,14 @@
-import { PrismaClient } from '@prisma/client';
+import { type PluginContext } from 'plugins/plugin.interface';
 
 import { getAccessToken, getBotAccessToken } from './utils';
 
-const prisma = new PrismaClient();
-export const getToken = async (integrationAccountId: string) => {
-  const integrationAccount = await prisma.integrationAccount.findUnique({
-    where: {
-      id: integrationAccountId,
-      deleted: null,
-    },
-    include: { integrationDefinition: true },
-  });
+export const getToken = async (
+  ctx: PluginContext,
+  integrationAccountId: string,
+) => {
+  const integrationAccount = await ctx.account.get(integrationAccountId);
 
-  const token = await getAccessToken(prisma, integrationAccount);
+  const token = await getAccessToken(ctx, integrationAccount);
   const botToken = await getBotAccessToken(integrationAccount);
 
   return { token, botToken };

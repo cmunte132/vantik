@@ -4,8 +4,8 @@ import { homedir } from 'os';
 import { basename, isAbsolute, join, resolve, sep } from 'path';
 
 import { BadRequestException } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
 import { createIntegrationAccount } from 'integrations/utils';
+import { type PluginContext } from 'plugins/plugin.interface';
 
 export const LOCAL_REPO_SLUG = 'local-repo';
 
@@ -38,16 +38,16 @@ interface AccountSettings {
  * This function returns the local repositories of one workspace.
  */
 export async function listRepositories(
-  prisma: PrismaClient,
+  ctx: PluginContext,
   workspaceId: string,
 ): Promise<LocalRepository[]> {
-  const definition = await findDefinition(prisma);
+  const definition = await findDefinition(ctx);
 
   if (!definition) {
     return [];
   }
 
-  const account = await findAccount(prisma, workspaceId, definition.id);
+  const account = await findAccount(ctx, workspaceId);
 
   return account ? readRepositories(account.settings) : [];
 }
@@ -60,17 +60,13 @@ export async function listRepositories(
  * database.
  */
 export async function addRepository(
-  prisma: PrismaClient,
+  ctx: PluginContext,
   parameters: { workspaceId: string; userId: string; path: string },
 ): Promise<LocalRepository> {
-  const definition = await requireDefinition(prisma);
+  const definition = await requireDefinition(ctx);
   const path = await inspectPath(parameters.path);
 
-  const account = await findAccount(
-    prisma,
-    parameters.workspaceId,
-    definition.id,
-  );
+  const account = await findAccount(ctx, parameters.workspaceId);
   const repositories = readRepositories(account?.settings);
 
   const existing = repositories.find((repository) => repository.path === path);
@@ -88,7 +84,7 @@ export async function addRepository(
     addedAt: new Date().toISOString(),
   };
 
-  await writeRepositories(prisma, {
+  await writeRepositories(ctx, {
     workspaceId: parameters.workspaceId,
     userId: parameters.userId,
     definitionId: definition.id,
@@ -106,15 +102,11 @@ export async function addRepository(
  * workspace no longer offers.
  */
 export async function removeRepository(
-  prisma: PrismaClient,
+  ctx: PluginContext,
   parameters: { workspaceId: string; userId: string; repositoryId: string },
 ): Promise<LocalRepository> {
-  const definition = await requireDefinition(prisma);
-  const account = await findAccount(
-    prisma,
-    parameters.workspaceId,
-    definition.id,
-  );
+  const definition = await requireDefinition(ctx);
+  const account = await findAccount(ctx, parameters.workspaceId);
   const repositories = readRepositories(account?.settings);
 
   const repository = repositories.find(
@@ -127,7 +119,7 @@ export async function removeRepository(
     );
   }
 
-  await writeRepositories(prisma, {
+  await writeRepositories(ctx, {
     workspaceId: parameters.workspaceId,
     userId: parameters.userId,
     definitionId: definition.id,
@@ -146,11 +138,11 @@ export async function removeRepository(
  * Anything that needs the checkout reads the path here.
  */
 export async function resolveRepositoryPath(
-  prisma: PrismaClient,
+  ctx: PluginContext,
   workspaceId: string,
   repositoryId: string,
 ): Promise<string | null> {
-  const repositories = await listRepositories(prisma, workspaceId);
+  const repositories = await listRepositories(ctx, workspaceId);
   const repository = repositories.find(
     (candidate) => candidate.id === repositoryId,
   );
@@ -257,14 +249,12 @@ async function statOrNull(path: string) {
   }
 }
 
-async function findDefinition(prisma: PrismaClient) {
-  return await prisma.integrationDefinitionV2.findFirst({
-    where: { slug: LOCAL_REPO_SLUG, deleted: null },
-  });
+async function findDefinition(ctx: PluginContext) {
+  return await ctx.definitions.get(LOCAL_REPO_SLUG);
 }
 
-async function requireDefinition(prisma: PrismaClient) {
-  const definition = await findDefinition(prisma);
+async function requireDefinition(ctx: PluginContext) {
+  const definition = await findDefinition(ctx);
 
   if (!definition) {
     throw new BadRequestException(
@@ -275,18 +265,8 @@ async function requireDefinition(prisma: PrismaClient) {
   return definition;
 }
 
-async function findAccount(
-  prisma: PrismaClient,
-  workspaceId: string,
-  definitionId: string,
-) {
-  return await prisma.integrationAccount.findFirst({
-    where: {
-      workspaceId,
-      integrationDefinitionId: definitionId,
-      deleted: null,
-    },
-  });
+async function findAccount(ctx: PluginContext, workspaceId: string) {
+  return await ctx.account.byDefinition(LOCAL_REPO_SLUG, workspaceId);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -305,7 +285,7 @@ function readRepositories(settings: any): LocalRepository[] {
  * an empty account never exists.
  */
 async function writeRepositories(
-  prisma: PrismaClient,
+  ctx: PluginContext,
   parameters: {
     workspaceId: string;
     userId: string;
@@ -313,7 +293,7 @@ async function writeRepositories(
     repositories: LocalRepository[];
   },
 ) {
-  await createIntegrationAccount(prisma, {
+  await createIntegrationAccount(ctx, {
     userId: parameters.userId,
     accountId: parameters.workspaceId,
     workspaceId: parameters.workspaceId,

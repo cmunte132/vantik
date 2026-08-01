@@ -2,9 +2,9 @@ import { readdir } from 'fs/promises';
 import { join } from 'path';
 
 import { BadRequestException } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
 
 import { resolveRepositoryPath } from './repositories';
+import { type PluginContext } from 'plugins/plugin.interface';
 
 /**
  * One directory in a repository that a module can claim.
@@ -85,11 +85,11 @@ const LIMIT = 300;
  * directory that another workspace added, and nobody can name a path directly.
  */
 export async function listRepositoryFolders(
-  prisma: PrismaClient,
+  ctx: PluginContext,
   workspaceId: string,
   repositoryId: string,
 ): Promise<RepositoryFolder[]> {
-  const root = await resolveRepositoryPath(prisma, workspaceId, repositoryId);
+  const root = await resolveRepositoryPath(ctx, workspaceId, repositoryId);
 
   if (!root) {
     throw new BadRequestException(

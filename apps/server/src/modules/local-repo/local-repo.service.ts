@@ -14,6 +14,8 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { resolveAdminWorkspaceId } from 'common/workspace-access';
 
+import { PluginContextFactory } from 'plugins/plugin-context.factory';
+
 /**
  * The repositories that a workspace has on the disk of this machine.
  *
@@ -29,10 +31,24 @@ import { resolveAdminWorkspaceId } from 'common/workspace-access';
  */
 @Injectable()
 export class LocalRepoService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private contextFactory: PluginContextFactory,
+  ) {}
+
+  /**
+   * The local-repo functions take a plugin context rather than a client.
+   *
+   * This service calls them directly rather than through `loadIntegration`,
+   * because a person asking for their repositories is a request and not an
+   * event, so it builds the context the same way the loader would.
+   */
+  private ctx(workspaceId: string, userId?: string) {
+    return this.contextFactory.build('local-repo', workspaceId, userId);
+  }
 
   async list(workspaceId: string): Promise<LocalRepository[]> {
-    return await listRepositories(this.prisma, workspaceId);
+    return await listRepositories(this.ctx(workspaceId), workspaceId);
   }
 
   async add(
@@ -50,7 +66,7 @@ export class LocalRepoService {
       workspaceId,
     );
 
-    return await addRepository(this.prisma, {
+    return await addRepository(this.ctx(target, userId), {
       workspaceId: target,
       userId,
       path,
@@ -68,7 +84,7 @@ export class LocalRepoService {
       workspaceId,
     );
 
-    return await removeRepository(this.prisma, {
+    return await removeRepository(this.ctx(target, userId), {
       workspaceId: target,
       userId,
       repositoryId,
@@ -83,7 +99,11 @@ export class LocalRepoService {
     workspaceId: string,
     repositoryId: string,
   ): Promise<RepositoryFolder[]> {
-    return await listRepositoryFolders(this.prisma, workspaceId, repositoryId);
+    return await listRepositoryFolders(
+      this.ctx(workspaceId),
+      workspaceId,
+      repositoryId,
+    );
   }
 
   /**
@@ -96,6 +116,10 @@ export class LocalRepoService {
     workspaceId: string,
     repositoryId: string,
   ): Promise<string | null> {
-    return await resolveRepositoryPath(this.prisma, workspaceId, repositoryId);
+    return await resolveRepositoryPath(
+      this.ctx(workspaceId),
+      workspaceId,
+      repositoryId,
+    );
   }
 }

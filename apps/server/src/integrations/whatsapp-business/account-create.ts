@@ -1,10 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import { createIntegrationAccount } from 'integrations/utils';
-
-const prisma = new PrismaClient();
+import { type PluginContext } from 'plugins/plugin.interface';
 
 export const integrationCreate = async (
+  ctx: PluginContext,
   userId: string,
   workspaceId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,7 +42,7 @@ export const integrationCreate = async (
   );
 
   // Update the integration account with the new configuration in the database
-  const integrationAccount = await createIntegrationAccount(prisma, {
+  const integrationAccount = await createIntegrationAccount(ctx, {
     userId,
     accountId,
     config: integrationConfiguration,

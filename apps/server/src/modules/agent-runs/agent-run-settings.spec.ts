@@ -15,6 +15,7 @@ describe('workspaceAgentDefaults', () => {
         repo: { testCommand: 'pnpm test' },
         model: { provider: 'openrouter', model: 'gemini-3.6-flash' },
         phases: { specify: true, score: false },
+        limits: { maxCycles: 2, maxCostUsd: 12.5 },
       },
     });
 
@@ -23,6 +24,7 @@ describe('workspaceAgentDefaults', () => {
       repo: { testCommand: 'pnpm test' },
       model: { provider: 'openrouter', model: 'gemini-3.6-flash' },
       phases: { specify: true, score: false },
+      limits: { maxCycles: 2, maxCostUsd: 12.5 },
     });
   });
 
@@ -32,12 +34,45 @@ describe('workspaceAgentDefaults', () => {
       repo: {},
       model: {},
       phases: {},
+      limits: {},
     });
     expect(workspaceAgentDefaults({})).toEqual({
       defaultExecutor: null,
       repo: {},
       model: {},
       phases: {},
+      limits: {},
+    });
+  });
+
+  describe('limits', () => {
+    it('drops a ceiling that is not a usable number', () => {
+      // A zero is a run that can never take a pass, and a string is a
+      // comparison against a string. Both surface as a run that stops at once
+      // for a reason nobody would look for in a settings field.
+      const { limits } = workspaceAgentDefaults({
+        agentRuns: {
+          limits: { maxCycles: 0, maxCostUsd: '5', maxDurationMs: -1 },
+        },
+      });
+
+      expect(limits).toEqual({});
+    });
+
+    it('keeps the ceilings that are usable and drops the rest', () => {
+      const { limits } = workspaceAgentDefaults({
+        agentRuns: { limits: { maxCycles: 2, maxCostUsd: null } },
+      });
+
+      expect(limits).toEqual({ maxCycles: 2 });
+    });
+
+    it('ignores a name it does not know', () => {
+      const { limits } = workspaceAgentDefaults({
+        agentRuns: { limits: { maxCycles: 2, maxVibes: 9 } },
+      });
+
+      expect(limits).toEqual({ maxCycles: 2 });
     });
   });
 

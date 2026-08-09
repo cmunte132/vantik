@@ -19,6 +19,7 @@ import { LoggerService } from 'modules/logger/logger.service';
 import {
   agentBoundExecutor,
   workspaceAgentDefaults,
+  type WorkspaceAgentDefaults,
 } from './agent-run-settings';
 import { AGENT_RUN_WORKSPACE_CONCURRENCY } from './agent-runs.interface';
 import { AgentRunsService } from './agent-runs.service';
@@ -105,9 +106,12 @@ export class AgentDelegationService {
     // default underneath, this request's choice on top. Stored on the run
     // rather than resolved again at dispatch, so a later change to the
     // workspace default cannot rewrite what a finished run was asked to do.
-    const config = {
+    const defaults = await this.workspaceDefaults(input.workspaceId);
+
+    const config: AgentRunConfig = {
       ...contextPack.repo,
-      ...(await this.resolveModel(input)),
+      ...this.resolveModel(defaults, input),
+      ...this.resolveCycle(defaults, input),
     };
 
     const run = await this.agentRuns.createRun({
@@ -389,23 +393,29 @@ export class AgentDelegationService {
 
   // --------------------------------------------------------------- resolving
 
+  /** The workspace's agent settings, read once per delegation. */
+  private async workspaceDefaults(workspaceId: string) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { preferences: true },
+    });
+
+    return workspaceAgentDefaults(workspace?.preferences);
+  }
+
   private async resolveExecutor(input: DelegateInput) {
-    const [membership, workspace] = await Promise.all([
+    const [membership, defaults] = await Promise.all([
       this.prisma.usersOnWorkspaces.findFirst({
         where: { userId: input.agentUserId, workspaceId: input.workspaceId },
         select: { settings: true },
       }),
-      this.prisma.workspace.findUnique({
-        where: { id: input.workspaceId },
-        select: { preferences: true },
-      }),
+      this.workspaceDefaults(input.workspaceId),
     ]);
 
     return this.registry.resolve({
       requested: input.executor,
       agentBound: agentBoundExecutor(membership?.settings),
-      workspaceDefault: workspaceAgentDefaults(workspace?.preferences)
-        .defaultExecutor,
+      workspaceDefault: defaults.defaultExecutor,
     });
   }
 
@@ -416,21 +426,52 @@ export class AgentDelegationService {
    * field, so a run that overrides only the thinking level keeps the
    * workspace's provider and model rather than losing them.
    */
-  private async resolveModel(input: DelegateInput): Promise<ModelChoice> {
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: input.workspaceId },
-      select: { preferences: true },
-    });
-
-    const fallback = workspaceAgentDefaults(workspace?.preferences).model;
-
+  private resolveModel(
+    defaults: WorkspaceAgentDefaults,
+    input: DelegateInput,
+  ): ModelChoice {
     return {
-      ...fallback,
+      ...defaults.model,
       ...stripUndefined({
         provider: input.config?.provider,
         model: input.config?.model,
         thinking: input.config?.thinking,
       }),
+    };
+  }
+
+  /**
+   * Which review phases this run performs, and what it may spend doing it.
+   *
+   * The workspace's stored phase switches were parsed and then dropped on the
+   * floor here: the run config was built from the repo and the model alone, so
+   * `config.phases` was undefined on every run ever dispatched and no executor
+   * could act on a setting somebody had deliberately set. Layered like
+   * everything else — workspace underneath, request on top — and stored on the
+   * run, so "was this diff reviewed, and against what ceiling" is answerable
+   * from the row long after the settings have moved on.
+   */
+  private resolveCycle(
+    defaults: WorkspaceAgentDefaults,
+    input: DelegateInput,
+  ): Pick<AgentRunConfig, 'phases' | 'limits'> {
+    const phases = {
+      ...defaults.phases,
+      ...stripUndefined(input.config?.phases ?? {}),
+    };
+
+    const limits = {
+      ...defaults.limits,
+      ...stripUndefined(input.config?.limits ?? {}),
+    };
+
+    // Absent rather than empty. A workspace that has configured nothing should
+    // not look, on the row, like one that configured everything to its default
+    // — the run record is what somebody reads to find out what this run was
+    // actually asked to do.
+    return {
+      ...(Object.keys(phases).length ? { phases } : {}),
+      ...(Object.keys(limits).length ? { limits } : {}),
     };
   }
 

@@ -1,6 +1,12 @@
 import { PI_PACKAGE } from '@vantikhq/types';
 
-import { BUNDLED_SKILLS, skillArguments, skillFiles } from '../agent-skills';
+import {
+  BUNDLED_SKILLS,
+  IMPLEMENTER_SKILLS,
+  REVIEWER_SKILLS,
+  skillArguments,
+  skillFiles,
+} from '../agent-skills';
 import { piCommand } from './hosted.executor';
 
 /**
@@ -100,8 +106,9 @@ describe('the skills a run is given', () => {
 });
 
 describe('the bundled skills', () => {
-  it('ships one about the issue and one about the code', () => {
+  it('ships one about the issue, one about the code, one about reviewing', () => {
     expect(BUNDLED_SKILLS.map((skill) => skill.name).sort()).toEqual([
+      'reviewing-work',
       'vantik-issues',
       'writing-code',
     ]);
@@ -114,9 +121,46 @@ describe('the bundled skills', () => {
     const files = skillFiles();
 
     expect(Object.keys(files).sort()).toEqual([
+      'skills/reviewing-work/SKILL.md',
       'skills/vantik-issues/SKILL.md',
       'skills/writing-code/SKILL.md',
     ]);
+  });
+
+  it('never gives the implementer the skill about reviewing', () => {
+    // The whole value of the review pass is that it is made by something which
+    // did not write the code. An implementer told how to review starts grading
+    // its own diff, and its verdict on itself is worth nothing.
+    expect(IMPLEMENTER_SKILLS.map((skill) => skill.name)).not.toContain(
+      'reviewing-work',
+    );
+    expect(skillArguments(IMPLEMENTER_SKILLS)).toEqual([
+      '/workspace/skills/vantik-issues',
+      '/workspace/skills/writing-code',
+    ]);
+  });
+
+  it('never gives the reviewer the skill about writing changes', () => {
+    // `writing-code` is instructions for making a change, which is the one
+    // thing a reviewer must not do.
+    expect(REVIEWER_SKILLS.map((skill) => skill.name)).not.toContain(
+      'writing-code',
+    );
+    expect(skillArguments(REVIEWER_SKILLS)).toEqual([
+      '/workspace/skills/vantik-issues',
+      '/workspace/skills/reviewing-work',
+    ]);
+  });
+
+  it('tells the reviewer not to fix what it finds', () => {
+    // A reviewer that fixes what it finds has destroyed the independent read
+    // and produced work nobody has reviewed.
+    const reviewing = BUNDLED_SKILLS.find(
+      (skill) => skill.name === 'reviewing-work',
+    );
+
+    expect(reviewing?.body).toContain('Do not fix anything');
+    expect(reviewing?.body).toContain('Every finding needs evidence');
   });
 
   it('gives every skill the frontmatter the standard requires', () => {

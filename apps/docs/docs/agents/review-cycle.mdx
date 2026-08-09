@@ -1,0 +1,111 @@
+---
+title: How agent work gets checked
+sidebar_label: The review cycle
+---
+
+# The review cycle
+
+Delegate an issue to an agent running in the hosted sandbox and the work does
+not go straight to a pull request. It goes round a loop first:
+
+1. **Implement** — an agent gets the issue, its Definition of Done, and the
+   repository's own commands. It writes the change.
+2. **Verify** — Vantik runs the repository's test, typecheck, lint and build
+   commands against the tree the agent left. Not the agent: an agent that
+   believes it ran the tests and did not is a common and quiet failure.
+3. **Review** — a *second* agent, in the same sandbox, reads the diff against
+   the issue. It did not write the code, it is not allowed to change it, and it
+   is given the verification result as fact.
+4. **Revise** — what the reviewer found goes back to an implementer to fix, and
+   the loop returns to step 2.
+
+That repeats until the reviewer accepts the work or the issue's budget is spent.
+
+## Why a second agent rather than the first one thinking again
+
+An agent asked to re-examine its own answer is not a check. Self-correction
+without an execution-grounded signal measures flat to negative on code
+generation, and challenging a model on a correct answer makes it abandon the
+answer. The value of the review pass is entirely that it is performed by
+something which never saw the reasoning — it gets the issue and the resulting
+tree, which is what a human reviewer gets.
+
+The two agents are given different instructions and different skills. The
+implementer is never told how to review, because an implementer that starts
+grading its own diff has removed the only independent read. The reviewer is
+never given the skill about writing changes, because making one is the single
+thing it must not do.
+
+## What a finding has to carry
+
+A review finding is discarded unread unless it cites a `file.ts:123` or a
+command that fails.
+
+This is not a formatting rule. A reviewer that has opened the file writes a
+different finding from one that has skimmed a diff, and requiring the citation
+is what forces the first kind. It also protects the next pass: an implementer
+handed "consider whether this is idiomatic" will spend a pass — and your money
+— changing something that was never wrong.
+
+## When the loop stops
+
+**It accepts** when the reviewer says the work is done *and* the repository's
+checks pass. A reviewer that signs off a tree whose tests are failing has
+contradicted something that was actually executed, and the executed thing wins.
+
+**It stops and asks for a human** — the run finishes as `Needs review`, with the
+branch pushed and the pull request open — when any of these happen:
+
+- the budget is spent, in passes, money or wall clock;
+- two passes in a row changed neither the tree nor the verification result, so
+  another pass would change nothing either;
+- the reviewer produced no verdict that could be read. "The reviewer did not
+  answer" and "the reviewer said yes" never collapse into the same outcome;
+- the reviewer rejected the work but cited nothing, so there is nothing specific
+  to send back.
+
+In every one of those cases the work is still delivered. It is real work; it
+simply has not been signed off, and the pull request body says so.
+
+**It fails** only when the first pass crashes or the agent changed nothing. A
+crash on a *later* pass stops the loop and delivers what the earlier passes
+built — throwing away three passes of real work to report the fourth one's exit
+code helps nobody.
+
+## The budget
+
+Set in **Settings → Agents → How the work is checked**, and overridable per run.
+
+| Ceiling | Default | What it bounds |
+| --- | --- | --- |
+| Review passes | 3 | Times round the loop before a person is asked to look |
+| Spend per issue | $5 | Everything one attempt costs, across every pass |
+| Wall clock | 30 minutes | The whole run, including fetching the repository |
+
+These are ceilings on the *whole cycle*, not on one agent call. Reviewing
+roughly doubles what an issue costs when the first attempt is accepted, and more
+when it is not — which is the trade the switch exists for.
+
+A run that reaches a ceiling does not lose its work. It hands over.
+
+## Turning it off
+
+The switch in **Settings → Agents** disables the cycle for the workspace: the
+first attempt is delivered as it stands, which is what hosted runs did before
+this existed. It defaults on, because a pull request that nothing has read is
+the failure hosted execution is arranged to avoid — but a workspace that would
+rather have the cheaper thing can say so.
+
+The BYO runner (`vantik agent work`) does not run this cycle. It drives one
+harness pass and delivers, and its own loop settings — `specify` and `score` —
+are separate and default off.
+
+## What you can see afterwards
+
+The run timeline groups events by pass, so `Did the work` → `Ran the checks` →
+`Reviewed the work` → `Fixed what the review found (pass 2)` reads in the order
+it happened rather than merging every pass into one heading.
+
+Each pass is also recorded on the run: whether verification passed, what the
+reviewer found, and a hash of the tree it produced. That is what makes "why did
+this take four passes" answerable a week later.

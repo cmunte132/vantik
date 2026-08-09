@@ -340,6 +340,64 @@ describe('AgentDelegationService routing', () => {
     );
   });
 
+  it('carries the workspace’s phase switches onto the run', async () => {
+    // These were parsed out of the workspace's preferences and then dropped:
+    // the run config was built from the repo and the model alone, so
+    // `config.phases` was undefined on every run ever dispatched and an
+    // executor could not act on a setting somebody had deliberately set.
+    const { service, created } = build({
+      preferences: { agentRuns: { phases: { review: false, specify: true } } },
+    });
+
+    await service.delegate(delegateInput);
+
+    expect((created[0] as { config: unknown }).config).toMatchObject({
+      phases: { review: false, specify: true },
+    });
+  });
+
+  it('lets the request override one phase without losing the others', async () => {
+    const { service, created } = build({
+      preferences: { agentRuns: { phases: { review: true, score: true } } },
+    });
+
+    await service.delegate({
+      ...delegateInput,
+      config: { phases: { review: false } },
+    });
+
+    expect((created[0] as { config: unknown }).config).toMatchObject({
+      phases: { review: false, score: true },
+    });
+  });
+
+  it('stores the ceilings the run was delegated under', async () => {
+    // Stored rather than resolved again at dispatch, so raising the workspace
+    // limit later cannot rewrite what a finished run was held to.
+    const { service, created } = build();
+
+    await service.delegate({
+      ...delegateInput,
+      config: { limits: { maxCycles: 1, maxCostUsd: 2 } },
+    });
+
+    expect((created[0] as { config: unknown }).config).toMatchObject({
+      limits: { maxCycles: 1, maxCostUsd: 2 },
+    });
+  });
+
+  it('leaves phases off the config when nothing set one', async () => {
+    // An empty object here would be a workspace that had configured nothing
+    // looking, on the row, like one that had configured everything to default.
+    const { service, created } = build();
+
+    await service.delegate(delegateInput);
+
+    expect((created[0] as { config: Record<string, unknown> }).config).not.toHaveProperty(
+      'phases',
+    );
+  });
+
   it('stores a config hash that does not depend on key order', async () => {
     const a = build();
     const b = build();

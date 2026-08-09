@@ -38,6 +38,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Agents',
+      items: ['agents/review-cycle', 'agents/runner'],
+    },
+    {
+      type: 'category',
       label: 'Integrations',
       items: [
         'integrations/overview',

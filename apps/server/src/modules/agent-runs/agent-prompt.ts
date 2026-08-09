@@ -52,9 +52,7 @@ export function buildAgentPrompt(pack: ContextPack): string {
     );
   }
 
-  const open = (pack.definitionOfDone ?? []).filter(
-    (criterion) => !criterion.completed,
-  );
+  const open = openCriteria(pack);
 
   if (open.length) {
     parts.push(
@@ -173,8 +171,32 @@ export function buildAgentPrompt(pack: ContextPack): string {
   return parts.join('\n');
 }
 
-/** The repo's own checks, in the order a reader expects them. */
-function verificationCommands(pack: ContextPack): Array<[string, string]> {
+/**
+ * The criteria still open on the issue, in the order they are numbered.
+ *
+ * Exported because the implementer's prompt, the reviewer's prompt and the
+ * revision prompt all number the Definition of Done, and a finding that says
+ * "criterion 3" is worthless if the three prompts disagree about which one that
+ * is. One function, so they cannot.
+ */
+export function openCriteria(
+  pack: ContextPack,
+): Array<{ id: string; body: string; completed: boolean }> {
+  return (pack.definitionOfDone ?? []).filter(
+    (criterion) => !criterion.completed,
+  );
+}
+
+/**
+ * The repo's own checks, in the order a reader expects them.
+ *
+ * Exported so the executor runs exactly the commands the prompt told the agent
+ * to run. Two lists would drift, and the first sign of it would be an agent
+ * being failed for a check it was never asked to pass.
+ */
+export function verificationCommands(
+  pack: ContextPack,
+): Array<[string, string]> {
   return Object.entries({
     Tests: pack.repo?.testCommand,
     Typecheck: pack.repo?.typecheckCommand,

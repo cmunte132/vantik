@@ -246,6 +246,31 @@ export interface AgentRunLimits {
   maxTokens?: number;
   maxIterations?: number;
   maxCostUsd?: number;
+  /**
+   * Passes of the implement → verify → review cycle a run may take.
+   *
+   * The budget denominated in the thing the cycle spends. `maxIterations`
+   * counts assistant turns inside one harness invocation and cannot bound a
+   * loop that starts a new invocation each pass; `maxCostUsd` bounds the money
+   * but says nothing until it has been spent. This is the ceiling somebody
+   * reasons about before delegating.
+   */
+  maxCycles?: number;
+}
+
+/**
+ * Which of the review phases a run performs.
+ *
+ * `specify` and `score` belong to the BYO runner's loop and default off there.
+ * `review` is the hosted sandbox's implement → verify → review → revise cycle,
+ * and defaults **on**: an agent that grades its own work is the failure this
+ * whole surface exists to avoid, and a second agent reading the diff against
+ * the issue is the cheapest check available that the first one did not.
+ */
+export interface AgentRunPhases {
+  specify?: boolean;
+  score?: boolean;
+  review?: boolean;
 }
 
 export interface AgentRunConfig extends AgentRunRepoConfig {
@@ -271,6 +296,15 @@ export interface AgentRunConfig extends AgentRunRepoConfig {
    */
   thinking?: ThinkingLevel;
   limits?: AgentRunLimits;
+  /**
+   * Which review phases this run performs.
+   *
+   * Resolved at delegation from the workspace's settings with the request's
+   * choice over them, and then stored on the run — so a later change to the
+   * workspace default cannot rewrite what a finished run was asked to do, and
+   * "was this diff reviewed" stays answerable from the row.
+   */
+  phases?: AgentRunPhases;
   /** Leave the diff on disk; do not push and do not open a PR. */
   dryRun?: boolean;
 }
@@ -300,6 +334,21 @@ export const AGENT_RUN_DEFAULT_LIMITS = {
   maxIterations: 50,
   maxCostUsd: 5,
 } as const;
+
+/**
+ * Passes of the review cycle a hosted run takes when nobody sets a ceiling.
+ *
+ * Not in `AGENT_RUN_DEFAULT_LIMITS` because that block mirrors the CLI runner's
+ * `BUDGET_DEFAULTS`, and the CLI enforces none of this — the cycle is the
+ * hosted executor's, and a number stated as the runner's would be a number
+ * nothing on that side reads.
+ *
+ * Three is where the evidence points. The first review catches most of what a
+ * one-shot run gets wrong; by the third the loop is usually rewording rather
+ * than fixing, and more search steps amplify reward hacking rather than reduce
+ * it. A run that needs a fourth pass is one a person should look at.
+ */
+export const AGENT_RUN_DEFAULT_MAX_CYCLES = 3;
 
 export const AGENT_STEP_KINDS = [
   'read',

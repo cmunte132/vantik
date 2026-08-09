@@ -30,6 +30,7 @@ import { UserContext } from 'store/user-context';
 
 import { CredentialBlock } from './credential-block';
 import { ModelAccess } from './model-access';
+import { ReviewCycle } from './review-cycle';
 
 /**
  * What agent work in this workspace runs on, and who may act here.
@@ -125,6 +126,23 @@ export const Agents = observer(() => {
             // under `agentRuns` is rebuilt here rather than delegated —
             // writing it wholesale would drop `repo` and `phases` beside it.
             updatePreferences({ agentRuns: { ...agentRuns, model } } as any)
+          }
+        />
+      </SettingSection>
+
+      <SettingSection
+        title="How the work is checked"
+        description="What happens between an agent finishing and you seeing a pull request. An agent grading its own diff is worth nothing, so a second one — which did not write the code — reads it against the issue, and what it finds goes back to be fixed. That costs money, which is why the ceiling is here beside the switch."
+      >
+        <ReviewCycle
+          phases={agentRuns.phases ?? {}}
+          limits={agentRuns.limits ?? {}}
+          onChange={({ phases, limits }) =>
+            // The server merges preferences one level deep only, so everything
+            // under `agentRuns` is rebuilt here rather than delegated.
+            updatePreferences({
+              agentRuns: { ...agentRuns, phases, limits },
+            } as any)
           }
         />
       </SettingSection>

@@ -63,10 +63,15 @@ export const LeftSide = observer(() => {
 
   const { handlePaste } = useEditorPasteHandler();
 
+  // The scroll frame is not a flex container. It used to centre its own
+  // viewport, and a viewport cannot shrink below the width of the widest code
+  // block it holds, so a narrow column pushed the text out of both sides of the
+  // frame and `overflow-hidden` cut it off. min-w-0 lets every box shrink, and
+  // mx-auto does the centring the layout wanted.
   return (
-    <ScrollArea className="grow flex h-full justify-center w-full">
-      <div className="flex h-full justify-center w-full pb-[150px]">
-        <div className="grow flex flex-col gap-2 h-full max-w-[97ch]">
+    <ScrollArea className="grow h-full w-full min-w-0">
+      <div className="flex h-full w-full min-w-0 pb-[150px]">
+        <div className="grow min-w-0 mx-auto flex flex-col gap-2 h-full max-w-[97ch]">
           <div className="py-6 flex flex-col">
             {isTriageView && <SimilarIssuesView issueId={issue.id} />}
 

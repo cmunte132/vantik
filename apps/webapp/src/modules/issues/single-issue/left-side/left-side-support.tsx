@@ -63,10 +63,11 @@ export const LeftSideSupport = observer(() => {
   const { handlePaste } = useEditorPasteHandler();
   const { suggestionItems } = useEditorSuggestionItems();
 
+  // The same shrink rules as the engineering left side.
   return (
-    <ScrollArea className="grow flex h-full justify-center w-full">
-      <div className="flex h-full justify-center w-full">
-        <div className="grow flex flex-col gap-2 h-full max-w-[97ch]">
+    <ScrollArea className="grow h-full w-full min-w-0">
+      <div className="flex h-full w-full min-w-0">
+        <div className="grow min-w-0 mx-auto flex flex-col gap-2 h-full max-w-[97ch]">
           <div className="py-6 flex flex-col">
             {isTriageView && <SimilarIssuesView issueId={issue.id} />}
 

@@ -20,7 +20,7 @@ export async function saveNotificationData(
 
         actionData: JSON.stringify(record.data.actionData),
         createdById: record.data.createdById,
-        sourceMetadata: JSON.stringify(record.data.actionData),
+        sourceMetadata: JSON.stringify(record.data.sourceMetadata),
 
         readAt: record.data.readAt,
         workspaceId: record.data.workspaceId,

@@ -324,6 +324,24 @@ describe('decideCycle', () => {
     expect(decision.reason).not.toContain('limit for this issue');
   });
 
+  it('sends a red suite back even when the reviewer cited nothing', () => {
+    // A failing check is specific enough to act on whether or not a reviewer
+    // thought to cite it, and the revision prompt carries the command and its
+    // output either way. Handing a person a diff with failing tests, while
+    // there was budget to fix them, gives up one step early.
+    const decision = decideCycle({
+      history: [
+        pass({ accepted: false, findings: [], verificationPassed: false }),
+      ],
+      spend: spend(),
+      limits: limits(),
+      now: NOW,
+    });
+
+    expect(decision.action).toBe('revise');
+    expect(decision.reason).toContain('checks are failing');
+  });
+
   it('hands over on a rejection nobody can act on', () => {
     // The reviewer said no and could not say where. Sending that back produces
     // a pass of churn and another identical rejection.

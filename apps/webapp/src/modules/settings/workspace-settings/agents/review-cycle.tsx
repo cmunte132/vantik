@@ -152,7 +152,11 @@ function Budget({
         />
       </div>
 
-      <span className="pl-47 text-muted-foreground">{hint}</span>
+      {/* Lines the hint up under the input rather than under the label:
+          `w-44` plus the row's `gap-3`. Written out because Tailwind's default
+          scale has no step at 11.75rem, and `pl-47` is a class that does not
+          exist — it compiles to nothing and the indent silently disappears. */}
+      <span className="pl-[11.75rem] text-muted-foreground">{hint}</span>
     </div>
   );
 }

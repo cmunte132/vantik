@@ -137,16 +137,37 @@ export interface AgentRunResult {
   costUsd?: number;
   /** Denied egress attempts. A spike is the clearest injection signal we get. */
   egressDenied?: number;
+  /**
+   * How many times a second agent read this work before it was handed back.
+   *
+   * Zero means nothing did — either the workspace turned reviewing off, or the
+   * run never got far enough. Worth being on the record beside the branch,
+   * because "an agent wrote this" and "an agent wrote this and another one
+   * signed it off" are different claims about the same diff.
+   */
+  reviewPasses?: number;
 }
 
-/** Milliseconds spent in each phase. Sparse — only phases that ran appear. */
+/**
+ * Milliseconds spent in each phase. Sparse — only phases that ran appear.
+ *
+ * The named fields are the first pass. A run that went round the review cycle
+ * more than once also carries `verify-2`, `revise-2`, `review-3` and so on:
+ * the phase's name with the pass appended, which is exactly what the events of
+ * that pass are filed under. The index signature is what makes those
+ * addressable rather than merely present — without it a reader would have to
+ * cast to find the timing for a phase the timeline is already drawing.
+ */
 export interface AgentRunPhaseTimings {
   setup?: number;
   specify?: number;
   implement?: number;
+  verify?: number;
   score?: number;
   review?: number;
   report?: number;
+  /** `revise-2`, `verify-3`, … — one per phase of each later pass. */
+  [phase: string]: number | undefined;
 }
 
 /**

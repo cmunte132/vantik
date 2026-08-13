@@ -212,6 +212,16 @@ type CycleResult =
       needsReview: boolean;
       reason: string;
       summary: string | null;
+      /**
+       * What the last review said was still wrong, and its own summing-up.
+       *
+       * Carried out of the loop rather than left in the iteration rows. On a
+       * run nothing signed off, this is the most useful thing anybody gets:
+       * "why it stopped" tells a person the budget ran out, and this tells them
+       * what to go and look at.
+       */
+      outstanding: ReviewFinding[];
+      reviewSummary?: string;
       modelId: string | null;
       turns: number;
       costUsd: number;
@@ -704,7 +714,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         commitMessage: `${pack.issue?.key ?? ''}: ${pack.issue?.title ?? 'Agent work'}`,
         issueKey: pack.issue?.key ?? run.issueId,
         issueTitle: pack.issue?.title ?? 'Agent work',
-        summary: pullRequestBody(cycle.needsReview, cycle.reason, cycle.passes),
+        summary: pullRequestBody(cycle),
       });
 
       if (!pushed) {
@@ -754,10 +764,14 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
 
       await this.handback.post(run.issueId, run.agentUserId, run.id, {
         status,
-        // The reviewer's reason is what a person needs on a run that stopped
-        // without being signed off; on one that was accepted it is a line of
-        // reassurance above the agent's own report.
-        summary: cycle.needsReview ? `${cycle.reason}\n\n${summary}` : summary,
+        // On a run that stopped without being signed off, why it stopped and
+        // what the reviewer still objected to come first — that is what a
+        // person opening the issue has to act on, and the agent's own account
+        // of what it did is context underneath it. On an accepted run there is
+        // nothing to add, so its report stands alone as it always did.
+        summary: cycle.needsReview
+          ? [cycle.reason, ...outstandingWork(cycle), '', summary].join('\n')
+          : summary,
         branch: pushed.branch,
         prUrl: pushed.prUrl,
         attempt: run.attempt,
@@ -913,6 +927,19 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       verification = checks.outcomes;
       phaseTimings[verifyPhase] = Date.now() - verifyStart;
 
+      // A review started with a minute left is killed partway through reading
+      // the diff, and its silence would then be recorded as "the reviewer gave
+      // no readable verdict" — which is true but points at the reviewer rather
+      // than at the clock that stopped it. Said properly instead, and the model
+      // call is not paid for.
+      if (cx.limits.deadlineAt - Date.now() < MIN_USEFUL_MS) {
+        needsReview = true;
+        reason =
+          `The run reached its wall-clock limit for this issue after pass ` +
+          `${pass} did the work, so nothing reviewed it.`;
+        break;
+      }
+
       // ---- review: a different agent, on the same tree ----
       const reviewPhase = phaseName('review', pass);
       const reviewStart = Date.now();
@@ -980,6 +1007,11 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       needsReview,
       reason,
       summary,
+      // Only what the *last* review left open. Findings from an earlier pass
+      // were either fixed or filed again, and listing both would tell a reader
+      // the work is twice as broken as it is.
+      outstanding: needsReview ? findings : [],
+      ...(needsReview && reviewSummary ? { reviewSummary } : {}),
       modelId,
       turns: spend.turns,
       costUsd: spend.costUsd,
@@ -1404,27 +1436,73 @@ function cycleArtifacts(passes: number): string[] {
 }
 
 /**
+ * What the last review left open, as something a person can act on.
+ *
+ * Empty when the work was accepted, or when the reviewer never produced a
+ * readable answer — in the second case the reason already says so, and a
+ * "still open" heading with nothing under it would suggest the reviewer found
+ * nothing wrong rather than that it said nothing at all.
+ */
+function outstandingWork(cycle: {
+  outstanding: ReviewFinding[];
+  reviewSummary?: string;
+}): string[] {
+  const lines: string[] = [];
+
+  if (cycle.reviewSummary) {
+    lines.push('', `> ${cycle.reviewSummary.replace(/\n/g, '\n> ')}`);
+  }
+
+  if (cycle.outstanding.length) {
+    lines.push(
+      '',
+      'Still open when the run stopped:',
+      '',
+      ...cycle.outstanding.map(
+        (finding) =>
+          `- ${finding.message}${finding.evidence ? ` — \`${finding.evidence}\`` : ''}`,
+      ),
+    );
+  }
+
+  return lines;
+}
+
+/**
  * What the pull request says about how this diff got here.
  *
- * A reviewer opening it should know whether anything checked the work before
- * they did, because "an agent wrote this" and "an agent wrote this and a second
- * agent signed it off" call for different amounts of attention.
+ * Somebody opening it should know whether anything checked the work before they
+ * did, because "an agent wrote this" and "an agent wrote this and a second
+ * agent signed it off" call for different amounts of attention. The findings
+ * are repeated here as well as on the issue on purpose: whoever opens the pull
+ * request from the git host never sees the issue comment, and what the reviewer
+ * could not get fixed is the most useful thing they could be told.
  */
-function pullRequestBody(
-  needsReview: boolean,
-  reason: string,
-  passes: number,
-): string {
-  if (passes === 0) {
+function pullRequestBody(cycle: {
+  needsReview: boolean;
+  reason: string;
+  passes: number;
+  outstanding: ReviewFinding[];
+  reviewSummary?: string;
+}): string {
+  if (cycle.passes === 0) {
     return 'Opened by a Vantik agent running in a hosted sandbox.';
   }
 
-  return needsReview
-    ? `Opened by a Vantik agent running in a hosted sandbox, after ${passes} ` +
-        `review pass(es). **Nothing signed this off:** ${reason} Read it closely.`
-    : `Opened by a Vantik agent running in a hosted sandbox. A second agent ` +
-        `reviewed it against the issue over ${passes} pass(es) and accepted it. ` +
-        `Review the diff, not the transcript.`;
+  if (!cycle.needsReview) {
+    return (
+      `Opened by a Vantik agent running in a hosted sandbox. A second agent ` +
+      `reviewed it against the issue over ${cycle.passes} pass(es) and ` +
+      `accepted it. Review the diff, not the transcript.`
+    );
+  }
+
+  return [
+    `Opened by a Vantik agent running in a hosted sandbox, after ` +
+      `${cycle.passes} review pass(es). **Nothing signed this off:** ` +
+      `${cycle.reason} Read it closely.`,
+    ...outstandingWork(cycle),
+  ].join('\n');
 }
 
 // A `shellSafe` guard used to sit here, for the repo url and base branch that

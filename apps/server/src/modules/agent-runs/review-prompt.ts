@@ -228,19 +228,25 @@ export function buildRevisionPrompt(input: {
     parts.push('', '## What the reviewer said', '', reviewSummary);
   }
 
-  parts.push(
-    '',
-    '## What to fix',
-    '',
-    'Each of these cites the file and line it is about. Work through them:',
-    '',
-    ...findings.map((finding, index) => renderFinding(finding, index + 1)),
-    '',
-    'If a finding is wrong — the reviewer misread the code, or asked for',
-    'something the issue does not — do not change the code to satisfy it. Say so',
-    'in your closing summary, name it by number, and say why. That is a better',
-    'outcome than a change made to silence a review.',
-  );
+  // A pass can be asked for with no findings at all: the reviewer rejected the
+  // work without citing anything, but the repository's own checks are red,
+  // which is specific enough to act on. Printing the heading with nothing under
+  // it would read to a model as an instruction it failed to receive.
+  if (findings.length) {
+    parts.push(
+      '',
+      '## What to fix',
+      '',
+      'Each of these cites the file and line it is about. Work through them:',
+      '',
+      ...findings.map((finding, index) => renderFinding(finding, index + 1)),
+      '',
+      'If a finding is wrong — the reviewer misread the code, or asked for',
+      'something the issue does not — do not change the code to satisfy it. Say',
+      'so in your closing summary, name it by number, and say why. That is a',
+      'better outcome than a change made to silence a review.',
+    );
+  }
 
   const failed = verification.filter((check) => !check.ok);
 
@@ -279,12 +285,23 @@ export function buildRevisionPrompt(input: {
     '',
     '## How to finish',
     '',
-    'Keep the diff to what the findings ask for. Do not commit, branch, push or',
-    'open a pull request — that is handled for you.',
+    findings.length
+      ? 'Keep the diff to what the findings ask for.'
+      : 'Keep the diff to what it takes to make the checks pass.',
+    'Do not commit, branch, push or open a pull request — that is handled for',
+    'you.',
     '',
-    'Close with a short report: what you changed this pass, then a line per',
-    'finding above, numbered as above, reading `fixed`, `not fixed` or',
-    '`disagree`, with a handful of words saying how you know.',
+    ...(findings.length
+      ? [
+          'Close with a short report: what you changed this pass, then a line per',
+          'finding above, numbered as above, reading `fixed`, `not fixed` or',
+          '`disagree`, with a handful of words saying how you know.',
+        ]
+      : [
+          'Close with a short report: what you changed this pass, and which of the',
+          'failing checks now pass. If one still does not, say which and what it',
+          'reports — that is useful, and silently leaving it failing is not.',
+        ]),
   );
 
   return parts.join('\n');

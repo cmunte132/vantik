@@ -482,6 +482,50 @@ describe('a run nothing signs off', () => {
     expect(harness.final().status).toBe('NEEDS_REVIEW');
   });
 
+  it('says what the reviewer still objected to, on the issue and on the PR', async () => {
+    // "Why it stopped" tells a person the budget ran out. This tells them what
+    // to go and look at, which is the whole reason the run is theirs now — and
+    // it is on the pull request too, because whoever opens that from the git
+    // host never sees the issue comment.
+    const harness = build(
+      { verdicts: { 1: REJECTED } },
+      { limits: { maxCycles: 1 } },
+    );
+
+    await harness.execute();
+
+    for (const text of [
+      harness.prBody(),
+      String(harness.handbacks[0].summary),
+    ]) {
+      expect(text).toContain('Loop still exits one short');
+      expect(text).toContain('src/importer.ts:88');
+      expect(text).toContain('The off-by-one is still there.');
+    }
+  });
+
+  it('does not list findings on a run that was accepted', async () => {
+    // Nothing is outstanding, and a "still open" heading over an empty list
+    // reads as though the reviewer had reservations it did not state.
+    const harness = build({ verdicts: { 1: ACCEPTED } });
+
+    await harness.execute();
+
+    expect(harness.prBody()).not.toContain('Still open');
+    expect(String(harness.handbacks[0].summary)).not.toContain('Still open');
+  });
+
+  it('does not claim the reviewer found nothing when it said nothing', async () => {
+    // A silent reviewer leaves no findings, and a "still open" heading with an
+    // empty list under it would say the diff was read and passed.
+    const harness = build({ verdicts: { 1: 'not json' } });
+
+    await harness.execute();
+
+    expect(harness.prBody()).toContain('Nothing signed this off');
+    expect(harness.prBody()).not.toContain('Still open');
+  });
+
   it('says on the pull request that nothing signed it off', async () => {
     // "An agent wrote this" and "an agent wrote this and a second agent signed
     // it off" call for different amounts of attention from whoever opens it.

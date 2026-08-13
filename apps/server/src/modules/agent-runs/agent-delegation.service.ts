@@ -88,7 +88,14 @@ export class AgentDelegationService {
     await this.assertNoLiveRun(input.issueId, input.force ?? false);
     await this.assertBelowConcurrencyCap(input.workspaceId);
 
-    const executor = await this.resolveExecutor(input);
+    // Read once and passed down. Every layered decision below — which backend,
+    // which model, which phases, which ceilings — comes out of the same blob,
+    // and reading it per question is both three round trips and three chances
+    // for a delegation to be resolved against settings that changed halfway
+    // through it.
+    const defaults = await this.workspaceDefaults(input.workspaceId);
+
+    const executor = await this.resolveExecutor(defaults, input);
 
     const availability = await executor.availability(input.workspaceId);
     if (availability.available === false) {
@@ -106,8 +113,6 @@ export class AgentDelegationService {
     // default underneath, this request's choice on top. Stored on the run
     // rather than resolved again at dispatch, so a later change to the
     // workspace default cannot rewrite what a finished run was asked to do.
-    const defaults = await this.workspaceDefaults(input.workspaceId);
-
     const config: AgentRunConfig = {
       ...contextPack.repo,
       ...this.resolveModel(defaults, input),
@@ -403,14 +408,14 @@ export class AgentDelegationService {
     return workspaceAgentDefaults(workspace?.preferences);
   }
 
-  private async resolveExecutor(input: DelegateInput) {
-    const [membership, defaults] = await Promise.all([
-      this.prisma.usersOnWorkspaces.findFirst({
-        where: { userId: input.agentUserId, workspaceId: input.workspaceId },
-        select: { settings: true },
-      }),
-      this.workspaceDefaults(input.workspaceId),
-    ]);
+  private async resolveExecutor(
+    defaults: WorkspaceAgentDefaults,
+    input: DelegateInput,
+  ) {
+    const membership = await this.prisma.usersOnWorkspaces.findFirst({
+      where: { userId: input.agentUserId, workspaceId: input.workspaceId },
+      select: { settings: true },
+    });
 
     return this.registry.resolve({
       requested: input.executor,

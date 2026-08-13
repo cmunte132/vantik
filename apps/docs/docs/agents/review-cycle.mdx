@@ -65,7 +65,9 @@ branch pushed and the pull request open — when any of these happen:
   to send back.
 
 In every one of those cases the work is still delivered. It is real work; it
-simply has not been signed off, and the pull request body says so.
+simply has not been signed off, and both the pull request body and the issue
+comment say so — along with whatever the last review still objected to, so the
+person picking it up starts from what is wrong rather than from the diff.
 
 **It fails** only when the first pass crashes or the agent changed nothing. A
 crash on a *later* pass stops the loop and delivers what the earlier passes

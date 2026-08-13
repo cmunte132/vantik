@@ -224,6 +224,31 @@ describe('the prompt the next pass is given', () => {
     expect(prompt).toContain('Fix the cause rather than the check');
   });
 
+  it('reads as an instruction when the only thing wrong is a red suite', () => {
+    // A pass can be asked for with no findings: the reviewer rejected the work
+    // without citing anything, but the checks are red. An empty "What to fix"
+    // heading reads to a model as an instruction it failed to receive.
+    const prompt = buildRevisionPrompt({
+      pack: packWith(),
+      pass: 2,
+      findings: [],
+      verification: [
+        {
+          label: 'Tests',
+          command: 'pnpm test',
+          ok: false,
+          output: 'expected 41, got 40',
+        },
+      ],
+    });
+
+    expect(prompt).not.toContain('## What to fix');
+    expect(prompt).toContain('Checks that are currently failing');
+    expect(prompt).toContain('expected 41, got 40');
+    expect(prompt).toContain('make the checks pass');
+    expect(prompt).not.toContain('numbered as above');
+  });
+
   it('leaves the delivery to the host, the same as the first pass', () => {
     const prompt = buildRevisionPrompt({
       pack: packWith(),
@@ -232,6 +257,8 @@ describe('the prompt the next pass is given', () => {
       verification: [],
     });
 
-    expect(prompt).toContain('Do not commit, branch, push or');
+    expect(prompt).toContain(
+      'Do not commit, branch, push or open a pull request',
+    );
   });
 });

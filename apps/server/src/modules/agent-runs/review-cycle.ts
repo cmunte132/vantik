@@ -313,9 +313,16 @@ export function decideCycle(input: DecideCycleInput): CycleDecision {
     };
   }
 
-  // A rejection with no evidence behind it is the same situation: the reviewer
-  // said no and could not say where. Sending that back produces churn.
-  if (latest.findings.length === 0) {
+  // A rejection with no evidence behind it is nearly the same situation: the
+  // reviewer said no and could not say where, and sending that back produces
+  // churn.
+  //
+  // Unless the repository's own checks are red. Then there *is* something
+  // specific to send back — the failing command and its output, which the
+  // revision prompt carries whether or not a reviewer thought to cite it — and
+  // handing a person a diff with failing tests, when another pass had budget to
+  // fix them, is giving up one step early.
+  if (latest.findings.length === 0 && latest.verificationPassed !== false) {
     return {
       action: 'handOver',
       reason:
@@ -369,7 +376,9 @@ export function decideCycle(input: DecideCycleInput): CycleDecision {
 
   return {
     action: 'revise',
-    reason: `${latest.findings.length} finding(s) to address.`,
+    reason: latest.findings.length
+      ? `${latest.findings.length} finding(s) to address.`
+      : 'The repository’s own checks are failing.',
   };
 }
 

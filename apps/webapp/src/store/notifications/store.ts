@@ -57,28 +57,63 @@ export const NotificationsStore: IAnyStateTreeNode = types
     return { update, deleteById, load };
   })
   .views((self) => ({
+    /**
+     * This view gives the inbox one row for each issue.
+     *
+     * The row stands for the newest thing that happened on that issue, so the
+     * representative is chosen by `createdAt`. It used to be chosen by
+     * `updatedAt`, and marking a notification read is a write that moves
+     * `updatedAt` to now: the one the person had just read then beat every
+     * unread notification on the same issue and became the only one the list
+     * could see. Reading one update hid all the others.
+     */
     get getNotifications() {
-      const latestCreatedAt: Record<string, string> = {};
-      const latestObjects: Record<string, NotificationType> = {};
+      const newestCreatedAt: Record<string, string> = {};
+      const newestObjects: Record<string, NotificationType> = {};
 
-      // Iterate through the array to find the latest object for each issueId
       self.notifications.forEach((obj) => {
-        const { issueId, updatedAt } = obj;
+        const { issueId, createdAt } = obj;
 
-        // Update latest updatedAt if the current object's updatedAt is later
-        if (!latestCreatedAt[issueId] || updatedAt > latestCreatedAt[issueId]) {
-          latestCreatedAt[issueId] = updatedAt;
-          latestObjects[issueId] = obj as NotificationType;
+        if (!newestCreatedAt[issueId] || createdAt > newestCreatedAt[issueId]) {
+          newestCreatedAt[issueId] = createdAt;
+          newestObjects[issueId] = obj as NotificationType;
         }
       });
 
-      // Return the latest objects for each issueId
-      return Object.values(latestObjects);
+      return Object.values(newestObjects);
     },
+
+    /** Every notification on one issue, newest first. */
+    notificationsForIssue(issueId: string) {
+      const forIssue = self.notifications.filter(
+        (obj) => obj.issueId === issueId,
+      ) as unknown as NotificationType[];
+
+      return sort(forIssue).desc(
+        (obj: NotificationType) => new Date(obj.createdAt),
+      );
+    },
+
+    /** A row is unread while any notification behind it is unread. */
+    hasUnreadForIssue(issueId: string) {
+      return self.notifications.some(
+        (obj) => obj.issueId === issueId && !obj.readAt,
+      );
+    },
+
+    /**
+     * The count is over rows, not over notifications: the list draws one row
+     * for each issue, and a badge that counts the notifications hidden behind
+     * those rows would never agree with what is on the screen.
+     */
     get unReadCount() {
-      return (self as NotificationsStoreType).getNotifications.filter(
-        (obj: NotificationType) => !obj.readAt,
-      ).length;
+      const issuesWithUnread = new Set(
+        self.notifications
+          .filter((obj) => !obj.readAt)
+          .map((obj) => obj.issueId),
+      );
+
+      return issuesWithUnread.size;
     },
   }));
 

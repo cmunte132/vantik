@@ -6,9 +6,6 @@ import {
   ResizablePanelGroup,
 } from '@vantikhq/ui/components/resizable';
 
-import { LeftSide } from 'modules/issues/single-issue/left-side/left-side';
-import { RightSide } from 'modules/issues/single-issue/right-side/right-side';
-
 import { AppLayout } from 'common/layouts/app-layout';
 import { ContentBox } from 'common/layouts/content-box';
 
@@ -18,6 +15,7 @@ import { IssueStoreInit } from 'store/issue-store-provider';
 
 import { Header } from './header';
 import { NotificationsList } from './notifications-list';
+import { InboxUpdateView } from './update-view';
 
 export function InboxSingleIssue() {
   const issue = useIssueDataFromStore(false);
@@ -27,7 +25,7 @@ export function InboxSingleIssue() {
       <main className="flex flex-col h-[100vh]">
         <Header />
         <ContentBox>
-          <ResizablePanelGroup direction="horizontal" className="">
+          <ResizablePanelGroup direction="horizontal">
             <ResizablePanel
               maxSize={50}
               defaultSize={24}
@@ -41,19 +39,15 @@ export function InboxSingleIssue() {
               </div>
             </ResizablePanel>
             <ResizableHandle />
-            <ResizablePanel collapsible collapsedSize={0}>
-              <div className="flex">
-                <div className="flex flex-col h-full w-full">
-                  <main className="grid grid-cols-4 h-full">
-                    <div className="col-span-4 xl:col-span-3 flex flex-col h-[calc(100vh_-_52px)]">
-                      <LeftSide />
-                    </div>
-                    <div className="border-l border-border hidden flex-col xl:col-span-1 xl:flex">
-                      <RightSide />
-                    </div>
-                  </main>
-                </div>
-              </div>
+            {/*
+              The updates, and nothing else. This panel used to hold the whole
+              issue page — the editor and the property rail — which made the
+              inbox a narrower copy of a page one click away, and left the
+              reader 494px on a 1280px window. What arrived is what the person
+              came to read, so it gets the panel.
+            */}
+            <ResizablePanel collapsible collapsedSize={0} className="min-w-0">
+              <InboxUpdateView />
             </ResizablePanel>
           </ResizablePanelGroup>
         </ContentBox>

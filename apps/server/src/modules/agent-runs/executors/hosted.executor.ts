@@ -176,6 +176,15 @@ const MIN_CHECK_MS = 30 * 1000;
 /** Exit code for a command the runtime stopped rather than one that ran. */
 const TIMED_OUT = 124;
 
+/**
+ * Exit code for a harness that ran fine and never reached a model.
+ *
+ * Synthesised here because Pi exits zero in that case. 125 is the shell's own
+ * "the command could not be invoked", which is what this is: the harness was
+ * started, and the thing it exists to call refused.
+ */
+const MODEL_FAILED = 125;
+
 /** Enough for a content hash of a large tree, and not enough to hide in. */
 const TREE_HASH_TIMEOUT_MS = 3 * 60 * 1000;
 
@@ -407,6 +416,26 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         run,
         'ENVIRONMENT_SETUP_FAILED',
         `This workspace's model key is for "${model.provider}", which this version does not know how to run.`,
+      );
+      return;
+    }
+
+    // The run's model, or no run. Pi has a default and would quietly use it,
+    // which would put the work on a model nobody picked, bill it to whoever
+    // configured the key, and leave "which model wrote this diff" unanswerable
+    // from the run row. `piCommand` drops an id it cannot pass safely, so an
+    // unusable one lands in the same place as a missing one and is refused
+    // here rather than silently becoming the default.
+    //
+    // Not asked of a deployment that brought its own harness: the model is not
+    // passed to it, and its command is where the choice was already made.
+    if (!config.harnessCommand && !isSafeModelId(String(config.model ?? ''))) {
+      await this.fail(
+        run,
+        'ENVIRONMENT_SETUP_FAILED',
+        config.model
+          ? `"${String(config.model).slice(0, 60)}" is not a model id this can pass to the harness, and the run will not fall back to the harness's own default. Choose a model for this workspace's agent runs.`
+          : 'This run named no model, and it will not fall back to the harness’s own default. Choose one in the workspace’s agent settings, or when delegating the issue.',
       );
       return;
     }
@@ -1108,8 +1137,20 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     }
 
     return {
-      exitCode: result.exitCode,
-      stderr: scrubSecrets(result.stderr, cx.secrets),
+      // A model that never answered is a failed invocation, whatever the
+      // harness's own exit code says. Pi exits zero when the provider refuses
+      // it — a bad model id, a rejected key, a rate limit — and read literally
+      // that is a pass which did the work and had nothing to report. The run
+      // then spends its budget on passes that cannot do anything and ends up
+      // blaming the reviewer for not producing a verdict.
+      exitCode:
+        result.exitCode === 0 && parsed.failure ? MODEL_FAILED : result.exitCode,
+      stderr: scrubSecrets(
+        parsed.failure
+          ? `The model did not answer: ${parsed.failure.message}`
+          : result.stderr,
+        cx.secrets,
+      ),
       summary: parsed.summary,
       modelId: parsed.modelId,
       costUsd: parsed.costUsd,

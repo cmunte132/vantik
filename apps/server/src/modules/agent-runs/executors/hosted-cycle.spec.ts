@@ -39,9 +39,34 @@ function piOutput(summary: string): string {
   ].join('\n');
 }
 
+/**
+ * A stream from a harness whose model refused it.
+ *
+ * Exit code zero, deliberately: that is what Pi really does when the provider
+ * turns it away, and reading it as a pass that simply had nothing to say is
+ * the failure these fixtures exist to pin down.
+ */
+function piRefusal(errorMessage: string): string {
+  return [
+    JSON.stringify({ type: 'turn_end' }),
+    JSON.stringify({
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [],
+        stopReason: 'error',
+        errorMessage,
+      },
+    }),
+  ].join('\n');
+}
+
 interface GuestScript {
   /** Verdict JSON per pass, keyed by pass number. Absent means no file. */
   verdicts: Record<number, string | undefined>;
+  /** A model refusal instead of an answer, keyed by the prompt file. */
+  modelFailure?: Record<string, string>;
   /** Exit codes for the repository's own checks, keyed by pass. */
   checks?: Record<number, number>;
   /** Exit code for the harness, keyed by the prompt file it was given. */
@@ -73,6 +98,17 @@ function buildGuest(script: GuestScript) {
 
       if (prompt) {
         const exitCode = script.harnessExit?.[prompt] ?? 0;
+        const refusal = script.modelFailure?.[prompt];
+
+        if (refusal !== undefined) {
+          if (prompt.startsWith('review-')) {
+            reviewPasses += 1;
+          } else {
+            implementPasses += 1;
+          }
+
+          return { ...ok, exitCode: 0, stdout: piRefusal(refusal) };
+        }
 
         if (prompt.startsWith('review-')) {
           reviewPasses += 1;
@@ -297,7 +333,9 @@ describe('a run the reviewer accepts first time', () => {
   it('gives the reviewer a different prompt and different skills', async () => {
     const harness = build(
       { verdicts: { 1: ACCEPTED } },
-      { harnessCommand: undefined },
+      // The bundled harness, so this reads the command the executor really
+      // builds — which needs the model the run was dispatched with.
+      { harnessCommand: undefined, model: 'claude-opus-5' },
     );
 
     await harness.execute();
@@ -536,6 +574,131 @@ describe('a run nothing signs off', () => {
     expect(harness.prBody()).toContain('Nothing signed this off');
     expect(harness.handbacks[0]).toMatchObject({ status: 'NEEDS_REVIEW' });
     expect(String(harness.handbacks[0].summary)).toContain('reviewer');
+  });
+});
+
+/**
+ * The harness exits zero when the provider refuses it, so a run whose model
+ * never answered used to look like a pass that did the work and had nothing to
+ * report. It then spent its budget on passes that could not do anything and
+ * finished by blaming the reviewer for producing no verdict.
+ */
+describe('when the model never answers', () => {
+  const REFUSED =
+    '400: {"message":"google/gemini-nope is not a valid model ID","code":400}';
+
+  it('fails the run rather than reading it as a pass that did nothing', async () => {
+    const harness = build({
+      verdicts: {},
+      modelFailure: { 'prompt.md': REFUSED },
+    });
+
+    await harness.execute();
+
+    expect(harness.final().status).toBe('FAILED');
+  });
+
+  it('says the model refused, not that the reviewer was silent', async () => {
+    const harness = build({
+      verdicts: {},
+      modelFailure: { 'prompt.md': REFUSED },
+    });
+
+    await harness.execute();
+
+    const error = JSON.stringify(harness.final());
+
+    expect(error).toContain('is not a valid model ID');
+    expect(error).not.toContain('verdict');
+  });
+
+  it('never asks a reviewer to read a diff that was never written', async () => {
+    const harness = build({
+      verdicts: {},
+      modelFailure: { 'prompt.md': REFUSED },
+    });
+
+    await harness.execute();
+
+    expect(harness.guest.passes()).toEqual({ implement: 1, review: 0 });
+  });
+
+  it('delivers the earlier passes when a later one loses the model', async () => {
+    const harness = build({
+      verdicts: { 1: REJECTED },
+      modelFailure: { 'revise-2.md': REFUSED },
+    });
+
+    await harness.execute();
+
+    // The work from pass one is real and is handed to a human, exactly as it
+    // is when a later pass crashes outright.
+    expect(harness.final().status).toBe('NEEDS_REVIEW');
+    expect(harness.prBody()).toContain('Nothing signed this off');
+  });
+
+  it('still destroys the guest', async () => {
+    const harness = build({
+      verdicts: {},
+      modelFailure: { 'prompt.md': REFUSED },
+    });
+
+    await harness.execute();
+
+    expect(harness.guest.sandbox.disposed).toBe(true);
+  });
+});
+
+/**
+ * Pi has a default model and would use it happily. A run that fell back to it
+ * would put the work on a model nobody picked, bill it to whoever configured
+ * the key, and make "which model wrote this diff" unanswerable from the row.
+ */
+describe('the model the run was dispatched with', () => {
+  it('refuses a run that named none, rather than taking the harness’s default', async () => {
+    const harness = build(
+      { verdicts: { 1: ACCEPTED } },
+      { harnessCommand: undefined, model: undefined },
+    );
+
+    await harness.execute();
+
+    expect(harness.final().status).toBe('FAILED');
+    expect(JSON.stringify(harness.final())).toContain('named no model');
+  });
+
+  it('refuses an id it could not pass on safely', async () => {
+    // `piCommand` drops an unsafe id rather than quoting it, so letting this
+    // through would land on the harness's default too.
+    const harness = build(
+      { verdicts: { 1: ACCEPTED } },
+      { harnessCommand: undefined, model: 'opus; rm -rf /' },
+    );
+
+    await harness.execute();
+
+    expect(harness.final().status).toBe('FAILED');
+  });
+
+  it('never boots a guest for a run it is going to refuse', async () => {
+    const harness = build(
+      { verdicts: { 1: ACCEPTED } },
+      { harnessCommand: undefined, model: undefined },
+    );
+
+    await harness.execute();
+
+    expect(harness.specs).toHaveLength(0);
+  });
+
+  it('leaves a deployment’s own harness to make its own choice', async () => {
+    // The model is not passed to a configured command, so requiring one would
+    // refuse a setup that is working.
+    const harness = build({ verdicts: { 1: ACCEPTED } }, { model: undefined });
+
+    await harness.execute();
+
+    expect(harness.final().status).toBe('SUCCEEDED');
   });
 });
 

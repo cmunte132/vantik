@@ -329,7 +329,12 @@ describe('the git token never enters the guest', () => {
       id: 'run-1',
       workspaceId: WORKSPACE,
       issueId: 'issue-1',
-      config: { repoUrl: 'https://github.com/acme/app.git' },
+      // A model, because a run without one is refused before it reaches a
+      // sandbox — there is no spec to capture on a run that never starts.
+      config: {
+        repoUrl: 'https://github.com/acme/app.git',
+        model: 'google/gemini-3.7-flash',
+      },
       contextPack: { issue: { key: 'ENG-1', title: 'Thing' } },
     });
 

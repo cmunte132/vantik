@@ -182,6 +182,84 @@ describe('reading a run out of Pi’s event stream', () => {
       modelId: null,
       costUsd: 0,
       iterations: 0,
+      failure: null,
     });
+  });
+});
+
+/**
+ * The harness exits zero when the provider refuses it, so a run that never
+ * reached a model is indistinguishable from one that finished quietly unless
+ * these two fields are read. Shapes taken from real streams: a 400 for an
+ * unknown model id and a 401 for a rejected key.
+ */
+describe('a model call that never answered', () => {
+  const errored = (errorMessage: string) => ({
+    type: 'message_end',
+    message: {
+      role: 'assistant',
+      content: [] as unknown[],
+      provider: 'openrouter',
+      model: 'google/gemini-3.7-flash',
+      stopReason: 'error',
+      errorMessage,
+    },
+  });
+
+  const answered = (text: string) => ({
+    type: 'message_end',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'text', text }],
+      model: 'google/gemini-3.7-flash',
+      stopReason: 'stop',
+    },
+  });
+
+  it('reports the provider’s refusal of an unknown model id', () => {
+    const { failure } = parsePiEvents(
+      stream(
+        errored(
+          '400: {"message":"google/gemini-nope is not a valid model ID","code":400}',
+        ),
+      ),
+    );
+
+    expect(failure?.reason).toBe('error');
+    expect(failure?.message).toContain('is not a valid model ID');
+  });
+
+  it('reports a key the provider would not take', () => {
+    const { failure } = parsePiEvents(
+      stream(errored('401: {"message":"Missing Authentication header"}')),
+    );
+
+    expect(failure?.message).toContain('Missing Authentication header');
+  });
+
+  it('says nothing about a run that ended normally', () => {
+    expect(parsePiEvents(stream(answered('Done.'))).failure).toBeNull();
+  });
+
+  // Pi retries a failed call. Failing the run on an error it recovered from
+  // would throw away everything the retry went on to do.
+  it('ignores an error a later message recovered from', () => {
+    const { failure, summary } = parsePiEvents(
+      stream(errored('429: rate limited'), answered('Done anyway.')),
+    );
+
+    expect(failure).toBeNull();
+    expect(summary).toBe('Done anyway.');
+  });
+
+  it('still reports a failure the harness gave no reason for', () => {
+    const { failure } = parsePiEvents(
+      stream({
+        type: 'message_end',
+        message: { role: 'assistant', content: [], stopReason: 'error' },
+      }),
+    );
+
+    expect(failure?.message).toContain('did not say why');
   });
 });

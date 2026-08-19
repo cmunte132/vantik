@@ -75,6 +75,7 @@ export function ReviewCycle({
             value={limits.maxCycles}
             placeholder="3"
             hint="How many times the work may go round before a person is asked to look. Three is the default; past that a loop is usually rewording rather than fixing."
+            integer
             onChange={(value) => set({ maxCycles: value })}
           />
 
@@ -106,6 +107,7 @@ function Budget({
   placeholder,
   hint,
   step,
+  integer,
   onChange,
 }: {
   label: string;
@@ -113,6 +115,8 @@ function Budget({
   placeholder: string;
   hint: string;
   step?: string;
+  /** When true, non-integer values are rounded before being passed to onChange. */
+  integer?: boolean;
   onChange: (value: number | undefined) => void;
 }) {
   const [draft, setDraft] = React.useState(String(value ?? ''));
@@ -132,7 +136,9 @@ function Budget({
       return;
     }
 
-    onChange(parsed);
+    const coerced = integer ? Math.round(parsed) : parsed;
+    setDraft(String(coerced));
+    onChange(coerced);
   };
 
   return (

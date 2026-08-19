@@ -71,21 +71,27 @@ REPO="\${VANTIK_REPO_DIR:-/workspace/repo}"
 
 list_repo() {
   cd "$REPO" 2>/dev/null || return 1
-  find . \\( ${PRUNE_EXPRESSION} \\) -prune -o -type f -print |
+  find . \\( ${PRUNE_EXPRESSION} \\) -prune -o \\( -type f -o -type l \\) -print |
     sed 's|^\\./||' | LC_ALL=C sort
 }
 
 list_base() {
   cd "$BASE" 2>/dev/null || return 1
-  find . -type f -print | sed 's|^\\./||' | LC_ALL=C sort
+  find . \\( -type f -o -type l \\) -print | sed 's|^\\./||' | LC_ALL=C sort
 }
 
 # A content hash of everything the agent could have touched. Used only to spot
 # a pass that changed nothing, so it needs to be stable, not cryptographic.
 tree_hash() {
-  list_repo | tr '\\n' '\\0' |
-    ( cd "$REPO" && xargs -0 sha256sum 2>/dev/null ) |
-    sha256sum | cut -d' ' -f1
+  ( cd "$REPO" 2>/dev/null || return 1
+    list_repo | while IFS= read -r f; do
+      if [ -L "$f" ]; then
+        printf 'symlink:%s  %s\\n' "$(readlink "$f")" "$f"
+      else
+        sha256sum "$f" 2>/dev/null
+      fi
+    done
+  ) | sha256sum | cut -d' ' -f1
 }
 
 tree_diff() {
@@ -94,17 +100,35 @@ tree_diff() {
 
     a="$BASE/$f"
     b="$REPO/$f"
-    [ -f "$a" ] || a=/dev/null
-    [ -f "$b" ] || b=/dev/null
 
-    if [ "$a" = /dev/null ] && [ "$b" = /dev/null ]; then
+    # Determine type of each side: 'l' symlink, 'f' regular file, '-' absent.
+    a_type='-'; [ -L "$a" ] && a_type='l' || { [ -f "$a" ] && a_type='f'; }
+    b_type='-'; [ -L "$b" ] && b_type='l' || { [ -f "$b" ] && b_type='f'; }
+
+    if [ "$a_type" = '-' ] && [ "$b_type" = '-' ]; then
       continue
     fi
 
-    cmp -s "$a" "$b" && continue
+    # Skip when both sides are identical.
+    if [ "$a_type" = "$b_type" ]; then
+      if [ "$a_type" = 'l' ]; then
+        [ "$(readlink "$a")" = "$(readlink "$b")" ] && continue
+      else
+        cmp -s "$a" "$b" && continue
+      fi
+    fi
 
-    if [ "$b" = /dev/null ]; then
+    if [ "$b_type" = '-' ]; then
       printf '=== %s (deleted) ===\\n' "$f"
+      continue
+    fi
+
+    if [ "$b_type" = 'l' ]; then
+      if [ "$a_type" = '-' ]; then
+        printf '=== %s (new symlink -> %s) ===\\n' "$f" "$(readlink "$b")"
+      else
+        printf '=== %s (symlink -> %s) ===\\n' "$f" "$(readlink "$b")"
+      fi
       continue
     fi
 
@@ -115,15 +139,13 @@ tree_diff() {
       continue
     fi
 
-    if [ "$a" = /dev/null ]; then
+    if [ "$a_type" = '-' ]; then
       printf '=== %s (new file) ===\\n' "$f"
+      diff -u /dev/null "$b" 2>/dev/null | tail -n +3
     else
       printf '=== %s ===\\n' "$f"
+      diff -u "$a" "$b" 2>/dev/null | tail -n +3
     fi
-
-    # The first two lines name host paths the reviewer has no use for; the
-    # header above already said which file this is.
-    diff -u "$a" "$b" 2>/dev/null | tail -n +3
   done
 }
 

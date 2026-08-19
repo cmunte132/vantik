@@ -192,7 +192,7 @@ function findingsOf(value: unknown): ReviewFinding[] {
  * going and looking, because a reviewer that has opened the file writes a
  * different finding from one that has only read a diff.
  */
-const EVIDENCE = /(^|\s)[\w./-]+\.[a-z]{1,5}:\d+|`[^`]+`/i;
+const EVIDENCE = /(^|\s)[\w./-]+\.[a-z]+:\d+|`[^`]+`/i;
 
 /**
  * Drops findings that cite nothing, and keeps the worst of what is left.

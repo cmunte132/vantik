@@ -70,12 +70,16 @@ export function workspaceAgentDefaults(
   };
 }
 
-/** The ceilings this workspace sets, with every field checked. */
-const LIMIT_NAMES = [
+/**
+ * Limit fields that must be integers (counts and durations).
+ *
+ * `maxCostUsd` is intentionally absent: spending $1.50 is meaningful, so
+ * decimal budgets are valid.
+ */
+const INTEGER_LIMIT_NAMES = [
   'maxDurationMs',
   'maxTokens',
   'maxIterations',
-  'maxCostUsd',
   'maxCycles',
 ] as const;
 
@@ -95,12 +99,26 @@ function limitsOf(value: unknown): AgentRunLimits {
   const raw = value as Record<string, unknown>;
   const limits: AgentRunLimits = {};
 
-  for (const name of LIMIT_NAMES) {
+  for (const name of INTEGER_LIMIT_NAMES) {
     const entry = raw[name];
 
-    if (typeof entry === 'number' && Number.isFinite(entry) && entry > 0) {
+    if (
+      typeof entry === 'number' &&
+      Number.isFinite(entry) &&
+      entry > 0 &&
+      Number.isInteger(entry)
+    ) {
       limits[name] = entry;
     }
+  }
+
+  const costEntry = raw['maxCostUsd'];
+  if (
+    typeof costEntry === 'number' &&
+    Number.isFinite(costEntry) &&
+    costEntry > 0
+  ) {
+    limits['maxCostUsd'] = costEntry;
   }
 
   return limits;

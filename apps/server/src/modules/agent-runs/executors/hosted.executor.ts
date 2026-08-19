@@ -614,6 +614,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
             : []),
           'rm -f /workspace/repo.tar.gz /workspace/repo.tar.gz.b64',
         ].join(' && '),
+        { timeoutMs: limits.deadlineAt - Date.now() },
       );
       egressDenied += unpack.egressDenied;
 
@@ -628,7 +629,10 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       }
 
       for (const command of config.setupCommands ?? []) {
-        const result = await sandbox.exec(`cd /workspace/repo && ${command}`);
+        const result = await sandbox.exec(
+          `cd /workspace/repo && ${command}`,
+          { timeoutMs: limits.deadlineAt - Date.now() },
+        );
         egressDenied += result.egressDenied;
 
         if (result.exitCode !== 0) {
@@ -699,6 +703,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
             (file) => `{ [ -e ${BASE_DIR}/${file} ] || rm -f ${file}; }`,
           ),
         ].join(' && '),
+        { timeoutMs: limits.deadlineAt - Date.now() },
       );
       egressDenied += swept.egressDenied;
 
@@ -710,6 +715,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         'tar czf /tmp/tree.tar.gz -C /workspace/repo . && ' +
           'base64 /tmp/tree.tar.gz > /workspace/tree.b64 && ' +
           'rm -f /tmp/tree.tar.gz',
+        { timeoutMs: limits.deadlineAt - Date.now() },
       );
       egressDenied += packed.egressDenied;
 

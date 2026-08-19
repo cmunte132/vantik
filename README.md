@@ -86,9 +86,10 @@ That repeats until the reviewer accepts the work or the issue's budget runs out.
 A run that runs out still delivers its branch; it finishes as **Needs review**
 rather than as a success, and the pull request says that nothing signed it off.
 
-The ceilings are three review passes, five dollars and thirty minutes for the
-whole attempt. All three, and the switch that turns reviewing off, are in
-**Settings → Agents**. The full behaviour is in
+The ceilings are three review passes and five dollars for the whole attempt.
+Both, and the switch that turns reviewing off, are in **Settings → Agents**.
+The wall-clock limit (thirty minutes by default) applies per run and is not
+currently configurable in the settings screen. The full behaviour is in
 [the review cycle documentation](./apps/docs/docs/agents/review-cycle.mdx).
 
 ### Scheduled work

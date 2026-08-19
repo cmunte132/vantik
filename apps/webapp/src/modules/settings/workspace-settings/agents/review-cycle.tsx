@@ -141,6 +141,7 @@ function Budget({
         <span className="w-44 shrink-0">{label}</span>
 
         <Input
+          aria-label={label}
           className="w-28"
           type="number"
           min="0"

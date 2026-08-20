@@ -254,6 +254,12 @@ export interface CreateProjectInput {
   /** ISO dates, as the API stores them. */
   startDate?: string;
   endDate?: string;
+  /**
+   * The teams whose work this project holds, by identifier ("ENG"), name or
+   * id. Omitted leaves the project with none, which the server allows: a
+   * project belongs to its workspace and no team owns it.
+   */
+  teams?: string[];
 }
 
 /**
@@ -274,7 +280,10 @@ export interface UpdateProjectInput {
   endDate?: string;
   /** Member id of the project lead. */
   leadUserId?: string;
-  /** Team ids the project belongs to; replaces the existing set. */
+  /**
+   * The teams the project belongs to, by identifier ("ENG"), name or id.
+   * Replaces the existing set; an empty list clears it.
+   */
   teams?: string[];
 }
 
@@ -554,12 +563,42 @@ export class VantikAgent {
   // ---------------------------------------------------------------- writing
 
   /**
+   * Turns team references into the ids a project stores.
+   *
+   * A reference is what a person says — "ENG", or "Engineering" — and
+   * `resolveTeam` takes an id too, so a caller already holding ids loses
+   * nothing by going through here. It also reports an unknown team by listing
+   * the ones that exist, which is the difference between a usable error and a
+   * rejected uuid.
+   *
+   * Undefined is passed through rather than turned into an empty list. On
+   * update the two mean opposite things: an omitted field leaves the teams
+   * alone, and an empty list clears them.
+   */
+  private async resolveTeams(
+    references?: string[],
+  ): Promise<string[] | undefined> {
+    if (!references) {
+      return undefined;
+    }
+
+    const teams = await Promise.all(
+      references.map((reference) => this.directory.resolveTeam(reference)),
+    );
+
+    // Named twice is still one team.
+    return [...new Set(teams.map((team) => team.id))];
+  }
+
+  /**
    * Opens a project: the container for a body of work that spans several tasks.
    *
    * Neutral about when one is warranted — that judgment belongs to the surface
    * talking to the person or the model, not to the client underneath it.
    */
   async createProject(input: CreateProjectInput): Promise<Project> {
+    const teams = await this.resolveTeams(input.teams);
+
     const created = await this.client.post<Project>('/projects', {
       body: {
         name: input.name,
@@ -567,6 +606,7 @@ export class VantikAgent {
         ...(input.status ? { status: input.status } : {}),
         ...(input.startDate ? { startDate: input.startDate } : {}),
         ...(input.endDate ? { endDate: input.endDate } : {}),
+        ...(teams ? { teams } : {}),
       },
     });
 
@@ -600,6 +640,7 @@ export class VantikAgent {
     input: UpdateProjectInput,
   ): Promise<Project> {
     const { id } = await this.directory.resolveProject(reference);
+    const teams = await this.resolveTeams(input.teams);
 
     const updated = await this.client.post<Project>(`/projects/${id}`, {
       // Spread rather than field-by-field so that an explicit empty string —
@@ -613,7 +654,7 @@ export class VantikAgent {
         startDate: input.startDate,
         endDate: input.endDate,
         leadUserId: input.leadUserId,
-        teams: input.teams,
+        teams,
       },
     });
 

@@ -83,6 +83,10 @@ export function configureProjectCommands(program: Command) {
     .option('-s, --status <status>', 'Defaults to the first workspace status')
     .option('--start <date>', 'ISO start date')
     .option('--end <date>', 'ISO end date')
+    .option(
+      '--team <team...>',
+      'Teams the project belongs to, by identifier, name or id',
+    )
     .option('--json', 'Output raw JSON')
     .action(async (name, options) => {
       const description = await resolveBody(options.description);
@@ -96,6 +100,7 @@ export function configureProjectCommands(program: Command) {
             status: options.status,
             startDate: options.start,
             endDate: options.end,
+            teams: options.team,
           }),
         (created) => renderProjectRef(created, 'Created'),
       );
@@ -111,6 +116,10 @@ export function configureProjectCommands(program: Command) {
     .option('--start <date>', 'ISO start date')
     .option('--end <date>', 'ISO end date')
     .option('--lead <userId>', 'Member id of the project lead')
+    .option(
+      '--team <team...>',
+      'Replaces the teams the project belongs to, by identifier, name or id',
+    )
     .option('--json', 'Output raw JSON')
     .action(async (ref, options) => {
       const description = await resolveBody(options.description);
@@ -125,6 +134,7 @@ export function configureProjectCommands(program: Command) {
             startDate: options.start,
             endDate: options.end,
             leadUserId: options.lead,
+            teams: options.team,
           }),
         (updated) => renderProjectRef(updated, 'Updated'),
       );

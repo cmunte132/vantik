@@ -8,11 +8,14 @@
  * repository writing the agent's instructions, which is why discovery is off
  * (`--no-skills`) and these are passed explicitly with `--skill`.
  *
- * Two skills, because they answer two different questions. One is how to read a
- * Vantik issue — what a Definition of Done is for, and that it is the bar
- * rather than a suggestion. The other is how to write code well enough that the
- * diff is worth reviewing. Neither is repository-specific; a repository's own
- * conventions come from its files and its `setupCommands`.
+ * Three skills, because they answer three different questions. One is how to
+ * read a Vantik issue — what a Definition of Done is for, and that it is the
+ * bar rather than a suggestion. One is how to write code well enough that the
+ * diff is worth reviewing. The third is how to review one, and it is loaded
+ * only by the review pass: an implementer given the reviewing skill starts
+ * grading itself, which is the exact thing the separate pass exists to avoid.
+ * None is repository-specific; a repository's own conventions come from its
+ * files and its `setupCommands`.
  *
  * Both are deliberately read-only about the tracker. The agent holds no Vantik
  * credential yet — ENG-84 — so a skill telling it to tick criteria as it goes
@@ -158,7 +161,115 @@ after you stop. Leave the working tree with your changes in it.
 `,
 };
 
-export const BUNDLED_SKILLS: BundledSkill[] = [VANTIK_ISSUES, WRITING_CODE];
+const REVIEWING_WORK: BundledSkill = {
+  name: 'reviewing-work',
+  body: `---
+name: reviewing-work
+description: How to review a change someone else made against the issue it claims to satisfy — what counts as evidence, what is not worth reporting, and why accepting bad work is worse than missing something. Use when reviewing a diff rather than writing one.
+---
+
+# Reviewing work you did not write
+
+You are the only independent read this change gets before a person sees it. You
+did not write it, you do not know what the author intended, and that is the
+whole value you add. Do not try to reconstruct their reasoning — judge what is
+in front of you against what was asked.
+
+## Start from the change, not the codebase
+
+Read the diff first, then open the files it touches. A diff tells you what
+moved; the file around it tells you whether the thing still makes sense. Both,
+in that order — reviewing a whole repository is how a review runs out of budget
+without saying anything.
+
+Then read the callers of what changed. Most real defects a reviewer catches are
+not in the lines that changed; they are in something that depended on the old
+behaviour.
+
+## Judge against the criteria, not your taste
+
+The Definition of Done is the bar. Something adjacent to a criterion does not
+meet it, and neither does something better than it that the issue did not ask
+for.
+
+- A criterion about *behaviour* needs a test that would fail without the change.
+- A criterion the change does not address at all is a finding, even if the code
+  it did write is good.
+- A change that meets every criterion and also does three other things has a
+  scope finding.
+
+## Every finding needs evidence
+
+A finding you cannot point at is an opinion, and it will be discarded unread.
+Evidence is a \`file.ts:123\` you have actually opened, or a command in backticks
+you have actually run and watched fail.
+
+This is not a formatting rule. A reviewer that has opened the file writes a
+different finding from one that has only skimmed a diff, and requiring the
+citation is what forces the first kind.
+
+**Do not report**: naming you would have chosen differently, formatting, "could
+be more idiomatic", or anything that begins "consider". If it does not break a
+criterion, break the code, or leave behaviour untested, it is not a finding.
+
+## Tests are where to look hardest
+
+A generated test that cannot fail is the most common way a change looks
+finished and is not.
+
+- Would this test fail if the implementation were wrong? If you cannot say yes,
+  that is a finding.
+- \`assertNotNull\` where the point was a particular value is the characteristic
+  defect. So is a test that asserts the function was called rather than what it
+  did.
+- Behaviour that changed with no test covering it is a finding on its own.
+
+## Accepting bad work is the worst thing you can do
+
+Missing something is recoverable — a human reads this next. Signing off work
+that does not meet the bar is what makes the whole review worthless, because
+after it happens once nobody can trust an acceptance again.
+
+Inventing findings to look thorough is the second worst. It sends the next pass
+chasing things that are not wrong, and it spends budget that the real defects
+needed.
+
+## Do not fix anything
+
+You have write access to the tree and you must not use it. A reviewer that
+fixes what it finds has destroyed the independent read and produced work nobody
+has reviewed. Report it; someone else changes it.
+`,
+};
+
+/**
+ * Everything seeded into a guest. Both passes get all three files; which ones
+ * are *loaded* is decided per invocation by `skillArguments`.
+ */
+export const BUNDLED_SKILLS: BundledSkill[] = [
+  VANTIK_ISSUES,
+  WRITING_CODE,
+  REVIEWING_WORK,
+];
+
+/**
+ * What an implementing pass loads.
+ *
+ * Deliberately without the reviewing skill. An implementer told how to review
+ * spends its turns grading its own diff, and its verdict on itself is worth
+ * nothing — that judgement is the review pass's job precisely because it is
+ * made by something that did not write the code.
+ */
+export const IMPLEMENTER_SKILLS: BundledSkill[] = [VANTIK_ISSUES, WRITING_CODE];
+
+/**
+ * What a review pass loads.
+ *
+ * Without `writing-code`, which is instructions for making a change — the one
+ * thing a reviewer must not do. It keeps `vantik-issues` because judging work
+ * against a Definition of Done requires knowing what one is for.
+ */
+export const REVIEWER_SKILLS: BundledSkill[] = [VANTIK_ISSUES, REVIEWING_WORK];
 
 /** Where a skill is seeded, relative to the guest's `/workspace`. */
 export function skillPath(name: string): string {

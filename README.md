@@ -72,6 +72,26 @@ For a deployment that is not on localhost, do these two steps:
 1. Set `FRONTEND_HOST` and `BACKEND_HOST` in `.env` to your domain.
 2. Change `POSTGRES_PASSWORD` and `TYPESENSE_API_KEY`.
 
+### How agent work gets checked
+
+Delegate an issue to an agent in the hosted sandbox and the work goes round a
+loop before anybody sees a pull request. One agent implements the change.
+Vantik runs the repository's own test, typecheck, lint and build commands
+against the tree it left. A *second* agent — a fresh process, in the same
+sandbox, with different instructions and no sight of the first one's reasoning —
+reads the diff against the issue and reports what is missing, citing a file and
+a line for each thing. Those go back to be fixed, and it reads the result again.
+
+That repeats until the reviewer accepts the work or the issue's budget runs out.
+A run that runs out still delivers its branch; it finishes as **Needs review**
+rather than as a success, and the pull request says that nothing signed it off.
+
+The ceilings are three review passes and five dollars for the whole attempt.
+Both, and the switch that turns reviewing off, are in **Settings → Agents**.
+The wall-clock limit (thirty minutes by default) applies per run and is not
+currently configurable in the settings screen. The full behaviour is in
+[the review cycle documentation](./apps/docs/docs/agents/review-cycle.mdx).
+
 ### Scheduled work
 
 Vantik does some of its work on a schedule, and not in response to a request.

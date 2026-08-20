@@ -1,6 +1,8 @@
 import {
   THINKING_LEVELS,
   isSafeModelId,
+  type AgentRunLimits,
+  type AgentRunPhases,
   type AgentRunRepoConfig,
   type ModelChoice,
   type ThinkingLevel,
@@ -31,16 +33,25 @@ export interface WorkspaceAgentDefaults {
    */
   model: ModelChoice;
   /**
-   * Which ENG-62 phases the workspace runs. Absent means none, and none is
-   * the shipped default: the null hypothesis is that implement plus
-   * deterministic verification is as good, and every phase has to earn its
-   * place against that.
+   * Which review phases the workspace runs.
+   *
+   * Absent means "not stated", which is not the same as off — each executor
+   * decides what an unstated flag means for it. `specify` and `score` belong
+   * to the BYO runner's loop and default off there, because the null
+   * hypothesis is that implement plus deterministic verification is as good.
+   * `review` is the hosted sandbox's implement → verify → review → revise
+   * cycle and defaults on, because a diff nothing has read is the failure that
+   * whole executor is arranged to prevent.
    */
-  phases: {
-    specify?: boolean;
-    score?: boolean;
-    review?: boolean;
-  };
+  phases: AgentRunPhases;
+  /**
+   * What a run may spend before somebody has to look at it.
+   *
+   * A workspace-level setting because the cost of agent work lands on whoever
+   * holds the model key, and they are not the person clicking delegate. A run
+   * may still be given its own ceilings; these are what applies when it is not.
+   */
+  limits: AgentRunLimits;
 }
 
 export function workspaceAgentDefaults(
@@ -55,7 +66,62 @@ export function workspaceAgentDefaults(
     repo: isObject(agentRuns?.repo) ? agentRuns.repo : {},
     model: modelChoiceOf(agentRuns?.model),
     phases: phaseFlagsOf(agentRuns?.phases),
+    limits: limitsOf(agentRuns?.limits),
   };
+}
+
+/**
+ * Limit fields that must be integers (counts and durations).
+ *
+ * `maxCostUsd` is intentionally absent: spending $1.50 is meaningful, so
+ * decimal budgets are valid.
+ */
+const INTEGER_LIMIT_NAMES = [
+  'maxDurationMs',
+  'maxTokens',
+  'maxIterations',
+  'maxCycles',
+] as const;
+
+/**
+ * Stored ceilings, read back one field at a time.
+ *
+ * Anything that is not a positive, finite number is dropped rather than passed
+ * through. A `0` or a `"5"` reaching the run would be a ceiling nothing can
+ * satisfy or a comparison against a string, and both surface as a run that
+ * stops immediately for a reason nobody can find.
+ */
+function limitsOf(value: unknown): AgentRunLimits {
+  if (!isObject(value)) {
+    return {};
+  }
+
+  const raw = value as Record<string, unknown>;
+  const limits: AgentRunLimits = {};
+
+  for (const name of INTEGER_LIMIT_NAMES) {
+    const entry = raw[name];
+
+    if (
+      typeof entry === 'number' &&
+      Number.isFinite(entry) &&
+      entry > 0 &&
+      Number.isInteger(entry)
+    ) {
+      limits[name] = entry;
+    }
+  }
+
+  const costEntry = raw['maxCostUsd'];
+  if (
+    typeof costEntry === 'number' &&
+    Number.isFinite(costEntry) &&
+    costEntry > 0
+  ) {
+    limits['maxCostUsd'] = costEntry;
+  }
+
+  return limits;
 }
 
 const PHASE_NAMES = ['specify', 'score', 'review'] as const;

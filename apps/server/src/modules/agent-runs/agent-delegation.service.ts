@@ -19,6 +19,7 @@ import { LoggerService } from 'modules/logger/logger.service';
 import {
   agentBoundExecutor,
   workspaceAgentDefaults,
+  type WorkspaceAgentDefaults,
 } from './agent-run-settings';
 import { AGENT_RUN_WORKSPACE_CONCURRENCY } from './agent-runs.interface';
 import { AgentRunsService } from './agent-runs.service';
@@ -87,7 +88,14 @@ export class AgentDelegationService {
     await this.assertNoLiveRun(input.issueId, input.force ?? false);
     await this.assertBelowConcurrencyCap(input.workspaceId);
 
-    const executor = await this.resolveExecutor(input);
+    // Read once and passed down. Every layered decision below — which backend,
+    // which model, which phases, which ceilings — comes out of the same blob,
+    // and reading it per question is both three round trips and three chances
+    // for a delegation to be resolved against settings that changed halfway
+    // through it.
+    const defaults = await this.workspaceDefaults(input.workspaceId);
+
+    const executor = await this.resolveExecutor(defaults, input);
 
     const availability = await executor.availability(input.workspaceId);
     if (availability.available === false) {
@@ -105,9 +113,10 @@ export class AgentDelegationService {
     // default underneath, this request's choice on top. Stored on the run
     // rather than resolved again at dispatch, so a later change to the
     // workspace default cannot rewrite what a finished run was asked to do.
-    const config = {
+    const config: AgentRunConfig = {
       ...contextPack.repo,
-      ...(await this.resolveModel(input)),
+      ...this.resolveModel(defaults, input),
+      ...this.resolveCycle(defaults, input),
     };
 
     const run = await this.agentRuns.createRun({
@@ -389,23 +398,29 @@ export class AgentDelegationService {
 
   // --------------------------------------------------------------- resolving
 
-  private async resolveExecutor(input: DelegateInput) {
-    const [membership, workspace] = await Promise.all([
-      this.prisma.usersOnWorkspaces.findFirst({
-        where: { userId: input.agentUserId, workspaceId: input.workspaceId },
-        select: { settings: true },
-      }),
-      this.prisma.workspace.findUnique({
-        where: { id: input.workspaceId },
-        select: { preferences: true },
-      }),
-    ]);
+  /** The workspace's agent settings, read once per delegation. */
+  private async workspaceDefaults(workspaceId: string) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { preferences: true },
+    });
+
+    return workspaceAgentDefaults(workspace?.preferences);
+  }
+
+  private async resolveExecutor(
+    defaults: WorkspaceAgentDefaults,
+    input: DelegateInput,
+  ) {
+    const membership = await this.prisma.usersOnWorkspaces.findFirst({
+      where: { userId: input.agentUserId, workspaceId: input.workspaceId },
+      select: { settings: true },
+    });
 
     return this.registry.resolve({
       requested: input.executor,
       agentBound: agentBoundExecutor(membership?.settings),
-      workspaceDefault: workspaceAgentDefaults(workspace?.preferences)
-        .defaultExecutor,
+      workspaceDefault: defaults.defaultExecutor,
     });
   }
 
@@ -416,21 +431,52 @@ export class AgentDelegationService {
    * field, so a run that overrides only the thinking level keeps the
    * workspace's provider and model rather than losing them.
    */
-  private async resolveModel(input: DelegateInput): Promise<ModelChoice> {
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: input.workspaceId },
-      select: { preferences: true },
-    });
-
-    const fallback = workspaceAgentDefaults(workspace?.preferences).model;
-
+  private resolveModel(
+    defaults: WorkspaceAgentDefaults,
+    input: DelegateInput,
+  ): ModelChoice {
     return {
-      ...fallback,
+      ...defaults.model,
       ...stripUndefined({
         provider: input.config?.provider,
         model: input.config?.model,
         thinking: input.config?.thinking,
       }),
+    };
+  }
+
+  /**
+   * Which review phases this run performs, and what it may spend doing it.
+   *
+   * The workspace's stored phase switches were parsed and then dropped on the
+   * floor here: the run config was built from the repo and the model alone, so
+   * `config.phases` was undefined on every run ever dispatched and no executor
+   * could act on a setting somebody had deliberately set. Layered like
+   * everything else — workspace underneath, request on top — and stored on the
+   * run, so "was this diff reviewed, and against what ceiling" is answerable
+   * from the row long after the settings have moved on.
+   */
+  private resolveCycle(
+    defaults: WorkspaceAgentDefaults,
+    input: DelegateInput,
+  ): Pick<AgentRunConfig, 'phases' | 'limits'> {
+    const phases = {
+      ...defaults.phases,
+      ...stripUndefined(input.config?.phases ?? {}),
+    };
+
+    const limits = {
+      ...defaults.limits,
+      ...stripUndefined(input.config?.limits ?? {}),
+    };
+
+    // Absent rather than empty. A workspace that has configured nothing should
+    // not look, on the row, like one that configured everything to its default
+    // — the run record is what somebody reads to find out what this run was
+    // actually asked to do.
+    return {
+      ...(Object.keys(phases).length ? { phases } : {}),
+      ...(Object.keys(limits).length ? { limits } : {}),
     };
   }
 

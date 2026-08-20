@@ -189,13 +189,21 @@ export function whereTheWorkWent(result: {
 }
 
 /**
+ * The phases within one pass of the cycle, in the order they happen.
+ *
+ * `implement` and `revise` share a slot because they are the same step: the
+ * first pass implements, every later one revises what the reviewer found.
+ */
+const CYCLE_ORDER = ['specify', 'implement', 'revise', 'verify', 'review'];
+
+/**
  * The phases a run moves through, in the order it moves through them.
  *
  * The timeline groups events under these headings. An event carrying a phase
  * the client does not know about still has to appear, so unknown phases sort
  * after these rather than being dropped.
  */
-export const PHASE_ORDER = ['setup', 'specify', 'implement', 'verify', 'report'];
+export const PHASE_ORDER = ['setup', ...CYCLE_ORDER, 'report'];
 
 /**
  * Past tense, because a timeline is a record of what happened.
@@ -208,9 +216,73 @@ export const PHASE_LABEL: Record<string, string> = {
   setup: 'Set up the environment',
   specify: 'Wrote the tests first',
   implement: 'Did the work',
+  revise: 'Fixed what the review found',
   verify: 'Ran the checks',
+  review: 'Reviewed the work',
   report: 'Handed the work back',
 };
+
+/**
+ * A phase name split into the step it is and the pass it belongs to.
+ *
+ * A hosted run goes round the cycle more than once, and the later passes carry
+ * their number — `revise-2`, `review-3`. The first pass does not, so a run that
+ * needed only one reads exactly as it did before the cycle existed.
+ */
+export function splitPhase(phase: string): { base: string; pass: number } {
+  const match = /^(.*?)-(\d+)$/.exec(phase);
+
+  return match
+    ? { base: match[1], pass: Number(match[2]) }
+    : { base: phase, pass: 1 };
+}
+
+/**
+ * What a phase is called, whichever pass it is from.
+ *
+ * The pass number is on the heading rather than folded into the label, because
+ * "Reviewed the work" three times in a row tells a reader nothing about which
+ * review they are looking at.
+ */
+export function phaseLabel(phase: string): string {
+  const { base, pass } = splitPhase(phase);
+  const label = PHASE_LABEL[base];
+
+  if (!label) {
+    return phase;
+  }
+
+  return pass > 1 ? `${label} (pass ${pass})` : label;
+}
+
+/**
+ * Where a phase sorts in the timeline.
+ *
+ * Ordered by pass first and step second, so pass two's work lands after pass
+ * one's review rather than being merged into pass one's work — which is what
+ * grouping on the bare name did. `setup` and `report` are outside the cycle and
+ * anchor the two ends whatever pass count sits between them.
+ */
+export function phaseRank(phase: string): number {
+  const { base, pass } = splitPhase(phase);
+
+  if (base === 'setup') {
+    return Number.MIN_SAFE_INTEGER;
+  }
+
+  if (base === 'report') {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  const index = CYCLE_ORDER.indexOf(base);
+
+  // A phase this bundle has never heard of keeps its own group at the end
+  // rather than being dropped: a newer server can emit one, and losing those
+  // lines would lose exactly the progress a reader came for.
+  return index === -1
+    ? Number.MAX_SAFE_INTEGER - 1
+    : pass * CYCLE_ORDER.length + index;
+}
 
 /**
  * A duration in milliseconds, said the way the rest of the app says one.

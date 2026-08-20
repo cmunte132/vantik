@@ -13,7 +13,7 @@ import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
-import { PHASE_LABEL, PHASE_ORDER, formatMs, isLive } from './run-vocabulary';
+import { formatMs, isLive, phaseLabel, phaseRank } from './run-vocabulary';
 
 interface Props {
   run: any;
@@ -91,9 +91,7 @@ const PhaseNode = observer(
             line={!last}
           />
 
-          <span className="grow truncate font-medium">
-            {PHASE_LABEL[phase] ?? phase}
-          </span>
+          <span className="grow truncate font-medium">{phaseLabel(phase)}</span>
 
           {durationMs ? (
             <span className="shrink-0 font-mono text-xs text-muted-foreground">
@@ -418,10 +416,5 @@ function groupByPhase(events: any[]): Array<{ phase: string; lines: any[] }> {
 
   return [...groups.entries()]
     .map(([phase, lines]) => ({ phase, lines }))
-    .sort((a, b) => rank(a.phase) - rank(b.phase));
-}
-
-function rank(phase: string): number {
-  const index = PHASE_ORDER.indexOf(phase);
-  return index === -1 ? PHASE_ORDER.length : index;
+    .sort((a, b) => phaseRank(a.phase) - phaseRank(b.phase));
 }

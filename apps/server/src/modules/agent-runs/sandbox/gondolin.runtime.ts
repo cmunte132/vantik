@@ -98,7 +98,9 @@ export class GondolinRuntime implements SandboxRuntime {
 
     const vm = await this.module.VM.create({
       httpHooks: countDenials(httpHooks, denials),
-      env: { ...spec.env, ...secretEnv },
+      // Workspace paths sit underneath, so a caller that sets one of them
+      // wins, and the substituted secrets win over everything.
+      env: { ...workspaceEnv(), ...spec.env, ...secretEnv },
       memory: `${spec.limits.memoryMb}M`,
       cpus: spec.limits.cpus,
       // Growing the root disk needs `resize2fs` *inside* the guest, which the
@@ -114,6 +116,10 @@ export class GondolinRuntime implements SandboxRuntime {
     const handle = new GondolinHandle(vm, spec, this.logger, denials);
 
     try {
+      // Before the files are seeded, so the run's own files land on the
+      // writable area rather than under it.
+      await mountWorkspace(vm, spec);
+
       for (const [path, contents] of Object.entries(spec.files)) {
         await handle.writeFile(path, contents);
       }
@@ -173,6 +179,105 @@ function rootfsSizeMb(): number | undefined {
 
   return Number.isFinite(configured) && configured > 0 ? configured : undefined;
 }
+
+const WORKSPACE = '/workspace';
+
+/**
+ * Everything that writes, pointed at `/workspace`.
+ *
+ * `npx` fetches the harness into the npm cache, which defaults to `$HOME`, and
+ * `$HOME` on the stock image is on a root filesystem with about 80MB free.
+ * Pointing both here is what keeps the install on the writable area — and it
+ * has a second effect worth having: the harness's own session state lands
+ * outside the checkout, so it cannot turn up in the diff a reviewer reads.
+ */
+function workspaceEnv(): Record<string, string> {
+  return {
+    HOME: `${WORKSPACE}/home`,
+    npm_config_cache: `${WORKSPACE}/.npm`,
+    TMPDIR: `${WORKSPACE}/tmp`,
+  };
+}
+
+/**
+ * Gives the run somewhere to write, before it has anything to write.
+ *
+ * The stock guest image is a ~260MB read-mostly root filesystem with about
+ * 80MB free, and the harness alone unpacks to a little over 200MB — so every
+ * hosted run died on `npx` with ENOSPC before the agent had said a word. The
+ * other repair is to grow the root disk, which needs `resize2fs` inside the
+ * guest; the stock image does not carry it, and asking for a size without it
+ * fails the boot rather than being ignored. A tmpfs needs nothing from the
+ * image, so it works on the image people actually have.
+ *
+ * The cost is stated rather than hidden: this is memory. The checkout, its
+ * dependencies and the harness share the RAM the agent computes in, which is
+ * why the size is capped against `memoryMb` rather than taken from `diskMb` —
+ * a runaway `npm install` should hit a full filesystem and fail, not take the
+ * guest down with an OOM. A deployment that has built an image carrying
+ * `resize2fs` sets `VANTIK_SANDBOX_ROOTFS_MB`, gets a real disk of the size it
+ * asked for, and skips all of this.
+ */
+async function mountWorkspace(
+  // The raw guest rather than the handle: the handle runs everything from
+  // `/workspace`, which is the one directory that does not exist yet.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  vm: any,
+  spec: SandboxSpec,
+): Promise<void> {
+  const directories = ['home', '.npm', 'tmp']
+    .map((name) => `${WORKSPACE}/${name}`)
+    .join(' ');
+
+  // A deployment with a real disk has already been given the size it asked
+  // for, and a tmpfs on top of it would be a smaller ceiling, not a larger one.
+  if (rootfsSizeMb()) {
+    const prepared = await vm.exec(`mkdir -p ${directories}`, { cwd: '/' });
+
+    if ((prepared.exitCode ?? 0) !== 0) {
+      throw new Error(
+        `Could not prepare ${WORKSPACE} in the guest: ${prepared.stderr}`,
+      );
+    }
+
+    return;
+  }
+
+  const result = await vm.exec(
+    `mkdir -p ${WORKSPACE} && ` +
+      `mount -t tmpfs -o size=${workspaceSizeMb(spec)}m tmpfs ${WORKSPACE} && ` +
+      `mkdir -p ${directories}`,
+    { cwd: '/' },
+  );
+
+  // Refused rather than carried on with. The run would otherwise get as far as
+  // fetching the harness and fail there, and "npm could not write a file" is a
+  // long way from the thing that is actually wrong.
+  if ((result.exitCode ?? 0) !== 0) {
+    throw new Error(
+      `Could not mount a writable ${WORKSPACE} in the guest, so the harness ` +
+        `would have nowhere to install: ${result.stderr}`,
+    );
+  }
+}
+
+/**
+ * How large the writable area may grow.
+ *
+ * Three quarters of the guest's memory, and never more than the caller asked
+ * for. tmpfs charges only for what is written, so this is a ceiling rather
+ * than a reservation — but it is a ceiling that has to leave the agent room to
+ * run in, which `diskMb` (tens of gigabytes, written for a real disk) does not.
+ */
+export function workspaceSizeMb(spec: SandboxSpec): number {
+  return Math.max(
+    MIN_WORKSPACE_MB,
+    Math.min(spec.limits.diskMb, Math.floor((spec.limits.memoryMb * 3) / 4)),
+  );
+}
+
+/** Below this the harness does not fit, so there is no point starting. */
+const MIN_WORKSPACE_MB = 512;
 
 /**
  * Counts refused egress without changing what is refused.

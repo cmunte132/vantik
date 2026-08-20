@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { type Step, phrase, toSteps } from './run-timeline';
+import { phaseLabel, phaseRank } from './run-vocabulary';
 
 /**
  * The two transformations that make a run readable.
@@ -20,9 +21,18 @@ const event = (
 describe('toSteps', () => {
   it('merges adjacent reads into one row that counts them', () => {
     const steps = toSteps([
-      event('1', 'read: a/repo-routing.ts', { kind: 'read', target: 'a/repo-routing.ts' }),
-      event('2', 'read: a/context-pack.ts', { kind: 'read', target: 'a/context-pack.ts' }),
-      event('3', 'read: a/sandbox.ts', { kind: 'read', target: 'a/sandbox.ts' }),
+      event('1', 'read: a/repo-routing.ts', {
+        kind: 'read',
+        target: 'a/repo-routing.ts',
+      }),
+      event('2', 'read: a/context-pack.ts', {
+        kind: 'read',
+        target: 'a/context-pack.ts',
+      }),
+      event('3', 'read: a/sandbox.ts', {
+        kind: 'read',
+        target: 'a/sandbox.ts',
+      }),
     ]);
 
     expect(steps).toHaveLength(1);
@@ -113,7 +123,12 @@ describe('toSteps', () => {
     // An outcome with no matching ref is all the reader has. Dropping it would
     // lose the only record that something broke.
     const steps = toSteps([
-      event('1', 'bash failed', { kind: 'bash', ref: 'gone', ok: false }, 'ERROR'),
+      event(
+        '1',
+        'bash failed',
+        { kind: 'bash', ref: 'gone', ok: false },
+        'ERROR',
+      ),
     ]);
 
     expect(steps).toHaveLength(1);
@@ -145,5 +160,71 @@ describe('toSteps', () => {
     expect(steps).toHaveLength(2);
     expect(steps[0].count).toBe(1);
     expect(steps[0].failed).toBe(true);
+  });
+});
+
+/**
+ * The order the cycle reads in.
+ *
+ * A hosted run goes implement → verify → review and then round again, and the
+ * timeline used to group on the bare phase name — so pass three's edits were
+ * drawn above pass one's review, and every "Reviewed the work" heading was the
+ * same heading. Ordering by pass first is what makes the loop legible.
+ */
+describe('phase ordering', () => {
+  const sorted = (phases: string[]) =>
+    [...phases].sort((a, b) => phaseRank(a) - phaseRank(b));
+
+  it('keeps a single-pass run reading as it always did', () => {
+    expect(sorted(['report', 'implement', 'setup', 'verify'])).toEqual([
+      'setup',
+      'implement',
+      'verify',
+      'report',
+    ]);
+  });
+
+  it('puts a later pass after the review that asked for it', () => {
+    expect(
+      sorted([
+        'review-2',
+        'setup',
+        'revise-2',
+        'implement',
+        'review',
+        'verify',
+        'verify-2',
+        'report',
+      ]),
+    ).toEqual([
+      'setup',
+      'implement',
+      'verify',
+      'review',
+      'revise-2',
+      'verify-2',
+      'review-2',
+      'report',
+    ]);
+  });
+
+  it('anchors the handback last however many passes there were', () => {
+    expect(sorted(['report', 'revise-9'])).toEqual(['revise-9', 'report']);
+  });
+
+  it('keeps a phase it has never heard of rather than dropping it', () => {
+    // A newer server can emit one, and losing those lines would lose exactly
+    // the progress a reader came for.
+    const order = sorted(['report', 'telepathy', 'setup']);
+
+    expect(order).toContain('telepathy');
+    expect(order[0]).toBe('setup');
+  });
+
+  it('numbers the heading rather than repeating it', () => {
+    expect(phaseLabel('review')).toBe('Reviewed the work');
+    expect(phaseLabel('review-3')).toBe('Reviewed the work (pass 3)');
+    expect(phaseLabel('revise-2')).toBe('Fixed what the review found (pass 2)');
+    expect(phaseLabel('telepathy')).toBe('telepathy');
   });
 });

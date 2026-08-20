@@ -20,6 +20,7 @@ import {
   type AgentRunDelivery,
   type AgentRunEventLevel,
   type AgentRunFailure,
+  type AgentRunPhases,
   type AgentRunStatus,
 } from './agent-run.entity';
 import { THINKING_LEVELS, type ThinkingLevel } from './model-providers';
@@ -44,6 +45,25 @@ export class AgentRunLimitsDto {
   @IsNumber()
   @Min(0)
   maxCostUsd?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxCycles?: number;
+}
+
+export class AgentRunPhasesDto implements AgentRunPhases {
+  @IsOptional()
+  @IsBoolean()
+  specify?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  score?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  review?: boolean;
 }
 
 export class AgentRunConfigDto {
@@ -118,6 +138,11 @@ export class AgentRunConfigDto {
   @ValidateNested()
   @Type(() => AgentRunLimitsDto)
   limits?: AgentRunLimitsDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AgentRunPhasesDto)
+  phases?: AgentRunPhasesDto;
 
   @IsOptional()
   @IsBoolean()

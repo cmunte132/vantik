@@ -22,6 +22,21 @@ export interface ParsedStep {
   data?: Record<string, unknown>;
 }
 
+/**
+ * The model call itself failing, as opposed to the agent doing badly.
+ *
+ * A bad model id, a rejected key, a rate limit or a provider outage all land
+ * here — and none of them make the harness exit non-zero, so without this the
+ * caller cannot tell "the agent had nothing to say" from "nothing ever
+ * answered".
+ */
+export interface RunFailure {
+  /** Pi's own stop reason. `error` is the only one that lands here. */
+  reason: string;
+  /** The provider's message, e.g. `400: … is not a valid model ID`. */
+  message: string;
+}
+
 export interface ParsedRun {
   steps: ParsedStep[];
   /** The agent's own closing prose. What the handback comment is rendered from. */
@@ -31,6 +46,14 @@ export interface ParsedRun {
   costUsd: number;
   /** Assistant turns, for the record on the run. */
   iterations: number;
+  /**
+   * Why the last model call did not answer, when it did not.
+   *
+   * Null on a run that ended normally, *including* one that failed a call
+   * partway and recovered — Pi retries, and a transient error the retry fixed
+   * is not a reason to throw away the work that followed it.
+   */
+  failure: RunFailure | null;
 }
 
 /**
@@ -47,6 +70,10 @@ export function parsePiEvents(stdout: string): ParsedRun {
   let modelId: string | null = null;
   let costUsd = 0;
   let iterations = 0;
+  // Overwritten by every settled message, so what survives is the state of the
+  // *last* one. That is what makes a retried call that then answered read as a
+  // success rather than as the error it recovered from.
+  let failure: RunFailure | null = null;
 
   // Split on LF and nothing else, the same as the RPC framing rule: U+2028 and
   // U+2029 are legal inside a JSON string, and a generic line reader would
@@ -60,6 +87,13 @@ export function parsePiEvents(stdout: string): ParsedRun {
 
     if (event.type === 'turn_end') {
       iterations += 1;
+    }
+
+    // `message_end` rather than `turn_end`, which carries the same message a
+    // second time, or `message_start`, which reports an error before the retry
+    // that may clear it.
+    if (event.type === 'message_end') {
+      failure = failureOf(event);
     }
 
     const model = modelOf(event);
@@ -91,6 +125,32 @@ export function parsePiEvents(stdout: string): ParsedRun {
     modelId,
     costUsd,
     iterations,
+    failure,
+  };
+}
+
+/**
+ * A settled message that never got an answer.
+ *
+ * Pi reports this on the message and still exits zero, so the whole difference
+ * between "the model refused" and "the agent finished quietly" is these two
+ * fields.
+ */
+export function failureOf(event: PiEvent): RunFailure | null {
+  const message = event.message as
+    | { stopReason?: unknown; errorMessage?: unknown }
+    | undefined;
+
+  if (message?.stopReason !== 'error') {
+    return null;
+  }
+
+  return {
+    reason: 'error',
+    message:
+      typeof message.errorMessage === 'string' && message.errorMessage.trim()
+        ? message.errorMessage.trim().slice(0, 1000)
+        : 'The model call failed, and the harness did not say why.',
   };
 }
 

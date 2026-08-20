@@ -46,9 +46,30 @@ export const TeamsDropdown = observer(
     };
 
     function getTrigger() {
-      const teams = value.map((team: string) =>
-        teamsStore.getTeamWithId(team),
-      ) as TeamType[];
+      // A team id that no longer resolves is dropped rather than rendered.
+      // A team can be deleted while a project still names it, and the trigger
+      // reads `name` and `preferences` off whatever it is handed.
+      const teams = (value ?? [])
+        .map((team: string) => teamsStore.getTeamWithId(team))
+        .filter(Boolean) as TeamType[];
+
+      // A project need not name a team. The dialog asks for one and this
+      // dropdown refuses to remove the last one, but a project created over
+      // the API carries none, and the server is content with that: a project
+      // belongs to its workspace, and no team owns it. So the trigger says so
+      // and stays clickable, instead of reading a name off `teams[0]`.
+      if (teams.length === 0) {
+        return (
+          <Button
+            variant="link"
+            role="combobox"
+            aria-expanded={open}
+            className="flex items-center px-0 shadow-none justify-between focus-visible:ring-1 focus-visible:border-primary text-muted-foreground"
+          >
+            No teams
+          </Button>
+        );
+      }
 
       if (variant === ProjectDropdownVariant.LINK) {
         return (

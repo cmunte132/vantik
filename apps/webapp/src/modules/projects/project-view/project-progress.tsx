@@ -21,18 +21,20 @@ export const ProjectProgress = observer(
     const { workflows } = useComputedWorkflows();
     const issues = issuesStore.getIssuesForProject({ projectId: project?.id });
 
-    if (!project) {
-      return null;
-    }
-
+    // An issue whose state this view cannot resolve is counted as neither
+    // done nor started, the way the cycle view already counts it. Nothing
+    // makes a project hold only the issues of the teams it names, so a state
+    // belonging to some other team is an ordinary state of the data and not a
+    // fault — and reading `category` off the miss took the whole page down.
     const totalCompletedIssues = issues.filter((issue: IssueType) => {
       const workflow = workflows.find((workflow: WorkflowType) =>
         workflow.ids.includes(issue.stateId),
       );
 
       if (
-        workflow.category === WorkflowCategory.COMPLETED ||
-        workflow.category === WorkflowCategory.CANCELED
+        workflow &&
+        (workflow.category === WorkflowCategory.COMPLETED ||
+          workflow.category === WorkflowCategory.CANCELED)
       ) {
         return true;
       }
@@ -46,7 +48,7 @@ export const ProjectProgress = observer(
           workflow.ids.includes(issue.stateId),
         );
 
-        if (workflow.category === WorkflowCategory.STARTED) {
+        if (workflow && workflow.category === WorkflowCategory.STARTED) {
           return true;
         }
 
@@ -71,6 +73,13 @@ export const ProjectProgress = observer(
       }
       return '#d94b0e';
     }, []);
+
+    // Below every hook on purpose. This return used to sit above the two
+    // hooks under it, which made the number of hooks depend on whether the
+    // project had reached the store yet.
+    if (!project) {
+      return null;
+    }
 
     if (onlyGraph) {
       return (

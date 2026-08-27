@@ -1,13 +1,18 @@
 import { randomInt } from 'node:crypto';
 
 /**
- * A name for one execution, not for an account somebody manages.
+ * A name for the agent working one issue, not for an account somebody manages.
  *
- * A hosted run is handed to an identity that exists for the length of that run
- * and is never configured, listed or revoked by anybody — so the name only has
- * to do one job: let a person tell two runs apart in a comment feed at a
- * glance. "Fuzzy Zebra" does that; a uuid does not, and reusing one account
- * for every run makes three concurrent handbacks indistinguishable.
+ * The identity is created on the first delegation of an issue and reused by
+ * every attempt after it. It is never configured, listed or revoked by
+ * anybody, so the name has one job: let a person read a handback at a glance
+ * and see an agent rather than a uuid. "Fuzzy Zebra" does that.
+ *
+ * It used to name one run, which meant a fresh identity per delegation and
+ * nothing ever reaping them. Two runs forced to overlap on one issue now share
+ * this name — accepted, because the issue view renders a card per run and
+ * every handback comment carries its own run id, so which run said what is
+ * answerable without spending an identity to answer it.
  *
  * Deliberately harmless words. These end up authoring comments on real issues,
  * so the list contains nothing that could read as rude, cute-but-confusing, or
@@ -68,9 +73,9 @@ const ANIMALS = [
 ];
 
 /**
- * 576 pairs, so two runs in the same feed colliding is unlikely but not
- * impossible — which is fine, because the name is a label and the run id is
- * the identifier. Nothing is keyed on it.
+ * 576 pairs, so two issues in the same feed colliding is unlikely but not
+ * impossible — which is fine, because the name is a label and the identity's
+ * id is the identifier. Nothing is keyed on it.
  */
 export function runIdentityName(): string {
   return `${ADJECTIVES[randomInt(ADJECTIVES.length)]} ${

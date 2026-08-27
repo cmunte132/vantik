@@ -43,7 +43,30 @@ describe('agentSettings', () => {
       scopes: ['read', 'delete'],
       hiddenAt: null,
       disabledAt: null,
+      ephemeral: false,
     });
+  });
+
+  it('reads the flag that says this is a run identity and not an account', () => {
+    // Two correct rules met here and let every delegated run into Settings →
+    // Agents: hidden-from-birth assumed hidden meant hidden, and a workspace
+    // agent's liveness being `!disabledAt` assumed anything hidden was already
+    // revoked. This is the fact that separates them.
+    expect(
+      agentSettings({
+        agent: { ownership: 'workspace', ephemeral: true },
+      }).ephemeral,
+    ).toBe(true);
+
+    // Taken at its word only when it is really true. Anything else is an
+    // account somebody made, and hiding one of those would conceal something
+    // that can still act.
+    for (const stored of ['true', 1, {}, null, undefined]) {
+      expect(
+        agentSettings({ agent: { ownership: 'workspace', ephemeral: stored } })
+          .ephemeral,
+      ).toBe(false);
+    }
   });
 
   it('gives an agent from before scopes existed the default, not everything', () => {
@@ -56,6 +79,7 @@ describe('agentSettings', () => {
       scopes: DEFAULT_AGENT_SCOPES,
       hiddenAt: null,
       disabledAt: null,
+      ephemeral: false,
     });
   });
 

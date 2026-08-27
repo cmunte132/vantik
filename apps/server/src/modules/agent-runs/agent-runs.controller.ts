@@ -118,7 +118,11 @@ export class AgentRunsController {
     @UserId() userId: string,
     @Body() body: CreateAgentRunDto,
   ) {
-    const agentUserId = await this.resolveAgent(workspace, body.agentUserId);
+    const agentUserId = await this.resolveAgent(
+      workspace,
+      body.issueId,
+      body.agentUserId,
+    );
 
     return this.delegation.delegate({
       issueId: body.issueId,
@@ -271,8 +275,9 @@ export class AgentRunsController {
    * Which identity the work is attributed to.
    *
    * Named explicitly by a caller that has an agent account it wants credited,
-   * such as a script delegating as itself. Otherwise the run gets a fresh
-   * identity of its own, created here and managed by nobody.
+   * such as a script delegating as itself. Otherwise the run is attributed to
+   * the identity that works this issue — created here on the first delegation
+   * and reused by every attempt after it, managed by nobody.
    *
    * This used to refuse when the workspace had more than one agent, on the
    * reasoning that picking one would attribute work to an identity the user did
@@ -284,6 +289,7 @@ export class AgentRunsController {
    */
   private async resolveAgent(
     workspaceId: string,
+    issueId: string,
     requested?: string,
   ): Promise<string> {
     if (requested) {
@@ -310,6 +316,7 @@ export class AgentRunsController {
 
     const minted = await this.users.provisionRunIdentity(
       workspaceId,
+      issueId,
       runIdentityName(),
     );
 

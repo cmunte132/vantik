@@ -320,7 +320,6 @@ describe('the git token never enters the guest', () => {
       gitProxy as never,
       { post: async (): Promise<undefined> => undefined } as never,
       agentRuns as never,
-      { agentRun: { findMany: async (): Promise<unknown[]> => [] } } as never,
     );
 
     await (

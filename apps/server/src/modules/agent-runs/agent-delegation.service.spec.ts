@@ -101,6 +101,11 @@ function build(options: {
       workspaceId: WORKSPACE,
     })),
     cancelRun: jest.fn(async (): Promise<void> => undefined),
+    retryRun: jest.fn(async (runId: string) => ({
+      id: `${runId}-next`,
+      executor: options.executors?.[0]?.key ?? 'hosted',
+      attempt: 2,
+    })),
   } as unknown as AgentRunsService;
 
   const contextPacks = {
@@ -431,5 +436,83 @@ describe('AgentDelegationService assignment trigger', () => {
     await expect(
       service.onAssigneeChanged(ISSUE, WORKSPACE, null, AGENT, 'user-1'),
     ).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * A run that exists and was never handed to a backend is the worst of both
+ * worlds: it holds a slot against the concurrency cap, blocks its own issue
+ * from being delegated again, and reads in the runs list as work in progress.
+ * That is what every retry was while `createRun` alone counted as a dispatch.
+ */
+describe('AgentDelegationService retry', () => {
+  it('starts the attempt it opens', async () => {
+    const executor = fakeExecutor('hosted');
+    const { service } = build({ executors: [executor] });
+
+    const next = await service.retry(
+      'run-1',
+      { workspaceId: WORKSPACE },
+      'user-1',
+    );
+
+    expect(next).toMatchObject({ id: 'run-1-next', attempt: 2 });
+    expect(executor.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'run-1-next' }),
+    );
+  });
+
+  it('records a dispatch failure on the new attempt rather than dropping it', async () => {
+    const { service, agentRuns } = build({
+      executors: [
+        fakeExecutor('hosted', {
+          dispatch: async () => {
+            throw new Error('sandbox host unreachable');
+          },
+        }),
+      ],
+    });
+
+    await service.retry('run-1', { workspaceId: WORKSPACE }, 'user-1');
+
+    expect(agentRuns.transition).toHaveBeenCalledWith(
+      'run-1-next',
+      'FAILED',
+      expect.objectContaining({ failure: 'ENVIRONMENT_SETUP_FAILED' }),
+    );
+  });
+
+  it('sends it to the backend the previous attempt used', async () => {
+    // Not re-resolved. A workspace that changed its default between attempts
+    // would otherwise retry on a backend the first attempt never ran on, and
+    // the two would not be comparable.
+    const hosted = fakeExecutor('hosted');
+    const elsewhere = fakeExecutor('elsewhere');
+    const { service } = build({ executors: [elsewhere, hosted] });
+
+    await service.retry('run-1', { workspaceId: WORKSPACE }, 'user-1');
+
+    expect(elsewhere.dispatch).toHaveBeenCalled();
+    expect(hosted.dispatch).not.toHaveBeenCalled();
+  });
+});
+
+describe('AgentDelegationService liveness', () => {
+  it('counts only the statuses a run is really working in', async () => {
+    // What lets an expired run go. EXPIRED, FAILED and the rest are terminal,
+    // so the slot they held is released and the issue can be delegated again
+    // — but only because neither guard reads them as live.
+    const { service, prisma } = build();
+
+    await service.delegate(delegateInput);
+
+    const live = ['QUEUED', 'CLAIMED', 'RUNNING'];
+
+    expect(
+      (prisma.agentRun.findFirst as jest.Mock).mock.calls[0][0].where.status,
+    ).toEqual({ in: live });
+    expect(
+      (prisma.agentRun.count as jest.Mock).mock.calls[0][0].where.status,
+    ).toEqual({ in: live });
   });
 });

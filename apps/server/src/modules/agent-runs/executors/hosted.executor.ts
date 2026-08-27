@@ -18,10 +18,10 @@ import {
   isSafeModelId,
   providerById,
 } from '@vantikhq/types';
-import { PrismaService } from 'nestjs-prisma';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
+import { AGENT_RUN_LEASE_MS } from '../agent-runs.interface';
 import { AgentRunsService } from '../agent-runs.service';
 import { ExecutorRegistry } from './executor.registry';
 import { buildAgentPrompt, verificationCommands } from '../agent-prompt';
@@ -295,12 +295,10 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     private gitProxy: GitProxyService,
     private handback: RunHandbackService,
     private agentRuns: AgentRunsService,
-    private prisma: PrismaService,
   ) {}
 
   async onModuleInit() {
     this.registry.register(this);
-    await this.reconcileAfterRestart();
   }
 
   /**
@@ -443,6 +441,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     const secrets = [model.secret];
     let sandbox: SandboxHandle | undefined;
     let egressDenied = 0;
+    let releaseLease: (() => void) | undefined;
 
     const note = async (message: string, phase: string) => {
       // Scrubbed before it is written, not after. An event row is read by a
@@ -459,7 +458,13 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     try {
       await this.agentRuns.transition(run.id, 'CLAIMED', {
         claimedAt: new Date(),
+        leaseExpiresAt: new Date(Date.now() + AGENT_RUN_LEASE_MS),
       });
+
+      // From here on the run is answerable for its own liveness. Started after
+      // the claim rather than before, so a run that never claims — because
+      // something else already did — never renews a lease it does not hold.
+      releaseLease = this.holdLease(run);
 
       // ---- Phase 0: the checkout, host-side, before anything boots. ----
       //
@@ -830,8 +835,11 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         egressDenied,
       );
     } finally {
-      // Always. On success, on failure, on cancel — the VM, the checkout and
-      // the decrypted key all go.
+      // Always. On success, on failure, on cancel — the VM, the checkout, the
+      // decrypted key and the lease all go. The lease first: a renewal firing
+      // after the run reached a terminal state finds nothing to renew, but a
+      // timer nobody cleared keeps this run's id alive in the event loop.
+      releaseLease?.();
       await sandbox?.dispose();
       this.running.delete(run.id);
     }
@@ -1391,14 +1399,23 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     egressDenied = 0,
     summary?: string | null,
   ) {
-    await this.agentRuns
+    // Gated on the transition landing. A run this executor lost — swept for a
+    // lapsed lease, cancelled from the UI — is already terminal and already
+    // spoke for itself, and a second comment saying it crashed would contradict
+    // the first one on the same issue.
+    const failed = await this.agentRuns
       .transition(run.id, 'FAILED', {
         failure,
         error: error.slice(0, 4000),
         ...(summary ? { summary } : {}),
         result: { egressDenied },
       })
-      .catch((): undefined => undefined);
+      .then(() => true)
+      .catch(() => false);
+
+    if (!failed) {
+      return;
+    }
 
     // A failed run says so on the issue too. Silence here is what made a
     // sandbox failure invisible to everyone not watching the runs list.
@@ -1414,39 +1431,55 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
   }
 
   /**
-   * After a restart, no sandbox this process was tracking still exists.
+   * Keeps a run visible to the sweeper for as long as it is really working.
    *
-   * Any hosted run left CLAIMED or RUNNING is therefore orphaned: its guest
-   * died with the old process and nothing will ever report on it. Left alone
-   * it would sit until its lease expired, which is correct but slow. Failing
-   * it explicitly tells the user what happened.
+   * A hosted run is an unawaited promise in this process. If the process dies
+   * — or the promise is lost — nothing marks the row: the run stays RUNNING
+   * for ever, holds a slot against the workspace's concurrency cap, and blocks
+   * its own issue from being delegated again. The lease is the answer the
+   * server already had, and this is the half that was missing, which is
+   * somebody renewing it.
+   *
+   * This replaced a boot-time reconcile that failed every hosted run in
+   * CLAIMED or RUNNING across the whole deployment. That was right on one
+   * replica and wrong on two: a rolling deploy had each booting replica kill
+   * the other's live work and tell the user to retry a run that was still
+   * going. A lease is owned by the run rather than by whoever booted last.
+   *
+   * Renewed at a third of the lease, so two consecutive failures — a database
+   * blip, a paused event loop — still leave a full renewal's grace before the
+   * sweeper takes the run. The timer is unref'd: holding a lease is not a
+   * reason for the process to stay alive.
    */
-  private async reconcileAfterRestart() {
-    const orphans = await this.prisma.agentRun.findMany({
-      where: {
-        executor: HOSTED_EXECUTOR_KEY,
-        status: { in: ['CLAIMED', 'RUNNING'] },
-        deleted: null,
-      },
-      select: { id: true },
-    });
+  private holdLease(run: AgentRun): () => void {
+    const every = Math.max(Math.floor(AGENT_RUN_LEASE_MS / 3), 1000);
 
-    for (const orphan of orphans) {
-      await this.agentRuns
-        .transition(orphan.id, 'FAILED', {
-          failure: 'HARNESS_CRASHED',
-          error:
-            'The server restarted while this run was in a sandbox, so the sandbox was lost. Retry it.',
+    const timer = setInterval(() => {
+      void this.agentRuns
+        .renewLease(run.id)
+        .then(async (held) => {
+          if (held) {
+            return;
+          }
+
+          // The run moved on without us — swept, or cancelled. Killing the
+          // guest is the whole point of noticing: the sweeper has already
+          // opened a fresh attempt at this issue, and two sandboxes doing the
+          // same work is the user's money spent twice for one result.
+          this.logger.info({
+            message: `Hosted run ${run.id} lost its lease; disposing the sandbox`,
+            where: 'HostedExecutor.holdLease',
+          });
+
+          clearInterval(timer);
+          await this.cancel(run);
         })
         .catch((): undefined => undefined);
-    }
+    }, every);
 
-    if (orphans.length > 0) {
-      this.logger.info({
-        message: `Failed ${orphans.length} hosted run(s) orphaned by a restart`,
-        where: 'HostedExecutor.reconcileAfterRestart',
-      });
-    }
+    timer.unref?.();
+
+    return () => clearInterval(timer);
   }
 }
 

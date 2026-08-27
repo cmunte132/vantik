@@ -226,6 +226,15 @@ export class AgentRunsController {
     );
   }
 
+  /**
+   * A fresh attempt at the same issue, actually started.
+   *
+   * Through the delegation service rather than straight to `retryRun`, which
+   * creates the row and stops there. That was enough while a backend drained
+   * the queue and nothing else does now, so a retry that skipped this returned
+   * a run that sat QUEUED for ever — holding a concurrency slot and blocking
+   * its issue, while the button that made it looked like it had worked.
+   */
   @Post(':agentRunId/retry')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async retryRun(
@@ -234,7 +243,7 @@ export class AgentRunsController {
     @Role() role: string,
     @Param() params: AgentRunRequestParamsDto,
   ) {
-    return this.agentRuns.retryRun(
+    return this.delegation.retry(
       params.agentRunId,
       this.scope(workspace, userId, role),
       userId,

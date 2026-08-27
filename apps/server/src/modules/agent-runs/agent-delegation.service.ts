@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import type { AgentRun } from '@prisma/client';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   AgentRunConfig,
@@ -20,7 +21,10 @@ import {
   type WorkspaceAgentDefaults,
 } from './agent-run-settings';
 import { AGENT_RUN_WORKSPACE_CONCURRENCY } from './agent-runs.interface';
-import { AgentRunsService } from './agent-runs.service';
+import {
+  AgentRunsService,
+  type AgentRunScope,
+} from './agent-runs.service';
 import { ContextPackService } from './context-pack.service';
 import { ExecutorRegistry } from './executors/executor.registry';
 
@@ -125,10 +129,37 @@ export class AgentDelegationService {
       configHash: hashConfig(config, executor.key),
     });
 
-    // A dispatch that fails has to land as a visible state on the run. The
-    // existing tasks.trigger call sites in issues.service are fire-and-forget
-    // with no catch, so with no worker reachable they become unhandled
-    // rejections rather than logged failures. Not a pattern to copy.
+    return this.dispatchRun(run);
+  }
+
+  /**
+   * Opens the next attempt at a run that stopped, and starts it.
+   *
+   * Every guard that makes a retry legal — the ceiling on attempts, the one
+   * retry per run — lives on `retryRun`, so this adds nothing to it but the
+   * dispatch. That is the part that used to be missing: `createRun` *was* the
+   * dispatch while a backend drained the queue, and nothing took over when
+   * that backend went. A retry that only creates a row leaves a run QUEUED
+   * for ever, holding a concurrency slot and blocking its own issue from
+   * being delegated again.
+   */
+  async retry(runId: string, scope: AgentRunScope, createdById: string) {
+    const next = await this.agentRuns.retryRun(runId, scope, createdById);
+
+    return this.dispatchRun(next);
+  }
+
+  /**
+   * Hands a run that already exists to its backend.
+   *
+   * A dispatch that fails has to land as a visible state on the run. The
+   * existing tasks.trigger call sites in issues.service are fire-and-forget
+   * with no catch, so with no worker reachable they become unhandled
+   * rejections rather than logged failures. Not a pattern to copy.
+   */
+  async dispatchRun(run: AgentRun) {
+    const executor = this.registry.get(run.executor);
+
     try {
       await executor.dispatch(run);
     } catch (error) {
@@ -136,7 +167,7 @@ export class AgentDelegationService {
 
       this.logger.error({
         message: `Dispatching agent run ${run.id} to ${executor.key} failed: ${message}`,
-        where: 'AgentDelegationService.delegate',
+        where: 'AgentDelegationService.dispatchRun',
         error: error instanceof Error ? error : undefined,
       });
 

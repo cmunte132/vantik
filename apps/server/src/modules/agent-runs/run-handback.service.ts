@@ -16,6 +16,16 @@ export interface HandbackOutcome {
   prUrl?: string | null;
   worktreePath?: string | null;
   attempt: number;
+  /**
+   * The attempt already running in this one's place, when the server opened
+   * one by itself.
+   *
+   * Only the sweep sets it. A person who retries a run is looking at the
+   * screen when they do it and does not need to be told; a run the server gave
+   * up on and replaced produces a second run out of nowhere, and an issue that
+   * does not say so reads as an agent that ran twice for no reason.
+   */
+  nextAttempt?: number | null;
 }
 
 /**
@@ -85,6 +95,10 @@ export class RunHandbackService {
       if (outcome.error) {
         lines.push('', '```', outcome.error.slice(0, 1500), '```');
       }
+    }
+
+    if (outcome.nextAttempt) {
+      lines.push('', `Attempt ${outcome.nextAttempt} has already started.`);
     }
 
     const standing = await this.definitionOfDone(issueId);
@@ -224,7 +238,7 @@ const FAILURE_PROSE: Record<AgentRunFailure, string> = {
   PUSH_REJECTED: 'the push was rejected',
   PR_CREATION_FAILED: 'the branch went up but the pull request did not',
   EGRESS_DENIED: 'the sandbox blocked a network call it needed',
-  LEASE_LOST: 'the runner stopped responding',
+  LEASE_LOST: 'it stopped responding',
   NOT_TEST_SPECIFIABLE: 'this issue cannot be pinned down with tests',
   REWARD_HACK_SUSPECTED: 'it was optimising the tests rather than the problem',
 };

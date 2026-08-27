@@ -25,13 +25,12 @@ export const DEFAULT_AGENT_SCOPES: AgentScope[] = ['read', 'write'];
  * - `personal`: a user provisioned it for their own use — to drive their own
  *   Claude Code or whichever agent they run — and it belongs to that person,
  *   recorded as `ownerUserId`. Its token *is* the product: somebody has to
- *   paste it into `.mcp.json` or a runner daemon.
+ *   paste it into `.mcp.json`.
  * - `workspace`: an identity belonging to nobody in particular, so
  *   `ownerUserId` is null and an admin rather than an owner retires it. **It is
  *   never issued a token.** A standing credential owned by no individual has
  *   unbounded blast radius and nobody to rotate it; anything that genuinely
- *   needs a long-lived token uses a personal agent, which is what the BYO
- *   runner daemon already does.
+ *   needs a long-lived token uses a personal agent.
  *
  * This is orthogonal to a BOT. A BOT is an internal automation (the actions
  * feature), a different kind of principal altogether — not an agent, and never

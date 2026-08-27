@@ -50,7 +50,7 @@ function makeRun(over: Partial<FakeRun> = {}): FakeRun {
     issueId: 'issue-1',
     agentUserId: 'agent-1',
     createdById: 'user-1',
-    executor: 'byo',
+    executor: 'hosted',
     status: 'QUEUED',
     attempt: 1,
     previousRunId: null,
@@ -255,25 +255,6 @@ describe('AgentRunsService transition table', () => {
 });
 
 describe('AgentRunsService leases', () => {
-  it('refuses a heartbeat on a run that was cancelled underneath it', async () => {
-    const { service } = buildService([makeRun({ status: 'CANCELED' })]);
-
-    // How a runner learns to stop: it finds out on its next heartbeat rather
-    // than after another hour of work nobody wants.
-    await expect(service.heartbeat(RUN, scope)).rejects.toThrow(/Stop work/);
-  });
-
-  it('renews without changing status', async () => {
-    const { service, rows } = buildService([makeRun({ status: 'RUNNING' })]);
-
-    await service.heartbeat(RUN, scope);
-
-    expect(rows.get(RUN)?.status).toBe('RUNNING');
-    expect(rows.get(RUN)?.leaseExpiresAt?.getTime()).toBeGreaterThan(
-      Date.now(),
-    );
-  });
-
   it('expires a lapsed lease and re-queues it as the next attempt', async () => {
     const { service, rows } = buildService([
       makeRun({

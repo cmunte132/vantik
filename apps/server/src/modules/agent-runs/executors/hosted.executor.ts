@@ -260,7 +260,7 @@ interface Invocation {
  * Runs an agent on Vantik infrastructure, with credentials the workspace
  * supplied once.
  *
- * The value-add over the BYO runner is that there is nothing to keep alive.
+ * The value-add is that there is nothing for the user to keep alive.
  * The cost is that Vantik now holds a model key and a git token, which is what
  * the whole design around this executor is arranged to contain:
  *
@@ -317,7 +317,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         available: false,
         reason:
           runtime.reason ??
-          'This server cannot provide a sandbox, so hosted execution is unavailable. Use the BYO runner instead.',
+          'This server cannot provide a sandbox, so agent runs are unavailable here. A microVM or gVisor runtime has to be installed on the host.',
       };
     }
 
@@ -517,9 +517,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         await this.fail(
           run,
           'ENVIRONMENT_SETUP_FAILED',
-          'Fetching the repository used this run’s whole time budget, so there ' +
-            'was none left to work in. Raise the run’s maxDurationMs, or use ' +
-            'the BYO runner for a repository this size.',
+          'Fetching the repository used this run’s whole time budget, so ' +
+            'there was none left to work in. Raise the run’s maxDurationMs.',
           egressDenied,
         );
         return;

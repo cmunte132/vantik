@@ -12,14 +12,9 @@ import {
   AGENT_RUN_DEFAULT_LIMITS,
   AgentRunFilterDto,
   AgentRunRequestParamsDto,
-  AppendAgentRunEventDto,
   CancelAgentRunDto,
-  ClaimAgentRunDto,
   CreateAgentRunDto,
-  RecordIterationDto,
-  ReportAgentRunDto,
   RoleEnum,
-  StartAgentRunDto,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -43,6 +38,13 @@ import { runIdentityName } from './run-identity';
  * Reads narrow for the principal: a person sees the workspace's runs, an AGENT
  * token sees its own. That is not cosmetic — an agent able to enumerate every
  * run in the workspace can enumerate the workspace's issues through them.
+ *
+ * Nothing here reports *into* a run. An executor runs inside this server and
+ * moves the run through `AgentRunsService` directly, so the claim, heartbeat,
+ * start, report, event and iteration endpoints that existed for a runner
+ * polling from someone else's machine are gone with it. What survives is what
+ * a person or an agent asks about a run from outside: read it, start one, stop
+ * one, try again.
  */
 @Controller({
   version: '1',
@@ -131,83 +133,6 @@ export class AgentRunsController {
   }
 
   /**
-   * A runner asking for work.
-   *
-   * Long-poll rather than a socket: it survives restarts, works through CI
-   * proxies, and keeps the server stateless per request. Returns 204 with no
-   * body when there is nothing queued, so an idle runner costs one cheap
-   * request per interval.
-   *
-   * Declared a write because it changes state — it takes ownership of a run.
-   */
-  @Post('claim')
-  @UseGuards(AuthGuard)
-  async claimRun(
-    @Workspace() workspace: string,
-    @UserId() userId: string,
-    @Role() role: string,
-    @Body() body: ClaimAgentRunDto,
-  ) {
-    // A person cannot claim work: claiming binds a run to the identity that
-    // will be credited with the result, and only an agent has one.
-    if (role !== RoleEnum.AGENT) {
-      throw new BadRequestException({
-        message:
-          'Only an agent token can claim runs. Run the daemon with a PAT ' +
-          'from an agent account.',
-      });
-    }
-
-    const run = await this.agentRuns.claimNext({
-      workspaceId: workspace,
-      agentUserId: userId,
-      executor: body.executor,
-    });
-
-    return run ?? null;
-  }
-
-  /** Renews the lease on a claimed run, and reports if it was stopped. */
-  @Post(':agentRunId/heartbeat')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async heartbeat(
-    @Workspace() workspace: string,
-    @UserId() userId: string,
-    @Role() role: string,
-    @Param() params: AgentRunRequestParamsDto,
-  ) {
-    return this.agentRuns.heartbeat(
-      params.agentRunId,
-      this.scope(workspace, userId, role),
-    );
-  }
-
-  /** Moves a claimed run to RUNNING once the harness actually starts. */
-  @Post(':agentRunId/start')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async startRun(
-    @Workspace() workspace: string,
-    @UserId() userId: string,
-    @Role() role: string,
-    @Param() params: AgentRunRequestParamsDto,
-    @Body() body: StartAgentRunDto,
-  ) {
-    return this.agentRuns.transition(
-      params.agentRunId,
-      'RUNNING',
-      {
-        startedAt: new Date(),
-        ...(body.baseCommit ? { baseCommit: body.baseCommit } : {}),
-        ...(body.harnessVersion
-          ? { harnessVersion: body.harnessVersion }
-          : {}),
-        ...(body.modelId ? { modelId: body.modelId } : {}),
-      },
-      this.scope(workspace, userId, role),
-    );
-  }
-
-  /**
    * The models this workspace's keys can drive.
    *
    * Read by the delegation sheet, so choosing a model is a list rather than a
@@ -278,61 +203,6 @@ export class AgentRunsController {
   }
 
   /**
-   * The terminal report from an executor.
-   *
-   * The server does the linking and the commenting from this; the executor
-   * never writes to the issue itself.
-   */
-  @Post(':agentRunId/report')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async reportRun(
-    @Workspace() workspace: string,
-    @Param() params: AgentRunRequestParamsDto,
-    @Body() body: ReportAgentRunDto,
-  ) {
-    return this.delegation.report(params.agentRunId, body, workspace);
-  }
-
-  /**
-   * One pass of the ENG-62 loop.
-   *
-   * Δ is derived server-side from the two pass rates rather than accepted
-   * here: it is the reward-hacking metric, and a metric reported by the party
-   * being measured is not a metric.
-   */
-  @Post(':agentRunId/iterations')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async recordIteration(
-    @Workspace() workspace: string,
-    @UserId() userId: string,
-    @Role() role: string,
-    @Param() params: AgentRunRequestParamsDto,
-    @Body() body: RecordIterationDto,
-  ) {
-    return this.agentRuns.recordIteration(
-      params.agentRunId,
-      body,
-      this.scope(workspace, userId, role),
-    );
-  }
-
-  @Post(':agentRunId/events')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async appendEvent(
-    @Workspace() workspace: string,
-    @UserId() userId: string,
-    @Role() role: string,
-    @Param() params: AgentRunRequestParamsDto,
-    @Body() body: AppendAgentRunEventDto,
-  ) {
-    return this.agentRuns.appendEvent(
-      params.agentRunId,
-      body,
-      this.scope(workspace, userId, role),
-    );
-  }
-
-  /**
    * A cancel, not a delete.
    *
    * Declared as a write rather than a deletion so an agent granted `write` can
@@ -391,9 +261,9 @@ export class AgentRunsController {
   /**
    * Which identity the work is attributed to.
    *
-   * Named explicitly by a caller that has an agent account it wants credited —
-   * a BYO runner authenticating as itself, or a script. Otherwise the run gets
-   * a fresh identity of its own, created here and managed by nobody.
+   * Named explicitly by a caller that has an agent account it wants credited,
+   * such as a script delegating as itself. Otherwise the run gets a fresh
+   * identity of its own, created here and managed by nobody.
    *
    * This used to refuse when the workspace had more than one agent, on the
    * reasoning that picking one would attribute work to an identity the user did

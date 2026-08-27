@@ -440,7 +440,7 @@ describe('sandbox runtime gating', () => {
     // A refusal with a reason someone can act on, not a silent fallback to a
     // container.
     expect(availability.available).toBe(false);
-    expect(availability.reason).toMatch(/microVM|not installed|BYO/i);
+    expect(availability.reason).toMatch(/microVM|not installed|gVisor/i);
   });
 
   it('throws rather than creating a weaker sandbox', async () => {

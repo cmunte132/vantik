@@ -62,7 +62,7 @@ export class GondolinRuntime implements SandboxRuntime {
           this.unavailableReason ??
           'The @earendil-works/gondolin package is not installed, so this ' +
             'server cannot provide a microVM. Install it to enable hosted ' +
-            'execution, or use the BYO runner.',
+            'execution.',
       };
     }
 
@@ -157,8 +157,7 @@ export class GondolinRuntime implements SandboxRuntime {
       this.unavailableReason =
         `The sandbox runtime could not be loaded: ${
           error instanceof Error ? error.message : String(error)
-        }. Hosted execution is unavailable on this server; the BYO runner ` +
-        'still works.';
+        }. Agent runs are unavailable on this server until it is.`;
     }
   }
 }

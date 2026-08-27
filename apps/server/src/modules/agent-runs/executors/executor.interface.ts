@@ -15,9 +15,9 @@ export type ExecutorAvailability =
 /**
  * A backend that can run an agent.
  *
- * Narrow on purpose — two methods — so a queue-based backend (the BYO runner,
- * which claims work when it is ready) and a push-based one (a hosted sandbox,
- * or a third-party coding agent poked by webhook) both fit without a special
+ * Narrow on purpose — two methods — so the hosted sandbox and any push-based
+ * backend that arrives later (a third-party coding agent poked by webhook)
+ * both fit without a special
  * case anywhere in the delegation layer. If the hosted path ever needs a
  * branch in the dispatcher, this interface is wrong.
  *
@@ -27,7 +27,7 @@ export type ExecutorAvailability =
  * expected here as adapters later.
  */
 export interface AgentExecutor {
-  /** Registry key, stored on the run. `byo`, `hosted`, later `github`. */
+  /** Registry key, stored on the run. `hosted`, later `github`. */
   readonly key: string;
 
   /** Shown when a human picks an executor. */
@@ -55,10 +55,9 @@ export interface AgentExecutor {
   /**
    * Stop work in flight.
    *
-   * For a queue-based backend the runner finds out at its next heartbeat, so
-   * there is nothing to do here. For a hosted sandbox this must actually kill
-   * the machine — a cancel that only marks the row leaves the model spending
-   * money on work nobody wants.
+   * For a hosted sandbox this must actually kill the machine — a cancel that
+   * only marks the row leaves the model spending money on work nobody wants.
+   * A backend that polls for its own cancellation has nothing to do here.
    */
   cancel(run: AgentRun): Promise<void>;
 }

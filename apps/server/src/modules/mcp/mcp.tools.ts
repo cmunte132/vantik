@@ -410,11 +410,17 @@ export function registerVantikTools(
         agent: z
           .string()
           .optional()
-          .describe('Agent account id. Omit when the workspace has one.'),
+          .describe(
+            'Attribute the run to an existing agent account. Omit and the ' +
+              'run gets an identity of its own, which is the normal case.',
+          ),
         executor: z
           .string()
           .optional()
-          .describe('Backend key. Omit to use the configured default.'),
+          .describe(
+            'Backend key. Omit unless this deployment registers more than ' +
+              'one backend and the work belongs on a particular one.',
+          ),
         force: z
           .boolean()
           .optional()

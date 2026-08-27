@@ -134,9 +134,9 @@ export const DelegateControl = observer(() => {
 
     delegate({
       issueId: issue.id,
-      // Named explicitly: with two executors registered the server refuses to
-      // choose, and correctly — it is not its decision to make. Work runs in
-      // the sandbox, so this is the answer.
+      // Named explicitly rather than left to the server's fallback: this
+      // control is the sandbox's control, and it should keep meaning that if
+      // a second backend is ever registered beside it.
       executor: HOSTED,
       ...(guidance.trim() ? { guidance: guidance.trim() } : {}),
       ...(provider || modelId || thinking !== DEFAULT

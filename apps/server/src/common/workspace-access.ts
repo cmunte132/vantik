@@ -221,8 +221,8 @@ export async function assertChecklistItemInWorkspace(
 /**
  * Proves an agent run belongs to the given workspace.
  *
- * Every run route addresses the row by id alone — cancel, retry, heartbeat,
- * report, append event — with no issue or team anywhere in the request. The
+ * Every run route addresses the row by id alone — read, cancel, retry, list
+ * events — with no issue or team anywhere in the request. The
  * service scopes its own queries too; this is the check at the HTTP boundary,
  * where the untrusted id actually arrives, and it means a foreign run id is
  * refused before any handler runs.

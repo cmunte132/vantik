@@ -3,6 +3,7 @@ import { AgentRunFailure, AgentRunStatus } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import IssueCommentsService from 'modules/issue-comments/issue-comments.service';
+import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
 export interface HandbackOutcome {
@@ -18,14 +19,16 @@ export interface HandbackOutcome {
 }
 
 /**
- * The one thing a run writes back to the issue.
+ * Everything a run writes back to the issue: the link to what it produced, and
+ * the comment describing it.
  *
- * Its own service rather than a private method on the delegation service,
- * because both delivery paths have to reach it and only one of them did. The
- * BYO runner reports over HTTP and got a comment; the hosted sandbox
- * transitions the run in-process and got nothing, so a sandbox run — success
- * or failure — left no trace on the issue at all. A reader of the issue could
- * not tell an agent had ever touched it.
+ * Its own service rather than a private method on an executor, because a
+ * reader of an issue must not be able to tell which backend did the work. Both
+ * halves have been learned the hard way. The comment lived on the reporting
+ * path and the sandbox never reached it, so a hosted run — success or failure
+ * — left no trace on the issue at all. The link had the same shape one layer
+ * up: it lived on the same reporting path, so a hosted run opened a pull
+ * request that appeared nowhere in the issue's links.
  *
  * Rendered here rather than accepted from an executor, so an executor cannot
  * post arbitrary markdown to an issue as the agent identity — and so a failed
@@ -38,6 +41,7 @@ export class RunHandbackService {
   constructor(
     private prisma: PrismaService,
     private comments: IssueCommentsService,
+    private linkedIssues: LinkedIssueService,
   ) {}
 
   async post(
@@ -46,6 +50,13 @@ export class RunHandbackService {
     runId: string,
     outcome: HandbackOutcome,
   ): Promise<void> {
+    // Linked before the comment is written, so a reader who follows the
+    // handback finds the pull request already on the issue rather than
+    // arriving a moment before it does.
+    if (outcome.prUrl) {
+      await this.linkPullRequest(issueId, outcome.prUrl, agentUserId);
+    }
+
     const lines: string[] = [];
 
     if (outcome.status === 'SUCCEEDED') {
@@ -115,6 +126,43 @@ export class RunHandbackService {
       this.logger.error({
         message: `Could not post the agent summary on issue ${issueId}: ${error}`,
         where: 'RunHandbackService.post',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
+  }
+
+  /**
+   * Puts the pull request on the issue.
+   *
+   * Idempotent: a run reported twice — a retried call, an executor that both
+   * transitions and reports — must not leave the issue carrying the same pull
+   * request twice.
+   *
+   * A failed link must not cost the run its handback. The url is on the run
+   * record and in the comment either way, so the work stays reachable; a
+   * missing link row is a smaller loss than a silent run.
+   */
+  private async linkPullRequest(
+    issueId: string,
+    url: string,
+    agentUserId: string,
+  ): Promise<void> {
+    try {
+      const existing = await this.linkedIssues.getLinkedIssueByUrl(url);
+
+      if (existing.some((linked) => linked.issueId === issueId)) {
+        return;
+      }
+
+      await this.linkedIssues.createLinkIssue(
+        { url, sourceData: { source: 'agent-run' } },
+        { issueId },
+        agentUserId,
+      );
+    } catch (error) {
+      this.logger.error({
+        message: `Could not link ${url} to issue ${issueId}: ${error}`,
+        where: 'RunHandbackService.linkPullRequest',
         error: error instanceof Error ? error : undefined,
       });
     }

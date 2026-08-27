@@ -46,11 +46,10 @@ export type AgentRunEventLevel = (typeof AGENT_RUN_EVENT_LEVELS)[number];
 /**
  * Every legal move, and by omission every illegal one.
  *
- * Terminal states map to an empty list — terminal is terminal, and a report
+ * Terminal states map to an empty list — terminal is terminal, and an outcome
  * arriving for a run that already expired is refused rather than quietly
- * resurrecting it. That case is not hypothetical: a runner whose process
- * paused long enough to miss a heartbeat comes back believing it still owns
- * the work.
+ * resurrecting it. That case is not hypothetical: a run whose process paused
+ * long enough to lose its lease comes back believing it still owns the work.
  */
 export const AGENT_RUN_TRANSITIONS: Record<AgentRunStatus, AgentRunStatus[]> = {
   QUEUED: ['CLAIMED', 'CANCELED', 'FAILED'],
@@ -122,8 +121,7 @@ export interface AgentRunResult {
   linkedIssueId?: string;
   /**
    * Absolute path to the worktree holding the branch. Only for `worktree`
-   * delivery, and only meaningful on the machine that ran it — which is the
-   * BYO runner's own machine, where the user is sitting.
+   * delivery, and only meaningful on the machine that ran it.
    */
   worktreePath?: string;
   /** Commit the branch ends at. */
@@ -160,10 +158,8 @@ export interface AgentRunResult {
  */
 export interface AgentRunPhaseTimings {
   setup?: number;
-  specify?: number;
   implement?: number;
   verify?: number;
-  score?: number;
   review?: number;
   report?: number;
   /** `revise-2`, `verify-3`, … — one per phase of each later pass. */
@@ -282,15 +278,18 @@ export interface AgentRunLimits {
 /**
  * Which of the review phases a run performs.
  *
- * `specify` and `score` belong to the BYO runner's loop and default off there.
- * `review` is the hosted sandbox's implement → verify → review → revise cycle,
- * and defaults **on**: an agent that grades its own work is the failure this
- * whole surface exists to avoid, and a second agent reading the diff against
- * the issue is the cheapest check available that the first one did not.
+ * One flag, because there is one phase anything implements. `review` is the
+ * sandbox's implement → verify → review → revise cycle, and it defaults
+ * **on**: an agent that grades its own work is the failure this whole surface
+ * exists to avoid, and a second agent reading the diff against the issue is
+ * the cheapest check available that the first one did not.
+ *
+ * `specify` and `score` were here too. They belonged to a loop in the runner
+ * that has been retired, so they were switches over nothing — and a setting
+ * that changes no behaviour is worse than an absent one, because somebody
+ * turns it on and believes it did something.
  */
 export interface AgentRunPhases {
-  specify?: boolean;
-  score?: boolean;
   review?: boolean;
 }
 

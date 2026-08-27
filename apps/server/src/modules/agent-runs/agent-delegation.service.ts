@@ -6,14 +6,12 @@ import {
   AgentRunFailure,
   AgentRunStatus,
   type ModelChoice,
-  ReportAgentRunDto,
   RoleEnum,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { convertTiptapJsonToMarkdown } from 'common/utils/tiptap.utils';
 
-import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import {
@@ -25,7 +23,6 @@ import { AGENT_RUN_WORKSPACE_CONCURRENCY } from './agent-runs.interface';
 import { AgentRunsService } from './agent-runs.service';
 import { ContextPackService } from './context-pack.service';
 import { ExecutorRegistry } from './executors/executor.registry';
-import { RunHandbackService } from './run-handback.service';
 
 /** States in which a run still counts against the concurrency cap. */
 const LIVE_STATUSES: AgentRunStatus[] = ['QUEUED', 'CLAIMED', 'RUNNING'];
@@ -66,8 +63,6 @@ export class AgentDelegationService {
     private agentRuns: AgentRunsService,
     private contextPacks: ContextPackService,
     private registry: ExecutorRegistry,
-    private linkedIssues: LinkedIssueService,
-    private handback: RunHandbackService,
   ) {}
 
   // ------------------------------------------------------------- delegating
@@ -225,112 +220,6 @@ export class AgentDelegationService {
           'The issue was reassigned away from the agent.',
         )
         .catch((): undefined => undefined);
-    }
-  }
-
-  // ---------------------------------------------------------------- handback
-
-  /**
-   * What happens when an executor reports a result.
-   *
-   * The server does the linking and the commenting; the executor reports facts
-   * and never writes to the issue itself. That is the whole handback contract,
-   * and keeping it here means every backend produces an identical-looking
-   * result — a reader cannot tell whether a run happened on someone's laptop
-   * or in a hosted sandbox, which is exactly right.
-   */
-  async report(runId: string, report: ReportAgentRunDto, workspaceId: string) {
-    const run = await this.agentRuns.getRun(runId, { workspaceId });
-
-    const status: AgentRunStatus = report.failure
-      ? 'FAILED'
-      : report.needsReview
-        ? 'NEEDS_REVIEW'
-        : 'SUCCEEDED';
-
-    const delivery =
-      report.delivery ??
-      (report.prUrl
-        ? 'pull_request'
-        : report.worktreePath
-          ? 'worktree'
-          : undefined);
-
-    // Linking before the transition, so a finished run never renders without
-    // the artifact it is pointing at.
-    let linkedIssueId: string | undefined;
-    if (report.prUrl) {
-      linkedIssueId = await this.linkPullRequest(
-        run.issueId,
-        report.prUrl,
-        run.agentUserId,
-      );
-    }
-
-    const updated = await this.agentRuns.transition(runId, status, {
-      summary: report.summary,
-      error: report.error,
-      failure: report.failure ?? null,
-      harnessVersion: report.harnessVersion,
-      modelId: report.modelId,
-      baseCommit: report.baseCommit,
-      iterationCount: report.iterationCount,
-      phaseTimings: report.phaseTimings,
-      result: {
-        ...(delivery ? { delivery } : {}),
-        ...(report.branch ? { branch: report.branch } : {}),
-        ...(report.prUrl ? { prUrl: report.prUrl } : {}),
-        ...(report.worktreePath ? { worktreePath: report.worktreePath } : {}),
-        ...(linkedIssueId ? { linkedIssueId } : {}),
-        ...(report.headCommit ? { headCommit: report.headCommit } : {}),
-        ...(report.counters ?? {}),
-      },
-    });
-
-    await this.handback.post(run.issueId, run.agentUserId, runId, {
-      status,
-      summary: report.summary,
-      error: report.error,
-      failure: report.failure,
-      branch: report.branch,
-      prUrl: report.prUrl,
-      worktreePath: report.worktreePath,
-      attempt: run.attempt,
-    });
-
-    return updated;
-  }
-
-  private async linkPullRequest(
-    issueId: string,
-    url: string,
-    agentUserId: string,
-  ): Promise<string | undefined> {
-    // Idempotent: a runner that reports twice — a retried HTTP call, say —
-    // must not leave the issue carrying the same pull request twice.
-    const existing = await this.linkedIssues.getLinkedIssueByUrl(url);
-    const here = existing.find((linked) => linked.issueId === issueId);
-
-    if (here) {
-      return here.id;
-    }
-
-    try {
-      const created = await this.linkedIssues.createLinkIssue(
-        { url, sourceData: { source: 'agent-run' } },
-        { issueId },
-        agentUserId,
-      );
-      return 'id' in created ? created.id : undefined;
-    } catch (error) {
-      // A failed link must not lose the run's result. The PR url is on the
-      // run record either way, so the work is still reachable.
-      this.logger.error({
-        message: `Could not link ${url} to issue ${issueId}: ${error}`,
-        where: 'AgentDelegationService.linkPullRequest',
-        error: error instanceof Error ? error : undefined,
-      });
-      return undefined;
     }
   }
 

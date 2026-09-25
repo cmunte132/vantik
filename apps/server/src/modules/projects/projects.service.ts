@@ -87,9 +87,15 @@ export class ProjectsService {
     updateProjectMilestoneDto: UpdateProjectMilestoneDto,
     projectMilestoneId: string,
   ) {
+    // Field by field: the global ValidationPipe keeps undeclared keys, so the
+    // DTO as sent could carry a `projectId` and move the milestone elsewhere.
     return await this.prisma.projectMilestone.update({
       where: { id: projectMilestoneId },
-      data: updateProjectMilestoneDto,
+      data: {
+        name: updateProjectMilestoneDto.name,
+        description: updateProjectMilestoneDto.description,
+        endDate: updateProjectMilestoneDto.endDate,
+      },
     });
   }
 

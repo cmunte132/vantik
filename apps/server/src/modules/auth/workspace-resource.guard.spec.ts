@@ -17,6 +17,12 @@ const OWN_CAPABILITY = 'capability-own';
 const FOREIGN_CAPABILITY = 'capability-foreign';
 const OWN_REPO = 'repo-own';
 const FOREIGN_REPO = 'repo-foreign';
+const OWN_LABEL = 'label-own';
+const FOREIGN_LABEL = 'label-foreign';
+const OWN_WORKFLOW = 'workflow-own';
+const FOREIGN_WORKFLOW = 'workflow-foreign';
+const OWN_MILESTONE = 'milestone-own';
+const FOREIGN_MILESTONE = 'milestone-foreign';
 
 // A team is a visibility boundary inside the workspace (ENG-79). These three
 // sit in OWN_WORKSPACE and pass every workspace check; the team check is the
@@ -24,6 +30,7 @@ const FOREIGN_REPO = 'repo-foreign';
 const OTHER_TEAM = 'team-other';
 const OTHER_TEAM_ISSUE = 'issue-other-team';
 const OTHER_TEAM_COMMENT = 'comment-other-team';
+const OTHER_TEAM_WORKFLOW = 'workflow-other-team';
 
 /**
  * Rows are keyed by id; the fixtures place the "own" ones in OWN_WORKSPACE and
@@ -39,9 +46,13 @@ function buildPrisma(callerTeamIds: string[] = [OWN_TEAM]) {
       OWN_MODULE,
       OWN_CAPABILITY,
       OWN_REPO,
+      OWN_LABEL,
+      OWN_WORKFLOW,
+      OWN_MILESTONE,
       OTHER_TEAM,
       OTHER_TEAM_ISSUE,
       OTHER_TEAM_COMMENT,
+      OTHER_TEAM_WORKFLOW,
     ].includes(id);
 
   const finder =
@@ -55,6 +66,8 @@ function buildPrisma(callerTeamIds: string[] = [OWN_TEAM]) {
     [OWN_COMMENT]: OWN_TEAM,
     [OTHER_TEAM_ISSUE]: OTHER_TEAM,
     [OTHER_TEAM_COMMENT]: OTHER_TEAM,
+    [OWN_WORKFLOW]: OWN_TEAM,
+    [OTHER_TEAM_WORKFLOW]: OTHER_TEAM,
   };
 
   // Stands in for `teamId: { in: [...] }`, and for the same clause reached
@@ -92,6 +105,12 @@ function buildPrisma(callerTeamIds: string[] = [OWN_TEAM]) {
     },
     checklistItem: { findMany: jest.fn(visibleFinder()) },
     cycle: { findMany: jest.fn(visibleFinder()) },
+    label: { findFirst: jest.fn(finder()) },
+    workflow: {
+      findFirst: jest.fn(finder()),
+      findMany: jest.fn(visibleFinder()),
+    },
+    projectMilestone: { findFirst: jest.fn(finder()) },
     module: { findFirst: jest.fn(finder()) },
     capability: { findFirst: jest.fn(finder()) },
     product: { findFirst: jest.fn(finder()) },
@@ -478,5 +497,99 @@ describe('WorkspaceResourceGuard team boundary', () => {
     });
 
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
+  });
+
+  /**
+   * The label, workflow, team and milestone routes predate this guard and ran
+   * behind AuthGuard alone, so any signed-in caller could read, rename or
+   * delete those rows in any workspace by id.
+   */
+  describe('routes that took the id on trust', () => {
+    let guard: WorkspaceResourceGuard;
+
+    beforeEach(() => {
+      guard = new WorkspaceResourceGuard(buildPrisma());
+    });
+
+    it('allows a label in the caller-s workspace', async () => {
+      const ctx = buildContext({ params: { labelId: OWN_LABEL } });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+
+    it('rejects a foreign label id', async () => {
+      const ctx = buildContext({ params: { labelId: FOREIGN_LABEL } });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects a foreign label named as a group', async () => {
+      // Create and update name the parent label in the body.
+      const ctx = buildContext({ body: { groupId: FOREIGN_LABEL } });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects a foreign team named in the path', async () => {
+      // The workflow routes are `/:teamId/workflows`.
+      const ctx = buildContext({ params: { teamId: FOREIGN_TEAM } });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('allows a workflow state of the caller-s own team', async () => {
+      const ctx = buildContext({
+        params: { teamId: OWN_TEAM, workflowId: OWN_WORKFLOW },
+      });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+
+    it('rejects a foreign workflow id', async () => {
+      const ctx = buildContext({
+        params: { teamId: OWN_TEAM, workflowId: FOREIGN_WORKFLOW },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects a workflow state of another team in the workspace', async () => {
+      // Workflow is team-owned, so a caller outside the team cannot address
+      // its states even through a path team they can see.
+      const guard = new WorkspaceResourceGuard(buildPrisma([OWN_TEAM]));
+      const ctx = buildContext({
+        params: { teamId: OWN_TEAM, workflowId: OTHER_TEAM_WORKFLOW },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('allows a milestone of a project in the caller-s workspace', async () => {
+      const ctx = buildContext({
+        params: { projectMilestoneId: OWN_MILESTONE },
+      });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+
+    it('rejects a foreign milestone id', async () => {
+      const ctx = buildContext({
+        params: { projectMilestoneId: FOREIGN_MILESTONE },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
   });
 });

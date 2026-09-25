@@ -8,6 +8,7 @@ import {
   assertIssueCommentsVisible,
   assertIssuesVisible,
   assertTeamsVisible,
+  assertWorkflowsVisible,
   visibleTeamIds,
 } from 'common/team-access';
 import {
@@ -18,13 +19,16 @@ import {
   assertIntegrationAccountInWorkspace,
   assertIssueCommentInWorkspace,
   assertIssueInWorkspace,
+  assertLabelInWorkspace,
   assertModuleInWorkspace,
   assertModuleRepoInWorkspace,
   assertPageEntryInWorkspace,
   assertPageInWorkspace,
   assertProductInWorkspace,
   assertProjectInWorkspace,
+  assertProjectMilestoneInWorkspace,
   assertTeamInWorkspace,
+  assertWorkflowInWorkspace,
   resolveWorkspaceId,
 } from 'common/workspace-access';
 
@@ -76,6 +80,10 @@ export class WorkspaceResourceGuard implements CanActivate {
       moduleRepoId,
       capabilityId,
       agentRunId,
+      labelId,
+      workflowId,
+      projectMilestoneId,
+      teamId: pathTeamId,
     } = request.params ?? {};
 
     // The bulk routes carry their ids inside a body array, one per issue, so
@@ -96,8 +104,10 @@ export class WorkspaceResourceGuard implements CanActivate {
     ]);
 
     // teamId selects the team a write lands in: a query param on update, the
-    // body on create and move, and per-entry on bulk create.
+    // body on create and move, and per-entry on bulk create. The workflow
+    // routes carry it in the path, as `/:teamId/workflows`.
     const requestTeamIds = unique([
+      pathTeamId,
       request.query?.teamId,
       ...bodies.map((body) => body?.teamId),
     ]);
@@ -245,6 +255,27 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertProjectInWorkspace(this.prisma, id, workspaceId);
     }
 
+    if (projectMilestoneId) {
+      await assertProjectMilestoneInWorkspace(
+        this.prisma,
+        projectMilestoneId,
+        workspaceId,
+      );
+    }
+
+    // A label is addressed by id on read, update and delete, and names another
+    // label as its group on create and update. No other route sends a
+    // `groupId`, so reading it off every body costs nothing elsewhere.
+    const labelIds = unique([labelId, ...bodies.map((body) => body?.groupId)]);
+
+    for (const id of labelIds) {
+      await assertLabelInWorkspace(this.prisma, id, workspaceId);
+    }
+
+    if (workflowId) {
+      await assertWorkflowInWorkspace(this.prisma, workflowId, workspaceId);
+    }
+
     // A team is a visibility boundary inside the workspace (ENG-79), so the
     // checks above are necessary and not sufficient: they prove the row is a
     // tenant's own, and say nothing about whether this caller may see it. Every
@@ -269,6 +300,11 @@ export class WorkspaceResourceGuard implements CanActivate {
       teamIds,
     );
     await assertCyclesVisible(this.prisma, cycleId ? [cycleId] : [], teamIds);
+    await assertWorkflowsVisible(
+      this.prisma,
+      workflowId ? [workflowId] : [],
+      teamIds,
+    );
 
     return true;
   }
@@ -282,6 +318,7 @@ interface IdBearingBody {
   ownerProductId?: string;
   capabilityId?: string;
   integrationAccountId?: string;
+  groupId?: string;
   moduleIds?: unknown;
   capabilityIds?: unknown;
   linkedTeamIds?: unknown;

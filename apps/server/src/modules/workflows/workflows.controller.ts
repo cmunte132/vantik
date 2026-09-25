@@ -15,9 +15,13 @@ import {
 } from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
 import WorkflowsService from './workflows.service';
 
+// Every route carries WorkspaceResourceGuard, which proves the `:teamId` in the
+// path and any `:workflowId` belong to a team the caller can see. Workflow
+// states are team-owned records, so visibility is by membership (ENG-79).
 @Controller({
   version: '1',
   path: ':teamId/workflows',
@@ -26,7 +30,7 @@ export class WorkflowsController {
   constructor(private workflowsService: WorkflowsService) {}
 
   @Get()
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getAllWorkflows(
     @Param() workflowRequestParams: WorkflowRequestParamsDto,
   ): Promise<Workflow[]> {
@@ -34,7 +38,7 @@ export class WorkflowsController {
   }
 
   @Post()
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createWorkflow(
     @Param() workflowRequestParams: WorkflowRequestParamsDto,
     @Body() workflowData: CreateWorkflowDTO,
@@ -46,7 +50,7 @@ export class WorkflowsController {
   }
 
   @Get(':workflowId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getWorkflow(
     @Param()
     workflowRequestParams: WorkflowRequestParamsDto,
@@ -55,7 +59,7 @@ export class WorkflowsController {
   }
 
   @Post(':workflowId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateWorkflow(
     @Param()
     workflowRequestParams: WorkflowRequestParamsDto,
@@ -68,7 +72,7 @@ export class WorkflowsController {
   }
 
   @Delete(':workflowId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async deleteWorkflow(
     @Param()
     workflowRequestParams: WorkflowRequestParamsDto,

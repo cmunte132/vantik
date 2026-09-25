@@ -223,7 +223,7 @@ export class AgentRunsController {
     @Param() params: AgentRunRequestParamsDto,
     @Body() body: CancelAgentRunDto,
   ) {
-    return this.agentRuns.cancelRun(
+    return this.delegation.cancel(
       params.agentRunId,
       this.scope(workspace, userId, role),
       body.reason,

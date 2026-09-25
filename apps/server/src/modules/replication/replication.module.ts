@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from 'nestjs-prisma';
 
 import { ActionEventModule } from 'modules/action-event/action-event.module';
 import ActionEventService from 'modules/action-event/action-event.service';
@@ -21,7 +20,6 @@ import ReplicationService from './replication.service';
     ConfigService,
     SyncActionsService,
     SyncRepairService,
-    PrismaService,
     ActionEventService,
   ],
   exports: [],

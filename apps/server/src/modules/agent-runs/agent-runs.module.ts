@@ -1,6 +1,5 @@
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
-import { PrismaModule, PrismaService } from 'nestjs-prisma';
 
 import { IssueCommentsModule } from 'modules/issue-comments/issue-comments.module';
 import { IssuesModule } from 'modules/issues/issues.module';
@@ -27,7 +26,6 @@ import { ExecutorRegistry } from './executors/executor.registry';
 
 @Module({
   imports: [
-    PrismaModule,
     BullModule.registerQueue({ name: AGENT_RUNS_QUEUE }),
     IssuesModule,
     IssueCommentsModule,
@@ -52,7 +50,6 @@ import { ExecutorRegistry } from './executors/executor.registry';
     GitProxyService,
     AgentRunsScheduler,
     AgentRunsProcessor,
-    PrismaService,
     // AuthGuard resolves UsersService out of the module it guards, so every
     // module with a guarded controller has to provide it.
     UsersService,

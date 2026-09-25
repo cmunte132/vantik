@@ -85,7 +85,13 @@ export function useComputedWorkflows(): {
           return workflow.teamId === team.id;
         }
 
-        if (project) {
+        // A project that names no team is workspace-wide, and the server
+        // already treats it that way: `getTeamId` answers nothing for a
+        // Project, so the record reaches every member of the workspace.
+        // Filtering by an empty `teams` would instead leave no workflow at
+        // all, and a project view with no workflows cannot resolve the state
+        // of a single one of the issues it holds.
+        if (project && project.teams.length > 0) {
           return project.teams.includes(workflow.teamId);
         }
 
@@ -120,9 +126,13 @@ export function useComputedWorkflows(): {
     };
   };
 
+  // The project belongs in here with the team. Both projects sit on the same
+  // route, so moving from one to the next re-renders this component rather
+  // than remounting it, and without the id the memo keeps serving the
+  // workflows of the project that was open before.
   const { workflowMap, uniqueWorkflowsByName } = React.useMemo(
     () => getWorkflows(),
-    [workflows.length, team?.id],
+    [workflows.length, team?.id, project?.id],
   );
 
   return {

@@ -18,16 +18,19 @@ export const ProjectSubIssueSelector = () => {
   const { query } = useRouter();
   const { editor } = useEditor();
 
+  // A project need not name a team, and the team it names can be deleted.
+  // This selector files a new issue into a team, so with no team there is
+  // nothing for it to file into.
   const team = useTeamWithId(project.teams[0]);
   const { workflowsStore } = useContextStore();
-  const workflows = workflowsStore.getWorkflowsForTeam(team.id);
+  const workflows = team ? workflowsStore.getWorkflowsForTeam(team.id) : [];
   const backlog = workflows.find(
     (workflow: WorkflowType) =>
       workflow.category === WorkflowCategoryEnum.BACKLOG,
   );
   const { mutate: createIssue } = useCreateIssueMutation({
     onSuccess: (data, variables) => {
-      const url = `https://app.vantik.dev/${query.workspaceSlug}/issue/${team.identifier}-${data.number}`;
+      const url = `https://app.vantik.dev/${query.workspaceSlug}/issue/${team?.identifier}-${data.number}`;
 
       editor
         .chain()
@@ -64,6 +67,13 @@ export const ProjectSubIssueSelector = () => {
       await delay(200);
     }
   };
+
+  // Below every hook, so the count does not change with the project. Hiding
+  // the selector takes one action off the editor; letting it render without a
+  // team to file into took the whole project page down.
+  if (!team || !backlog) {
+    return null;
+  }
 
   return <SubIssueSelector onCreate={onCreateIssues} />;
 };

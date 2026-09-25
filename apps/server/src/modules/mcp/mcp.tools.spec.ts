@@ -721,6 +721,7 @@ describe('vantik MCP tools', () => {
 
   it('opens a project for an objective that spans several issues', async () => {
     const { client, requests } = await connect({
+      ...baseRoutes,
       'GET /projects': [],
       'POST /projects': {
         id: 'project-new',
@@ -744,6 +745,68 @@ describe('vantik MCP tools', () => {
       id: 'project-new',
       name: 'Search rewrite',
     });
+  });
+
+  it('opens a project against the team that will hold its issues', async () => {
+    const { client, requests } = await connect({
+      ...baseRoutes,
+      'GET /projects': [],
+      'POST /projects': {
+        id: 'project-new',
+        name: 'Search rewrite',
+        description: 'Replace the search stack',
+        status: 'Backlog',
+      },
+    });
+
+    const result = await client.callTool({
+      name: 'create_project',
+      arguments: {
+        name: 'Search rewrite',
+        description: 'Replace the search stack',
+        teams: ['ENG'],
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+
+    // The tool takes what a person says; the API stores the id.
+    const create = requests.find(
+      (request) => request.path === '/projects' && request.method === 'POST',
+    );
+    expect(create?.body).toMatchObject({ teams: ['team-eng'] });
+  });
+
+  it('gives a project its teams so its issues can be filed into it', async () => {
+    const { client, requests } = await connect({
+      ...baseRoutes,
+      'GET /projects': [
+        {
+          id: 'project-search',
+          name: 'Search rewrite',
+          description: null,
+          status: 'In Progress',
+        },
+      ],
+      'POST /projects/project-search': {
+        id: 'project-search',
+        name: 'Search rewrite',
+        description: null,
+        status: 'In Progress',
+      },
+    });
+
+    const result = await client.callTool({
+      name: 'update_project',
+      arguments: { project: 'Search rewrite', teams: ['Engineering'] },
+    });
+
+    expect(result.isError).toBeFalsy();
+
+    const update = requests.find(
+      (request) => request.path === '/projects/project-search',
+    );
+    expect(update?.body).toMatchObject({ teams: ['team-eng'] });
   });
 
   it('updates a project the caller named rather than one it had to look up', async () => {

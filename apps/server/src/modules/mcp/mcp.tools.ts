@@ -28,6 +28,10 @@ const projectRef = z
   .string()
   .describe('Project name or id. Call list_projects to see what exists.');
 
+const teamRef = z
+  .string()
+  .describe('Team identifier such as ENG, its name, or its id.');
+
 const moduleRef = z
   .string()
   .describe('Module key such as server, its name, or its id.');
@@ -267,6 +271,16 @@ export function registerVantikTools(
           .describe('Defaults to the workspace’s first status.'),
         startDate: z.string().optional().describe('ISO date.'),
         endDate: z.string().optional().describe('ISO date.'),
+        teams: z
+          .array(teamRef)
+          .optional()
+          .describe(
+            'The teams whose issues this project holds. Name them — a ' +
+              'project that names none is invisible from inside a team: it ' +
+              'is missing from the project picker on every issue, so nobody ' +
+              'can file work into it from where the work is. Usually the one ' +
+              'team doing the work.',
+          ),
       },
     },
     handler((input) => agent.createProject(input)),
@@ -362,6 +376,14 @@ export function registerVantikTools(
         startDate: z.string().optional().describe('ISO date.'),
         endDate: z.string().optional().describe('ISO date.'),
         leadUserId: z.string().optional().describe('Member id of the lead.'),
+        teams: z
+          .array(teamRef)
+          .optional()
+          .describe(
+            'Replaces the teams this project belongs to. Reach for it when a ' +
+              'project has none and its issues cannot be filed into it from ' +
+              'the issue view, or when the work has moved to another team.',
+          ),
       },
     },
     handler(({ project, ...changes }) => agent.updateProject(project, changes)),

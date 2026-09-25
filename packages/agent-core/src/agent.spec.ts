@@ -428,6 +428,83 @@ describe('projects', () => {
     ).toBe(true);
   });
 
+  it('resolves team identifiers to ids when opening a project', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /teams': teams,
+      'GET /projects': projects,
+      'POST /projects': {
+        id: 'project-new',
+        name: 'Billing rework',
+        description: null,
+        status: 'Backlog',
+      },
+    });
+
+    await agent.createProject({ name: 'Billing rework', teams: ['ENG'] });
+
+    const create = calls.find((call) => call.path === '/projects');
+    expect(create?.body).toMatchObject({ teams: ['team-eng'] });
+  });
+
+  it('stores one id when the same team is named twice', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /teams': teams,
+      'GET /projects': projects,
+      'POST /projects': {
+        id: 'project-new',
+        name: 'Billing rework',
+        description: null,
+        status: 'Backlog',
+      },
+    });
+
+    await agent.createProject({
+      name: 'Billing rework',
+      teams: ['ENG', 'Engineering', 'team-eng'],
+    });
+
+    const create = calls.find((call) => call.path === '/projects');
+    expect(create?.body).toMatchObject({ teams: ['team-eng'] });
+  });
+
+  it('names what exists when a project is opened against an unknown team', async () => {
+    const { agent } = makeAgent({ 'GET /teams': teams });
+
+    await expect(
+      agent.createProject({ name: 'Billing rework', teams: ['DESIGN'] }),
+    ).rejects.toThrow(/ENG/);
+  });
+
+  it('leaves the teams alone unless the update names them', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /teams': teams,
+      'GET /projects': projects,
+      'POST /projects/project-search': projects[0],
+    });
+
+    await agent.updateProject('Search rewrite', { status: 'Completed' });
+
+    const update = calls.find(
+      (call) => call.path === '/projects/project-search',
+    );
+    expect(update?.body).not.toHaveProperty('teams');
+  });
+
+  it('clears the teams when the update names an empty list', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /teams': teams,
+      'GET /projects': projects,
+      'POST /projects/project-search': projects[0],
+    });
+
+    await agent.updateProject('Search rewrite', { teams: [] });
+
+    const update = calls.find(
+      (call) => call.path === '/projects/project-search',
+    );
+    expect(update?.body).toMatchObject({ teams: [] });
+  });
+
   it('names the alternatives when the project does not exist', async () => {
     const { agent } = makeAgent({ 'GET /projects': projects });
 

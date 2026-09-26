@@ -5,7 +5,7 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 0 (review round 1 addressed; round 2 in progress)
+- Current phase: 0 (review round 2 addressed; round 3 in progress)
 - Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phase 0 spec-hash 069a84bf6612`
   (KG-0.1 to KG-0.6 pass; KG-0.R waits on the review)
 
@@ -50,17 +50,25 @@ next session starts by reading it.
   (`lastServedAt` null). An earlier draft also spared rows with a count and no
   date as "legacy"; the review showed both columns arrived in one migration and
   are written together, so that branch and its test were removed.
-- **Supersede waits for acceptance (from review round 1).** A correction used
-  to retire its target immediately, whoever wrote it, and SUPERSEDED is
-  terminal: an agent could take any accepted entry out of use for good. Now the
-  target is retired when the correction is accepted (at once for a person
-  writing STANDING; otherwise when a person moves the correction to STANDING or
-  CONSOLIDATED, singly or in bulk). Rejecting it (ARCHIVED or DISPUTED) or its
-  expiry in decay leaves the target in use and releases the unique pointer. A
-  second correction to an entry is refused while the first waits. This also
-  applies to a person's correction that lands PROPOSED (the CLI without
-  `--standing`), which is consistent: only standing knowledge retires what it
-  replaces.
+- **Supersede waits for acceptance (review rounds 1 and 2).** A correction
+  used to retire its target immediately, whoever wrote it, and SUPERSEDED is
+  terminal: an agent could take any accepted entry out of use for good. Now:
+  - the target is retired when the correction is accepted: at once for a
+    person writing STANDING, otherwise when a person moves the correction to
+    STANDING or CONSOLIDATED, singly or in bulk;
+  - accepting a correction retires the chain behind it (the target, and what
+    that target corrected if it was itself unaccepted), stopping at SUPERSEDED
+    or CONSOLIDATED, which are never touched;
+  - rejecting or disputing a correction leaves its target in use and keeps the
+    pointer, so a correction revived to STANDING later still retires it;
+  - a new correction of an entry takes the unique pointer over from an earlier
+    rejected, disputed or displaced one, in the same transaction;
+  - a PROPOSED correction refuses an agent's second correction of the same
+    entry; a person writing standing knowledge displaces it, and it stays in
+    the inbox as an ordinary claim.
+
+  This applies to a person's correction that lands PROPOSED too (the CLI
+  without `--standing`): only standing knowledge retires what it replaces.
 - **Existing tests adjusted, not loosened:** the five status-transition tests
   named their writer `human-1` but built an agent (the fixture's default), so
   the new agent rule refused them; they now build a person. The decay test's
@@ -97,6 +105,29 @@ next session starts by reading it.
    entry already on the page and its status, which is the part a person can act
    on; the resend instructions follow for API clients.
 
+### Phase 0, round 2 (same reviewer, on the round 1 fixes)
+
+2 blocking, 3 non-blocking findings. Answers:
+
+1. **Blocking: accepting a correction of a correction left the original served
+   and locked.** Fixed in `73aa310`: acceptance retires the chain; a decided
+   target refuses new corrections with "already superseded", never "waiting".
+   Stateful test.
+2. **Blocking: a disputed correction accepted later served both truths, and
+   rejection erased the pointer.** Fixed in `73aa310`: pointers are kept
+   through rejection and dispute and moved only when a new correction is
+   written. Stateful test.
+3. **A pending agent correction blocked a person's standing correction.**
+   Fixed: a person's standing correction displaces it.
+4. **Consolidation folds a STANDING target that has a pending correction.**
+   Accepted for phase 0: if the correction is later accepted, the CONSOLIDATED
+   row is left alone (decided states are never moved) and the body still
+   carries the old text until someone edits it. Consolidation is reworked in
+   KG-7.4; recorded under Observed.
+5. **Test gaps (chains, disputed-then-accepted, decided targets, decay query
+   shape).** Covered by the stateful correction tests; the decay pointer
+   release no longer exists.
+
 When a phase's independent review ends with no unresolved findings, add a line
 in the form `Phase <number> review: PASS - <what the reviewer checked>`, for
 example with the number 0 for phase 0. `verify.mjs` looks for that line.
@@ -123,6 +154,8 @@ Give the evidence, and stop until the maintainer answers.
   proposal; `write_page` on a new page stays as designed.
 - **Concurrent identical writes** both pass the duplicate check (read, then
   write). KG-4.1's content hash is the place to add a uniqueness guarantee.
+- **Consolidating an entry that has a pending correction** leaves the old text
+  in the body if the correction is later accepted. For KG-7.4.
 
 ## Log
 
@@ -132,3 +165,7 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-26: Review round 1: one blocking finding (supersede by an agent
   retired accepted entries). Fixed with deferred supersede; non-blocking
   findings answered above. Verify through phase 0: 6/7, all suites green.
+- 2026-09-26: Review round 2: two blocking findings in the round 1 fix
+  (chained corrections, pointer erased on dispute). Pointers now kept and moved
+  only by a new correction; acceptance retires the chain. Stateful tests.
+  Verify through phase 0: 6/7, all suites green.

@@ -1,10 +1,25 @@
-import { updateTeam, type UpdateTeamDtoWithTeamId } from '@vantikhq/services';
+import type { UpdateTeamDto } from '@vantikhq/types';
 
 import type { TeamType } from 'common/types';
 
-import { type MutationCallbacks, useApiMutation } from 'services/utils';
+import {
+  ajaxPost,
+  type MutationCallbacks,
+  useApiMutation,
+} from 'services/utils';
 
 import { useContextStore } from 'store/global-context-provider';
+
+export interface UpdateTeamDtoWithTeamId extends UpdateTeamDto {
+  teamId: string;
+}
+
+export function updateTeam({
+  teamId,
+  ...updateData
+}: UpdateTeamDtoWithTeamId): Promise<TeamType> {
+  return ajaxPost({ url: `/api/v1/teams/${teamId}`, data: updateData });
+}
 
 export function useUpdateTeamMutation(
   callbacks: MutationCallbacks<TeamType, UpdateTeamDtoWithTeamId> = {},

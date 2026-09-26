@@ -1,5 +1,9 @@
-import { createPat } from '@vantikhq/services';
+import type { CreatePatDto } from '@vantikhq/types';
 
-import { mutationHook } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
+
+export function createPat(createPatDto: CreatePatDto) {
+  return ajaxPost({ url: `/api/v1/users/pat`, data: createPatDto });
+}
 
 export const useCreatePatMutation = mutationHook(createPat);

@@ -13,13 +13,10 @@ describe('errorMessage', () => {
     expect(errorMessage(rejected)).toBe('This cycle has already ended');
   });
 
-  it('reads an axios error, whose body sits under response.data', () => {
-    const rejected = {
-      message: 'Request failed with status code 400',
-      response: { data: { message: 'The path is not a git repository' } },
-    };
-
-    expect(errorMessage(rejected)).toBe('The path is not a git repository');
+  it('reads an Error thrown before any request went out', () => {
+    expect(errorMessage(new Error('Pick a team first'))).toBe(
+      'Pick a team first',
+    );
   });
 
   it('joins the list a validation failure sends', () => {

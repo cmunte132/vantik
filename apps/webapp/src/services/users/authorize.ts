@@ -1,5 +1,9 @@
-import { authorizeCode } from '@vantikhq/services';
+import type { CodeDtoWithWorkspace } from '@vantikhq/types';
 
-import { mutationHook } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
+
+export function authorizeCode(codeBody: CodeDtoWithWorkspace) {
+  return ajaxPost({ url: `/api/v1/users/authorization`, data: codeBody });
+}
 
 export const useAuthorizeMutation = mutationHook(authorizeCode);

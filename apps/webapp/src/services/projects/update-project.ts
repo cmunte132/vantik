@@ -1,5 +1,19 @@
-import { updateProject } from '@vantikhq/services';
+import type { Project, UpdateProjectDto } from '@vantikhq/types';
 
-import { mutationHook } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
+
+interface UpdateProjectWithProjectDto extends UpdateProjectDto {
+  projectId: string;
+}
+
+export function updateProject({
+  projectId,
+  ...updateProjectDto
+}: UpdateProjectWithProjectDto): Promise<Project> {
+  return ajaxPost({
+    url: `/api/v1/projects/${projectId}`,
+    data: updateProjectDto,
+  });
+}
 
 export const useUpdateProjectMutation = mutationHook(updateProject);

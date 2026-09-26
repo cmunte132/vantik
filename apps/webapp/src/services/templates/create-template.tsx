@@ -1,5 +1,9 @@
-import { createTemplate } from '@vantikhq/services';
+import type { CreateTemplateDto, Template } from '@vantikhq/types';
 
-import { mutationHook } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
+
+export function createTemplate(data: CreateTemplateDto): Promise<Template> {
+  return ajaxPost({ url: `/api/v1/templates`, data });
+}
 
 export const useCreateTemplateMutation = mutationHook(createTemplate);

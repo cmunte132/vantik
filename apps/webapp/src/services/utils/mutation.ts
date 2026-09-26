@@ -25,22 +25,19 @@ const NO_REASON = 'The request failed, and the server gave no reason.';
 /**
  * The server's own words where it has any.
  *
- * Nest puts them in `message`, which is a list when validation rejects more
- * than one field. A body that is not JSON arrives as text, and a proxy's error
- * page is HTML: that is not a sentence anyone should be shown.
+ * The ajax client keeps a JSON error body under `errors`, and Nest puts its
+ * reason in that body's `message` — a list when validation rejects more than
+ * one field. A body that is not JSON arrives as `message` text, and a proxy's
+ * error page is HTML: that is not a sentence anyone should be shown. An Error
+ * thrown before any request is made has a `message` too.
  */
 export function errorMessage(error: unknown, fallback = NO_REASON): string {
   const failure = error as {
     errors?: { message?: unknown };
-    response?: { data?: { message?: unknown } };
     message?: unknown;
   };
 
-  const candidates = [
-    failure?.errors?.message,
-    failure?.response?.data?.message,
-    failure?.message,
-  ];
+  const candidates = [failure?.errors?.message, failure?.message];
 
   for (const candidate of candidates) {
     const text = Array.isArray(candidate)

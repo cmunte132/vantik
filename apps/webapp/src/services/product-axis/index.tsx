@@ -1,21 +1,177 @@
-import {
-  acceptModuleSuggestion,
-  createCapability,
-  createModule,
-  createModuleRepo,
-  createProduct,
-  deleteCapability,
-  deleteModule,
-  deleteModuleRepo,
-  deleteProduct,
-  dismissModuleSuggestion,
-  updateCapability,
-  updateModule,
-  updateModuleRepo,
-  updateProduct,
-} from '@vantikhq/services';
+import type {
+  Capability,
+  CreateCapabilityDto,
+  CreateModuleDto,
+  CreateModuleRepoDto,
+  CreateProductDto,
+  Module,
+  ModuleRepo,
+  Product,
+  UpdateCapabilityDto,
+  UpdateModuleDto,
+  UpdateModuleRepoDto,
+  UpdateProductDto,
+} from '@vantikhq/types';
 
-import { mutationHook } from 'services/utils';
+import { ajaxDelete, ajaxGet, ajaxPost, mutationHook } from 'services/utils';
+
+export function createProduct(
+  createProductDto: CreateProductDto,
+): Promise<Product> {
+  return ajaxPost({ url: `/api/v1/products`, data: createProductDto });
+}
+
+export function updateProduct({
+  productId,
+  ...updateProductDto
+}: UpdateProductDto & { productId: string }): Promise<Product> {
+  return ajaxPost({
+    url: `/api/v1/products/${productId}`,
+    data: updateProductDto,
+  });
+}
+
+export function deleteProduct({
+  productId,
+}: {
+  productId: string;
+}): Promise<Product> {
+  return ajaxDelete({ url: `/api/v1/products/${productId}` });
+}
+
+export function getModules(): Promise<Module[]> {
+  return ajaxGet({ url: `/api/v1/modules` });
+}
+
+export function createModule(
+  createModuleDto: CreateModuleDto,
+): Promise<Module> {
+  return ajaxPost({ url: `/api/v1/modules`, data: createModuleDto });
+}
+
+export function updateModule({
+  moduleId,
+  ...updateModuleDto
+}: UpdateModuleDto & { moduleId: string }): Promise<Module> {
+  return ajaxPost({
+    url: `/api/v1/modules/${moduleId}`,
+    data: updateModuleDto,
+  });
+}
+
+export function deleteModule({
+  moduleId,
+}: {
+  moduleId: string;
+}): Promise<Module> {
+  return ajaxDelete({ url: `/api/v1/modules/${moduleId}` });
+}
+
+/**
+ * The repositories of a module.
+ *
+ * These rows are not replicated, so there is no store to read them from and
+ * every screen that shows them asks for them.
+ */
+export function getModuleRepos({
+  moduleId,
+}: {
+  moduleId: string;
+}): Promise<ModuleRepo[]> {
+  return ajaxGet({ url: `/api/v1/modules/${moduleId}/repos` });
+}
+
+export function createModuleRepo({
+  moduleId,
+  ...createModuleRepoDto
+}: CreateModuleRepoDto & { moduleId: string }): Promise<ModuleRepo> {
+  return ajaxPost({
+    url: `/api/v1/modules/${moduleId}/repos`,
+    data: createModuleRepoDto,
+  });
+}
+
+export function updateModuleRepo({
+  moduleId,
+  moduleRepoId,
+  ...updateModuleRepoDto
+}: UpdateModuleRepoDto & {
+  moduleId: string;
+  moduleRepoId: string;
+}): Promise<ModuleRepo> {
+  return ajaxPost({
+    url: `/api/v1/modules/${moduleId}/repos/${moduleRepoId}`,
+    data: updateModuleRepoDto,
+  });
+}
+
+export function deleteModuleRepo({
+  moduleId,
+  moduleRepoId,
+}: {
+  moduleId: string;
+  moduleRepoId: string;
+}): Promise<ModuleRepo> {
+  return ajaxDelete({
+    url: `/api/v1/modules/${moduleId}/repos/${moduleRepoId}`,
+  });
+}
+
+export function createCapability(
+  createCapabilityDto: CreateCapabilityDto,
+): Promise<Capability> {
+  return ajaxPost({ url: `/api/v1/capabilities`, data: createCapabilityDto });
+}
+
+export function updateCapability({
+  capabilityId,
+  ...updateCapabilityDto
+}: UpdateCapabilityDto & { capabilityId: string }): Promise<Capability> {
+  return ajaxPost({
+    url: `/api/v1/capabilities/${capabilityId}`,
+    data: updateCapabilityDto,
+  });
+}
+
+export function deleteCapability({
+  capabilityId,
+}: {
+  capabilityId: string;
+}): Promise<Capability> {
+  return ajaxDelete({ url: `/api/v1/capabilities/${capabilityId}` });
+}
+
+/**
+ * Promotes a module the classifier suggested to a module of the issue.
+ *
+ * Accepting is what moves a module from the least confident tier to the most
+ * confident one. The issue comes back over the socket, so nothing is written
+ * to the store here.
+ */
+export function acceptModuleSuggestion({
+  issueId,
+  moduleId,
+}: {
+  issueId: string;
+  moduleId: string;
+}) {
+  return ajaxPost({
+    url: `/api/v1/issues/ai/suggestions/${issueId}/modules/${moduleId}/accept`,
+  });
+}
+
+/** Removes a suggested module, and remembers not to suggest it again. */
+export function dismissModuleSuggestion({
+  issueId,
+  moduleId,
+}: {
+  issueId: string;
+  moduleId: string;
+}) {
+  return ajaxPost({
+    url: `/api/v1/issues/ai/suggestions/${issueId}/modules/${moduleId}/dismiss`,
+  });
+}
 
 /**
  * The write side of the product axis.

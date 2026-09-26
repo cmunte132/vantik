@@ -1,10 +1,27 @@
-import type { Workflow } from '@vantikhq/types';
+import type {
+  UpdateWorkflowDTO,
+  Workflow,
+  WorkflowRequestParamsDto,
+} from '@vantikhq/types';
 
-import { updateWorkflow, type UpdateWorkflowInput } from '@vantikhq/services';
-
-import { type MutationCallbacks, useApiMutation } from 'services/utils';
+import {
+  ajaxPost,
+  type MutationCallbacks,
+  useApiMutation,
+} from 'services/utils';
 
 import { useContextStore } from 'store/global-context-provider';
+
+export interface UpdateWorkflowInput
+  extends WorkflowRequestParamsDto, UpdateWorkflowDTO {}
+
+export function updateWorkflow({
+  teamId,
+  workflowId,
+  ...data
+}: UpdateWorkflowInput): Promise<Workflow> {
+  return ajaxPost({ url: `/api/v1/${teamId}/workflows/${workflowId}`, data });
+}
 
 export function useUpdateWorkflowMutation(
   callbacks: MutationCallbacks<Workflow, UpdateWorkflowInput> = {},

@@ -1,5 +1,9 @@
-import { deleteCycle } from '@vantikhq/services';
+import type { Cycle } from '@vantikhq/types';
 
-import { mutationHook } from 'services/utils';
+import { ajaxDelete, mutationHook } from 'services/utils';
+
+export function deleteCycle({ cycleId }: { cycleId: string }): Promise<Cycle> {
+  return ajaxDelete({ url: `/api/v1/cycles/${cycleId}` });
+}
 
 export const useDeleteCycleMutation = mutationHook(deleteCycle);

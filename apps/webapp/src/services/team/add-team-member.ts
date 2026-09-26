@@ -1,5 +1,14 @@
-import { addTeamMember } from '@vantikhq/services';
+import type { AddTeamMemberDto } from '@vantikhq/types';
 
-import { mutationHook } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
+
+export function addTeamMember({ teamId, userId }: AddTeamMemberDto) {
+  return ajaxPost({
+    url: `/api/v1/teams/${teamId}/add-member`,
+    data: {
+      userId,
+    },
+  });
+}
 
 export const useAddTeamMemberMutation = mutationHook(addTeamMember);

@@ -1,9 +1,19 @@
-import type { IntegrationDefinition } from '@vantikhq/types';
+import type {
+  IntegrationDefinition,
+  IntegrationDefinitionIdDto,
+} from '@vantikhq/types';
 
 import { type UseQueryResult, useQuery } from '@tanstack/react-query';
-import { getIntegrationDefinition } from '@vantikhq/services';
 
-import { type XHRErrorResponse } from 'services/utils';
+import { ajaxGet, type XHRErrorResponse } from 'services/utils';
+
+export function getIntegrationDefinition({
+  integrationDefinitionId,
+}: IntegrationDefinitionIdDto): Promise<IntegrationDefinition> {
+  return ajaxGet({
+    url: `/api/v1/integration_definition/${integrationDefinitionId}`,
+  });
+}
 
 /**
  * Query Key for Get user.

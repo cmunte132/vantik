@@ -41,6 +41,7 @@ interface FakeRun {
   contextPack: unknown;
   configHash: string | null;
   deleted: Date | null;
+  createdAt: Date | null;
 }
 
 function makeRun(over: Partial<FakeRun> = {}): FakeRun {
@@ -61,6 +62,7 @@ function makeRun(over: Partial<FakeRun> = {}): FakeRun {
     contextPack: null,
     configHash: null,
     deleted: null,
+    createdAt: new Date(),
     ...over,
   };
 }
@@ -343,6 +345,71 @@ describe('AgentRunsService leases', () => {
     const { service } = buildService([makeRun({ status: 'EXPIRED' })]);
 
     await expect(service.renewLease(RUN)).resolves.toBe(false);
+  });
+});
+
+/**
+ * A run handed to a push-based executor leaves QUEUED within seconds. One that
+ * has not, a lease later, was dropped on the way, and nothing polls the queue
+ * to find it.
+ */
+describe('AgentRunsService runs that never started', () => {
+  const longAgo = () => new Date(Date.now() - 60 * 60 * 1000);
+
+  it('fails a run still queued a lease after it was handed off', async () => {
+    const { service, rows } = buildService([
+      makeRun({ status: 'QUEUED', createdAt: longAgo() }),
+    ]);
+
+    const failed = await service.failUnstartedRuns();
+
+    expect(rows.get(RUN)?.status).toBe('FAILED');
+    expect(rows.get(RUN)?.failure).toBe('LEASE_LOST');
+    // The same words go on the run and on the issue, and they say what to do.
+    expect(failed).toEqual([
+      expect.objectContaining({
+        id: RUN,
+        attempt: 1,
+        error: expect.stringMatching(/Retry it to run it again/),
+      }),
+    ]);
+  });
+
+  it('leaves a run that was only just handed off', async () => {
+    const { service, rows } = buildService([makeRun({ status: 'QUEUED' })]);
+
+    await expect(service.failUnstartedRuns()).resolves.toEqual([]);
+    expect(rows.get(RUN)?.status).toBe('QUEUED');
+  });
+
+  it('leaves a run that was claimed while the sweep was deciding', async () => {
+    // Read as QUEUED, claimed before the write. Moving it from where it now
+    // is would fail work in progress and say it never started.
+    const { service, rows, prisma } = buildService([
+      makeRun({ status: 'QUEUED', createdAt: longAgo() }),
+    ]);
+    const findMany = prisma.agentRun.findMany as unknown as jest.Mock;
+    const read = findMany.getMockImplementation();
+    findMany.mockImplementationOnce(async (args: never) => {
+      const found = await read(args);
+      const row = rows.get(RUN);
+      if (row) {
+        row.status = 'CLAIMED';
+      }
+      return found;
+    });
+
+    await expect(service.failUnstartedRuns()).resolves.toEqual([]);
+    expect(rows.get(RUN)?.status).toBe('CLAIMED');
+  });
+
+  it('never touches a deleted run', async () => {
+    const { service, rows } = buildService([
+      makeRun({ status: 'QUEUED', createdAt: longAgo(), deleted: new Date() }),
+    ]);
+
+    await expect(service.failUnstartedRuns()).resolves.toEqual([]);
+    expect(rows.get(RUN)?.status).toBe('QUEUED');
   });
 });
 

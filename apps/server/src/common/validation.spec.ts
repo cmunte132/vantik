@@ -19,6 +19,7 @@ import {
   GetUsersDto,
   IntegrationDefinitionIdDto,
   TemplateCategoryEnum,
+  UpdateIssueDto,
   UpdateTemplateDto,
 } from '@vantikhq/types';
 
@@ -54,6 +55,14 @@ describe('the global validation pipe', () => {
       category: TemplateCategoryEnum.ISSUE,
       templateData: { title: 'x' },
     });
+  });
+
+  it('drops an issue id from an update body', async () => {
+    // Update reads the issue from the path and spreads the rest of the body
+    // into the write, so an id here would reach Prisma.
+    await expect(
+      run(UpdateIssueDto, { title: 'Fix login', issueId: 'issue-2' }),
+    ).resolves.toEqual({ title: 'Fix login' });
   });
 
   it('still rejects what the DTO forbids', async () => {

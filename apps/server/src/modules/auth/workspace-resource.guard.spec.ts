@@ -239,34 +239,23 @@ describe('WorkspaceResourceGuard', () => {
     );
   });
 
-  it('rejects a foreign issue hidden inside a bulk update body', async () => {
-    const ctx = buildContext({
-      query: { teamId: OWN_TEAM },
-      body: { issues: [{ issueId: OWN_ISSUE }, { issueId: FOREIGN_ISSUE }] },
-    });
+  it('rejects a foreign issue named in the body', async () => {
+    // Delegating a run names its issue in the body, not the path.
+    const ctx = buildContext({ body: { issueId: FOREIGN_ISSUE } });
 
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
 
-  it('rejects a foreign team hidden inside a bulk create body', async () => {
+  it('rejects a foreign team hidden on a sub-issue', async () => {
     const ctx = buildContext({
-      body: { issues: [{ teamId: OWN_TEAM }, { teamId: FOREIGN_TEAM }] },
+      body: { teamId: OWN_TEAM, subIssues: [{ teamId: FOREIGN_TEAM }] },
     });
 
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
       NotFoundException,
     );
-  });
-
-  it('allows a bulk body whose entries are all in the workspace', async () => {
-    const ctx = buildContext({
-      query: { teamId: OWN_TEAM },
-      body: { issues: [{ issueId: OWN_ISSUE }, { issueId: OWN_ISSUE }] },
-    });
-
-    await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 
   it('passes when the request names no scoped resource', async () => {
@@ -324,10 +313,10 @@ describe('WorkspaceResourceGuard', () => {
   });
 
   /**
-   * An issue body nests: `subIssues` on any issue, and `issues` on the bulk
-   * routes. Reading only the top level checked the parent and none of the
-   * children, and `Issue.moduleIds` has no foreign key behind it, so this guard
-   * is the only thing between that column and any id a caller sends.
+   * An issue body nests: `subIssues` on any issue, recursively. Reading only
+   * the top level checked the parent and none of the children, and
+   * `Issue.moduleIds` has no foreign key behind it, so this guard is the only
+   * thing between that column and any id a caller sends.
    */
   describe('the product axis inside a nested body', () => {
     it('rejects a foreign module hidden on a sub-issue', async () => {
@@ -360,21 +349,6 @@ describe('WorkspaceResourceGuard', () => {
       const ctx = buildContext({
         body: {
           subIssues: [{ subIssues: [{ moduleIds: [FOREIGN_MODULE] }] }],
-        },
-      });
-
-      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
-    });
-
-    it('rejects a foreign module inside a bulk create body', async () => {
-      const ctx = buildContext({
-        body: {
-          issues: [
-            { teamId: OWN_TEAM, moduleIds: [OWN_MODULE] },
-            { teamId: OWN_TEAM, moduleIds: [FOREIGN_MODULE] },
-          ],
         },
       });
 
@@ -475,11 +449,9 @@ describe('WorkspaceResourceGuard team boundary', () => {
     );
   });
 
-  it('rejects an issue in a bulk body that belongs to another team', async () => {
+  it('rejects an issue named in the body that belongs to another team', async () => {
     const guard = new WorkspaceResourceGuard(buildPrisma([OWN_TEAM]));
-    const ctx = buildContext({
-      body: { issues: [{ issueId: OWN_ISSUE }, { issueId: OTHER_TEAM_ISSUE }] },
-    });
+    const ctx = buildContext({ body: { issueId: OTHER_TEAM_ISSUE } });
 
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
       NotFoundException,

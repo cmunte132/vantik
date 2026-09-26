@@ -86,11 +86,9 @@ export class WorkspaceResourceGuard implements CanActivate {
       teamId: pathTeamId,
     } = request.params ?? {};
 
-    // The bulk routes carry their ids inside a body array, one per issue, so
-    // the path and query alone do not describe everything the request touches.
-    // An issue also carries its own sub-issues, and each of those is a whole
-    // issue body again — so the ids of a write are the ids of a tree, not of
-    // one object. Reading only the top level let a caller hang a foreign module
+    // An issue carries its own sub-issues, and each of those is a whole issue
+    // body again — so the ids of a write are the ids of a tree, not of one
+    // object. Reading only the top level let a caller hang a foreign module
     // or capability off a sub-issue, which is the same hole one level down.
     const bodies = issueBodies(request.body);
 
@@ -104,7 +102,7 @@ export class WorkspaceResourceGuard implements CanActivate {
     ]);
 
     // teamId selects the team a write lands in: a query param on update, the
-    // body on create and move, and per-entry on bulk create. The workflow
+    // body on create and move, and per sub-issue on create. The workflow
     // routes carry it in the path, as `/:teamId/workflows`.
     const requestTeamIds = unique([
       pathTeamId,
@@ -329,7 +327,6 @@ interface IdBearingBody {
   linkedTeamIds?: unknown;
   linkedProductIds?: unknown;
   teams?: unknown;
-  issues?: unknown;
   subIssues?: unknown;
 }
 
@@ -339,10 +336,10 @@ const MAX_ISSUE_DEPTH = 10;
 /**
  * Flattens a request body into every object whose ids have to be checked.
  *
- * An issue body nests twice over: `issues` on the bulk routes, and `subIssues`
- * on any issue, recursively. A guard that read only the top level checked the
- * ids of the parent and none of the children, so a foreign module or capability
- * arrived on a sub-issue untouched.
+ * An issue body nests: `subIssues` on any issue, recursively. A guard that
+ * read only the top level checked the ids of the parent and none of the
+ * children, so a foreign module or capability arrived on a sub-issue
+ * untouched.
  *
  * The depth limit is a guard against a body built to make this walk expensive,
  * not against anything the app itself sends: a person nests a sub-issue once,
@@ -354,9 +351,13 @@ function issueBodies(body: unknown, depth = 0): IdBearingBody[] {
   }
 
   const current = body as IdBearingBody;
-  const nested = [...list(current.issues), ...list(current.subIssues)];
 
-  return [current, ...nested.flatMap((child) => issueBodies(child, depth + 1))];
+  return [
+    current,
+    ...list(current.subIssues).flatMap((child) =>
+      issueBodies(child, depth + 1),
+    ),
+  ];
 }
 
 /** Reads a value that should be an array, and refuses to guess when it is not. */

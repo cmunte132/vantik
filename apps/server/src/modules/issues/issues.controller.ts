@@ -69,50 +69,6 @@ export class IssuesController {
     return await this.issuesService.createIssueAPI(issueData, userId);
   }
 
-  @Post('bulk/update')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async bulkUpdateIssues(
-    @SessionDecorator() session: SessionContainer,
-    @Query() teamParams: TeamRequestParamsDto,
-    @Body() issueData: { issues: UpdateIssueDto[] },
-  ): Promise<string[]> {
-    const userId = getAppUserId(session);
-    const issues = [];
-
-    for (const issue of issueData.issues) {
-      const { issueId, ...otherData } = issue;
-      const responseIssue = await this.issuesService.updateIssueApi(
-        teamParams,
-        otherData,
-        { issueId },
-        userId,
-      );
-      issues.push(responseIssue.id);
-    }
-
-    return issues;
-  }
-
-  @Post('bulk')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async bulkCreateIssues(
-    @SessionDecorator() session: SessionContainer,
-    @Body() issueData: { issues: CreateIssueDto[] },
-  ): Promise<string[]> {
-    const userId = getAppUserId(session);
-    const issues = [];
-
-    for (const issue of issueData.issues) {
-      const responseIssue = await this.issuesService.createIssueAPI(
-        issue,
-        userId,
-      );
-      issues.push(responseIssue.id);
-    }
-
-    return issues;
-  }
-
   // A read that arrives as a POST because the filter travels in the body. Left
   // to the method, the scope guard would read it as a write and lock a
   // read-only agent out of the board itself.

@@ -11,11 +11,17 @@ import {
 } from '@nestjs/common';
 import { SignedURLBody } from '@vantikhq/types';
 import { Request, Response } from 'express';
+import { PrismaService } from 'nestjs-prisma';
+
+import { resolveWorkspaceId } from 'common/workspace-access';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { UserId, Workspace } from 'modules/auth/session.decorator';
 
-import { AttachmentRequestParams } from './attachments.interface';
+import {
+  AttachmentIdParams,
+  AttachmentRequestParams,
+} from './attachments.interface';
 import { AttachmentService } from './attachments.service';
 
 @Controller({
@@ -23,7 +29,10 @@ import { AttachmentService } from './attachments.service';
   path: 'attachment',
 })
 export class AttachmentController {
-  constructor(private readonly attachementService: AttachmentService) {}
+  constructor(
+    private readonly attachementService: AttachmentService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post('get-signed-url')
   @UseGuards(AuthGuard)
@@ -80,20 +89,32 @@ export class AttachmentController {
   @UseGuards(AuthGuard)
   async getFileForWorkspace(
     @Param() attachementRequestParams: AttachmentRequestParams,
+    @UserId() userId: string,
+    @Workspace() sessionWorkspaceId: string,
     @Res() res: Response,
   ) {
     try {
+      // The path names the workspace, so it has to be one the caller belongs
+      // to: without this, any signed-in user could read any workspace's files
+      // from their URLs. A refusal reads as a missing file, like any other.
+      const workspaceId = await resolveWorkspaceId(
+        this.prisma,
+        userId,
+        sessionWorkspaceId,
+        attachementRequestParams.workspaceId,
+      );
       const { buffer, contentType } =
         await this.attachementService.getFileFromStorage(
           attachementRequestParams,
-          attachementRequestParams.workspaceId,
+          workspaceId,
         );
 
       // Set content disposition header with the original filename
       res.set({
         'Content-Type': contentType,
         'Content-Disposition': 'inline',
-        'Cache-Control': 'public, immutable, max-age=31536000', // Cache for 1 year (effectively infinite)
+        // Private: only a member may read it, so no shared cache may keep it.
+        'Cache-Control': 'private, immutable, max-age=31536000',
       });
 
       res.send(buffer);
@@ -106,7 +127,7 @@ export class AttachmentController {
   @UseGuards(AuthGuard)
   async getFile(
     @Workspace() workspaceId: string,
-    @Param() attachementRequestParams: AttachmentRequestParams,
+    @Param() attachementRequestParams: AttachmentIdParams,
     @Res() res: Response,
   ) {
     try {
@@ -120,7 +141,8 @@ export class AttachmentController {
       res.set({
         'Content-Type': contentType,
         'Content-Disposition': 'inline',
-        'Cache-Control': 'public, immutable, max-age=31536000', // Cache for 1 year (effectively infinite)
+        // Private: only a member may read it, so no shared cache may keep it.
+        'Cache-Control': 'private, immutable, max-age=31536000',
       });
 
       res.send(buffer);

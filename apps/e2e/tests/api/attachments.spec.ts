@@ -1,7 +1,7 @@
 import type { APIRequestContext } from '@playwright/test';
 
 import type { Account } from '../../src/auth';
-import { expect, knownBug, test } from '../../src/fixtures';
+import { expect, test } from '../../src/fixtures';
 
 /**
  * An image pasted into the editor takes three requests: ask the server for a
@@ -73,10 +73,6 @@ test.describe('attachments', () => {
 
     const read = await asAlice.get(`/v1/attachment/${attachment.id}`);
 
-    knownBug(
-      'GET /v1/attachment/:attachmentId validates its params as AttachmentRequestParams, which requires a workspaceId the route does not have, and answers 400',
-    );
-
     expect(read).toBeOK();
     expect(await read.body()).toEqual(PNG);
   });
@@ -95,10 +91,6 @@ test.describe('attachments', () => {
     expect((await asBob.get(`/v1/attachment/${attachment.id}`)).ok()).toBe(false);
 
     const read = await asBob.get(inWorkspace(alice, attachment));
-
-    knownBug(
-      'GET /v1/attachment/:workspaceId/:attachmentId takes the workspace from the URL and never checks the caller belongs to it',
-    );
 
     expect([403, 404]).toContain(read.status());
   });

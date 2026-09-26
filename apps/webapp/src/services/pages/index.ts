@@ -2,7 +2,6 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import type {
   KnowledgeGapType,
-  PageEntryFacets,
   PageEntryStatus,
   PageEntryPolicy,
   PageEntryType,
@@ -368,17 +367,6 @@ export interface KnowledgeHit {
   content: string;
   scope: string | null;
   verified: boolean;
-}
-
-/** Facet counts for a page's entries, or for the whole workspace. */
-export function useEntryFacets(pageId?: string) {
-  return useQuery<PageEntryFacets>({
-    queryKey: ['page-entry-facets', pageId ?? 'workspace'],
-    queryFn: () =>
-      ajaxGet({
-        url: `/api/v1/page_entries/facets${pageId ? `?pageId=${pageId}` : ''}`,
-      }) as Promise<PageEntryFacets>,
-  });
 }
 
 /**

@@ -1,6 +1,5 @@
 export * from './data-loader';
 export * from './integration-account';
-export * from './integration-definition';
 export * from './issue-relation';
 export * from './issue';
 export * from './label';

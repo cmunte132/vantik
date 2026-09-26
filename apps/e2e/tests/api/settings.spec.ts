@@ -61,3 +61,25 @@ test.describe('settings are saved', () => {
     );
   });
 });
+
+test.describe('settings are for admins', () => {
+  // The workspace's settings hold the agent run limits: what a run may spend
+  // on a model key someone else pays for. Any member could change them.
+  test("a member who is not an admin can't change the workspace's", async ({
+    asAlice,
+    asCarol,
+    alice,
+  }) => {
+    const maxCostUsd = 1_000_000;
+
+    const response = await asCarol.post('/v1/workspaces/preferences', {
+      data: { agentRuns: { limits: { maxCostUsd } } },
+    });
+    expect(response.status()).toBe(403);
+
+    const workspace = (await workspacesOf(asAlice)).find(
+      (candidate) => candidate.id === alice.workspaceId,
+    );
+    expect(JSON.stringify(workspace?.preferences ?? {})).not.toContain(`${maxCostUsd}`);
+  });
+});

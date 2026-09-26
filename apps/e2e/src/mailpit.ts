@@ -58,6 +58,10 @@ export interface Email {
  * `alreadySeen`. Taking the ids from before the action that sends it, rather
  * than a timestamp, keeps a clock that differs between the test runner and the
  * mail container from picking up an older message.
+ *
+ * Tests run side by side and email the same people, so two emails with the
+ * same subject can arrive at once. Pass `containing`, something only the
+ * expected email's body holds, to pass over the other test's.
  */
 export async function readEmail(
   request: APIRequestContext,
@@ -65,30 +69,46 @@ export async function readEmail(
   subject: RegExp,
   alreadySeen: string[] = [],
   timeout = 30_000,
+  containing?: string,
 ): Promise<Email> {
-  let id: string | undefined;
+  const passedOver = new Set(alreadySeen);
+  let found: MailpitMessage | undefined;
 
   await expect
     .poll(
       async () => {
-        id = (await messagesTo(request, email)).find(
-          (message) =>
-            !alreadySeen.includes(message.ID) && subject.test(message.Subject),
-        )?.ID;
-        return id !== undefined;
+        const candidates = (await messagesTo(request, email)).filter(
+          (message) => !passedOver.has(message.ID) && subject.test(message.Subject),
+        );
+        for (const candidate of candidates) {
+          const message = await readMessage(request, candidate.ID);
+          if (containing === undefined || message.HTML.includes(containing)) {
+            found = message;
+            return true;
+          }
+          passedOver.add(candidate.ID);
+        }
+        return false;
       },
       {
-        message: `no email with a subject like ${subject} reached Mailpit for ${email}`,
+        message: `no email with a subject like ${subject}${
+          containing === undefined ? '' : ` holding "${containing}"`
+        } reached Mailpit for ${email}`,
         timeout,
       },
     )
     .toBe(true);
 
+  return { subject: found!.Subject, html: found!.HTML };
+}
+
+async function readMessage(
+  request: APIRequestContext,
+  id: string,
+): Promise<MailpitMessage> {
   const response = await request.get(`${MAILPIT_URL}/api/v1/message/${id}`);
   expect(response, 'Mailpit message fetch failed').toBeOK();
-  const message = (await response.json()) as MailpitMessage;
-
-  return { subject: message.Subject, html: message.HTML };
+  return (await response.json()) as MailpitMessage;
 }
 
 /**

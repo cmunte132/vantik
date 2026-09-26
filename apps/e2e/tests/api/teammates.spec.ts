@@ -150,14 +150,56 @@ test.describe('notifications', () => {
       )
       .toBe(true);
 
+    // Other tests assign Carol issues too, at the same time.
     const email = await readEmail(
       request,
       carol.email,
       /assigned an issue to you/,
       seen,
       15_000,
+      issue.title,
     );
     expect(email.html).toContain(issue.title);
+  });
+});
+
+test.describe('a notification', () => {
+  // The route updated the row by id alone, so anyone signed in could mark
+  // anyone's notification read or snooze it, in any workspace.
+  test('is marked read by the person it was sent to, and no one else', async ({
+    asAlice,
+    asCarol,
+    alice,
+    carol,
+  }) => {
+    const issue = await createIssue(asAlice, alice, {
+      teamId: carol.teamId,
+      assigneeId: carol.userId,
+    });
+
+    let notificationId: string | undefined;
+    await expect
+      .poll(
+        async () => {
+          notificationId = (await bootstrap(asCarol, ['Notification'])).syncActions.find(
+            (record) => record.data.issueId === issue.id,
+          )?.modelId;
+          return notificationId;
+        },
+        { timeout: 30_000 },
+      )
+      .toBeTruthy();
+
+    const readAt = new Date().toISOString();
+    const byAlice = await asAlice.post(`/v1/notifications/${notificationId}`, {
+      data: { readAt },
+    });
+    expect(byAlice.status()).toBe(404);
+
+    const byCarol = await asCarol.post(`/v1/notifications/${notificationId}`, {
+      data: { readAt },
+    });
+    expect(byCarol).toBeOK();
   });
 });
 
@@ -195,5 +237,23 @@ test.describe('invites', () => {
 
     // And the invite is still Dave's to accept.
     expect(await answerInvite(request, daves, inviteId)).toBeOK();
+  });
+
+  test('a declined invite cannot be accepted after', async ({
+    request,
+    asAlice,
+    alice,
+  }) => {
+    const invitee = `frank+${runTag()}@e2e.vantik.test`;
+    const team = await createSpareTeam(asAlice);
+    await invite(request, alice, invitee, team.id);
+    const { session } = await signIn(request, invitee);
+    const inviteId = await inviteIdFor(request, session, alice.workspaceId);
+
+    expect(await answerInvite(request, session, inviteId, false)).toBeOK();
+
+    // The invite was found by id alone, declined or not.
+    const accepted = await answerInvite(request, session, inviteId);
+    expect(accepted.status()).toBe(404);
   });
 });

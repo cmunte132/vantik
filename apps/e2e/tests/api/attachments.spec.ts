@@ -60,6 +60,8 @@ test.describe('attachments', () => {
 
     expect(read).toBeOK();
     expect(read.headers()['content-type']).toContain('image/png');
+    // A file is for the workspace's members, so no shared cache may keep it.
+    expect(read.headers()['cache-control']).toMatch(/^private\b/);
     expect(await read.body()).toEqual(PNG);
   });
 

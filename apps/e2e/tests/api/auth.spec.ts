@@ -109,6 +109,20 @@ test.describe('credentials', () => {
     expect(response.status()).toBe(401);
   });
 
+  // Impersonation took the database password as its key, and the install docs
+  // set that to "docker": on an install that kept it, anyone who could sign up
+  // could become anyone. It has a key of its own now, and is off without one.
+  test('impersonation is off unless the server has a key for it', async ({
+    asBob,
+    alice,
+  }) => {
+    const response = await asBob.post('/v1/users/impersonate', {
+      data: { key: 'docker', userId: alice.userId },
+    });
+    expect(response.status()).toBe(404);
+    expect(response.headers()['st-access-token']).toBeUndefined();
+  });
+
   test('a personal access token keeps working', async ({ asAlice, alice }) => {
     // The setup project minted this token before any test ran. PATs used to
     // die an hour after they were issued; this only proves they outlive the

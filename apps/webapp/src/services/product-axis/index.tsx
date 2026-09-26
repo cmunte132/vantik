@@ -1,30 +1,29 @@
 import type {
-  Capability,
   CreateCapabilityDto,
   CreateModuleDto,
   CreateModuleRepoDto,
   CreateProductDto,
-  Module,
   ModuleRepo,
-  Product,
   UpdateCapabilityDto,
   UpdateModuleDto,
   UpdateModuleRepoDto,
   UpdateProductDto,
 } from '@vantikhq/types';
 
+import type { CapabilityType, ModuleType, ProductType } from 'common/types';
+
 import { ajaxDelete, ajaxGet, ajaxPost, mutationHook } from 'services/utils';
 
 export function createProduct(
   createProductDto: CreateProductDto,
-): Promise<Product> {
+): Promise<ProductType> {
   return ajaxPost({ url: `/api/v1/products`, data: createProductDto });
 }
 
 export function updateProduct({
   productId,
   ...updateProductDto
-}: UpdateProductDto & { productId: string }): Promise<Product> {
+}: UpdateProductDto & { productId: string }): Promise<ProductType> {
   return ajaxPost({
     url: `/api/v1/products/${productId}`,
     data: updateProductDto,
@@ -35,24 +34,31 @@ export function deleteProduct({
   productId,
 }: {
   productId: string;
-}): Promise<Product> {
+}): Promise<ProductType> {
   return ajaxDelete({ url: `/api/v1/products/${productId}` });
 }
 
-export function getModules(): Promise<Module[]> {
+/**
+ * The modules as the API stores them, which is more than the synced model
+ * carries: `verification` is read only by the page that edits it, so it is
+ * fetched here rather than replicated to every client.
+ */
+export function getModules(): Promise<
+  Array<ModuleType & { verification?: unknown }>
+> {
   return ajaxGet({ url: `/api/v1/modules` });
 }
 
 export function createModule(
   createModuleDto: CreateModuleDto,
-): Promise<Module> {
+): Promise<ModuleType> {
   return ajaxPost({ url: `/api/v1/modules`, data: createModuleDto });
 }
 
 export function updateModule({
   moduleId,
   ...updateModuleDto
-}: UpdateModuleDto & { moduleId: string }): Promise<Module> {
+}: UpdateModuleDto & { moduleId: string }): Promise<ModuleType> {
   return ajaxPost({
     url: `/api/v1/modules/${moduleId}`,
     data: updateModuleDto,
@@ -63,7 +69,7 @@ export function deleteModule({
   moduleId,
 }: {
   moduleId: string;
-}): Promise<Module> {
+}): Promise<ModuleType> {
   return ajaxDelete({ url: `/api/v1/modules/${moduleId}` });
 }
 
@@ -119,14 +125,14 @@ export function deleteModuleRepo({
 
 export function createCapability(
   createCapabilityDto: CreateCapabilityDto,
-): Promise<Capability> {
+): Promise<CapabilityType> {
   return ajaxPost({ url: `/api/v1/capabilities`, data: createCapabilityDto });
 }
 
 export function updateCapability({
   capabilityId,
   ...updateCapabilityDto
-}: UpdateCapabilityDto & { capabilityId: string }): Promise<Capability> {
+}: UpdateCapabilityDto & { capabilityId: string }): Promise<CapabilityType> {
   return ajaxPost({
     url: `/api/v1/capabilities/${capabilityId}`,
     data: updateCapabilityDto,
@@ -137,7 +143,7 @@ export function deleteCapability({
   capabilityId,
 }: {
   capabilityId: string;
-}): Promise<Capability> {
+}): Promise<CapabilityType> {
   return ajaxDelete({ url: `/api/v1/capabilities/${capabilityId}` });
 }
 

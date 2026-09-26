@@ -1,8 +1,4 @@
-import type {
-  IntegrationAccount,
-  TeamMapping,
-  TeamMappingParams,
-} from '@vantikhq/types';
+import type { TeamMapping, TeamMappingParams } from '@vantikhq/types';
 
 import { RiDeleteBinLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
@@ -20,7 +16,11 @@ import * as React from 'react';
 
 import { SettingSection } from 'modules/settings/setting-section';
 
-import type { TeamType, UsersOnWorkspaceType } from 'common/types';
+import type {
+  IntegrationAccountType,
+  TeamType,
+  UsersOnWorkspaceType,
+} from 'common/types';
 
 import { useAllTeams } from 'hooks/teams';
 
@@ -37,7 +37,7 @@ interface Repository {
 }
 
 interface TeamMappingsProps {
-  account: IntegrationAccount;
+  account: IntegrationAccountType;
   params: TeamMappingParams;
 }
 

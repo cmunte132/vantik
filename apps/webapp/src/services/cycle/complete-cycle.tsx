@@ -1,4 +1,6 @@
-import type { CompleteCycleDto, Cycle } from '@vantikhq/types';
+import type { CompleteCycleDto } from '@vantikhq/types';
+
+import type { CycleType } from 'common/types';
 
 import { ajaxPost, mutationHook } from 'services/utils';
 
@@ -9,7 +11,7 @@ interface CompleteCycleDtoWithCycleId extends CompleteCycleDto {
 export function completeCycle({
   cycleId,
   ...completeCycleDto
-}: CompleteCycleDtoWithCycleId): Promise<Cycle> {
+}: CompleteCycleDtoWithCycleId): Promise<CycleType> {
   return ajaxPost({
     url: `/api/v1/cycles/${cycleId}/complete`,
     data: completeCycleDto,

@@ -1,10 +1,10 @@
-import type { Project } from '@vantikhq/types';
+import type { ProjectType } from 'common/types';
 
 import { ajaxDelete, mutationHook } from 'services/utils';
 
 export function deleteProjectMilestone(
   projectMilestoneId: string,
-): Promise<Project> {
+): Promise<ProjectType> {
   return ajaxDelete({
     url: `/api/v1/projects/milestone/${projectMilestoneId}`,
   });

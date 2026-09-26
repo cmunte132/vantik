@@ -1,8 +1,12 @@
-import type { CreateCycleDto, Cycle } from '@vantikhq/types';
+import type { CreateCycleDto } from '@vantikhq/types';
+
+import type { CycleType } from 'common/types';
 
 import { ajaxPost, mutationHook } from 'services/utils';
 
-export function createCycle(createCycleDto: CreateCycleDto): Promise<Cycle> {
+export function createCycle(
+  createCycleDto: CreateCycleDto,
+): Promise<CycleType> {
   return ajaxPost({ url: '/api/v1/cycles/single', data: createCycleDto });
 }
 

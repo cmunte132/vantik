@@ -1,4 +1,6 @@
-import type { Template, UpdateTemplateDto } from '@vantikhq/types';
+import type { UpdateTemplateDto } from '@vantikhq/types';
+
+import type { TemplateType } from 'common/types';
 
 import { ajaxPost, mutationHook } from 'services/utils';
 
@@ -9,7 +11,7 @@ interface UpdateTemplateDtoWithId extends UpdateTemplateDto {
 export function updateTemplate({
   templateId,
   ...data
-}: UpdateTemplateDtoWithId): Promise<Template> {
+}: UpdateTemplateDtoWithId): Promise<TemplateType> {
   return ajaxPost({ url: `/api/v1/templates/${templateId}`, data });
 }
 

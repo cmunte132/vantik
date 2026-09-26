@@ -1,7 +1,6 @@
-import type {
-  ProjectMilestone,
-  UpdateProjectMilestoneDto,
-} from '@vantikhq/types';
+import type { UpdateProjectMilestoneDto } from '@vantikhq/types';
+
+import type { ProjectMilestoneType } from 'common/types';
 
 import { ajaxPost, mutationHook } from 'services/utils';
 
@@ -12,7 +11,7 @@ interface UpdateProjectMilestoneWithProjectDto extends UpdateProjectMilestoneDto
 export function updateProjectMilestone({
   projectMilestoneId,
   ...updateProjecMilestonetDto
-}: UpdateProjectMilestoneWithProjectDto): Promise<ProjectMilestone> {
+}: UpdateProjectMilestoneWithProjectDto): Promise<ProjectMilestoneType> {
   return ajaxPost({
     url: `/api/v1/projects/milestone/${projectMilestoneId}`,
     data: updateProjecMilestonetDto,

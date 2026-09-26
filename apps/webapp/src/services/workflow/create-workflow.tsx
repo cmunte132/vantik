@@ -1,8 +1,9 @@
 import type {
   CreateWorkflowDTO,
-  Workflow,
   WorkflowRequestParamsDto,
 } from '@vantikhq/types';
+
+import type { WorkflowType } from 'common/types';
 
 import { ajaxPost, mutationHook } from 'services/utils';
 
@@ -12,7 +13,7 @@ export interface CreateWorkflowInput
 export function createWorkflow({
   teamId,
   ...data
-}: CreateWorkflowInput): Promise<Workflow> {
+}: CreateWorkflowInput): Promise<WorkflowType> {
   return ajaxPost({ url: `/api/v1/${teamId}/workflows`, data });
 }
 

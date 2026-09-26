@@ -9,9 +9,10 @@ import { IntegrationDefinitionSeeder } from './integration-definition.seeder';
 
 /**
  * The seed runs at each start of the server, and it writes the rows that hold
- * the OAuth credentials of the deployment. An operator can also set a
- * credential through the update route. These tests are about what the restart
- * does to that value.
+ * the OAuth credentials of the deployment. A row can also hold a credential
+ * that did not come from this environment: one written before the environment
+ * named it, or set in the database by hand. These tests are about what the
+ * restart does to that value.
  *
  * They read the arguments of the upsert and not the database. What the row
  * keeps is a property of the `update` object: a column that the object does not

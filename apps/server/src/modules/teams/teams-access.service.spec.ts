@@ -15,7 +15,7 @@
  * - The role widens the *roster* and never the *content*. `visibleTeamIds`,
  *   which governs issues, is untouched by any of this.
  */
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
 import TeamsService from './teams.service';
@@ -205,6 +205,27 @@ describe('TeamsService write boundary', () => {
       service.deleteTeam({ teamId: OTHER_TEAM }, 'user-1', WORKSPACE),
     ).rejects.toThrow(NotFoundException);
     expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses a member deleting their own team', async () => {
+    // Renaming stays with the members; deleting is the workspace admin's call.
+    const { service, prisma } = buildWritable('USER', [MY_TEAM]);
+
+    await expect(
+      service.deleteTeam({ teamId: MY_TEAM }, 'user-1', WORKSPACE),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('lets an admin delete a team', async () => {
+    const { service, prisma } = buildWritable('ADMIN', []);
+
+    await service.deleteTeam({ teamId: OTHER_TEAM }, 'admin-1', WORKSPACE);
+
+    expect(prisma.team.update).toHaveBeenCalledWith({
+      where: { id: OTHER_TEAM },
+      data: { deleted: expect.any(String) },
+    });
   });
 
   it('lets an admin update a team they are not in', async () => {

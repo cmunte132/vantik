@@ -10,6 +10,7 @@ import {
 import { PrismaService } from 'nestjs-prisma';
 
 import { assertTeamsVisible, readableTeamIds } from 'common/team-access';
+import { assertWorkspaceAdmin } from 'common/workspace-access';
 
 import { SyncGateway } from 'modules/sync/sync.gateway';
 import { UserIdParams } from 'modules/users/users.interface';
@@ -230,12 +231,21 @@ export default class TeamsService {
     });
   }
 
+  /**
+   * Deleting a team is a workspace admin's call, where renaming it is not.
+   *
+   * Readability is checked first, so a team in another workspace is still
+   * not-found rather than forbidden. The role is read from the membership row
+   * for this workspace, not from the access token, which carries the role in
+   * the caller's first workspace only.
+   */
   async deleteTeam(
     teamRequestParams: TeamRequestParams,
     userId: string,
     workspaceId: string,
   ): Promise<Team> {
     await this.assertReadable(teamRequestParams.teamId, userId, workspaceId);
+    await assertWorkspaceAdmin(this.prisma, userId, workspaceId);
 
     const teamIssues = await this.prisma.issue.findMany({
       where: {

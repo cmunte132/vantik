@@ -1,4 +1,3 @@
-import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -22,16 +21,8 @@ describe('the agent hooks wiring', () => {
       // The real one opens a redis connection on construction.
       .overrideProvider(CacheService)
       .useValue({})
-      // Global in the real app, so they are stood in for rather than imported.
-      .useMocker((token) => {
-        if (token === PrismaService) {
-          return {};
-        }
-        if (token === ConfigService) {
-          return { get: (): undefined => undefined };
-        }
-        return undefined;
-      })
+      // Global in the real app, so it is stood in for rather than imported.
+      .useMocker((token) => (token === PrismaService ? {} : undefined))
       .compile();
 
     expect(moduleRef.get(AgentHooksController)).toBeInstanceOf(

@@ -231,8 +231,18 @@ describe('closeTask', () => {
     const { agent } = makeAgent({
       ...baseRoutes,
       'GET /checklist_items': [
-        { id: 'item-1', body: 'Pool sized from config', completed: true, sortOrder: 1 },
-        { id: 'item-2', body: 'Exhaustion is logged', completed: false, sortOrder: 2 },
+        {
+          id: 'item-1',
+          body: 'Pool sized from config',
+          completed: true,
+          sortOrder: 1,
+        },
+        {
+          id: 'item-2',
+          body: 'Exhaustion is logged',
+          completed: false,
+          sortOrder: 2,
+        },
       ],
       'POST /issues/issue-42': issue42,
     });
@@ -427,9 +437,9 @@ describe('projects', () => {
 
     await agent.updateProject('project-search', { name: 'Search rewrite' });
 
-    expect(
-      calls.some((call) => call.path === '/projects/project-search'),
-    ).toBe(true);
+    expect(calls.some((call) => call.path === '/projects/project-search')).toBe(
+      true,
+    );
   });
 
   it('resolves team identifiers to ids when opening a project', async () => {
@@ -552,9 +562,11 @@ describe('projects', () => {
     // Sent as markdown and handed back as markdown — no tiptap JSON anywhere
     // on this path, in either direction.
     expect(
-      (calls.find((call) => call.method === 'POST')?.body as {
-        description: string;
-      }).description,
+      (
+        calls.find((call) => call.method === 'POST')?.body as {
+          description: string;
+        }
+      ).description,
     ).toBe(markdown);
     expect(updated.description).toBe(markdown);
   });
@@ -1101,5 +1113,101 @@ describe('remember', () => {
     await expect(
       agent.remember({ page: 'Deployment', content: 'A fact.' }),
     ).rejects.toThrow(/409/);
+  });
+});
+
+describe('knowledge by kind and by module', () => {
+  const pages = [{ id: 'page-1', title: 'Server' }];
+  const hit = {
+    kind: 'entry',
+    entryKind: 'CONVENTION',
+    pageId: 'page-1',
+    pageTitle: 'Server',
+    entryId: 'entry-1',
+    content: 'Migrations are hand-written SQL.',
+    scope: 'apps/server',
+    verified: false,
+    retrievalCount: 0,
+  };
+
+  it('[KG-1.4] writes the kind a fact is remembered as', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /pages': pages,
+      'POST /page_entries': { id: 'entry-1', content: 'x', pageId: 'page-1' },
+    });
+
+    await agent.remember({
+      page: 'Server',
+      content: 'Migrations are hand-written SQL.',
+      kind: 'CONVENTION',
+    });
+
+    expect(calls.find((call) => call.method === 'POST')?.body).toMatchObject({
+      kind: 'CONVENTION',
+    });
+  });
+
+  it('[KG-1.4] asks for only the kinds wanted, and says which kind each hit is', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /knowledge/search': { hits: [hit] },
+    });
+
+    const hits = await agent.recallKnowledge({
+      query: 'migrations',
+      kinds: ['CONVENTION', 'GOTCHA'],
+    });
+
+    expect(calls[0].query.kind).toBe('CONVENTION,GOTCHA');
+    expect(hits[0].entryKind).toBe('CONVENTION');
+  });
+
+  it('[KG-1.5] loads context seeded from an issue or modules', async () => {
+    const { agent, calls } = makeAgent({
+      'POST /knowledge/context': { items: [hit], estimatedTokens: 10 },
+      'GET /knowledge/search': { hits: [] },
+    });
+
+    await agent.loadContext({ issueId: 'issue-1', moduleIds: ['m-1'] });
+    await agent.recallKnowledge({ query: 'x', moduleIds: ['m-1', 'm-2'] });
+
+    expect(calls[0].body).toMatchObject({
+      issueId: 'issue-1',
+      moduleIds: ['m-1'],
+    });
+    expect(calls[1].query.moduleIds).toBe('m-1,m-2');
+  });
+
+  it('[KG-1.6] links a page to a module and finds the pages of a product', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /pages': pages,
+      'POST /pages/page-1/links': {
+        id: 'link-1',
+        pageId: 'page-1',
+        entityType: 'MODULE',
+        entityId: 'm-1',
+        label: 'Server',
+      },
+      'GET /pages/related': [{ id: 'page-1', title: 'Server' }],
+    });
+
+    await agent.linkPage({
+      page: 'Server',
+      entityType: 'MODULE',
+      entityId: 'm-1',
+    });
+    const related = await agent.pagesFor({
+      entityType: 'PRODUCT',
+      entityId: 'p-1',
+    });
+
+    expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
+      entityType: 'MODULE',
+      entityId: 'm-1',
+    });
+    expect(calls.at(-1)?.query).toMatchObject({
+      entityType: 'PRODUCT',
+      entityId: 'p-1',
+    });
+    expect(related).toEqual([{ id: 'page-1', title: 'Server' }]);
   });
 });

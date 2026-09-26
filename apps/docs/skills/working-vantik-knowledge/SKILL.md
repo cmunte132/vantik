@@ -39,6 +39,14 @@ This is the cheapest thing you will do all session. Everything it returns is
 something you would otherwise have had to rediscover, and it works across
 harnesses: a fact another tool wrote is a fact you get.
 
+If you are working an issue, pass it: `load_context(issueId: "…")`. Knowledge
+about the issue's modules then ranks first, and knowledge about their
+neighbours — modules that share a capability or a product with them — next.
+`moduleIds` does the same when you know the modules but have no issue. A scope
+matches by folder: a fact scoped to `apps/server` comes back for work in
+`apps/server/prisma`, and one scoped to `apps/server/prisma` for work in
+`apps/server`.
+
 When you have an actual question, use `recall_knowledge` instead. Ask it before
 investigating something from scratch — the answer may already be in the bank.
 
@@ -54,6 +62,12 @@ Something a future session would otherwise have to work out again.
   `BACKEND_URL=http://server:3001` or its /api proxy 502s")
 - A convention that is not obvious from the code
 - A constraint someone stated that is not written down anywhere
+
+Say which it is with `kind`, so a reader can ask for just the conventions of an
+area: `DECISION` for a choice and its reason, `GOTCHA` for something that cost
+time, `CONVENTION` for how things are done here, and `FACT` (the default) for
+anything else true about the system. `recall_knowledge(kinds: ["CONVENTION"])`
+is the question "how do we do things in here".
 
 **No:**
 

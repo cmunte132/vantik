@@ -82,9 +82,7 @@ function buildService(documents: unknown[] = [entryDocument()]) {
       // Echoes back whatever ids were asked about, so by default every hit is
       // live and the staleness check only bites when a test says so.
       findMany: jest.fn(({ where }) =>
-        Promise.resolve(
-          (where.id?.in ?? []).map((id: string) => ({ id })),
-        ),
+        Promise.resolve((where.id?.in ?? []).map((id: string) => ({ id }))),
       ),
       updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
     },
@@ -177,7 +175,8 @@ describe('KnowledgeService.search', () => {
 
     await service.search(WORKSPACE, 'redis');
 
-    const { data } = (prisma.pageEntry.updateMany as jest.Mock).mock.calls[0][0];
+    const { data } = (prisma.pageEntry.updateMany as jest.Mock).mock
+      .calls[0][0];
     expect(data.retrievalCount).toEqual({ increment: 1 });
   });
 
@@ -264,5 +263,186 @@ describe('KnowledgeService.knowledgeGaps', () => {
       .mock.calls[0][0];
     expect(where.workspaceId).toBe(WORKSPACE);
     expect(orderBy[0]).toEqual({ count: 'desc' });
+  });
+});
+
+describe('KnowledgeService.seedsFor', () => {
+  const id = (n: number) =>
+    `22222222-2222-4222-8222-${String(n).padStart(12, '0')}`;
+  const [M1, M2, M3, M4, M5, FOREIGN, P, C1, C2, ISSUE] = [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+  ].map(id);
+
+  /**
+   * A small product graph: product P owns M1 and M3 and is linked from M4;
+   * capability C1 spans M1 and M2; capability C2 spans M5; FOREIGN belongs to
+   * another workspace. The double answers the filters the service sends.
+   */
+  function graph() {
+    const modules: Array<{
+      id: string;
+      workspaceId: string;
+      ownerProductId: string | null;
+      linkedProductIds: string[];
+    }> = [
+      {
+        id: M1,
+        workspaceId: WORKSPACE,
+        ownerProductId: P,
+        linkedProductIds: [],
+      },
+      {
+        id: M2,
+        workspaceId: WORKSPACE,
+        ownerProductId: null,
+        linkedProductIds: [],
+      },
+      {
+        id: M3,
+        workspaceId: WORKSPACE,
+        ownerProductId: P,
+        linkedProductIds: [],
+      },
+      {
+        id: M4,
+        workspaceId: WORKSPACE,
+        ownerProductId: null,
+        linkedProductIds: [P],
+      },
+      {
+        id: M5,
+        workspaceId: WORKSPACE,
+        ownerProductId: null,
+        linkedProductIds: [],
+      },
+      {
+        id: FOREIGN,
+        workspaceId: 'other',
+        ownerProductId: P,
+        linkedProductIds: [],
+      },
+    ];
+    const capabilities = [
+      { id: C1, workspaceId: WORKSPACE, moduleIds: [M1, M2] },
+      { id: C2, workspaceId: WORKSPACE, moduleIds: [M5] },
+    ];
+    const issues = [
+      { id: ISSUE, workspaceId: WORKSPACE, moduleIds: [M1], capabilityId: C2 },
+    ];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const moduleMatches = (
+      m: (typeof modules)[number],
+      where: any,
+    ): boolean => {
+      if (where.workspaceId && m.workspaceId !== where.workspaceId)
+        return false;
+      if (where.id?.in && !where.id.in.includes(m.id)) return false;
+      if (where.OR) {
+        return where.OR.some(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (branch: any) =>
+            (branch.ownerProductId &&
+              branch.ownerProductId.in.includes(m.ownerProductId)) ||
+            (branch.linkedProductIds &&
+              m.linkedProductIds.some((p) =>
+                branch.linkedProductIds.hasSome.includes(p),
+              )),
+        );
+      }
+      return true;
+    };
+
+    const prisma = {
+      module: {
+        findMany: jest.fn(async ({ where }) =>
+          modules.filter((m) => moduleMatches(m, where)),
+        ),
+      },
+      capability: {
+        findMany: jest.fn(async ({ where }) =>
+          capabilities.filter(
+            (c) =>
+              c.workspaceId === where.workspaceId &&
+              where.OR.some(
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (branch: any) =>
+                  (branch.moduleIds &&
+                    c.moduleIds.some((m) =>
+                      branch.moduleIds.hasSome.includes(m),
+                    )) ||
+                  (branch.id && branch.id.in.includes(c.id)),
+              ),
+          ),
+        ),
+      },
+      issue: {
+        findFirst: jest.fn(
+          async ({ where }) =>
+            issues.find(
+              (issue) =>
+                issue.id === where.id &&
+                issue.workspaceId === where.team.workspaceId,
+            ) ?? null,
+        ),
+      },
+    } as unknown as PrismaService;
+
+    return new KnowledgeService(
+      prisma,
+      {} as VectorService,
+      {} as PageEntriesService,
+    );
+  }
+
+  it('[KG-1.5] expands a module one hop: its capabilities and its product', async () => {
+    const seeds = await graph().seedsFor(WORKSPACE, { moduleIds: [M1] });
+
+    expect(seeds?.modules).toEqual([M1]);
+    // M2 shares capability C1; M3 is owned by M1's product; M4 is linked to
+    // it. M5 is unrelated, and FOREIGN is another workspace's.
+    expect(seeds?.neighbours.sort()).toEqual([M2, M3, M4].sort());
+  });
+
+  it("[KG-1.5] seeds from an issue's modules and its capability", async () => {
+    const seeds = await graph().seedsFor(WORKSPACE, { issueId: ISSUE });
+
+    expect(seeds?.modules).toEqual([M1]);
+    // C2 is the issue's capability, so its module is a neighbour too.
+    expect(seeds?.neighbours).toEqual(expect.arrayContaining([M5]));
+  });
+
+  it('[KG-1.5] ignores ids from another workspace, and seeds nothing from nothing', async () => {
+    const service = graph();
+
+    await expect(
+      service.seedsFor(WORKSPACE, { moduleIds: [FOREIGN] }),
+    ).resolves.toBeUndefined();
+    await expect(service.seedsFor(WORKSPACE, {})).resolves.toBeUndefined();
+    await expect(
+      service.seedsFor('other-workspace', { issueId: ISSUE }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('[KG-1.5] hands the seeds to the search when context is loaded for an issue', async () => {
+    const { service, typesense, prisma } = buildService();
+    Object.assign(prisma, {
+      issue: {
+        findFirst: jest.fn(async () => ({
+          moduleIds: [M1],
+          capabilityId: null as string | null,
+        })),
+      },
+      module: {
+        findMany: jest.fn(async ({ where }) =>
+          where.id ? [{ id: M1, ownerProductId: null as string | null }] : [],
+        ),
+      },
+      capability: { findMany: jest.fn(async (): Promise<unknown[]> => []) },
+    });
+
+    await service.contextPack(WORKSPACE, { issueId: ISSUE, tokenBudget: 500 });
+
+    expect(searchParams(typesense).sort_by).toContain(`moduleIds:=[\`${M1}\`]`);
   });
 });

@@ -22,6 +22,12 @@ export interface ContextPack {
   omitted: number;
 }
 
+/** Where a piece of work is, in the product graph. */
+export interface KnowledgeSeeds {
+  moduleIds?: string[];
+  issueId?: string;
+}
+
 export interface KnowledgeGap {
   query: string;
   count: number;
@@ -59,12 +65,21 @@ export default class KnowledgeService {
   async search(
     workspaceId: string,
     query: string,
-    options: { limit?: number; scope?: string } = {},
+    options: {
+      limit?: number;
+      scope?: string;
+      kinds?: string[];
+    } & KnowledgeSeeds = {},
   ): Promise<KnowledgeSearchResult> {
     const result = await this.vectorService.searchKnowledge(
       workspaceId,
       query,
-      options,
+      {
+        limit: options.limit,
+        scope: options.scope,
+        kinds: options.kinds,
+        boost: await this.seedsFor(workspaceId, options),
+      },
     );
 
     await this.recordDemand(workspaceId, query, result.hits);
@@ -83,7 +98,11 @@ export default class KnowledgeService {
    */
   async contextPack(
     workspaceId: string,
-    input: { scope?: string; query?: string; tokenBudget?: number },
+    input: {
+      scope?: string;
+      query?: string;
+      tokenBudget?: number;
+    } & KnowledgeSeeds,
   ): Promise<ContextPack> {
     const tokenBudget = Math.min(
       Math.max(input.tokenBudget ?? DEFAULT_TOKEN_BUDGET, 1),
@@ -104,6 +123,7 @@ export default class KnowledgeService {
         // than more of the same page.
         limit: 50,
         scope: input.scope,
+        boost: await this.seedsFor(workspaceId, input),
       },
     );
 
@@ -133,6 +153,95 @@ export default class KnowledgeService {
       tokenBudget,
       omitted: hits.length - items.length,
     };
+  }
+
+  /**
+   * The modules to rank first, and their neighbours, for work that names
+   * modules or an issue.
+   *
+   * One hop over the graph the workspace curates, and nothing inferred: the
+   * modules named and the issue's modules are the seeds; the modules that
+   * share a capability with a seed (or make up the issue's capability) and
+   * the other modules of a seed's product — owned by it or linked to it — are
+   * the neighbours. Every id is checked against this workspace, so a caller
+   * cannot rank by another workspace's graph. No LLM is involved.
+   */
+  async seedsFor(
+    workspaceId: string,
+    seeds: KnowledgeSeeds,
+  ): Promise<{ modules: string[]; neighbours: string[] } | undefined> {
+    const named = [...(seeds.moduleIds ?? [])];
+    const capabilityIds: string[] = [];
+
+    if (seeds.issueId) {
+      const issue = await this.prisma.issue.findFirst({
+        where: { id: seeds.issueId, deleted: null, team: { workspaceId } },
+        select: { moduleIds: true, capabilityId: true },
+      });
+      named.push(...(issue?.moduleIds ?? []));
+      if (issue?.capabilityId) {
+        capabilityIds.push(issue.capabilityId);
+      }
+    }
+
+    if (named.length === 0 && capabilityIds.length === 0) {
+      return undefined;
+    }
+
+    const modules = await this.prisma.module.findMany({
+      where: { id: { in: named }, workspaceId, deleted: null },
+      select: { id: true, ownerProductId: true },
+    });
+    const moduleIds = modules.map((productModule) => productModule.id);
+    const productIds = [
+      ...new Set(
+        modules
+          .map((productModule) => productModule.ownerProductId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    const [capabilities, productModules] = await Promise.all([
+      moduleIds.length || capabilityIds.length
+        ? this.prisma.capability.findMany({
+            where: {
+              workspaceId,
+              deleted: null,
+              OR: [
+                { moduleIds: { hasSome: moduleIds } },
+                { id: { in: capabilityIds } },
+              ],
+            },
+            select: { moduleIds: true },
+          })
+        : [],
+      productIds.length
+        ? this.prisma.module.findMany({
+            where: {
+              workspaceId,
+              deleted: null,
+              OR: [
+                { ownerProductId: { in: productIds } },
+                { linkedProductIds: { hasSome: productIds } },
+              ],
+            },
+            select: { id: true },
+          })
+        : [],
+    ]);
+
+    const neighbours = [
+      ...new Set([
+        ...capabilities.flatMap((capability) => capability.moduleIds),
+        ...productModules.map((productModule) => productModule.id),
+      ]),
+    ].filter((id) => !moduleIds.includes(id));
+
+    if (moduleIds.length === 0 && neighbours.length === 0) {
+      return undefined;
+    }
+
+    return { modules: moduleIds, neighbours };
   }
 
   /** Near matches for a fact about to be written. Hints, never a veto. */

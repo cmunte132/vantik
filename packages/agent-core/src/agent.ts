@@ -13,6 +13,7 @@ import {
   EntryStatus,
   KnowledgeEntry,
   KnowledgeGap,
+  EntryKind,
   KnowledgeHit,
   KnowledgePage,
   KnowledgePageRef,
@@ -1092,6 +1093,11 @@ export class VantikAgent {
           query: input.query,
           scope: input.scope,
           limit: input.limit,
+          kind: input.kinds?.length ? input.kinds.join(',') : undefined,
+          moduleIds: input.moduleIds?.length
+            ? input.moduleIds.join(',')
+            : undefined,
+          issueId: input.issueId,
         },
       },
     );
@@ -1112,6 +1118,8 @@ export class VantikAgent {
         ...(input.task ? { query: input.task } : {}),
         ...(input.scope ? { scope: input.scope } : {}),
         ...(input.tokenBudget ? { tokenBudget: input.tokenBudget } : {}),
+        ...(input.moduleIds?.length ? { moduleIds: input.moduleIds } : {}),
+        ...(input.issueId ? { issueId: input.issueId } : {}),
       },
     });
 
@@ -1176,6 +1184,7 @@ export class VantikAgent {
         body: {
           content: input.content,
           ...(input.scope ? { scope: input.scope } : {}),
+          ...(input.kind ? { kind: input.kind } : {}),
           ...(input.session ? { sourceSession: input.session } : {}),
           ...(input.supersedes ? { supersedesId: input.supersedes } : {}),
           ...(input.distinct ? { distinct: true } : {}),
@@ -1653,6 +1662,7 @@ interface RawEntry {
 
 interface RawKnowledgeHit {
   kind: 'page' | 'entry';
+  entryKind?: string | null;
   pageId: string;
   pageTitle: string;
   entryId: string | null;
@@ -1719,6 +1729,7 @@ function needsDecision(error: unknown): RawKnowledgeHit[] | null {
 function toHit(hit: RawKnowledgeHit): KnowledgeHit {
   return {
     kind: hit.kind,
+    entryKind: (hit.entryKind as EntryKind | null | undefined) ?? null,
     page: { id: hit.pageId, title: hit.pageTitle },
     entryId: hit.entryId ?? null,
     content: hit.content,

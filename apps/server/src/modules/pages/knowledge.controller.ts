@@ -57,6 +57,9 @@ export class KnowledgeController {
     return this.knowledgeService.search(workspaceId, query.query, {
       limit,
       scope: query.scope,
+      kinds: query.kind,
+      moduleIds: query.moduleIds,
+      issueId: query.issueId,
     });
   }
 

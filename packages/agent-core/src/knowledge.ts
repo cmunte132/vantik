@@ -61,9 +61,14 @@ export interface KnowledgeEntry {
   createdAt: string;
 }
 
+/** What sort of knowledge an entry is. */
+export type EntryKind = 'FACT' | 'DECISION' | 'CONVENTION' | 'GOTCHA';
+
 export interface KnowledgeHit {
   /** Agreed narrative from a page body, or one agent's asserted fact. */
   kind: 'page' | 'entry';
+  /** For an entry, what sort of knowledge it is. Null for a page body. */
+  entryKind: EntryKind | null;
   page: KnowledgePageRef;
   entryId: string | null;
   content: string;
@@ -81,14 +86,26 @@ export interface ContextPack {
   omitted: number;
 }
 
-export interface RecallInput {
+/**
+ * Where a piece of work is in the product graph. Knowledge about these
+ * modules, or the issue's modules and capability, ranks first, and knowledge
+ * about their neighbours next.
+ */
+export interface KnowledgeSeeds {
+  moduleIds?: string[];
+  issueId?: string;
+}
+
+export interface RecallInput extends KnowledgeSeeds {
   query: string;
   /** Narrow to facts asserted about this repo path, team or project. */
   scope?: string;
   limit?: number;
+  /** Only these kinds of entry. Page bodies drop out. */
+  kinds?: EntryKind[];
 }
 
-export interface LoadContextInput {
+export interface LoadContextInput extends KnowledgeSeeds {
   /** What the caller is about to do. Free text; used as the question. */
   task?: string;
   scope?: string;
@@ -97,14 +114,24 @@ export interface LoadContextInput {
 }
 
 /** What a page can be linked to. */
-export type PageLinkType = 'TEAM' | 'PROJECT' | 'ISSUE' | 'PAGE';
+export type PageLinkType =
+  | 'TEAM'
+  | 'PROJECT'
+  | 'ISSUE'
+  | 'PAGE'
+  | 'PRODUCT'
+  | 'MODULE'
+  | 'CAPABILITY';
 
 export interface PageLink {
   id: string;
   pageId: string;
   entityType: PageLinkType;
   entityId: string;
-  /** An issue key and title, a project or team name, a page title. */
+  /**
+   * An issue key and title, a project, team, product, module or capability
+   * name, a page title.
+   */
   label: string;
 }
 
@@ -112,7 +139,7 @@ export interface LinkPageInput {
   /** Page title or id. */
   page: string;
   entityType: PageLinkType;
-  /** The team, project, issue or page id to link to. */
+  /** The id of the team, project, issue, page, product, module or capability. */
   entityId: string;
 }
 
@@ -133,6 +160,8 @@ export interface RememberInput {
   page: string;
   /** One self-contained claim, in markdown. */
   content: string;
+  /** What sort of knowledge it is. FACT when omitted. */
+  kind?: EntryKind;
   scope?: string;
   /** Harness session id, so the claim can be traced back to a run. */
   session?: string;

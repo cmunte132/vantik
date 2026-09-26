@@ -698,6 +698,36 @@ export function registerVantikTools(
 
   // ------------------------------------------------------- knowledge bank
 
+  // The link targets and entry kinds the knowledge tools accept, in one place
+  // so the tools that take them cannot drift apart.
+  const LINK_TYPES = [
+    'TEAM',
+    'PROJECT',
+    'ISSUE',
+    'PAGE',
+    'PRODUCT',
+    'MODULE',
+    'CAPABILITY',
+  ] as const;
+  const ENTRY_KINDS = ['FACT', 'DECISION', 'CONVENTION', 'GOTCHA'] as const;
+  const seedSchema = {
+    moduleIds: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'Ids of the modules the work is in. Knowledge about them ranks ' +
+          'first, and knowledge about their neighbours (modules sharing a ' +
+          'capability or a product) next.',
+      ),
+    issueId: z
+      .string()
+      .optional()
+      .describe(
+        'The issue the work is for. Its modules and capability seed the ' +
+          'ranking the same way.',
+      ),
+  };
+
   server.registerTool(
     'load_context',
     {
@@ -728,6 +758,7 @@ export function registerVantikTools(
           .max(20000)
           .optional()
           .describe('How much context you can afford. Defaults to 2000.'),
+        ...seedSchema,
       },
     },
     handler((input) => agent.loadContext(input)),
@@ -751,6 +782,14 @@ export function registerVantikTools(
           .optional()
           .describe('Narrow to a repo path, team or project.'),
         limit: z.number().int().min(1).max(50).optional(),
+        kinds: z
+          .array(z.enum(ENTRY_KINDS))
+          .optional()
+          .describe(
+            'Only these kinds of fact, e.g. ["CONVENTION"] for how things are ' +
+              'done in an area. Leaves page bodies out.',
+          ),
+        ...seedSchema,
       },
     },
     handler((input) => agent.recallKnowledge(input)),
@@ -790,7 +829,8 @@ export function registerVantikTools(
   server.registerTool(
     'pages_for',
     {
-      title: 'Pages about a team, project or issue',
+      title:
+        'Pages about a team, project, issue, product, module or capability',
       description:
         'The documentation attached to one thing in the workspace. Use this ' +
         'the moment you are handed an issue or a project, before you search: ' +
@@ -801,7 +841,7 @@ export function registerVantikTools(
         'down about the thing in front of me”.',
       inputSchema: {
         entityType: z
-          .enum(['TEAM', 'PROJECT', 'ISSUE', 'PAGE'])
+          .enum(LINK_TYPES)
           .describe('What kind of thing you are starting from.'),
         entityId: z.string().describe('Its id.'),
       },
@@ -816,8 +856,9 @@ export function registerVantikTools(
     {
       title: 'Link a page to work',
       description:
-        'Attach a page to the team, project or issue it is about, so the next ' +
-        'agent handed that work is given the page without having to find it.\n\n' +
+        'Attach a page to the team, project, issue, product, module or ' +
+        'capability it is about, so the next agent handed that work is given ' +
+        'the page without having to find it.\n\n' +
         'Link when the connection is durable — this runbook governs this ' +
         'project, this page explains this team’s conventions. Do not link a ' +
         'page to every issue that happened to touch it: a page attached to ' +
@@ -825,7 +866,7 @@ export function registerVantikTools(
         'actually explains.',
       inputSchema: {
         page: z.string().describe('Page title or id.'),
-        entityType: z.enum(['TEAM', 'PROJECT', 'ISSUE', 'PAGE']),
+        entityType: z.enum(LINK_TYPES),
         entityId: z.string().describe('The id of the thing to link it to.'),
       },
     },
@@ -865,6 +906,15 @@ export function registerVantikTools(
             'Where it applies — a repo path glob, team or project. A fact ' +
               'without a scope is served everywhere, so scope it when it is ' +
               'not true of the whole workspace.',
+          ),
+        kind: z
+          .enum(ENTRY_KINDS)
+          .optional()
+          .describe(
+            'FACT (the default): something true about the system. DECISION: ' +
+              'a choice that was made, and why. CONVENTION: how things are ' +
+              'done here, a rule a newcomer would not guess. GOTCHA: ' +
+              'something that cost time, so it need not cost the next one.',
           ),
         session: z
           .string()

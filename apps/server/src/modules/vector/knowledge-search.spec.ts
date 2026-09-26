@@ -358,3 +358,80 @@ describe('scoped retrieval', () => {
     expect(ids(hits)[0]).toBe('everywhere');
   });
 });
+
+describe('retrieval by kind', () => {
+  it('[KG-1.4] serves only the kinds asked for, and no page bodies', async () => {
+    const { service } = fakeIndex();
+    await seed(service);
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'redis', {
+      kinds: [PageEntryKindEnum.CONVENTION, PageEntryKindEnum.GOTCHA],
+    });
+
+    expect(ids(hits).sort()).toEqual(['globbed', 'migrations']);
+    expect(hits.map((hit) => hit.entryKind).sort()).toEqual([
+      'CONVENTION',
+      'GOTCHA',
+    ]);
+  });
+
+  it('[KG-1.4] ignores a kind that does not exist rather than filtering on it', async () => {
+    const { service, searches } = fakeIndex();
+    await seed(service);
+
+    await service.searchKnowledge(WORKSPACE, 'redis', {
+      kinds: ['OPINION` || workspaceId:=`other'],
+    });
+
+    expect(searches[0].filter_by).not.toContain('entryKind');
+  });
+});
+
+describe('retrieval seeded from the product graph', () => {
+  it('[KG-1.5] ranks the seed modules first, their neighbours next, and the rest after', async () => {
+    const { service } = fakeIndex();
+    await seed(service);
+
+    // No question at all — the shape of load_context with only an issue.
+    const { hits } = await service.searchKnowledge(WORKSPACE, '*', {
+      boost: { modules: [SERVER], neighbours: [TYPES] },
+    });
+    const order = ids(hits);
+
+    const serverKnowledge = ['server', 'migrations', 'globbed'].map((id) =>
+      order.indexOf(id),
+    );
+    expect(Math.max(...serverKnowledge)).toBeLessThan(order.indexOf('types'));
+    expect(order.indexOf('types')).toBeLessThan(order.indexOf('webapp'));
+    expect(order.indexOf('types')).toBeLessThan(order.indexOf('everywhere'));
+  });
+
+  it('[KG-1.5] lets a boost reorder near-equal answers without burying a far better one', async () => {
+    const { searches, service } = fakeIndex();
+    await seed(service);
+
+    await service.searchKnowledge(WORKSPACE, 'redis', {
+      boost: { modules: [WEBAPP], neighbours: [] },
+    });
+
+    // With a question, text relevance is bucketed first and the boost breaks
+    // ties inside a bucket, rather than outranking relevance outright.
+    expect(String(searches[0].sort_by)).toMatch(
+      /^_text_match\(buckets: \d+\):desc,_eval\(/,
+    );
+  });
+
+  it('[KG-1.5] refuses to put anything but a module id into the ranking', async () => {
+    const { searches, service } = fakeIndex();
+    await seed(service);
+
+    await service.searchKnowledge(WORKSPACE, '*', {
+      boost: {
+        modules: ['x`] || verified:true || moduleIds:=[`y'],
+        neighbours: [],
+      },
+    });
+
+    expect(searches[0].sort_by).not.toContain('moduleIds');
+  });
+});

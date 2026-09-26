@@ -1,5 +1,6 @@
 import {
   VantikError,
+  type EntryKind,
   type EntryPolicy,
   type EntryStatus,
 } from '@vantikhq/agent-core';
@@ -45,6 +46,8 @@ const STATUSES: EntryStatus[] = [
 ];
 
 const POLICIES: EntryPolicy[] = ['OPEN', 'CURATED', 'LOCKED'];
+
+const KINDS: EntryKind[] = ['FACT', 'DECISION', 'CONVENTION', 'GOTCHA'];
 
 async function run<T>(
   json: boolean | undefined,
@@ -100,6 +103,32 @@ function asStatus(value: string): EntryStatus {
   return upper as EntryStatus;
 }
 
+/** One entry kind, as commander hands an option value to a parser. */
+function entryKind(value: string): EntryKind {
+  const upper = value.toUpperCase();
+
+  if (!KINDS.includes(upper as EntryKind)) {
+    throw new VantikError(
+      `Unknown kind "${value}". Use one of: ${KINDS.join(', ')}.`,
+    );
+  }
+
+  return upper as EntryKind;
+}
+
+/** A comma-separated list of kinds. */
+function entryKinds(value: string): EntryKind[] {
+  return commaList(value).map(entryKind);
+}
+
+/** A comma-separated list, trimmed, with empty items dropped. */
+function commaList(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function asPolicy(value: string | undefined): EntryPolicy | undefined {
   if (value === undefined) {
     return undefined;
@@ -144,6 +173,17 @@ export function configureKnowledgeCommands(program: Command) {
     .argument('<query...>', 'Free text')
     .option('-s, --scope <scope>', 'Narrow to a repo path, team or project')
     .option('-n, --limit <n>', 'Max hits', (v) => parseInt(v, 10))
+    .option(
+      '-k, --kind <kinds>',
+      'Only these kinds, comma-separated: FACT, DECISION, CONVENTION, GOTCHA',
+      entryKinds,
+    )
+    .option(
+      '-m, --module <ids>',
+      'Module ids, comma-separated; their knowledge ranks first',
+      commaList,
+    )
+    .option('-i, --issue <id>', 'Rank knowledge about this issue first')
     .option('--json', 'Output raw JSON')
     .action(async (query, options) => {
       await run(
@@ -153,6 +193,9 @@ export function configureKnowledgeCommands(program: Command) {
             query: query.join(' '),
             scope: options.scope,
             limit: options.limit,
+            kinds: options.kind,
+            moduleIds: options.module,
+            issueId: options.issue,
           }),
         renderHits,
       );
@@ -164,6 +207,12 @@ export function configureKnowledgeCommands(program: Command) {
     .option('-s, --scope <scope>', 'Where you are working')
     .option('-t, --task <task>', 'What you are about to do')
     .option('-b, --budget <tokens>', 'Token budget', (v) => parseInt(v, 10))
+    .option(
+      '-m, --module <ids>',
+      'Module ids the work is in, comma-separated; their knowledge ranks first',
+      commaList,
+    )
+    .option('-i, --issue <id>', 'The issue the work is for')
     .option('--json', 'Output raw JSON')
     .action(async (options) => {
       await run(
@@ -173,6 +222,8 @@ export function configureKnowledgeCommands(program: Command) {
             scope: options.scope,
             task: options.task,
             tokenBudget: options.budget,
+            moduleIds: options.module,
+            issueId: options.issue,
           }),
         renderContextPack,
       );
@@ -184,6 +235,11 @@ export function configureKnowledgeCommands(program: Command) {
     .argument('<page>', 'Page title or id')
     .argument('<content...>', 'The fact, in markdown')
     .option('-s, --scope <scope>', 'Where the fact applies')
+    .option(
+      '-k, --kind <kind>',
+      'FACT (default), DECISION, CONVENTION or GOTCHA',
+      entryKind,
+    )
     .option('--session <id>', 'Harness session id, for provenance')
     .option('--supersedes <entryId>', 'The entry this one replaces')
     .option(
@@ -200,6 +256,7 @@ export function configureKnowledgeCommands(program: Command) {
             page,
             content: content.join(' '),
             scope: options.scope,
+            kind: options.kind,
             session: options.session,
             supersedes: options.supersedes,
             distinct: options.distinct,
@@ -267,7 +324,10 @@ export function configureKnowledgeCommands(program: Command) {
     .description('Fold standing facts into a page body and mark them folded')
     .argument('<page>', 'Page title or id')
     .requiredOption('-b, --body <markdown>', 'The rewritten page body')
-    .option('--entry <entryId...>', 'Entries to fold; omit to fold all standing')
+    .option(
+      '--entry <entryId...>',
+      'Entries to fold; omit to fold all standing',
+    )
     .option('--json', 'Output raw JSON')
     .action(async (page, options) => {
       await run(

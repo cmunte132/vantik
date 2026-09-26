@@ -141,3 +141,53 @@ describe('agent scopes on the knowledge routes', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
+
+describe('KnowledgeController.search', () => {
+  it('[KG-1.4] hands the kinds, modules and issue asked for to the search', async () => {
+    const knowledgeService = {
+      search: jest.fn().mockResolvedValue({ hits: [] }),
+    } as unknown as KnowledgeService;
+    const controller = new KnowledgeController(
+      knowledgeService,
+      {} as PrismaService,
+    );
+    jest
+      .spyOn(
+        controller as unknown as { workspace: () => Promise<string> },
+        'workspace',
+      )
+      .mockResolvedValue('workspace-1');
+
+    // The query string as the DTO leaves it: lists already split.
+    const query = plainToInstance(KnowledgeSearchQueryDto, {
+      query: 'migrations',
+      kind: 'CONVENTION,GOTCHA',
+      moduleIds: '22222222-2222-4222-8222-000000000001',
+      issueId: '22222222-2222-4222-8222-000000000002',
+    });
+    await expect(validate(query)).resolves.toEqual([]);
+
+    await controller.search('session-workspace', 'user-1', query);
+
+    expect(knowledgeService.search).toHaveBeenCalledWith(
+      'workspace-1',
+      'migrations',
+      expect.objectContaining({
+        kinds: ['CONVENTION', 'GOTCHA'],
+        moduleIds: ['22222222-2222-4222-8222-000000000001'],
+        issueId: '22222222-2222-4222-8222-000000000002',
+      }),
+    );
+  });
+
+  it('[KG-1.4] rejects a kind that does not exist', async () => {
+    const query = plainToInstance(KnowledgeSearchQueryDto, {
+      query: 'migrations',
+      kind: 'OPINION',
+    });
+
+    await expect(validate(query)).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ property: 'kind' })]),
+    );
+  });
+});

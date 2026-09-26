@@ -12,7 +12,11 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { PageEntryPolicyEnum, PageEntryStatusEnum } from '@vantikhq/types';
+import {
+  PageEntryKindEnum,
+  PageEntryPolicyEnum,
+  PageEntryStatusEnum,
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import type { VectorService } from 'modules/vector/vector.service';
@@ -1210,5 +1214,34 @@ describe("an entry's modules", () => {
       'new-module',
       'gone',
     ]);
+  });
+});
+
+describe("an entry's kind", () => {
+  it('[KG-1.4] records the kind an entry is written with, and leaves the default to the column', async () => {
+    const { service, created } = buildService({ userType: 'User' });
+
+    await service.createEntry('page-1', HUMAN, {
+      content: 'We chose postgres over redis for durable state.',
+      kind: PageEntryKindEnum.DECISION,
+    });
+    await service.createEntry('page-1', HUMAN, {
+      content: 'Redis runs with no persistence.',
+    });
+
+    expect(created[0]).toMatchObject({ kind: 'DECISION' });
+    // FACT is the column's default; nothing is written for it.
+    expect(created[1]).not.toHaveProperty('kind');
+  });
+
+  it('[KG-1.4] lets an agent correct the kind of its own untriaged entry', async () => {
+    const { service, prisma } = buildService({ userType: 'Agent' });
+
+    await service.updateEntry('entry-1', 'agent-1', {
+      kind: PageEntryKindEnum.GOTCHA,
+    });
+
+    const { data } = (prisma.pageEntry.update as jest.Mock).mock.calls[0][0];
+    expect(data).toEqual({ kind: 'GOTCHA' });
   });
 });

@@ -13,8 +13,8 @@ as the issue tracker. It holds **pages** (canonical documentation, written as
 prose for humans) and **entries** (single asserted facts appended by agents,
 each carrying who claimed it, where it applies, and whether anyone has
 confirmed it). Tools: `load_context`, `recall_knowledge`, `list_pages`,
-`read_page`, `remember`, `write_page`, `consolidate_knowledge`,
-`knowledge_gaps`.
+`read_page`, `pages_for`, `link_page`, `remember`, `write_page`,
+`consolidate_knowledge`, `knowledge_gaps`.
 
 **Load context before you start work, not after you get stuck.** Call
 `load_context` with the area you are about to touch and a token budget, before
@@ -22,6 +22,8 @@ reading a single file. You do not need a question — at the start of a task you
 do not yet know what you do not know, which is exactly why a scope is enough.
 Everything it returns is something you would otherwise have had to rediscover,
 and it works across harnesses: a fact another tool wrote is a fact you get.
+Working an issue? Pass `issueId` too, and knowledge about its modules ranks
+first.
 
 **One entry is one fact.** Not a summary of your session. An entry that bundles
 six claims cannot be scoped, confirmed or corrected one claim at a time, and
@@ -32,7 +34,8 @@ everyone, forever.
 
 **Worth remembering:** a decision and why it went that way, a gotcha that cost
 you time, a convention that is not obvious from the code, a constraint someone
-stated that is written down nowhere. **Not worth remembering:** what you did
+stated that is written down nowhere — say which with `kind` (`DECISION`,
+`GOTCHA`, `CONVENTION`, or the default `FACT`). **Not worth remembering:** what you did
 this session (that is a note on the issue), anything already in the page body,
 anything the code says plainly. Never secrets or credentials — the bank is
 readable by every agent in the workspace.

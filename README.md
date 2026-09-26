@@ -56,6 +56,7 @@ migrations when it starts.
 
 ```bash
 cp .env.example .env   # the default values work; change the secrets for a real deployment
+echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env   # the one secret with no default
 docker compose up -d
 ```
 
@@ -129,6 +130,7 @@ These containers publish their ports on localhost for this purpose.
 
 ```bash
 cp .env.example .env
+echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
 
 # 1. The service containers only. This command starts no webapp and no server.
 docker compose up -d postgres redis supertokens typesense

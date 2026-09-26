@@ -3,7 +3,8 @@ import { dirname } from 'node:path';
 
 import { expect, test as setup, type APIRequestContext } from '@playwright/test';
 
-import { provisionAccount } from '../src/auth';
+import { createSpareTeam } from '../src/api';
+import { bearer, provisionAccount, provisionTeammate } from '../src/auth';
 import {
   ACCOUNTS_FILE,
   MAILPIT_URL,
@@ -54,23 +55,39 @@ setup('the stack is up', async ({ request }) => {
     .toBe(200);
 });
 
-setup('provision accounts', async ({ request }) => {
+setup('provision accounts', async ({ request, playwright }) => {
   const tag = runTag();
 
-  const accounts: Accounts = {
-    alice: await provisionAccount(request, {
-      email: `alice+${tag}@e2e.vantik.test`,
-      fullname: 'Alice',
-      workspaceName: `E2E Alice ${tag}`,
-      teamIdentifier: 'ALC',
-    }),
-    bob: await provisionAccount(request, {
-      email: `bob+${tag}@e2e.vantik.test`,
-      fullname: 'Bob',
-      workspaceName: `E2E Bob ${tag}`,
-      teamIdentifier: 'BOB',
-    }),
-  };
+  const alice = await provisionAccount(request, {
+    email: `alice+${tag}@e2e.vantik.test`,
+    fullname: 'Alice',
+    workspaceName: `E2E Alice ${tag}`,
+    teamIdentifier: 'ALC',
+  });
+
+  const bob = await provisionAccount(request, {
+    email: `bob+${tag}@e2e.vantik.test`,
+    fullname: 'Bob',
+    workspaceName: `E2E Bob ${tag}`,
+    teamIdentifier: 'BOB',
+  });
+
+  // Carol joins Alice's workspace by invite, to a team of its own. Alice is in
+  // both teams; Carol is in CRL only, which is what the team boundary tests
+  // need: someone inside the workspace who must still not see ALC.
+  const asAlice = await playwright.request.newContext({
+    baseURL: SERVER_URL,
+    extraHTTPHeaders: bearer(alice.pat),
+  });
+  const crl = await createSpareTeam(asAlice, { identifier: 'CRL' });
+  await asAlice.dispose();
+
+  const carol = await provisionTeammate(request, alice, {
+    email: `carol+${tag}@e2e.vantik.test`,
+    team: crl,
+  });
+
+  const accounts: Accounts = { alice, bob, carol };
 
   mkdirSync(dirname(ACCOUNTS_FILE), { recursive: true });
   writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2));

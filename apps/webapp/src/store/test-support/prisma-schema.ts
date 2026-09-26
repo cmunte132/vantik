@@ -60,6 +60,25 @@ function collectEnumNames(schema: string): Set<string> {
   return names;
 }
 
+/** Each enum in the schema, with its values in the order they are declared. */
+export function parsePrismaEnums(): Map<string, string[]> {
+  const enums = new Map<string, string[]>();
+
+  for (const match of readSchema().matchAll(
+    /^enum\s+(\w+)\s*\{([\s\S]*?)^\}/gm,
+  )) {
+    const [, name, body] = match;
+    const values = body
+      .split('\n')
+      .map((line) => line.trim().match(/^(\w+)/)?.[1])
+      .filter((value): value is string => Boolean(value));
+
+    enums.set(name, values);
+  }
+
+  return enums;
+}
+
 export function parsePrismaModels(): Map<string, PrismaModel> {
   const schema = readSchema();
   const enumNames = collectEnumNames(schema);

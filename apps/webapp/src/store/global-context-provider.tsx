@@ -1,8 +1,8 @@
 import { types, type Instance } from 'mobx-state-tree';
 import React from 'react';
 
-import { ApplicationStore, defaultApplicationStoreValue } from './application';
 import { AgentRunsStore } from './agent-runs';
+import { ApplicationStore, defaultApplicationStoreValue } from './application';
 import { CapabilitiesStore } from './capabilities';
 import { ChecklistItemsStore } from './checklist-items';
 import { CommentsStore } from './comments';
@@ -15,13 +15,13 @@ import { IntegrationAccountsStore } from './integration-accounts';
 import { IssueHistoryStore } from './issue-history';
 import { IssueRelationsStore } from './issue-relation';
 import { IssueSuggestionsStore } from './issue-suggestions';
-import { PageEntriesStore } from './page-entries';
-import { PagesStore } from './pages';
 import { IssuesStore } from './issues';
 import { LabelsStore } from './labels';
 import { LinkedIssuesStore } from './linked-issues';
 import { ModulesStore } from './modules';
 import { NotificationsStore } from './notifications';
+import { PageEntriesStore } from './page-entries';
+import { PagesStore } from './pages';
 import { PeopleStore } from './people';
 import { ProductsStore } from './products';
 import { ProjectMilestonesStore, ProjectsStore } from './projects';
@@ -66,112 +66,120 @@ const StoreContextModel = types.model({
   supportStore: SupportStore,
 });
 
-export const storeContextStore = StoreContextModel.create({
-  commentsStore: {
-    comments: {},
-  },
-  agentRunsStore: {
-    agentRuns: [],
-    events: {},
-  },
-  checklistItemsStore: {
-    checklistItems: {},
-  },
-  pagesStore: {
-    pages: [],
-  },
-  pageEntriesStore: {
-    pageEntries: {},
-  },
-  issuesHistoryStore: {
-    issueHistories: {},
-  },
-  issuesStore: {
-    teamId: undefined,
-  },
-  workflowsStore: {
-    workflows: {},
-  },
-  labelsStore: {
-    labels: [],
-    workspaceId: undefined,
-  },
-  teamsStore: {
-    teams: [],
-    workspaceId: undefined,
-  },
-  workspaceStore: {
-    workspace: undefined,
-    usersOnWorkspaces: [],
-  },
-  applicationStore: {
-    filters: {},
-    silentFilters: {},
-    identifier: '',
-    displaySettings: defaultApplicationStoreValue.displaySettings,
-    sidebarCollapsed: false,
-  },
-  integrationAccountsStore: {
-    integrationAccounts: [],
-    workspaceId: undefined,
-  },
-  linkedIssuesStore: {
-    linkedIssues: {},
-  },
-  issueRelationsStore: {
-    issueRelations: {},
-  },
-  notificationsStore: {
-    notifications: [],
-  },
-  viewsStore: {
-    views: [],
-  },
-  issueSuggestionsStore: {
-    teamId: undefined,
-  },
-  projectsStore: {
-    projects: [],
-    workspaceId: undefined,
-  },
-  projectMilestonesStore: {
-    milestones: [],
-  },
-  productsStore: {
-    products: [],
-    workspaceId: undefined,
-  },
-  modulesStore: {
-    modules: [],
-    workspaceId: undefined,
-  },
-  capabilitiesStore: {
-    capabilities: [],
-    workspaceId: undefined,
-  },
-  cyclesStore: {
-    cycles: [],
-  },
-  conversationsStore: {
-    conversations: [],
-  },
-  conversationHistoryStore: {
-    conversationHistory: [],
-  },
-  commonStore: defaultCommonStoreValue,
-  templatesStore: {
-    templates: [],
-  },
-  companiesStore: {
-    companies: {},
-  },
-  peopleStore: {
-    people: {},
-  },
-  supportStore: {
-    support: {},
-  },
-});
+/**
+ * A new, empty root store. The app holds exactly one (`storeContextStore`
+ * below); tests build their own so that no two share state.
+ */
+export function createStoreContext() {
+  return StoreContextModel.create({
+    commentsStore: {
+      comments: {},
+    },
+    agentRunsStore: {
+      agentRuns: [],
+      events: {},
+    },
+    checklistItemsStore: {
+      checklistItems: {},
+    },
+    pagesStore: {
+      pages: [],
+    },
+    pageEntriesStore: {
+      pageEntries: {},
+    },
+    issuesHistoryStore: {
+      issueHistories: {},
+    },
+    issuesStore: {
+      teamId: undefined,
+    },
+    workflowsStore: {
+      workflows: {},
+    },
+    labelsStore: {
+      labels: [],
+      workspaceId: undefined,
+    },
+    teamsStore: {
+      teams: [],
+      workspaceId: undefined,
+    },
+    workspaceStore: {
+      workspace: undefined,
+      usersOnWorkspaces: [],
+    },
+    applicationStore: {
+      filters: {},
+      silentFilters: {},
+      identifier: '',
+      displaySettings: defaultApplicationStoreValue.displaySettings,
+      sidebarCollapsed: false,
+    },
+    integrationAccountsStore: {
+      integrationAccounts: [],
+      workspaceId: undefined,
+    },
+    linkedIssuesStore: {
+      linkedIssues: {},
+    },
+    issueRelationsStore: {
+      issueRelations: {},
+    },
+    notificationsStore: {
+      notifications: [],
+    },
+    viewsStore: {
+      views: [],
+    },
+    issueSuggestionsStore: {
+      teamId: undefined,
+    },
+    projectsStore: {
+      projects: [],
+      workspaceId: undefined,
+    },
+    projectMilestonesStore: {
+      milestones: [],
+    },
+    productsStore: {
+      products: [],
+      workspaceId: undefined,
+    },
+    modulesStore: {
+      modules: [],
+      workspaceId: undefined,
+    },
+    capabilitiesStore: {
+      capabilities: [],
+      workspaceId: undefined,
+    },
+    cyclesStore: {
+      cycles: [],
+    },
+    conversationsStore: {
+      conversations: [],
+    },
+    conversationHistoryStore: {
+      conversationHistory: [],
+    },
+    commonStore: defaultCommonStoreValue,
+    templatesStore: {
+      templates: [],
+    },
+    companiesStore: {
+      companies: {},
+    },
+    peopleStore: {
+      people: {},
+    },
+    supportStore: {
+      support: {},
+    },
+  });
+}
+
+export const storeContextStore = createStoreContext();
 
 export type StoreContextInstanceType = Instance<typeof StoreContextModel>;
 export const StoreContext =

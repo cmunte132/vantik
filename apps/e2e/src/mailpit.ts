@@ -4,6 +4,7 @@ import { MAILPIT_URL } from './env';
 
 interface MailpitSummary {
   ID: string;
+  Subject: string;
   To: Array<{ Address: string }>;
 }
 
@@ -19,11 +20,11 @@ export interface LoginEmail {
   magicLink: string;
 }
 
-/** The ids of every message Mailpit holds for `email`, newest first. */
-export async function messageIdsTo(
+/** Every message Mailpit holds for `email`, newest first. */
+async function messagesTo(
   request: APIRequestContext,
   email: string,
-): Promise<string[]> {
+): Promise<MailpitSummary[]> {
   const response = await request.get(`${MAILPIT_URL}/api/v1/search`, {
     params: { query: `to:"${email}"`, limit: 50 },
   });
@@ -34,36 +35,51 @@ export async function messageIdsTo(
   };
 
   // A search term is a substring match, so the address is checked exactly.
-  return messages
-    .filter((message) =>
-      message.To.some((to) => to.Address.toLowerCase() === email.toLowerCase()),
-    )
-    .map((message) => message.ID);
+  return messages.filter((message) =>
+    message.To.some((to) => to.Address.toLowerCase() === email.toLowerCase()),
+  );
+}
+
+/** The ids of every message Mailpit holds for `email`, newest first. */
+export async function messageIdsTo(
+  request: APIRequestContext,
+  email: string,
+): Promise<string[]> {
+  return (await messagesTo(request, email)).map((message) => message.ID);
+}
+
+export interface Email {
+  subject: string;
+  html: string;
 }
 
 /**
- * Waits for a login email to `email` that is not one of `alreadySeen`, and
- * pulls the code and the magic link out of it. Taking the ids from before the
- * request, rather than a timestamp, keeps a clock that differs between the
- * test runner and the mail container from picking up an older code.
+ * Waits for an email to `email` whose subject matches, and that is not one of
+ * `alreadySeen`. Taking the ids from before the action that sends it, rather
+ * than a timestamp, keeps a clock that differs between the test runner and the
+ * mail container from picking up an older message.
  */
-export async function readLoginEmail(
+export async function readEmail(
   request: APIRequestContext,
   email: string,
-  alreadySeen: string[],
-): Promise<LoginEmail> {
+  subject: RegExp,
+  alreadySeen: string[] = [],
+  timeout = 30_000,
+): Promise<Email> {
   let id: string | undefined;
 
   await expect
     .poll(
       async () => {
-        const ids = await messageIdsTo(request, email);
-        id = ids.find((candidate) => !alreadySeen.includes(candidate));
+        id = (await messagesTo(request, email)).find(
+          (message) =>
+            !alreadySeen.includes(message.ID) && subject.test(message.Subject),
+        )?.ID;
         return id !== undefined;
       },
       {
-        message: `no login email reached Mailpit for ${email}`,
-        timeout: 30_000,
+        message: `no email with a subject like ${subject} reached Mailpit for ${email}`,
+        timeout,
       },
     )
     .toBe(true);
@@ -72,16 +88,32 @@ export async function readLoginEmail(
   expect(response, 'Mailpit message fetch failed').toBeOK();
   const message = (await response.json()) as MailpitMessage;
 
+  return { subject: message.Subject, html: message.HTML };
+}
+
+/**
+ * Waits for a login email to `email` that is not one of `alreadySeen`, and
+ * pulls the code and the magic link out of it.
+ */
+export async function readLoginEmail(
+  request: APIRequestContext,
+  email: string,
+  alreadySeen: string[],
+): Promise<LoginEmail> {
+  // Whatever arrives first: nothing else is sent to the address between the
+  // request for a code and this read.
+  const message = await readEmail(request, email, /.*/, alreadySeen);
+
   // The mailer inlines the template's CSS before sending, which rewrites each
   // tag with a style attribute and reorders what was there. So a tag is found
   // by its class, and its attributes are read wherever they ended up.
-  const code = message.HTML.match(
+  const code = message.html.match(
     /<span\b[^>]*\bclass="code"[^>]*>\s*([^<\s]+)\s*<\/span>/,
   )?.[1];
-  const button = message.HTML.match(/<a\b[^>]*\bclass="button"[^>]*>/)?.[0];
+  const button = message.html.match(/<a\b[^>]*\bclass="button"[^>]*>/)?.[0];
   const magicLink = button?.match(/\bhref="([^"]+)"/)?.[1];
 
-  const excerpt = message.HTML.replace(/\s+/g, ' ').slice(0, 2000);
+  const excerpt = message.html.replace(/\s+/g, ' ').slice(0, 2000);
   expect(code, `the login email carries no code:\n${excerpt}`).toBeTruthy();
   expect(
     magicLink,
@@ -89,7 +121,7 @@ export async function readLoginEmail(
   ).toBeTruthy();
 
   return {
-    subject: message.Subject,
+    subject: message.subject,
     code: decodeEntities(code!),
     magicLink: decodeEntities(magicLink!),
   };

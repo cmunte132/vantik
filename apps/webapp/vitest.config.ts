@@ -38,10 +38,14 @@ export default defineConfig({
   // it does not render anything: `environment` below is still node.
   oxc: { jsx: { runtime: 'automatic' } },
   test: {
-    // The suite covers store models, selectors and other pure logic, none of
-    // which touches the DOM. A test can import a component to check which one
-    // a function returns, but it cannot render one.
+    // The suite covers store models, selectors, hooks and other logic, none of
+    // which needs the DOM. A test cannot mount a component, but it can call a
+    // hook through store/test-support/render-hook, which renders to a string.
     environment: 'node',
+    // IndexedDB for Dexie, which looks for it once, when it is first loaded.
+    // Installing it here rather than in the tests that need it means no import
+    // has to come first, and an import sorter cannot move it after Dexie.
+    setupFiles: ['fake-indexeddb/auto'],
     include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx'],
     alias,
   },

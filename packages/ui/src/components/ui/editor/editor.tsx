@@ -157,6 +157,18 @@ export const Editor = ({
     500,
   );
 
+  // The editor's own handlers are bound once, when it is made, so they read
+  // the submit handler through a ref to reach the one from this render.
+  const onSubmitRef = React.useRef(onSubmit);
+  onSubmitRef.current = onSubmit;
+
+  // Changes are reported half a second late. Whatever acts on the value next,
+  // a submit or a button outside the editor, has to see what is on screen, so
+  // anything still pending is reported first.
+  const reportPendingChange = () => {
+    debouncedUpdates.flush();
+  };
+
   const getExtensions = () => {
     const finalExtensions = [
       ...defaultExtensions,
@@ -170,7 +182,14 @@ export const Editor = ({
 
   return (
     // TODO: Change this to the editor input
-    <div onFocus={onFocus} onBlur={onBlur} className="relative">
+    <div
+      onFocus={onFocus}
+      onBlur={() => {
+        reportPendingChange();
+        onBlur && onBlur();
+      }}
+      className="relative"
+    >
       <EditorRoot>
         <EditorContent
           initialContent={getInitialValue()}
@@ -204,7 +223,8 @@ export const Editor = ({
             handleDOMEvents: {
               keydown: (_view, event) => {
                 if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                  onSubmit && onSubmit();
+                  reportPendingChange();
+                  onSubmitRef.current && onSubmitRef.current();
                   event.preventDefault();
                   return false;
                 }

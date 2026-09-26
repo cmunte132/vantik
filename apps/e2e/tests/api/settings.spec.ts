@@ -1,5 +1,5 @@
 import { createSpareTeam, teamsOf, workspacesOf } from '../../src/api';
-import { expect, knownBug, test } from '../../src/fixtures';
+import { expect, test } from '../../src/fixtures';
 
 /**
  * A settings form saves part of a record and expects the rest to stay. The
@@ -49,10 +49,6 @@ test.describe('settings are saved', () => {
       data: { agentRuns },
     });
     expect(response).toBeOK();
-
-    knownBug(
-      'UpdateWorkspacePreferencesDto declares no fields, so validation strips the whole body and nothing is saved',
-    );
 
     const workspace = (await workspacesOf(asAlice)).find(
       (candidate) => candidate.id === alice.workspaceId,

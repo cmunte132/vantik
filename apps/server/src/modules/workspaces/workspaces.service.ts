@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
+import { Prisma } from '@prisma/client';
 import {
   InviteStatusEnum,
   RoleEnum,
@@ -174,19 +175,17 @@ export default class WorkspacesService {
       },
     });
 
-    await this.prisma.workspace.update({
+    return await this.prisma.workspace.update({
       where: {
         id: workspaceId,
       },
       data: {
         preferences: {
-          ...(workspace.preferences as Record<string, string | boolean>),
+          ...(workspace.preferences as Prisma.InputJsonObject),
           ...workspaceData,
-        },
+        } as Prisma.InputJsonObject,
       },
     });
-
-    return workspace;
   }
 
   async addUserToWorkspace(

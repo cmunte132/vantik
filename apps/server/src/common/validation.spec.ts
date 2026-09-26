@@ -20,6 +20,7 @@ import {
   TemplateCategoryEnum,
   UpdateIssueDto,
   UpdateTemplateDto,
+  UpdateWorkspacePreferencesDto,
 } from '@vantikhq/types';
 
 import { OAuthBodyInterface } from 'modules/oauth-callback/oauth-callback.interface';
@@ -114,6 +115,19 @@ describe('the global validation pipe', () => {
         'UpdateTemplateDto',
         UpdateTemplateDto,
         { name: 'Bug', templateData: { title: 'x', labelIds: ['l-1'] } },
+        'body',
+      ],
+      // An empty class, so every field was dropped, and the agent settings
+      // page saved nothing.
+      [
+        'UpdateWorkspacePreferencesDto',
+        UpdateWorkspacePreferencesDto,
+        {
+          agentRuns: {
+            model: { provider: 'anthropic', model: 'claude-sonnet-5' },
+            limits: { maxCostUsd: 1.5 },
+          },
+        },
         'body',
       ],
       [

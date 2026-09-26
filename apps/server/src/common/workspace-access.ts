@@ -407,6 +407,27 @@ export async function assertLabelInWorkspace(
 }
 
 /**
+ * Proves a saved view belongs to the given workspace.
+ *
+ * Update and delete named the view by id behind AuthGuard alone, so any
+ * signed-in caller could rewrite or remove another workspace's views.
+ */
+export async function assertViewInWorkspace(
+  prisma: PrismaService,
+  viewId: string,
+  workspaceId: string,
+): Promise<void> {
+  const view = await prisma.view.findFirst({
+    where: { id: viewId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!view) {
+    throw new NotFoundException({ message: `View ${viewId} not found` });
+  }
+}
+
+/**
  * Proves a workflow state's team belongs to the given workspace.
  *
  * Same history as the label routes: update and delete named the state by id

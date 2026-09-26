@@ -19,6 +19,8 @@ const OWN_REPO = 'repo-own';
 const FOREIGN_REPO = 'repo-foreign';
 const OWN_LABEL = 'label-own';
 const FOREIGN_LABEL = 'label-foreign';
+const OWN_VIEW = 'view-own';
+const FOREIGN_VIEW = 'view-foreign';
 const OWN_WORKFLOW = 'workflow-own';
 const FOREIGN_WORKFLOW = 'workflow-foreign';
 const OWN_MILESTONE = 'milestone-own';
@@ -51,6 +53,7 @@ function buildPrisma(callerTeamIds: string[] = [OWN_TEAM]) {
       OWN_CAPABILITY,
       OWN_REPO,
       OWN_LABEL,
+      OWN_VIEW,
       OWN_WORKFLOW,
       OWN_MILESTONE,
       OWN_CYCLE,
@@ -118,6 +121,7 @@ function buildPrisma(callerTeamIds: string[] = [OWN_TEAM]) {
       findMany: jest.fn(visibleFinder()),
     },
     label: { findFirst: jest.fn(finder()) },
+    view: { findFirst: jest.fn(finder()) },
     workflow: {
       findFirst: jest.fn(finder()),
       findMany: jest.fn(visibleFinder()),
@@ -502,9 +506,9 @@ describe('WorkspaceResourceGuard team boundary', () => {
   });
 
   /**
-   * The label, workflow, team and milestone routes predate this guard and ran
-   * behind AuthGuard alone, so any signed-in caller could read, rename or
-   * delete those rows in any workspace by id.
+   * The label, view, workflow, team and milestone routes predate this guard
+   * and ran behind AuthGuard alone, so any signed-in caller could read, rename
+   * or delete those rows in any workspace by id.
    */
   describe('routes that took the id on trust', () => {
     let guard: WorkspaceResourceGuard;
@@ -530,6 +534,21 @@ describe('WorkspaceResourceGuard team boundary', () => {
     it('rejects a foreign label named as a group', async () => {
       // Create and update name the parent label in the body.
       const ctx = buildContext({ body: { groupId: FOREIGN_LABEL } });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('allows a view in the caller-s workspace', async () => {
+      const ctx = buildContext({ params: { viewId: OWN_VIEW } });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+
+    it('rejects a foreign view id', async () => {
+      // Update and delete name the view by id and nothing else.
+      const ctx = buildContext({ params: { viewId: FOREIGN_VIEW } });
 
       await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
         NotFoundException,

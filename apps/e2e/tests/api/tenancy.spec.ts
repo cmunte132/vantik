@@ -19,7 +19,7 @@ import {
   unique,
   workflows,
 } from '../../src/api';
-import { expect, knownBug, test } from '../../src/fixtures';
+import { expect, test } from '../../src/fixtures';
 
 /**
  * Alice and Bob each own a workspace. Nothing Bob does may read or change
@@ -41,8 +41,6 @@ function expectRefused(response: APIResponse, what: string) {
     response.status(),
   );
 }
-
-const VIEWS_OPEN = 'the view routes take an id and never check its workspace';
 
 test.describe('the workspace boundary', () => {
   test("Bob's own credentials work, so a refusal below is about Alice's records", async ({
@@ -358,7 +356,6 @@ test.describe('the workspace boundary', () => {
     }) => {
       const view = await createView(asAlice, alice);
       expect((await currentView(asAlice, view)).name).toBe(view.name);
-      knownBug(VIEWS_OPEN);
 
       expectRefused(
         await asBob.post(`/v1/views/${view.id}`, {

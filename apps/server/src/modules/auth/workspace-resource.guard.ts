@@ -28,6 +28,7 @@ import {
   assertProjectInWorkspace,
   assertProjectMilestoneInWorkspace,
   assertTeamInWorkspace,
+  assertViewInWorkspace,
   assertWorkflowInWorkspace,
   resolveWorkspaceId,
 } from 'common/workspace-access';
@@ -81,6 +82,7 @@ export class WorkspaceResourceGuard implements CanActivate {
       capabilityId,
       agentRunId,
       labelId,
+      viewId,
       workflowId,
       projectMilestoneId,
       integrationAccountId,
@@ -278,6 +280,10 @@ export class WorkspaceResourceGuard implements CanActivate {
 
     if (workflowId) {
       await assertWorkflowInWorkspace(this.prisma, workflowId, workspaceId);
+    }
+
+    if (viewId) {
+      await assertViewInWorkspace(this.prisma, viewId, workspaceId);
     }
 
     // A team is a visibility boundary inside the workspace (ENG-79), so the

@@ -12,6 +12,7 @@ import { SessionContainer } from 'supertokens-node/recipe/session';
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
 import { Session, Workspace } from 'modules/auth/session.decorator';
+import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
 import {
   CreateViewsRequestBody,
@@ -31,7 +32,7 @@ export class ViewsController {
    * Delete a View
    */
   @Delete(':viewId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async deleteView(
     @Param()
     viewRequestIdBody: ViewRequestIdBody,
@@ -43,7 +44,7 @@ export class ViewsController {
    * Update a view in workspace
    */
   @Post(':viewId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateView(
     @Param()
     viewRequestIdBody: ViewRequestIdBody,
@@ -60,7 +61,7 @@ export class ViewsController {
    * Create view in a workspace
    */
   @Post()
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createView(
     @Session() session: SessionContainer,
     @Workspace() sessionWorkspaceId: string,

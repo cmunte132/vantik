@@ -80,6 +80,15 @@ COPY --from=builder --chown=node:node /app/apps/server/scripts ./apps/server/scr
 # change here.
 COPY --chown=node:node apps/docs/skills ./apps/server/skills
 
+# Where local attachment storage writes, and where docker-compose.yaml mounts
+# the attachment-data volume. Docker gives a new, empty named volume the owner
+# of the directory it is mounted over, so the directory has to exist here and
+# belong to node. Without it Docker creates the volume owned by root, the server
+# cannot write its URL-signing secret, and it crash-loops on every fresh
+# install. Rootless podman hands the volume to the container user either way,
+# which is why this only showed up under Docker.
+RUN mkdir -p /data/attachments && chown node:node /data/attachments
+
 EXPOSE 3001
 
 USER node

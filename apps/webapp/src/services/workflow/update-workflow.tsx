@@ -1,21 +1,14 @@
 import type { Workflow } from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
 import { updateWorkflow, type UpdateWorkflowInput } from '@vantikhq/services';
+
+import { type MutationCallbacks, useApiMutation } from 'services/utils';
 
 import { useContextStore } from 'store/global-context-provider';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Workflow) => void;
-  onError?: (error: string) => void;
-}
-
-export function useUpdateWorkflowMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
+export function useUpdateWorkflowMutation(
+  callbacks: MutationCallbacks<Workflow, UpdateWorkflowInput> = {},
+) {
   const { workflowsStore } = useContextStore();
 
   const update = ({ workflowId, ...otherParams }: UpdateWorkflowInput) => {
@@ -34,25 +27,5 @@ export function useUpdateWorkflowMutation({
     }
   };
 
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Workflow) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: update,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
+  return useApiMutation(update, callbacks);
 }

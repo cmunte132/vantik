@@ -106,11 +106,7 @@ export const TeamMappings = observer(
         setTeamId('');
         setError('');
       },
-      onError: (failure) =>
-        setError(
-          failure?.response?.data?.message ??
-            'The server refused this change, and it gave no reason.',
-        ),
+      onError: setError,
     });
 
     const write = (teamMappings: TeamMapping[]) =>

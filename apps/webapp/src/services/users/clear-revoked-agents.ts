@@ -1,13 +1,6 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-
-import { ajaxPost } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
 
 import { GetAgents } from './get-agents';
-
-interface MutationParams {
-  onSuccess?: (result: { hidden: number }) => void;
-  onError?: (error: string) => void;
-}
 
 /**
  * Clears revoked agents out of the listing.
@@ -17,28 +10,18 @@ interface MutationParams {
  * user would break attribution on records that still name them. A revoked agent
  * cannot authenticate, so the row is all there is left to remove.
  */
-export function useClearRevokedAgentsMutation({
-  onSuccess,
-  onError,
-}: MutationParams = {}) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ workspaceId }: { workspaceId: string }) =>
-      ajaxPost({
-        url: `/api/v1/users/agents/clear_revoked?workspaceId=${workspaceId}`,
-        data: {},
-      }) as Promise<{ hidden: number }>,
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: [GetAgents] });
-      onSuccess?.(result);
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (error: any) =>
-      onError?.(
-        error?.response?.data?.message ??
-          error?.errors?.message ??
-          'Could not clear the revoked agents.',
-      ),
+function clearRevokedAgents({
+  workspaceId,
+}: {
+  workspaceId: string;
+}): Promise<{ hidden: number }> {
+  return ajaxPost({
+    url: `/api/v1/users/agents/clear_revoked?workspaceId=${workspaceId}`,
+    data: {},
   });
 }
+
+export const useClearRevokedAgentsMutation = mutationHook(clearRevokedAgents, {
+  invalidates: [GetAgents],
+  fallback: 'Could not clear the revoked agents.',
+});

@@ -1,10 +1,6 @@
 import type { LocalRepository, RepositoryFolder } from '@vantikhq/types';
 
-import {
-  type UseQueryResult,
-  useMutation,
-  useQuery,
-} from '@tanstack/react-query';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 import {
   addLocalRepository,
   getLocalRepositories,
@@ -12,7 +8,7 @@ import {
   removeLocalRepository,
 } from '@vantikhq/services';
 
-import { type XHRErrorResponse } from 'services/utils';
+import { mutationHook, type XHRErrorResponse } from 'services/utils';
 
 export const GetLocalRepositories = 'getLocalRepositories';
 export const GetLocalRepositoryFolders = 'getLocalRepositoryFolders';
@@ -50,32 +46,10 @@ export function useGetLocalRepositoryFolders(
   });
 }
 
-interface MutationParams<T> {
-  onSuccess?: (data: T) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onError?: (error: any) => void;
-}
+export const useAddLocalRepositoryMutation = mutationHook(addLocalRepository, {
+  fallback: 'The server refused this path, and it gave no reason.',
+});
 
-export function useAddLocalRepositoryMutation({
-  onSuccess,
-  onError,
-}: MutationParams<LocalRepository> = {}) {
-  return useMutation({
-    mutationFn: addLocalRepository,
-    onSuccess: (data) => onSuccess && onSuccess(data),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (error: any) => onError && onError(error),
-  });
-}
-
-export function useRemoveLocalRepositoryMutation({
-  onSuccess,
-  onError,
-}: MutationParams<LocalRepository> = {}) {
-  return useMutation({
-    mutationFn: removeLocalRepository,
-    onSuccess: (data) => onSuccess && onSuccess(data),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (error: any) => onError && onError(error),
-  });
-}
+export const useRemoveLocalRepositoryMutation = mutationHook(
+  removeLocalRepository,
+);

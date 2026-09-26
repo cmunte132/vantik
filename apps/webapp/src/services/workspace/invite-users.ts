@@ -1,8 +1,6 @@
 import type { RoleEnum } from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
-
-import { ajaxPost } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
 
 export type InviteResponse = Record<string, string>;
 
@@ -12,7 +10,11 @@ export interface InviteUsersParams {
   role: RoleEnum;
 }
 
-export function inviteUsers({ emailIds, teamIds, role }: InviteUsersParams) {
+export function inviteUsers({
+  emailIds,
+  teamIds,
+  role,
+}: InviteUsersParams): Promise<InviteResponse> {
   return ajaxPost({
     url: `/api/v1/workspaces/invite_users`,
     data: {
@@ -23,36 +25,4 @@ export function inviteUsers({ emailIds, teamIds, role }: InviteUsersParams) {
   });
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: InviteResponse) => void;
-  onError?: (error: string) => void;
-}
-
-export function useInviteUsersMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: InviteResponse) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: inviteUsers,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useInviteUsersMutation = mutationHook(inviteUsers);

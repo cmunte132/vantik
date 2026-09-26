@@ -1,38 +1,7 @@
-import type { ProjectMilestone } from '@vantikhq/types';
-
-import { useMutation } from '@tanstack/react-query';
 import { updateProjectMilestone } from '@vantikhq/services';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: ProjectMilestone) => void;
-  onError?: (error: string) => void;
-}
+import { mutationHook } from 'services/utils';
 
-export function useUpdateProjectMilestoneMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: ProjectMilestone) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: updateProjectMilestone,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useUpdateProjectMilestoneMutation = mutationHook(
+  updateProjectMilestone,
+);

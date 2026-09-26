@@ -1,10 +1,6 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useMutation } from '@tanstack/react-query';
-
 import type { IssueType } from 'common/types';
 
-import { ajaxPost } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
 
 export interface CreateIssueParams {
   title?: string;
@@ -20,18 +16,24 @@ export interface CreateIssueParams {
   parentId?: string;
   projectId?: string;
   projectMilestoneId?: string;
+  cycleId?: string;
 
   // Need when creating from the description
   start?: number;
   end?: number;
 }
 
+// `start` and `end` stay behind: they say where in a description the issue was
+// written, which the caller reads back from the mutation's variables to put a
+// link there. The server has no use for them.
+/* eslint-disable @typescript-eslint/no-unused-vars */
 export function createIssue({
   teamId,
   start,
   end,
   ...otherParams
-}: CreateIssueParams) {
+}: CreateIssueParams): Promise<IssueType> {
+  /* eslint-enable @typescript-eslint/no-unused-vars */
   return ajaxPost({
     url: `/api/v1/issues`,
     data: {
@@ -44,36 +46,4 @@ export function createIssue({
   });
 }
 
-export interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: IssueType, variables: any, context: any) => void;
-  onError?: (error: string) => void;
-}
-
-export function useCreateIssueMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: IssueType, variables: any, context: any) => {
-    onSuccess && onSuccess(data, variables, context);
-  };
-
-  return useMutation({
-    mutationFn: createIssue,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useCreateIssueMutation = mutationHook(createIssue);

@@ -38,11 +38,7 @@ export function LocalRepositories({ instruction }: { instruction?: string }) {
         setError('');
         refetch();
       },
-      onError: (failure) =>
-        setError(
-          failure?.response?.data?.message ??
-            'The server refused this path, and it gave no reason.',
-        ),
+      onError: setError,
     });
 
   const { mutate: removeRepository } = useRemoveLocalRepositoryMutation({

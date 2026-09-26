@@ -1,4 +1,3 @@
-import { useMutation } from '@tanstack/react-query';
 import {
   acceptModuleSuggestion,
   createCapability,
@@ -16,6 +15,8 @@ import {
   updateProduct,
 } from '@vantikhq/services';
 
+import { mutationHook } from 'services/utils';
+
 /**
  * The write side of the product axis.
  *
@@ -23,51 +24,29 @@ import {
  * over the socket as a sync action, and the store applies it there. Writing it
  * twice is how the two copies drift.
  */
-interface MutationParams<T> {
-  onMutate?: () => void;
-  onSuccess?: (data: T) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onError?: (error: any) => void;
-}
+export const useCreateProductMutation = mutationHook(createProduct);
+export const useUpdateProductMutation = mutationHook(updateProduct);
+export const useDeleteProductMutation = mutationHook(deleteProduct);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mutation<TData, TVariables>(
-  fn: (variables: TVariables) => Promise<TData>,
-) {
-  return ({ onMutate, onSuccess, onError }: MutationParams<TData> = {}) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useMutation({
-      mutationFn: fn,
-      onMutate: () => onMutate && onMutate(),
-      onSuccess: (data: TData) => onSuccess && onSuccess(data),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      onError: (error: any) => onError && onError(error),
-    });
-}
+export const useCreateModuleMutation = mutationHook(createModule);
+export const useUpdateModuleMutation = mutationHook(updateModule);
+export const useDeleteModuleMutation = mutationHook(deleteModule);
 
-export const useCreateProductMutation = mutation(createProduct);
-export const useUpdateProductMutation = mutation(updateProduct);
-export const useDeleteProductMutation = mutation(deleteProduct);
-
-export const useCreateModuleMutation = mutation(createModule);
-export const useUpdateModuleMutation = mutation(updateModule);
-export const useDeleteModuleMutation = mutation(deleteModule);
-
-export const useCreateCapabilityMutation = mutation(createCapability);
-export const useUpdateCapabilityMutation = mutation(updateCapability);
-export const useDeleteCapabilityMutation = mutation(deleteCapability);
+export const useCreateCapabilityMutation = mutationHook(createCapability);
+export const useUpdateCapabilityMutation = mutationHook(updateCapability);
+export const useDeleteCapabilityMutation = mutationHook(deleteCapability);
 
 // The classifier proposes modules and a person answers. Accepting writes the
 // issue, dismissing writes only the suggestion; both come back over the socket.
-export const useAcceptModuleSuggestionMutation = mutation(
+export const useAcceptModuleSuggestionMutation = mutationHook(
   acceptModuleSuggestion,
 );
-export const useDismissModuleSuggestionMutation = mutation(
+export const useDismissModuleSuggestionMutation = mutationHook(
   dismissModuleSuggestion,
 );
 
 // A module's repositories are not replicated, so the caller refetches after a
 // write rather than waiting for a socket message that never comes.
-export const useCreateModuleRepoMutation = mutation(createModuleRepo);
-export const useUpdateModuleRepoMutation = mutation(updateModuleRepo);
-export const useDeleteModuleRepoMutation = mutation(deleteModuleRepo);
+export const useCreateModuleRepoMutation = mutationHook(createModuleRepo);
+export const useUpdateModuleRepoMutation = mutationHook(updateModuleRepo);
+export const useDeleteModuleRepoMutation = mutationHook(deleteModuleRepo);

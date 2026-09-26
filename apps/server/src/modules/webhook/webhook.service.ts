@@ -77,8 +77,29 @@ export default class WebhookService {
       data: { eventBody, eventHeaders },
     });
 
+    // A handler that cannot read the account from the body throws, and
+    // `loadIntegration` turns that into undefined. Passed to Prisma, undefined
+    // drops the filter, and the webhook was handed to whichever account came
+    // first, in any workspace.
+    if (typeof accountId !== 'string' || accountId.length === 0) {
+      this.logger.log({
+        message: `Received ${sourceName} webhook names no connected account`,
+        where: `WebhookService.handleEvents`,
+      });
+      return null;
+    }
+
+    // Account ids are only unique within a provider: a Discord guild and a
+    // GitHub installation can share one. Within GitHub, a personal account's
+    // id is a user id, which can equal an installation id, and a webhook is
+    // never delivered to a person.
     const integrationAccount = await this.prisma.integrationAccount.findFirst({
-      where: { accountId, deleted: null },
+      where: {
+        accountId,
+        integrationDefinition: { slug: sourceName },
+        personal: false,
+        deleted: null,
+      },
       include: { workspace: true, integrationDefinition: true },
     });
 

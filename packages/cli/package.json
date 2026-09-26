@@ -47,7 +47,7 @@
     "dev:main": "tsup --watch",
     "clean": "rimraf dist",
     "start": "node dist/index.js",
-    "lint": "eslint \"src/**/*.ts\" --fix",
+    "lint": "eslint \"src/**/*.ts\"",
     "test": "jest --passWithNoTests"
   },
   "dependencies": {

@@ -65,6 +65,8 @@ export function InstallConfig({ token }: InstallConfigProps) {
       </div>
 
       <SkillInstall harness={active} origin={origin} />
+
+      <HookInstall harness={active} />
     </div>
   );
 }
@@ -94,10 +96,10 @@ function SkillInstall({
         <p className="text-sm text-muted-foreground">
           The config above is all your agent needs to read and file issues. Left
           to itself, though, an agent tends to file a long tail of one-line
-          tickets, and to tell only the chat window what it learned. Two guides
-          correct that: one for issues, one for the knowledge bank. The command
-          asks which to install, and whether for this project or for every
-          project.
+          tickets, and to tell only the chat window what it learned. Three
+          guides correct that: one for issues, one for the knowledge bank, and
+          one for handing an issue to Vantik’s own agent. The command asks which
+          to install, and whether for this project or for every project.
         </p>
       </div>
 
@@ -110,6 +112,39 @@ function SkillInstall({
         label={`Or keep the issues guide always in context, in ${skill.contextFile}`}
         value={contextAppendCommand(origin, skill.contextFile)}
       />
+    </div>
+  );
+}
+
+/**
+ * The third, and the one that is checked rather than advised: hooks that brief
+ * the agent when a session begins and hold it at a stop once when an issue it
+ * has in progress has gone quiet.
+ *
+ * Offered after the skills, because they enforce what the skills explain; an
+ * agent held at a stop without the guide still gets told what to do, but one
+ * with the guide rarely needs holding.
+ */
+function HookInstall({ harness }: { harness: Harness }) {
+  const { hooks } = harness;
+
+  return (
+    <div className="border-t border-border pt-3 flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <p className="text-sm">Optional: hooks that keep the tracker current</p>
+        <p className="text-sm text-muted-foreground">
+          A skill is advice. With these hooks, the first prompt of a session is
+          told what the agent has in progress, and an agent about to stop while
+          an issue it has in progress has gone 20 minutes without an update from
+          it is held once and asked to record where it stands. The check runs on
+          this server; the hooks write nothing to the tracker themselves.
+        </p>
+        <p className="text-sm text-muted-foreground">{hooks.intro}</p>
+      </div>
+
+      {hooks.blocks.map((block) => (
+        <CopyBlock key={block.label} label={block.label} value={block.value} />
+      ))}
     </div>
   );
 }

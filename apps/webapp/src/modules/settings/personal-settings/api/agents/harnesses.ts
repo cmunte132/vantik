@@ -25,12 +25,23 @@ export interface HarnessSkill {
   contextFile: 'CLAUDE.md' | 'AGENTS.md';
 }
 
+/**
+ * The hooks that make the tracker's rules checked rather than advised: a brief
+ * on the first prompt of a session, and a check before the agent stops. The
+ * rules live on the server, so each tab is only a different way of asking it.
+ */
+export interface HarnessHooks {
+  intro: string;
+  blocks: HarnessBlock[];
+}
+
 export interface Harness {
   id: string;
   label: string;
   intro: string;
   blocks: HarnessBlock[];
   skill: HarnessSkill;
+  hooks: HarnessHooks;
 }
 
 /**
@@ -39,8 +50,16 @@ export interface Harness {
  */
 export const TOKEN_PLACEHOLDER = 'YOUR_VANTIK_TOKEN';
 
+/** The MCP server key every config on this page uses, and the hooks name. */
+export const MCP_SERVER_NAME = 'vantik';
+
 export function harnessConfigs(url: string, token: string): Harness[] {
   const auth = `Bearer ${token}`;
+  const hooksUrl = url.replace(/\/mcp$/, '/agent-hooks');
+  const tokenEnv = {
+    label: 'Environment',
+    value: `export VANTIK_TOKEN=${token}`,
+  };
 
   return [
     {
@@ -71,6 +90,16 @@ export function harnessConfigs(url: string, token: string): Harness[] {
         },
       ],
       skill: { agent: 'claude-code', contextFile: 'CLAUDE.md' },
+      hooks: {
+        intro:
+          'Merge into .claude/settings.json in the project, or ~/.claude/settings.json for every project. The hooks go through the vantik MCP server above, so they hold no token and the file can be committed.',
+        blocks: [
+          {
+            label: '.claude/settings.json',
+            value: mcpToolHooks('claude-code'),
+          },
+        ],
+      },
     },
     {
       id: 'codex',
@@ -87,6 +116,11 @@ export function harnessConfigs(url: string, token: string): Harness[] {
         },
       ],
       skill: { agent: 'codex', contextFile: 'AGENTS.md' },
+      hooks: {
+        intro:
+          'Save as .codex/hooks.json in the project, or ~/.codex/hooks.json for every project. Codex asks you to trust new hooks before they run. The hooks go through the vantik MCP server above, so they hold no token.',
+        blocks: [{ label: '.codex/hooks.json', value: mcpToolHooks('codex') }],
+      },
     },
     {
       id: 'cursor',
@@ -106,6 +140,14 @@ export function harnessConfigs(url: string, token: string): Harness[] {
         },
       ],
       skill: { agent: 'cursor', contextFile: 'AGENTS.md' },
+      hooks: {
+        intro:
+          'Save as .cursor/hooks.json in the project, or ~/.cursor/hooks.json, and set VANTIK_TOKEN wherever Cursor is started from. Cursor runs hooks as shell commands (macOS and Linux), and it cannot hold an agent at a stop: the reminder comes back as the next message instead.',
+        blocks: [
+          { label: '.cursor/hooks.json', value: cursorHooks(hooksUrl) },
+          tokenEnv,
+        ],
+      },
     },
     {
       id: 'other',
@@ -125,8 +167,97 @@ export function harnessConfigs(url: string, token: string): Harness[] {
       ],
       // No agent: the CLI detects which ones are installed, or asks.
       skill: { contextFile: 'AGENTS.md' },
+      hooks: {
+        intro:
+          'Any harness that runs a command at session start and before it stops can use the same endpoint: send the hook’s own input as the body, and name the output format to answer in with ?harness= (claude-code, codex or cursor).',
+        blocks: [
+          {
+            label: 'Endpoint',
+            value: `${hooksUrl}/{session-start | prompt | stop}?harness={claude-code | codex | cursor}`,
+          },
+          {
+            label: 'As a command hook',
+            value: hookCommand(hooksUrl, 'stop', 'claude-code'),
+          },
+          tokenEnv,
+        ],
+      },
     },
   ];
+}
+
+/**
+ * Claude Code and Codex: hooks that call the hook tools on the MCP server the
+ * same tab configures. They carry no token — the connection already has one —
+ * so the file can be committed for a whole team.
+ *
+ * Only `${session_id}` is templated: it is the one field both harnesses send
+ * on both events, and Codex refuses a hook whose placeholder is missing.
+ * UserPromptSubmit rather than SessionStart, because neither harness has its
+ * MCP servers connected when SessionStart fires at launch, and skips an MCP
+ * hook it cannot reach.
+ */
+export function mcpToolHooks(harness: 'claude-code' | 'codex'): string {
+  const call = (tool: string) => ({
+    hooks: [
+      {
+        type: 'mcp_tool',
+        server: MCP_SERVER_NAME,
+        tool,
+        // eslint-disable-next-line no-template-curly-in-string
+        input: { session_id: '${session_id}', harness },
+      },
+    ],
+  });
+
+  return JSON.stringify(
+    {
+      hooks: {
+        UserPromptSubmit: [call('hook_prompt_submit')],
+        Stop: [call('hook_stop')],
+      },
+    },
+    null,
+    2,
+  );
+}
+
+/**
+ * Cursor: its hooks run commands, so each is a `curl` that pipes the hook's
+ * input to the endpoint and prints what comes back.
+ */
+export function cursorHooks(hooksUrl: string): string {
+  return JSON.stringify(
+    {
+      version: 1,
+      hooks: {
+        sessionStart: [
+          { command: hookCommand(hooksUrl, 'session-start', 'cursor') },
+        ],
+        stop: [{ command: hookCommand(hooksUrl, 'stop', 'cursor') }],
+      },
+    },
+    null,
+    2,
+  );
+}
+
+/**
+ * One hook as a shell command. The token is read from the environment rather
+ * than written in, so the file holding the command can be committed; and any
+ * failure — Vantik down, the token unset — prints `{}`, which every harness
+ * reads as "carry on", so a broken hook never stands in the agent's way.
+ */
+export function hookCommand(
+  hooksUrl: string,
+  event: 'session-start' | 'prompt' | 'stop',
+  harness: 'claude-code' | 'codex' | 'cursor',
+): string {
+  return (
+    `curl -fsS -m 10 -X POST '${hooksUrl}/${event}?harness=${harness}' ` +
+    `-H "Authorization: Bearer $VANTIK_TOKEN" -H 'Content-Type: application/json' ` +
+    `--data-binary @- || echo '{}'`
+  );
 }
 
 /**

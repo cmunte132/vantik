@@ -1,6 +1,6 @@
 # Vantik agent skills
 
-Two guides teach an LLM agent to use Vantik well. Each guide is an
+Three guides teach an LLM agent to use Vantik well. Each guide is an
 [agent skill](https://agentskills.io). Claude Code, Codex, Cursor, and many other
 agents load a skill on demand, so it costs no context until the work starts.
 
@@ -8,10 +8,11 @@ agents load a skill on demand, so it costs no context until the work starts.
 | --- | --- |
 | `working-vantik-issues` | Keep the tracker current while the work happens, and keep the issues few and large. |
 | `working-vantik-knowledge` | Load the context before the work starts, record one fact at a time, and supersede an old fact and do not contradict it. |
+| `delegating-vantik-work` | Hand an issue to the agent of Vantik only when the issue is ready, and read the result of the run correctly. |
 
 ## How to install
 
-Both guides need an agent that reaches Vantik over MCP. Make a token in
+Each guide needs an agent that reaches Vantik over MCP. Make a token in
 **Vantik → Settings → Agents**, and copy the configuration from that page into
 your client. That page makes an agent identity, so the workspace records the
 work against the agent and not against you.
@@ -59,8 +60,43 @@ curl -fsSL https://your-vantik-host/api/v1/agent-skill/CLAUDE.md >> CLAUDE.md
 curl -fsSL https://your-vantik-host/api/v1/agent-skill/AGENTS.md >> AGENTS.md
 ```
 
-These commands give the issues guide. For the knowledge guide, put
-`working-vantik-knowledge/` after `agent-skill/` in the URL.
+These commands give the issues guide. For another guide, put its name and a
+slash after `agent-skill/` in the URL, for example
+`agent-skill/working-vantik-knowledge/AGENTS.md`.
+
+The MCP server also sends a short form of the rules to each client that
+connects, in the `instructions` field of MCP. Claude Code and Codex keep that
+text in the context for the whole session, so an agent there gets the rules
+even before it loads a skill.
+
+## Hooks
+
+A skill is advice, and the agent decides when to read it. Hooks make two parts
+of the guidance certain:
+
+- **At the start of a session**, the agent gets a list of the issues that it
+  has in progress, with how much of each Definition of Done is met.
+- **Before the agent stops**, Vantik examines each of those issues. If an issue
+  has had no update from the agent for 20 minutes of this session, Vantik holds
+  the agent once and asks it to record where the issue stands. If the session
+  did not touch that issue, the agent can say so in one line and stop. Vantik
+  asks once for each quiet period.
+
+The rules are on the server, so the hooks only relay the answer. The hooks
+write nothing to the tracker. If Vantik does not answer, the agent continues as
+if there were no hooks.
+
+**Settings → Agents** shows the hooks for each agent:
+
+| Agent | How the hook reaches Vantik | Where the file goes |
+| --- | --- | --- |
+| Claude Code | An `mcp_tool` hook, through the MCP server that you configured. It holds no token. | `.claude/settings.json` |
+| Codex | The same. | `.codex/hooks.json` |
+| Cursor | A `curl` command that reads `VANTIK_TOKEN` from the environment. Cursor cannot hold an agent at a stop, so the reminder comes back as the next message. | `.cursor/hooks.json` |
+
+The endpoint behind them is `POST /v1/agent-hooks/<event>?harness=<harness>`,
+for any other agent that can run a command at the start of a session and before
+it stops.
 
 ## working-vantik-issues
 
@@ -100,6 +136,14 @@ issues are the work, and the bank is what the work taught you.
 The bank records each entry against the agent that wrote it. This provenance is
 the purpose of the bank, because the text of a claim from an agent and the text
 of a claim from a person are the same.
+
+## delegating-vantik-work
+
+This guide says when an issue is ready to give to the agent of Vantik: it has a
+Definition of Done that a stranger can check, it is one contained change, the
+checks of the repository can verify it, and no run is already in progress. It
+also explains the loop of implementation, verification, and review, and the
+meaning of each status that `list_agent_runs` gives.
 
 ## How to change the guidance
 

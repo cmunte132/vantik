@@ -553,8 +553,10 @@ export default class PageEntriesService {
         }
         retire.add(row.id);
         // Only an undecided correction carries its claim on to what it
-        // corrects. One a person archived was rejected as a replacement, and
-        // accepting a correction of it must not quietly undo that decision.
+        // corrects. An archived one was rejected by a person, withdrawn by its
+        // writer or left to expire; either way it is not a replacement anyone
+        // accepted, and accepting a correction of it must not quietly retire
+        // what it had meant to replace.
         if (
           row.supersedesId &&
           !retire.has(row.supersedesId) &&
@@ -765,9 +767,11 @@ export default class PageEntriesService {
       throw new BadRequestException({
         message:
           `Entry ${supersedesId} has been folded into the page body, so the ` +
-          'body is what carries it now. Correct the page body instead; a ' +
-          'standing correction beside it would serve the old text and the new ' +
-          'one together.',
+          'body is what carries it now, and a correction standing beside it ' +
+          'would serve the old text and the new one together. Nothing was ' +
+          'written. Write the correction as a new entry without ' +
+          '`supersedesId`: it goes to review like any other claim, and ' +
+          'whoever accepts it fixes the body.',
       });
     }
 

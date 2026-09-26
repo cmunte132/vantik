@@ -107,7 +107,9 @@ acting on it. Superseding keeps the old entry for audit and stops serving it
 once a person accepts your correction. Until then the old entry stays in use,
 so a correction nobody has reviewed cannot take accepted knowledge away, and a
 second correction to the same entry waits until the first is decided. An entry
-that has been folded into the page body is corrected in the body.
+that has been folded into the page body cannot be superseded: write the
+correction as a new entry, without `supersedes`, and it goes to review like any
+other claim.
 
 `remember` searches before it writes. When near matches come back **nothing was
 written**: read them, then either supersede one or pass `distinct: true` to say

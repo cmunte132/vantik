@@ -5,9 +5,8 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 0 (review round 3 addressed; round 4 in progress)
-- Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phase 0 spec-hash 069a84bf6612`
-  (KG-0.1 to KG-0.6 pass; KG-0.R waits on the review)
+- Current phase: 0 done (review passed). Next session: phase 1.
+- Last verify: `KNOWLEDGE-GARDENER VERIFY: PASS phase 0 spec-hash 069a84bf6612`
 
 ## Decisions
 
@@ -153,6 +152,26 @@ next session starts by reading it.
    links, which the reviewer also noted, predates this phase; recorded under
    Observed.)
 
+### Phase 0, round 4 (same reviewer, fixes plus a final pass over the phase)
+
+`VERDICT: NO UNRESOLVED FINDINGS`. Two non-blocking notes, both fixed in the
+wording commit after `001c875`:
+
+1. The refusal for a CONSOLIDATED target told agents to correct the page body,
+   which for an agent means the unreviewed `write_page`/`consolidate_knowledge`
+   routes. It now says to write a plain new entry, which goes to review; the
+   skill says the same.
+2. The chain-walk comment said an archived link was one "a person archived";
+   decay expiry and an agent withdrawing its own entry also archive. Reworded.
+
+Phase 0 review: PASS - four rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-0 criteria: agent triage refused on
+single and bulk routes, corrections retire nothing until a person accepts them
+(chains, disputes, archives, displacement and batch order checked against a
+stateful double and the reviewer's own stricter fake), server-side duplicate
+check on every client, read scope on load_context, settled search, decay from
+lastServedAt; no skipped or loosened tests, checklist and verifier untouched.
+
 When a phase's independent review ends with no unresolved findings, add a line
 in the form `Phase <number> review: PASS - <what the reviewer checked>`, for
 example with the number 0 for phase 0. `verify.mjs` looks for that line.
@@ -201,3 +220,5 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-26: Review round 3: one blocking finding (disputed corrections gave
   up their pointer). Fixed with three non-blocking ones; the double now defers
   writes to the transaction. Verify through phase 0: 6/7, all suites green.
+- 2026-09-26: Review round 4: no unresolved findings; two wording notes fixed.
+  Phase 0 done.

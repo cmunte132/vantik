@@ -1,5 +1,7 @@
 import { Transform } from 'class-transformer';
 import {
+  IsArray,
+  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -7,6 +9,12 @@ import {
   IsUUID,
   NotEquals,
 } from 'class-validator';
+
+import { parseIdList } from './create-page-entry.dto';
+import { PageEntryKindEnum } from './page.entity';
+
+const toList = ({ value }: { value: unknown }) =>
+  value === undefined || value === null ? value : parseIdList(value);
 
 export class KnowledgeGapsQueryDto {
   @IsOptional()
@@ -39,6 +47,25 @@ export class KnowledgeSearchQueryDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   limit?: string;
+
+  /** Only these kinds of entry. Page bodies are not entries and drop out. */
+  @IsOptional()
+  @Transform(toList)
+  @IsArray()
+  @IsEnum(PageEntryKindEnum, { each: true })
+  kind?: PageEntryKindEnum[];
+
+  /** Rank knowledge about these modules, and their neighbours, first. */
+  @IsOptional()
+  @Transform(toList)
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  moduleIds?: string[];
+
+  /** Rank knowledge about this issue's modules and capability first. */
+  @IsOptional()
+  @IsUUID()
+  issueId?: string;
 }
 
 export class KnowledgeContextDto {
@@ -66,6 +93,20 @@ export class KnowledgeContextDto {
   @IsOptional()
   @IsNumber()
   tokenBudget?: number;
+
+  /**
+   * The modules the work is in. Knowledge about them, and about their
+   * neighbours in the product graph, is ranked first.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  moduleIds?: string[];
+
+  /** The issue the work is for; its modules and capability seed the ranking. */
+  @IsOptional()
+  @IsUUID()
+  issueId?: string;
 }
 
 export class KnowledgeSimilarDto {

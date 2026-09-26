@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PageLinkTypeEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -23,9 +27,10 @@ export interface ResolvedLink {
   teamId?: string;
   /**
    * How the target is addressed in a URL, when that is not its id: an issue
-   * key ("ENG-42"), a team identifier ("ENG"). Sent because the routes for
-   * those are keyed that way, and a caller left to reconstruct it from `label`
-   * is a caller parsing a display string.
+   * key ("ENG-42"), a team identifier ("ENG"), a product or module key
+   * ("cloud", "server"). Sent because the routes for those are keyed that way,
+   * and a caller left to reconstruct it from `label` is a caller parsing a
+   * display string.
    */
   key?: string;
 }
@@ -51,7 +56,7 @@ export default class PageLinksService {
   /**
    * Everything this page is linked to, with the dead edges dropped.
    *
-   * `entityId` cannot be a foreign key — one column will not reference four
+   * `entityId` cannot be a foreign key — one column will not reference seven
    * tables — so a target can be deleted out from under an edge. Reads resolve
    * every target and omit what no longer exists, rather than handing the caller
    * a link that goes nowhere.
@@ -66,7 +71,8 @@ export default class PageLinksService {
   }
 
   /**
-   * The other direction: pages linked to one team, project, issue or page.
+   * The other direction: pages linked to one team, project, issue, page,
+   * product, module or capability.
    *
    * This is the half that the substring scan over issue descriptions could
    * never do, and the reason an agent can be handed a project's documentation
@@ -108,7 +114,10 @@ export default class PageLinksService {
     userId: string,
     input: { entityType: PageLinkTypeEnum; entityId: string },
   ): Promise<ResolvedLink> {
-    if (input.entityType === PageLinkTypeEnum.PAGE && input.entityId === pageId) {
+    if (
+      input.entityType === PageLinkTypeEnum.PAGE &&
+      input.entityId === pageId
+    ) {
       throw new BadRequestException({
         message: 'A page cannot be linked to itself.',
       });
@@ -116,7 +125,11 @@ export default class PageLinksService {
 
     // Checked before writing, so a typo becomes an error rather than an edge
     // that silently resolves to nothing on every later read.
-    const label = await this.labelFor(input.entityType, input.entityId, workspaceId);
+    const label = await this.labelFor(
+      input.entityType,
+      input.entityId,
+      workspaceId,
+    );
 
     if (!label) {
       throw new NotFoundException({
@@ -207,34 +220,71 @@ export default class PageLinksService {
         .filter((link) => link.entityType === type)
         .map((link) => link.entityId);
 
-    const [teams, projects, issues, pages] = await Promise.all([
-      this.prisma.team.findMany({
-        where: { id: { in: idsOf(PageLinkTypeEnum.TEAM) }, workspaceId, deleted: null },
-        select: { id: true, name: true, identifier: true },
-      }),
-      this.prisma.project.findMany({
-        where: { id: { in: idsOf(PageLinkTypeEnum.PROJECT) }, workspaceId, deleted: null },
-        select: { id: true, name: true },
-      }),
-      this.prisma.issue.findMany({
-        where: {
-          id: { in: idsOf(PageLinkTypeEnum.ISSUE) },
-          deleted: null,
-          team: { workspaceId },
-        },
-        select: {
-          id: true,
-          title: true,
-          number: true,
-          teamId: true,
-          team: { select: { identifier: true } },
-        },
-      }),
-      this.prisma.page.findMany({
-        where: { id: { in: idsOf(PageLinkTypeEnum.PAGE) }, workspaceId, deleted: null },
-        select: { id: true, title: true },
-      }),
-    ]);
+    const [teams, projects, issues, pages, products, modules, capabilities] =
+      await Promise.all([
+        this.prisma.team.findMany({
+          where: {
+            id: { in: idsOf(PageLinkTypeEnum.TEAM) },
+            workspaceId,
+            deleted: null,
+          },
+          select: { id: true, name: true, identifier: true },
+        }),
+        this.prisma.project.findMany({
+          where: {
+            id: { in: idsOf(PageLinkTypeEnum.PROJECT) },
+            workspaceId,
+            deleted: null,
+          },
+          select: { id: true, name: true },
+        }),
+        this.prisma.issue.findMany({
+          where: {
+            id: { in: idsOf(PageLinkTypeEnum.ISSUE) },
+            deleted: null,
+            team: { workspaceId },
+          },
+          select: {
+            id: true,
+            title: true,
+            number: true,
+            teamId: true,
+            team: { select: { identifier: true } },
+          },
+        }),
+        this.prisma.page.findMany({
+          where: {
+            id: { in: idsOf(PageLinkTypeEnum.PAGE) },
+            workspaceId,
+            deleted: null,
+          },
+          select: { id: true, title: true },
+        }),
+        this.prisma.product.findMany({
+          where: {
+            id: { in: idsOf(PageLinkTypeEnum.PRODUCT) },
+            workspaceId,
+            deleted: null,
+          },
+          select: { id: true, name: true, key: true },
+        }),
+        this.prisma.module.findMany({
+          where: {
+            id: { in: idsOf(PageLinkTypeEnum.MODULE) },
+            workspaceId,
+            deleted: null,
+          },
+          select: { id: true, name: true, key: true },
+        }),
+        this.prisma.capability.findMany({
+          where: {
+            id: { in: idsOf(PageLinkTypeEnum.CAPABILITY) },
+            workspaceId,
+            deleted: null,
+          },
+          select: { id: true, name: true },
+        }),
+      ]);
 
     const labels = new Map<
       string,
@@ -263,6 +313,23 @@ export default class PageLinksService {
     pages.forEach((page) =>
       labels.set(key(PageLinkTypeEnum.PAGE, page.id), {
         label: page.title || 'Untitled page',
+      }),
+    );
+    products.forEach((product) =>
+      labels.set(key(PageLinkTypeEnum.PRODUCT, product.id), {
+        label: product.name,
+        key: product.key,
+      }),
+    );
+    modules.forEach((productModule) =>
+      labels.set(key(PageLinkTypeEnum.MODULE, productModule.id), {
+        label: productModule.name,
+        key: productModule.key,
+      }),
+    );
+    capabilities.forEach((capability) =>
+      labels.set(key(PageLinkTypeEnum.CAPABILITY, capability.id), {
+        label: capability.name,
       }),
     );
 
@@ -315,6 +382,30 @@ export default class PageLinksService {
         select: { title: true },
       });
       return issue?.title ?? null;
+    }
+
+    if (entityType === PageLinkTypeEnum.PRODUCT) {
+      const product = await this.prisma.product.findFirst({
+        where: { id: entityId, workspaceId, deleted: null },
+        select: { name: true },
+      });
+      return product?.name ?? null;
+    }
+
+    if (entityType === PageLinkTypeEnum.MODULE) {
+      const productModule = await this.prisma.module.findFirst({
+        where: { id: entityId, workspaceId, deleted: null },
+        select: { name: true },
+      });
+      return productModule?.name ?? null;
+    }
+
+    if (entityType === PageLinkTypeEnum.CAPABILITY) {
+      const capability = await this.prisma.capability.findFirst({
+        where: { id: entityId, workspaceId, deleted: null },
+        select: { name: true },
+      });
+      return capability?.name ?? null;
     }
 
     const page = await this.prisma.page.findFirst({

@@ -48,6 +48,25 @@ export enum PageLinkTypeEnum {
   PROJECT = 'PROJECT',
   ISSUE = 'ISSUE',
   PAGE = 'PAGE',
+  PRODUCT = 'PRODUCT',
+  MODULE = 'MODULE',
+  CAPABILITY = 'CAPABILITY',
+}
+
+/**
+ * What sort of knowledge an entry is. The guidance already asks for decisions,
+ * gotchas and conventions; recording which lets a reader ask for just the
+ * conventions of a module.
+ */
+export enum PageEntryKindEnum {
+  /** Something true about the system. The default. */
+  FACT = 'FACT',
+  /** A choice that was made, and why. */
+  DECISION = 'DECISION',
+  /** How things are done here: a rule a newcomer would not guess. */
+  CONVENTION = 'CONVENTION',
+  /** Something that cost somebody time. */
+  GOTCHA = 'GOTCHA',
 }
 
 export class Page {
@@ -83,6 +102,10 @@ export class PageEntry {
   content: string;
   /** Repo path glob, team or project the fact applies to; null is page-level. */
   scope: string | null;
+  /** The modules the scope resolves to, kept by the server. */
+  moduleIds: string[];
+
+  kind: PageEntryKindEnum;
 
   status: PageEntryStatusEnum;
 

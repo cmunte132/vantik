@@ -827,6 +827,17 @@ model PageEntry {
   /// it applies to the page as a whole.
   scope String?
 
+  /// The modules the scope falls in, resolved against `ModuleRepo.pathPrefixes`
+  /// when the scope is written and again whenever a module's repositories
+  /// change. Stored rather than computed on read because retrieval filters and
+  /// boosts on it inside the search index, which cannot run the resolution.
+  moduleIds String[] @default([])
+
+  /// What sort of knowledge this is. The bank's guidance already asks agents
+  /// for decisions, gotchas and conventions; recording which one an entry is
+  /// lets a reader ask for just the conventions of a module.
+  kind PageEntryKind @default(FACT)
+
   /// Retrieval serves only STANDING entries. Without that boundary the bank
   /// accumulates contradictions and stops being trusted: a wiki rots over
   /// years, a bank ten agent sessions a day write into rots in days.
@@ -1606,6 +1617,12 @@ enum PageLinkType {
   /// Page to page. Bodies can already mention each other in prose, but prose is
   /// not traversable and says nothing in the other direction.
   PAGE
+  /// The product graph. What a workspace ships, where the code is, and what
+  /// the software does are the things documentation is most often *about*,
+  /// and the ones an agent grounded in an issue already holds ids for.
+  PRODUCT
+  MODULE
+  CAPABILITY
 }
 
 /// An edge between a page and something else in the workspace.
@@ -1655,6 +1672,17 @@ enum PageEntryPolicy {
   CURATED
   /// Human-only. Agents read the page but cannot append to it.
   LOCKED
+}
+
+enum PageEntryKind {
+  /// Something true about the system. The default.
+  FACT
+  /// A choice that was made, and why. The why is the part worth keeping.
+  DECISION
+  /// How things are done here: a rule a newcomer would not guess.
+  CONVENTION
+  /// Something that cost somebody time, so it should not cost the next one.
+  GOTCHA
 }
 
 enum PageEntryStatus {

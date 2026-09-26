@@ -21,7 +21,9 @@ jest.mock('modules/auth/session-user', () => ({
 }));
 
 const REQUEST = {} as never;
-const DATABASE_PASSWORD = 'docker';
+// What the install docs set the database's password to, which impersonation
+// used to take as its key.
+const DOCUMENTED_DEFAULT = 'docker';
 const KEY = 'a-long-random-impersonation-key';
 
 describe('impersonating a user', () => {
@@ -31,7 +33,7 @@ describe('impersonating a user', () => {
 
   beforeEach(() => {
     createNewSession.mockReset();
-    process.env = { ...originalEnv, POSTGRES_PASSWORD: DATABASE_PASSWORD };
+    process.env = { ...originalEnv, POSTGRES_PASSWORD: DOCUMENTED_DEFAULT };
     delete process.env.IMPERSONATION_KEY;
 
     const prisma = {
@@ -53,7 +55,7 @@ describe('impersonating a user', () => {
     // It used to take the database password, which the install docs set to
     // "docker": anyone signed in could become anyone.
     await expect(
-      service.impersonate(DATABASE_PASSWORD, 'user-target', res, REQUEST),
+      service.impersonate(DOCUMENTED_DEFAULT, 'user-target', res, REQUEST),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(createNewSession).not.toHaveBeenCalled();
   });
@@ -61,7 +63,7 @@ describe('impersonating a user', () => {
   it('refuses a wrong key, the database password included', async () => {
     process.env.IMPERSONATION_KEY = KEY;
 
-    for (const key of [DATABASE_PASSWORD, `${KEY}x`, '']) {
+    for (const key of [DOCUMENTED_DEFAULT, `${KEY}x`, '']) {
       await expect(
         service.impersonate(key, 'user-target', res, REQUEST),
       ).rejects.toBeInstanceOf(NotFoundException);

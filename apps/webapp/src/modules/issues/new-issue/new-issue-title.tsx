@@ -118,6 +118,7 @@ export function NewIssueTitle({ form, index }: NewIssueTitleProps) {
                   className="border-0 py-0 resize-none bg-transparent no-scrollbar overflow-hidden outline-none focus-visible:ring-0 w-fit"
                   placeholderClassName="font-medium"
                   placeholder="Issue title"
+                  autoFocus={!aiEnabled}
                   {...field}
                 />
               </div>

@@ -113,14 +113,19 @@ export function NewIssue({
     createIssue(createIssueParams);
   };
 
-  // Shortcuts
+  // Shortcuts. The title and the description are both contenteditable, which
+  // the hook ignores unless told otherwise, so Cmd+Enter did nothing from
+  // either. No dependency list: with one, the hook kept the first render's
+  // onSubmit.
   useHotkeys(
     [`${Key.Meta}+${Key.Enter}`, `${Key.Control}+${Key.Enter}`],
     () => form.handleSubmit(onSubmit)(),
     {
+      scopes: [SCOPES.NewIssue],
       enableOnFormTags: true,
+      enableOnContentEditable: true,
+      preventDefault: true,
     },
-    [SCOPES.NewIssue],
   );
 
   React.useEffect(() => {

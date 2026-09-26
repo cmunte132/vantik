@@ -16,6 +16,8 @@ import {
 import { AiWritingExtension } from 'common/editor/ai-writing';
 import type { IssueType } from 'common/types';
 
+import { useAIEnabled } from 'hooks';
+
 import { useSuggestionItems } from './hooks';
 import { NewIssueHeader } from './new-issue-header';
 import { NewIssueMetadata } from './new-issue-metadata';
@@ -67,6 +69,7 @@ export const NewIssueForm = observer(
     const pathname = usePathname();
 
     const { team, setTeam } = useTeamForNewIssue(issue.teamId);
+    const aiEnabled = useAIEnabled();
     const [editor, setEditor] = React.useState(undefined);
     const { suggestionItems, isLoading: aiLoading } =
       useSuggestionItems(subIssueOperations);
@@ -148,7 +151,9 @@ export const NewIssueForm = observer(
                       {...field}
                       className="new-issue-editor min-h-[100px]"
                       editorClassName="min-h-[100px]"
-                      autoFocus
+                      // With AI the title is written from the description, so
+                      // you start there; without it, you start at the title.
+                      autoFocus={aiEnabled}
                       extensions={[AiWritingExtension]}
                       onCreate={(editor) => setEditor(editor)}
                     >

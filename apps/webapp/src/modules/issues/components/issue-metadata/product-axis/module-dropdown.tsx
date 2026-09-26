@@ -128,13 +128,11 @@ function ModuleDropdownContent({ modules, value, toggle }: ContentProps) {
           >
             <div className="flex gap-2 items-center">
               <Checkbox
-                id={module.name}
                 checked={value.includes(module.id)}
-                onCheckedChange={(checked: boolean) =>
-                  toggle(checked, module.id)
-                }
+                tabIndex={-1}
+                className="pointer-events-none"
               />
-              <label htmlFor={module.name} className="flex gap-2 grow">
+              <label className="flex gap-2 grow">
                 <RiCodeSSlashLine className="h-5 w-5 text-[9px]" size={16} />
                 {module.name}
               </label>

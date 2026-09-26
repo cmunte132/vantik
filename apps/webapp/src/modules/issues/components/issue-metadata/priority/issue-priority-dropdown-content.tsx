@@ -70,6 +70,11 @@ export function IssuePriorityDropdownContent({
               if (!multiple) {
                 onChange && onChange(currentValue);
                 onClose();
+              } else {
+                onValueChange(
+                  !(value as number[]).includes(currentValue),
+                  currentValue,
+                );
               }
             }}
           >
@@ -77,14 +82,12 @@ export function IssuePriorityDropdownContent({
               <div className="flex gap-2 items-center">
                 {multiple && (
                   <Checkbox
-                    id={priority}
                     checked={(value as number[]).includes(index)}
-                    onCheckedChange={(value: boolean) => {
-                      onValueChange(value, index);
-                    }}
+                    tabIndex={-1}
+                    className="pointer-events-none"
                   />
                 )}
-                <label htmlFor={priority} className="flex grow items-center">
+                <label className="flex grow items-center">
                   <PriorityIcon.icon size={16} className="mr-2" />
                   {priority}
                 </label>

@@ -59,11 +59,9 @@ export function IssueAssigneeDropdownContent({
         <div className="flex gap-2 items-center">
           {multiple && (
             <Checkbox
-              id="no-user"
               checked={value.includes('no-user')}
-              onCheckedChange={(value: boolean) =>
-                onValueChange(value, 'no-user')
-              }
+              tabIndex={-1}
+              className="pointer-events-none"
             />
           )}
           <div className="flex grow">
@@ -93,17 +91,12 @@ export function IssueAssigneeDropdownContent({
             <div className="flex gap-2 items-center">
               {multiple && (
                 <Checkbox
-                  id={userData.id}
                   checked={value.includes(user.id)}
-                  onCheckedChange={(value: boolean) => {
-                    onValueChange(value, user.id);
-                  }}
+                  tabIndex={-1}
+                  className="pointer-events-none"
                 />
               )}
-              <label
-                htmlFor={multiple ? userData.id : undefined}
-                className="flex gap-2 grow"
-              >
+              <label className="flex gap-2 grow">
                 <AvatarText
                   text={userData.fullname}
                   className="h-5 w-5 text-[9px]"

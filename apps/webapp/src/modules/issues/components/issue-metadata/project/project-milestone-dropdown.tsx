@@ -133,7 +133,7 @@ export function ProjectMilestoneDropdown({
         <PopoverTrigger asChild>{getTrigger()}</PopoverTrigger>
         <PopoverContent className="p-0" align="end">
           <Command>
-            <CommandInput placeholder="Set project..." autoFocus />
+            <CommandInput placeholder="Set milestone..." autoFocus />
             <ProjectMilestoneDropdownContent
               onClose={() => setOpen(false)}
               projectMilestones={milestones}

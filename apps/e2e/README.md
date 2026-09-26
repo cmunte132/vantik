@@ -88,6 +88,11 @@ hole in the workspace boundary that is known and not yet closed on `main`.
 When a change closes the hole, the test passes and Playwright reports "expected
 to fail, but passed". Then remove the `knownHole` call from that test.
 
+Call `knownHole` after the test's setup, and check that setup first. An
+expected failure passes whatever makes it fail. If the setup breaks before the
+call, the test fails as it should. If the setup breaks after the call, the
+suite reports that the hole is still open.
+
 ## How to write a test
 
 - Import `test` and `expect` from `src/fixtures`. The fixtures give you `alice`

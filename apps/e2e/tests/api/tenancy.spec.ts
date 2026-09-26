@@ -45,6 +45,11 @@ function expectRefused(response: APIResponse, what: string) {
  * the result, so the suite stays green while the hole is open and goes red with
  * "expected to fail, but passed" the moment it is closed — which is the prompt
  * to delete the call.
+ *
+ * Call it after the test's own setup, never before. An inverted test passes
+ * whatever makes it fail, so setup that broke underneath it would read as the
+ * hole still being open. Once setup has run and been checked, the only thing
+ * left to fail is Bob's attempt.
  */
 function knownHole(fixedBy: string) {
   test.fail(true, `Known hole on main, closed by ${fixedBy}`);
@@ -216,8 +221,9 @@ test.describe('the workspace boundary', () => {
     });
 
     test("Bob cannot rename Alice's team", async ({ asAlice, asBob }) => {
-      knownHole(PR_35);
       const team = await createSpareTeam(asAlice);
+      expect((await getTeam(asAlice, team.id)).name).toBe(team.name);
+      knownHole(PR_35);
 
       expectRefused(
         await asBob.post(`/v1/teams/${team.id}`, { data: { name: 'Taken over' } }),
@@ -227,8 +233,9 @@ test.describe('the workspace boundary', () => {
     });
 
     test("Bob cannot delete Alice's team", async ({ asAlice, asBob }) => {
-      knownHole(PR_35);
       const team = await createSpareTeam(asAlice);
+      expect((await getTeam(asAlice, team.id)).id).toBe(team.id);
+      knownHole(PR_35);
 
       expectRefused(await asBob.delete(`/v1/teams/${team.id}`), 'DELETE /v1/teams/:id');
       expect((await getTeam(asAlice, team.id)).id).toBe(team.id);
@@ -236,7 +243,12 @@ test.describe('the workspace boundary', () => {
   });
 
   test.describe('workflow states', () => {
-    test("Bob cannot list Alice's team's states", async ({ asBob, alice }) => {
+    test("Bob cannot list Alice's team's states", async ({
+      asAlice,
+      asBob,
+      alice,
+    }) => {
+      expect((await workflows(asAlice, alice.teamId)).length).toBeGreaterThan(0);
       knownHole(PR_35);
 
       expectRefused(
@@ -246,11 +258,11 @@ test.describe('the workspace boundary', () => {
     });
 
     test("Bob cannot rename one of Alice's states", async ({ asAlice, asBob }) => {
-      knownHole(PR_35);
       // A spare team, because renaming the main team's "Todo" would break
       // every other test that files an issue into it.
       const team = await createSpareTeam(asAlice);
       const todo = await stateNamed(asAlice, team.id, 'Todo');
+      knownHole(PR_35);
 
       expectRefused(
         await asBob.post(`/v1/${team.id}/workflows/${todo.id}`, {
@@ -265,8 +277,9 @@ test.describe('the workspace boundary', () => {
 
   test.describe('labels', () => {
     test("Bob cannot read Alice's label", async ({ asAlice, asBob, alice }) => {
-      knownHole(PR_35);
       const label = await createLabel(asAlice, alice);
+      expect(label.workspaceId).toBe(alice.workspaceId);
+      knownHole(PR_35);
 
       expectRefused(await asBob.get(`/v1/labels/${label.id}`), 'GET /v1/labels/:id');
     });
@@ -276,8 +289,10 @@ test.describe('the workspace boundary', () => {
       asBob,
       alice,
     }) => {
-      knownHole(PR_35);
       const label = await createLabel(asAlice, alice);
+      const listed = await labelsOf(asAlice, alice);
+      expect(listed.find((l) => l.id === label.id)?.name).toBe(label.name);
+      knownHole(PR_35);
 
       expectRefused(
         await asBob.post(`/v1/labels/${label.id}`, { data: { name: 'Taken over' } }),
@@ -294,8 +309,10 @@ test.describe('the workspace boundary', () => {
       asBob,
       alice,
     }) => {
-      knownHole(PR_35);
       const label = await createLabel(asAlice, alice);
+      const own = (await labelsOf(asAlice, alice)).map((l) => l.id);
+      expect(own).toContain(label.id);
+      knownHole(PR_35);
 
       const response = await asBob.get('/v1/labels', {
         params: { workspaceId: alice.workspaceId },
@@ -312,8 +329,10 @@ test.describe('the workspace boundary', () => {
       asBob,
       alice,
     }) => {
-      knownHole(PR_35);
       const name = unique('Planted label');
+      // Alice's listing works, so its answer below means something.
+      expect((await labelsOf(asAlice, alice)).length).toBeGreaterThan(0);
+      knownHole(PR_35);
 
       await asBob.post('/v1/labels', {
         data: { name, color: '#000000', workspaceId: alice.workspaceId },
@@ -353,9 +372,10 @@ test.describe('the workspace boundary', () => {
     });
 
     test("Bob cannot edit or delete Alice's milestone", async ({ asAlice, asBob }) => {
-      knownHole(PR_35);
       const project = await createProject(asAlice);
       const milestone = await createMilestone(asAlice, project.id);
+      expect(milestone.id).toBeTruthy();
+      knownHole(PR_35);
 
       expectRefused(
         await asBob.post(`/v1/projects/milestone/${milestone.id}`, {
@@ -376,8 +396,9 @@ test.describe('the workspace boundary', () => {
       asBob,
       alice,
     }) => {
-      knownHole(VIEWS_OPEN);
       const view = await createView(asAlice, alice);
+      expect((await getView(asAlice, view.id)).name).toBe(view.name);
+      knownHole(VIEWS_OPEN);
 
       expectRefused(await asBob.get(`/v1/views/${view.id}`), 'GET /v1/views/:id');
       expectRefused(

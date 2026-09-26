@@ -54,6 +54,14 @@ export class AgentIdParams {
   agentId: string;
 }
 
+export class ImpersonateBody {
+  @IsString()
+  key: string;
+
+  @IsString()
+  userId: string;
+}
+
 export interface PublicUser {
   id: string;
   username: string;

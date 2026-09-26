@@ -1,7 +1,6 @@
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 
 import {
-  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -991,12 +990,19 @@ export class UsersService {
   }
 
   // Impersonate into accounts for better support
+  /**
+   * An operator signs in as someone else, to see what they see. Off unless
+   * IMPERSONATION_KEY is set, and a wrong key looks the same as no route. It
+   * used to take the database password, so on an install left with the
+   * documented default anyone signed in could become anyone.
+   */
   async impersonate(key: string, userId: string, res: Response, req: Request) {
-    if (key !== process.env.POSTGRES_PASSWORD) {
-      throw new BadRequestException('Wrong URL');
+    const configured = process.env.IMPERSONATION_KEY;
+    if (!configured || !sameSecret(key, configured)) {
+      throw new NotFoundException();
     }
 
-    const user = this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
       },
@@ -1015,4 +1021,10 @@ export class UsersService {
 
     res.send({ status: 200, message: 'impersonate' });
   }
+}
+
+/** Compares two secrets in time that says nothing about where they differ. */
+function sameSecret(given: string, expected: string): boolean {
+  const digest = (value: string) => createHash('sha256').update(value).digest();
+  return timingSafeEqual(digest(given), digest(expected));
 }

@@ -36,6 +36,7 @@ import {
 import {
   AgentIdParams,
   CreateAgentDto,
+  ImpersonateBody,
   UpdateUserBody,
   UserWithInvites,
 } from './users.interface';
@@ -75,7 +76,7 @@ export class UsersController {
   @Post('impersonate')
   @UseGuards(AuthGuard)
   async impersonate(
-    @Body() { key, userId }: { key: string; userId: string },
+    @Body() { key, userId }: ImpersonateBody,
     @Res() res: Response,
     @Req() req: Request,
   ) {

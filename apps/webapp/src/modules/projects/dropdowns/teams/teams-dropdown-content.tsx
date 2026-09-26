@@ -17,6 +17,7 @@ interface TeamsDropdownContentProps {
 
 export function TeamsDropdownContent({
   onChange,
+  onClose,
   multiple = false,
   value,
 }: TeamsDropdownContentProps) {
@@ -45,19 +46,27 @@ export function TeamsDropdownContent({
             id={team.id}
             value={team.name}
             index={index + 1}
-            onSelect={() => {}}
+            // The row picks the team, so Enter on a highlighted row works as a
+            // click does. The checkbox only shows the state: were it to toggle
+            // too, a click on it would reach the row and undo itself.
+            onSelect={() => {
+              if (multiple) {
+                onValueChange(!value.includes(team.id), team.id);
+              } else {
+                onChange && onChange(team.id);
+                onClose();
+              }
+            }}
           >
             <div className="flex gap-2 w-full items-center">
               {multiple && (
                 <Checkbox
-                  id={team.id}
                   checked={value.includes(team.id)}
-                  onCheckedChange={(value: boolean) => {
-                    onValueChange(value, team.id);
-                  }}
+                  tabIndex={-1}
+                  className="pointer-events-none"
                 />
               )}
-              <label className="flex grow items-center" htmlFor={team.id}>
+              <label className="flex grow items-center">
                 <RiTeamLine size={18} className="mr-2" />
                 <span className="grow">{team.name}</span>
               </label>

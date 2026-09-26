@@ -16,8 +16,8 @@ import { IssueStatusDropdownContent } from 'modules/issues/components';
 import { useComputedWorkflows } from 'hooks/workflows/use-team-workflows';
 
 interface IssueStatusProps {
-  value?: string[];
-  onChange?: (newStatus: string[]) => void;
+  value: string[];
+  onChange: (newStatus: string[]) => void;
 }
 
 export function IssueStatusDropdown({ value, onChange }: IssueStatusProps) {

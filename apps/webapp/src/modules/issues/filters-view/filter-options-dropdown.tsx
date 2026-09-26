@@ -18,20 +18,15 @@ const FilterToName = {
 interface FilterOptionsDropdownProps {
   filterType: FilterTypeEnum;
   onChange: (filterType: FilterTypeEnum) => void;
-  // Defines whether the filter value is of array or a string
-  // Like labels is array but assignee is not
-  isArray: boolean;
+  /** The operators this filter offers; see `operatorsFor`. */
+  options: FilterTypeEnum[];
 }
 
 export function FilterOptionsDropdown({
   onChange,
   filterType,
-  isArray,
+  options,
 }: FilterOptionsDropdownProps) {
-  const options = isArray
-    ? [FilterTypeEnum.INCLUDES, FilterTypeEnum.EXCLUDES]
-    : [FilterTypeEnum.IS, FilterTypeEnum.IS_NOT];
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger>

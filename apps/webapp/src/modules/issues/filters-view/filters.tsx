@@ -1,3 +1,5 @@
+import type { FilterValues } from './filter-dropdowns/types';
+
 import { RiCloseLine } from '@remixicon/react';
 import { RiLoader4Line } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
@@ -19,38 +21,19 @@ import { useCurrentWorkspace } from 'hooks/workspace';
 
 import { useAIFilterIssuesMutation } from 'services/issues';
 
-import { FilterTypeEnum } from 'store/application';
+import {
+  FilterTypeEnum,
+  type FilterKey,
+  type ValueFilterKey,
+} from 'store/application';
 import { useContextStore } from 'store/global-context-provider';
 
 import { AppliedFiltersView } from './applied-filters-view';
 import { DefaultFilterDropdown } from './default-filter-dropdown';
-import {
-  IssueAssigneeFilter,
-  IssueStatusFilter,
-  IssueLabelFilter,
-  IssuePriorityFilter,
-  IssueProjectFilter,
-  IssueCycleFilter,
-  IssueProductFilter,
-  IssueModuleFilter,
-  IssueCapabilityFilter,
-} from './filter-dropdowns';
+import { VALUE_FILTER_COMPONENTS } from './filter-components';
+import { defaultOperator, isFlagFilter } from './filter-registry';
 import { isEmpty } from './filter-utils';
 import { useFilterShorcuts } from './use-filter-shortcuts';
-
-const ContentMap = {
-  status: IssueStatusFilter,
-  assignee: IssueAssigneeFilter,
-  label: IssueLabelFilter,
-  priority: IssuePriorityFilter,
-  project: IssueProjectFilter,
-  cycle: IssueCycleFilter,
-  product: IssueProductFilter,
-  module: IssueModuleFilter,
-  capability: IssueCapabilityFilter,
-};
-
-export type KeyType = keyof typeof ContentMap;
 
 interface FiltersProps {
   onClose: () => void;
@@ -67,7 +50,7 @@ export const Filters = observer(({ onClose }: FiltersProps) => {
   } = useContextStore();
   const team = useCurrentTeam();
   const workspace = useCurrentWorkspace();
-  const [filter, setFilter] = React.useState<KeyType>(undefined);
+  const [filter, setFilter] = React.useState<ValueFilterKey>(undefined);
   const [value, setValue] = React.useState('');
   const [timeout, setTimeoutValue] = React.useState(undefined);
   const inputRef = React.useRef(null);
@@ -108,48 +91,43 @@ export const Filters = observer(({ onClose }: FiltersProps) => {
     [filter, showOption],
   );
 
-  const onSelect = (value: string) => {
+  // Sends what was typed, as typed; cmdk hands `onSelect` a lowercased copy.
+  const onAIFilter = () => {
+    clearTimeoutValue();
+    inputRef.current.focus();
+    setLoading(true);
+    aiFilterIssues({
+      teamId: team?.id,
+      workspaceId: workspace.id,
+      text: value,
+    });
+  };
+
+  // A flag filter has nothing to pick, so choosing it applies it.
+  const onSelectFilter = (key: FilterKey) => {
     clearTimeoutValue();
     inputRef.current.focus();
 
-    if (value.includes('ai:')) {
-      setLoading(true);
-      aiFilterIssues({
-        teamId: team?.id,
-        workspaceId: workspace.id,
-        text: value.replace('ai: ', ''),
-      });
-
-      return;
-    }
-
-    const isBooleanFilters = [
-      'isBlocked',
-      'isBlocking',
-      'isParent',
-      'isSubIssue',
-    ];
-
-    if (isBooleanFilters.includes(value)) {
+    if (isFlagFilter(key)) {
       applicationStore.updateFilters({
-        [value]: { filterType: FilterTypeEnum.IS },
+        [key]: { filterType: FilterTypeEnum.IS },
       });
     } else {
-      setFilter(value as KeyType);
-      inputRef.current.focus();
+      setFilter(key);
     }
 
     setValue('');
   };
 
-  const ContentComponent = filter ? ContentMap[filter] : ContentMap.status;
+  const Picker = filter ? VALUE_FILTER_COMPONENTS[filter].Picker : undefined;
 
   const clearTimeoutValue = () => {
     clearTimeout(timeout);
     setTimeoutValue(undefined);
   };
 
-  const onChange = (value: string[] | number[], filterType: FilterTypeEnum) => {
+  // Picking more values keeps the operator already chosen; "is not" stays "is not".
+  const onChange = (value: FilterValues) => {
     clearTimeoutValue();
     inputRef.current.focus();
 
@@ -157,7 +135,12 @@ export const Filters = observer(({ onClose }: FiltersProps) => {
       return applicationStore.deleteFilter(filter);
     }
 
-    applicationStore.updateFilters({ [filter]: { filterType, value } });
+    applicationStore.updateFilters({
+      [filter]: {
+        filterType: filters[filter]?.filterType ?? defaultOperator(filter),
+        value,
+      },
+    });
   };
 
   return (
@@ -207,8 +190,9 @@ export const Filters = observer(({ onClose }: FiltersProps) => {
 
             {showOption && (
               <CommandList className="absolute rounded-md shadow-1 border-[#ffffff38] min-w-[250px] top-8 z-10 bg-popover">
-                {filter ? (
-                  <ContentComponent
+                {Picker ? (
+                  <Picker
+                    value={filters[filter]?.value ?? []}
                     onClose={() => {
                       setShowOptions(false);
                       setFilter(undefined);
@@ -216,7 +200,7 @@ export const Filters = observer(({ onClose }: FiltersProps) => {
                     onChange={onChange}
                   />
                 ) : (
-                  <DefaultFilterDropdown onSelect={onSelect} />
+                  <DefaultFilterDropdown onSelect={onSelectFilter} />
                 )}
                 {value && aiEnabled && (
                   <CommandGroup>
@@ -224,7 +208,7 @@ export const Filters = observer(({ onClose }: FiltersProps) => {
                       key="AI"
                       value={`AI: ${value}`}
                       className="flex items-center gap-1"
-                      onSelect={onSelect}
+                      onSelect={onAIFilter}
                     >
                       <AI size={16} />
 

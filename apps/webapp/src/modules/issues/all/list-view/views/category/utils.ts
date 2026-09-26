@@ -1,11 +1,12 @@
 import { WorkflowCategoryEnum } from '@vantikhq/types';
 
 import { workflowSort } from 'common/sorting';
-import { ViewEnum, type IssueType, type WorkflowType } from 'common/types';
+import { type IssueType, type WorkflowType } from 'common/types';
 
 import { useComputedWorkflows } from 'hooks/workflows';
 
 import { TimeBasedFilterEnum } from 'store/application';
+import { ViewEnum } from 'store/application';
 import { useContextStore } from 'store/global-context-provider';
 
 import { getIssueRows } from '../../list-view-utils';

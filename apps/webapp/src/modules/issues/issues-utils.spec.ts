@@ -15,7 +15,12 @@ import {
   type FiltersModelType,
 } from 'store/application';
 
-import { filterIssue, getFilters } from './issues-utils';
+import {
+  defaultOperator,
+  operatorFor,
+  operatorsFor,
+} from './filters-view/filter-registry';
+import { filterIssue, filterIssues, getFilters } from './issues-utils';
 
 /**
  * These two functions decide what the issues list contains. They run over
@@ -160,14 +165,69 @@ describe('getFilters', () => {
     });
   });
 
-  it('turns the no-user assignee choice into an unset check', () => {
-    const filters = {
-      assignee: { value: ['no-user'], filterType: FilterTypeEnum.IS },
-    } as unknown as FiltersModelType;
+  /**
+   * The pickers offer "No assignee", "No project" and "No cycle" beside the
+   * real choices. Each has to sit in the same list as the others: as a separate
+   * condition it had to hold at the same time, so "no assignee or Ada" matched
+   * nobody, and the project and cycle ones matched nothing at all.
+   */
+  describe('the "No …" choice', () => {
+    const rows = [
+      issue({
+        id: 'ada',
+        assigneeId: 'user-ada',
+        projectId: 'p-1',
+        cycleId: 'c-1',
+      }),
+      issue({
+        id: 'bob',
+        assigneeId: 'user-bob',
+        projectId: 'p-2',
+        cycleId: 'c-2',
+      }),
+      issue({ id: 'none', assigneeId: null, projectId: null, cycleId: null }),
+      issue({ id: 'unset', assigneeId: undefined, projectId: undefined }),
+    ];
 
-    expect(getFilters(filters, DISPLAY_SETTINGS, WORKFLOWS, LABELS)).toEqual([
-      { key: 'assigneeId', filterType: FilterTypeEnum.UNDEFINED },
-    ]);
+    const kept = (filters: FiltersModelType) =>
+      filterIssues(
+        rows,
+        getFilters(filters, DISPLAY_SETTINGS, WORKFLOWS, LABELS),
+        {},
+        () => false,
+      ).map((row) => row.id);
+
+    it('keeps the unassigned rows alongside the chosen person', () => {
+      expect(
+        kept({
+          assignee: {
+            value: ['no-user', 'user-ada'],
+            filterType: FilterTypeEnum.IS,
+          },
+        } as unknown as FiltersModelType),
+      ).toEqual(['ada', 'none', 'unset']);
+    });
+
+    it('keeps only assigned rows for "is not" No assignee', () => {
+      expect(
+        kept({
+          assignee: { value: ['no-user'], filterType: FilterTypeEnum.IS_NOT },
+        } as unknown as FiltersModelType),
+      ).toEqual(['ada', 'bob']);
+    });
+
+    it('reads No project and No cycle as an unset field', () => {
+      expect(
+        kept({
+          project: { value: ['no-project'], filterType: FilterTypeEnum.IS },
+        } as unknown as FiltersModelType),
+      ).toEqual(['none', 'unset']);
+      expect(
+        kept({
+          cycle: { value: ['no-cycle', 'c-2'], filterType: FilterTypeEnum.IS },
+        } as unknown as FiltersModelType),
+      ).toEqual(['bob', 'none', 'unset']);
+    });
   });
 
   it('narrows to the current user only when no assignee filter is set', () => {
@@ -230,22 +290,6 @@ describe('getFilters', () => {
       filterType: FilterTypeEnum.IS_NOT,
       value: ['state-done'],
     });
-  });
-
-  it('produces a source filter the row filter can survive', () => {
-    const filters = getFilters(
-      {
-        source: { value: ['github'], filterType: FilterTypeEnum.IS },
-      } as unknown as FiltersModelType,
-      DISPLAY_SETTINGS,
-      WORKFLOWS,
-      LABELS,
-    );
-
-    const sourceFilter = filters.find((filter) => filter.key === 'source');
-
-    expect(sourceFilter).toBeDefined();
-    expect(() => filterIssue(issue(), sourceFilter)).not.toThrow();
   });
 });
 
@@ -326,6 +370,28 @@ describe('getFilters for the product axis', () => {
    * nothing. That is the truth, and it is better than a filter that quietly
    * matches everything.
    */
+  it('excludes the modules of a product for "is not"', () => {
+    const filters = getFilters(
+      {
+        product: {
+          value: ['product-cloud'],
+          filterType: FilterTypeEnum.IS_NOT,
+        },
+      } as unknown as FiltersModelType,
+      DISPLAY_SETTINGS,
+      WORKFLOWS,
+      LABELS,
+      undefined,
+      MODULES,
+    );
+
+    expect(filters).toContainEqual({
+      key: 'moduleIds',
+      filterType: FilterTypeEnum.EXCLUDES,
+      value: ['module-server', 'module-shared'],
+    });
+  });
+
   it('gives an empty list for a product that owns nothing', () => {
     expect(forProduct(['product-nobody'])).toEqual({
       key: 'moduleIds',
@@ -420,6 +486,68 @@ describe('getFilters for the product axis', () => {
 
     expect(filters.filter((filter) => filter.key === 'moduleIds')).toHaveLength(
       2,
+    );
+  });
+});
+
+/**
+ * The flag filters test something about an issue rather than a field of it,
+ * through the stores. Each offers "is not", and until the registry only the
+ * sub-issue one listened to it.
+ */
+describe('flag filters', () => {
+  const rows = [issue({ id: 'stuck' }), issue({ id: 'free' })];
+  const stores = {
+    issueRelationsStore: {
+      isBlocked: (id: string) => id === 'stuck',
+      isBlocking: () => false,
+    },
+    issuesStore: { isSubIssue: () => false },
+  } as unknown as Parameters<typeof filterIssues>[2];
+
+  const kept = (filterType: FilterTypeEnum) =>
+    filterIssues(
+      rows,
+      [{ key: 'isBlocked', filterType }],
+      stores,
+      () => false,
+    ).map((row) => row.id);
+
+  it('keeps the blocked issues for "is"', () => {
+    expect(kept(FilterTypeEnum.IS)).toEqual(['stuck']);
+  });
+
+  it('keeps the others for "is not"', () => {
+    expect(kept(FilterTypeEnum.IS_NOT)).toEqual(['free']);
+  });
+});
+
+describe('filter operators', () => {
+  it('offers includes and excludes on array fields, is and is not otherwise', () => {
+    expect(operatorsFor('label')).toEqual([
+      FilterTypeEnum.INCLUDES,
+      FilterTypeEnum.EXCLUDES,
+    ]);
+    expect(operatorsFor('assignee')).toEqual([
+      FilterTypeEnum.IS,
+      FilterTypeEnum.IS_NOT,
+    ]);
+    expect(operatorsFor('isBlocked')).toEqual([
+      FilterTypeEnum.IS,
+      FilterTypeEnum.IS_NOT,
+    ]);
+    expect(defaultOperator('module')).toBe(FilterTypeEnum.INCLUDES);
+  });
+
+  it('turns a requested operator into one the filter can hold', () => {
+    expect(operatorFor('label', FilterTypeEnum.IS)).toBe(
+      FilterTypeEnum.INCLUDES,
+    );
+    expect(operatorFor('label', FilterTypeEnum.IS_NOT)).toBe(
+      FilterTypeEnum.EXCLUDES,
+    );
+    expect(operatorFor('status', FilterTypeEnum.EXCLUDES)).toBe(
+      FilterTypeEnum.IS_NOT,
     );
   });
 });

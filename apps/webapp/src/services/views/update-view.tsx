@@ -1,6 +1,8 @@
-import type { ViewType, FiltersModelType } from 'common/types';
+import type { ViewType } from 'common/types';
 
 import { ajaxPost, mutationHook } from 'services/utils';
+
+import type { FiltersModelType } from 'store/application';
 
 export interface UpdateViewParams {
   name?: string;

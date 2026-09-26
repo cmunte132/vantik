@@ -278,3 +278,25 @@ export async function assertCyclesVisible(
     throw new NotFoundException({ message: `Cycle ${missing} not found` });
   }
 }
+
+/** This function proves that each workflow state sits in a visible team. */
+export async function assertWorkflowsVisible(
+  prisma: PrismaService,
+  workflowIds: string[],
+  teamIds: string[],
+): Promise<void> {
+  if (workflowIds.length === 0) {
+    return;
+  }
+
+  const visible = await prisma.workflow.findMany({
+    where: { id: { in: workflowIds }, teamId: { in: teamIds } },
+    select: { id: true },
+  });
+  const found = new Set(visible.map((workflow) => workflow.id));
+  const missing = workflowIds.find((id) => !found.has(id));
+
+  if (missing) {
+    throw new NotFoundException({ message: `Workflow ${missing} not found` });
+  }
+}

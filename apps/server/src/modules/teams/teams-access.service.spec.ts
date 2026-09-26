@@ -148,3 +148,89 @@ describe('TeamsService read boundary', () => {
     ).rejects.toThrow(NotFoundException);
   });
 });
+
+/**
+ * The write routes on the team object. Update, preferences and delete sat on
+ * AuthGuard alone and took the team id on trust, so a signed-in caller could
+ * rename or delete a team in any workspace. They now make the read check.
+ */
+describe('TeamsService write boundary', () => {
+  function buildWritable(role: 'ADMIN' | 'USER', teamIds: string[]) {
+    const built = buildService(role, teamIds);
+    const prisma = built.prisma as unknown as {
+      team: Record<string, jest.Mock>;
+      issue: Record<string, jest.Mock>;
+    };
+    prisma.team.update = jest.fn().mockResolvedValue({ id: MY_TEAM });
+    prisma.team.findUniqueOrThrow = jest
+      .fn()
+      .mockResolvedValue({ id: MY_TEAM, preferences: {} });
+    prisma.issue = { findMany: jest.fn().mockResolvedValue([]) };
+
+    return { ...built, prisma };
+  }
+
+  it('refuses to update a team the caller cannot read', async () => {
+    const { service, prisma } = buildWritable('USER', [MY_TEAM]);
+
+    await expect(
+      service.updateTeam(
+        { teamId: OTHER_TEAM },
+        { name: 'Renamed' },
+        'user-1',
+        WORKSPACE,
+      ),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to change the preferences of a team the caller cannot read', async () => {
+    const { service, prisma } = buildWritable('USER', [MY_TEAM]);
+
+    await expect(
+      service.updateTeamPreferences(
+        { teamId: OTHER_TEAM },
+        {},
+        'user-1',
+        WORKSPACE,
+      ),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to delete a team the caller cannot read', async () => {
+    const { service, prisma } = buildWritable('USER', [MY_TEAM]);
+
+    await expect(
+      service.deleteTeam({ teamId: OTHER_TEAM }, 'user-1', WORKSPACE),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('lets an admin update a team they are not in', async () => {
+    const { service } = buildWritable('ADMIN', []);
+
+    await expect(
+      service.updateTeam(
+        { teamId: OTHER_TEAM },
+        { name: 'Renamed' },
+        'admin-1',
+        WORKSPACE,
+      ),
+    ).resolves.toBeTruthy();
+  });
+
+  it('writes only the declared fields, whatever else the body carries', async () => {
+    // The global ValidationPipe keeps undeclared keys, so a spread body could
+    // carry a workspaceId and move the team into another workspace.
+    const { service, prisma } = buildWritable('USER', [MY_TEAM]);
+    const body = { name: 'Renamed', workspaceId: 'ws-elsewhere' };
+
+    await service.updateTeam({ teamId: MY_TEAM }, body, 'user-1', WORKSPACE);
+
+    expect(prisma.team.update).toHaveBeenCalledWith({
+      data: { name: 'Renamed', identifier: undefined, icon: undefined },
+      where: { id: MY_TEAM },
+    });
+  });
+});

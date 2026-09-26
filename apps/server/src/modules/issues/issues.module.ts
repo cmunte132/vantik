@@ -2,7 +2,6 @@ import { HttpModule } from '@nestjs/axios';
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 import { IssueHistory } from '@vantikhq/types';
-import { PrismaModule, PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
 import { IssueHistoryModule } from 'modules/issue-history/issue-history.module';
@@ -23,7 +22,6 @@ import IssuesService from './issues.service';
 
 @Module({
   imports: [
-    PrismaModule,
     HttpModule,
     IssueHistoryModule,
     LinkedIssueModule,
@@ -37,7 +35,6 @@ import IssuesService from './issues.service';
   controllers: [IssuesController, IssuesAIController],
   providers: [
     IssuesService,
-    PrismaService,
     IssueHistory,
     IssuesQueue,
     IssuesProcessor,

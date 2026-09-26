@@ -1,6 +1,5 @@
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
-import { PrismaModule, PrismaService } from 'nestjs-prisma';
 
 import { UsersService } from 'modules/users/users.service';
 import { VectorModule } from 'modules/vector/vector.module';
@@ -17,11 +16,7 @@ import { PagesProcessor, PagesScheduler } from './pages.processor';
 import PagesService from './pages.service';
 
 @Module({
-  imports: [
-    PrismaModule,
-    VectorModule,
-    BullModule.registerQueue({ name: PAGES_QUEUE }),
-  ],
+  imports: [VectorModule, BullModule.registerQueue({ name: PAGES_QUEUE })],
   controllers: [PagesController, PageEntriesController, KnowledgeController],
   providers: [
     PagesService,
@@ -31,9 +26,13 @@ import PagesService from './pages.service';
     KnowledgeIndexService,
     PagesScheduler,
     PagesProcessor,
-    PrismaService,
     UsersService,
   ],
-  exports: [PagesService, PageEntriesService, PageLinksService, KnowledgeService],
+  exports: [
+    PagesService,
+    PageEntriesService,
+    PageLinksService,
+    KnowledgeService,
+  ],
 })
 export class PagesModule {}

@@ -39,8 +39,7 @@ export default class TeamsService {
     userId: string,
     workspaceId: string,
   ): Promise<Team> {
-    const readable = await readableTeamIds(this.prisma, userId, workspaceId);
-    await assertTeamsVisible([TeamRequestParams.teamId], readable);
+    await this.assertReadable(TeamRequestParams.teamId, userId, workspaceId);
 
     return await this.prisma.team.findUnique({
       where: {
@@ -172,13 +171,28 @@ export default class TeamsService {
     return team;
   }
 
+  /**
+   * Update, preferences and delete took the team id on trust behind AuthGuard
+   * alone, so any signed-in caller could rename, reconfigure or delete a team
+   * in any workspace. They now make the same check `getTeam` does.
+   *
+   * The fields are copied one by one because the global ValidationPipe keeps
+   * keys the DTO does not declare, and a `workspaceId` in the body would have
+   * moved the team into another workspace.
+   */
   async updateTeam(
     teamRequestParams: TeamRequestParams,
     teamData: UpdateTeamDto,
+    userId: string,
+    workspaceId: string,
   ): Promise<Team> {
+    await this.assertReadable(teamRequestParams.teamId, userId, workspaceId);
+
     return await this.prisma.team.update({
       data: {
-        ...teamData,
+        name: teamData.name,
+        identifier: teamData.identifier,
+        icon: teamData.icon,
       },
       where: {
         id: teamRequestParams.teamId,
@@ -189,7 +203,11 @@ export default class TeamsService {
   async updateTeamPreferences(
     teamRequestParams: TeamRequestParams,
     preferencesDto: UpdateTeamPreferencesDto,
+    userId: string,
+    workspaceId: string,
   ): Promise<Team> {
+    await this.assertReadable(teamRequestParams.teamId, userId, workspaceId);
+
     const team = await this.prisma.team.findUniqueOrThrow({
       where: {
         id: teamRequestParams.teamId,
@@ -212,7 +230,13 @@ export default class TeamsService {
     });
   }
 
-  async deleteTeam(teamRequestParams: TeamRequestParams): Promise<Team> {
+  async deleteTeam(
+    teamRequestParams: TeamRequestParams,
+    userId: string,
+    workspaceId: string,
+  ): Promise<Team> {
+    await this.assertReadable(teamRequestParams.teamId, userId, workspaceId);
+
     const teamIssues = await this.prisma.issue.findMany({
       where: {
         teamId: teamRequestParams.teamId,
@@ -318,8 +342,7 @@ export default class TeamsService {
     userId: string,
     workspaceId: string,
   ): Promise<UsersOnWorkspaces[]> {
-    const readable = await readableTeamIds(this.prisma, userId, workspaceId);
-    await assertTeamsVisible([teamRequestParams.teamId], readable);
+    await this.assertReadable(teamRequestParams.teamId, userId, workspaceId);
 
     return await this.prisma.usersOnWorkspaces.findMany({
       where: { workspaceId, teamIds: { has: teamRequestParams.teamId } },
@@ -378,5 +401,19 @@ export default class TeamsService {
     await this.syncGateway.refreshTeamRooms(teamMemberData.userId, workspaceId);
 
     return membership;
+  }
+
+  /**
+   * Proves the caller may act on this team's own record: it is in their
+   * workspace, and they are in the team or administer the workspace. See
+   * `readableTeamIds` for why the role widens this and nothing else.
+   */
+  private async assertReadable(
+    teamId: string,
+    userId: string,
+    workspaceId: string,
+  ): Promise<void> {
+    const readable = await readableTeamIds(this.prisma, userId, workspaceId);
+    await assertTeamsVisible([teamId], readable);
   }
 }

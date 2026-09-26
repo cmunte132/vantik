@@ -1,11 +1,9 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from 'nestjs-prisma';
 import { Client as TypesenseClient } from 'typesense';
 
 import { VectorService } from './vector.service';
 
 @Module({
-  imports: [PrismaModule],
   providers: [
     VectorService,
     {

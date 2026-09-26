@@ -118,10 +118,14 @@ export class TeamsController {
     @Param()
     teamRequestParams: TeamRequestParams,
     @Body() updateTeamPreferences: UpdateTeamPreferencesDto,
+    @UserId() userId: string,
+    @Workspace() workspaceId: string,
   ): Promise<Team> {
     return await this.teamsService.updateTeamPreferences(
       teamRequestParams,
       updateTeamPreferences,
+      userId,
+      workspaceId,
     );
   }
 
@@ -131,8 +135,15 @@ export class TeamsController {
     @Param()
     teamRequestParams: TeamRequestParams,
     @Body() teamData: UpdateTeamDto,
+    @UserId() userId: string,
+    @Workspace() workspaceId: string,
   ): Promise<Team> {
-    return await this.teamsService.updateTeam(teamRequestParams, teamData);
+    return await this.teamsService.updateTeam(
+      teamRequestParams,
+      teamData,
+      userId,
+      workspaceId,
+    );
   }
 
   @Delete(':teamId')
@@ -140,8 +151,14 @@ export class TeamsController {
   async deleteTeam(
     @Param()
     teamRequestParams: TeamRequestParams,
+    @UserId() userId: string,
+    @Workspace() workspaceId: string,
   ): Promise<Team> {
-    return await this.teamsService.deleteTeam(teamRequestParams);
+    return await this.teamsService.deleteTeam(
+      teamRequestParams,
+      userId,
+      workspaceId,
+    );
   }
 
   @Get(':teamId/members')

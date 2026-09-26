@@ -100,7 +100,11 @@ function build(options: {
       attempt: 1,
       workspaceId: WORKSPACE,
     })),
-    cancelRun: jest.fn(async (): Promise<void> => undefined),
+    cancelRun: jest.fn(async (runId: string) => ({
+      id: runId,
+      executor: options.executors?.[0]?.key ?? 'hosted',
+      status: 'CANCELED',
+    })),
     retryRun: jest.fn(async (runId: string) => ({
       id: `${runId}-next`,
       executor: options.executors?.[0]?.key ?? 'hosted',
@@ -494,6 +498,56 @@ describe('AgentDelegationService retry', () => {
 
     expect(elsewhere.dispatch).toHaveBeenCalled();
     expect(hosted.dispatch).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Moving the row is not stopping the work. Left to the lease renewal, a
+ * cancelled sandbox runs on for up to a third of a lease before it notices.
+ */
+describe('AgentDelegationService cancel', () => {
+  it('stops the executor as well as the row', async () => {
+    const executor = fakeExecutor('hosted');
+    const { service } = build({ executors: [executor] });
+
+    const run = await service.cancel('run-1', { workspaceId: WORKSPACE });
+
+    expect(run).toMatchObject({ id: 'run-1', status: 'CANCELED' });
+    expect(executor.cancel).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'run-1' }),
+    );
+  });
+
+  it('keeps the cancel when the executor cannot stop the run', async () => {
+    // The row is already CANCELED. A sandbox that is already gone must not
+    // turn the cancel the person asked for into an error.
+    const { service } = build({
+      executors: [
+        fakeExecutor('hosted', {
+          cancel: async () => {
+            throw new Error('sandbox already disposed');
+          },
+        }),
+      ],
+    });
+
+    await expect(
+      service.cancel('run-1', { workspaceId: WORKSPACE }),
+    ).resolves.toMatchObject({ status: 'CANCELED' });
+  });
+
+  it('stops queued work when the issue goes back to a human', async () => {
+    const executor = fakeExecutor('hosted');
+    const { service } = build({
+      executors: [executor],
+      queuedRuns: [{ id: 'run-queued', workspaceId: WORKSPACE }],
+    });
+
+    await service.onAssigneeChanged(ISSUE, WORKSPACE, AGENT, null, 'user-1');
+
+    expect(executor.cancel).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'run-queued' }),
+    );
   });
 });
 

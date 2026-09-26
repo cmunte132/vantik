@@ -53,7 +53,7 @@ export class ProjectsController {
   }
 
   @Post('milestone/:projectMilestoneId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateProjectMilestone(
     @Param() projectMilestoneParams: ProjectMilestoneRequestParamsDto,
     @Body() projectData: UpdateProjectMilestoneDto,
@@ -91,7 +91,7 @@ export class ProjectsController {
   }
 
   @Delete('milestone/:projectMilestoneId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async deleteProjectMilestone(
     @Param() projectMilestoneParams: ProjectMilestoneRequestParamsDto,
   ) {

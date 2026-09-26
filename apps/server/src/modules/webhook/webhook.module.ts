@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule, PrismaService } from 'nestjs-prisma';
 
 import { ActionEventModule } from 'modules/action-event/action-event.module';
 import { IntegrationsModule } from 'modules/integrations/integrations.module';
@@ -19,7 +18,6 @@ import WebhookService from './webhook.service';
   // than imported, and commenting notifies.
   // ActionEventModule for the actions queue a source webhook dispatches onto.
   imports: [
-    PrismaModule,
     IntegrationsModule,
     IssuesModule,
     ModulesModule,
@@ -27,12 +25,7 @@ import WebhookService from './webhook.service';
     ActionEventModule,
   ],
   controllers: [WebhookController],
-  providers: [
-    PrismaService,
-    WebhookService,
-    IssueCommentsService,
-    LinkedIssueService,
-  ],
+  providers: [WebhookService, IssueCommentsService, LinkedIssueService],
   exports: [],
 })
 export class WebhookModule {}

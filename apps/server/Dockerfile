@@ -30,14 +30,14 @@ COPY tooling/typescript-config/package.json tooling/typescript-config/
 ## The cache mount keeps the pnpm store across builds; without it every package
 ## came off the network on each run (`reused 0`), twice per image.
 FROM manifests AS dev-deps
-ENV NODE_ENV development
+ENV NODE_ENV=development
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm install --ignore-scripts --frozen-lockfile \
       --store-dir=/pnpm/store --filter=server...
 
 ## Production deps — what actually ships in the runner.
 FROM manifests AS production-deps
-ENV NODE_ENV production
+ENV NODE_ENV=production
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm install --prod --frozen-lockfile \
       --store-dir=/pnpm/store --filter=server...
@@ -59,7 +59,7 @@ RUN --mount=type=cache,id=turbo,target=/app/.turbo,sharing=locked \
 FROM node:24-alpine AS runner
 RUN apk add --no-cache openssl dumb-init bash
 WORKDIR /app
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 COPY --from=production-deps --chown=node:node /app .
 COPY --from=builder --chown=node:node /app/apps/server/node_modules ./apps/server/node_modules

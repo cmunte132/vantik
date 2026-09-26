@@ -21,15 +21,24 @@ export function Invites() {
   const { mutate: inviteAction, isPending: isLoading } =
     useInviteActionMutation({
       onSuccess: (data: Invite) => {
-        if (data.status === 'ACCEPTED') {
-          toast({
-            title: 'Invitation accepted',
-            description:
-              'Current invitation for the workspace has been accepted',
-          });
+        toast(
+          data.status === 'ACCEPTED'
+            ? {
+                title: 'Invitation accepted',
+                description:
+                  'Current invitation for the workspace has been accepted',
+              }
+            : {
+                title: 'Invitation declined',
+                description: 'You will not join that workspace',
+              },
+        );
 
-          window.location.reload();
-        }
+        // Either way the session was reissued and the invites have changed,
+        // so start again from what the server now holds. This once reloaded
+        // only on an accept, which a decline also reported until the server
+        // recorded declines; since then Decline changed nothing on screen.
+        window.location.reload();
       },
     });
 

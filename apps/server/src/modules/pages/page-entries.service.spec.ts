@@ -1245,3 +1245,21 @@ describe("an entry's kind", () => {
     expect(data).toEqual({ kind: 'GOTCHA' });
   });
 });
+
+describe('entries about modules', () => {
+  it('[KG-1.6] lists the entries resolved to any of the modules asked for, in the workspace', async () => {
+    const { service, prisma } = buildService();
+
+    await service.getEntries('workspace-1', {
+      status: [PageEntryStatusEnum.STANDING],
+      moduleIds: ['server', 'webapp'],
+    });
+
+    const { where } = (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0];
+    expect(where).toMatchObject({
+      page: { workspaceId: 'workspace-1', deleted: null },
+      status: { in: [PageEntryStatusEnum.STANDING] },
+      moduleIds: { hasSome: ['server', 'webapp'] },
+    });
+  });
+});

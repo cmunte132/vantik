@@ -16,6 +16,7 @@ import {
   PageEntryRequestParamsDto,
   UpdatePageEntryDto,
   parseEntryStatuses,
+  parseIdList,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -57,6 +58,9 @@ export class PageEntriesController {
       // reaches the handler as a bare string however the DTO validated it —
       // and a string would reach Prisma as `status: { in: 'STANDING' }`.
       status: parseEntryStatuses(query.status),
+      // The same caveat: `?moduleIds=a` arrives as a string whatever the DTO
+      // made of it, so it is split here too.
+      moduleIds: parseIdList(query.moduleIds),
     });
   }
 

@@ -28,6 +28,8 @@ import {
 
 import { useContextStore } from 'store/global-context-provider';
 
+import { linkRoute } from './link-route';
+
 /**
  * What this page is about, in the workspace's own terms.
  *
@@ -53,31 +55,10 @@ export const RelatedLinks = observer(({ pageId }: { pageId: string }) => {
 
   const { mutate: remove } = useDeletePageLinkMutation({ onSuccess: refresh });
 
-  // Pages and projects are addressed by id; issues and teams are not. The issue
-  // route parses its parameter as "ENG-42" — identifier before the dash, number
-  // after — so a uuid resolves to no team and a NaN number, and the reader
-  // lands on a blank page rather than the issue they clicked.
   const open = (link: PageLink) => {
-    if (link.entityType === 'PAGE') {
-      router.push({
-        pathname: '/[workspaceSlug]/pages/[pageId]',
-        query: { workspaceSlug, pageId: link.entityId },
-      });
-    } else if (link.entityType === 'PROJECT') {
-      router.push({
-        pathname: '/[workspaceSlug]/projects/[projectId]',
-        query: { workspaceSlug, projectId: link.entityId },
-      });
-    } else if (link.entityType === 'ISSUE' && link.key) {
-      router.push({
-        pathname: '/[workspaceSlug]/issue/[issueId]',
-        query: { workspaceSlug, issueId: link.key },
-      });
-    } else if (link.entityType === 'TEAM' && link.key) {
-      router.push({
-        pathname: '/[workspaceSlug]/team/[teamIdentifier]/all',
-        query: { workspaceSlug, teamIdentifier: link.key },
-      });
+    const route = linkRoute(link, String(workspaceSlug));
+    if (route) {
+      router.push(route);
     }
   };
 
@@ -90,9 +71,9 @@ export const RelatedLinks = observer(({ pageId }: { pageId: string }) => {
 
       {(!links || links.length === 0) && (
         <p className="text-muted-foreground">
-          Nothing yet. Linking this page to the team, project or issue it is
-          about is how the next person — or the next agent — finds it from the
-          work rather than by searching for it.
+          Nothing yet. Linking this page to the team, project, issue, product,
+          module or capability it is about is how the next person — or the next
+          agent — finds it from the work rather than by searching for it.
         </p>
       )}
 
@@ -135,13 +116,16 @@ const KIND_LABEL: Record<PageLinkType, string> = {
   PROJECT: 'Project',
   ISSUE: 'Issue',
   PAGE: 'Page',
+  PRODUCT: 'Product',
+  MODULE: 'Module',
+  CAPABILITY: 'Capability',
 };
 
 /**
  * Adding a link.
  *
- * Teams, projects and pages come from the synced stores, so the list is
- * immediate and searchable without a round trip. Issues are deliberately absent
+ * Teams, projects, pages and the product graph come from the synced stores, so
+ * the list is immediate and searchable without a round trip. Issues are deliberately absent
  * here: a workspace has thousands, and an unbounded picker is a worse way to
  * link an issue than the issue's own page will be — while an agent, which is
  * what mostly links issues, already has the id in hand.
@@ -149,7 +133,14 @@ const KIND_LABEL: Record<PageLinkType, string> = {
 const AddLink = observer(
   ({ pageId, onAdded }: { pageId: string; onAdded: () => void }) => {
     const [open, setOpen] = React.useState(false);
-    const { teamsStore, projectsStore, pagesStore } = useContextStore();
+    const {
+      teamsStore,
+      projectsStore,
+      pagesStore,
+      productsStore,
+      modulesStore,
+      capabilitiesStore,
+    } = useContextStore();
 
     const { mutate: create } = useCreatePageLinkMutation({
       onSuccess: () => {
@@ -171,7 +162,7 @@ const AddLink = observer(
         </PopoverTrigger>
         <PopoverContent align="end" className="w-[320px] p-0">
           <Command>
-            <CommandInput placeholder="Find a team, project or page…" />
+            <CommandInput placeholder="Find a team, project, page, product, module or capability…" />
             <CommandList>
               <CommandEmpty>Nothing matches.</CommandEmpty>
 
@@ -202,6 +193,32 @@ const AddLink = observer(
                   ),
                 )}
               </CommandGroup>
+
+              {(
+                [
+                  ['Products', 'PRODUCT', productsStore.getProducts],
+                  ['Modules', 'MODULE', modulesStore.getModules],
+                  [
+                    'Capabilities',
+                    'CAPABILITY',
+                    capabilitiesStore.getCapabilities,
+                  ],
+                ] as Array<
+                  [string, PageLinkType, Array<{ id: string; name: string }>]
+                >
+              ).map(([heading, entityType, targets]) => (
+                <CommandGroup key={entityType} heading={heading}>
+                  {targets.map((target) => (
+                    <CommandItem
+                      key={target.id}
+                      value={`${entityType.toLowerCase()} ${target.name}`}
+                      onSelect={() => add(entityType, target.id)}
+                    >
+                      {target.name}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ))}
 
               <CommandGroup heading="Pages">
                 {pagesStore.getPages

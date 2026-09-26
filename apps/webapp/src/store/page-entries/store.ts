@@ -27,7 +27,14 @@ export const PageEntriesStore: IAnyStateTreeNode = types
       const indexToUpdate = entries.findIndex((obj) => obj.id === id);
 
       if (indexToUpdate !== -1) {
-        entries[indexToUpdate] = { ...entries[indexToUpdate], ...entry };
+        // A plain array for `moduleIds` is what MST snapshots take; the typed
+        // node it becomes is not something a spread can produce. The same cast
+        // the capability store makes for its own `moduleIds`.
+        entries[indexToUpdate] = {
+          ...entries[indexToUpdate],
+          ...entry,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any;
       } else {
         entries.push(entry);
       }

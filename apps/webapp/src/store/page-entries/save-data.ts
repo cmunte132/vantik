@@ -17,6 +17,8 @@ export async function savePageEntryData(
 
         content: record.data.content,
         scope: record.data.scope,
+        moduleIds: record.data.moduleIds ?? [],
+        kind: record.data.kind,
         status: record.data.status,
 
         sourceUserId: record.data.sourceUserId,

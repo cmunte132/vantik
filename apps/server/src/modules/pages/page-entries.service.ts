@@ -50,7 +50,12 @@ export default class PageEntriesService {
 
   async getEntries(
     workspaceId: string,
-    filters: { pageId?: string; status?: PageEntryStatusEnum[] } = {},
+    filters: {
+      pageId?: string;
+      status?: PageEntryStatusEnum[];
+      /** Entries resolved to any of these modules. */
+      moduleIds?: string[];
+    } = {},
   ): Promise<PageEntry[]> {
     return this.prisma.pageEntry.findMany({
       where: {
@@ -58,6 +63,9 @@ export default class PageEntriesService {
         page: { workspaceId, deleted: null },
         ...(filters.pageId ? { pageId: filters.pageId } : {}),
         ...(filters.status?.length ? { status: { in: filters.status } } : {}),
+        ...(filters.moduleIds?.length
+          ? { moduleIds: { hasSome: filters.moduleIds } }
+          : {}),
       },
       orderBy: { createdAt: 'desc' },
     }) as unknown as Promise<PageEntry[]>;

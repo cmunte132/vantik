@@ -6,13 +6,15 @@ mail server. These tests mock nothing. They find the problems that only a
 running stack shows: a server that does not start, a route that serves another
 workspace's records, a feature that works in the code and not in the image.
 
-The runner is [Playwright](https://playwright.dev). Today the suite has two
+The runner is [Playwright](https://playwright.dev). The suite has four
 projects:
 
 | Project | What it does |
 | --- | --- |
 | `setup` | Waits for the stack. Then it provisions three people and saves their credentials in `.auth/accounts.json`. |
 | `api` | Calls the HTTP API, the sync API and the MCP endpoint directly, as any of the three. |
+| `browser-setup` | Signs Alice in to the webapp through its sign-in page, with the code from the email, and saves the browser session in `.auth/alice.browser.json`. |
+| `browser` | Drives the webapp in Chromium as Alice, and checks what reached the server through the API. |
 
 The three people:
 
@@ -25,8 +27,7 @@ The three people:
 Bob is the outsider for the workspace boundary. Carol is the insider for the
 team boundary: she is in Alice's workspace, but not in Alice's team.
 
-A `browser` project will use the same accounts to sign in to the webapp. See
-[Next: browser tests](#next-browser-tests).
+The browser tests sign in as Alice too. See [Browser tests](#browser-tests).
 
 ## How to run the tests
 
@@ -39,7 +40,15 @@ cp .env.example .env
 echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
 docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml up -d --build --wait
 pnpm install
+pnpm --filter @vantikhq/e2e exec playwright install chromium
 pnpm e2e
+```
+
+To run one layer, name its project. The setup projects it depends on run
+first:
+
+```bash
+pnpm e2e --project=api
 ```
 
 The tests also work against `pnpm dev`. Start Mailpit beside the other service
@@ -137,26 +146,43 @@ The webapp's unit tests do the same with Vitest's `it.fails`.
   "Alice's issue still has its title". A poor assertion is "the handler called
   the service".
 
-## Next: browser tests
+In a browser test, `page` is already signed in as Alice.
 
-The API tests prove what the server does. They cannot see what the webapp does
-with it. These bugs need a real browser to find:
+- Make a spare team with `createSpareTeam` and file the test's issues there.
+  The list the test opens then holds only what it made, whatever the API
+  tests file meanwhile. Alice is added to every team she makes.
+- Check the outcome on the server with `asAlice`, not only on the screen. The
+  webapp draws a change before the server has it, from its local store, so a
+  change the server refused can still look saved.
+- Find controls by role and accessible name, as a screen reader does. If a
+  control has no name to find it by, give it one in the webapp.
+- `src/browser.ts` has helpers to open a team's issues, open an issue, and set
+  one of its properties.
 
-- a page that crashes or does not hydrate with real data;
-- sign-in through the webapp's proxy, with cookies;
-- the socket that carries live updates to a second person's screen;
-- the local database after a reload, after a schema upgrade, or offline;
-- the production build of the webapp.
+## Browser tests
 
-The plan is a `browser` project in `playwright.config.ts`. It depends on
-`setup` and uses the same people. It will have two parts:
+The API tests prove what the server does. The browser tests prove what the
+webapp does with it, with the production build, through the webapp's proxy,
+and with a cookie session. There are two kinds:
 
-1. **A crawl.** One test signs in as Alice, opens each main page, and fails on
-   any page error, console error, or failed request.
-2. **A few journeys.** For example: Alice creates an issue and sees it in the
-   list. Carol sees Alice's change on her screen without a reload. An issue is
-   still there after a reload. An edit made offline is sent when the browser is
-   back online.
+1. **A crawl** (`tests/browser/crawl.spec.ts`). It opens each main page with
+   nothing cached, and fails on any page error, console error, or failed or
+   refused request. It is what catches a page that a removed module or a bad
+   response has quietly broken.
+2. **Journeys**. Each one is a thing a person does, checked on the server
+   afterwards: create an issue from the keyboard; change its status, priority
+   and labels; comment; move a card on the board; save a filter as a view;
+   write a page; make a project and a label; search; invite someone, who
+   accepts or declines. Several of them came from bugs that only a browser
+   shows, such as an edit lost because the sheet closed within the half
+   second before it saved, and a socket that silently stopped delivering
+   live updates.
 
-CI already builds and starts the webapp for this job, so the project adds only
-Chromium and the test time.
+The browser project runs one test at a time. Each test works in a team of its
+own, so they could run in parallel, but the editors save half a second after
+the last keystroke, and a page starved of CPU misses that.
+
+Not yet covered:
+
+- a second person, such as Carol, seeing Alice's change on her screen;
+- the local database after a reload, after a schema upgrade, or offline.

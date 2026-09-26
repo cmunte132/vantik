@@ -1,7 +1,12 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 
 import { SERVER_URL } from './env';
-import { messageIdsTo, readLoginEmail, type LoginEmail } from './mailpit';
+import {
+  messageIdsTo,
+  readEmail,
+  readLoginEmail,
+  type LoginEmail,
+} from './mailpit';
 
 /**
  * SuperTokens answers in cookies for a browser and in response headers for
@@ -143,6 +148,121 @@ export async function createPersonalAccessToken(
   return body.token;
 }
 
+/** Who the token belongs to, and the workspace it acts in. */
+async function identify(
+  request: APIRequestContext,
+  pat: string,
+  workspaceId: string,
+): Promise<{ userId: string; workspaceSlug: string }> {
+  const auth = { headers: bearer(pat) };
+
+  const user = await request.get(`${SERVER_URL}/v1/users`, auth);
+  expect(user, 'reading the current user failed').toBeOK();
+
+  const workspaces = await request.get(`${SERVER_URL}/v1/workspaces`, auth);
+  expect(workspaces, 'listing workspaces failed').toBeOK();
+  const workspace = (await workspaces.json()).find(
+    (candidate: { id: string }) => candidate.id === workspaceId,
+  );
+  expect(workspace, 'the workspace is not listed').toBeTruthy();
+
+  return { userId: (await user.json()).id, workspaceSlug: workspace.slug };
+}
+
+/**
+ * Invites `email` into `inviter`'s workspace, to one team, the way the members
+ * settings page does, and waits for the invite email.
+ */
+export async function invite(
+  request: APIRequestContext,
+  inviter: Account,
+  email: string,
+  teamId: string,
+): Promise<void> {
+  const seenBeforeInvite = await messageIdsTo(request, email);
+
+  const invited = await request.post(
+    `${SERVER_URL}/v1/workspaces/invite_users`,
+    {
+      headers: bearer(inviter.pat),
+      data: { emailIds: email, teamIds: [teamId], role: 'USER' },
+    },
+  );
+  expect(invited, 'inviting a teammate failed').toBeOK();
+  expect((await invited.json())[email]).toBe('Success');
+
+  // Waiting for it also means a sign-in after this reads the email that
+  // carries the code, and not this one.
+  await readEmail(request, email, /^Invite to /, seenBeforeInvite);
+}
+
+/** The id of the open invite into `workspaceId` on the signed-in user. */
+export async function inviteIdFor(
+  request: APIRequestContext,
+  session: Session,
+  workspaceId: string,
+): Promise<string> {
+  const user = await request.get(`${SERVER_URL}/v1/users`, {
+    headers: bearer(session.accessToken),
+  });
+  expect(user, 'reading the invited user failed').toBeOK();
+  const found = (
+    (await user.json()).invites as Array<{ id: string; workspaceId: string }>
+  ).find((candidate) => candidate.workspaceId === workspaceId);
+  expect(found, 'the invite is not on the invited user').toBeTruthy();
+  return found!.id;
+}
+
+/** Accepts or declines an invite. Returns the raw response. */
+export async function answerInvite(
+  request: APIRequestContext,
+  session: Session,
+  inviteId: string,
+  accept = true,
+) {
+  return request.post(`${SERVER_URL}/v1/workspaces/invite_action`, {
+    headers: { ...bearer(session.accessToken), ...SUPERTOKENS_HEADERS },
+    data: { inviteId, accept },
+  });
+}
+
+/**
+ * A person invited into `inviter`'s workspace, to one of its teams, who signs
+ * in with a code of their own, finds the invite on their user and accepts it.
+ */
+export async function provisionTeammate(
+  request: APIRequestContext,
+  inviter: Account,
+  options: { email: string; team: { id: string; identifier: string } },
+): Promise<Account> {
+  await invite(request, inviter, options.email, options.team.id);
+
+  const { session } = await signIn(request, options.email);
+  const inviteId = await inviteIdFor(request, session, inviter.workspaceId);
+
+  const accepted = await answerInvite(request, session, inviteId);
+  expect(accepted, 'accepting the invite failed').toBeOK();
+
+  // Like onboarding, accepting re-issues the session so that it names the
+  // workspace just joined.
+  const joined = sessionFrom(accepted.headers());
+  const pat = await createPersonalAccessToken(
+    request,
+    joined.accessToken,
+    'e2e',
+  );
+
+  return {
+    email: options.email,
+    ...(await identify(request, pat, inviter.workspaceId)),
+    workspaceId: inviter.workspaceId,
+    teamId: options.team.id,
+    teamIdentifier: options.team.identifier,
+    pat,
+    accessToken: joined.accessToken,
+  };
+}
+
 /**
  * A new person with their own workspace and team, signed in, holding both a
  * session and a personal access token.
@@ -166,29 +286,17 @@ export async function provisionAccount(
     'e2e',
   );
 
-  const auth = { headers: bearer(pat) };
-
-  const user = await request.get(`${SERVER_URL}/v1/users`, auth);
-  expect(user, 'reading the current user failed').toBeOK();
-  const { id: userId } = await user.json();
-
-  const teams = await request.get(`${SERVER_URL}/v1/teams`, auth);
+  const teams = await request.get(`${SERVER_URL}/v1/teams`, {
+    headers: bearer(pat),
+  });
   expect(teams, 'listing teams failed').toBeOK();
   const [team] = await teams.json();
   expect(team?.identifier).toBe(options.teamIdentifier);
 
-  const workspaces = await request.get(`${SERVER_URL}/v1/workspaces`, auth);
-  expect(workspaces, 'listing workspaces failed').toBeOK();
-  const workspace = (await workspaces.json()).find(
-    (candidate: { id: string }) => candidate.id === team.workspaceId,
-  );
-  expect(workspace, 'the new workspace is not listed').toBeTruthy();
-
   return {
     email: options.email,
-    userId,
-    workspaceId: workspace.id,
-    workspaceSlug: workspace.slug,
+    ...(await identify(request, pat, team.workspaceId)),
+    workspaceId: team.workspaceId,
     teamId: team.id,
     teamIdentifier: team.identifier,
     pat,

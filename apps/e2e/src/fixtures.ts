@@ -13,6 +13,11 @@ import { ACCOUNTS_FILE, SERVER_URL } from './env';
 export interface Accounts {
   alice: Account;
   bob: Account;
+  /**
+   * A member of Alice's workspace who was invited to one team, CRL, and not to
+   * Alice's own. Her account's `teamId` is CRL.
+   */
+  carol: Account;
 }
 
 export function loadAccounts(): Accounts {
@@ -34,10 +39,13 @@ interface WorkerFixtures {
 interface TestFixtures {
   alice: Account;
   bob: Account;
+  carol: Account;
   /** The API as Alice, authenticated with her personal access token. */
   asAlice: APIRequestContext;
   /** The API as Bob, who belongs to a different workspace. */
   asBob: APIRequestContext;
+  /** The API as Carol, Alice's teammate in the CRL team only. */
+  asCarol: APIRequestContext;
   /** The API with no credentials at all. */
   anonymous: APIRequestContext;
 }
@@ -69,6 +77,10 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(accounts.bob);
   },
 
+  carol: async ({ accounts }, use) => {
+    await use(accounts.carol);
+  },
+
   asAlice: async ({ playwright, alice }, use) => {
     const api = await apiAs(playwright, alice.pat);
     await use(api);
@@ -81,11 +93,32 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await api.dispose();
   },
 
+  asCarol: async ({ playwright, carol }, use) => {
+    const api = await apiAs(playwright, carol.pat);
+    await use(api);
+    await api.dispose();
+  },
+
   anonymous: async ({ playwright }, use) => {
     const api = await apiAs(playwright);
     await use(api);
     await api.dispose();
   },
 });
+
+/**
+ * Marks the running test as a known bug: one that is on main and not yet
+ * fixed. `test.fail` inverts the result, so the suite stays green while the bug
+ * is there and goes red with "expected to fail, but passed" the moment it is
+ * fixed, which is the prompt to delete the call.
+ *
+ * Call it after the test's own setup, never before. An inverted test passes
+ * whatever makes it fail, so setup that broke underneath it would read as the
+ * bug still being there. Once setup has run and been checked, the only thing
+ * left to fail is the behaviour the test is about.
+ */
+export function knownBug(description: string) {
+  test.fail(true, `Known bug on main: ${description}`);
+}
 
 export { expect } from '@playwright/test';

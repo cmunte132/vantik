@@ -19,7 +19,7 @@ import {
   unique,
   workflows,
 } from '../../src/api';
-import { expect, test } from '../../src/fixtures';
+import { expect, knownBug, test } from '../../src/fixtures';
 
 /**
  * Alice and Bob each own a workspace. Nothing Bob does may read or change
@@ -42,22 +42,7 @@ function expectRefused(response: APIResponse, what: string) {
   );
 }
 
-/**
- * Marks a hole that is known and not yet closed on main. `test.fail` inverts
- * the result, so the suite stays green while the hole is open and goes red with
- * "expected to fail, but passed" the moment it is closed — which is the prompt
- * to delete the call.
- *
- * Call it after the test's own setup, never before. An inverted test passes
- * whatever makes it fail, so setup that broke underneath it would read as the
- * hole still being open. Once setup has run and been checked, the only thing
- * left to fail is Bob's attempt.
- */
-function knownHole(fixedBy: string) {
-  test.fail(true, `Known hole on main, closed by ${fixedBy}`);
-}
-
-const VIEWS_OPEN = 'nothing yet: the view routes take an id and never check its workspace';
+const VIEWS_OPEN = 'the view routes take an id and never check its workspace';
 
 test.describe('the workspace boundary', () => {
   test("Bob's own credentials work, so a refusal below is about Alice's records", async ({
@@ -373,7 +358,7 @@ test.describe('the workspace boundary', () => {
     }) => {
       const view = await createView(asAlice, alice);
       expect((await currentView(asAlice, view)).name).toBe(view.name);
-      knownHole(VIEWS_OPEN);
+      knownBug(VIEWS_OPEN);
 
       expectRefused(
         await asBob.post(`/v1/views/${view.id}`, {

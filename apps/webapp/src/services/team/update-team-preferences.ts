@@ -1,38 +1,23 @@
-import { useMutation } from '@tanstack/react-query';
-import { updateTeamPreferences } from '@vantikhq/services';
+import type { UpdateTeamPreferencesDto } from '@vantikhq/types';
 
 import type { TeamType } from 'common/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (team: TeamType) => void;
-  onError?: (error: string) => void;
+import { ajaxPost, mutationHook } from 'services/utils';
+
+export interface UpdateTeamPreferencesDtoWithTeamId extends UpdateTeamPreferencesDto {
+  teamId: string;
 }
 
-export function useUpdateTeamPreferencesMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (team: TeamType) => {
-    onSuccess && onSuccess(team);
-  };
-
-  return useMutation({
-    mutationFn: updateTeamPreferences,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+export function updateTeamPreferences({
+  teamId,
+  ...updateData
+}: UpdateTeamPreferencesDtoWithTeamId): Promise<TeamType> {
+  return ajaxPost({
+    url: `/api/v1/teams/${teamId}/preferences`,
+    data: updateData,
   });
 }
+
+export const useUpdateTeamPreferencesMutation = mutationHook(
+  updateTeamPreferences,
+);

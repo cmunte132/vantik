@@ -1,36 +1,13 @@
-import { useMutation } from '@tanstack/react-query';
-import { deleteIssueComment } from '@vantikhq/services';
+import type { IssueCommentRequestParamsDto } from '@vantikhq/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: () => void;
-  onError?: (error: string) => void;
+import type { IssueCommentType } from 'common/types';
+
+import { ajaxDelete, mutationHook } from 'services/utils';
+
+export function deleteIssueComment({
+  issueCommentId,
+}: IssueCommentRequestParamsDto): Promise<IssueCommentType> {
+  return ajaxDelete({ url: `/api/v1/issue_comments/${issueCommentId}` });
 }
 
-export function useDeleteCommentMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = () => {
-    onSuccess && onSuccess();
-  };
-
-  return useMutation({
-    mutationFn: deleteIssueComment,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useDeleteCommentMutation = mutationHook(deleteIssueComment);

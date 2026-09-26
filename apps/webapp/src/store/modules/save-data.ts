@@ -10,7 +10,7 @@ export async function saveModuleData(
 ) {
   await Promise.all(
     data.map(async (record: SyncActionRecord) => {
-      const module = {
+      const moduleData = {
         id: record.data.id,
         createdAt: record.data.createdAt,
         updatedAt: record.data.updatedAt,
@@ -32,9 +32,10 @@ export async function saveModuleData(
       switch (record.action) {
         case 'I':
         case 'U': {
-          await vantikDatabase.modules.put(module);
+          await vantikDatabase.modules.put(moduleData);
           return (
-            modulesStore && (await modulesStore.update(module, record.data.id))
+            modulesStore &&
+            (await modulesStore.update(moduleData, record.data.id))
           );
         }
 

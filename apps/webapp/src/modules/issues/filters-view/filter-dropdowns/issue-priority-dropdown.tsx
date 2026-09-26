@@ -14,8 +14,8 @@ import { IssuePriorityDropdownContent } from 'modules/issues/components';
 import { usePriorities } from 'hooks/priorities';
 
 interface IssuePriorityDropdownProps {
-  value?: number[];
-  onChange?: (priority: number) => void;
+  value: number[];
+  onChange: (priorities: number[]) => void;
 }
 
 export const IssuePriorityDropdown = observer(

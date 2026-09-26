@@ -89,13 +89,14 @@ export const WorkflowsStore: IAnyStateTreeNode = types
           workflow.category === WorkflowCategoryEnum.TRIAGE,
       );
     },
-    getWorkflowByNames(names: string[]) {
+    /** The workflow names that match these, in any case, spelled as stored. */
+    getWorkflowNames(names: string[]) {
       const normalizedNames = names.map((name) => name.toLowerCase());
       return Array.from(self.workflows.values())
         .filter((workflow: WorkflowType) =>
           normalizedNames.includes(workflow.name.toLowerCase()),
         )
-        .map((workflow) => workflow.id);
+        .map((workflow) => workflow.name);
     },
     getPositionForCategory(category: WorkflowCategoryEnum, teamId: string) {
       return Array.from(self.workflows.values()).filter(

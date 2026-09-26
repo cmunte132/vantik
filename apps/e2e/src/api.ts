@@ -53,30 +53,82 @@ export interface Issue {
   title: string;
   stateId: string;
   teamId: string;
+  assigneeId: string | null;
+  cycleId: string | null;
   description: string | null;
   descriptionMarkdown: string;
   deleted: string | null;
 }
 
+/**
+ * An issue in the account's team, or in `fields.teamId`. It starts in that
+ * team's "Todo" state unless `fields.stateId` names another.
+ */
 export async function createIssue(
   api: APIRequestContext,
   account: Account,
-  fields: Partial<{ title: string; descriptionMarkdown: string; stateId: string }> = {},
+  fields: Partial<{
+    title: string;
+    descriptionMarkdown: string;
+    stateId: string;
+    teamId: string;
+    assigneeId: string;
+    cycleId: string;
+  }> = {},
 ): Promise<Issue> {
-  const stateId =
-    fields.stateId ?? (await stateNamed(api, account.teamId, 'Todo')).id;
+  const teamId = fields.teamId ?? account.teamId;
+  const stateId = fields.stateId ?? (await stateNamed(api, teamId, 'Todo')).id;
 
   return ok(
     await api.post('/v1/issues', {
       data: {
-        teamId: account.teamId,
         title: unique('Issue'),
         ...fields,
+        teamId,
         stateId,
       },
     }),
     'creating an issue',
   );
+}
+
+export async function updateIssue(
+  api: APIRequestContext,
+  issue: Issue,
+  fields: Partial<{ title: string; stateId: string; assigneeId: string }>,
+): Promise<Issue> {
+  return ok(
+    await api.post(`/v1/issues/${issue.id}`, {
+      params: { teamId: issue.teamId },
+      data: fields,
+    }),
+    'updating an issue',
+  );
+}
+
+/** Moves an issue to another team in the same workspace. */
+export async function moveIssue(
+  api: APIRequestContext,
+  issue: Issue,
+  teamId: string,
+): Promise<Issue> {
+  return ok(
+    await api.post(`/v1/issues/${issue.id}/move`, { data: { teamId } }),
+    'moving an issue',
+  );
+}
+
+export async function deleteIssue(
+  api: APIRequestContext,
+  issue: Issue,
+): Promise<void> {
+  const response = await api.delete(`/v1/issues/${issue.id}`, {
+    params: { teamId: issue.teamId },
+  });
+  expect(
+    response,
+    `deleting an issue failed: ${response.status()} ${await response.text()}`,
+  ).toBeOK();
 }
 
 export async function getIssue(
@@ -168,17 +220,26 @@ export interface Team {
   name: string;
   identifier: string;
   workspaceId: string;
+  preferences: Record<string, unknown>;
+  /** The number of the team's current cycle, if one is running. */
+  currentCycle: number | null;
 }
 
 /**
  * A second team in the account's workspace, for tests that delete or rename a
- * team and must not touch the one every other test files its issues into.
+ * team, or change its settings, and must not touch the one every other test
+ * files its issues into.
  */
-export async function createSpareTeam(api: APIRequestContext): Promise<Team> {
-  const identifier = `S${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+export async function createSpareTeam(
+  api: APIRequestContext,
+  fields: Partial<{ identifier: string; preferences: Record<string, unknown> }> = {},
+): Promise<Team> {
+  const identifier =
+    fields.identifier ??
+    `S${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   return ok(
     await api.post('/v1/teams', {
-      data: { name: unique('Spare team'), identifier },
+      data: { name: unique('Spare team'), ...fields, identifier },
     }),
     'creating a team',
   );
@@ -258,4 +319,46 @@ export async function currentView(
     await api.post(`/v1/views/${view.id}`, { data: { filters: view.filters } }),
     'reading a view back',
   );
+}
+
+export interface Cycle {
+  id: string;
+  name: string;
+  number: number;
+  teamId: string;
+  status: string;
+}
+
+const DAY = 24 * 60 * 60 * 1000;
+
+/** A week-long cycle starting `startsInDays` from now. */
+export async function createCycle(
+  api: APIRequestContext,
+  teamId: string,
+  startsInDays = 0,
+): Promise<Cycle> {
+  const start = Date.now() + startsInDays * DAY;
+  return ok(
+    await api.post('/v1/cycles/single', {
+      data: {
+        teamId,
+        name: unique('Cycle'),
+        startDate: new Date(start).toISOString(),
+        endDate: new Date(start + 7 * DAY).toISOString(),
+      },
+    }),
+    'creating a cycle',
+  );
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  preferences: Record<string, unknown> | null;
+}
+
+/** Every workspace the caller belongs to. */
+export async function workspacesOf(api: APIRequestContext): Promise<Workspace[]> {
+  return ok(await api.get('/v1/workspaces'), 'listing workspaces');
 }

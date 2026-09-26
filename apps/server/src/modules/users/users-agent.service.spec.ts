@@ -69,7 +69,7 @@ function buildPrisma() {
 /** The service over a stubbed prisma; each suite supplies the shape it needs. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function serviceWith(prisma: any) {
-  return new UsersService(prisma, {} as any);
+  return new UsersService(prisma);
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -292,7 +292,13 @@ describe('UsersService.listAgentAccounts', () => {
         // revoked ones too, and decides `active` in application code.
         findMany: jest.fn().mockResolvedValue([
           ...activeTokenUserIds.map(
-            (userId): { userId: string; deleted: Date | null; lastUsedAt: Date | null } => ({
+            (
+              userId,
+            ): {
+              userId: string;
+              deleted: Date | null;
+              lastUsedAt: Date | null;
+            } => ({
               userId,
               deleted: null,
               lastUsedAt: null,
@@ -509,9 +515,10 @@ describe('UsersService.listAgentAccounts', () => {
     // Deleted rows are fetched on purpose — they still carry a last-used time
     // worth reporting — so `active` has to be decided on `deleted`, not on the
     // row merely existing.
-    const prisma = listPrisma([], [
-      { userId: 'agent-1', deleted: new Date(), lastUsedAt: new Date() },
-    ]);
+    const prisma = listPrisma(
+      [],
+      [{ userId: 'agent-1', deleted: new Date(), lastUsedAt: new Date() }],
+    );
     const [agent] = await serviceWith(prisma).listAgentAccounts(
       'ws-1',
       'admin-1',
@@ -536,10 +543,13 @@ describe('UsersService.listAgentAccounts', () => {
 
     // An agent can hold more than one token over its life — a rotation leaves
     // the old one deleted — so its last use is the newest of all of them.
-    const prisma = listPrisma([], [
-      { userId: 'agent-1', deleted: new Date(), lastUsedAt: older },
-      { userId: 'agent-1', deleted: null, lastUsedAt: newer },
-    ]);
+    const prisma = listPrisma(
+      [],
+      [
+        { userId: 'agent-1', deleted: new Date(), lastUsedAt: older },
+        { userId: 'agent-1', deleted: null, lastUsedAt: newer },
+      ],
+    );
     const [agent] = await serviceWith(prisma).listAgentAccounts(
       'ws-1',
       'admin-1',
@@ -700,7 +710,9 @@ describe('UsersService.revokeAgent', () => {
 
     expect(prisma.usersOnWorkspaces.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId_workspaceId: { userId: 'agent-1', workspaceId: 'ws-1' } },
+        where: {
+          userId_workspaceId: { userId: 'agent-1', workspaceId: 'ws-1' },
+        },
         data: {
           settings: {
             agent: expect.objectContaining({

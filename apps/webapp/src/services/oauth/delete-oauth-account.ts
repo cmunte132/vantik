@@ -1,49 +1,19 @@
-import { useMutation } from '@tanstack/react-query';
-
 import type { IntegrationAccountType } from 'common/types';
 
-import { ajaxDelete } from 'services/utils';
+import { ajaxDelete, mutationHook } from 'services/utils';
 
 interface IntegrationAccountsParams {
   integrationAccountId: string;
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: IntegrationAccountType) => void;
-  onError?: (error: string) => void;
-}
-
-export function deleteIntegrationAccount(params: IntegrationAccountsParams) {
+export function deleteIntegrationAccount(
+  params: IntegrationAccountsParams,
+): Promise<IntegrationAccountType> {
   return ajaxDelete({
     url: `/api/v1/integration_account/${params.integrationAccountId}`,
   });
 }
 
-export function useDeleteIntegrationAccount({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: IntegrationAccountType) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: deleteIntegrationAccount,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useDeleteIntegrationAccount = mutationHook(
+  deleteIntegrationAccount,
+);

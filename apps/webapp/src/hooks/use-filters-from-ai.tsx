@@ -1,102 +1,75 @@
+import type { FilterValues } from 'modules/issues/filters-view/filter-dropdowns/types';
+import {
+  isFlagFilter,
+  operatorFor,
+} from 'modules/issues/filters-view/filter-registry';
+
 import { getPriorities } from 'common/priority';
 import type { User } from 'common/types';
 
+import type { FilterTypeEnum, ValueFilterKey } from 'store/application';
 import { useContextStore } from 'store/global-context-provider';
 
 import { useUsersData } from './users';
 
-export const isBooleanFilters = [
-  'isBlocked',
-  'isBlocking',
-  'isParent',
-  'isSubIssue',
-];
-
-export const allKeys = [
-  ...isBooleanFilters,
-  'assignee',
-  'status',
-  'label',
-  'priority',
-];
+/** What the AI filter endpoint answers: human names, keyed by filter. */
+type AIFilters = Record<
+  string,
+  { filterType: FilterTypeEnum; value?: string[] }
+>;
 
 export function useFiltersFromAI() {
   const { applicationStore, labelsStore, workflowsStore } = useContextStore();
   const { users } = useUsersData();
 
-  const getValueIds = (key: string, value: string[]) => {
-    switch (key) {
-      case 'label': {
-        return labelsStore.getLabelWithValues(value);
-      }
-
-      case 'assignee': {
-        return value
-          .map((name: string) => {
-            const user = users.find((user: User) =>
+  // The value filters the AI can name, and how its names become stored values.
+  // Status and label filters store names, spelled the way the workspace spells
+  // them; the others store ids or, for priority, a number.
+  const readers: Partial<
+    Record<ValueFilterKey, (names: string[]) => FilterValues>
+  > = {
+    status: (names) => workflowsStore.getWorkflowNames(names),
+    label: (names) => labelsStore.getLabelWithValues(names),
+    assignee: (names) =>
+      names
+        .map(
+          (name) =>
+            users.find((user: User) =>
               user.fullname.toLowerCase().includes(name.toLowerCase()),
-            );
-
-            return user?.id;
-          })
-          .filter(Boolean);
-      }
-
-      case 'priority': {
-        return value
-          .map((priority: string) => {
-            const index = getPriorities().indexOf(priority);
-
-            return index < 0 ? undefined : index;
-          })
-          .filter(Boolean);
-      }
-
-      case 'status': {
-        return workflowsStore.getWorkflowByNames(value);
-      }
-
-      default:
-        return [];
-    }
+            )?.id,
+        )
+        .filter(Boolean),
+    priority: (names) =>
+      names
+        .map((name) => getPriorities().indexOf(name))
+        .filter((index) => index > 0),
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const setFilters = (filterData: any) => {
-    const keys = Object.keys(filterData);
-
-    keys.forEach((key: string) => {
-      // Verify if the keys are according to the current filter support
-      if (allKeys.includes(key)) {
-        // If the filter is a boolean filter just add to the store
-        if (isBooleanFilters.includes(key)) {
-          applicationStore.updateFilters({
-            [key]: { filterType: filterData[key].filterType },
-          });
-
-          // If it not a boolean filter
-        } else {
-          const value = getValueIds(key, filterData[key].value);
-
-          if (value.length > 0) {
-            const newValue = (
-              applicationStore.filters[key]
-                ? [...applicationStore.filters[key].value, ...value]
-                : value
-            ).filter((elem: string, index: number, self: string[]) => {
-              return index === self.indexOf(elem);
-            });
-
-            applicationStore.updateFilters({
-              [key]: {
-                filterType: filterData[key].filterType,
-                value: newValue,
-              },
-            });
-          }
-        }
+  const setFilters = (filterData: AIFilters) => {
+    for (const [key, requested] of Object.entries(filterData)) {
+      if (isFlagFilter(key)) {
+        applicationStore.updateFilters({
+          [key]: { filterType: operatorFor(key, requested.filterType) },
+        });
+        continue;
       }
-    });
+
+      const read = readers[key as ValueFilterKey];
+      const value = read ? read(requested.value ?? []) : [];
+
+      if (value.length === 0) {
+        continue;
+      }
+
+      const current: FilterValues = applicationStore.filters[key]?.value ?? [];
+
+      applicationStore.updateFilters({
+        [key]: {
+          filterType: operatorFor(key as ValueFilterKey, requested.filterType),
+          value: [...new Set([...current, ...value])],
+        },
+      });
+    }
   };
 
   return { setFilters };

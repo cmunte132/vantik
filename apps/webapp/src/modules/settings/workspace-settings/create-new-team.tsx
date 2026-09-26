@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Team, TeamType as TeamTypeEnum } from '@vantikhq/types';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Form,
@@ -21,6 +20,8 @@ import {
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+
+import { type TeamType, TeamTypeEnum } from 'common/types';
 
 import { useCreateTeamMutation } from 'services/team';
 
@@ -51,7 +52,7 @@ export function CreateNewTeam() {
   const { toast } = useToast();
 
   const { mutate: createTeam } = useCreateTeamMutation({
-    onSuccess: (data: Team) => {
+    onSuccess: (data: TeamType) => {
       toast({
         title: 'Created!',
         description: `New team ${data.name} is created`,

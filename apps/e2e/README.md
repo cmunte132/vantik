@@ -11,10 +11,22 @@ projects:
 
 | Project | What it does |
 | --- | --- |
-| `setup` | Waits for the stack. Then it signs up two people, Alice and Bob, each with a workspace of their own, and saves their credentials in `.auth/accounts.json`. |
-| `api` | Calls the HTTP API and the MCP endpoint directly, as Alice or as Bob. |
+| `setup` | Waits for the stack. Then it provisions three people and saves their credentials in `.auth/accounts.json`. |
+| `api` | Calls the HTTP API, the sync API and the MCP endpoint directly, as any of the three. |
 
-A `browser` project will use the same accounts to sign in to the webapp.
+The three people:
+
+| Person | Workspace | Team |
+| --- | --- | --- |
+| Alice | her own | ALC, and CRL |
+| Bob | his own | BOB |
+| Carol | Alice's. Alice invites her, and she accepts. | CRL only |
+
+Bob is the outsider for the workspace boundary. Carol is the insider for the
+team boundary: she is in Alice's workspace, but not in Alice's team.
+
+A `browser` project will use the same accounts to sign in to the webapp. See
+[Next: browser tests](#next-browser-tests).
 
 ## How to run the tests
 
@@ -82,29 +94,69 @@ way `README.md` says to: the defaults from `.env.example`, plus a new
 If a check fails, the workflow uploads the Playwright report and the container
 logs as the `e2e-report` artifact.
 
-## Known holes
+## Known bugs
 
-Some tests in `tests/api/tenancy.spec.ts` call `knownHole(...)`. Each one is a
-hole in the workspace boundary that is known and not yet closed on `main`.
-`knownHole` marks the test as an expected failure, so the suite stays green.
-When a change closes the hole, the test passes and Playwright reports "expected
-to fail, but passed". Then remove the `knownHole` call from that test.
+Some tests call `knownBug(...)`. Each one tests a bug that is known and not yet
+fixed on `main`, and the argument says what the bug is. `knownBug` marks the
+test as an expected failure, so the suite stays green. When a change fixes the
+bug, the test passes and Playwright reports "expected to fail, but passed".
+Then remove the `knownBug` call from that test.
 
-Call `knownHole` after the test's setup, and check that setup first. An
+To see which bugs are open:
+
+```bash
+grep -rn "knownBug(" apps/e2e/tests
+```
+
+Call `knownBug` after the test's setup, and check that setup first. An
 expected failure passes whatever makes it fail. If the setup breaks before the
 call, the test fails as it should. If the setup breaks after the call, the
-suite reports that the hole is still open.
+suite reports that the bug is still there.
+
+The webapp's unit tests do the same with Vitest's `it.fails`.
 
 ## How to write a test
 
 - Import `test` and `expect` from `src/fixtures`. The fixtures give you `alice`
   and `bob` (their ids and tokens), `asAlice` and `asBob` (API clients that use
   their tokens), and `anonymous` (a client with no credentials).
+- The fixtures also give you `carol` and `asCarol`, Alice's teammate in the
+  CRL team only.
 - Make the records that the test needs. `src/api.ts` has small builders for
   them. Do not rely on records from other tests. The tests run in parallel.
+- To check what the webapp is sent, use `src/sync.ts`. The webapp reads its
+  records from the sync API, not from the REST routes. A write reaches the sync
+  log a moment after the request returns, through Postgres replication. So take
+  a `cursor` before the write, and wait for the change with `synced`.
+- Before you assert that someone was not sent a record, wait until someone who
+  should get it has it. Otherwise "not replicated yet" also passes the test.
 - Do not change shared records. For example, do not rename Alice's team or her
   "Todo" state. If a test must change or delete a team, make a spare team with
   `createSpareTeam`.
 - Assert on what the product does, not on how it does it. A good assertion is
   "Alice's issue still has its title". A poor assertion is "the handler called
   the service".
+
+## Next: browser tests
+
+The API tests prove what the server does. They cannot see what the webapp does
+with it. These bugs need a real browser to find:
+
+- a page that crashes or does not hydrate with real data;
+- sign-in through the webapp's proxy, with cookies;
+- the socket that carries live updates to a second person's screen;
+- the local database after a reload, after a schema upgrade, or offline;
+- the production build of the webapp.
+
+The plan is a `browser` project in `playwright.config.ts`. It depends on
+`setup` and uses the same people. It will have two parts:
+
+1. **A crawl.** One test signs in as Alice, opens each main page, and fails on
+   any page error, console error, or failed request.
+2. **A few journeys.** For example: Alice creates an issue and sees it in the
+   list. Carol sees Alice's change on her screen without a reload. An issue is
+   still there after a reload. An edit made offline is sent when the browser is
+   back online.
+
+CI already builds and starts the webapp for this job, so the project adds only
+Chromium and the test time.

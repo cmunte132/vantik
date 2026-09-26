@@ -1,41 +1,13 @@
-import type { Cycle } from '@vantikhq/types';
+import type { CreateCycleDto } from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
-import { createCycle } from '@vantikhq/services';
+import type { CycleType } from 'common/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Cycle) => void;
-  onError?: (error: string) => void;
+import { ajaxPost, mutationHook } from 'services/utils';
+
+export function createCycle(
+  createCycleDto: CreateCycleDto,
+): Promise<CycleType> {
+  return ajaxPost({ url: '/api/v1/cycles/single', data: createCycleDto });
 }
 
-export function useCreateCycleMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText =
-      errorResponse?.response?.data?.message ||
-      errorResponse?.errors?.message ||
-      'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Cycle) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: createCycle,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useCreateCycleMutation = mutationHook(createCycle);

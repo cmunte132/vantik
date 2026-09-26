@@ -63,6 +63,15 @@ export class CreatePageEntryDto {
   supersedesId?: string;
 
   /**
+   * The writer has seen the entries this one resembles and says it is a
+   * separate fact. Without it, or `supersedesId`, a write the page already
+   * holds is refused with the matches so the writer can choose.
+   */
+  @IsOptional()
+  @IsBoolean()
+  distinct?: boolean;
+
+  /**
    * Land the entry as STANDING rather than PROPOSED. Only a human reviewer may
    * ask for this; an agent's writes always start in the inbox.
    */

@@ -130,6 +130,13 @@ you call the API.
   them; do not look for another page to dump into.
 - **`LOCKED` pages.** Maintained by hand. You can read them — recall and context
   both work — but you cannot append. Append to a related page instead.
+- **Triage is for people.** You cannot accept, dispute or verify an entry —
+  yours or anyone else's — one at a time or in bulk. You can reword, rescope or
+  archive your own entries while they are still `PROPOSED`; once the workspace
+  has decided about an entry, correct it by writing one that supersedes it.
+- **Repeats are refused everywhere.** The search-before-write runs on the
+  server, so it applies however you reach the API: an exact repeat of an entry
+  on the page, or a near match, comes back with the matches and writes nothing.
 - **`CURATED` is the default.** `OPEN` pages exist for scratch work where volume
   genuinely does not matter.
 

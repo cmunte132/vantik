@@ -7,9 +7,15 @@
  * machine, which is what has to hold when a model that ignores tool
  * descriptions is pointed at the endpoint.
  */
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PageEntryPolicyEnum, PageEntryStatusEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
+
+import type { VectorService } from 'modules/vector/vector.service';
 
 import PageEntriesService from './page-entries.service';
 import { PROPOSED_ENTRY_BUDGET, WriterIdentity } from './pages.interface';
@@ -22,7 +28,13 @@ interface Options {
   outstanding?: number;
   userType?: 'Agent' | 'User';
   entryStatus?: PageEntryStatusEnum;
+  /** Who wrote the entry `updateEntry` finds. */
+  entrySource?: string;
   supersededBy?: { id: string } | null;
+  /** What the page already holds, for the duplicate check. */
+  existing?: Array<{ id: string; content: string; status?: string }>;
+  /** What the near-match search returns, or an error it throws. */
+  nearMatches?: Array<{ entryId: string; content: string }> | Error;
 }
 
 function buildService({
@@ -30,7 +42,10 @@ function buildService({
   outstanding = 0,
   userType = 'Agent',
   entryStatus = PageEntryStatusEnum.PROPOSED,
+  entrySource = 'agent-1',
   supersededBy = null,
+  existing = [],
+  nearMatches = [],
 }: Options = {}) {
   const created: unknown[] = [];
 
@@ -41,6 +56,7 @@ function buildService({
           id: 'page-1',
           title: 'Deployment',
           entryPolicy: policy,
+          workspaceId: 'workspace-1',
         }),
       ),
     },
@@ -48,17 +64,33 @@ function buildService({
       findUnique: jest.fn(() => Promise.resolve({ type: userType })),
     },
     pageEntry: {
-      findMany: jest.fn(() =>
+      // The budget check asks for one token's untriaged entries; the duplicate
+      // check asks for everything live on the page. The double tells them apart
+      // by whether a token or source is in the filter.
+      findMany: jest.fn(({ where }) =>
         Promise.resolve(
-          Array.from({ length: outstanding }, (_, index) => ({
-            id: `existing-${index}`,
-            content: `a fact ${index}`,
-            status: PageEntryStatusEnum.PROPOSED,
-          })),
+          'sourceTokenId' in where || 'sourceUserId' in where
+            ? Array.from({ length: outstanding }, (_, index) => ({
+                id: `existing-${index}`,
+                content: `a fact ${index}`,
+                status: PageEntryStatusEnum.PROPOSED,
+              }))
+            : existing.map((entry) => ({
+                scope: null as string | null,
+                status: PageEntryStatusEnum.STANDING as string,
+                sourceUserId: 'someone',
+                verifiedAt: null as Date | null,
+                retrievalCount: 0,
+                ...entry,
+              })),
         ),
       ),
       findFirst: jest.fn(() =>
-        Promise.resolve({ status: entryStatus, supersededBy }),
+        Promise.resolve({
+          status: entryStatus,
+          sourceUserId: entrySource,
+          supersededBy,
+        }),
       ),
       create: jest.fn(({ data }) => {
         created.push(data);
@@ -72,7 +104,34 @@ function buildService({
     $transaction: jest.fn((operations: unknown[]) => Promise.resolve(operations)),
   } as unknown as PrismaService;
 
-  return { service: new PageEntriesService(prisma), prisma, created };
+  const vectorService = {
+    findSimilarEntries: jest.fn(() =>
+      nearMatches instanceof Error
+        ? Promise.reject(nearMatches)
+        : Promise.resolve(
+            nearMatches.map((hit) => ({
+              id: hit.entryId,
+              kind: 'entry',
+              pageId: 'page-1',
+              pageTitle: 'Deployment',
+              title: 'Deployment',
+              scope: null as string | null,
+              status: PageEntryStatusEnum.STANDING,
+              sourceUserId: 'someone',
+              verified: false,
+              retrievalCount: 0,
+              ...hit,
+            })),
+          ),
+    ),
+  } as unknown as VectorService;
+
+  return {
+    service: new PageEntriesService(prisma, undefined, vectorService),
+    prisma,
+    created,
+    vectorService,
+  };
 }
 
 describe('entry policy', () => {
@@ -198,6 +257,7 @@ describe('status transitions', () => {
   it('refuses to revive a CONSOLIDATED entry', async () => {
     const { service } = buildService({
       entryStatus: PageEntryStatusEnum.CONSOLIDATED,
+      userType: 'User',
     });
 
     // It is already in the page body; serving it again duplicates the fact.
@@ -211,6 +271,7 @@ describe('status transitions', () => {
   it('refuses to revive a SUPERSEDED entry', async () => {
     const { service } = buildService({
       entryStatus: PageEntryStatusEnum.SUPERSEDED,
+      userType: 'User',
     });
 
     await expect(
@@ -223,6 +284,7 @@ describe('status transitions', () => {
   it('refuses to push an entry back into the inbox', async () => {
     const { service } = buildService({
       entryStatus: PageEntryStatusEnum.STANDING,
+      userType: 'User',
     });
 
     await expect(
@@ -235,6 +297,7 @@ describe('status transitions', () => {
   it('accepts a proposed entry as standing', async () => {
     const { service } = buildService({
       entryStatus: PageEntryStatusEnum.PROPOSED,
+      userType: 'User',
     });
 
     await expect(
@@ -247,6 +310,7 @@ describe('status transitions', () => {
   it('stamps who verified an entry rather than trusting the flag alone', async () => {
     const { service, prisma } = buildService({
       entryStatus: PageEntryStatusEnum.STANDING,
+      userType: 'User',
     });
 
     await service.updateEntry('entry-1', 'human-1', { verified: true });
@@ -277,9 +341,353 @@ describe('serving and decay', () => {
 
     const standingPass = (prisma.pageEntry.updateMany as jest.Mock).mock
       .calls[1][0];
-    // Retrieval count is a proxy for "worth keeping"; a human vouching for it
+    // Being served is a proxy for "worth keeping"; a human vouching for it
     // is the real thing, and outranks the proxy.
     expect(standingPass.where.verifiedAt).toBeNull();
-    expect(standingPass.where.retrievalCount).toBe(0);
+  });
+});
+
+describe('what an agent may change on an entry', () => {
+  it('[KG-0.1] refuses an agent promoting its own entry to STANDING, and changes nothing', async () => {
+    const { service, prisma } = buildService({ userType: 'Agent' });
+
+    await expect(
+      service.updateEntry('entry-1', 'agent-1', {
+        status: PageEntryStatusEnum.STANDING,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.pageEntry.update).not.toHaveBeenCalled();
+  });
+
+  it('[KG-0.1] refuses an agent disputing an entry', async () => {
+    const { service, prisma } = buildService({
+      userType: 'Agent',
+      entryStatus: PageEntryStatusEnum.STANDING,
+      entrySource: 'someone-else',
+    });
+
+    await expect(
+      service.updateEntry('entry-1', 'agent-1', {
+        status: PageEntryStatusEnum.DISPUTED,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.pageEntry.update).not.toHaveBeenCalled();
+  });
+
+  it('[KG-0.1] refuses an agent verifying an entry, even its own', async () => {
+    const { service, prisma } = buildService({ userType: 'Agent' });
+
+    await expect(
+      service.updateEntry('entry-1', 'agent-1', { verified: true }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.updateEntry('entry-1', 'agent-1', { verified: false }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.pageEntry.update).not.toHaveBeenCalled();
+  });
+
+  it('[KG-0.1] refuses an agent rewriting an entry the workspace already accepted', async () => {
+    // Changing the text of a standing fact is promotion by another route: the
+    // new words would be served under a decision made about the old ones.
+    const { service, prisma } = buildService({
+      userType: 'Agent',
+      entryStatus: PageEntryStatusEnum.STANDING,
+    });
+
+    await expect(
+      service.updateEntry('entry-1', 'agent-1', { content: 'new words' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.pageEntry.update).not.toHaveBeenCalled();
+  });
+
+  it("[KG-0.1] refuses an agent editing another writer's entry", async () => {
+    const { service, prisma } = buildService({
+      userType: 'Agent',
+      entrySource: 'someone-else',
+    });
+
+    await expect(
+      service.updateEntry('entry-1', 'agent-1', { content: 'new words' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.pageEntry.update).not.toHaveBeenCalled();
+  });
+
+  it('[KG-0.1] still lets an agent reword or withdraw its own untriaged entry', async () => {
+    const { service, prisma } = buildService({ userType: 'Agent' });
+
+    await service.updateEntry('entry-1', 'agent-1', {
+      content: 'clearer words',
+      scope: 'apps/server',
+    });
+    await service.updateEntry('entry-1', 'agent-1', {
+      status: PageEntryStatusEnum.ARCHIVED,
+    });
+
+    const calls = (prisma.pageEntry.update as jest.Mock).mock.calls;
+    expect(calls[0][0].data).toEqual({
+      content: 'clearer words',
+      scope: 'apps/server',
+    });
+    expect(calls[1][0].data).toEqual({ status: PageEntryStatusEnum.ARCHIVED });
+  });
+
+  it('[KG-0.1] lets a person promote and verify the same entry', async () => {
+    const { service, prisma } = buildService({ userType: 'User' });
+
+    await service.updateEntry('entry-1', 'human-1', {
+      status: PageEntryStatusEnum.STANDING,
+      verified: true,
+    });
+
+    const { data } = (prisma.pageEntry.update as jest.Mock).mock.calls[0][0];
+    expect(data.status).toBe(PageEntryStatusEnum.STANDING);
+    expect(data.verifiedByUserId).toBe('human-1');
+  });
+});
+
+describe('bulk triage', () => {
+  it('[KG-0.2] refuses an agent triaging in bulk, and changes nothing', async () => {
+    const { service, prisma } = buildService({ userType: 'Agent' });
+
+    for (const status of [
+      PageEntryStatusEnum.STANDING,
+      PageEntryStatusEnum.DISPUTED,
+      PageEntryStatusEnum.ARCHIVED,
+    ]) {
+      await expect(
+        service.bulkUpdate('workspace-1', 'agent-1', {
+          entryIds: ['entry-1', 'entry-2'],
+          status,
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    }
+
+    expect(prisma.pageEntry.findMany).not.toHaveBeenCalled();
+    expect(prisma.pageEntry.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("[KG-0.2] still applies a person's bulk decision", async () => {
+    const { service, prisma } = buildService({ userType: 'User' });
+    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValueOnce([
+      { id: 'entry-1', status: PageEntryStatusEnum.PROPOSED },
+      { id: 'entry-2', status: PageEntryStatusEnum.PROPOSED },
+    ]);
+
+    await expect(
+      service.bulkUpdate('workspace-1', 'human-1', {
+        entryIds: ['entry-1', 'entry-2'],
+        status: PageEntryStatusEnum.STANDING,
+      }),
+    ).resolves.toEqual({ updated: 2, skipped: 0 });
+
+    const { where, data } = (prisma.pageEntry.updateMany as jest.Mock).mock
+      .calls[0][0];
+    expect(where.id.in).toEqual(['entry-1', 'entry-2']);
+    expect(data.status).toBe(PageEntryStatusEnum.STANDING);
+  });
+});
+
+describe('a write the page already holds', () => {
+  it('[KG-0.3] refuses an exact repeat, ignoring case and spacing, and writes nothing', async () => {
+    const { service, prisma } = buildService({
+      userType: 'User',
+      existing: [{ id: 'entry-9', content: 'Redis holds only cache here.' }],
+    });
+
+    // A plain REST append from a person's token: no agent-core in front of it.
+    const attempt = service.createEntry('page-1', HUMAN, {
+      content: '  redis   holds only CACHE here. ',
+    });
+
+    await expect(attempt).rejects.toBeInstanceOf(ConflictException);
+    const response = (
+      (await attempt.catch((error) => error)) as ConflictException
+    ).getResponse() as Record<string, unknown>;
+    expect(response.status).toBe('needs-decision');
+    expect(response.nearMatches).toEqual([
+      expect.objectContaining({ entryId: 'entry-9' }),
+    ]);
+    expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('[KG-0.3] refuses a near match found by the index, and writes nothing', async () => {
+    const { service, prisma } = buildService({
+      nearMatches: [
+        {
+          entryId: 'entry-3',
+          content: 'The cache is the only thing in Redis.',
+        },
+      ],
+    });
+
+    const attempt = service.createEntry('page-1', AGENT, {
+      content: 'Redis holds only cache here.',
+    });
+
+    await expect(attempt).rejects.toBeInstanceOf(ConflictException);
+    const response = (
+      (await attempt.catch((error) => error)) as ConflictException
+    ).getResponse() as Record<string, unknown>;
+    expect(response.nearMatches).toEqual([
+      expect.objectContaining({ entryId: 'entry-3' }),
+    ]);
+    expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('[KG-0.3] writes once the writer says the fact is distinct', async () => {
+    const { service, prisma } = buildService({
+      existing: [{ id: 'entry-9', content: 'Redis holds only cache here.' }],
+      nearMatches: [{ entryId: 'entry-3', content: 'similar' }],
+    });
+
+    await expect(
+      service.createEntry('page-1', AGENT, {
+        content: 'Redis holds only cache here.',
+        distinct: true,
+      }),
+    ).resolves.toBeDefined();
+
+    expect(prisma.pageEntry.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('[KG-0.3] writes a correction that supersedes the entry it repeats', async () => {
+    const { service, prisma } = buildService({
+      existing: [{ id: 'entry-9', content: 'Redis holds only cache here.' }],
+    });
+
+    await service.createEntry('page-1', AGENT, {
+      content: 'Redis holds only cache here.',
+      supersedesId: '5b1c6a52-0d5f-4d8e-9d1e-2f0f6b1a7c3e',
+    });
+
+    expect(prisma.pageEntry.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('[KG-0.3] still records the fact when the index cannot be reached', async () => {
+    const { service, prisma } = buildService({
+      nearMatches: new Error('typesense is down'),
+    });
+
+    await expect(
+      service.createEntry('page-1', AGENT, { content: 'A new fact.' }),
+    ).resolves.toBeDefined();
+
+    expect(prisma.pageEntry.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('[KG-0.3] asks a person writing a standing fact about exact repeats only', async () => {
+    const { service, vectorService } = buildService({
+      userType: 'User',
+      nearMatches: [{ entryId: 'entry-3', content: 'similar' }],
+    });
+
+    await expect(
+      service.createEntry('page-1', HUMAN, {
+        content: 'A new fact.',
+        standing: true,
+      }),
+    ).resolves.toBeDefined();
+
+    expect(vectorService.findSimilarEntries).not.toHaveBeenCalled();
+  });
+});
+
+describe('decay', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const daysAgo = (days: number) => new Date(Date.now() - days * DAY);
+
+  interface Row {
+    name: string;
+    status: PageEntryStatusEnum;
+    createdAt: Date;
+    lastServedAt: Date | null;
+    retrievalCount: number;
+    verifiedAt: Date | null;
+  }
+
+  /**
+   * Applies the fields of a Prisma `where` that the standing pass filters on,
+   * so the test can say which entries it archives rather than only what the
+   * query looks like.
+   */
+  function matches(where: Record<string, unknown>, row: Row): boolean {
+    return Object.entries(where).every(([field, condition]) => {
+      if (field === 'page' || field === 'deleted') {
+        return true;
+      }
+      if (field === 'OR') {
+        return (condition as Array<Record<string, unknown>>).some((branch) =>
+          matches(branch, row),
+        );
+      }
+      const value = row[field as keyof Row];
+      if (condition !== null && typeof condition === 'object') {
+        const { lt } = condition as { lt?: Date };
+        return value instanceof Date && lt !== undefined && value < lt;
+      }
+      return value === condition;
+    });
+  }
+
+  async function archivedBy(rows: Row[]): Promise<string[]> {
+    const { service, prisma } = buildService();
+    await service.runDecay('workspace-1');
+    const standingPass = (prisma.pageEntry.updateMany as jest.Mock).mock
+      .calls[1][0];
+
+    return rows
+      .filter((row) => matches(standingPass.where, row))
+      .map((row) => row.name);
+  }
+
+  const standing = (row: Partial<Row> & { name: string }): Row => ({
+    status: PageEntryStatusEnum.STANDING,
+    createdAt: daysAgo(400),
+    lastServedAt: null,
+    retrievalCount: 0,
+    verifiedAt: null,
+    ...row,
+  });
+
+  it('[KG-0.6] keeps an entry served within the window, and archives one last served before it', async () => {
+    await expect(
+      archivedBy([
+        standing({
+          name: 'served yesterday',
+          lastServedAt: daysAgo(1),
+          retrievalCount: 7,
+        }),
+        standing({
+          name: 'served once, long ago',
+          lastServedAt: daysAgo(200),
+          retrievalCount: 1,
+        }),
+      ]),
+    ).resolves.toEqual(['served once, long ago']);
+  });
+
+  it('[KG-0.6] archives an old entry nobody ever served, and spares a verified one', async () => {
+    await expect(
+      archivedBy([
+        standing({ name: 'never served' }),
+        standing({ name: 'verified', verifiedAt: daysAgo(300) }),
+        standing({ name: 'new', createdAt: daysAgo(5) }),
+      ]),
+    ).resolves.toEqual(['never served']);
+  });
+
+  it('[KG-0.6] spares an entry counted before serve dates were recorded', async () => {
+    // A count with no date means somebody read it at a time nobody wrote
+    // down, which is not evidence that nobody reads it.
+    await expect(
+      archivedBy([
+        standing({ name: 'legacy', lastServedAt: null, retrievalCount: 4 }),
+      ]),
+    ).resolves.toEqual([]);
   });
 });

@@ -96,7 +96,7 @@ export class PageEntriesController {
       query.workspaceId,
     );
 
-    return this.pageEntriesService.bulkUpdate(workspaceId, input);
+    return this.pageEntriesService.bulkUpdate(workspaceId, userId, input);
   }
 
   @Post(':pageEntryId')

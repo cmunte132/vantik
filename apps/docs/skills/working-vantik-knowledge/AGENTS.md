@@ -60,7 +60,9 @@ per token (the error names the ones in your way — consolidate or supersede the
 do not find another page to dump into); `LOCKED` pages are readable but not
 appendable by agents. Everything you write lands as proposed and is served to
 nobody until a human accepts it, so write for the reviewer and for the stranger
-after them.
+after them. Triage is for people: you cannot accept, dispute or verify entries.
+You can reword or archive your own while they are still proposed; correct an
+accepted one by superseding it.
 
 `knowledge_gaps` lists questions the bank could not answer, most-asked first. If
 you just spent an hour answering one, that hour is worth an entry.

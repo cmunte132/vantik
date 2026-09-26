@@ -62,11 +62,9 @@ export const ProjectMilestoneDropdownContent = observer(
           <div className="flex gap-2 items-center">
             {multiple && (
               <Checkbox
-                id="no-project-milestone"
                 checked={value.includes('no-project-milestone')}
-                onCheckedChange={(value: boolean) =>
-                  onValueChange(value, 'no-project-milestone')
-                }
+                tabIndex={-1}
+                className="pointer-events-none"
               />
             )}
             <div className="flex grow">
@@ -98,17 +96,12 @@ export const ProjectMilestoneDropdownContent = observer(
                 <div className="flex gap-2 items-center">
                   {multiple && (
                     <Checkbox
-                      id={projectMilestone.name}
                       checked={value.includes(projectMilestone.id)}
-                      onCheckedChange={(value: boolean) => {
-                        onValueChange(value, projectMilestone.id);
-                      }}
+                      tabIndex={-1}
+                      className="pointer-events-none"
                     />
                   )}
-                  <label
-                    htmlFor={projectMilestone.name}
-                    className="flex gap-2 grow"
-                  >
+                  <label className="flex gap-2 grow">
                     <RiPriceTag3Line className="h-5 w-5 text-[9px]" size={18} />
 
                     {projectMilestone.name}

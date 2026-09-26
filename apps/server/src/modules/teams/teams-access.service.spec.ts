@@ -136,6 +136,7 @@ describe('TeamsService write boundary', () => {
       .fn()
       .mockResolvedValue({ id: MY_TEAM, preferences: {} });
     prisma.issue = { findMany: jest.fn().mockResolvedValue([]) };
+    (prisma as unknown as Record<string, jest.Mock>).$executeRaw = jest.fn();
 
     return { ...built, prisma };
   }

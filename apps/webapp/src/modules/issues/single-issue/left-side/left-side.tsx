@@ -43,23 +43,28 @@ export const LeftSide = observer(() => {
   const { mutate: updateIssue } = useUpdateIssueMutation({});
   const { suggestionItems } = useEditorSuggestionItems();
 
-  const onDescriptionChange = useDebouncedCallback((content: string) => {
-    const { json: description } = getTiptapJSON(content);
+  // Each save waits a second after the last keystroke. What is still waiting
+  // when the sheet closes, or moves to another issue, is sent then rather than
+  // dropped. The issue travels with the text, not read off `issue` when the
+  // timer fires: the sheet renders the next issue before it lets this one go,
+  // and a late save would otherwise land in the issue just opened.
+  const onDescriptionChange = useDebouncedCallback(
+    (id: string, teamId: string, content: string) => {
+      const { json: description } = getTiptapJSON(content);
 
-    updateIssue({
-      description: JSON.stringify(description),
-      teamId: issue.teamId,
-      id: issue.id,
-    });
-  }, 1000);
+      updateIssue({ description: JSON.stringify(description), teamId, id });
+    },
+    1000,
+    { flushOnExit: true },
+  );
 
-  const onIssueChange = useDebouncedCallback((content: string) => {
-    updateIssue({
-      title: content,
-      teamId: issue.teamId,
-      id: issue.id,
-    });
-  }, 1000);
+  const onIssueChange = useDebouncedCallback(
+    (id: string, teamId: string, title: string) => {
+      updateIssue({ title, teamId, id });
+    },
+    1000,
+    { flushOnExit: true },
+  );
 
   const { handlePaste } = useEditorPasteHandler();
 
@@ -75,15 +80,26 @@ export const LeftSide = observer(() => {
           <div className="py-6 flex flex-col">
             {isTriageView && <SimilarIssuesView issueId={issue.id} />}
 
-            <IssueTitle value={issue.title} onChange={onIssueChange} />
+            {/* Keyed on the issue, so each only ever reports edits to its own.
+                The two keys differ: siblings that shared one left React unable
+                to tell them apart, and every update to the issue drew another
+                title above the last. */}
+            <IssueTitle
+              key={`${issue.id}-title`}
+              value={issue.title}
+              onChange={(title) => onIssueChange(issue.id, issue.teamId, title)}
+            />
             {issue.parentId && (
               <div className="px-6">
                 <ParentIssueView issue={issue} />
               </div>
             )}
             <Editor
+              key={`${issue.id}-description`}
               value={issue.description}
-              onChange={onDescriptionChange}
+              onChange={(content: string) =>
+                onDescriptionChange(issue.id, issue.teamId, content)
+              }
               handlePaste={handlePaste}
               extensions={[vantikIssueExtension]}
               className="min-h-[50px] mb-8 px-6 mt-3 text-md"

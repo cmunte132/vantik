@@ -4,12 +4,11 @@ import { Button } from '@vantikhq/ui/components/button';
 import {
   Editor,
   EditorExtensions,
+  type EditorT,
   suggestionItems,
 } from '@vantikhq/ui/components/editor/index';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import * as React from 'react';
-
-import { getTiptapJSON } from 'common';
 
 import {
   CustomMention,
@@ -41,29 +40,34 @@ export function ReplyComment({ issueCommentId }: ReplyCommentProps) {
   // only copy, so an auto-reload has to wait.
   useReloadBlock(!!commentValue);
 
+  const editorRef = React.useRef<EditorT>(undefined);
+
+  // What the editor holds now, not `commentValue`: that trails the editor by
+  // half a second, and a comment sent inside that half second was cleared
+  // without being posted.
   const onSubmit = () => {
-    if (commentValue !== '') {
-      const { json, text } = getTiptapJSON(commentValue);
+    const editor = editorRef.current;
+    const json = editor?.getJSON();
+    const text = editor?.getText();
 
-      if (pendingUploads(json)) {
-        toast({
-          title: 'Uploads pending!',
-          variant: 'destructive',
-          description:
-            'Some uploads are pending, please wait before you comment',
-        });
+    if (json && pendingUploads(json)) {
+      toast({
+        title: 'Uploads pending!',
+        variant: 'destructive',
+        description: 'Some uploads are pending, please wait before you comment',
+      });
 
-        return;
-      }
-
-      if (text) {
-        createIssueComment({
-          body: JSON.stringify(json),
-          issueId: issueData.id,
-          parentId: issueCommentId,
-        });
-      }
+      return;
     }
+
+    if (text) {
+      createIssueComment({
+        body: JSON.stringify(json),
+        issueId: issueData.id,
+        parentId: issueCommentId,
+      });
+    }
+
     setCommentValue(undefined);
   };
 
@@ -82,6 +86,9 @@ export function ReplyComment({ issueCommentId }: ReplyCommentProps) {
           ]}
           autoFocus
           onSubmit={onSubmit}
+          onCreate={(editor) => {
+            editorRef.current = editor;
+          }}
           onChange={(e) => setCommentValue(e)}
           className="w-full min-h-[60px] bg-transparent mb-0 p-2 pt-0 grow text-foreground relative"
         >

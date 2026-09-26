@@ -99,7 +99,6 @@ export const IssueStatusDropdown = observer(
     return (
       <div
         onClick={(e) => {
-          console.log(e);
           e.stopPropagation();
           e.preventDefault();
         }}

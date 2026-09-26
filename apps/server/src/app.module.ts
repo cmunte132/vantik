@@ -8,6 +8,7 @@ import { PrismaModule } from 'nestjs-prisma';
 
 import { BuildStampInterceptor } from 'common/interceptors/build-stamp.interceptor';
 import { ErrorReportingInterceptor } from 'common/interceptors/error-reporting.interceptor';
+import { smtpFrom, smtpTransportOptions } from 'common/smtp';
 
 import { AgentHooksModule } from 'modules/agent-hooks/agent-hooks.module';
 import { AgentSkillModule } from 'modules/agent-skill/agent-skill.module';
@@ -74,17 +75,9 @@ import { AppService } from './app.service';
     }),
 
     MailerModule.forRoot({
-      transport: {
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT),
-        secure: process.env.SMTP_USE_SLS === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASSWORD,
-        },
-      },
+      transport: smtpTransportOptions(),
       defaults: {
-        from: `${process.env.SMTP_DEFAULT_FROM}`,
+        from: smtpFrom(),
       },
       template: {
         dir: `${process.cwd()}/templates`,

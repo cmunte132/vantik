@@ -55,6 +55,10 @@ export interface Issue {
   teamId: string;
   assigneeId: string | null;
   cycleId: string | null;
+  projectId: string | null;
+  priority: number | null;
+  labelIds: string[];
+  parentId: string | null;
   description: string | null;
   descriptionMarkdown: string;
   deleted: string | null;
@@ -74,6 +78,8 @@ export async function createIssue(
     teamId: string;
     assigneeId: string;
     cycleId: string;
+    priority: number;
+    labelIds: string[];
   }> = {},
 ): Promise<Issue> {
   const teamId = fields.teamId ?? account.teamId;
@@ -95,7 +101,12 @@ export async function createIssue(
 export async function updateIssue(
   api: APIRequestContext,
   issue: Issue,
-  fields: Partial<{ title: string; stateId: string; assigneeId: string }>,
+  fields: Partial<{
+    title: string;
+    stateId: string;
+    assigneeId: string | null;
+    priority: number;
+  }>,
 ): Promise<Issue> {
   return ok(
     await api.post(`/v1/issues/${issue.id}`, {
@@ -253,11 +264,19 @@ export async function teamsOf(api: APIRequestContext): Promise<Team[]> {
 export interface Project {
   id: string;
   name: string;
+  description: string | null;
+  teams: string[];
 }
 
-export async function createProject(api: APIRequestContext): Promise<Project> {
+/** A project, in no team unless `fields.teams` names some. */
+export async function createProject(
+  api: APIRequestContext,
+  fields: Partial<{ name: string; teams: string[] }> = {},
+): Promise<Project> {
   return ok(
-    await api.post('/v1/projects', { data: { name: unique('Project') } }),
+    await api.post('/v1/projects', {
+      data: { name: unique('Project'), ...fields },
+    }),
     'creating a project',
   );
 }
@@ -361,4 +380,32 @@ export interface Workspace {
 /** Every workspace the caller belongs to. */
 export async function workspacesOf(api: APIRequestContext): Promise<Workspace[]> {
   return ok(await api.get('/v1/workspaces'), 'listing workspaces');
+}
+
+export interface WikiPage {
+  id: string;
+  title: string;
+  description: string | null;
+}
+
+export async function getPage(
+  api: APIRequestContext,
+  pageId: string,
+): Promise<WikiPage> {
+  return ok(await api.get(`/v1/pages/${pageId}`), 'reading a page');
+}
+
+/** The ids of the issues a search of the account's workspace finds. */
+export async function searchIssueIds(
+  api: APIRequestContext,
+  account: Account,
+  query: string,
+): Promise<string[]> {
+  const found = await ok<Array<{ id: string }>>(
+    await api.get('/v1/search', {
+      params: { workspaceId: account.workspaceId, query },
+    }),
+    'searching issues',
+  );
+  return found.map((issue) => issue.id);
 }

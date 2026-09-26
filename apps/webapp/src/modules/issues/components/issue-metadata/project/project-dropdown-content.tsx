@@ -57,11 +57,9 @@ export function ProjectDropdownContent({
         <div className="flex gap-2 items-center">
           {multiple && (
             <Checkbox
-              id="no-project"
               checked={value.includes('no-project')}
-              onCheckedChange={(value: boolean) =>
-                onValueChange(value, 'no-project')
-              }
+              tabIndex={-1}
+              className="pointer-events-none"
             />
           )}
           <div className="flex grow">
@@ -89,14 +87,12 @@ export function ProjectDropdownContent({
             <div className="flex gap-2 items-center">
               {multiple && (
                 <Checkbox
-                  id={project.name}
                   checked={value.includes(project.id)}
-                  onCheckedChange={(value: boolean) => {
-                    onValueChange(value, project.id);
-                  }}
+                  tabIndex={-1}
+                  className="pointer-events-none"
                 />
               )}
-              <label htmlFor={project.name} className="flex gap-2 grow">
+              <label className="flex gap-2 grow">
                 <RiBox3Line className="h-5 w-5 text-[9px]" size={18} />
 
                 {project.name}

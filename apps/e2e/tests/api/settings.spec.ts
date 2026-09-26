@@ -1,5 +1,5 @@
 import { createSpareTeam, teamsOf, workspacesOf } from '../../src/api';
-import { expect, knownBug, test } from '../../src/fixtures';
+import { expect, test } from '../../src/fixtures';
 
 /**
  * A settings form saves part of a record and expects the rest to stay. The
@@ -50,10 +50,6 @@ test.describe('settings are saved', () => {
     });
     expect(response).toBeOK();
 
-    knownBug(
-      'UpdateWorkspacePreferencesDto declares no fields, so validation strips the whole body and nothing is saved',
-    );
-
     const workspace = (await workspacesOf(asAlice)).find(
       (candidate) => candidate.id === alice.workspaceId,
     );
@@ -63,5 +59,27 @@ test.describe('settings are saved', () => {
     expect((await response.json()).preferences).toEqual(
       expect.objectContaining({ agentRuns }),
     );
+  });
+});
+
+test.describe('settings are for admins', () => {
+  // The workspace's settings hold the agent run limits: what a run may spend
+  // on a model key someone else pays for. Any member could change them.
+  test("a member who is not an admin can't change the workspace's", async ({
+    asAlice,
+    asCarol,
+    alice,
+  }) => {
+    const maxCostUsd = 1_000_000;
+
+    const response = await asCarol.post('/v1/workspaces/preferences', {
+      data: { agentRuns: { limits: { maxCostUsd } } },
+    });
+    expect(response.status()).toBe(403);
+
+    const workspace = (await workspacesOf(asAlice)).find(
+      (candidate) => candidate.id === alice.workspaceId,
+    );
+    expect(JSON.stringify(workspace?.preferences ?? {})).not.toContain(`${maxCostUsd}`);
   });
 });

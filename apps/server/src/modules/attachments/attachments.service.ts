@@ -13,7 +13,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
-import { AttachmentRequestParams } from './attachments.interface';
+import { AttachmentIdParams } from './attachments.interface';
 import { LocalStorageProvider } from './providers/local-storage.provider';
 import { StorageProvider } from './storage-provider.interface';
 import { StorageFactory } from './storage.factory';
@@ -192,7 +192,7 @@ export class AttachmentService {
   }
 
   async getFileFromStorage(
-    attachementRequestParams: AttachmentRequestParams,
+    attachementRequestParams: AttachmentIdParams,
     workspaceId: string,
   ) {
     const attachment = await this.getAttachment(

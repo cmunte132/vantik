@@ -117,7 +117,9 @@ export function MultiSelect({
           </div>
         </PopoverTrigger>
         <PopoverContent className="p-0" align="start">
-          <CommandList>
+          {/* The list scrolls. Taller, it ran past the bottom of the screen,
+              and an option down there could not be reached. */}
+          <CommandList className="max-h-72">
             {open && options.length > 0 ? (
               <div className="mt-2 top-0 z-10 w-full rounded-md border bg-popover text-popover-foreground shadow-md outline-none animate-in">
                 <CommandGroup className="h-full overflow-auto">

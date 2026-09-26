@@ -52,8 +52,12 @@ export function SearchDialog({ open, setOpen }: SearchDialogProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
+  // An empty box searches for nothing. The dialog is mounted, and this runs, on
+  // every page before anyone opens it, and the server refuses an empty query.
   const fetchData = useDebouncedCallback(() => {
-    refetch();
+    if (query.trim()) {
+      refetch();
+    }
   }, 500);
 
   const onSelect = (value: string) => {
@@ -75,9 +79,9 @@ export function SearchDialog({ open, setOpen }: SearchDialogProps) {
       {!isLoading &&
         (issues?.length ?? 0) === 0 &&
         (knowledge?.hits?.length ?? 0) === 0 && (
-        <CommandEmpty>
-          <span className="text-muted-foreground">No results found.</span>
-        </CommandEmpty>
+          <CommandEmpty>
+            <span className="text-muted-foreground">No results found.</span>
+          </CommandEmpty>
         )}
       {isLoading && <Loader />}
       {!isLoading && (

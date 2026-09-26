@@ -1,7 +1,7 @@
 import type { APIRequestContext } from '@playwright/test';
 
 import type { Account } from '../../src/auth';
-import { expect, knownBug, test } from '../../src/fixtures';
+import { expect, test } from '../../src/fixtures';
 
 /**
  * An image pasted into the editor takes three requests: ask the server for a
@@ -60,6 +60,8 @@ test.describe('attachments', () => {
 
     expect(read).toBeOK();
     expect(read.headers()['content-type']).toContain('image/png');
+    // A file is for the workspace's members, so no shared cache may keep it.
+    expect(read.headers()['cache-control']).toMatch(/^private\b/);
     expect(await read.body()).toEqual(PNG);
   });
 
@@ -72,10 +74,6 @@ test.describe('attachments', () => {
     expect(attachment.publicURL).toMatch(new RegExp(`/v1/attachment/${attachment.id}$`));
 
     const read = await asAlice.get(`/v1/attachment/${attachment.id}`);
-
-    knownBug(
-      'GET /v1/attachment/:attachmentId validates its params as AttachmentRequestParams, which requires a workspaceId the route does not have, and answers 400',
-    );
 
     expect(read).toBeOK();
     expect(await read.body()).toEqual(PNG);
@@ -95,10 +93,6 @@ test.describe('attachments', () => {
     expect((await asBob.get(`/v1/attachment/${attachment.id}`)).ok()).toBe(false);
 
     const read = await asBob.get(inWorkspace(alice, attachment));
-
-    knownBug(
-      'GET /v1/attachment/:workspaceId/:attachmentId takes the workspace from the URL and never checks the caller belongs to it',
-    );
 
     expect([403, 404]).toContain(read.status());
   });

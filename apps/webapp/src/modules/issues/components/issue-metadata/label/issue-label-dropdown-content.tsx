@@ -70,25 +70,25 @@ export function IssueLabelDropdownContent({
       <CommandGroup>
         {filter().map((label: LabelType, index: number) => {
           return (
+            // The row toggles the label, so Enter on a highlighted row works
+            // as a click does. The checkbox only shows the state: were it to
+            // toggle too, a click on it would reach the row and undo itself.
             <DropdownItem
               key={label.name}
               id={label.id}
               index={index}
               value={label.name}
-              onSelect={() => {}}
+              onSelect={() =>
+                onValueChange(!value.includes(label.id), label.id)
+              }
             >
               <div className="flex gap-2 items-center w-full">
                 <Checkbox
-                  id={label.id}
                   checked={value.includes(label.id)}
-                  onCheckedChange={(value: boolean) =>
-                    onValueChange(value, label.id)
-                  }
+                  tabIndex={-1}
+                  className="pointer-events-none"
                 />
-                <label
-                  htmlFor={label.id}
-                  className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
-                >
+                <label className="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2">
                   <BadgeColor
                     style={{ backgroundColor: label.color }}
                     className="w-2 h-2"

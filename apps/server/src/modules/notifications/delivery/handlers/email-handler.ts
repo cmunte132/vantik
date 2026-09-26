@@ -8,7 +8,8 @@ import {
   Workspace,
 } from '@vantikhq/types';
 import nodemailer from 'nodemailer';
-import SMTPTransport from 'nodemailer/lib/smtp-transport';
+
+import { smtpConfigured, smtpFrom, smtpTransportOptions } from 'common/smtp';
 
 import { generateEmailTemplate } from './notificationTemplate';
 import {
@@ -17,37 +18,12 @@ import {
   getUnassingedNotification,
 } from '../utils';
 
+/**
+ * Sends notification mail through the SMTP server sign-in mail uses. Without
+ * one there is nobody to hand the mail to, so nothing is sent.
+ */
 class MailService {
-  private transporter: nodemailer.Transporter;
-
-  constructor() {
-    const transportOptions: SMTPTransport.Options = {
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT),
-      secure: true,
-      requireTLS: true,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-      connectionTimeout: 5000,
-      socketTimeout: 5000,
-    };
-
-    this.transporter = nodemailer.createTransport(transportOptions);
-  }
-
-  async verify() {
-    return await this.transporter.verify((err, success) => {
-      if (err) {
-        console.error(err);
-      }
-      console.log(`Your config is correct ${success}`);
-    });
-  }
+  private transporter: nodemailer.Transporter | undefined;
 
   async sendMail({
     to,
@@ -58,12 +34,13 @@ class MailService {
     subject: string;
     html: string;
   }) {
-    await this.transporter.sendMail({
-      from: `Vantik <notification@vantik.dev>`,
-      to,
-      subject,
-      html,
-    });
+    if (!smtpConfigured()) {
+      return;
+    }
+
+    this.transporter ??= nodemailer.createTransport(smtpTransportOptions());
+
+    await this.transporter.sendMail({ from: smtpFrom(), to, subject, html });
   }
 }
 
@@ -74,7 +51,6 @@ export const emailHandler = async (
   prisma: PrismaClient,
   payload: ActionEventPayload,
 ) => {
-  await mailService.verify();
   switch (payload.event) {
     case ActionTypesEnum.ON_CREATE:
     case ActionTypesEnum.ON_UPDATE:

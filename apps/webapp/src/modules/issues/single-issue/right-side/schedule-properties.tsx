@@ -44,12 +44,20 @@ export const ScheduleProperties = observer(() => {
 
   return (
     <>
-      <div className={cn('flex flex-col items-start')}>
+      <div
+        className={cn('flex flex-col items-start')}
+        role="group"
+        aria-label="Due Date"
+      >
         <div className="text-xs text-left">Due Date</div>
         <DueDate dueDate={issue.dueDate} dueDateChange={dueDateChange} />
       </div>
       {cyclesEnabledForTeam && (
-        <div className={cn('flex flex-col items-start')}>
+        <div
+          className={cn('flex flex-col items-start')}
+          role="group"
+          aria-label="Cycle"
+        >
           <div className="text-xs text-left">Cycle</div>
 
           <CycleDropdown

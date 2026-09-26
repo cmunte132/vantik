@@ -59,14 +59,12 @@ export function IssueStatusDropdownContent({
             <div className="flex gap-2 items-center">
               {multiple && (
                 <Checkbox
-                  id={workflow.name}
                   checked={value.includes(workflow.id)}
-                  onCheckedChange={(value: boolean) => {
-                    onValueChange(value, workflow.id);
-                  }}
+                  tabIndex={-1}
+                  className="pointer-events-none"
                 />
               )}
-              <label className="flex grow items-center" htmlFor={workflow.name}>
+              <label className="flex grow items-center">
                 <CategoryIcon
                   size={18}
                   className="mr-2"

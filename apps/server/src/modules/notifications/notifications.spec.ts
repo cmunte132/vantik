@@ -5,6 +5,7 @@ import { emailHandler } from './delivery/handlers/email-handler';
 import { vantikHandler } from './delivery/handlers/vantik-handler';
 import { NotificationsProcessor } from './notifications.processor';
 import { NotificationsQueue } from './notifications.queue';
+import NotificationsService from './notifications.service';
 
 jest.mock('./delivery/handlers/vantik-handler', () => ({
   vantikHandler: jest.fn(),
@@ -145,5 +146,50 @@ describe('the processor', () => {
     } as never);
 
     expect(result.emailDelivered).toBe(false);
+  });
+});
+
+describe('updating a notification', () => {
+  function serviceWith(owned: boolean) {
+    const prisma = {
+      notification: {
+        findFirst: jest.fn().mockResolvedValue(owned ? { id: 'n-1' } : null),
+        update: jest.fn().mockResolvedValue({ id: 'n-1' }),
+      },
+    };
+
+    return {
+      prisma,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      service: new NotificationsService(prisma as any),
+    };
+  }
+
+  it("marks the caller's own notification read", async () => {
+    const { prisma, service } = serviceWith(true);
+    const readAt = new Date();
+
+    await service.updateNotification('n-1', 'user-1', { readAt });
+
+    expect(prisma.notification.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'n-1', userId: 'user-1', deleted: null },
+      }),
+    );
+    expect(prisma.notification.update).toHaveBeenCalledWith({
+      where: { id: 'n-1' },
+      data: { readAt },
+    });
+  });
+
+  // Any signed-in user could mark anyone's notification read by its id, and
+  // was handed back its contents.
+  it("answers someone else's as missing, and leaves it alone", async () => {
+    const { prisma, service } = serviceWith(false);
+
+    await expect(
+      service.updateNotification('n-1', 'intruder', { readAt: new Date() }),
+    ).rejects.toThrow('Notification n-1 not found');
+    expect(prisma.notification.update).not.toHaveBeenCalled();
   });
 });

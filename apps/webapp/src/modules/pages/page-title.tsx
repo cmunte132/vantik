@@ -1,6 +1,5 @@
 import { Textarea } from '@vantikhq/ui/components/textarea';
 import * as React from 'react';
-import { useDebouncedCallback } from 'use-debounce';
 
 interface PageTitleProps {
   value: string;
@@ -32,13 +31,11 @@ export function PageTitle({ value, onChange }: PageTitleProps) {
     setInputValue(value);
   }, [value]);
 
-  const debouncedUpdates = useDebouncedCallback(async (title: string) => {
-    onChange && onChange(title);
-  }, 500);
-
   const onInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputValue(event.currentTarget.value);
-    debouncedUpdates(event.currentTarget.value);
+    // Straight up: the page debounces the save, and a second delay here was
+    // one the page could not flush when you left it.
+    onChange && onChange(event.currentTarget.value);
   };
 
   return (

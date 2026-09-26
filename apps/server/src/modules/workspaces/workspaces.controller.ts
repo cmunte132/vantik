@@ -75,8 +75,11 @@ export class WorkspacesController {
     );
   }
 
+  // Admins only, as the settings page that sends it is. The preferences hold
+  // the agent run defaults, limits included: what a run may spend on a model
+  // key that someone else pays for.
   @Post('preferences')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, AdminGuard)
   async updateWorkspacePreferences(
     @WorkspaceD() workspaceId: string,
     @Body() workspaceData: UpdateWorkspacePreferencesDto,

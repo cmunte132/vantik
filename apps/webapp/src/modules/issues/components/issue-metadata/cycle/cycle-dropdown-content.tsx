@@ -57,11 +57,9 @@ export function CycleDropdownContent({
         <div className="flex gap-2 items-center">
           {multiple && (
             <Checkbox
-              id="no-cycle"
               checked={value.includes('no-cycle')}
-              onCheckedChange={(value: boolean) =>
-                onValueChange(value, 'no-cycle')
-              }
+              tabIndex={-1}
+              className="pointer-events-none"
             />
           )}
           <div className="flex grow">
@@ -89,14 +87,12 @@ export function CycleDropdownContent({
             <div className="flex gap-2 items-center">
               {multiple && (
                 <Checkbox
-                  id={cycle.name}
                   checked={value.includes(cycle.id)}
-                  onCheckedChange={(value: boolean) => {
-                    onValueChange(value, cycle.id);
-                  }}
+                  tabIndex={-1}
+                  className="pointer-events-none"
                 />
               )}
-              <label htmlFor={cycle.name} className="flex gap-2 grow">
+              <label className="flex gap-2 grow">
                 <RiRefreshLine className="h-5 w-5 text-[9px]" size={16} />
 
                 {cycle.name}

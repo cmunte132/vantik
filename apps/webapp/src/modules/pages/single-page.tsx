@@ -144,6 +144,9 @@ const SinglePageView = observer(() => {
       });
     },
     1000,
+    // Leaving the page inside that second sends what is waiting rather than
+    // dropping it.
+    { flushOnExit: true },
   );
 
   const onTitleChange = useDebouncedCallback(
@@ -151,6 +154,7 @@ const SinglePageView = observer(() => {
       updatePage({ pageId, title });
     },
     1000,
+    { flushOnExit: true },
   );
 
   // Marked pending the instant a key is pressed, not when the debounced

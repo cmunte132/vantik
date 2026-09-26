@@ -2,7 +2,8 @@
 import { Timeline, TimelineItem } from '@vantikhq/ui/components/timeline';
 import { sort } from 'fast-sort';
 import { observer } from 'mobx-react-lite';
-import React from 'react';
+
+import { RunCard } from 'modules/agent-runs/run-card';
 
 import type { User } from 'common/types';
 import type { IssueCommentType } from 'common/types';
@@ -11,8 +12,6 @@ import { useIssueData } from 'hooks/issues';
 import { useUsersData } from 'hooks/users';
 
 import { useContextStore } from 'store/global-context-provider';
-
-import { RunCard } from 'modules/agent-runs/run-card';
 
 import { CommentActivity } from './comment-activity';
 import { IssueComment } from './issue-comment';
@@ -33,14 +32,14 @@ export const CommentsActivity = observer(() => {
     );
   }
 
-  const sortedComments = React.useMemo(() => {
-    const comments = commentsStore.getComments(issue.id) as IssueCommentType[];
-
-    return sort(comments).asc((comment) =>
-      new Date(comment.createdAt).getTime(),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commentsStore.comments.length, issue]);
+  // Read as the component draws, so the observer follows this issue's
+  // comments. This was a memo keyed on the store's length, but the store is a
+  // map, which has none: the list was worked out again only when the issue
+  // changed. A comment that landed after its issue's own update was never
+  // shown until the issue was opened again.
+  const sortedComments = sort(
+    commentsStore.getComments(issue.id) as IssueCommentType[],
+  ).asc((comment) => new Date(comment.createdAt).getTime());
 
   /**
    * Comments and agent runs, interleaved by when they happened.
@@ -51,34 +50,31 @@ export const CommentsActivity = observer(() => {
    * words, but here the card says the same thing with the buttons attached, and
    * two of them would be one story told twice.
    */
-  const entries = React.useMemo(() => {
-    const runs = agentRunsStore
-      .getRunsForIssue(issue.id)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map((run: any) => ({ kind: 'run' as const, at: run.createdAt, run }));
+  const runs = agentRunsStore
+    .getRunsForIssue(issue.id)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((run: any) => ({ kind: 'run' as const, at: run.createdAt, run }));
 
-    const reported = new Set(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      runs.map((entry: any) => entry.run.id),
-    );
+  const reported = new Set(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    runs.map((entry: any) => entry.run.id),
+  );
 
-    const comments = sortedComments
-      .filter((comment: IssueCommentType) => !comment.parentId)
-      .filter(
-        (comment: IssueCommentType) =>
-          !reported.has(agentRunIdOf(comment.sourceMetadata)),
-      )
-      .map((comment: IssueCommentType) => ({
-        kind: 'comment' as const,
-        at: comment.createdAt,
-        comment,
-      }));
+  const comments = sortedComments
+    .filter((comment: IssueCommentType) => !comment.parentId)
+    .filter(
+      (comment: IssueCommentType) =>
+        !reported.has(agentRunIdOf(comment.sourceMetadata)),
+    )
+    .map((comment: IssueCommentType) => ({
+      kind: 'comment' as const,
+      at: comment.createdAt,
+      comment,
+    }));
 
-    return sort([...runs, ...comments]).asc((entry) =>
-      new Date(entry.at).getTime(),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortedComments, agentRunsStore.agentRuns.length, issue]);
+  const entries = sort([...runs, ...comments]).asc((entry) =>
+    new Date(entry.at).getTime(),
+  );
 
   if (isLoading) {
     return null;

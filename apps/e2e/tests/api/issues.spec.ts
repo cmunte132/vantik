@@ -2,10 +2,12 @@ import {
   commentsOn,
   createComment,
   createIssue,
+  createLabel,
   getIssue,
   issuesOf,
   stateNamed,
   unique,
+  updateIssue,
 } from '../../src/api';
 import { expect, test } from '../../src/fixtures';
 
@@ -106,5 +108,91 @@ test.describe('issues', () => {
     // Deletion is soft, so the row is still there to be served by mistake.
     expect((await issuesOf(asAlice)).map((i) => i.id)).not.toContain(issue.id);
     expect((await asAlice.get(`/v1/issues/${issue.id}`)).status()).toBe(404);
+  });
+});
+
+/**
+ * The webapp saves an issue one property at a time, so an update carries only
+ * what changed. The validation pipe used to hand the handler every field the
+ * DTO declares, the unsent ones as undefined, and the handler read those as
+ * sent: an update tried to connect a parent, a project and a cycle of
+ * undefined, and answered 500.
+ */
+test.describe('updating an issue', () => {
+  test('changes only the fields the request sends', async ({ asAlice, alice }) => {
+    const label = await createLabel(asAlice, alice);
+    const issue = await createIssue(asAlice, alice, {
+      descriptionMarkdown: 'Left as it was',
+      priority: 2,
+      labelIds: [label.id],
+      assigneeId: alice.userId,
+    });
+
+    await updateIssue(asAlice, issue, { priority: 1 });
+
+    expect(await getIssue(asAlice, issue.id)).toMatchObject({
+      priority: 1,
+      title: issue.title,
+      description: issue.description,
+      stateId: issue.stateId,
+      labelIds: [label.id],
+      assigneeId: alice.userId,
+      parentId: null,
+      projectId: null,
+      cycleId: null,
+    });
+  });
+
+  test('clears a field the request sends as null', async ({ asAlice, alice }) => {
+    const issue = await createIssue(asAlice, alice, { assigneeId: alice.userId });
+
+    await updateIssue(asAlice, issue, { assigneeId: null });
+
+    expect((await getIssue(asAlice, issue.id)).assigneeId).toBeNull();
+  });
+
+  // The body is whitelisted against the DTO: a field it does not declare, like
+  // the issue number, is dropped rather than written.
+  test('ignores a field the update does not declare', async ({ asAlice, alice }) => {
+    const issue = await createIssue(asAlice, alice);
+    const title = unique('Renamed');
+
+    const response = await asAlice.post(`/v1/issues/${issue.id}`, {
+      params: { teamId: issue.teamId },
+      data: { title, number: issue.number + 1000 },
+    });
+    expect(response).toBeOK();
+
+    expect(await getIssue(asAlice, issue.id)).toMatchObject({
+      title,
+      number: issue.number,
+    });
+  });
+
+  // A team named in the body has to be one of the caller's, as the one in the
+  // query does. Otherwise the body could carry an issue off.
+  test("refuses a team that is not the caller's", async ({ asAlice, alice, bob }) => {
+    const issue = await createIssue(asAlice, alice);
+
+    const response = await asAlice.post(`/v1/issues/${issue.id}`, {
+      params: { teamId: issue.teamId },
+      data: { title: unique('Carried off'), teamId: bob.teamId },
+    });
+    expect(response.status()).toBe(404);
+
+    expect(await getIssue(asAlice, issue.id)).toMatchObject({
+      title: issue.title,
+      teamId: issue.teamId,
+    });
+  });
+
+  test('refuses a field of the wrong type', async ({ asAlice, alice }) => {
+    const issue = await createIssue(asAlice, alice);
+
+    const response = await asAlice.post(`/v1/issues/${issue.id}`, {
+      params: { teamId: issue.teamId },
+      data: { priority: 'high' },
+    });
+    expect(response.status()).toBe(400);
   });
 });

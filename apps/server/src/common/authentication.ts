@@ -21,15 +21,41 @@ import { UsersService } from 'modules/users/users.service';
  */
 export const AUTH_API_BASE_PATH = '/api/auth';
 
+let jwksClient: JwksClient | undefined;
+
+/**
+ * The keys that sign access tokens, as the SuperTokens core serves them.
+ *
+ * They used to be fetched from `BACKEND_HOST`, the address a browser uses to
+ * reach this server. The server cannot always reach itself that way: in a
+ * container that publishes 3001 on another host port, or behind a proxy whose
+ * public name does not resolve from inside, the fetch failed. Every websocket
+ * was then turned away as "no valid session", and live updates stopped until a
+ * reload. The core is where the SDK itself gets the keys, and the server has to
+ * reach it to run at all. One client is kept, so its cache is kept too; a new
+ * one per call fetched the keys on every handshake.
+ */
+function signingKeys(): JwksClient {
+  if (!jwksClient) {
+    // The connection URI may list several cores, separated by ';'.
+    const core = process.env.SUPERTOKEN_CONNECTION_URI.split(';')[0].replace(
+      /\/+$/,
+      '',
+    );
+
+    jwksClient = new JwksClient({
+      jwksUri: `${core}/.well-known/jwks.json`,
+      cache: true,
+    });
+  }
+
+  return jwksClient;
+}
+
 export async function getKey(jwt: string) {
   const decoded = decode(jwt, { complete: true });
 
-  // A hardcoded '/auth' here once drifted from the path SuperTokens serves.
-  const client = new JwksClient({
-    jwksUri: `${process.env.BACKEND_HOST}${AUTH_API_BASE_PATH}/jwt/jwks.json`,
-  });
-
-  const key = await client.getSigningKey(decoded.header.kid);
+  const key = await signingKeys().getSigningKey(decoded.header.kid);
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   return key!.getPublicKey();
 }

@@ -1,5 +1,10 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
+import { Prisma } from '@prisma/client';
 import {
   InviteStatusEnum,
   RoleEnum,
@@ -174,19 +179,17 @@ export default class WorkspacesService {
       },
     });
 
-    await this.prisma.workspace.update({
+    return await this.prisma.workspace.update({
       where: {
         id: workspaceId,
       },
       data: {
         preferences: {
-          ...(workspace.preferences as Record<string, string | boolean>),
+          ...(workspace.preferences as Prisma.InputJsonObject),
           ...workspaceData,
-        },
+        } as Prisma.InputJsonObject,
       },
     });
-
-    return workspace;
   }
 
   async addUserToWorkspace(
@@ -274,6 +277,21 @@ export default class WorkspacesService {
     accepted: boolean = false,
   ) {
     const userId = getAppUserId(session);
+
+    // Only an open invite, and only by the person it was sent to. This took
+    // any invite id from anyone signed in, so whoever had one joined that
+    // workspace in the role it carried, and a declined invite could still be
+    // accepted afterwards.
+    const { email } = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { email: true },
+    });
+    const open = await this.prisma.invite.findFirst({
+      where: { id: inviteId, emailId: email, deleted: null },
+    });
+    if (!open) {
+      throw new NotFoundException(`Invite ${inviteId} not found`);
+    }
 
     if (accepted) {
       const invite = await this.prisma.invite.update({

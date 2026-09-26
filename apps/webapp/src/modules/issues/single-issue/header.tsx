@@ -81,12 +81,18 @@ export const Header = observer(({ sideView }: HeaderProps) => {
               <Button
                 variant="ghost"
                 size="sm"
+                aria-label="Close issue"
                 onClick={() => closeIssueView()}
               >
                 <RiCloseLine size={16} />
               </Button>
             </TooltipWrapper>
-            <Button variant="ghost" size="sm" onClick={openInFull}>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Open issue in full"
+              onClick={openInFull}
+            >
               <RiExpandDiagonalLine size={16} />
             </Button>
           </>

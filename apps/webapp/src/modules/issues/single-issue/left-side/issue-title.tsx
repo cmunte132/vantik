@@ -1,6 +1,5 @@
 import { AdjustableTextArea } from '@vantikhq/ui/components/adjustable-textarea';
 import * as React from 'react';
-import { useDebouncedCallback } from 'use-debounce';
 
 interface IssueTitleProps {
   value: string;
@@ -12,13 +11,11 @@ interface IssueTitleProps {
 export function IssueTitle({ value, onChange }: IssueTitleProps) {
   const [inputValue, setInputValue] = React.useState(value);
 
-  const debouncedUpdates = useDebouncedCallback(async (title: string) => {
-    onChange && onChange(title);
-  }, 500);
-
+  // Every keystroke goes straight up: the sheet debounces the save, and a
+  // second delay here was one the sheet could not flush when it closed.
   const onInputChange = (value: string) => {
     setInputValue(value);
-    debouncedUpdates(value);
+    onChange && onChange(value);
   };
 
   return (

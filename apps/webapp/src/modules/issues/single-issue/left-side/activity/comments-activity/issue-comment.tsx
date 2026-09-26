@@ -3,12 +3,11 @@ import { Button } from '@vantikhq/ui/components/button';
 import {
   Editor,
   EditorExtensions,
+  type EditorT,
   suggestionItems,
 } from '@vantikhq/ui/components/editor/index';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import * as React from 'react';
-
-import { getTiptapJSON } from 'common';
 
 import {
   CustomMention,
@@ -38,26 +37,31 @@ export function IssueComment() {
   // again on a client that had posted once.
   useReloadBlock(!!commentValue);
 
+  const editorRef = React.useRef<EditorT>(undefined);
+
+  // What the editor holds now, not `commentValue`: that trails the editor by
+  // half a second, and a comment sent inside that half second was cleared
+  // without being posted.
   const onSubmit = () => {
-    if (commentValue !== '') {
-      const { json, text } = getTiptapJSON(commentValue);
-      if (pendingUploads(json)) {
-        toast({
-          title: 'Uploads pending!',
-          variant: 'destructive',
-          description:
-            'Some uploads are pending, please wait before you comment',
-        });
+    const editor = editorRef.current;
+    const json = editor?.getJSON();
+    const text = editor?.getText();
 
-        return;
-      }
+    if (json && pendingUploads(json)) {
+      toast({
+        title: 'Uploads pending!',
+        variant: 'destructive',
+        description: 'Some uploads are pending, please wait before you comment',
+      });
 
-      if (text) {
-        createIssueComment({
-          body: JSON.stringify(json),
-          issueId: issueData.id,
-        });
-      }
+      return;
+    }
+
+    if (text) {
+      createIssueComment({
+        body: JSON.stringify(json),
+        issueId: issueData.id,
+      });
     }
 
     setCommentValue(undefined);
@@ -78,11 +82,19 @@ export function IssueComment() {
           ]}
           placeholder="Leave your comment..."
           onSubmit={onSubmit}
+          onCreate={(editor) => {
+            editorRef.current = editor;
+          }}
           className="w-full min-h-[60px] mb-0 p-2 border-border border relative"
         >
           <div className="absolute right-1 bottom-1 flex items-center gap-1">
             <FileUpload withPosition={false} />
-            <Button variant="ghost" type="submit" onClick={onSubmit}>
+            <Button
+              variant="ghost"
+              type="submit"
+              aria-label="Send comment"
+              onClick={onSubmit}
+            >
               <RiSendPlaneLine size={20} />
             </Button>
           </div>

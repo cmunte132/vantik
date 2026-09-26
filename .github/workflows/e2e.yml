@@ -2,7 +2,8 @@ name: E2E
 
 # Boots the stack a self-hoster runs — both images built from this commit, the
 # stock docker-compose.yaml, plus the mail catcher from docker-compose.e2e.yaml
-# — and drives it from outside with the suite in apps/e2e.
+# — and drives it from outside with the suite in apps/e2e: the API directly,
+# and the webapp in a browser.
 #
 # The CI workflow proves the code compiles and the units behave. This proves
 # the product starts and works. Those have come apart on main more than once:
@@ -36,7 +37,7 @@ env:
 
 jobs:
   e2e:
-    name: Stack and API
+    name: Stack, API and browser
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -105,6 +106,11 @@ jobs:
           docker exec vantik-postgres createdb -U docker vantik_shadow
           docker exec vantik-postgres psql -U docker -d vantik_shadow -c 'CREATE SCHEMA IF NOT EXISTS vantik'
           pnpm run migrate:check
+
+      # The browser project drives the webapp in Chromium. Only this job needs
+      # a browser, so it is installed here rather than with the dependencies.
+      - name: Install Chromium
+        run: pnpm --filter @vantikhq/e2e exec playwright install --with-deps chromium
 
       - name: Run the end-to-end suite
         run: pnpm e2e

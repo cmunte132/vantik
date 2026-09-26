@@ -87,6 +87,12 @@ export async function setProperty(
   property: string,
   option: string,
 ) {
+  // A picker hands the keyboard back to its own button once it has finished
+  // closing, wherever the keyboard has gone since. On a slow machine that
+  // came after the next picker had opened, so the Enter typed into it
+  // reopened the last one instead. By the time a person reaches the next
+  // property, the last picker is gone; wait for that too.
+  await expect(page.getByRole('option')).toHaveCount(0);
   await propertyControl(page, property).click();
   await page.keyboard.type(option);
   // Enter picks the highlighted row. The list is redrawn for each key typed

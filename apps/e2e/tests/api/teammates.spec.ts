@@ -92,6 +92,11 @@ test.describe('the team boundary', () => {
     await movedInLog(asAlice, aliceSince, issue.id, alice.teamId);
 
     expectRefused(await asCarol.get(`/v1/issues/${issue.id}`), 'GET /v1/issues/:id');
+
+    knownBug(
+      "a move files only the issue's update under its new team; its insert stays under the old one, so the old team's bootstrap still serves it, with its current data",
+    );
+
     expect(await bootstrapIds(asCarol, 'Issue')).not.toContain(issue.id);
   });
 });

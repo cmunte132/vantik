@@ -69,7 +69,6 @@ test.describe('sync', () => {
     const issue = await createIssue(asAlice, alice);
     await synced(asAlice, since, 'Issue', issue.id, 'I');
 
-
     // Other tests write to this workspace at the same time. So the two are
     // compared on the issues listed both before and after the bootstrap, and
     // polled: an issue created a moment ago may not have replicated yet.

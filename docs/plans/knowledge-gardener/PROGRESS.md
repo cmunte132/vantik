@@ -5,7 +5,7 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 0 (review round 2 addressed; round 3 in progress)
+- Current phase: 0 (review round 3 addressed; round 4 in progress)
 - Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phase 0 spec-hash 069a84bf6612`
   (KG-0.1 to KG-0.6 pass; KG-0.R waits on the review)
 
@@ -62,10 +62,15 @@ next session starts by reading it.
   - rejecting or disputing a correction leaves its target in use and keeps the
     pointer, so a correction revived to STANDING later still retires it;
   - a new correction of an entry takes the unique pointer over from an earlier
-    rejected, disputed or displaced one, in the same transaction;
-  - a PROPOSED correction refuses an agent's second correction of the same
-    entry; a person writing standing knowledge displaces it, and it stays in
-    the inbox as an ordinary claim.
+    archived (rejected) one, in the same transaction;
+  - a PROPOSED or DISPUTED correction refuses an agent's second correction of
+    the same entry; a person writing standing knowledge displaces it, and it
+    stays where it is as an ordinary claim;
+  - the chain walk passes only through undecided (PROPOSED or DISPUTED)
+    corrections, so accepting a correction of an archived claim does not undo
+    the archive decision;
+  - an entry folded into the page body (CONSOLIDATED) cannot be superseded; it
+    is corrected in the body.
 
   This applies to a person's correction that lands PROPOSED too (the CLI
   without `--standing`): only standing knowledge retires what it replaces.
@@ -128,6 +133,26 @@ next session starts by reading it.
    shape).** Covered by the stateful correction tests; the decay pointer
    release no longer exists.
 
+### Phase 0, round 3 (same reviewer, on the redesign)
+
+1 blocking, 3 non-blocking findings. All four fixed in the commit after
+`634413d`:
+
+1. **Blocking: a disputed correction gave its pointer to an agent's new
+   correction**, so accepting it later served both truths. A DISPUTED
+   correction now counts as waiting; only a person's standing correction
+   displaces it. Tested, and mutation-checked.
+2. **The stateful double did not model transaction order.** Writes are now
+   deferred until `$transaction` runs them in array order; the mixed batch
+   (DISPUTED target with its correction, accepted together) is tested, and
+   putting the retirement before the status write fails that test.
+3. **`chainToRetire` walked through archived corrections.** It now passes only
+   through PROPOSED or DISPUTED links. Tested.
+4. **A CONSOLIDATED entry could be superseded.** Refused now, with a message
+   pointing at the page body. Tested. (That the webapp does not show supersede
+   links, which the reviewer also noted, predates this phase; recorded under
+   Observed.)
+
 When a phase's independent review ends with no unresolved findings, add a line
 in the form `Phase <number> review: PASS - <what the reviewer checked>`, for
 example with the number 0 for phase 0. `verify.mjs` looks for that line.
@@ -156,6 +181,10 @@ Give the evidence, and stop until the maintainer answers.
   write). KG-4.1's content hash is the place to add a uniqueness guarantee.
 - **Consolidating an entry that has a pending correction** leaves the old text
   in the body if the correction is later accepted. For KG-7.4.
+- **The webapp shows no supersede links** (nothing under
+  `apps/webapp/src/modules` reads `supersedesId`), so a reviewer accepting a
+  correction cannot see what it retires. Predates phase 0; worth surfacing in
+  the review queue, which phase 5 reworks (KG-5.1).
 
 ## Log
 
@@ -169,3 +198,6 @@ Give the evidence, and stop until the maintainer answers.
   (chained corrections, pointer erased on dispute). Pointers now kept and moved
   only by a new correction; acceptance retires the chain. Stateful tests.
   Verify through phase 0: 6/7, all suites green.
+- 2026-09-26: Review round 3: one blocking finding (disputed corrections gave
+  up their pointer). Fixed with three non-blocking ones; the double now defers
+  writes to the transaction. Verify through phase 0: 6/7, all suites green.

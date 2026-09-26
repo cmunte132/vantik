@@ -26,7 +26,6 @@ COPY apps/server/package.json               apps/server/
 COPY apps/webapp/package.json               apps/webapp/
 COPY packages/agent-core/package.json       packages/agent-core/
 COPY packages/cli/package.json              packages/cli/
-COPY packages/services/package.json         packages/services/
 COPY packages/types/package.json            packages/types/
 COPY packages/ui/package.json               packages/ui/
 COPY tooling/eslint-config/package.json     tooling/eslint-config/

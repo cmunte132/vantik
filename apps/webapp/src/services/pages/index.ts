@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import type {
   KnowledgeGapType,
@@ -8,7 +8,7 @@ import type {
   PageType,
 } from 'common/types';
 
-import { ajaxDelete, ajaxGet, ajaxPost } from 'services/utils';
+import { ajaxDelete, ajaxGet, ajaxPost, mutationHook } from 'services/utils';
 
 /**
  * The page and entry API, as react-query hooks.
@@ -27,7 +27,7 @@ export interface CreatePageParams {
   entryPolicy?: PageEntryPolicy;
 }
 
-export function createPage(params: CreatePageParams) {
+export function createPage(params: CreatePageParams): Promise<PageType> {
   return ajaxPost({ url: '/api/v1/pages', data: params });
 }
 
@@ -42,11 +42,14 @@ export interface UpdatePageParams {
   entryPolicy?: PageEntryPolicy;
 }
 
-export function updatePage({ pageId, ...data }: UpdatePageParams) {
+export function updatePage({
+  pageId,
+  ...data
+}: UpdatePageParams): Promise<PageType> {
   return ajaxPost({ url: `/api/v1/pages/${pageId}`, data });
 }
 
-export function deletePage({ pageId }: { pageId: string }) {
+export function deletePage({ pageId }: { pageId: string }): Promise<PageType> {
   return ajaxDelete({ url: `/api/v1/pages/${pageId}` });
 }
 
@@ -56,7 +59,10 @@ export interface ConsolidatePageParams {
   entryIds?: string[];
 }
 
-export function consolidatePage({ pageId, ...data }: ConsolidatePageParams) {
+export function consolidatePage({
+  pageId,
+  ...data
+}: ConsolidatePageParams): Promise<PageType> {
   return ajaxPost({ url: `/api/v1/pages/${pageId}/consolidate`, data });
 }
 
@@ -68,7 +74,10 @@ export interface UpdateEntryParams {
   verified?: boolean;
 }
 
-export function updatePageEntry({ pageEntryId, ...data }: UpdateEntryParams) {
+export function updatePageEntry({
+  pageEntryId,
+  ...data
+}: UpdateEntryParams): Promise<PageEntryType> {
   return ajaxPost({ url: `/api/v1/page_entries/${pageEntryId}`, data });
 }
 
@@ -84,7 +93,9 @@ export interface BulkTriageParams {
  * everything one agent asserted about one path in a single action, instead of
  * clicking thirty-eight times and giving up at nine.
  */
-export function bulkTriageEntries(data: BulkTriageParams) {
+export function bulkTriageEntries(
+  data: BulkTriageParams,
+): Promise<{ updated: number; skipped: number }> {
   return ajaxPost({ url: '/api/v1/page_entries/bulk', data });
 }
 
@@ -96,90 +107,37 @@ export function createPageEntry({
   content: string;
   scope?: string;
   standing?: boolean;
-}) {
+}): Promise<PageEntryType> {
   return ajaxPost({ url: `/api/v1/page_entries?pageId=${pageId}`, data });
 }
 
-interface MutationParams<T> {
-  onMutate?: () => void;
-  onSuccess?: (data: T) => void;
-  onError?: (error: string) => void;
-}
+export const useCreatePageMutation = mutationHook(createPage);
 
-function buildMutation<TVariables, TData>(
-  mutationFn: (variables: TVariables) => Promise<unknown>,
-  { onMutate, onSuccess, onError }: MutationParams<TData>,
-) {
-  return useMutation({
-    mutationFn,
-    onMutate: () => onMutate?.(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (errorResponse: any) =>
-      onError?.(errorResponse?.errors?.message || 'Error occured'),
-    onSuccess: (data: unknown) => onSuccess?.(data as TData),
-  });
-}
+export const useUpdatePageMutation = mutationHook(updatePage);
 
-export function useCreatePageMutation(params: MutationParams<PageType> = {}) {
-  return buildMutation<CreatePageParams, PageType>(createPage, params);
-}
+export const useDeletePageMutation = mutationHook(deletePage);
 
-export function useUpdatePageMutation(params: MutationParams<PageType> = {}) {
-  return buildMutation<UpdatePageParams, PageType>(updatePage, params);
-}
+export const useConsolidatePageMutation = mutationHook(consolidatePage);
 
-export function useDeletePageMutation(params: MutationParams<PageType> = {}) {
-  return buildMutation<{ pageId: string }, PageType>(deletePage, params);
-}
+export const useUpdatePageEntryMutation = mutationHook(updatePageEntry);
 
-export function useConsolidatePageMutation(
-  params: MutationParams<PageType> = {},
-) {
-  return buildMutation<ConsolidatePageParams, PageType>(
-    consolidatePage,
-    params,
-  );
-}
+export const useBulkTriageMutation = mutationHook(bulkTriageEntries);
 
-export function useUpdatePageEntryMutation(
-  params: MutationParams<PageEntryType> = {},
-) {
-  return buildMutation<UpdateEntryParams, PageEntryType>(
-    updatePageEntry,
-    params,
-  );
-}
-
-export function useBulkTriageMutation(
-  params: MutationParams<{ updated: number; skipped: number }> = {},
-) {
-  return buildMutation<BulkTriageParams, { updated: number; skipped: number }>(
-    bulkTriageEntries,
-    params,
-  );
-}
-
-export function useCreatePageEntryMutation(
-  params: MutationParams<PageEntryType> = {},
-) {
-  return buildMutation<
-    { pageId: string; content: string; scope?: string; standing?: boolean },
-    PageEntryType
-  >(createPageEntry, params);
-}
+export const useCreatePageEntryMutation = mutationHook(createPageEntry);
 
 export interface RevertParams {
   pageId: string;
   historyId: string;
 }
 
-export function revertPageBody({ pageId, historyId }: RevertParams) {
+export function revertPageBody({
+  pageId,
+  historyId,
+}: RevertParams): Promise<PageType> {
   return ajaxPost({ url: `/api/v1/pages/${pageId}/revert/${historyId}` });
 }
 
-export function useRevertPageMutation(params: MutationParams<PageType> = {}) {
-  return buildMutation<RevertParams, PageType>(revertPageBody, params);
-}
+export const useRevertPageMutation = mutationHook(revertPageBody);
 
 export interface PageRevision {
   id: string;
@@ -294,7 +252,7 @@ export function createPageLink({
   pageId: string;
   entityType: PageLinkType;
   entityId: string;
-}) {
+}): Promise<PageLink> {
   return ajaxPost({ url: `/api/v1/pages/${pageId}/links`, data });
 }
 
@@ -304,27 +262,13 @@ export function deletePageLink({
 }: {
   pageId: string;
   linkId: string;
-}) {
+}): Promise<{ id: string }> {
   return ajaxDelete({ url: `/api/v1/pages/${pageId}/links/${linkId}` });
 }
 
-export function useCreatePageLinkMutation(
-  params: MutationParams<PageLink> = {},
-) {
-  return buildMutation<
-    { pageId: string; entityType: PageLinkType; entityId: string },
-    PageLink
-  >(createPageLink, params);
-}
+export const useCreatePageLinkMutation = mutationHook(createPageLink);
 
-export function useDeletePageLinkMutation(
-  params: MutationParams<{ id: string }> = {},
-) {
-  return buildMutation<{ pageId: string; linkId: string }, { id: string }>(
-    deletePageLink,
-    params,
-  );
-}
+export const useDeletePageLinkMutation = mutationHook(deletePageLink);
 
 /** Issues that link to a page. Documentation and work, not two worlds. */
 export function usePageBacklinks(pageId?: string) {

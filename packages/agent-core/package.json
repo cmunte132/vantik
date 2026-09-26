@@ -25,13 +25,14 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "generate": "tsup --watch",
+    "generate": "tsup",
+    "watch": "tsup --watch",
     "clean": "rimraf dist",
     "build": "npm run clean && npm run build:tsup",
     "build:tsup": "tsup --dts-resolve",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "lint": "eslint \"src/**/*.ts\" --fix"
+    "lint": "eslint \"src/**/*.ts\""
   },
   "devDependencies": {
     "@vantikhq/eslint-config": "workspace:*",

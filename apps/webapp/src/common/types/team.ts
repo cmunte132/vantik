@@ -1,7 +1,7 @@
-export enum TeamTypeEnum {
-  ENGINEERING = 'engineering',
-  SUPPORT = 'support',
-}
+// The server validates against this enum, so the webapp names it rather than
+// keeping a copy that could drift.
+export { TeamType as TeamTypeEnum } from '@vantikhq/types';
+
 export type CyclesMode = 'auto' | 'manual';
 
 export interface TeamPreferences {

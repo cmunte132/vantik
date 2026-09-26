@@ -1,3 +1,5 @@
+import type { FilterPickerProps } from './types';
+
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
@@ -5,41 +7,23 @@ import { IssueLabelDropdownContent } from 'modules/issues/components';
 
 import { useComputedLabels } from 'hooks/labels';
 
-import { FilterTypeEnum } from 'store/application';
-import { useContextStore } from 'store/global-context-provider';
-
-interface IssueLabelFilterProps {
-  value?: string[];
-  onChange?: (value: string[], filterType: FilterTypeEnum) => void;
-  onClose: () => void;
-}
-
+/** Label filters store label names, so one filter spans every team. */
 export const IssueLabelFilter = observer(
-  ({ onChange }: IssueLabelFilterProps) => {
+  ({ value, onChange }: FilterPickerProps) => {
     const [labelSearch, setLabelSearch] = React.useState('');
     const { labels } = useComputedLabels();
 
-    const { applicationStore } = useContextStore();
-
-    const labelFilters = applicationStore.filters.label
-      ? applicationStore.filters.label.value
-      : [];
-
-    const change = (value: string[]) => {
-      const names = value.map((val: string) => {
-        const label = labels.find((labels) => labels.id === val);
-
-        return label.name;
-      });
-
-      onChange(names, FilterTypeEnum.INCLUDES);
+    const change = (ids: string[]) => {
+      onChange(
+        ids
+          .map((id) => labels.find((label) => label.id === id)?.name)
+          .filter(Boolean),
+      );
     };
 
-    const computedValues = labelFilters.flatMap((val: string) => {
-      const label = labels.find((label) => label.name === val);
-
-      return label.ids;
-    });
+    const computedValues = value.flatMap(
+      (name) => labels.find((label) => label.name === name)?.ids ?? [],
+    );
 
     return (
       <IssueLabelDropdownContent

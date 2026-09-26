@@ -8,20 +8,25 @@ import Session from 'supertokens-node/recipe/session';
 import { VerifySessionOptions } from 'supertokens-node/recipe/session';
 import { verifySession } from 'supertokens-node/recipe/session/framework/express';
 
-import { config } from 'common/configs/config';
 import { bearerToken, createPatSession, isPatToken } from 'common/pat-session';
 
 import { UsersService } from 'modules/users/users.service';
 
+/**
+ * Where SuperTokens serves its routes, as the browser addresses them.
+ *
+ * SuperTokens scopes the refresh cookie to this path, and the JWKS the
+ * verifier below fetches lives under it too, so both read it from here rather
+ * than each keeping a copy that has to be remembered.
+ */
+export const AUTH_API_BASE_PATH = '/api/auth';
+
 export async function getKey(jwt: string) {
   const decoded = decode(jwt, { complete: true });
 
-  // SuperTokens serves JWKS under its apiBasePath. That path moved to
-  // '/api/auth' to match where the browser reaches the auth routes; deriving the
-  // URI from the same config value keeps this verifier from drifting away from
-  // it again the way a hardcoded '/auth' did.
+  // A hardcoded '/auth' here once drifted from the path SuperTokens serves.
   const client = new JwksClient({
-    jwksUri: `${process.env.BACKEND_HOST}${config.superToken.appInfo.apiBasePath}/jwt/jwks.json`,
+    jwksUri: `${process.env.BACKEND_HOST}${AUTH_API_BASE_PATH}/jwt/jwks.json`,
   });
 
   const key = await client.getSigningKey(decoded.header.kid);

@@ -1,38 +1,20 @@
-import type { Workflow } from '@vantikhq/types';
+import type {
+  CreateWorkflowDTO,
+  WorkflowRequestParamsDto,
+} from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
-import { createWorkflow } from '@vantikhq/services';
+import type { WorkflowType } from 'common/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Workflow) => void;
-  onError?: (error: string) => void;
+import { ajaxPost, mutationHook } from 'services/utils';
+
+export interface CreateWorkflowInput
+  extends WorkflowRequestParamsDto, CreateWorkflowDTO {}
+
+export function createWorkflow({
+  teamId,
+  ...data
+}: CreateWorkflowInput): Promise<WorkflowType> {
+  return ajaxPost({ url: `/api/v1/${teamId}/workflows`, data });
 }
 
-export function useCreateWorkflowMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Workflow) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: createWorkflow,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useCreateWorkflowMutation = mutationHook(createWorkflow);

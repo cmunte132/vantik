@@ -1,42 +1,31 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createAgent } from '@vantikhq/services';
-import { type AgentAccount } from '@vantikhq/types';
+import type { AgentAccount, AgentScope } from '@vantikhq/types';
+
+import { ajaxPost, mutationHook } from 'services/utils';
 
 import { GetAgents } from './get-agents';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: AgentAccount) => void;
-  onError?: (error: string) => void;
+export interface CreateAgentDto {
+  name: string;
+  /** What the agent may do. Omit for the default: read and write, not delete. */
+  scopes?: AgentScope[];
+  /**
+   * The workspace to provision into. Named explicitly because the server would
+   * otherwise fall back to the one on the access token, which is the account's
+   * first workspace rather than the one being looked at.
+   */
+  workspaceId: string;
 }
 
-export function useCreateAgentMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const queryClient = useQueryClient();
-
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: AgentAccount) => {
-    queryClient.invalidateQueries({ queryKey: [GetAgents] });
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: createAgent,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+export function createAgent({
+  workspaceId,
+  ...createAgentDto
+}: CreateAgentDto): Promise<AgentAccount> {
+  return ajaxPost({
+    url: `/api/v1/users/agents?workspaceId=${workspaceId}`,
+    data: createAgentDto,
   });
 }
+
+export const useCreateAgentMutation = mutationHook(createAgent, {
+  invalidates: [GetAgents],
+});

@@ -219,14 +219,14 @@ describe('CyclesService.completeCycle', () => {
       'user-1',
     );
 
-    expect(prisma.cycleHistory.createMany.mock.calls[0][0].data[0]).toMatchObject(
-      {
-        cycleId: 'cycle-1',
-        issueId: 'issue-1',
-        userId: 'user-1',
-        changeType: CycleHistoryChangeEnum.MOVED,
-      },
-    );
+    expect(
+      prisma.cycleHistory.createMany.mock.calls[0][0].data[0],
+    ).toMatchObject({
+      cycleId: 'cycle-1',
+      issueId: 'issue-1',
+      userId: 'user-1',
+      changeType: CycleHistoryChangeEnum.MOVED,
+    });
   });
 
   it('records a removal when the work goes back to the backlog', async () => {
@@ -331,7 +331,8 @@ describe('CyclesService.completeCycle', () => {
     });
 
     const successorQuery = prisma.cycle.findFirst.mock.calls.find(
-      (call: any) => call[0].where.number !== undefined,
+      (call: [{ where: { number?: number } }]) =>
+        call[0].where.number !== undefined,
     );
     expect(successorQuery[0].where).toMatchObject({
       number: 5,

@@ -1,18 +1,56 @@
 import type { LocalRepository, RepositoryFolder } from '@vantikhq/types';
 
-import {
-  type UseQueryResult,
-  useMutation,
-  useQuery,
-} from '@tanstack/react-query';
-import {
-  addLocalRepository,
-  getLocalRepositories,
-  getLocalRepositoryFolders,
-  removeLocalRepository,
-} from '@vantikhq/services';
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 
-import { type XHRErrorResponse } from 'services/utils';
+import {
+  ajaxDelete,
+  ajaxGet,
+  ajaxPost,
+  mutationHook,
+  type XHRErrorResponse,
+} from 'services/utils';
+
+/**
+ * The repositories that this workspace has on the disk of the server.
+ *
+ * These rows live in the `settings` of an integration account, so a write
+ * arrives back over the socket as a sync action on that account. The caller
+ * needs no refetch after a write.
+ */
+export function getLocalRepositories(): Promise<LocalRepository[]> {
+  return ajaxGet({ url: '/api/v1/local_repo' });
+}
+
+export function addLocalRepository({
+  path,
+}: {
+  path: string;
+}): Promise<LocalRepository> {
+  return ajaxPost({ url: '/api/v1/local_repo', data: { path } });
+}
+
+export function removeLocalRepository({
+  repositoryId,
+}: {
+  repositoryId: string;
+}): Promise<LocalRepository> {
+  return ajaxDelete({ url: `/api/v1/local_repo/${repositoryId}` });
+}
+
+/**
+ * The folders inside one repository that a module can claim.
+ *
+ * This answer describes the repository, and the repository belongs to the
+ * workspace. Each module that connects the same repository reads the same
+ * folders, and each one keeps its own choice among them.
+ */
+export function getLocalRepositoryFolders({
+  repositoryId,
+}: {
+  repositoryId: string;
+}): Promise<RepositoryFolder[]> {
+  return ajaxGet({ url: `/api/v1/local_repo/${repositoryId}/folders` });
+}
 
 export const GetLocalRepositories = 'getLocalRepositories';
 export const GetLocalRepositoryFolders = 'getLocalRepositoryFolders';
@@ -50,32 +88,10 @@ export function useGetLocalRepositoryFolders(
   });
 }
 
-interface MutationParams<T> {
-  onSuccess?: (data: T) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onError?: (error: any) => void;
-}
+export const useAddLocalRepositoryMutation = mutationHook(addLocalRepository, {
+  fallback: 'The server refused this path, and it gave no reason.',
+});
 
-export function useAddLocalRepositoryMutation({
-  onSuccess,
-  onError,
-}: MutationParams<LocalRepository> = {}) {
-  return useMutation({
-    mutationFn: addLocalRepository,
-    onSuccess: (data) => onSuccess && onSuccess(data),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (error: any) => onError && onError(error),
-  });
-}
-
-export function useRemoveLocalRepositoryMutation({
-  onSuccess,
-  onError,
-}: MutationParams<LocalRepository> = {}) {
-  return useMutation({
-    mutationFn: removeLocalRepository,
-    onSuccess: (data) => onSuccess && onSuccess(data),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (error: any) => onError && onError(error),
-  });
-}
+export const useRemoveLocalRepositoryMutation = mutationHook(
+  removeLocalRepository,
+);

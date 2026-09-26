@@ -1,9 +1,7 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-
 import type { WorkspaceType } from 'common/types';
 
 import { GetUserQuery } from 'services/users';
-import { ajaxPost } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
 
 export interface CreateInitialResourcesDto {
   workspaceName: string;
@@ -14,50 +12,14 @@ export interface CreateInitialResourcesDto {
 
 export function createInitialResources(
   createInitialResourcesDto: CreateInitialResourcesDto,
-) {
+): Promise<WorkspaceType> {
   return ajaxPost({
     url: `/api/v1/workspaces/onboarding`,
     data: createInitialResourcesDto,
   });
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: WorkspaceType) => void;
-  onError?: (error: string) => void;
-}
-
-export function useCreateInitialResourcesMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const queryClient = useQueryClient();
-
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    let errorText = 'Error occurred';
-    if (errorResponse.errors.statusCode === 409) {
-      errorText = 'Workspace with the name already exist';
-    }
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: WorkspaceType) => {
-    queryClient.invalidateQueries({ queryKey: [GetUserQuery] });
-
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: createInitialResources,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useCreateInitialResourcesMutation = mutationHook(
+  createInitialResources,
+  { invalidates: [GetUserQuery] },
+);

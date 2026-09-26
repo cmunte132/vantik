@@ -17,7 +17,7 @@ export const DeleteTeamButton = observer(() => {
   const [open, setOpen] = React.useState(false);
   const team = useCurrentTeam();
   const { issuesStore } = useContextStore();
-  const issues = issuesStore.getIssuesForTeam({ teamId: team.id });
+  const issues = issuesStore.getIssues({ teamId: team.id });
   const { mutate: deleteTeamMutation, isPending: isLoading } =
     useDeleteTeamMutation({});
 

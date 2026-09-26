@@ -1,38 +1,11 @@
-import type { Team } from '@vantikhq/types';
+import type { CreateTeamDto } from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
-import { createTeam } from '@vantikhq/services';
+import type { TeamType } from 'common/types';
 
-export interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Team) => void;
-  onError?: (error: string) => void;
+import { ajaxPost, mutationHook } from 'services/utils';
+
+export function createTeam(teamData: CreateTeamDto): Promise<TeamType> {
+  return ajaxPost({ url: `/api/v1/teams`, data: teamData });
 }
 
-export function useCreateTeamMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Team) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: createTeam,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useCreateTeamMutation = mutationHook(createTeam);

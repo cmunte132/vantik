@@ -1,38 +1,18 @@
-import type { Template } from '@vantikhq/types';
+import type { UpdateTemplateDto } from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
-import { updateTemplate } from '@vantikhq/services';
+import type { TemplateType } from 'common/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Template) => void;
-  onError?: (error: string) => void;
+import { ajaxPost, mutationHook } from 'services/utils';
+
+interface UpdateTemplateDtoWithId extends UpdateTemplateDto {
+  templateId: string;
 }
 
-export function useUpdateTemplateMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Template) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: updateTemplate,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
+export function updateTemplate({
+  templateId,
+  ...data
+}: UpdateTemplateDtoWithId): Promise<TemplateType> {
+  return ajaxPost({ url: `/api/v1/templates/${templateId}`, data });
 }
+
+export const useUpdateTemplateMutation = mutationHook(updateTemplate);

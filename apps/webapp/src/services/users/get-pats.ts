@@ -1,9 +1,12 @@
 import type { Pat } from '@vantikhq/types';
 
 import { type UseQueryResult, useQuery } from '@tanstack/react-query';
-import { getPats } from '@vantikhq/services';
 
-import { type XHRErrorResponse } from 'services/utils';
+import { ajaxGet, type XHRErrorResponse } from 'services/utils';
+
+export function getPats(): Promise<Pat[]> {
+  return ajaxGet({ url: `/api/v1/users/pats` });
+}
 
 /**
  * Query Key for Get user.

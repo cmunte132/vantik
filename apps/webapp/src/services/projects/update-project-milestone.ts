@@ -1,38 +1,23 @@
-import type { ProjectMilestone } from '@vantikhq/types';
+import type { UpdateProjectMilestoneDto } from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
-import { updateProjectMilestone } from '@vantikhq/services';
+import type { ProjectMilestoneType } from 'common/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: ProjectMilestone) => void;
-  onError?: (error: string) => void;
+import { ajaxPost, mutationHook } from 'services/utils';
+
+interface UpdateProjectMilestoneWithProjectDto extends UpdateProjectMilestoneDto {
+  projectMilestoneId: string;
 }
 
-export function useUpdateProjectMilestoneMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: ProjectMilestone) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: updateProjectMilestone,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+export function updateProjectMilestone({
+  projectMilestoneId,
+  ...updateProjecMilestonetDto
+}: UpdateProjectMilestoneWithProjectDto): Promise<ProjectMilestoneType> {
+  return ajaxPost({
+    url: `/api/v1/projects/milestone/${projectMilestoneId}`,
+    data: updateProjecMilestonetDto,
   });
 }
+
+export const useUpdateProjectMilestoneMutation = mutationHook(
+  updateProjectMilestone,
+);

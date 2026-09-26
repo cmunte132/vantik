@@ -1,15 +1,13 @@
-import { useMutation } from '@tanstack/react-query';
-
 import type { LabelType } from 'common/types';
 
-import { ajaxPost } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
 
 interface UpdateLabelParams {
   name: string;
   labelId: string;
 }
 
-export function updateLabel(params: UpdateLabelParams) {
+export function updateLabel(params: UpdateLabelParams): Promise<LabelType> {
   const { labelId, ...otherParams } = params;
 
   return ajaxPost({
@@ -18,36 +16,4 @@ export function updateLabel(params: UpdateLabelParams) {
   });
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: LabelType) => void;
-  onError?: (error: string) => void;
-}
-
-export function useUpdateLabelMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: LabelType) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: updateLabel,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useUpdateLabelMutation = mutationHook(updateLabel);

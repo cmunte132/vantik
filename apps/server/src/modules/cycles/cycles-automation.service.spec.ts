@@ -235,10 +235,12 @@ describe('CyclesAutomationService.runMaintenance', () => {
     // makes the difference between topping up once and topping up per close.
     let ahead = 2;
     prisma.cycle.count = jest.fn().mockImplementation(async () => ahead);
-    prisma.cycle.create = jest.fn().mockImplementation((args: any) => {
-      ahead += 1;
-      return args.data;
-    });
+    prisma.cycle.create = jest
+      .fn()
+      .mockImplementation((args: { data: unknown }) => {
+        ahead += 1;
+        return args.data;
+      });
 
     const cycles = buildCycles();
     cycles.completeCycle = jest.fn().mockImplementation(async () => {
@@ -363,7 +365,10 @@ describe('CyclesAutomationService.stopAutoCycles', () => {
         {
           id: 'team-1',
           name: 'Engineering',
-          preferences: { cyclesEnabled: true, cyclesMode: CyclesModeEnum.MANUAL },
+          preferences: {
+            cyclesEnabled: true,
+            cyclesMode: CyclesModeEnum.MANUAL,
+          },
         },
       ],
     });

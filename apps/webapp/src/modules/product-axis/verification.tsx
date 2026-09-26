@@ -1,11 +1,11 @@
 import type { AgentRunVerification } from '@vantikhq/types';
 
 import { useQuery } from '@tanstack/react-query';
-import { getModules } from '@vantikhq/services';
 import { Button } from '@vantikhq/ui/components/button';
 import { Input } from '@vantikhq/ui/components/input';
 import * as React from 'react';
 
+import { getModules } from 'services/product-axis';
 import { useUpdateModuleMutation } from 'services/product-axis';
 
 /**

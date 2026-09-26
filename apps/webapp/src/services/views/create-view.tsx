@@ -1,8 +1,8 @@
-import { useMutation } from '@tanstack/react-query';
+import type { ViewType } from 'common/types';
 
-import type { ViewType, FiltersModelType } from 'common/types';
+import { ajaxPost, mutationHook } from 'services/utils';
 
-import { ajaxPost } from 'services/utils';
+import type { FiltersModelType } from 'store/application';
 
 export interface CreateViewParams {
   workspaceId: string;
@@ -12,7 +12,10 @@ export interface CreateViewParams {
   description?: string;
 }
 
-export function createView({ workspaceId, ...otherParams }: CreateViewParams) {
+export function createView({
+  workspaceId,
+  ...otherParams
+}: CreateViewParams): Promise<ViewType> {
   return ajaxPost({
     url: `/api/v1/views`,
     data: {
@@ -22,36 +25,4 @@ export function createView({ workspaceId, ...otherParams }: CreateViewParams) {
   });
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: ViewType) => void;
-  onError?: (error: string) => void;
-}
-
-export function useCreateViewMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: ViewType) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: createView,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useCreateViewMutation = mutationHook(createView);

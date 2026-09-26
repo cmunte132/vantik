@@ -17,8 +17,8 @@ import type { CycleType } from 'common/types';
 import { useCycles } from 'hooks/cycles';
 
 interface IssueCycleDropdownProps {
-  value?: string[];
-  onChange?: (projectIds: string[]) => void;
+  value: string[];
+  onChange: (cycleIds: string[]) => void;
 }
 
 export const IssueCycleDropdown = observer(

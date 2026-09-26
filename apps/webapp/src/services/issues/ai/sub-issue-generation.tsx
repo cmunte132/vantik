@@ -1,6 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
-
-import { ajaxPost } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
 
 export interface SubIssueGenerationParams {
   description: string;
@@ -10,7 +8,7 @@ export interface SubIssueGenerationParams {
 export function aiSubIssueGeneration({
   description,
   workspaceId,
-}: SubIssueGenerationParams) {
+}: SubIssueGenerationParams): Promise<string[]> {
   return ajaxPost({
     url: `/api/v1/issues/ai/subissues/generate`,
     data: {
@@ -21,36 +19,4 @@ export function aiSubIssueGeneration({
   });
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: string[]) => void;
-  onError?: (error: string) => void;
-}
-
-export function useSubIssueGenerationMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: string[]) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: aiSubIssueGeneration,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useSubIssueGenerationMutation = mutationHook(aiSubIssueGeneration);

@@ -50,6 +50,10 @@ export const AdjustableTextArea = ({
         ref={divRef}
         contentEditable
         suppressContentEditableWarning
+        // A div, so it has no role or name of its own; the placeholder above
+        // is a separate element that says nothing to assistive technology.
+        role="textbox"
+        aria-label={placeholder}
         className={cn(
           className,
           'w-full z-10 relative resize-none overflow-hidden whitespace-pre-wrap break-words focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',

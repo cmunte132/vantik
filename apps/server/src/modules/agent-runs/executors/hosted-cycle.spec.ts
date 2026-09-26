@@ -73,6 +73,14 @@ interface GuestScript {
   harnessExit?: Record<string, number>;
   /** Tree hash per implementing pass, so oscillation can be forced. */
   hashes?: string[];
+  /**
+   * How long a harness pass takes, in fake milliseconds.
+   *
+   * The default guest answers instantly, which is what most of these tests
+   * want and is exactly wrong for the lease: nothing that finishes inside one
+   * tick is ever alive long enough to renew anything.
+   */
+  slowHarnessMs?: number;
 }
 
 function buildGuest(script: GuestScript) {
@@ -97,6 +105,12 @@ function buildGuest(script: GuestScript) {
         )?.[1];
 
       if (prompt) {
+        if (script.slowHarnessMs) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, script.slowHarnessMs),
+          );
+        }
+
         const exitCode = script.harnessExit?.[prompt] ?? 0;
         const refusal = script.modelFailure?.[prompt];
 
@@ -179,7 +193,11 @@ function buildGuest(script: GuestScript) {
   };
 }
 
-function build(script: GuestScript, config: Record<string, unknown> = {}) {
+function build(
+  script: GuestScript,
+  config: Record<string, unknown> = {},
+  options: { leaseHeld?: boolean } = {},
+) {
   const guest = buildGuest(script);
   const specs: SandboxSpec[] = [];
 
@@ -193,6 +211,7 @@ function build(script: GuestScript, config: Record<string, unknown> = {}) {
     transition: jest.fn(async (_id: string, status: string, patch = {}) => {
       transitions.push({ status, patch });
     }),
+    renewLease: jest.fn(async () => options.leaseHeld ?? true),
     appendEvent: jest.fn(async (_id: string, event: never) => {
       events.push(event);
     }),
@@ -238,7 +257,6 @@ function build(script: GuestScript, config: Record<string, unknown> = {}) {
       }),
     } as never,
     agentRuns as never,
-    {} as never,
   );
 
   const run = {
@@ -270,6 +288,8 @@ function build(script: GuestScript, config: Record<string, unknown> = {}) {
 
   return {
     execute,
+    executor,
+    agentRuns,
     guest,
     specs,
     /** What the pull request body said, which is what a reviewer opens. */
@@ -800,5 +820,98 @@ describe('whatever happens', () => {
     expect(phases).toContain('review');
     expect(phases).toContain('revise-2');
     expect(phases).toContain('review-2');
+  });
+});
+
+/**
+ * A hosted run is an unawaited promise in this process, so nothing outside it
+ * knows whether it is alive. The lease is how it says so, and these are the
+ * two ends of that: it takes one when it claims the work, and it stops when
+ * the server tells it the run is no longer its to do.
+ */
+describe('a run is answerable for its own liveness', () => {
+  it('claims with a lease, so the sweeper can see it at all', async () => {
+    const harness = build({ verdicts: { 1: ACCEPTED } });
+
+    await harness.execute();
+
+    const claim = harness.transitions.find(
+      (transition) => transition.status === 'CLAIMED',
+    );
+
+    // Without this the sweeper's predicate — a lease that exists and has
+    // lapsed — never matches a hosted run, and the one backend that ships is
+    // the one nothing can reap.
+    expect(claim?.patch.leaseExpiresAt).toBeInstanceOf(Date);
+    expect((claim?.patch.leaseExpiresAt as Date).getTime()).toBeGreaterThan(
+      Date.now(),
+    );
+  });
+
+  it('renews it while the work is going, and stops when the work does', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+
+    try {
+      const harness = build({
+        verdicts: { 1: ACCEPTED },
+        slowHarnessMs: 10 * 60 * 1000,
+      });
+      const finished = harness.execute();
+
+      // Far enough for several renewals of a five-minute lease.
+      await jest.advanceTimersByTimeAsync(30 * 60 * 1000);
+      await finished;
+
+      expect(harness.agentRuns.renewLease).toHaveBeenCalled();
+
+      // A timer nobody cleared holds this run's id in the event loop long
+      // after the sandbox is gone, renewing a lease on a finished run.
+      const renewals = harness.agentRuns.renewLease.mock.calls.length;
+      await jest.advanceTimersByTimeAsync(30 * 60 * 1000);
+      expect(harness.agentRuns.renewLease).toHaveBeenCalledTimes(renewals);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('drops the guest when the lease turns out not to be its any more', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+
+    try {
+      // The sweeper won the race: this run is EXPIRED and a fresh attempt is
+      // already going. Carrying on would spend the model budget twice for one
+      // result, so losing the lease has to actually stop the machine.
+      const harness = build(
+        { verdicts: { 1: ACCEPTED }, slowHarnessMs: 10 * 60 * 1000 },
+        {},
+        { leaseHeld: false },
+      );
+      const finished = harness.execute();
+
+      // Only far enough for a renewal to be refused, and nowhere near far
+      // enough for the ten-minute harness pass to end. Asserting after the run
+      // finished would prove nothing: the guest is disposed in `finally` on
+      // every path, so the whole question is whether it goes *early*.
+      await jest.advanceTimersByTimeAsync(4 * 60 * 1000);
+
+      expect(harness.guest.sandbox.disposed).toBe(true);
+
+      await jest.advanceTimersByTimeAsync(30 * 60 * 1000);
+      await finished;
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('touches nothing on boot', async () => {
+    // This replaced a reconcile that failed every hosted run in CLAIMED or
+    // RUNNING across the deployment. On two replicas each booting one killed
+    // the other's live work, so a rolling deploy told the user to retry runs
+    // that were still going. Booting now registers the backend and stops.
+    const harness = build({ verdicts: { 1: ACCEPTED } });
+
+    await harness.executor.onModuleInit();
+
+    expect(harness.transitions).toEqual([]);
   });
 });

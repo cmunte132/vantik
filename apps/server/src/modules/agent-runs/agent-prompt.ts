@@ -3,8 +3,8 @@ import type { ContextPack } from './context-pack.service';
 /**
  * What the agent is actually told.
  *
- * Rendered here, from the pack, rather than by each executor. The hosted
- * sandbox used to hand Pi the pack as a JSON file on stdin and the BYO runner
+ * Rendered here, from the pack, rather than by each executor. The sandbox
+ * used to hand Pi the pack as a JSON file on stdin while a second backend
  * built prose of its own, which meant the same issue delegated two ways was
  * two different instructions — and the sandbox's was not an instruction at
  * all, because a pretty-printed object is not something a harness reads as a

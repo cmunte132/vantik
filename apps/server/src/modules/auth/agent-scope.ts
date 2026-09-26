@@ -104,6 +104,18 @@ export function agentSettings(settings: unknown): {
    * is what stops it, and that is a stronger statement than a flag.
    */
   disabledAt: string | null;
+  /**
+   * Whether this identity exists to attribute one run rather than to be an
+   * account somebody manages.
+   *
+   * The one question `hiddenAt` cannot answer. Hiding is what happens to an
+   * agent that was revoked, so a listing that reads hidden as "revoked, and
+   * therefore gone" is right about those and wrong about these — a run
+   * identity is hidden from birth precisely because it was never an account,
+   * and it is not revoked, so it came back. This is the fact that filter
+   * needed and did not have.
+   */
+  ephemeral: boolean;
 } {
   const agent = (
     settings as {
@@ -113,6 +125,7 @@ export function agentSettings(settings: unknown): {
         scopes?: unknown;
         hiddenAt?: string | null;
         disabledAt?: string | null;
+        ephemeral?: boolean;
       };
     } | null
   )?.agent;
@@ -123,5 +136,6 @@ export function agentSettings(settings: unknown): {
     scopes: sanitizeScopes(agent?.scopes),
     hiddenAt: agent?.hiddenAt ?? null,
     disabledAt: agent?.disabledAt ?? null,
+    ephemeral: agent?.ephemeral === true,
   };
 }

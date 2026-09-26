@@ -1,11 +1,11 @@
 /**
  * How long a claim is good for before the run is considered abandoned.
  *
- * Long enough that a runner doing real work — cloning a large repo, installing
- * dependencies — is not evicted mid-setup, short enough that a laptop that
- * closed its lid does not hold a queued issue hostage for an hour. The runner
- * renews well inside this on every heartbeat, so the only way to reach it is
- * to have genuinely stopped.
+ * Long enough that a run doing real work — cloning a large repo, installing
+ * dependencies — is not evicted mid-setup, short enough that a sandbox that
+ * died does not hold a queued issue hostage for an hour. Whatever holds the
+ * lease is expected to renew well inside this, so reaching the end of it means
+ * the work has genuinely stopped.
  */
 export const AGENT_RUN_LEASE_MS = Number(
   process.env.AGENT_RUN_LEASE_MS ?? 5 * 60 * 1000,

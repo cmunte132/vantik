@@ -320,7 +320,6 @@ describe('the git token never enters the guest', () => {
       gitProxy as never,
       { post: async (): Promise<undefined> => undefined } as never,
       agentRuns as never,
-      { agentRun: { findMany: async (): Promise<unknown[]> => [] } } as never,
     );
 
     await (
@@ -440,7 +439,7 @@ describe('sandbox runtime gating', () => {
     // A refusal with a reason someone can act on, not a silent fallback to a
     // container.
     expect(availability.available).toBe(false);
-    expect(availability.reason).toMatch(/microVM|not installed|BYO/i);
+    expect(availability.reason).toMatch(/microVM|not installed|gVisor/i);
   });
 
   it('throws rather than creating a weaker sandbox', async () => {

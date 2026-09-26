@@ -39,7 +39,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Agents',
-      items: ['agents/review-cycle', 'agents/runner'],
+      items: ['agents/review-cycle'],
     },
     {
       type: 'category',
@@ -70,7 +70,6 @@ const sidebars: SidebarsConfig = {
     {type: 'doc', id: 'api-reference/overview', label: 'Overview and authentication'},
     {type: 'doc', id: 'api-reference/connect-mcp', label: 'How to connect an MCP client'},
     {type: 'doc', id: 'api-reference/agents', label: 'How to work with agents'},
-    {type: 'doc', id: 'agents/runner', label: 'How to run agent work on your own machine'},
     ...apiSidebar,
   ],
 };

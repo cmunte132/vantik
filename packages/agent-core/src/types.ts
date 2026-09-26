@@ -252,7 +252,7 @@ export interface AgentRunSummary {
     | 'CANCELED'
     | 'EXPIRED'
     | 'NEEDS_REVIEW';
-  /** Which backend is running it — `byo`, `hosted`, later others. */
+  /** Which backend is running it — `hosted`, later others. */
   executor: string;
   attempt: number;
   /** Typed reason a run ended badly; null while it is alive or if it worked. */

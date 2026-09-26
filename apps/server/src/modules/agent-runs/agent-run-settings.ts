@@ -35,12 +35,10 @@ export interface WorkspaceAgentDefaults {
   /**
    * Which review phases the workspace runs.
    *
-   * Absent means "not stated", which is not the same as off — each executor
-   * decides what an unstated flag means for it. `specify` and `score` belong
-   * to the BYO runner's loop and default off there, because the null
-   * hypothesis is that implement plus deterministic verification is as good.
-   * `review` is the hosted sandbox's implement → verify → review → revise
-   * cycle and defaults on, because a diff nothing has read is the failure that
+   * Absent means "not stated", which is not the same as off — the executor
+   * decides what an unstated flag means for it. `review` is the sandbox's
+   * implement → verify → review → revise cycle, and it defaults on,
+   * because a diff nothing has read is the failure that
    * whole executor is arranged to prevent.
    */
   phases: AgentRunPhases;
@@ -124,7 +122,7 @@ function limitsOf(value: unknown): AgentRunLimits {
   return limits;
 }
 
-const PHASE_NAMES = ['specify', 'score', 'review'] as const;
+const PHASE_NAMES = ['review'] as const;
 
 /**
  * Stored phase switches, read back with each flag's type checked.

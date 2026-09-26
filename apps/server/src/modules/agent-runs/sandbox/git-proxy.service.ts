@@ -148,7 +148,7 @@ export class GitProxyService {
         throw new Error(
           `This repository is ${Math.round(bytes.byteLength / 1024 / 1024)}MB ` +
             'packed, which is too large to seed into a hosted sandbox. Use ' +
-            'the BYO runner for it.',
+            'a smaller checkout for it.',
         );
       }
 

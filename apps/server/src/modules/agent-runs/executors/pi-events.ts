@@ -9,10 +9,9 @@ import type { AgentStepKind } from '@vantikhq/types';
  * alternative today is what it replaced: three events per run, none of which
  * said anything the agent did.
  *
- * Kept deliberately close to the equivalent in the BYO runner's `pi-harness`,
- * because a reader must not be able to tell from the timeline which backend
- * produced it. The two cannot share code — the CLI publishes on its own and
- * does not depend on this package — so `pi-events.spec.ts` asserts the shapes
+ * A reader must not be able to tell from the timeline which backend produced
+ * it, so the mapping lives here rather than in any one executor and
+ * `pi-events.spec.ts` asserts the shapes
  * both are written against.
  */
 export interface ParsedStep {

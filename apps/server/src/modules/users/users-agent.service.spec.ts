@@ -364,6 +364,94 @@ describe('UsersService.listAgentAccounts', () => {
     expect(agent.active).toBe(false);
   });
 
+  /**
+   * A run identity: minted per delegated run to attribute a comment, hidden
+   * from birth, holding no token and managed by nobody.
+   */
+  const runIdentity = {
+    userId: 'agent-run',
+    joinedAt: new Date('2026-08-01T00:00:00.000Z'),
+    settings: {
+      agent: {
+        ownership: 'workspace',
+        ownerUserId: null as string | null,
+        scopes: [] as string[],
+        ephemeral: true,
+        hiddenAt: '2026-08-01T00:00:00.000Z',
+      },
+    },
+    user: {
+      id: 'agent-run',
+      fullname: 'Fuzzy Zebra',
+      email: 'run-abcd1234@agents.vantik.local',
+      createdAt: new Date('2026-08-01T00:00:00.000Z'),
+    },
+  };
+
+  /**
+   * The listing had no test at all, and this is what got through: two correct
+   * rules meeting. `hiddenAt`-from-birth assumed hidden meant hidden; the
+   * rework that made a workspace agent's liveness `!disabledAt` assumed
+   * anything hidden was already revoked. A run identity is hidden *and* live,
+   * so every delegated run added a permanent row to Settings → Agents.
+   */
+  it('never lists a run identity, however live it is', async () => {
+    const prisma = listPrisma([], [], [runIdentity]);
+
+    await expect(
+      serviceWith(prisma).listAgentAccounts('ws-1', 'admin-1'),
+    ).resolves.toEqual([]);
+  });
+
+  it('lists the agents somebody made beside it', async () => {
+    // The half that must not break: excluding run identities cannot cost the
+    // screen the accounts it exists to manage.
+    const prisma = listPrisma([], [], [runIdentity, workspaceMembership]);
+
+    const agents = await serviceWith(prisma).listAgentAccounts(
+      'ws-1',
+      'admin-1',
+    );
+
+    expect(agents.map((agent) => agent.id)).toEqual(['agent-ws']);
+  });
+
+  it('still hides a workspace agent that was disabled and cleared', async () => {
+    const prisma = listPrisma(
+      [],
+      [],
+      [
+        {
+          ...workspaceMembership,
+          settings: {
+            agent: {
+              ownership: 'workspace',
+              ownerUserId: null,
+              disabledAt: '2026-07-30T00:00:00.000Z',
+              hiddenAt: '2026-07-31T00:00:00.000Z',
+            },
+          },
+        },
+      ],
+    );
+
+    await expect(
+      serviceWith(prisma).listAgentAccounts('ws-1', 'admin-1'),
+    ).resolves.toEqual([]);
+  });
+
+  it('never puts ephemeral on the wire either', async () => {
+    // A listing concern, like `hiddenAt`. Nothing that reaches this screen is
+    // ephemeral, so a field saying so on every row is noise.
+    const prisma = listPrisma([], [], [workspaceMembership]);
+    const [agent] = await serviceWith(prisma).listAgentAccounts(
+      'ws-1',
+      'admin-1',
+    );
+
+    expect('ephemeral' in agent).toBe(false);
+  });
+
   it('never puts disabledAt on the wire; active is the whole answer', async () => {
     const prisma = listPrisma([], [], [workspaceMembership]);
     const [agent] = await serviceWith(prisma).listAgentAccounts(
@@ -459,6 +547,98 @@ describe('UsersService.listAgentAccounts', () => {
 
     expect(agent.lastUsedAt).toBe(newer.toISOString());
     expect(agent.active).toBe(true);
+  });
+});
+
+/**
+ * The identity a delegated run is attributed to.
+ *
+ * It used to be minted per run and never reaped: a SuperTokens user, a `User`
+ * row and a workspace membership for every delegation the workspace had ever
+ * done, all replicated to every connected client because comment attribution
+ * resolves through the user list.
+ */
+describe('UsersService.provisionRunIdentity', () => {
+  function runIdentityPrisma(existing: unknown = null) {
+    const prisma = buildPrisma();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (prisma.usersOnWorkspaces as any).findFirst = jest
+      .fn()
+      .mockResolvedValue(existing);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (prisma.usersOnWorkspaces as any).create = jest.fn().mockResolvedValue({});
+
+    return prisma;
+  }
+
+  beforeEach(() => {
+    signInUp.mockClear();
+    signInUp.mockResolvedValue({
+      status: 'OK',
+      recipeUserId: { getAsString: () => 'st-run-1' },
+    });
+  });
+
+  it('reuses the identity already working the issue', async () => {
+    const prisma = runIdentityPrisma({
+      user: { id: 'agent-run-1', fullname: 'Fuzzy Zebra' },
+    });
+
+    const identity = await serviceWith(prisma).provisionRunIdentity(
+      'ws-1',
+      'issue-1',
+      'Jolly Otter',
+    );
+
+    // The second attempt reads as the same agent having another go, rather
+    // than as a stranger arriving to finish somebody else's work.
+    expect(identity).toEqual({ id: 'agent-run-1', name: 'Fuzzy Zebra' });
+    expect(signInUp).not.toHaveBeenCalled();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((prisma.usersOnWorkspaces as any).create).not.toHaveBeenCalled();
+  });
+
+  it('matches on the issue, not merely on being a run identity', async () => {
+    const prisma = runIdentityPrisma();
+
+    await serviceWith(prisma).provisionRunIdentity(
+      'ws-1',
+      'issue-1',
+      'Jolly Otter',
+    );
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((prisma.usersOnWorkspaces as any).findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: 'ws-1',
+          settings: { path: ['agent', 'issueId'], equals: 'issue-1' },
+        }),
+      }),
+    );
+  });
+
+  it('records the issue on the one it makes, or it can never be found again', async () => {
+    const prisma = runIdentityPrisma();
+
+    await serviceWith(prisma).provisionRunIdentity(
+      'ws-1',
+      'issue-1',
+      'Jolly Otter',
+    );
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const created = (prisma.usersOnWorkspaces as any).create.mock.calls[0][0];
+
+    expect(created.data.settings.agent).toMatchObject({
+      ownership: 'workspace',
+      ephemeral: true,
+      issueId: 'issue-1',
+      scopes: [],
+    });
+    // No token, ever. A hosted run never calls the API as itself.
+    expect(prisma.personalAccessToken.create).not.toHaveBeenCalled();
   });
 });
 

@@ -55,14 +55,6 @@ export class AgentRunLimitsDto {
 export class AgentRunPhasesDto implements AgentRunPhases {
   @IsOptional()
   @IsBoolean()
-  specify?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  score?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
   review?: boolean;
 }
 

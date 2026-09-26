@@ -14,7 +14,7 @@ describe('workspaceAgentDefaults', () => {
         defaultExecutor: 'hosted',
         repo: { testCommand: 'pnpm test' },
         model: { provider: 'openrouter', model: 'gemini-3.6-flash' },
-        phases: { specify: true, score: false },
+        phases: { review: true },
         limits: { maxCycles: 2, maxCostUsd: 12.5 },
       },
     });
@@ -23,7 +23,7 @@ describe('workspaceAgentDefaults', () => {
       defaultExecutor: 'hosted',
       repo: { testCommand: 'pnpm test' },
       model: { provider: 'openrouter', model: 'gemini-3.6-flash' },
-      phases: { specify: true, score: false },
+      phases: { review: true },
       limits: { maxCycles: 2, maxCostUsd: 12.5 },
     });
   });
@@ -79,46 +79,49 @@ describe('workspaceAgentDefaults', () => {
   describe('phases', () => {
     it('drops the string "false" rather than letting it enable the phase', () => {
       // The case this hardening exists for. `"false"` is a non-empty string
-      // and so is truthy; spread over the runner's defaults it would switch
-      // `specify` *on* to express that it is off.
+      // and so is truthy; spread over the cycle's defaults it would switch
+      // `review` *on* to express that it is off.
       const { phases } = workspaceAgentDefaults({
-        agentRuns: { phases: { specify: 'false' } },
+        agentRuns: { phases: { review: 'false' } },
       });
 
-      expect(phases.specify).toBeUndefined();
+      expect(phases.review).toBeUndefined();
       expect(phases).toEqual({});
     });
 
-    it('drops a non-boolean under any of the three flags', () => {
+    it('drops a non-boolean flag', () => {
       const { phases } = workspaceAgentDefaults({
         agentRuns: {
-          phases: { specify: 1, score: {}, review: 'true' },
+          phases: { review: 1 },
         },
       });
 
       expect(phases).toEqual({});
     });
 
-    it('keeps the well-typed flags and drops only the bad one', () => {
+    it('keeps the well-typed flag and drops the bad one alongside it', () => {
       const { phases } = workspaceAgentDefaults({
         agentRuns: {
-          phases: { specify: true, score: 'false', review: false },
+          phases: { review: false, verify: 'false' },
         },
       });
 
-      expect(phases).toEqual({ specify: true, review: false });
+      expect(phases).toEqual({ review: false });
     });
 
     it('ignores keys that are not phase names', () => {
+      // `specify` and `score` were switches on the retired runner loop, so a
+      // workspace configured against an older build reads back as nothing
+      // rather than as flags over a phase that no longer exists.
       const { phases } = workspaceAgentDefaults({
-        agentRuns: { phases: { specify: true, implement: true } },
+        agentRuns: { phases: { review: true, specify: true, score: true } },
       });
 
-      expect(phases).toEqual({ specify: true });
+      expect(phases).toEqual({ review: true });
     });
 
     it('returns no flags when phases is not an object', () => {
-      for (const stored of ['specify', 3, true, ['specify'], null]) {
+      for (const stored of ['review', 3, true, ['review'], null]) {
         expect(
           workspaceAgentDefaults({ agentRuns: { phases: stored } }).phases,
         ).toEqual({});
@@ -129,9 +132,9 @@ describe('workspaceAgentDefaults', () => {
   describe('defaultExecutor', () => {
     it('keeps a non-empty string', () => {
       expect(
-        workspaceAgentDefaults({ agentRuns: { defaultExecutor: 'byo' } })
+        workspaceAgentDefaults({ agentRuns: { defaultExecutor: 'github' } })
           .defaultExecutor,
-      ).toBe('byo');
+      ).toBe('github');
     });
 
     it('reads back as null for anything that is not a non-empty string', () => {
@@ -179,7 +182,7 @@ describe('workspaceAgentDefaults', () => {
 
 describe('agentBoundExecutor', () => {
   it('names the executor an agent is bound to', () => {
-    expect(agentBoundExecutor({ agent: { executor: 'byo' } })).toBe('byo');
+    expect(agentBoundExecutor({ agent: { executor: 'github' } })).toBe('github');
   });
 
   it('is null when the agent names no executor, or names one badly', () => {

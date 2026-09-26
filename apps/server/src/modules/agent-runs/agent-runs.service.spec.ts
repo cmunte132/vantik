@@ -50,7 +50,7 @@ function makeRun(over: Partial<FakeRun> = {}): FakeRun {
     issueId: 'issue-1',
     agentUserId: 'agent-1',
     createdById: 'user-1',
-    executor: 'byo',
+    executor: 'hosted',
     status: 'QUEUED',
     attempt: 1,
     previousRunId: null,
@@ -255,26 +255,7 @@ describe('AgentRunsService transition table', () => {
 });
 
 describe('AgentRunsService leases', () => {
-  it('refuses a heartbeat on a run that was cancelled underneath it', async () => {
-    const { service } = buildService([makeRun({ status: 'CANCELED' })]);
-
-    // How a runner learns to stop: it finds out on its next heartbeat rather
-    // than after another hour of work nobody wants.
-    await expect(service.heartbeat(RUN, scope)).rejects.toThrow(/Stop work/);
-  });
-
-  it('renews without changing status', async () => {
-    const { service, rows } = buildService([makeRun({ status: 'RUNNING' })]);
-
-    await service.heartbeat(RUN, scope);
-
-    expect(rows.get(RUN)?.status).toBe('RUNNING');
-    expect(rows.get(RUN)?.leaseExpiresAt?.getTime()).toBeGreaterThan(
-      Date.now(),
-    );
-  });
-
-  it('expires a lapsed lease and re-queues it as the next attempt', async () => {
+  it('expires a lapsed lease and says what is owed to it', async () => {
     const { service, rows } = buildService([
       makeRun({
         status: 'RUNNING',
@@ -283,18 +264,20 @@ describe('AgentRunsService leases', () => {
       }),
     ]);
 
-    const { expired, requeued } = await service.expireLapsedLeases();
+    const expired = await service.expireLapsedLeases();
 
-    expect({ expired, requeued }).toEqual({ expired: 1, requeued: 1 });
     expect(rows.get(RUN)?.status).toBe('EXPIRED');
-    // Typed, so "the runner went away" is countable rather than a string.
+    // Typed, so "it went away" is countable rather than a string.
     expect(rows.get(RUN)?.failure).toBe('LEASE_LOST');
-
-    const retry = [...rows.values()].find((run) => run.previousRunId === RUN);
-    expect(retry).toMatchObject({ status: 'QUEUED', attempt: 2 });
+    // The attempt that lapsed, and the fact that another is worth opening.
+    // Opening it is the caller's job — a run created here and handed to
+    // nobody would sit QUEUED for ever.
+    expect(expired).toEqual([
+      expect.objectContaining({ id: RUN, attempt: 1, retryable: true }),
+    ]);
   });
 
-  it('stops re-queueing at the attempt cap', async () => {
+  it('marks a run past the attempt cap as not worth retrying', async () => {
     const { service, rows } = buildService([
       makeRun({
         status: 'RUNNING',
@@ -303,11 +286,13 @@ describe('AgentRunsService leases', () => {
       }),
     ]);
 
-    const { expired, requeued } = await service.expireLapsedLeases();
+    const expired = await service.expireLapsedLeases();
 
     // The same environment failing the same way a fourth time is not new
     // information, and it costs model budget to learn nothing.
-    expect({ expired, requeued }).toEqual({ expired: 1, requeued: 0 });
+    expect(expired).toEqual([
+      expect.objectContaining({ id: RUN, retryable: false }),
+    ]);
     expect(rows.get(RUN)?.status).toBe('EXPIRED');
   });
 
@@ -319,11 +304,45 @@ describe('AgentRunsService leases', () => {
       }),
     ]);
 
-    await expect(service.expireLapsedLeases()).resolves.toEqual({
-      expired: 0,
-      requeued: 0,
-    });
+    await expect(service.expireLapsedLeases()).resolves.toEqual([]);
     expect(rows.get(RUN)?.status).toBe('RUNNING');
+  });
+
+  it('never sees a run that holds no lease at all', async () => {
+    // The gap this issue existed to close. The sweeper's predicate requires a
+    // lease, so a backend that claims a run without taking one is invisible to
+    // it — which is what the hosted executor did, and it was the only backend
+    // left.
+    const { service, rows } = buildService([
+      makeRun({ status: 'RUNNING', leaseExpiresAt: null }),
+    ]);
+
+    await expect(service.expireLapsedLeases()).resolves.toEqual([]);
+    expect(rows.get(RUN)?.status).toBe('RUNNING');
+  });
+
+  it('renews a live run, and says so', async () => {
+    const { service, rows } = buildService([
+      makeRun({
+        status: 'RUNNING',
+        leaseExpiresAt: new Date(Date.now() + 1000),
+      }),
+    ]);
+
+    await expect(service.renewLease(RUN)).resolves.toBe(true);
+    expect(rows.get(RUN)?.leaseExpiresAt?.getTime()).toBeGreaterThan(
+      Date.now() + 60_000,
+    );
+    expect(rows.get(RUN)?.status).toBe('RUNNING');
+  });
+
+  it('refuses to renew a run that has already moved on', async () => {
+    // How work in flight finds out it was given up on. The false is the whole
+    // signal: an executor that keeps going after this is spending the model
+    // budget beside a fresh attempt at the same issue.
+    const { service } = buildService([makeRun({ status: 'EXPIRED' })]);
+
+    await expect(service.renewLease(RUN)).resolves.toBe(false);
   });
 });
 

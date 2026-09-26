@@ -310,26 +310,58 @@ export class UsersService {
   }
 
   /**
-   * An identity for one run, which nobody has to manage.
+   * The identity that works one issue, which nobody has to manage.
    *
    * Delegating to a hosted sandbox should not first require somebody to
    * provision an agent account, choose it from a list of thirteen, and keep it
    * alive afterwards. Vantik runs the agent, so Vantik owns the identity: it is
-   * created when the run is created, named something a person can tell apart in
-   * a comment feed, and never offered as a thing to configure.
+   * created on demand, named something a person can tell apart in a comment
+   * feed, and never offered as a thing to configure.
+   *
+   * **Per issue, not per run.** It was per run, and nothing ever reaped one —
+   * so a workspace doing a handful of delegations a day accumulated a
+   * SuperTokens user, a `User` row and a workspace membership every time, for
+   * ever, all of them replicated to every connected client because comment
+   * attribution resolves through the user list. Keyed to the issue, a second
+   * attempt reuses the first attempt's identity and the issue reads as one
+   * agent that had another go rather than as two strangers.
+   *
+   * The cost is that two runs forced to overlap on one issue share an author.
+   * Accepted deliberately: the issue view drops the handback comment and
+   * renders a card per run, and every comment carries its own `agentRunId`, so
+   * which run said what is answerable without spending an identity to say it.
    *
    * **It is given no token.** That is the security property, not an omission:
    * a hosted run never calls the API as itself — the sandbox reports to the
    * host and the host does the writing — so there is nothing for a credential
-   * to be needed for, and a credential that exists is one that can leak. It is
-   * also what keeps the identity out of `listAgentAccounts`, which only shows a
-   * hidden agent when it still has a live token.
+   * to be needed for, and a credential that exists is one that can leak.
    *
-   * The row stays after the run, like every other agent identity, because it
-   * authored a comment and may have opened a pull request. Attribution that
+   * The row stays after the work, like every other agent identity, because it
+   * authored comments and may have opened pull requests. Attribution that
    * disappears is worse than a row nobody looks at.
    */
-  async provisionRunIdentity(workspaceId: string, name: string) {
+  async provisionRunIdentity(
+    workspaceId: string,
+    issueId: string,
+    name: string,
+  ) {
+    // Reused rather than re-minted. Matched on the issue it was made for,
+    // which is stored on the membership beside the flag that keeps it out of
+    // the agents screen — the same blob, read the same way.
+    const existing = await this.prisma.usersOnWorkspaces.findFirst({
+      where: {
+        workspaceId,
+        role: RoleEnum.AGENT,
+        status: 'ACTIVE',
+        settings: { path: ['agent', 'issueId'], equals: issueId },
+      },
+      select: { user: { select: { id: true, fullname: true } } },
+    });
+
+    if (existing?.user) {
+      return { id: existing.user.id, name: existing.user.fullname ?? name };
+    }
+
     const email = `run-${randomBytes(8).toString('hex')}@agents.vantik.local`;
 
     const signUp = await Passwordless.signInUp({ tenantId: 'public', email });
@@ -366,15 +398,20 @@ export class UsersService {
           role: RoleEnum.AGENT,
           teamIds,
           joinedAt: new Date(),
-          // `hiddenAt` from birth: this is not an account, and listing it
-          // beside the ones somebody deliberately made would turn Settings →
-          // Agents into a list of every run the workspace has ever done.
+          // `ephemeral` is what keeps this out of Settings → Agents, and
+          // `hiddenAt` says the same thing to anything reading the older
+          // shape. Neither is a permission: this identity holds no token and
+          // no scopes, so there is nothing here to restrict.
+          //
+          // `issueId` is what makes it reusable. Without it the only way to
+          // find the identity that already works this issue is to guess.
           settings: {
             agent: {
               ownership: 'workspace',
               ownerUserId: null,
               scopes: [],
               ephemeral: true,
+              issueId,
               hiddenAt: new Date().toISOString(),
             },
           },
@@ -644,12 +681,29 @@ export class UsersService {
 
     return memberships
       .filter((membership) => {
+        const { hiddenAt, ephemeral } = agentSettings(membership.settings);
+
+        // A run identity is not an account and never appears here, whatever
+        // else is true of it. It is minted per delegated run to attribute a
+        // comment, holds no token and is managed by nobody, so a screen for
+        // provisioning and revoking agents has nothing to offer about it —
+        // and listing them would make that screen a list of every run the
+        // workspace has ever done.
+        //
+        // This is the check the `hiddenAt` rule below cannot make. Hiding is
+        // what happens to an agent somebody revoked, so "hidden but still
+        // able to act" is a contradiction worth showing; a run identity is
+        // hidden from birth and perfectly able to act, so that rule let every
+        // one of them back in.
+        if (ephemeral) {
+          return false;
+        }
+
         // A cleared agent leaves the listing but keeps its account, its
         // membership and everything it authored, so attribution on past issues
         // and comments still resolves. Only ever hides a revoked one — hiding a
         // live agent would conceal something that can still act.
-        const hidden = agentSettings(membership.settings).hiddenAt;
-        return !hidden || isActive(membership);
+        return !hiddenAt || isActive(membership);
       })
       .map((membership) => {
         // Read through the same helper the guard uses, so the screen shows what
@@ -659,6 +713,7 @@ export class UsersService {
         const {
           hiddenAt: _hiddenAt,
           disabledAt: _disabledAt,
+          ephemeral: _ephemeral,
           ...granted
         } = agentSettings(membership.settings);
 

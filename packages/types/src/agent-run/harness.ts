@@ -5,10 +5,9 @@
  * id. Two runs of the same issue are only comparable if you know what drove
  * them, and "latest" is not an answer to that question three weeks later.
  *
- * Here rather than beside either runner because both use it. The hosted
- * executor used to spell the package out unpinned while the BYO runner pinned
- * it, so the same issue delegated two ways could run two different builds and
- * nothing recorded the difference.
+ * Pinned in one place. The executor used to spell the package out unpinned
+ * while a second backend pinned it, so the same issue delegated two ways could
+ * run two different builds and nothing recorded the difference.
  */
 export const PI_VERSION = '0.82.1';
 export const PI_PACKAGE = `@earendil-works/pi-coding-agent@${PI_VERSION}`;
@@ -39,8 +38,7 @@ export const PI_PACKAGE = `@earendil-works/pi-coding-agent@${PI_VERSION}`;
  * next one, so nothing about finishing the work makes it exit. The hosted
  * executor has one shot at a command and reads the result afterwards, so it
  * wants the mode that takes a prompt as an argument, streams its events and
- * then terminates. The BYO runner keeps RPC, because it drives the process
- * interactively and closes stdin itself.
+ * then terminates.
  *
  * None of these is configurable, and nothing in the settings UI offers to
  * change them.

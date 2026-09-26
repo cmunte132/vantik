@@ -194,7 +194,7 @@ export function whereTheWorkWent(result: {
  * `implement` and `revise` share a slot because they are the same step: the
  * first pass implements, every later one revises what the reviewer found.
  */
-const CYCLE_ORDER = ['specify', 'implement', 'revise', 'verify', 'review'];
+const CYCLE_ORDER = ['implement', 'revise', 'verify', 'review'];
 
 /**
  * The phases a run moves through, in the order it moves through them.
@@ -214,7 +214,6 @@ export const PHASE_ORDER = ['setup', ...CYCLE_ORDER, 'report'];
  */
 export const PHASE_LABEL: Record<string, string> = {
   setup: 'Set up the environment',
-  specify: 'Wrote the tests first',
   implement: 'Did the work',
   revise: 'Fixed what the review found',
   verify: 'Ran the checks',

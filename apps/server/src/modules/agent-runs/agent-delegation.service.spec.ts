@@ -1,6 +1,5 @@
 /**
- * Delegation: when a run is created, which backend takes it, and what happens
- * to the issue when one reports back.
+ * Delegation: when a run is created, and which backend takes it.
  *
  * The guards are the substance. Every one of them exists because the failure
  * it prevents is silent and expensive — two agents on one issue, a scripted
@@ -11,10 +10,6 @@ import { BadRequestException } from '@nestjs/common';
 import { RoleEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
-import type IssueCommentsService from 'modules/issue-comments/issue-comments.service';
-import type LinkedIssueService from 'modules/linked-issue/linked-issue.service';
-
-import { RunHandbackService } from './run-handback.service';
 import { AgentDelegationService } from './agent-delegation.service';
 import type { AgentRunsService } from './agent-runs.service';
 import type { ContextPackService } from './context-pack.service';
@@ -53,7 +48,7 @@ function build(options: {
   membershipRole?: string;
 } = {}) {
   const registry = new ExecutorRegistry();
-  for (const executor of options.executors ?? [fakeExecutor('byo')]) {
+  for (const executor of options.executors ?? [fakeExecutor('hosted')]) {
     registry.register(executor);
   }
 
@@ -106,6 +101,11 @@ function build(options: {
       workspaceId: WORKSPACE,
     })),
     cancelRun: jest.fn(async (): Promise<void> => undefined),
+    retryRun: jest.fn(async (runId: string) => ({
+      id: `${runId}-next`,
+      executor: options.executors?.[0]?.key ?? 'hosted',
+      attempt: 2,
+    })),
   } as unknown as AgentRunsService;
 
   const contextPacks = {
@@ -115,45 +115,14 @@ function build(options: {
     })),
   } as unknown as ContextPackService;
 
-  const linked: Array<{ url: string; issueId: string }> = [];
-  const linkedIssues = {
-    getLinkedIssueByUrl: jest.fn(async (url: string) =>
-      linked.filter((entry) => entry.url === url),
-    ),
-    createLinkIssue: jest.fn(async (data: { url: string }, params: { issueId: string }) => {
-      linked.push({ url: data.url, issueId: params.issueId });
-      return { id: 'linked-1' };
-    }),
-  } as unknown as LinkedIssueService;
-
-  const posted: Array<{ issueId: string; userId: string; body: string }> = [];
-  const comments = {
-    createIssueComment: jest.fn(
-      async (
-        params: { issueId: string },
-        userId: string,
-        data: { bodyMarkdown: string },
-      ) => {
-        posted.push({
-          issueId: params.issueId,
-          userId,
-          body: data.bodyMarkdown,
-        });
-        return { id: 'comment-1' };
-      },
-    ),
-  } as unknown as IssueCommentsService;
-
   const service = new AgentDelegationService(
     prisma,
     agentRuns,
     contextPacks,
     registry,
-    linkedIssues,
-    new RunHandbackService(prisma, comments),
   );
 
-  return { service, prisma, agentRuns, registry, created, posted, linked, linkedIssues };
+  return { service, prisma, agentRuns, registry, created };
 }
 
 const delegateInput = {
@@ -257,23 +226,27 @@ describe('AgentDelegationService guards', () => {
 });
 
 describe('AgentDelegationService routing', () => {
+  // `hosted` is the only backend this build ships, so the second key here is a
+  // fake. The order these fall back in is a property of the registry rather
+  // than of how many adapters happen to be registered, and it is worth holding
+  // to now that adding one is the point of the registry existing.
   it('prefers the executor the request named', async () => {
     const { service, created } = build({
-      executors: [fakeExecutor('byo'), fakeExecutor('hosted')],
+      executors: [fakeExecutor('hosted'), fakeExecutor('elsewhere')],
       agentSettings: { agent: { executor: 'hosted' } },
       preferences: { agentRuns: { defaultExecutor: 'hosted' } },
     });
 
-    await service.delegate({ ...delegateInput, executor: 'byo' });
+    await service.delegate({ ...delegateInput, executor: 'elsewhere' });
 
-    expect(created[0]).toMatchObject({ executor: 'byo' });
+    expect(created[0]).toMatchObject({ executor: 'elsewhere' });
   });
 
   it('falls back to the executor the agent account is bound to', async () => {
     const { service, created } = build({
-      executors: [fakeExecutor('byo'), fakeExecutor('hosted')],
+      executors: [fakeExecutor('hosted'), fakeExecutor('elsewhere')],
       agentSettings: { agent: { executor: 'hosted' } },
-      preferences: { agentRuns: { defaultExecutor: 'byo' } },
+      preferences: { agentRuns: { defaultExecutor: 'elsewhere' } },
     });
 
     await service.delegate(delegateInput);
@@ -283,26 +256,28 @@ describe('AgentDelegationService routing', () => {
 
   it('falls back to the workspace default', async () => {
     const { service, created } = build({
-      executors: [fakeExecutor('byo'), fakeExecutor('hosted')],
-      preferences: { agentRuns: { defaultExecutor: 'hosted' } },
+      executors: [fakeExecutor('hosted'), fakeExecutor('elsewhere')],
+      preferences: { agentRuns: { defaultExecutor: 'elsewhere' } },
     });
+
+    await service.delegate(delegateInput);
+
+    expect(created[0]).toMatchObject({ executor: 'elsewhere' });
+  });
+
+  it('uses the only executor there is rather than demanding a choice', async () => {
+    // The case every delegation in this build actually takes: one adapter is
+    // registered, so nobody has to name it and nobody has to configure it.
+    const { service, created } = build({ executors: [fakeExecutor('hosted')] });
 
     await service.delegate(delegateInput);
 
     expect(created[0]).toMatchObject({ executor: 'hosted' });
   });
 
-  it('uses the only executor there is rather than demanding a choice', async () => {
-    const { service, created } = build({ executors: [fakeExecutor('byo')] });
-
-    await service.delegate(delegateInput);
-
-    expect(created[0]).toMatchObject({ executor: 'byo' });
-  });
-
   it('asks which one when several are registered and none is configured', async () => {
     const { service } = build({
-      executors: [fakeExecutor('byo'), fakeExecutor('hosted')],
+      executors: [fakeExecutor('hosted'), fakeExecutor('elsewhere')],
     });
 
     await expect(service.delegate(delegateInput)).rejects.toThrow(
@@ -311,13 +286,13 @@ describe('AgentDelegationService routing', () => {
   });
 
   it('names what exists when an unknown executor is asked for', async () => {
-    const { service } = build({ executors: [fakeExecutor('byo')] });
+    const { service } = build({ executors: [fakeExecutor('hosted')] });
 
-    // A typo would otherwise surface as a run nobody ever claims, which looks
-    // exactly like a runner being offline.
+    // A typo would otherwise surface as a run that sits in QUEUED for ever,
+    // which reads as the sandbox being down rather than as a bad request.
     await expect(
       service.delegate({ ...delegateInput, executor: 'hostd' }),
-    ).rejects.toThrow(/No executor "hostd". Available: byo/);
+    ).rejects.toThrow(/No executor "hostd". Available: hosted/);
   });
 
   it('records a dispatch failure on the run instead of dropping it', async () => {
@@ -346,19 +321,19 @@ describe('AgentDelegationService routing', () => {
     // `config.phases` was undefined on every run ever dispatched and an
     // executor could not act on a setting somebody had deliberately set.
     const { service, created } = build({
-      preferences: { agentRuns: { phases: { review: false, specify: true } } },
+      preferences: { agentRuns: { phases: { review: false } } },
     });
 
     await service.delegate(delegateInput);
 
     expect((created[0] as { config: unknown }).config).toMatchObject({
-      phases: { review: false, specify: true },
+      phases: { review: false },
     });
   });
 
-  it('lets the request override one phase without losing the others', async () => {
+  it('lets the request overrule the workspace switch', async () => {
     const { service, created } = build({
-      preferences: { agentRuns: { phases: { review: true, score: true } } },
+      preferences: { agentRuns: { phases: { review: true } } },
     });
 
     await service.delegate({
@@ -367,7 +342,7 @@ describe('AgentDelegationService routing', () => {
     });
 
     expect((created[0] as { config: unknown }).config).toMatchObject({
-      phases: { review: false, score: true },
+      phases: { review: false },
     });
   });
 
@@ -464,131 +439,80 @@ describe('AgentDelegationService assignment trigger', () => {
   });
 });
 
-describe('AgentDelegationService handback', () => {
-  it('links the pull request and comments as the agent', async () => {
-    const { service, posted, linked } = build();
+/**
+ * A run that exists and was never handed to a backend is the worst of both
+ * worlds: it holds a slot against the concurrency cap, blocks its own issue
+ * from being delegated again, and reads in the runs list as work in progress.
+ * That is what every retry was while `createRun` alone counted as a dispatch.
+ */
+describe('AgentDelegationService retry', () => {
+  it('starts the attempt it opens', async () => {
+    const executor = fakeExecutor('hosted');
+    const { service } = build({ executors: [executor] });
 
-    await service.report(
+    const next = await service.retry(
       'run-1',
-      {
-        summary: 'Added the deleted check and a regression test.',
-        branch: 'agent/eng-42',
-        prUrl: 'https://example.test/pr/7',
-      },
-      WORKSPACE,
+      { workspaceId: WORKSPACE },
+      'user-1',
     );
 
-    expect(linked).toEqual([
-      { url: 'https://example.test/pr/7', issueId: ISSUE },
-    ]);
-    // Authored by the agent user, not by whoever delegated.
-    expect(posted[0]).toMatchObject({ issueId: ISSUE, userId: AGENT });
-    expect(posted[0].body).toContain('https://example.test/pr/7');
-  });
-
-  it('does not link the same pull request twice', async () => {
-    const { service, linkedIssues } = build();
-
-    const report = {
-      branch: 'agent/eng-42',
-      prUrl: 'https://example.test/pr/7',
-    };
-
-    // A runner retrying an HTTP call must not leave the issue carrying the
-    // same pull request twice.
-    await service.report('run-1', report, WORKSPACE);
-    await service.report('run-1', report, WORKSPACE);
-
-    expect(linkedIssues.createLinkIssue).toHaveBeenCalledTimes(1);
-  });
-
-  it('hands back a worktree path with a command to reach it', async () => {
-    const { service, posted, linkedIssues } = build();
-
-    await service.report(
-      'run-1',
-      {
-        summary: 'Done.',
-        branch: 'agent/eng-42',
-        worktreePath: '/Users/dev/worktrees/eng-42',
-      },
-      WORKSPACE,
+    expect(next).toMatchObject({ id: 'run-1-next', attempt: 2 });
+    expect(executor.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'run-1-next' }),
     );
-
-    expect(posted[0].body).toContain('cd /Users/dev/worktrees/eng-42');
-    expect(posted[0].body).toContain('agent/eng-42');
-    // No remote, so nothing to link.
-    expect(linkedIssues.createLinkIssue).not.toHaveBeenCalled();
   });
 
-  it('derives delivery from what the run actually produced', async () => {
-    const { service, agentRuns } = build();
+  it('records a dispatch failure on the new attempt rather than dropping it', async () => {
+    const { service, agentRuns } = build({
+      executors: [
+        fakeExecutor('hosted', {
+          dispatch: async () => {
+            throw new Error('sandbox host unreachable');
+          },
+        }),
+      ],
+    });
 
-    await service.report(
-      'run-1',
-      { worktreePath: '/tmp/wt' },
-      WORKSPACE,
-    );
+    await service.retry('run-1', { workspaceId: WORKSPACE }, 'user-1');
 
     expect(agentRuns.transition).toHaveBeenCalledWith(
-      'run-1',
-      'SUCCEEDED',
-      expect.objectContaining({
-        result: expect.objectContaining({ delivery: 'worktree' }),
-      }),
-    );
-  });
-
-  it('reports a failure as FAILED with readable prose', async () => {
-    const { service, agentRuns, posted } = build();
-
-    await service.report(
-      'run-1',
-      { failure: 'ENVIRONMENT_SETUP_FAILED', error: 'pnpm install exited 1' },
-      WORKSPACE,
-    );
-
-    expect(agentRuns.transition).toHaveBeenCalledWith(
-      'run-1',
+      'run-1-next',
       'FAILED',
       expect.objectContaining({ failure: 'ENVIRONMENT_SETUP_FAILED' }),
     );
-    // A failed run deserves as much design as a successful one.
-    expect(posted[0].body).toContain('the environment would not build');
-    expect(posted[0].body).toContain('pnpm install exited 1');
   });
 
-  it('routes an unverifiable result to human review, not to failure', async () => {
-    const { service, agentRuns, posted } = build();
+  it('sends it to the backend the previous attempt used', async () => {
+    // Not re-resolved. A workspace that changed its default between attempts
+    // would otherwise retry on a backend the first attempt never ran on, and
+    // the two would not be comparable.
+    const hosted = fakeExecutor('hosted');
+    const elsewhere = fakeExecutor('elsewhere');
+    const { service } = build({ executors: [elsewhere, hosted] });
 
-    await service.report(
-      'run-1',
-      { needsReview: true, summary: 'This issue cannot be pinned down with tests.' },
-      WORKSPACE,
-    );
+    await service.retry('run-1', { workspaceId: WORKSPACE }, 'user-1');
 
-    expect(agentRuns.transition).toHaveBeenCalledWith(
-      'run-1',
-      'NEEDS_REVIEW',
-      expect.anything(),
-    );
-    expect(posted[0].body).toContain('Needs a human');
+    expect(elsewhere.dispatch).toHaveBeenCalled();
+    expect(hosted.dispatch).not.toHaveBeenCalled();
   });
+});
 
-  it('never lets an executor choose its own status', async () => {
-    const { service, agentRuns } = build();
+describe('AgentDelegationService liveness', () => {
+  it('counts only the statuses a run is really working in', async () => {
+    // What lets an expired run go. EXPIRED, FAILED and the rest are terminal,
+    // so the slot they held is released and the issue can be delegated again
+    // — but only because neither guard reads them as live.
+    const { service, prisma } = build();
 
-    // A failure and a "needs review" together must not resolve to SUCCEEDED.
-    await service.report(
-      'run-1',
-      { failure: 'HARNESS_CRASHED', needsReview: true },
-      WORKSPACE,
-    );
+    await service.delegate(delegateInput);
 
-    expect(agentRuns.transition).toHaveBeenCalledWith(
-      'run-1',
-      'FAILED',
-      expect.anything(),
-    );
+    const live = ['QUEUED', 'CLAIMED', 'RUNNING'];
+
+    expect(
+      (prisma.agentRun.findFirst as jest.Mock).mock.calls[0][0].where.status,
+    ).toEqual({ in: live });
+    expect(
+      (prisma.agentRun.count as jest.Mock).mock.calls[0][0].where.status,
+    ).toEqual({ in: live });
   });
 });

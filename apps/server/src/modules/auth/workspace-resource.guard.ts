@@ -136,9 +136,9 @@ export class WorkspaceResourceGuard implements CanActivate {
       );
     }
 
-    // Cancel, retry, heartbeat, report and event append all name the run by id
-    // and nothing else, so without this a caller could stop or hijack an agent
-    // run in another workspace.
+    // Read, cancel, retry and the event log all name the run by id and nothing
+    // else, so without this a caller could read or stop an agent run in
+    // another workspace.
     if (agentRunId) {
       await assertAgentRunInWorkspace(this.prisma, agentRunId, workspaceId);
     }

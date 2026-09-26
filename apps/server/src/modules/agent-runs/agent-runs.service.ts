@@ -15,8 +15,6 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
-import { LoggerService } from 'modules/logger/logger.service';
-
 import {
   AGENT_RUN_EVENT_CAP,
   AGENT_RUN_EVENT_TRIM_SLACK,
@@ -53,6 +51,23 @@ export interface AgentRunScope {
   onlyAgentUserId?: string | null;
 }
 
+/**
+ * A run the sweeper gave up on, and what is owed to it.
+ *
+ * Enough to write to the issue and to open the next attempt, without the
+ * caller reading the row again — the sweep is the one path where the run in
+ * question is by definition not going to change under it.
+ */
+export interface ExpiredRun {
+  id: string;
+  issueId: string;
+  agentUserId: string;
+  workspaceId: string;
+  /** The attempt that lapsed, not the one that follows it. */
+  attempt: number;
+  retryable: boolean;
+}
+
 export interface ListAgentRunsFilter {
   issueId?: string;
   agentUserId?: string;
@@ -77,8 +92,6 @@ export interface ListAgentRunsFilter {
  */
 @Injectable()
 export class AgentRunsService {
-  private readonly logger = new LoggerService('AgentRunsService');
-
   constructor(private prisma: PrismaService) {}
 
   // ------------------------------------------------------------------ reads
@@ -242,89 +255,6 @@ export class AgentRunsService {
     }
 
     return this.requireRunUnscoped(runId);
-  }
-
-  /**
-   * Hands the oldest eligible queued run to exactly one claimer.
-   *
-   * `FOR UPDATE SKIP LOCKED` is doing the real work. Reading a candidate and
-   * then updating it in two statements is a race two runners lose together:
-   * both read the same row, both write it, and the same issue gets worked
-   * twice — producing two branches for one issue, which is precisely the
-   * outcome the duplicate-run guard exists to prevent. The lock makes the read
-   * and the claim one indivisible step, and `SKIP LOCKED` means a second
-   * runner arriving mid-claim moves on to the next row instead of blocking
-   * behind the first.
-   *
-   * Scoped to the agent the token speaks for. A runner authenticates as one
-   * agent and may only take that agent's work; otherwise any runner could
-   * drain the whole workspace's queue.
-   */
-  async claimNext(input: {
-    workspaceId: string;
-    agentUserId: string;
-    executor?: string;
-  }) {
-    const leaseUntil = new Date(Date.now() + AGENT_RUN_LEASE_MS);
-
-    const claimed = await this.prisma.$queryRaw<Array<{ id: string }>>`
-      UPDATE "AgentRun"
-      SET status = 'CLAIMED',
-          "claimedAt" = NOW(),
-          "leaseExpiresAt" = ${leaseUntil},
-          "updatedAt" = NOW()
-      WHERE id = (
-        SELECT id FROM "AgentRun"
-        WHERE "workspaceId" = ${input.workspaceId}
-          AND "agentUserId" = ${input.agentUserId}
-          AND status = 'QUEUED'
-          AND deleted IS NULL
-          AND (${input.executor ?? null}::text IS NULL
-               OR executor = ${input.executor ?? null})
-        ORDER BY "createdAt" ASC
-        FOR UPDATE SKIP LOCKED
-        LIMIT 1
-      )
-      RETURNING id
-    `;
-
-    if (claimed.length === 0) {
-      return null;
-    }
-
-    // Re-read through Prisma so the runner gets the same shape every other
-    // read returns, rather than the raw row with its snake-cased edges.
-    return this.requireRunUnscoped(claimed[0].id);
-  }
-
-  /**
-   * Renews a lease without changing status.
-   *
-   * Refuses a terminal run, so a runner whose work was cancelled from the UI
-   * learns that from its next heartbeat rather than finishing an hour of work
-   * nobody wants.
-   */
-  async heartbeat(runId: string, scope: AgentRunScope) {
-    const run = await this.requireRun(runId, scope);
-
-    if (isTerminalAgentRunStatus(run.status as AgentRunStatus)) {
-      throw new ConflictException({
-        message: `Agent run ${runId} already finished as ${run.status}. Stop work.`,
-      });
-    }
-
-    const { count } = await this.prisma.agentRun.updateMany({
-      where: { id: runId, status: run.status },
-      data: { leaseExpiresAt: new Date(Date.now() + AGENT_RUN_LEASE_MS) },
-    });
-
-    if (count === 0) {
-      throw new ConflictException({
-        message: `Agent run ${runId} changed state; the lease was not renewed.`,
-      });
-    }
-
-    return { leaseExpiresAt: new Date(Date.now() + AGENT_RUN_LEASE_MS) };
   }
 
   /**
@@ -522,69 +452,82 @@ export class AgentRunsService {
   // ---------------------------------------------------------------- sweeper
 
   /**
-   * Expires runs whose lease has lapsed, and re-queues what is still worth
-   * trying.
+   * Extends a live run's lease, and says whether it is still the run's to
+   * extend.
    *
-   * Server-side and unconditional: a runner that has stopped cannot report
-   * that it stopped, which is exactly the case this exists for. Runs are
-   * expired one at a time through `transition` rather than in a bulk update,
-   * so a runner that heartbeats during the sweep loses the race cleanly
-   * instead of being expired out from under live work.
+   * The half of the lease protocol that runs beside the work. Conditional on
+   * the run still being CLAIMED or RUNNING, so a run that was cancelled or
+   * swept out from under its executor cannot be quietly resurrected by a
+   * renewal that arrived a moment later.
+   *
+   * The `false` is the point, not a detail: it is how work in flight finds
+   * out it has been given up on. An executor that keeps going after losing
+   * its lease is spending model budget on a result the server has already
+   * decided nothing will accept, beside a fresh attempt at the same issue.
    */
-  async expireLapsedLeases(now = new Date()) {
+  async renewLease(runId: string, now = new Date()): Promise<boolean> {
+    const { count } = await this.prisma.agentRun.updateMany({
+      where: { id: runId, status: { in: ['CLAIMED', 'RUNNING'] } },
+      data: { leaseExpiresAt: new Date(now.getTime() + AGENT_RUN_LEASE_MS) },
+    });
+
+    return count > 0;
+  }
+
+  /**
+   * Expires runs whose lease has lapsed.
+   *
+   * Server-side and unconditional: a run that has stopped cannot report that
+   * it stopped, which is exactly the case this exists for. Runs are expired
+   * one at a time through `transition` rather than in a bulk update, so work
+   * that renews its lease during the sweep loses the race cleanly instead of
+   * being expired out from under it.
+   *
+   * Expiring is all this does. What each expired run then needs — a word on
+   * its issue, a fresh attempt actually handed to a backend — belongs to the
+   * layers that own those, so it returns enough about each run for the caller
+   * to do them and stays a state machine.
+   */
+  async expireLapsedLeases(now = new Date()): Promise<ExpiredRun[]> {
     const lapsed = await this.prisma.agentRun.findMany({
       where: {
         status: { in: ['CLAIMED', 'RUNNING'] },
         leaseExpiresAt: { not: null, lt: now },
       },
-      select: { id: true, attempt: true },
+      select: {
+        id: true,
+        attempt: true,
+        issueId: true,
+        agentUserId: true,
+        workspaceId: true,
+      },
     });
 
-    let expired = 0;
-    let requeued = 0;
+    const expired: ExpiredRun[] = [];
 
     for (const run of lapsed) {
       try {
         await this.transition(run.id, 'EXPIRED', {
           failure: 'LEASE_LOST',
-          error: 'The runner stopped renewing its lease.',
+          error: 'The run stopped renewing its lease.',
         });
-        expired += 1;
       } catch {
-        // Lost the race to a heartbeat or a report. That is the correct
+        // Lost the race to a renewal or a finished run. That is the correct
         // outcome, not an error — the run is alive after all.
         continue;
       }
 
-      if (run.attempt >= AGENT_RUN_MAX_ATTEMPTS) {
-        continue;
-      }
-
-      try {
-        const previous = await this.requireRunUnscoped(run.id);
-        await this.createRun({
-          workspaceId: previous.workspaceId,
-          issueId: previous.issueId,
-          agentUserId: previous.agentUserId,
-          createdById: previous.createdById,
-          executor: previous.executor,
-          config: previous.config ?? undefined,
-          contextPack: previous.contextPack ?? undefined,
-          configHash: previous.configHash ?? undefined,
-          attempt: previous.attempt + 1,
-          previousRunId: previous.id,
-        });
-        requeued += 1;
-      } catch (error) {
-        this.logger.error({
-          message: `Could not re-queue expired agent run ${run.id}: ${error}`,
-          where: 'AgentRunsService.expireLapsedLeases',
-          error: error instanceof Error ? error : undefined,
-        });
-      }
+      expired.push({
+        id: run.id,
+        issueId: run.issueId,
+        agentUserId: run.agentUserId,
+        workspaceId: run.workspaceId,
+        attempt: run.attempt,
+        retryable: run.attempt < AGENT_RUN_MAX_ATTEMPTS,
+      });
     }
 
-    return { expired, requeued };
+    return expired;
   }
 
   // --------------------------------------------------------------- internal

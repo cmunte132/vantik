@@ -10,6 +10,7 @@ import {
 import { PrismaService } from 'nestjs-prisma';
 
 import { assertTeamsVisible, readableTeamIds } from 'common/team-access';
+import { assertWorkspaceAdmin } from 'common/workspace-access';
 
 import { SyncGateway } from 'modules/sync/sync.gateway';
 import { UserIdParams } from 'modules/users/users.interface';
@@ -28,30 +29,6 @@ export default class TeamsService {
   ) {}
 
   /**
-   * One team by id, if the caller may read it.
-   *
-   * The workspace is now required. Without it this looked a team up by id
-   * alone, so any authenticated caller anywhere could read any team on the
-   * server — a tenancy hole rather than only a team one.
-   */
-  async getTeam(
-    TeamRequestParams: TeamRequestParams,
-    userId: string,
-    workspaceId: string,
-  ): Promise<Team> {
-    await this.assertReadable(TeamRequestParams.teamId, userId, workspaceId);
-
-    return await this.prisma.team.findUnique({
-      where: {
-        id: TeamRequestParams.teamId,
-      },
-      include: {
-        workspace: true,
-      },
-    });
-  }
-
-  /**
    * The teams of this workspace the caller may read: their own, or every one
    * of them for an admin. See `readableTeamIds` for why the role widens this
    * and never widens what issues they can see.
@@ -64,64 +41,6 @@ export default class TeamsService {
         workspaceId,
         deleted: null,
         id: { in: readable },
-      },
-      include: {
-        workspace: true,
-      },
-    });
-  }
-
-  async getTeamsByUser(userId: string, workspaceId: string): Promise<Team[]> {
-    const usersOnWorkspace = await this.prisma.usersOnWorkspaces.findUnique({
-      where: {
-        userId_workspaceId: {
-          userId,
-          workspaceId,
-        },
-      },
-    });
-
-    return await this.prisma.team.findMany({
-      where: {
-        id: {
-          in: usersOnWorkspace.teamIds,
-        },
-      },
-      include: { workspace: true },
-    });
-  }
-
-  /**
-   * One team by name or identifier. Filtered rather than checked afterwards,
-   * so a name the caller may not read simply finds nothing — the same answer
-   * an imaginary name gives, which is what stops this route being used to
-   * enumerate the other teams' names.
-   */
-  async getTeamByName(
-    workspaceId: string,
-    nameOrIdentifier: string,
-    userId: string,
-  ): Promise<Team | null> {
-    const readable = await readableTeamIds(this.prisma, userId, workspaceId);
-
-    return await this.prisma.team.findFirst({
-      where: {
-        workspaceId,
-        id: { in: readable },
-        OR: [
-          {
-            name: {
-              equals: nameOrIdentifier,
-              mode: 'insensitive',
-            },
-          },
-          {
-            identifier: {
-              equals: nameOrIdentifier,
-              mode: 'insensitive',
-            },
-          },
-        ],
       },
       include: {
         workspace: true,
@@ -230,12 +149,21 @@ export default class TeamsService {
     });
   }
 
+  /**
+   * Deleting a team is a workspace admin's call, where renaming it is not.
+   *
+   * Readability is checked first, so a team in another workspace is still
+   * not-found rather than forbidden. The role is read from the membership row
+   * for this workspace, not from the access token, which carries the role in
+   * the caller's first workspace only.
+   */
   async deleteTeam(
     teamRequestParams: TeamRequestParams,
     userId: string,
     workspaceId: string,
   ): Promise<Team> {
     await this.assertReadable(teamRequestParams.teamId, userId, workspaceId);
+    await assertWorkspaceAdmin(this.prisma, userId, workspaceId);
 
     const teamIssues = await this.prisma.issue.findMany({
       where: {

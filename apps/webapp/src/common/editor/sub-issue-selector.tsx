@@ -17,21 +17,6 @@ export function isValidUrl(url: string) {
   }
 }
 
-export function getUrlFromString(str: string) {
-  if (isValidUrl(str)) {
-    return str;
-  }
-  try {
-    if (str.includes('.') && !str.includes(' ')) {
-      return new URL(`https://${str}`).toString();
-    }
-  } catch (e) {
-    return null;
-  }
-
-  return null;
-}
-
 export interface IssueContent {
   text: string;
   start: number;

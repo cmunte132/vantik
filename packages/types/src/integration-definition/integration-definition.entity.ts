@@ -26,6 +26,20 @@ export class LocalParams {
   instruction: string;
 }
 
+/**
+ * What a team is paired with when the integration routes work to teams.
+ *
+ * The pairs live on the workspace account's settings as `teamMappings`, each
+ * `{ source, teamId }`. `repository` means the source is the id of one of the
+ * account's `settings.repositories`, picked from a list; `address` means it is
+ * typed, because nothing enumerates the addresses mail can arrive at.
+ */
+export class TeamMappingParams {
+  source: 'repository' | 'address';
+  /** The sentence that the settings page shows above the pairs. */
+  instruction: string;
+}
+
 export class Spec {
   /**
    * The OAuth2 flow for the whole workspace. An integration that declares
@@ -38,6 +52,12 @@ export class Spec {
     OAuth2: OAuth2Params;
   };
   local_auth?: LocalParams;
+  /**
+   * No third party and no form: the workspace turns the integration on with a
+   * Connect button that authorises nothing, and off again the same way.
+   */
+  no_auth?: LocalParams;
+  team_mappings?: TeamMappingParams;
   other_data?: any;
 }
 

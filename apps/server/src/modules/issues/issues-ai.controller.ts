@@ -1,14 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  Query,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
-import { IssueRequestParamsDto, TeamRequestParamsDto } from '@vantikhq/types';
+import { Body, Controller, Param, Post, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
@@ -31,18 +21,6 @@ import {
 })
 export class IssuesAIController {
   constructor(private issuesAiService: IssuesAIService) {}
-
-  @Post('suggestions')
-  @UseGuards(AuthGuard)
-  async suggestions(
-    @Query() teamRequestParams: TeamRequestParamsDto,
-    @Body() suggestionsInput: AIInput,
-  ) {
-    return await this.issuesAiService.suggestions(
-      teamRequestParams,
-      suggestionsInput,
-    );
-  }
 
   /**
    * Promotes a suggested module to a module of the issue.
@@ -110,11 +88,5 @@ export class IssuesAIController {
     @Res({ passthrough: true }) response: Response,
   ) {
     await this.issuesAiService.getDescriptionStream(descriptionInput, response);
-  }
-
-  @Get(':issueId/summarize')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async summarizeIssue(@Param() issueParams: IssueRequestParamsDto) {
-    return await this.issuesAiService.summarizeIssue(issueParams.issueId);
   }
 }

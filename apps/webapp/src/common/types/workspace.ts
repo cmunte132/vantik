@@ -4,7 +4,6 @@ export interface WorkspaceType {
   updatedAt: string;
   slug: string;
   name: string;
-  actionsEnabled: boolean;
 }
 
 export interface UsersOnWorkspaceType {

@@ -11,7 +11,6 @@ import { resolveWorkspaceId } from 'common/workspace-access';
 
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 
-import { IntegrationDefinitionUpdateBody } from './integration-definition.interface';
 import { integrationSeeds } from './integration-definition.seed';
 
 /**
@@ -102,18 +101,5 @@ export class IntegrationDefinitionService {
     );
 
     return { ...integrationDefinition, spec };
-  }
-
-  async updateIntegrationDefinition(
-    integrationDefinitionUpdateBody: IntegrationDefinitionUpdateBody,
-    integrationDefinitionId: string,
-  ) {
-    integrationDefinitionUpdateBody;
-    return await this.prisma.integrationDefinitionV2.update({
-      data: integrationDefinitionUpdateBody,
-      where: {
-        id: integrationDefinitionId,
-      },
-    });
   }
 }

@@ -7,5 +7,10 @@ export function spec() {
         scopes: [''],
       },
     },
+    team_mappings: {
+      source: 'address',
+      instruction:
+        'Mail sent to you+workspace-tag@ lands in triage of the team paired with its tag, where workspace is this workspace’s slug.',
+    },
   };
 }

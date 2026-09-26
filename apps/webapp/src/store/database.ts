@@ -3,7 +3,6 @@
 import Dexie from 'dexie';
 
 import type {
-  ActionType,
   CapabilityType,
   CompanyType,
   ConversationHistoryType,
@@ -38,7 +37,6 @@ import { MODELS } from './models';
 import { DEXIE_SCHEMA_VERSION } from './schema-version';
 
 export class VantikDatabase extends Dexie {
-  actions: Dexie.Table<ActionType, string>;
   workspaces: Dexie.Table<WorkspaceType, string>;
   labels: Dexie.Table<LabelType, string>;
   teams: Dexie.Table<TeamType, string>;
@@ -109,8 +107,6 @@ export class VantikDatabase extends Dexie {
         'id,createdAt,updatedAt,workspaceId,name,description,filters,isBookmarked,teamId',
       [MODELS.IssueSuggestion]:
         'id,createdAt,updatedAt,issueId,suggestedLabelIds,suggestedAssigneeId',
-      [MODELS.Action]:
-        'id,createdAt,updatedAt,workspaceId,config,data,status,version,name,description,integrations,createdById,slug,isPersonal',
       [MODELS.Project]:
         'id,createdAt,updatedAt,workspaceId,name,description,status,startDate,endDate,leadUserId,teams',
       [MODELS.ProjectMilestone]:
@@ -161,7 +157,6 @@ export class VantikDatabase extends Dexie {
     this.notifications = this.table(MODELS.Notification);
     this.views = this.table(MODELS.View);
     this.issueSuggestions = this.table(MODELS.IssueSuggestion);
-    this.actions = this.table(MODELS.Action);
     this.projects = this.table(MODELS.Project);
     this.projectMilestones = this.table(MODELS.ProjectMilestone);
     this.products = this.table(MODELS.Product);

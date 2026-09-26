@@ -105,9 +105,9 @@ describe('AIRequestsService against an OpenAI-compatible endpoint', () => {
     ]);
   });
 
-  // Actions deploy to trigger.dev on their own schedule, so a current server
-  // has to keep serving requests from action code shipped long before it.
-  it('still serves a legacy model id from an older deployed action', async () => {
+  // The AI endpoint is public API, so a current server has to keep serving
+  // callers written long before it.
+  it('still serves a legacy model id from an older caller', async () => {
     await ask('gpt-3.5-turbo');
     await ask('gpt-4o');
 

@@ -73,14 +73,6 @@ export interface PageEntryType {
   pageId: string;
 }
 
-/** Counts the review rail opens on, before it renders a single row. */
-export interface PageEntryFacets {
-  total: number;
-  status: Record<string, number>;
-  sourceUserId: Record<string, number>;
-  scope: Record<string, number>;
-}
-
 export interface KnowledgeGapType {
   query: string;
   count: number;

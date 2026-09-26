@@ -50,6 +50,7 @@
     "BUCKET_NAME",
     "LOCAL_STORAGE_PATH",
     "ATTACHMENT_URL_SECRET",
+    "CREDENTIAL_ENCRYPTION_KEY",
     "AWS_REGION",
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
@@ -87,19 +88,8 @@
     "DISCORD_CLIENT_SECRET",
     "EMAIL_CLIENT_ID",
     "EMAIL_CLIENT_SECRET",
-    "WHATSAPP_CLIENT_ID",
-    "WHATSAPP_CLIENT_SECRET",
-    "WHATSAPP_BUSINESS_CLIENT_ID",
-    "WHATSAPP_BUSINESS_CLIENT_SECRET",
     "VANTIK_URL",
     "VANTIK_TOKEN",
-    "TRIGGER_DB",
-    "TRIGGER_DATABASE_URL",
-    "TRIGGER_COMMON_ID",
-    "TRIGGER_TOKEN",
-    "TRIGGER_ACCESS_TOKEN",
-    "TRIGGER_SECRET_KEY",
-    "TRIGGER_API_URL",
     "APOLLO_API_KEY"
   ],
   "ui": "tui",
@@ -146,13 +136,6 @@
       "outputs": []
     },
     "create-resources": {
-      "interactive": true,
-      "cache": false
-    },
-    "trigger-deploy": {
-      "cache": false
-    },
-    "trigger-dev": {
       "interactive": true,
       "cache": false
     },

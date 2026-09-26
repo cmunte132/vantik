@@ -34,21 +34,6 @@ export default class WorkflowsService {
     });
   }
 
-  async getWorkflow(
-    workflowRequestParams: WorkflowRequestParamsDto,
-  ): Promise<Workflow> {
-    this.logger.debug({
-      message: `Fetching workflow with id ${workflowRequestParams.workflowId}`,
-      where: `WorkflowsService.getWorkflow`,
-    });
-
-    return await this.prisma.workflow.findUnique({
-      where: {
-        id: workflowRequestParams.workflowId,
-      },
-    });
-  }
-
   async createWorkflow(
     workflowRequestParams: TeamRequestParamsDto,
     workflowData: CreateWorkflowDTO,
@@ -132,23 +117,5 @@ export default class WorkflowsService {
         `Error while creating workflow`,
       );
     }
-  }
-
-  async deleteWorkflow(
-    workflowRequestParams: WorkflowRequestParamsDto,
-  ): Promise<Workflow> {
-    this.logger.debug({
-      message: `Deleting workflow with id ${workflowRequestParams.workflowId}`,
-      where: `WorkflowsService.deleteWorkflow`,
-    });
-
-    return await this.prisma.workflow.update({
-      where: {
-        id: workflowRequestParams.workflowId,
-      },
-      data: {
-        deleted: new Date().toISOString(),
-      },
-    });
   }
 }

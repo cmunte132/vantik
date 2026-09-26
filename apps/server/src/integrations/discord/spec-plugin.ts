@@ -24,4 +24,5 @@ export const discordSpec: PluginSpec = {
 
     return token ? `Bot ${token}` : undefined;
   },
+  webhooks: true,
 };

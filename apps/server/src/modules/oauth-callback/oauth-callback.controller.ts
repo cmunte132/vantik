@@ -13,11 +13,7 @@ import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
 import { Session as SessionDecorator } from 'modules/auth/session.decorator';
 
-import {
-  OAuthBodyInterface,
-  CallbackParams,
-  SentryCallbackBody,
-} from './oauth-callback.interface';
+import { OAuthBodyInterface, CallbackParams } from './oauth-callback.interface';
 import { OAuthCallbackService } from './oauth-callback.service';
 
 @Controller({
@@ -37,19 +33,6 @@ export class OAuthCallbackController {
     return await this.oAuthCallbackService.getRedirectURL(body, userId);
   }
 
-  @Post('callback/sentry')
-  @UseGuards(AuthGuard)
-  async sentryCallback(
-    @SessionDecorator() session: SessionContainer,
-    @Body() callbackBody: SentryCallbackBody,
-  ) {
-    const userId = getAppUserId(session);
-    return await this.oAuthCallbackService.sentryCallbackHandler(
-      userId,
-      callbackBody,
-    );
-  }
-
   @Get('callback/email')
   @UseGuards(AuthGuard)
   async emailCallback(
@@ -62,7 +45,6 @@ export class OAuthCallbackController {
       res,
     );
   }
-
 
   @Get('callback')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

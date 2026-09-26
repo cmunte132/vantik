@@ -12,9 +12,9 @@ export const ICON_MAPPING = {
   github: RiGithubFill,
   'local-repo': RiGitRepositoryLine,
 
-  // Default icon
+  // Defaults
   integration: RiStackLine,
-  action: RiFlashlightLine,
+  bot: RiFlashlightLine,
 };
 
 export type IconType = keyof typeof ICON_MAPPING;
@@ -32,5 +32,5 @@ export function getBotIcon(icon: IconType) {
     return ICON_MAPPING[icon];
   }
 
-  return ICON_MAPPING['action'];
+  return ICON_MAPPING['bot'];
 }

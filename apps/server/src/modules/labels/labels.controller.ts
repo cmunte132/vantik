@@ -56,15 +56,6 @@ export class LabelsController {
     );
   }
 
-  @Get(':labelId')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async getLabel(
-    @Param()
-    labelId: LabelRequestParamsDto,
-  ): Promise<Label> {
-    return await this.labelsService.getLabel(labelId);
-  }
-
   @Post(':labelId')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateLabel(

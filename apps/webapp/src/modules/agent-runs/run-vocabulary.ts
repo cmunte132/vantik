@@ -197,15 +197,6 @@ export function whereTheWorkWent(result: {
 const CYCLE_ORDER = ['implement', 'revise', 'verify', 'review'];
 
 /**
- * The phases a run moves through, in the order it moves through them.
- *
- * The timeline groups events under these headings. An event carrying a phase
- * the client does not know about still has to appear, so unknown phases sort
- * after these rather than being dropped.
- */
-export const PHASE_ORDER = ['setup', ...CYCLE_ORDER, 'report'];
-
-/**
  * Past tense, because a timeline is a record of what happened.
  *
  * The present participle read as a claim about now — "Doing the work" on a run

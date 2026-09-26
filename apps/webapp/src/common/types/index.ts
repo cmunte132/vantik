@@ -1,6 +1,5 @@
 export * from './data-loader';
 export * from './integration-account';
-export * from './integration-definition';
 export * from './issue-relation';
 export * from './issue';
 export * from './label';
@@ -12,7 +11,6 @@ export * from './view';
 export * from './workspace';
 export * from './user';
 export * from './application';
-export * from './action';
 export * from './project';
 export * from './product-axis';
 export * from './cycle';

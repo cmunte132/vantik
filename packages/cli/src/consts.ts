@@ -8,4 +8,3 @@ const distPath = path.dirname(__filename);
 
 export const PKG_ROOT = path.join(distPath, '../');
 export const COMMAND_NAME = 'vantik-cli';
-export const CONFIG_FILE = 'config.json';

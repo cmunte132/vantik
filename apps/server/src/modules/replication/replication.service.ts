@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { announcementRoom } from 'common/team-access';
 
-import ActionEventService from 'modules/action-event/action-event.service';
+import { IntegrationEventsService } from 'modules/integration-events/integration-events.service';
 import { LoggerService } from 'modules/logger/logger.service';
 import { SyncGateway } from 'modules/sync/sync.gateway';
 import SyncActionsService from 'modules/sync-actions/sync-actions.service';
@@ -41,7 +41,7 @@ export default class ReplicationService {
     private configService: ConfigService,
     private syncGateway: SyncGateway,
     private syncActionsService: SyncActionsService,
-    private actionEventService: ActionEventService,
+    private integrationEvents: IntegrationEventsService,
     private prisma: PrismaService,
     private syncRepair: SyncRepairService,
   ) {
@@ -332,10 +332,10 @@ export default class ReplicationService {
           .emit('message', JSON.stringify(syncActionData));
       }
 
-      // Physical deletes are deliberately not turned into action events: the
+      // Physical deletes are deliberately not handed to integrations: the
       // event's workspace is resolved by reading the record, which no longer
-      // exists. Soft deletes still arrive here as updates and are unaffected,
-      // which is every delete the app itself performs.
+      // exists. Soft deletes still arrive here, as a `delete` tag no plugin
+      // subscribes to, which is every delete the app itself performs.
       if (tablesToTrigger.has(modelName) && log.tag !== 'delete') {
         const changedData = this.getChangedData(log);
 
@@ -345,13 +345,13 @@ export default class ReplicationService {
           modelId,
         );
 
-        await this.actionEventService.createEvent({
+        await this.integrationEvents.recordChanged({
           modelName,
           modelId,
-          eventType: isDeleted ? 'delete' : log.tag,
-          eventData: changedData,
+          tag: isDeleted ? 'delete' : log.tag,
+          changedData,
           workspaceId,
-          sequenceId: _lsn,
+          lsn: _lsn,
         });
       }
     });

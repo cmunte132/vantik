@@ -72,36 +72,6 @@ export class AgentRunsController {
     return this.agentRuns.listRuns(filter, this.scope(workspace, userId, role));
   }
 
-  @Get(':agentRunId')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async getRun(
-    @Workspace() workspace: string,
-    @UserId() userId: string,
-    @Role() role: string,
-    @Param() params: AgentRunRequestParamsDto,
-  ) {
-    return this.agentRuns.getRun(
-      params.agentRunId,
-      this.scope(workspace, userId, role),
-    );
-  }
-
-  @Get(':agentRunId/events')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async listEvents(
-    @Workspace() workspace: string,
-    @UserId() userId: string,
-    @Role() role: string,
-    @Param() params: AgentRunRequestParamsDto,
-    @Query('since') since?: string,
-  ) {
-    return this.agentRuns.listEvents(
-      params.agentRunId,
-      this.scope(workspace, userId, role),
-      since ? new Date(since) : undefined,
-    );
-  }
-
   /**
    * Opens a run.
    *

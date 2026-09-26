@@ -39,30 +39,6 @@ export const ajaxGet = <TResponseData, TError = unknown>(
   });
 };
 
-/** Ajax Configuration for PATCH request */
-export type AjaxPatchConfig<
-  TRequestData,
-  TResponseData,
-  TError = unknown,
-> = Omit<
-  AjaxBaseConfig<TRequestData, TResponseData, TError>,
-  'method' | 'query' | 'upload'
->;
-
-/**
- * Sends PATCH request to Server.
- * @param config - Ajax Configuration for PATCH request.
- * @returns Extended Promise with XHR request.
- */
-export const ajaxPatch = <TRequestData, TResponseData, TError = unknown>(
-  config: AjaxPatchConfig<TRequestData, TResponseData, TError>,
-) => {
-  return ajax<TRequestData, TResponseData, TError>({
-    ...config,
-    method: 'patch',
-  });
-};
-
 /** Ajax Configuration for POST request */
 export type AjaxPostConfig<
   TRequestData,
@@ -104,26 +80,5 @@ export const ajaxPut = <TRequestData, TResponseData, TError = unknown>(
   return ajax<TRequestData, TResponseData, TError>({
     ...config,
     method: 'put',
-  });
-};
-
-/** Ajax Configuration for POST request with Blob/File payload */
-export type AjaxUploadConfig<TResponseData, TError = unknown> = Omit<
-  AjaxBaseConfig<Blob, TResponseData, TError>,
-  'method' | 'query' | 'upload'
->;
-
-/**
- * Sends POST request with File payload to Server.
- * @param config - Ajax Configuration for POST request.
- * @returns Extended Promise with XHR request.
- */
-export const ajaxUpload = <TResponseData, TError = unknown>(
-  config: AjaxUploadConfig<TResponseData, TError>,
-) => {
-  return ajax<Blob, TResponseData, TError>({
-    ...config,
-    method: 'post',
-    upload: true,
   });
 };

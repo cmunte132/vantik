@@ -15,7 +15,6 @@ import {
   CallbackParams,
   OAuthBodyInterface,
   ProviderTemplateOAuth2,
-  SentryCallbackBody,
   SessionRecord,
 } from './oauth-callback.interface';
 import {
@@ -241,32 +240,6 @@ export class OAuthCallbackService {
     }
   }
 
-  async sentryCallbackHandler(
-    userId: string,
-    callbackData: SentryCallbackBody,
-  ) {
-    const integrationDefinition =
-      await this.integrationDefinitionService.getIntegrationDefinitionWithSpec(
-        callbackData.integrationDefinitionId,
-      );
-
-    const payload: IntegrationEventPayload = {
-      event: IntegrationPayloadEventType.CREATE,
-      userId,
-      workspaceId: callbackData.workspaceId,
-      data: {
-        oauthResponse: callbackData,
-        integrationDefinition,
-        personal: false,
-      },
-    };
-
-    return await this.integrations.loadIntegration(
-      integrationDefinition.slug,
-      payload,
-    );
-  }
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async emailCallbackHandler(params: CallbackParams, res: any) {
     if (!params.state) {
@@ -323,5 +296,4 @@ export class OAuthCallbackService {
       `${sessionRecord.redirectURL}?success=true&integrationName=${integrationDefinition.name}${accountIdentifier}${integrationKeys}`,
     );
   }
-
 }

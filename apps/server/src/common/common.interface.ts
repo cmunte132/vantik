@@ -1,4 +1,3 @@
-export type TiptapListTypes = 'orderedList' | 'bulletList' | 'taskList' | null;
 export interface TiptapAttrs {
   src?: string;
   alt?: string;

@@ -21,11 +21,6 @@ export class UpdateUserBody {
   username: string;
 }
 
-export class UserIdsBody {
-  @IsArray()
-  userIds: string[];
-}
-
 export class CreateAgentDto {
   @IsString()
   name: string;

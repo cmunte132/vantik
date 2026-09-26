@@ -15,7 +15,7 @@
  * - The role widens the *roster* and never the *content*. `visibleTeamIds`,
  *   which governs issues, is untouched by any of this.
  */
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
 import TeamsService from './teams.service';
@@ -59,14 +59,6 @@ describe('TeamsService read boundary', () => {
       );
     });
 
-    it('cannot read another team by id', async () => {
-      const { service } = buildService('USER', [MY_TEAM]);
-
-      await expect(
-        service.getTeam({ teamId: OTHER_TEAM }, 'user-1', WORKSPACE),
-      ).rejects.toThrow(NotFoundException);
-    });
-
     it('cannot read another team’s roster', async () => {
       const { service } = buildService('USER', [MY_TEAM]);
 
@@ -75,49 +67,27 @@ describe('TeamsService read boundary', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('cannot find another team by name', async () => {
-      // Filtered in the query rather than checked after, so an unreadable name
-      // and an imaginary one give the same answer — otherwise this route
-      // enumerates the other teams' names.
-      const { service, prisma } = buildService('USER', [MY_TEAM]);
-      await service.getTeamByName(WORKSPACE, 'Their Team', 'user-1');
-
-      expect(prisma.team.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ id: { in: [MY_TEAM] } }),
-        }),
-      );
-    });
-
-    it('reads its own team fine', async () => {
+    it('reads its own team’s roster fine', async () => {
       const { service } = buildService('USER', [MY_TEAM]);
 
       await expect(
-        service.getTeam({ teamId: MY_TEAM }, 'user-1', WORKSPACE),
-      ).resolves.toBeTruthy();
+        service.getTeamMembers({ teamId: MY_TEAM }, 'user-1', WORKSPACE),
+      ).resolves.toEqual([]);
     });
 
     it('with no team reads no team', async () => {
       const { service } = buildService('USER', []);
 
       await expect(
-        service.getTeam({ teamId: MY_TEAM }, 'user-1', WORKSPACE),
+        service.getTeamMembers({ teamId: MY_TEAM }, 'user-1', WORKSPACE),
       ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('an admin', () => {
-    it('reads every team by role, not by membership', async () => {
+    it('reads every team’s roster by role, not by membership', async () => {
       // The case the whole decision exists for: an admin who predates a team
       // is not in it, and must still be able to administer it.
-      const { service } = buildService('ADMIN', []);
-
-      await expect(
-        service.getTeam({ teamId: OTHER_TEAM }, 'admin-1', WORKSPACE),
-      ).resolves.toBeTruthy();
-    });
-
-    it('reads every team’s roster', async () => {
       const { service } = buildService('ADMIN', []);
 
       await expect(
@@ -144,7 +114,7 @@ describe('TeamsService read boundary', () => {
     const service = new TeamsService(prisma, null);
 
     await expect(
-      service.getTeam({ teamId: MY_TEAM }, 'stranger', WORKSPACE),
+      service.getTeamMembers({ teamId: MY_TEAM }, 'stranger', WORKSPACE),
     ).rejects.toThrow(NotFoundException);
   });
 });
@@ -205,6 +175,27 @@ describe('TeamsService write boundary', () => {
       service.deleteTeam({ teamId: OTHER_TEAM }, 'user-1', WORKSPACE),
     ).rejects.toThrow(NotFoundException);
     expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses a member deleting their own team', async () => {
+    // Renaming stays with the members; deleting is the workspace admin's call.
+    const { service, prisma } = buildWritable('USER', [MY_TEAM]);
+
+    await expect(
+      service.deleteTeam({ teamId: MY_TEAM }, 'user-1', WORKSPACE),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
+  it('lets an admin delete a team', async () => {
+    const { service, prisma } = buildWritable('ADMIN', []);
+
+    await service.deleteTeam({ teamId: OTHER_TEAM }, 'admin-1', WORKSPACE);
+
+    expect(prisma.team.update).toHaveBeenCalledWith({
+      where: { id: OTHER_TEAM },
+      data: { deleted: expect.any(String) },
+    });
   });
 
   it('lets an admin update a team they are not in', async () => {

@@ -1,0 +1,69 @@
+---
+id: delete-product
+title: "Delete product"
+description: "A soft delete. The row stays, and the server sets `deleted`."
+sidebar_label: "Delete product"
+hide_title: true
+hide_table_of_contents: true
+api: eJylVU2PEzkQ/SuWTyCFTmbhlFsQgzTS7mq1zHAZRsJpV6bNuG1jlzOEVv47VXYnBDqLBu0laduvvl6VnwepIbXRBDTeyaVcieQ3KDRYQGjEdQci+keRUO3STCinBdJWgriFSH+YxMeK1R8bOZNBRdXTKia5vB2kowU5DdHr3OKVJoThKEFhR98RPmcTQcslxgwzmdoOeiWXg8RdYMOE0bh7ud/fMTgF7xIkPv9jseC/H3N/l9sWUtpkKw5gCtJ6h+CQ4SoEa1rF8PmnxDbDNKZff4IWyfBnYrCjXOhXYeGg9X1QbidSZ0JqxGvY+AgMSqL3xMlMeGd3QgkE1ROB3mtBENoY6WjE6ujk0WAn8NEfzhKHiNWlA9Cgy+mjjw8pKKqSjYtjCpfQWFtyWvvstIq7Eog3AsTepEQlkMUVjtDOW51qEbvWwthYczi+N1uox2SaKYHcr6mjvGOi4J6WHEq/o6cQaGpXjD7TO+pABEUDssLp6UxSpr2iE6kJ8wINDQyZ5KB/12QcwycazKTL1qq1hTp85KAO65n8H2B3zuvk4nQ+YqFnVviHL6oPFsQH2Vqf9QfZiBtnPhOhxhV2j91sav4n7qbRJunSlcScngQ17RN9tt76+CSkBaVvSAauzhI+gR9LPYffEwANMlz+U+ef9nj31eJies1vnMpIXJuv1O0CejUF/e2RmkC3oXpX9yxIR+8kJ6RSndc8E2VuinaRKC3lXAUz317MDzdxPhzla0+oKn1V3nK0ZNAhhrSck11otsqheWg0bCVrVoI2R4O7gn4NKkJcZY5ye3d6/I41qF6hU9CRJ44gR3nk9bqASmXGbXxBjvy9LwlMp/NKvDUxoSAGWN7EX8qpe/LmUFx7b8mAq6rgRfOyuVgwtcEn7FWZnVHK3xS2DjL1c5zhu9r+35dkLB3hC86DVfRssCww4cPYqVvSc8OJX1QhKt2iz+X354Y47qgExg7DWiW4iXa/5226hpHbQp9bFU0dVmqSNom/aTA2yib4RX3P/h1fr+fiv9IdN0ngOU1lM6/kKCgnr+L+jsAd3ShqKidRz1f0mgU8sZw8X/vTOX5z+efl9SUNxTdQ17NM
+sidebar_class_name: "delete api-method"
+info_path: docs/api-reference/vantik
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Delete product"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"delete"}
+  path={"/api/v1/products/{productId}"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+A soft delete. The row stays, and the server sets `deleted`.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./delete-product.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./delete-product.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./delete-product.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

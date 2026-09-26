@@ -64,10 +64,10 @@ export class IntegrationDefinitionSeeder implements OnModuleInit {
           icon: seed.icon,
           // The environment is the authority on a credential that it holds.
           // For a credential that it does not hold, the row keeps the value it
-          // has. An operator can set a credential through the update route,
-          // and a restart must not remove that work. `readSeedCredentials`
-          // therefore gives a field only for a variable that is set, and this
-          // spread then names only the columns that the environment supplies.
+          // has, because a restart must not erase a credential an operator put
+          // there another way. `readSeedCredentials` therefore gives a field
+          // only for a variable that is set, and this spread then names only
+          // the columns that the environment supplies.
           ...(credentials ?? {}),
           deleted: null,
         },

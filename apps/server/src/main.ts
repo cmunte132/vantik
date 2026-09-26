@@ -2,7 +2,7 @@
 // anything imported above this line runs uninstrumented. See src/otel.ts.
 import './otel';
 
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import * as bodyParser from 'body-parser';
@@ -10,6 +10,7 @@ import { PrismaClientExceptionFilter } from 'nestjs-prisma';
 import supertokens from 'supertokens-node';
 
 import type { CorsConfig } from 'common/configs/config.interface';
+import { validationPipe } from 'common/validation';
 
 import {
   LOCAL_ATTACHMENT_PATH,
@@ -27,7 +28,7 @@ import { AppModule } from './app.module';
 };
 
 // Several services fire-and-forget calls to optional integrations
-// (trigger.dev, ollama, SMTP). A rejected promise from one of those must not
+// (ollama, SMTP). A rejected promise from one of those must not
 // take down the whole server, so log instead of crashing.
 process.on('unhandledRejection', (reason) => {
   new LoggerService('UnhandledRejection').error({
@@ -42,7 +43,7 @@ async function bootstrap() {
   });
 
   // Validation
-  app.useGlobalPipes(new ValidationPipe({}));
+  app.useGlobalPipes(validationPipe());
 
   app.use(bodyParser.json({ limit: '50mb' })); // Adjust limit as required
 

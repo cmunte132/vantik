@@ -1,4 +1,4 @@
-import { RoleEnum, WorkflowCategory } from '@vantikhq/types';
+import { RoleEnum, TeamMapping, WorkflowCategory } from '@vantikhq/types';
 import { type PluginContext } from 'plugins/plugin.interface';
 
 import { GITHUB_HEADERS } from './plugin-spec';
@@ -21,7 +21,7 @@ type Json = any;
  * identity instead; the host resolves the token.
  */
 export async function issueSync(ctx: PluginContext, payload: Json) {
-  const account = payload.integrationAccounts?.github;
+  const account = payload.integrationAccount;
 
   if (!account || !payload.modelId) {
     return { message: 'No GitHub account for this workspace' };
@@ -41,8 +41,10 @@ export async function issueSync(ctx: PluginContext, payload: Json) {
     return { message: 'Ignoring an issue written by a bot' };
   }
 
-  const mapping = payload.action?.data?.inputs?.repoTeamMappings?.find(
-    ({ teamId }: { teamId: string }) => teamId === issue.teamId,
+  // The account's settings pair each team with a repository of the
+  // installation, by the repository's id. A team with no pair stays in Vantik.
+  const mapping = account.settings?.teamMappings?.find(
+    ({ teamId }: TeamMapping) => teamId === issue.teamId,
   );
 
   if (!mapping) {
@@ -52,8 +54,13 @@ export async function issueSync(ctx: PluginContext, payload: Json) {
   }
 
   const repoFullName = account.settings?.repositories?.find(
-    (repo: Json) => repo.id === mapping.repo,
+    (repo: Json) => repo.id === mapping.source,
   )?.fullName;
+
+  // The repository was removed from the installation after it was mapped.
+  if (!repoFullName && !payload.linkedIssue) {
+    return { message: `Repository ${mapping.source} is no longer installed` };
+  }
 
   const workflows = await ctx.workspace.workflows(issue.teamId);
   const category = workflows.find(

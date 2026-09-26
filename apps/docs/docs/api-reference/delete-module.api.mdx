@@ -1,0 +1,69 @@
+---
+id: delete-module
+title: "Delete module"
+description: "A soft delete. The server also removes the id from every `Capability.moduleIds` and every `Issue.moduleIds` that held it. No record then points at a module that does not exist."
+sidebar_label: "Delete module"
+hide_title: true
+hide_table_of_contents: true
+api: eJzVVk1vGzcQ/SsETy2gruQ2J93cxgUENEHR2L04BjJajryMuSRDzipRBf33zpArRc2qhX3sRdol33xw5s3j7rXB3CYbyQavl/pa5bAhZdAhYaNuO1QZ0xaTApeDStiHLWZFvG6N2qTQK+TdnfrwC0RYW2dp1/TBDA5XJn9Q4M0RsMp5wPM96oBUh84oS416K97bkIw49yoG6ykrRoCqNhVvAof3gRR+sZkaPdMREvScbcp6eb/Xnl/4IMc4DLBysAjU8XPCT4NNaPSS0oAzndsOe9DLvaZdFLtMyfpHfTg8CDjH4DNm2f9xsZC/f5br3dC2mPNmcOoI5iBt8ISeBA4xOtuCwOcfs9jspzHD+iO2xIbf9mI8uM1qyAM4t1PBI0eKIVsKadeoFakWfG3OGrlWck5leeUMNlMhFUtppW25ryfXHeSyEz57FIxjsPSs1LoucnRQhNCLFw6Q2LKlyg3HPWAHG37wT9wXrn3hRuCfVIzy6O64NprnGmHIFV+zkbzEkXq029JlBQN1ITGnVBAOnkGl8SlETGRrf6y50EXuRUIgNNc03Z3pTUg98I42jPmBLDOHTYZoXmpS5+VCBhcNZtoPzsHaYaUhO6isvZD/E+4ueZ1MLZeJSv1niiPydEAfub/vdR3f97pRd95+GlDIIXX8HNJTjsBsqAc48zcNN8k3E9CQnwW17TN9tsGF9CykQzB3fLDVxYpP4IXHt0zGl+B/r0R9ponQFk2NcV4WSAl2okGE/YVyHU6mp3AvtD618VKiAiBLkqd+U+aGl2Tx1eJqKmZ3fhy3v5jJBfRqCnrL0rsJgzfVOTyK6h6ds2ayEnfBCN3LSBR9ZuVd6jlEO99ezev85vn+qNAHxlSSVgEfkmN4RxTzcs5WsdmCJ/vUGNxqkeWM7SCaUNA/IyRM14PEuH84334nMlu14Rx0qpFE0OMNIO/rAirHsn4TCnKs3Z8lgenYrdSvNmVS3DxRcPUGPDyyN0/qNgTHBnKqCl40PzVXC6kryzL1UGZivKxel1qN0vZtmP3X++T/eD2P1Sb8QvPogC9jkVjp8X6kxj3fklZqdcU/Iz34aXm6wrmpHddMkPv9GjLeJXc4yDLrWRIe8OMWkq0jyawwNssz83DDhcH/qOh3f4xfBN+rf0v2OIxeRnELbpA3PUrz1w+NwwNjO1YmJpHkULev+QMh0pnh5IvgcD41r29+u7m9YRL+DWWvUu0=
+sidebar_class_name: "delete api-method"
+info_path: docs/api-reference/vantik
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Delete module"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"delete"}
+  path={"/api/v1/modules/{moduleId}"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+A soft delete. The server also removes the id from every `Capability.moduleIds` and every `Issue.moduleIds` that held it. No record then points at a module that does not exist.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./delete-module.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./delete-module.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./delete-module.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

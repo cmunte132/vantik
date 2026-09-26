@@ -118,36 +118,6 @@ export class UsersService {
     return identity ? identity.userId : null;
   }
 
-  async upsertUser(
-    id: string,
-    email: string,
-    fullname: string,
-    username?: string,
-  ) {
-    try {
-      return await this.prisma.user.upsert({
-        where: { email },
-        create: {
-          id,
-          email,
-          fullname,
-          username: username ?? email.split('@')[0],
-        },
-        update: {},
-      });
-    } catch (error) {
-      this.logger.error({
-        message: `Error while upserting the user with id: ${id}`,
-        where: `UsersService.upsertUser`,
-        error,
-      });
-      throw new InternalServerErrorException(
-        error,
-        `Error while upserting the user with id: ${id}`,
-      );
-    }
-  }
-
   async getUser(id: string): Promise<UserWithInvites> {
     this.logger.debug({
       message: `fetching user with id ${id}`,
@@ -244,25 +214,6 @@ export class UsersService {
       },
     });
     return userSerializer(user);
-  }
-
-  async checkifAdmin(userId: string, workspaceId: string) {
-    try {
-      const userOnWorkspace = await this.prisma.usersOnWorkspaces.findFirst({
-        where: {
-          userId,
-          workspaceId,
-        },
-      });
-
-      if (!userOnWorkspace) {
-        throw new NotFoundException('User not found in workspace');
-      }
-
-      return userOnWorkspace.role === RoleEnum.ADMIN;
-    } catch (e) {
-      throw new BadRequestException('Forbidden');
-    }
   }
 
   async getInvitesForUser(email: string) {

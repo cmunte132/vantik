@@ -123,4 +123,9 @@ export class CreateIssueDto {
   @IsOptional()
   @IsString()
   capabilityId?: string;
+
+  /** The cycle to create the issue in, as the cycle overview does. */
+  @IsOptional()
+  @IsString()
+  cycleId?: string;
 }

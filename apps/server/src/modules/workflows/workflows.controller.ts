@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import {
   CreateWorkflowDTO,
   UpdateWorkflowDTO,
@@ -49,15 +41,6 @@ export class WorkflowsController {
     );
   }
 
-  @Get(':workflowId')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async getWorkflow(
-    @Param()
-    workflowRequestParams: WorkflowRequestParamsDto,
-  ): Promise<Workflow> {
-    return await this.workflowsService.getWorkflow(workflowRequestParams);
-  }
-
   @Post(':workflowId')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateWorkflow(
@@ -69,14 +52,5 @@ export class WorkflowsController {
       workflowRequestParams,
       workflowData,
     );
-  }
-
-  @Delete(':workflowId')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async deleteWorkflow(
-    @Param()
-    workflowRequestParams: WorkflowRequestParamsDto,
-  ): Promise<Workflow> {
-    return await this.workflowsService.deleteWorkflow(workflowRequestParams);
   }
 }

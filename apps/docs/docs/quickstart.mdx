@@ -9,7 +9,7 @@ Vantik is an issue tracker for developers and for agents. You host it yourself,
 because there is no cloud service. The Docker Compose stack in the main
 repository needs no other setup. It starts the webapp, the API server, and all
 the services: PostgreSQL, Redis, SuperTokens, and Typesense. The default
-values work.
+values work, except for one secret, which the second command makes.
 
 ## How to run it
 
@@ -18,7 +18,8 @@ You need Docker, or Podman with the compose provider.
 ```bash
 git clone https://github.com/cmunte132/vantik.git
 cd vantik
-cp .env.example .env   # the default values work
+cp .env.example .env
+echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
 docker compose up -d
 ```
 

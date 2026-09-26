@@ -331,14 +331,6 @@ export class VantikAgent {
     return this.toTaskContext(context);
   }
 
-  async getNotes(reference: string): Promise<TaskNote[]> {
-    const { id } = await this.resolveTask(reference);
-    const comments = await this.client.get<RawComment[]>(
-      `/issues/${id}/comments`,
-    );
-    return comments.map((comment) => this.toNote(comment));
-  }
-
   async listTasks(
     input: ListTasksInput = {},
   ): Promise<Paginated<TaskListItem>> {
@@ -677,7 +669,7 @@ export class VantikAgent {
    *
    * The server assembles what the agent is told and picks the backend, so this
    * carries no opinion about either. It returns as soon as the run is queued —
-   * the work happens elsewhere, and `getAgentRun` is how you find out how it
+   * the work happens elsewhere, and `listAgentRuns` is how you find out how it
    * went.
    */
   async delegateTask(
@@ -699,13 +691,6 @@ export class VantikAgent {
     return toAgentRunSummary(run);
   }
 
-  /** How a delegated run is going, or how it went. */
-  async getAgentRun(runId: string): Promise<AgentRunSummary> {
-    return toAgentRunSummary(
-      await this.client.get<RawAgentRun>(`/agent_runs/${runId}`),
-    );
-  }
-
   /** Runs for one task, newest first — every attempt, not just the live one. */
   async listAgentRuns(reference: string): Promise<AgentRunSummary[]> {
     const { id } = await this.resolveTask(reference);
@@ -716,53 +701,6 @@ export class VantikAgent {
     );
 
     return (page.items ?? []).map(toAgentRunSummary);
-  }
-
-  /** Every agent run in the workspace, newest first. */
-  async listWorkspaceAgentRuns(
-    input: { perPage?: number; status?: string[] } = {},
-  ): Promise<Paginated<AgentRunSummary>> {
-    const page = await this.client.get<{
-      items: RawAgentRun[];
-      page: number;
-      perPage: number;
-      total: number;
-    }>('/agent_runs', {
-      query: {
-        ...(input.perPage ? { perPage: String(input.perPage) } : {}),
-        ...(input.status?.length ? { status: input.status.join(',') } : {}),
-      },
-    });
-
-    return {
-      items: (page.items ?? []).map(toAgentRunSummary),
-      page: page.page,
-      perPage: page.perPage,
-      total: page.total,
-    };
-  }
-
-  /** Progress lines from a run, oldest first. */
-  async agentRunEvents(
-    runId: string,
-  ): Promise<Array<{ at: string; level: string; message: string }>> {
-    const events = await this.client.get<
-      Array<{ at: string; level: string; message: string }>
-    >(`/agent_runs/${runId}/events`);
-
-    return events ?? [];
-  }
-
-  /** Stops a run. Nothing is destroyed; the record and its log remain. */
-  async cancelAgentRun(
-    runId: string,
-    reason?: string,
-  ): Promise<AgentRunSummary> {
-    return toAgentRunSummary(
-      await this.client.post<RawAgentRun>(`/agent_runs/${runId}/cancel`, {
-        body: reason ? { reason } : {},
-      }),
-    );
   }
 
   async createTask(input: CreateTaskInput): Promise<TaskRef> {
@@ -825,7 +763,10 @@ export class VantikAgent {
    * Rendering them as markdown in the description instead looked the same on the
    * page and was inert: nothing to tick, nothing to count.
    */
-  async addCriteria(issueId: string, criteria: string[]): Promise<void> {
+  private async addCriteria(
+    issueId: string,
+    criteria: string[],
+  ): Promise<void> {
     const bodies = criteria
       .map((criterion) => criterion.trim())
       .filter(Boolean);
@@ -845,18 +786,6 @@ export class VantikAgent {
         }),
       ),
     );
-  }
-
-  /**
-   * The task's Definition of Done as it stands.
-   *
-   * Reads the criteria on their own rather than through the context endpoint,
-   * which is called on the way into and out of a change where the rest of the
-   * context would be dead weight.
-   */
-  async getDefinitionOfDone(reference: string): Promise<DefinitionOfDone> {
-    const { id } = await this.resolveTask(reference);
-    return toDefinitionOfDone(await this.criteriaRows(id));
   }
 
   /**
@@ -1206,15 +1135,6 @@ export class VantikAgent {
     return this.client.post<PageLink>(`/pages/${page.id}/links`, {
       body: { entityType: input.entityType, entityId: input.entityId },
     });
-  }
-
-  /** What a page is linked to. */
-  async pageLinks(page: string): Promise<PageLink[]> {
-    const resolved = await this.resolvePage(page);
-
-    return (
-      (await this.client.get<PageLink[]>(`/pages/${resolved.id}/links`)) ?? []
-    );
   }
 
   /**

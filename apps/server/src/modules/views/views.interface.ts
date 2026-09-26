@@ -9,16 +9,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
-  ValidateNested,
 } from 'class-validator';
-
-export interface ViewsRequestBody {
-  /**
-   * Optional. Honoured only if the caller is an active member of it, otherwise
-   * the request is rejected. Falls back to the session's workspace when absent.
-   */
-  workspaceId?: string;
-}
 export class FilterModelType {
   @IsArray()
   @Type(() => String)
@@ -33,11 +24,12 @@ export class FiltersModelType {
 }
 
 export class CreateViewsRequestBody {
+  // Not @ValidateNested. The keys are field names, so class-validator sees no
+  // property on the nested class, and under `whitelist` a nested class with
+  // none loses every key: the view would be saved with no filters at all.
   @IsDefined()
   @IsNotEmptyObject()
   @IsObject()
-  @ValidateNested()
-  @Type(() => FiltersModelType)
   filters: FiltersModelType;
 
   /**
@@ -70,11 +62,10 @@ export class UpdateViewsRequestBody {
   @IsOptional()
   description?: string;
 
+  // Not @ValidateNested, for the reason on `CreateViewsRequestBody.filters`.
   @IsDefined()
   @IsNotEmptyObject()
   @IsObject()
-  @ValidateNested()
-  @Type(() => FiltersModelType)
   filters?: FiltersModelType;
 
   @IsBoolean()

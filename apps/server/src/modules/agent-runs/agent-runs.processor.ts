@@ -92,6 +92,9 @@ export class AgentRunsScheduler implements OnModuleInit {
  * attempt, actually handed to a backend rather than left QUEUED, and a word on
  * the issue. Expiry was silent before — `FAILURE_PROSE` has carried a line for
  * `LEASE_LOST` since the lease existed and nothing could render it.
+ *
+ * A run that never started is owed less: no attempt opened in its place, only
+ * the word on the issue, so the person who delegated it can retry it.
  */
 @Processor(AGENT_RUNS_QUEUE)
 export class AgentRunsProcessor {
@@ -128,16 +131,37 @@ export class AgentRunsProcessor {
         .catch((): undefined => undefined);
     }
 
+    // Runs that never held a lease, so the expiry above cannot see them: handed
+    // to a backend and dropped before it claimed them. Not retried, because
+    // nothing is known about why, and a person should choose to spend the
+    // budget again.
+    const unstarted = await this.agentRuns.failUnstartedRuns();
+
+    for (const run of unstarted) {
+      await this.handback
+        .post(run.issueId, run.agentUserId, run.id, {
+          status: 'FAILED',
+          failure: 'LEASE_LOST',
+          error: run.error,
+          attempt: run.attempt,
+        })
+        .catch((): undefined => undefined);
+    }
+
     // Silent when there is nothing to do, which is the common case — a sweep
     // logging every minute would bury everything else.
-    if (expired.length > 0) {
+    if (expired.length > 0 || unstarted.length > 0) {
       this.logger.info({
-        message: `Expired ${expired.length} agent run(s) on a lapsed lease; re-queued ${requeued}`,
+        message: `Expired ${expired.length} agent run(s) on a lapsed lease; re-queued ${requeued}; failed ${unstarted.length} that never started`,
         where: 'AgentRunsProcessor.sweep',
       });
     }
 
-    return { expired: expired.length, requeued };
+    return {
+      expired: expired.length,
+      requeued,
+      unstarted: unstarted.length,
+    };
   }
 
   /**

@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 
-import { ActionEventModule } from 'modules/action-event/action-event.module';
+import { IntegrationEventsModule } from 'modules/integration-events/integration-events.module';
 import { IntegrationsModule } from 'modules/integrations/integrations.module';
 import IssueCommentsService from 'modules/issue-comments/issue-comments.service';
 import { IssuesModule } from 'modules/issues/issues.module';
@@ -16,13 +16,13 @@ import WebhookService from './webhook.service';
   // enqueues the work, and the queue and its processor are wired up there.
   // NotificationsModule because IssueCommentsService is provided here rather
   // than imported, and commenting notifies.
-  // ActionEventModule for the actions queue a source webhook dispatches onto.
+  // IntegrationEventsModule for the queue a webhook's behaviour runs on.
   imports: [
     IntegrationsModule,
     IssuesModule,
     ModulesModule,
     NotificationsModule,
-    ActionEventModule,
+    IntegrationEventsModule,
   ],
   controllers: [WebhookController],
   providers: [WebhookService, IssueCommentsService, LinkedIssueService],

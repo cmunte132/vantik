@@ -8,91 +8,6 @@ generator client {
   // previewFeatures = []
 }
 
-model Action {
-  id        String    @id @default(uuid())
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deleted   DateTime?
-
-  name         String
-  description  String?
-  slug         String
-  integrations String[]
-
-  status  ActionStatus
-  version String
-  url     String?
-
-  // To define if the action is deployed in personal account
-  isPersonal Boolean @default(false)
-
-  // We store the config of the action
-  config Json
-
-  // This is used to store inputs or some data needed for the action 
-  data Json?
-
-  workspace    Workspace?     @relation(fields: [workspaceId], references: [id])
-  workspaceId  String?
-  actionEntity ActionEntity[]
-
-  createdById    String
-  actionSchedule ActionSchedule[]
-}
-
-model ActionEntity {
-  id        String    @id @default(uuid())
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deleted   DateTime?
-
-  type   String
-  entity String
-
-  action   Action @relation(fields: [actionId], references: [id])
-  actionId String
-
-  @@unique([type, entity, actionId])
-}
-
-model ActionEvent {
-  id        String    @id @default(uuid())
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deleted   DateTime?
-
-  eventType String
-  modelName String // Issue
-  modelId   String // Issue ID
-  eventData Json? // Update data change
-
-  sequenceId BigInt
-
-  processed    Boolean   @default(false)
-  processedAt  DateTime?
-  processedIds String[]
-
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  workspaceId String
-}
-
-model ActionSchedule {
-  id        String    @id @default(uuid())
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deleted   DateTime?
-
-  cron       String?
-  status     ActionScheduleStatus
-  timezone   String?
-
-  scheduledById String
-  action        Action @relation(fields: [actionId], references: [id])
-  actionId      String
-
-  @@unique([actionId, cron, timezone])
-}
-
 /// One agent's attempt at one issue.
 ///
 /// The unit of work the whole Autonomous agents project turns on. Execution
@@ -1479,8 +1394,7 @@ model Workspace {
   slug String  @unique
   icon String?
 
-  actionsEnabled Boolean @default(true)
-  preferences    Json?
+  preferences Json?
 
   usersOnWorkspaces     UsersOnWorkspaces[]
   team                  Team[]
@@ -1493,7 +1407,6 @@ model Workspace {
   View                  View[]
   aiRequests            AIRequest[]
   prompts               Prompt[]
-  action                Action[]
   projects              Project[]
   products              Product[]
   modules               Module[]
@@ -1503,7 +1416,6 @@ model Workspace {
   credentials           WorkspaceCredential[]
   webhookSubscription   WebhookSubscription[]
 
-  ActionEvent  ActionEvent[]
   Conversation Conversation[]
   Company      Company[]
   People       People[]
@@ -1543,21 +1455,6 @@ enum Status {
   INVITED
   ACTIVE
   SUSPENDED
-}
-
-enum ActionStatus {
-  DEPLOYING
-  ERRORED
-  INSTALLED
-  NEEDS_CONFIGURATION
-  ACTIVE
-  SUSPENDED
-}
-
-enum ActionScheduleStatus {
-  ACTIVE
-  IN_ACTIVE
-  DELETED
 }
 
 /// Where a run is in its life.
@@ -1650,8 +1547,6 @@ enum AgentRunEventLevel {
 /// and the whole sync log then fails, and not only the rows of that one model.
 /// So a new model's value is added to this enum before any row can carry it.
 enum ModelName {
-  Action
-  ActionEntity
   AgentRun
   AgentRunEvent
   AgentRunIteration
@@ -1691,13 +1586,11 @@ enum ModelName {
   SyncAction
   Team
   Template
-  TriggerProject
   User
   UsersOnWorkspaces
   View
   Workflow
   Workspace
-  WorkspaceTriggerProject
 }
 
 /// What a page has been linked to.

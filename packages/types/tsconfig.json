@@ -7,7 +7,7 @@
     "paths": {
       "@vantikhq/tsup/*": ["../../tooling/tsup/src/*"]
     },
-    "lib": ["DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "declaration": false,
     "declarationMap": false,
     "stripInternal": true

@@ -19,11 +19,6 @@ export interface IssueWithRelations extends Issue {
   createdBy?: User;
 }
 
-export enum IssueAction {
-  CREATED,
-  UPDATED,
-}
-
 export enum SubscribeType {
   SUBSCRIBE = 'SUBSCRIBE',
   UNSUBSCRIBE = 'UNSUBSCRIBE',

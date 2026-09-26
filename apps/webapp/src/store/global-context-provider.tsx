@@ -1,7 +1,6 @@
 import { types, type Instance } from 'mobx-state-tree';
 import React from 'react';
 
-import { ActionsStore } from './action';
 import { ApplicationStore, defaultApplicationStoreValue } from './application';
 import { AgentRunsStore } from './agent-runs';
 import { CapabilitiesStore } from './capabilities';
@@ -51,7 +50,6 @@ const StoreContextModel = types.model({
   issueRelationsStore: IssueRelationsStore,
   notificationsStore: NotificationsStore,
   viewsStore: ViewsStore,
-  actionsStore: ActionsStore,
   issueSuggestionsStore: IssueSuggestionsStore,
   projectsStore: ProjectsStore,
   projectMilestonesStore: ProjectMilestonesStore,
@@ -131,10 +129,6 @@ export const storeContextStore = StoreContextModel.create({
   },
   issueSuggestionsStore: {
     teamId: undefined,
-  },
-  actionsStore: {
-    workspaceId: undefined,
-    actions: [],
   },
   projectsStore: {
     projects: [],

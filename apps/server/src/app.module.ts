@@ -11,7 +11,6 @@ import config from 'common/configs/config';
 import { BuildStampInterceptor } from 'common/interceptors/build-stamp.interceptor';
 import { ErrorReportingInterceptor } from 'common/interceptors/error-reporting.interceptor';
 
-import { ActionModule } from 'modules/action/action.module';
 import { AgentSkillModule } from 'modules/agent-skill/agent-skill.module';
 import { AIRequestsModule } from 'modules/ai-requests/ai-requests.module';
 import { ALSModule } from 'modules/als/als.module';
@@ -24,9 +23,6 @@ import { CachceModule } from 'modules/cache/cache.module';
 import { CapabilitiesModule } from 'modules/capabilities/capabilities.module';
 import { ChecklistItemsModule } from 'modules/checklist-items/checklist-items.module';
 import { ClientConfigModule } from 'modules/client-config/client-config.module';
-import { CompanyModule } from 'modules/company/company.modules';
-import { ConversationModule } from 'modules/conversation/conversation.module';
-import { ConversationHistoryModule } from 'modules/conversation-history/conversation-history.module';
 import { CyclesModule } from 'modules/cycles/cycles.module';
 import { HealthModule } from 'modules/health/health.module';
 import { IntegrationAccountModule } from 'modules/integration-account/integration-account.module';
@@ -44,7 +40,6 @@ import { ModulesModule } from 'modules/modules/modules.module';
 import { NotificationsModule } from 'modules/notifications/notifications.module';
 import { OAuthCallbackModule } from 'modules/oauth-callback/oauth-callback.module';
 import { PagesModule } from 'modules/pages/pages.module';
-import { PeopleModule } from 'modules/people/people.module';
 import { ProductsModule } from 'modules/products/products.module';
 import { ProjectsModule } from 'modules/projects/projects.module';
 import { PromptsModule } from 'modules/prompts/prompts.module';
@@ -58,7 +53,6 @@ import { TemplatesModule } from 'modules/templates/templates.module';
 import { UsersModule } from 'modules/users/users.module';
 import { ViewsModule } from 'modules/views/views.module';
 import { WebhookModule } from 'modules/webhook/webhook.module';
-import { WebhookSubscriptionModule } from 'modules/webhook-subscription/webhook-subscription.module';
 import { WorkflowsModule } from 'modules/workflows/workflows.module';
 import { WorkspacesModule } from 'modules/workspaces/workspaces.module';
 
@@ -126,7 +120,6 @@ import { AppService } from './app.service';
     AgentSkillModule,
     AttachmentModule,
     ViewsModule,
-    ActionModule,
     AIRequestsModule,
     ProjectsModule,
     ProductsModule,
@@ -134,7 +127,6 @@ import { AppService } from './app.service';
     CapabilitiesModule,
     PagesModule,
     CyclesModule,
-    WebhookSubscriptionModule,
 
     WebhookModule,
 
@@ -151,14 +143,9 @@ import { AppService } from './app.service';
 
     BullConfigModule,
 
-    ConversationModule,
-    ConversationHistoryModule,
-
     CachceModule,
     ClientConfigModule,
 
-    CompanyModule,
-    PeopleModule,
     SupportModule,
   ],
   controllers: [AppController],

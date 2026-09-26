@@ -18,7 +18,8 @@ const WORKSPACE = 'workspace-1';
 // The jest environment has no server secret; the store refuses to encrypt
 // without one, which is itself the correct behaviour.
 beforeAll(() => {
-  process.env.CREDENTIAL_ENCRYPTION_KEY ??= 'test-encryption-key';
+  process.env.CREDENTIAL_ENCRYPTION_KEY ??=
+    'sandbox-security-test-encryption-key';
 });
 
 function buildCredentials() {

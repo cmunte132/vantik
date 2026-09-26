@@ -41,6 +41,7 @@ interface FakeRun {
   contextPack: unknown;
   configHash: string | null;
   deleted: Date | null;
+  createdAt: Date | null;
 }
 
 function makeRun(over: Partial<FakeRun> = {}): FakeRun {
@@ -61,6 +62,7 @@ function makeRun(over: Partial<FakeRun> = {}): FakeRun {
     contextPack: null,
     configHash: null,
     deleted: null,
+    createdAt: new Date(),
     ...over,
   };
 }
@@ -240,9 +242,9 @@ describe('AgentRunsService transition table', () => {
   it('names the legal moves when it refuses a live run', async () => {
     const { service } = buildService([makeRun({ status: 'QUEUED' })]);
 
-    await expect(service.transition(RUN, 'SUCCEEDED', {}, scope)).rejects.toThrow(
-      /From QUEUED it may become: CLAIMED, CANCELED, FAILED/,
-    );
+    await expect(
+      service.transition(RUN, 'SUCCEEDED', {}, scope),
+    ).rejects.toThrow(/From QUEUED it may become: CLAIMED, CANCELED, FAILED/);
   });
 
   it('says a finished run is finished rather than listing nothing', async () => {
@@ -346,6 +348,71 @@ describe('AgentRunsService leases', () => {
   });
 });
 
+/**
+ * A run handed to a push-based executor leaves QUEUED within seconds. One that
+ * has not, a lease later, was dropped on the way, and nothing polls the queue
+ * to find it.
+ */
+describe('AgentRunsService runs that never started', () => {
+  const longAgo = () => new Date(Date.now() - 60 * 60 * 1000);
+
+  it('fails a run still queued a lease after it was handed off', async () => {
+    const { service, rows } = buildService([
+      makeRun({ status: 'QUEUED', createdAt: longAgo() }),
+    ]);
+
+    const failed = await service.failUnstartedRuns();
+
+    expect(rows.get(RUN)?.status).toBe('FAILED');
+    expect(rows.get(RUN)?.failure).toBe('LEASE_LOST');
+    // The same words go on the run and on the issue, and they say what to do.
+    expect(failed).toEqual([
+      expect.objectContaining({
+        id: RUN,
+        attempt: 1,
+        error: expect.stringMatching(/Retry it to run it again/),
+      }),
+    ]);
+  });
+
+  it('leaves a run that was only just handed off', async () => {
+    const { service, rows } = buildService([makeRun({ status: 'QUEUED' })]);
+
+    await expect(service.failUnstartedRuns()).resolves.toEqual([]);
+    expect(rows.get(RUN)?.status).toBe('QUEUED');
+  });
+
+  it('leaves a run that was claimed while the sweep was deciding', async () => {
+    // Read as QUEUED, claimed before the write. Moving it from where it now
+    // is would fail work in progress and say it never started.
+    const { service, rows, prisma } = buildService([
+      makeRun({ status: 'QUEUED', createdAt: longAgo() }),
+    ]);
+    const findMany = prisma.agentRun.findMany as unknown as jest.Mock;
+    const read = findMany.getMockImplementation();
+    findMany.mockImplementationOnce(async (args: never) => {
+      const found = await read(args);
+      const row = rows.get(RUN);
+      if (row) {
+        row.status = 'CLAIMED';
+      }
+      return found;
+    });
+
+    await expect(service.failUnstartedRuns()).resolves.toEqual([]);
+    expect(rows.get(RUN)?.status).toBe('CLAIMED');
+  });
+
+  it('never touches a deleted run', async () => {
+    const { service, rows } = buildService([
+      makeRun({ status: 'QUEUED', createdAt: longAgo(), deleted: new Date() }),
+    ]);
+
+    await expect(service.failUnstartedRuns()).resolves.toEqual([]);
+    expect(rows.get(RUN)?.status).toBe('QUEUED');
+  });
+});
+
 describe('AgentRunsService retry', () => {
   it('opens a new attempt rather than mutating the old record', async () => {
     const { service, rows } = buildService([
@@ -419,7 +486,12 @@ describe('AgentRunsService retry', () => {
   it('refuses to fork a chain that was already retried', async () => {
     const { service } = buildService([
       makeRun({ status: 'FAILED' }),
-      makeRun({ id: 'run-2', status: 'QUEUED', attempt: 2, previousRunId: RUN }),
+      makeRun({
+        id: 'run-2',
+        status: 'QUEUED',
+        attempt: 2,
+        previousRunId: RUN,
+      }),
     ]);
 
     await expect(service.retryRun(RUN, scope, 'user-1')).rejects.toThrow(
@@ -430,9 +502,9 @@ describe('AgentRunsService retry', () => {
   it('lets a human retry a run routed to review', async () => {
     const { service } = buildService([makeRun({ status: 'NEEDS_REVIEW' })]);
 
-    await expect(
-      service.retryRun(RUN, scope, 'user-1'),
-    ).resolves.toMatchObject({ status: 'QUEUED', attempt: 2 });
+    await expect(service.retryRun(RUN, scope, 'user-1')).resolves.toMatchObject(
+      { status: 'QUEUED', attempt: 2 },
+    );
   });
 });
 
@@ -475,16 +547,6 @@ describe('AgentRunsService events', () => {
 });
 
 describe('AgentRunsService tenancy', () => {
-  it('does not find a run from another workspace', async () => {
-    const { service } = buildService([
-      makeRun({ workspaceId: 'workspace-theirs' }),
-    ]);
-
-    await expect(
-      service.getRun(RUN, { workspaceId: WORKSPACE }),
-    ).rejects.toBeInstanceOf(NotFoundException);
-  });
-
   it('scopes every list to the caller’s workspace', async () => {
     const { service, prisma } = buildService();
 
@@ -511,14 +573,18 @@ describe('AgentRunsService tenancy', () => {
   });
 
   it('hides another agent’s run behind the same 404 as a missing one', async () => {
-    const { service } = buildService([makeRun({ agentUserId: 'agent-2' })]);
+    const { service, events } = buildService([
+      makeRun({ agentUserId: 'agent-2', status: 'RUNNING' }),
+    ]);
 
     await expect(
-      service.getRun(RUN, {
-        workspaceId: WORKSPACE,
-        onlyAgentUserId: 'agent-1',
-      }),
+      service.appendEvent(
+        RUN,
+        { message: 'injected' },
+        { workspaceId: WORKSPACE, onlyAgentUserId: 'agent-1' },
+      ),
     ).rejects.toThrow(`Agent run ${RUN} not found`);
+    expect(events).toHaveLength(0);
   });
 
   it('refuses to cancel a run in another workspace', async () => {
@@ -538,19 +604,13 @@ describe('AgentRunsService tenancy', () => {
     ]);
 
     await expect(
-      service.appendEvent(RUN, { message: 'injected' }, { workspaceId: WORKSPACE }),
+      service.appendEvent(
+        RUN,
+        { message: 'injected' },
+        { workspaceId: WORKSPACE },
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(events).toHaveLength(0);
-  });
-
-  it('refuses to read the events of a run in another workspace', async () => {
-    const { service } = buildService([
-      makeRun({ workspaceId: 'workspace-theirs' }),
-    ]);
-
-    await expect(
-      service.listEvents(RUN, { workspaceId: WORKSPACE }),
-    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('refuses to retry a run in another workspace', async () => {

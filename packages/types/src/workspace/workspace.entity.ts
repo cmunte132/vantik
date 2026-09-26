@@ -1,5 +1,3 @@
-import { Action } from '../action';
-import { ActionEvent } from '../action-event';
 import { AIRequest } from '../ai-request';
 import { Attachment } from '../attachment';
 import { Company } from '../company';
@@ -23,7 +21,6 @@ export class Workspace {
   name: string;
   slug: string;
   icon: string | null;
-  actionsEnabled: boolean;
   preferences: any | null;
   usersOnWorkspaces?: UsersOnWorkspaces[];
   team?: Team[];
@@ -36,9 +33,7 @@ export class Workspace {
   View?: View[];
   aiRequests?: AIRequest[];
   prompts?: Prompt[];
-  action?: Action[] | null;
   projects?: Project[] | null;
-  ActionEvent?: ActionEvent[] | null;
   Conversation?: Conversation[] | null;
   Company?: Company[] | null;
 }

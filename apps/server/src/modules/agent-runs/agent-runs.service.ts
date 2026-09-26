@@ -68,6 +68,16 @@ export interface ExpiredRun {
   retryable: boolean;
 }
 
+/**
+ * A run that was handed to a backend and never started, now failed.
+ *
+ * Carries the error it was failed with, so what the issue is told and what
+ * the run records are the same words.
+ */
+export interface UnstartedRun extends Omit<ExpiredRun, 'retryable'> {
+  error: string;
+}
+
 export interface ListAgentRunsFilter {
   issueId?: string;
   agentUserId?: string;
@@ -96,29 +106,6 @@ export class AgentRunsService {
 
   // ------------------------------------------------------------------ reads
 
-  /**
-   * One run, or a 404.
-   *
-   * The 404 is the same whether the run does not exist, sits in another
-   * workspace, or belongs to another agent — anything else discloses the
-   * existence of work the caller cannot see.
-   */
-  async getRun(runId: string, scope: AgentRunScope) {
-    const run = await this.prisma.agentRun.findFirst({
-      where: this.scopeWhere(scope, { id: runId }),
-      include: {
-        events: { orderBy: { at: 'asc' }, take: 500 },
-        iterations: { orderBy: { index: 'asc' } },
-      },
-    });
-
-    if (!run) {
-      throw new NotFoundException({ message: `Agent run ${runId} not found` });
-    }
-
-    return run;
-  }
-
   async listRuns(filter: ListAgentRunsFilter, scope: AgentRunScope) {
     const page = filter.page ?? 1;
     const perPage = Math.min(filter.perPage ?? 50, 200);
@@ -141,16 +128,6 @@ export class AgentRunsService {
     ]);
 
     return { items, page, perPage, total };
-  }
-
-  async listEvents(runId: string, scope: AgentRunScope, since?: Date) {
-    // Proves the run is the caller's before handing back a single line of it.
-    await this.requireRun(runId, scope);
-
-    return this.prisma.agentRunEvent.findMany({
-      where: { runId, ...(since ? { at: { gt: since } } : {}) },
-      orderBy: { at: 'asc' },
-    });
   }
 
   // ----------------------------------------------------------------- writes
@@ -204,18 +181,30 @@ export class AgentRunsService {
    * names the status the caller believed the run was in, so of two writers
    * only the first finds a row, and the second is told what actually happened
    * instead of overwriting it.
+   *
+   * `expected.from` narrows it further, for a caller whose decision holds only
+   * in one state. Without it a run that moved on between the caller's read
+   * and this one is moved from wherever it now is, which is right for "this
+   * run is finished" and wrong for "this run never started".
    */
   async transition(
     runId: string,
     to: AgentRunStatus,
     patch: TransitionPatch = {},
     scope?: AgentRunScope,
+    expected: { from?: AgentRunStatus } = {},
   ) {
     const current = scope
       ? await this.requireRun(runId, scope)
       : await this.requireRunUnscoped(runId);
 
     const from = current.status as AgentRunStatus;
+
+    if (expected.from && from !== expected.from) {
+      throw new ConflictException({
+        message: `Agent run ${runId} is ${from}, not ${expected.from}, so it was not moved to ${to}.`,
+      });
+    }
 
     if (from === to) {
       return current;
@@ -528,6 +517,78 @@ export class AgentRunsService {
     }
 
     return expired;
+  }
+
+  /**
+   * Fails runs that were handed to a backend and never started.
+   *
+   * Every executor is push-based now: dispatch starts the work, and the run
+   * leaves QUEUED within seconds, when the executor claims it. A run still
+   * QUEUED a whole lease later was dropped on the way, most often by a
+   * restart between dispatch and claim. Nothing polls the queue, so nothing
+   * would ever pick it up, and it would hold a slot against the workspace cap
+   * and block its own issue from being delegated again.
+   *
+   * Failed rather than dispatched again, so a person decides whether to spend
+   * the model budget twice. Aged out here rather than failed at boot, for the
+   * reason the lease replaced boot-time reconciling: a booting replica cannot
+   * tell a run that another replica dispatched a moment ago from one that was
+   * lost, and a lease's worth of age can.
+   *
+   * Pinned to QUEUED, so a run claimed between the read and the write is left
+   * to finish rather than failed while it works.
+   */
+  async failUnstartedRuns(now = new Date()): Promise<UnstartedRun[]> {
+    const stale = await this.prisma.agentRun.findMany({
+      where: {
+        status: 'QUEUED',
+        deleted: null,
+        createdAt: { lt: new Date(now.getTime() - AGENT_RUN_LEASE_MS) },
+      },
+      select: {
+        id: true,
+        attempt: true,
+        issueId: true,
+        agentUserId: true,
+        workspaceId: true,
+        executor: true,
+      },
+    });
+
+    const minutes = Math.round(AGENT_RUN_LEASE_MS / 60_000);
+    const failed: UnstartedRun[] = [];
+
+    for (const run of stale) {
+      const error =
+        `Nothing started this run. It was still queued ${minutes} minutes ` +
+        `after it was handed to the ${run.executor} executor, which usually ` +
+        'means the server restarted in between. Retry it to run it again.';
+
+      try {
+        await this.transition(
+          run.id,
+          'FAILED',
+          { failure: 'LEASE_LOST', error },
+          undefined,
+          { from: 'QUEUED' },
+        );
+      } catch {
+        // Claimed, cancelled or failed since the read. Whatever it became,
+        // it is no longer a run nobody started.
+        continue;
+      }
+
+      failed.push({
+        id: run.id,
+        issueId: run.issueId,
+        agentUserId: run.agentUserId,
+        workspaceId: run.workspaceId,
+        attempt: run.attempt,
+        error,
+      });
+    }
+
+    return failed;
   }
 
   // --------------------------------------------------------------- internal

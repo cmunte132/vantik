@@ -162,9 +162,6 @@ export const handleCommandNavigation = (event: KeyboardEvent) => {
   return false;
 };
 
-export const getPrevText = (editor: Editor, position: number) =>
-  editor.state.doc.textBetween(0, position, '\n');
-
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     aiHighlight: {
@@ -220,12 +217,3 @@ export const AIHighlight = Mark.create({
     };
   },
 });
-
-export const addAIHighlight = (editor: Editor, color?: string) =>
-  editor
-    ?.chain()
-    .setAIHighlight({ color: color ?? '#c1ecf970' })
-    .run();
-
-export const removeAIHighlight = (editor: Editor) =>
-  editor?.chain().unsetAIHighlight().run();

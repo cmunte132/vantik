@@ -128,8 +128,7 @@ export function parseIssueKey(
  * wants.
  *
  * The cache lives for the lifetime of the instance. That is the right trade for
- * a CLI invocation or a single MCP session; long-lived processes should call
- * `refresh()` if a team or state is added mid-session.
+ * a CLI invocation or a single MCP request, which is all that holds one.
  */
 export class Directory {
   private teams?: Promise<Team[]>;
@@ -143,23 +142,6 @@ export class Directory {
   private me?: Promise<User>;
 
   constructor(private readonly client: VantikClient) {}
-
-  /**
-   * Drops everything cached, so a long-lived agent can pick up a team, state,
-   * project, label or member added since it started. A CLI invocation or one MCP
-   * request never needs this; a process holding an agent across requests does.
-   */
-  refresh(): void {
-    this.teams = undefined;
-    this.projects = undefined;
-    this.products = undefined;
-    this.modules = undefined;
-    this.capabilities = undefined;
-    this.me = undefined;
-    this.statesByTeam.clear();
-    this.labelsByWorkspace.clear();
-    this.membersByTeam.clear();
-  }
 
   getTeams(): Promise<Team[]> {
     this.teams ??= forget(this.client.get<Team[]>('/teams'), () => {

@@ -3,7 +3,6 @@ import { PrismaClient } from '@prisma/client';
 import {
   ActionTypesEnum,
   CreateIssueDto,
-  CreateLinkedIssueDto,
   FilterKey,
   FilterTypeEnum,
   FilterValue,
@@ -106,23 +105,6 @@ export async function getLastIssueNumber(
     orderBy: { number: 'desc' },
   });
   return lastIssue?.number ?? 0;
-}
-
-export async function findExistingLink(
-  prisma: PrismaService,
-  linkData: CreateLinkedIssueDto,
-) {
-  const linkedIssue = await prisma.linkedIssue.findFirst({
-    where: { url: linkData.url },
-    include: { issue: { include: { team: true } } },
-  });
-  if (linkedIssue) {
-    return {
-      status: 400,
-      message: `This ${linkData.url} has already been linked to an issue ${linkedIssue.issue.team.identifier}-${linkedIssue.issue.number}`,
-    };
-  }
-  return { status: 200, message: null };
 }
 
 export function getSubscriberIds(

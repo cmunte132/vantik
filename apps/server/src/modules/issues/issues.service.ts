@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { setTimeout as sleep } from 'timers/promises';
+
+import { ConflictException, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { Prisma, Issue as PrismaIssue } from '@prisma/client';
 import {
@@ -24,7 +26,6 @@ import {
 } from '@vantikhq/types';
 import { createObjectCsvStringifier } from 'csv-writer';
 import { PrismaService } from 'nestjs-prisma';
-import { NotificationsQueue } from 'modules/notifications/notifications.queue';
 
 import { visibleTeamIds } from 'common/team-access';
 import {
@@ -41,6 +42,7 @@ import IssuesHistoryService from 'modules/issue-history/issue-history.service';
 import IssueRelationService from 'modules/issue-relation/issue-relation.service';
 import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { LoggerService } from 'modules/logger/logger.service';
+import { NotificationsQueue } from 'modules/notifications/notifications.queue';
 import SupportService from 'modules/support/support.service';
 
 import { SubscribeType } from './issues.interface';
@@ -55,6 +57,9 @@ import {
   getWorkspace,
   handlePostCreateIssue,
 } from './issues.utils';
+
+/** How many times an issue is tried when its team's numbering conflicts. */
+export const CREATE_ISSUE_ATTEMPTS = 5;
 
 @Injectable()
 export default class IssuesService {
@@ -155,10 +160,7 @@ export default class IssuesService {
       createdById: userId,
     };
 
-    const MAX_RETRIES = 5;
-    let retries = 0;
-
-    while (retries < MAX_RETRIES) {
+    for (let attempt = 1; ; attempt++) {
       try {
         // Create the issues in the database within a transaction
         const issues = await this.prisma.$transaction(
@@ -288,15 +290,23 @@ export default class IssuesService {
         // Return the main created issue
         return { ...issues[0], descriptionMarkdown };
       } catch (error) {
-        if (error.code === 'P2034') {
-          retries++;
-          continue;
+        // The number is read and written in one serializable transaction, so
+        // issues filed into a team at once conflict, and all but one are tried
+        // again. Straight away, a retry met the same writers again, and after
+        // five it fell out of the loop and answered 201 with no body and no
+        // issue. Now it waits a growing, jittered moment, and says so if every
+        // try conflicts.
+        if (error.code !== 'P2034') {
+          throw error;
         }
-        throw error;
+        if (attempt === CREATE_ISSUE_ATTEMPTS) {
+          throw new ConflictException(
+            'Too many issues were being filed into this team at once. Try again.',
+          );
+        }
+        await sleep(attempt * 25 + Math.random() * 25);
       }
     }
-
-    return undefined;
   }
 
   /**

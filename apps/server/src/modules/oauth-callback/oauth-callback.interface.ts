@@ -19,9 +19,6 @@ export interface SessionRecord {
 }
 
 export class OAuthBodyInterface {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config?: any;
-
   @IsString()
   redirectURL: string;
 

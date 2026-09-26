@@ -1,9 +1,10 @@
 <!--
-Portable version of the working-vantik-issues skill, for agent runners that
-read an AGENTS.md (Cursor, Windsurf, Codex, plain system prompts) rather than
-Claude Code skills. Paste the section below into your repo's AGENTS.md. Claude
-Code users should install the skill instead — see README.md — since it loads
-on demand and keeps context free until issue work actually comes up.
+Always-in-context version of the working-vantik-issues skill, for an agent that
+reads no skills (a plain system prompt, an older runner), or one that works
+quietly with the skill loaded on demand. Paste the section below into your
+repo's AGENTS.md. Where your agent reads skills, install the skill instead —
+`npx skills add https://your-vantik-host`, see README.md — since it loads on
+demand and keeps context free until issue work actually comes up.
 -->
 
 ## Working Vantik issues

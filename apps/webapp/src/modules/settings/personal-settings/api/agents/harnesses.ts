@@ -11,20 +11,18 @@ export interface HarnessBlock {
 }
 
 /**
- * How this tool wants the issue-filing guide installed. Every runner reads a
- * different file from a different place — a Claude Code skill, an AGENTS.md, a
- * Cursor rule — so the download has to follow the tab rather than hand everyone
- * the same two files and leave them to work out which one applies.
+ * How this tool takes the agent guides.
+ *
+ * The install is the same for every tool — the skills CLI reads this instance's
+ * discovery index and knows where each agent keeps its skills — so all a tab
+ * has to say is which agent it is, and which file that agent always reads, for
+ * anyone who would rather keep the guidance in context than load it on demand.
  */
 export interface HarnessSkill {
-  /** Name to fetch from /v1/agent-skill; also the downloaded filename. */
-  file: string;
-  /** Where it belongs, in this tool's terms. */
-  target: string;
-  /** One-line install, filled in with the served URL. */
-  install: (url: string) => string;
-  /** The other form this tool accepts, when it accepts one. */
-  alternative?: { file: string; target: string; note: string };
+  /** The skills CLI's `--agent` id. Omitted, the CLI detects or asks. */
+  agent?: string;
+  /** Where the always-in-context form goes. Also its name on /v1/agent-skill. */
+  contextFile: 'CLAUDE.md' | 'AGENTS.md';
 }
 
 export interface Harness {
@@ -72,17 +70,7 @@ export function harnessConfigs(url: string, token: string): Harness[] {
           value: `claude mcp add --transport http vantik ${url} --header "Authorization: ${auth}"`,
         },
       ],
-      skill: {
-        file: 'SKILL.md',
-        target: '.claude/skills/working-vantik-issues/SKILL.md',
-        install: (fileUrl) =>
-          `mkdir -p .claude/skills/working-vantik-issues && curl -fsSL ${fileUrl} -o .claude/skills/working-vantik-issues/SKILL.md`,
-        alternative: {
-          file: 'CLAUDE.md',
-          target: 'CLAUDE.md',
-          note: 'Keeps it always in context instead of loading on demand.',
-        },
-      },
+      skill: { agent: 'claude-code', contextFile: 'CLAUDE.md' },
     },
     {
       id: 'codex',
@@ -98,11 +86,7 @@ export function harnessConfigs(url: string, token: string): Harness[] {
             `args = ["-y", "mcp-remote", "${url}", "--header", "Authorization: ${auth}"]`,
         },
       ],
-      skill: {
-        file: 'AGENTS.md',
-        target: 'AGENTS.md, in your project root',
-        install: (fileUrl) => `curl -fsSL ${fileUrl} >> AGENTS.md`,
-      },
+      skill: { agent: 'codex', contextFile: 'AGENTS.md' },
     },
     {
       id: 'cursor',
@@ -121,17 +105,7 @@ export function harnessConfigs(url: string, token: string): Harness[] {
           ),
         },
       ],
-      skill: {
-        file: 'working-vantik-issues.mdc',
-        target: '.cursor/rules/working-vantik-issues.mdc',
-        install: (fileUrl) =>
-          `mkdir -p .cursor/rules && curl -fsSL ${fileUrl} -o .cursor/rules/working-vantik-issues.mdc`,
-        alternative: {
-          file: 'AGENTS.md',
-          target: 'AGENTS.md',
-          note: 'Cursor reads this too, if you keep one already.',
-        },
-      },
+      skill: { agent: 'cursor', contextFile: 'AGENTS.md' },
     },
     {
       id: 'other',
@@ -149,11 +123,31 @@ export function harnessConfigs(url: string, token: string): Harness[] {
           value: `npx -y mcp-remote ${url} --header "Authorization: ${auth}"`,
         },
       ],
-      skill: {
-        file: 'AGENTS.md',
-        target: 'AGENTS.md, in your project root',
-        install: (fileUrl) => `curl -fsSL ${fileUrl} >> AGENTS.md`,
-      },
+      // No agent: the CLI detects which ones are installed, or asks.
+      skill: { contextFile: 'AGENTS.md' },
     },
   ];
+}
+
+/**
+ * The one-line install of the agent guides, from this instance.
+ *
+ * Telemetry is off because, for a source that is not a public GitHub
+ * repository, the skills CLI reports the host it installed from, and the host
+ * name of a self-hosted tracker is nobody else's business.
+ */
+export function skillsAddCommand(origin: string, agent?: string): string {
+  return `DISABLE_TELEMETRY=1 npx skills add ${origin}${agent ? ` --agent ${agent}` : ''}`;
+}
+
+/**
+ * The issues guide appended to the file a tool always reads, for an agent that
+ * reports only at the end with the skill loaded on demand: nothing in the task
+ * looked like issue work until the task was done.
+ */
+export function contextAppendCommand(
+  origin: string,
+  file: HarnessSkill['contextFile'],
+): string {
+  return `curl -fsSL ${origin}/api/v1/agent-skill/${file} >> ${file}`;
 }

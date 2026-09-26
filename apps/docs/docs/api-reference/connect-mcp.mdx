@@ -117,34 +117,63 @@ is therefore the limit multiplied by the number of replicas. That is enough to
 stop a loop that runs away. For a true quota, put your own limiter in front of
 the server and set `MCP_RATE_LIMIT=0`.
 
-## Optional: a house style for a new issue
+## Optional: a house style, as agent skills
 
-The configuration above is all that an agent needs to read and to file an issue.
-But an agent alone files many small issues. It opens a new issue where a note on
-an issue that exists is enough, and it divides one piece of work into six
-issues.
+The configuration above is all that an agent needs to read and to file an
+issue. But an agent alone files many small issues. It opens a new issue where a
+note on an issue that exists is enough, and it divides one piece of work into
+six issues.
 
-**working-vantik-issues** is a short guide that corrects this behaviour. It says
-to file fewer and larger issues. It says to group the issues of one objective
-under a project. It says to add a note to an issue that exists, and not to open
-a near-duplicate. It also says to write the definition of "done" before you file
-the issue.
+Vantik has two short guides that correct this. Each guide is an
+[agent skill](https://agentskills.io):
 
-**Settings → Agents** gives you this guide in the form that your tool reads.
-Select the tab for your harness, and take the download and the install command
-next to it. The server serves the files at `/v1/agent-skill/:file`:
+- **working-vantik-issues** says to file fewer and larger issues. It says to
+  group the issues of one objective under a project. It says to add a note to an
+  issue that exists, and not to open a near-duplicate. It also says to write the
+  definition of "done" before you file the issue.
+- **working-vantik-knowledge** says to load the context of the knowledge bank
+  before the work starts, and to record one fact at a time.
 
-| Tool | File | Where it goes |
-| --- | --- | --- |
-| Claude Code | `SKILL.md` | `.claude/skills/working-vantik-issues/SKILL.md` |
-| Claude Code | `CLAUDE.md` | `CLAUDE.md`, to hold it in the context always |
-| Cursor | `working-vantik-issues.mdc` | `.cursor/rules/` |
-| Codex, and any other tool | `AGENTS.md` | the root of your project |
+The issues guide sits above the `create_task` tool, and that tool already
+refuses an issue with no description or no acceptance criteria. The tool sets
+the minimum. The guide gives the judgement about what to file.
 
-The server makes two of these files from the same source text, so there is one
-source of truth and not four copies that become different. The originals are in
+Each Vantik server publishes its guides at `/.well-known/agent-skills/`, in the
+format of the Agent Skills discovery index. Install them with the
+[skills CLI](https://github.com/vercel-labs/skills). Use your own host:
+
+```bash
+DISABLE_TELEMETRY=1 npx skills add https://your-vantik-host
+```
+
+The command asks which guides to install, for which agents, and whether to
+install them for this project or for all your projects. It knows where each
+agent keeps its skills: Claude Code, Codex, Cursor, and many more. To name the
+agent, add `--agent claude-code`, `--agent codex`, or `--agent cursor`. Each tab
+in **Settings → Agents** shows the command with its agent.
+
+After you upgrade Vantik, run `npx skills update`. The guides name the tools of
+your server, so the copy from your server is the copy that matches it.
+
+`DISABLE_TELEMETRY=1` stops the skills CLI from sending a report of the install.
+For a source that is not a public GitHub repository, that report holds the name
+of your host.
+
+### Always in the context
+
+A skill loads on demand. Sometimes an agent still works quietly, and reports only
+at the end, because no part of the task looked like issue work until the task
+was complete. For that agent, add the issues guide to a file that the agent
+always reads:
+
+```bash
+# Claude Code
+curl -fsSL https://your-vantik-host/api/v1/agent-skill/CLAUDE.md >> CLAUDE.md
+
+# Codex, Cursor, and any other tool
+curl -fsSL https://your-vantik-host/api/v1/agent-skill/AGENTS.md >> AGENTS.md
+```
+
+The server makes both files from one source text, so there is one source of
+truth and not copies that become different. The originals are in
 `apps/docs/skills/working-vantik-issues/`.
-
-This guide sits above the `create_task` tool, and that tool already refuses an
-issue with no description or no acceptance criteria. The tool sets the minimum.
-The guide gives the judgement about what to file.

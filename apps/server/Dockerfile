@@ -72,8 +72,8 @@ COPY --from=builder --chown=node:node /app/apps/server/prisma ./apps/server/pris
 COPY --from=builder --chown=node:node /app/apps/server/templates ./apps/server/templates
 COPY --from=builder --chown=node:node /app/apps/server/scripts ./apps/server/scripts
 
-# The agent guides, served over /v1/agent-skill so the Agents screen can offer
-# them as downloads instead of paths to go find in a checkout. Straight from the
+# The agent guides, published at /.well-known/agent-skills for `npx skills add`
+# and over /v1/agent-skill for the always-in-context forms. Straight from the
 # build context: they are authored in the docs app, which the server build does
 # not otherwise pull in. Copied as a directory so a guide added later needs no
 # change here.

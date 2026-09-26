@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   IntegrationEventPayload,
   IntegrationPayloadEventType,
@@ -32,10 +31,9 @@ export class OAuthCallbackService {
   constructor(
     private integrationDefinitionService: IntegrationDefinitionService,
     private prisma: PrismaService,
-    private configService: ConfigService,
     private integrations: IntegrationsService,
   ) {
-    this.CALLBACK_URL = this.configService.get<string>('OAUTH_CALLBACK_URL');
+    this.CALLBACK_URL = process.env.OAUTH_CALLBACK_URL;
   }
 
   async getRedirectURL(

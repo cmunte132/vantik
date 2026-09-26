@@ -242,6 +242,7 @@ export default class IssuesService {
                 projectId,
                 projectMilestoneId,
                 capabilityId,
+                cycleId,
                 ...otherData
               } = issueData;
               const issueInput = await getCreateIssueInput(
@@ -265,6 +266,10 @@ export default class IssuesService {
                   ...(capabilityId
                     ? { capability: { connect: { id: capabilityId } } }
                     : {}),
+                  // Likewise. Passed through as a bare id, it made Prisma
+                  // refuse the whole create, so adding issues from a cycle's
+                  // overview failed every time.
+                  ...(cycleId ? { cycle: { connect: { id: cycleId } } } : {}),
                 },
                 workspace.id,
                 userId,

@@ -23,6 +23,8 @@ const OWN_WORKFLOW = 'workflow-own';
 const FOREIGN_WORKFLOW = 'workflow-foreign';
 const OWN_MILESTONE = 'milestone-own';
 const FOREIGN_MILESTONE = 'milestone-foreign';
+const OWN_CYCLE = 'cycle-own';
+const FOREIGN_CYCLE = 'cycle-foreign';
 
 // A team is a visibility boundary inside the workspace (ENG-79). These three
 // sit in OWN_WORKSPACE and pass every workspace check; the team check is the
@@ -31,6 +33,7 @@ const OTHER_TEAM = 'team-other';
 const OTHER_TEAM_ISSUE = 'issue-other-team';
 const OTHER_TEAM_COMMENT = 'comment-other-team';
 const OTHER_TEAM_WORKFLOW = 'workflow-other-team';
+const OTHER_TEAM_CYCLE = 'cycle-other-team';
 
 /**
  * Rows are keyed by id; the fixtures place the "own" ones in OWN_WORKSPACE and
@@ -49,10 +52,12 @@ function buildPrisma(callerTeamIds: string[] = [OWN_TEAM]) {
       OWN_LABEL,
       OWN_WORKFLOW,
       OWN_MILESTONE,
+      OWN_CYCLE,
       OTHER_TEAM,
       OTHER_TEAM_ISSUE,
       OTHER_TEAM_COMMENT,
       OTHER_TEAM_WORKFLOW,
+      OTHER_TEAM_CYCLE,
     ].includes(id);
 
   const finder =
@@ -68,6 +73,8 @@ function buildPrisma(callerTeamIds: string[] = [OWN_TEAM]) {
     [OTHER_TEAM_COMMENT]: OTHER_TEAM,
     [OWN_WORKFLOW]: OWN_TEAM,
     [OTHER_TEAM_WORKFLOW]: OTHER_TEAM,
+    [OWN_CYCLE]: OWN_TEAM,
+    [OTHER_TEAM_CYCLE]: OTHER_TEAM,
   };
 
   // Stands in for `teamId: { in: [...] }`, and for the same clause reached
@@ -104,7 +111,10 @@ function buildPrisma(callerTeamIds: string[] = [OWN_TEAM]) {
       findMany: jest.fn(visibleFinder()),
     },
     checklistItem: { findMany: jest.fn(visibleFinder()) },
-    cycle: { findMany: jest.fn(visibleFinder()) },
+    cycle: {
+      findFirst: jest.fn(finder()),
+      findMany: jest.fn(visibleFinder()),
+    },
     label: { findFirst: jest.fn(finder()) },
     workflow: {
       findFirst: jest.fn(finder()),
@@ -590,6 +600,84 @@ describe('WorkspaceResourceGuard team boundary', () => {
       await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+  /**
+   * An issue names its cycle in the body, on create and on update. The guard
+   * read cycle ids from the path alone, so an update could connect an issue
+   * to a cycle in any workspace.
+   */
+  describe('a cycle named in an issue body', () => {
+    let guard: WorkspaceResourceGuard;
+
+    beforeEach(() => {
+      guard = new WorkspaceResourceGuard(buildPrisma([OWN_TEAM]));
+    });
+
+    it('allows creating an issue in the caller-s own cycle', async () => {
+      const ctx = buildContext({
+        body: { teamId: OWN_TEAM, cycleId: OWN_CYCLE },
+      });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+
+    it('rejects creating an issue in a foreign cycle', async () => {
+      const ctx = buildContext({
+        body: { teamId: OWN_TEAM, cycleId: FOREIGN_CYCLE },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects moving an issue into a foreign cycle', async () => {
+      const ctx = buildContext({
+        params: { issueId: OWN_ISSUE },
+        query: { teamId: OWN_TEAM },
+        body: { cycleId: FOREIGN_CYCLE },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects a cycle of a team the caller is not in', async () => {
+      const ctx = buildContext({
+        params: { issueId: OWN_ISSUE },
+        query: { teamId: OWN_TEAM },
+        body: { cycleId: OTHER_TEAM_CYCLE },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('rejects a foreign cycle on a sub-issue', async () => {
+      const ctx = buildContext({
+        body: {
+          teamId: OWN_TEAM,
+          subIssues: [{ teamId: OWN_TEAM, cycleId: FOREIGN_CYCLE }],
+        },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('lets an update take an issue out of its cycle', async () => {
+      // `cycleId: null` disconnects, and there is no cycle to check.
+      const ctx = buildContext({
+        params: { issueId: OWN_ISSUE },
+        query: { teamId: OWN_TEAM },
+        body: { cycleId: null },
+      });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
     });
   });
 });

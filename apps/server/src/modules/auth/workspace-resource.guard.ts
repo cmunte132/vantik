@@ -130,9 +130,13 @@ export class WorkspaceResourceGuard implements CanActivate {
 
     // Same shape as the checklist items below: start, complete and delete name
     // the cycle by id and nothing else, and completing one moves other people's
-    // issues around.
-    if (cycleId) {
-      await assertCycleInWorkspace(this.prisma, cycleId, workspaceId);
+    // issues around. An issue body names one too, on create and on update, and
+    // the update connected it unchecked: an issue could be put into a cycle in
+    // another workspace.
+    const cycleIds = unique([cycleId, ...bodies.map((body) => body?.cycleId)]);
+
+    for (const id of cycleIds) {
+      await assertCycleInWorkspace(this.prisma, id, workspaceId);
     }
 
     // Checklist item updates and deletes address the row by id alone, with no
@@ -299,7 +303,7 @@ export class WorkspaceResourceGuard implements CanActivate {
       checklistItemId ? [checklistItemId] : [],
       teamIds,
     );
-    await assertCyclesVisible(this.prisma, cycleId ? [cycleId] : [], teamIds);
+    await assertCyclesVisible(this.prisma, cycleIds, teamIds);
     await assertWorkflowsVisible(
       this.prisma,
       workflowId ? [workflowId] : [],
@@ -317,6 +321,7 @@ interface IdBearingBody {
   ownerTeamId?: string;
   ownerProductId?: string;
   capabilityId?: string;
+  cycleId?: string;
   integrationAccountId?: string;
   groupId?: string;
   moduleIds?: unknown;

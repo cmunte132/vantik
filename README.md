@@ -106,6 +106,7 @@ To see if a job runs, read `docker compose logs server`.
 | --- | --- | --- | --- |
 | Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
 | Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives each knowledge entry that no person triaged and that the server never served. |
+| Git issue mirror | every minute | `GIT_ISSUES_CRON` | This job applies to a local repository that mirrors issues for agents. It applies what agents handed in under `refs/vantik/inbox/*`, and then it rewrites `refs/vantik/issues`. A pass that finds nothing new writes nothing. |
 
 To stop a job, set its variable to `off`.
 

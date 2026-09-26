@@ -10,6 +10,7 @@ import {
   getLocalRepositories,
   getLocalRepositoryFolders,
   removeLocalRepository,
+  setLocalRepositoryGitIssues,
 } from '@vantikhq/services';
 
 import { type XHRErrorResponse } from 'services/utils';
@@ -74,6 +75,18 @@ export function useRemoveLocalRepositoryMutation({
 }: MutationParams<LocalRepository> = {}) {
   return useMutation({
     mutationFn: removeLocalRepository,
+    onSuccess: (data) => onSuccess && onSuccess(data),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onError: (error: any) => onError && onError(error),
+  });
+}
+
+export function useSetLocalRepositoryGitIssuesMutation({
+  onSuccess,
+  onError,
+}: MutationParams<LocalRepository> = {}) {
+  return useMutation({
+    mutationFn: setLocalRepositoryGitIssues,
     onSuccess: (data) => onSuccess && onSuccess(data),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (error: any) => onError && onError(error),

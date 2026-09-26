@@ -1,11 +1,13 @@
 ---
 name: working-vantik-issues
 description: >-
-  How to work the Vantik issue tracker as an agent over MCP: pick up the issue
-  before you touch code, keep it current while you work, tick the Definition of
-  Done as you meet it, name the capability the work delivers, and keep issues
-  few and meaty. Use before starting any substantial piece of work, throughout
-  that work, and whenever creating, updating or closing Vantik issues.
+  How to work the Vantik issue tracker as an agent over MCP, or through
+  refs/vantik/issues in the repository when Vantik is out of reach: pick up the
+  issue before you touch code, keep it current while you work, tick the
+  Definition of Done as you meet it, name the capability the work delivers,
+  and keep issues few and meaty. Use before starting any substantial piece of
+  work, throughout that work, and whenever creating, updating or closing
+  Vantik issues.
 ---
 
 # Working Vantik issues
@@ -83,6 +85,52 @@ only view they have of their agents.
 3. **If it is not actually done**, do not close it. `update_task` to the review
    or blocked state, and `add_note` with what remains. A closed issue that is
    not finished is worse than an open one.
+
+## When you cannot reach Vantik
+
+Some sandboxes have the repository and nothing else: no network to Vantik, no
+MCP, no token. If an admin turned on the issue mirror for the repository, the
+same loop works through git. Look for it:
+
+```bash
+git show refs/vantik/issues:README.md
+# In a clone, fetch it first:
+git fetch origin '+refs/vantik/issues:refs/vantik/issues'
+```
+
+That README is the reference. The short form:
+
+| Over MCP | Through git |
+| --- | --- |
+| `list_tasks`, `search_tasks` | `git show refs/vantik/issues:index.md`, `git grep -i <words> refs/vantik/issues` |
+| `get_task` | `git show refs/vantik/issues:issues/ENG-42/issue.md`, and its `checklist.md` and `comments/` |
+| `update_task`, and the state half of `pick_up_task` | edit `state:`, `priority:`, `labels:`, the title or the description in `issue.md` |
+| `add_note` | a new file under `issues/ENG-42/comments/` |
+| `create_task` | a new file under `new/` |
+
+Commit on top of the snapshot, and hand the commit in under a name nobody else
+will use:
+
+```bash
+git worktree add --detach /tmp/vantik-issues refs/vantik/issues
+# edit files in /tmp/vantik-issues, then:
+git -C /tmp/vantik-issues add -A   # new comments and issues are new files
+git -C /tmp/vantik-issues commit -m "ENG-42: in progress"
+git -C /tmp/vantik-issues update-ref refs/vantik/inbox/<session>-1 HEAD
+# or, from a clone: git -C /tmp/vantik-issues push origin HEAD:refs/vantik/inbox/<session>-1
+```
+
+Vantik applies it within a minute. It answers in the next snapshot's commit
+message: `git log refs/vantik/issues -1 --grep='^Vantik-Inbox: <session>-1$'`,
+after a `git fetch` in a clone. **Read the refusals.** A field that somebody
+changed after your snapshot is refused rather than overwritten. Start again
+from the current snapshot.
+
+Git cannot assign an issue, tick the Definition of Done, or close with a
+resolution. So set the state and say in a comment that you are on it. When you
+finish, move it to a completed state and put the resolution in a comment. The
+obligations above hold unchanged: the write is a commit instead of a tool call,
+and "never end a session with the issue out of date" still applies.
 
 ## Put the work on the map
 

@@ -93,3 +93,13 @@ a service), and a **capability** is what the software does for its users.
 - **Ask what will collide with you** before you start —
   `list_tasks(modules: ["server"], stateCategory: ["STARTED"])`, or
   `list_tasks(capability: "…")`. That is the question this axis exists to answer.
+
+**Without MCP.** If you cannot reach Vantik but the repository carries
+`refs/vantik/issues` (`git show refs/vantik/issues:README.md`; in a clone,
+first `git fetch origin '+refs/vantik/issues:refs/vantik/issues'`), keep the
+same loop through git, as that README describes. Read issues from the ref.
+Commit your edits on top of it in a detached worktree, and hand the commit in
+under a fresh name: `git update-ref refs/vantik/inbox/<name> HEAD`, or
+`git push origin HEAD:refs/vantik/inbox/<name>` from a clone. Vantik answers in
+the next snapshot's commit message, under `Vantik-Inbox: <name>`. Read its
+refusals.

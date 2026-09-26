@@ -36,6 +36,25 @@ export async function removeLocalRepository({
 }
 
 /**
+ * The teams whose issues one repository mirrors for agents, under
+ * `refs/vantik/issues`. An empty list turns the mirror off.
+ */
+export async function setLocalRepositoryGitIssues({
+  repositoryId,
+  teamIds,
+}: {
+  repositoryId: string;
+  teamIds: string[];
+}): Promise<LocalRepository> {
+  const response = await axios.post(
+    `/api/v1/local_repo/${repositoryId}/git_issues`,
+    { teamIds },
+  );
+
+  return response.data;
+}
+
+/**
  * The folders inside one repository that a module can claim.
  *
  * This answer describes the repository, and the repository belongs to the

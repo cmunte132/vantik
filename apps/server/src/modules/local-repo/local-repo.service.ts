@@ -9,6 +9,7 @@ import {
   LocalRepository,
   removeRepository,
   resolveRepositoryPath,
+  setRepositoryGitIssues,
 } from 'integrations/local-repo/repositories';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -88,6 +89,33 @@ export class LocalRepoService {
       workspaceId: target,
       userId,
       repositoryId,
+    });
+  }
+
+  /**
+   * This method sets the teams whose issues are mirrored into one repository
+   * for agents, and an empty list turns the mirror off.
+   *
+   * An admin decision for the same reason as adding the path: every person and
+   * agent that can read the repository can read what is mirrored into it.
+   */
+  async setGitIssues(
+    workspaceId: string,
+    userId: string,
+    repositoryId: string,
+    teamIds: string[],
+  ): Promise<LocalRepository> {
+    const target = await resolveAdminWorkspaceId(
+      this.prisma,
+      userId,
+      workspaceId,
+    );
+
+    return await setRepositoryGitIssues(this.ctx(target, userId), {
+      workspaceId: target,
+      userId,
+      repositoryId,
+      teamIds,
     });
   }
 

@@ -31,6 +31,7 @@ const sidebars: SidebarsConfig = {
         'integrations/overview',
         'integrations/github',
         'integrations/email',
+        'integrations/local-repository',
         'integrations/bug-enricher',
       ],
     },

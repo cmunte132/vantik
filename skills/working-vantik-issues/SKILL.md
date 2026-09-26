@@ -31,7 +31,9 @@ doing.
 
 1. **Find the issue.** `search_tasks` (include `COMPLETED` — it may already be
    fixed). If substantial work has no issue, file one *first*, using the rules
-   below. Work that exists only in a chat window is invisible work.
+   below. Work that exists only in a chat window is invisible work. Once you
+   have it, `find_similar_tasks` gives the earlier issues like it and how each
+   was resolved — the fix may already exist.
 2. **`get_task`.** Read the **Definition of Done**. That is the standard the
    work is judged against — read it, never infer one from the description. It
    also carries the notes, history, sub-tasks, blockers, and the modules and
@@ -84,6 +86,9 @@ only view they have of their agents.
    or blocked state, and `add_note` with what remains. A closed issue that is
    not finished is worse than an open one.
 
+Handing the issue to Vantik's own agent instead of working it yourself is its
+own decision, with its own bar — see the `delegating-vantik-work` skill.
+
 ## Put the work on the map
 
 A project says which objective an issue serves. A second axis says what the
@@ -97,7 +102,8 @@ software is made of, and an issue sits on both.
 
 **Read the map before you file.** `list_modules` gives every module with the
 repositories it sits in — match it against the checkout you are in and you know
-what your work touches. `list_capabilities` tells you whether what you are about
+what your work touches. `list_products` names what the workspace ships and the
+modules each one owns. `list_capabilities` tells you whether what you are about
 to describe already has a name.
 
 **Name the capability.** An issue delivers one capability, or none. Name the one
@@ -170,6 +176,11 @@ pass `project` on both. `list_projects` before filing and reuse what exists.
 Projects are few, long-lived and meaningful — one per real objective, never one
 per work session, never one holding a single issue. Issues that turn out after
 the fact to serve one objective can be gathered with `update_task` and `project`.
+
+When the objective turns out different from what the project says — the scope
+moved, the dates slipped, it is done — correct the project with
+`update_project`. Never open a second project beside one whose description has
+stopped matching its issues.
 
 ## What a good issue contains
 

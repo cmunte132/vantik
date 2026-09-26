@@ -42,6 +42,11 @@ harnesses: a fact another tool wrote is a fact you get.
 When you have an actual question, use `recall_knowledge` instead. Ask it before
 investigating something from scratch — the answer may already be in the bank.
 
+Handed an issue or a project, call `pages_for` with it first. At that point you
+have an id and no vocabulary — you cannot search for a page called "Deploying
+the worker pool" before you know it exists — and this is a direct lookup of the
+pages attached to that work, not a guess.
+
 ## What is worth remembering
 
 Something a future session would otherwise have to work out again.
@@ -85,13 +90,24 @@ remember(page: "Architecture", content: "…", scope: "apps/server")
 
 ## Prefer appending to an existing page
 
-Check `list_pages` before you write anything down. Pages are **few, broad and
-long-lived**; the facts under them are many. A bank of forty thin pages is one
-nobody can navigate, and navigability is the whole product.
+Check `list_pages` before you write anything down, and `read_page` the page you
+mean to add to: what you are about to assert may already be in its body, in
+which case there is nothing to add. Pages are **few, broad and long-lived**; the
+facts under them are many. A bank of forty thin pages is one nobody can
+navigate, and navigability is the whole product.
 
 Reach for `write_page` only when there is genuinely no page the knowledge
 belongs under. A page needs a real body — a title with nothing underneath it is
 a stub that makes the tree worse rather than better.
+
+## Link pages to the work they govern
+
+When a page durably governs a team, a project or an issue — this runbook covers
+this project, this page explains this team's conventions — attach it with
+`link_page`, so the next agent handed that work gets the page through
+`pages_for` without having to find it. Do not link a page to every issue that
+happened to touch it: a page attached to forty issues tells the next reader
+nothing about which of them it matters to.
 
 ## Contradictions: supersede, never stack
 

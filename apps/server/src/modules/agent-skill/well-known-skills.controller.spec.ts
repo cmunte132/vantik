@@ -10,7 +10,7 @@ import {
 describe('WellKnownSkillsController', () => {
   const controller = new WellKnownSkillsController();
 
-  it('publishes both guides under the 0.2.0 discovery schema', () => {
+  it('publishes every guide under the 0.2.0 discovery schema', () => {
     const index = controller.index();
 
     // A client that does not recognise the schema must not read the index at
@@ -21,6 +21,7 @@ describe('WellKnownSkillsController', () => {
     expect(index.skills.map((entry) => entry.name)).toEqual([
       'working-vantik-issues',
       'working-vantik-knowledge',
+      'delegating-vantik-work',
     ]);
   });
 

@@ -14,7 +14,8 @@ token from **Vantik → Settings → Agents** (it acts as its own identity, so y
 edits are attributed to the agent, not to a person). Tools: `search_tasks`,
 `get_task`, `find_similar_tasks`, `list_tasks`, `create_task`, `update_task`,
 `update_criteria`, `pick_up_task`, `add_note`, `close_task`, `list_projects`,
-`create_project`, `list_products`, `list_modules`, `list_capabilities`.
+`create_project`, `update_project`, `list_products`, `list_modules`,
+`list_capabilities`.
 
 Two obligations. **Restraint on filing, generosity on progress** — "few and
 meaty" governs how many issues exist, and says nothing about notes and criteria,
@@ -57,7 +58,8 @@ over *many and thin*.
   first, reuse what exists, and pass `project` on both. Projects are few,
   long-lived and meaningful: never one per work session, never one for a single
   issue. Issues that turn out to belong together can be gathered later with
-  `update_task` and `project`.
+  `update_task` and `project`. A project whose description no longer matches
+  its issues is corrected with `update_project`, never replaced by a second.
 
 **Before filing, stop at the first match:**
 
@@ -70,6 +72,9 @@ over *many and thin*.
 
 Always `search_tasks` first, including `COMPLETED` — it may already be fixed,
 and you should reference or reopen that instead of duplicating it.
+`find_similar_tasks` gives the earlier issues like one and how each was
+resolved. Handing an issue to Vantik's own agent (`delegate_task`) has its own
+bar: a Definition of Done a stranger could check, and `list_agent_runs` first.
 
 **A good issue has** a one-line title, a description of the problem and *where it
 lives*, and acceptance criteria — concrete checks for "done", which become the

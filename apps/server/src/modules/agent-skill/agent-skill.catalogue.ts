@@ -85,6 +85,12 @@ export const SKILLS: Record<string, ServedSkill> = {
     ruleDescription: 'How to use the Vantik knowledge bank over MCP',
     files: servedFiles('working-vantik-knowledge'),
   },
+  'delegating-vantik-work': {
+    description:
+      'How to hand an issue to Vantik’s own agent: when it is ready, what the review loop delivers, how to read a run.',
+    ruleDescription: 'How to delegate Vantik issues to its hosted agent',
+    files: servedFiles('delegating-vantik-work'),
+  },
 };
 
 /** The guide the unprefixed routes answer for, kept as it was before. */

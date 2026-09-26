@@ -5,8 +5,9 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 0 done (review passed). Next session: phase 1.
-- Last verify: `KNOWLEDGE-GARDENER VERIFY: PASS phase 0 spec-hash 069a84bf6612`
+- Current phase: 1 (implementation done; independent review in progress)
+- Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phases 0-1 spec-hash 069a84bf6612`
+  (KG-1.1 to KG-1.6 pass; KG-1.R waits on the review)
 
 ## Decisions
 
@@ -78,6 +79,79 @@ next session starts by reading it.
   the new agent rule refused them; they now build a person. The decay test's
   `retrievalCount: 0` assertion encoded the rule KG-0.6 replaces; the new
   tagged decay tests check the replacement against sample rows.
+
+### Phase 1
+
+- **Scope resolution (KG-1.2)** lives in `modules/module-routing.ts` beside
+  the pull-request routing and reuses its prefix normalisation and
+  `pathBelongsToModule`:
+  - `scopePath` reads the folder a scope names: `./` and slashes trimmed,
+    everything from the first glob segment dropped; a bare pattern names
+    nothing.
+  - A scope matches a module whose folder it is in or is, and a module whose
+    folder is below it. A fact about `apps` reaches every module under `apps`.
+  - A whole-repository module (no prefixes) matches only when that is
+    unambiguous: the scope starts with the repository's full name, or the
+    workspace has one repository. Otherwise a path in a workspace with two
+    small repositories would land in both.
+- **When entry modules are recomputed:** on create, on a scope change, for a
+  whole workspace whenever `ModulesService` changes a module's repositories or
+  deletes a module (a `recomputeEntryModules` job on the `pages` queue, which
+  `ModulesModule` now registers), and once at boot for every workspace
+  (`EntryModulesScheduler`, kept apart from the decay scheduler so its tests
+  stand). The boot pass also fills in entries written before this phase.
+- **Typesense:** four new faceted fields: `scopePath`, `scopeAncestors`,
+  `moduleIds`, and `entryKind` (not `kind`, which already means page or
+  entry). They are in `requiredPageFields`, so an existing collection is
+  dropped and rebuilt from Postgres on the next boot, by the path that
+  already existed.
+- **Prefix matching (KG-1.3):** a scoped search matches knowledge whose scope
+  path is the query folder or above it, whose ancestors include the query
+  folder (below it), or that is unscoped. With a scope, the `_eval` tier
+  comes before text match, so every scoped match outranks unscoped knowledge,
+  as the criterion requires. Without a scope or seeds, the ranking is exactly
+  what it was.
+- **Ranking tiers:** Typesense allows three sort fields and scores `_eval` by
+  the best tier a document matches, not a sum (typesense#2014). Each tier is
+  therefore a conjunction of positive conditions (scoped, seed or neighbour
+  module, verified), scored by how much it matches and listed best first.
+  With seeds and a real question, text match is bucketed (`buckets: 10`)
+  first, so a boost reorders near-equal answers without burying a far better
+  one.
+- **Seeds (KG-1.5):**
+  - The strong seeds are the named modules and the issue's modules.
+  - The neighbours are the modules of any capability that lists a seed (or is
+    the issue's capability), and the modules owned by or linked to a seed's
+    product.
+  - Every id is checked against the workspace.
+  - Page bodies are not boosted, because page documents carry no modules.
+    Indexing the modules a page is linked to would do it, and is left for a
+    later phase.
+- **Kind (KG-1.4):** a column defaulting to FACT, so nothing is written for
+  the default. Agents may change the kind of their own untriaged entries.
+  `recall_knowledge` takes `kinds`; the CLI has `--kind` on `append` and
+  `search`, plus `--module` and `--issue` on `search` and `context`. The CLI
+  package has no working test setup (plain `jest` with no TypeScript
+  transform), so its flags are covered through agent-core, which they pass
+  straight to.
+- **Webapp (KG-1.6):**
+  - A product's screen shows the knowledge of the modules it owns, not those
+    merely linked to it; a design system linked to three products would
+    otherwise fill all three.
+  - Entries come from `GET /page_entries?moduleIds=…`, because the synced
+    store loads entries a page at a time.
+  - The page view's Related section can link to products, modules and
+    capabilities and routes to them, through one `linkRoute` function.
+  - The synced store keeps `kind` and `moduleIds`, as the sync contract
+    requires.
+- **Test method:** `vector/knowledge-search.spec.ts` builds documents and
+  requests with the real service and applies them with a small evaluator of
+  the filter subset the service writes. That lets it assert which entries
+  come back, and in what order, without a running Typesense. Each behaviour
+  was mutation-checked: the test fails when the behaviour is broken.
+- **Formatting:** running Prettier on files this phase changed also
+  normalised a few pre-existing lines in them (`page-links.service.ts`,
+  `agent.spec.ts`).
 
 ## Phase reviews
 
@@ -222,3 +296,6 @@ Give the evidence, and stop until the maintainer answers.
   writes to the transaction. Verify through phase 0: 6/7, all suites green.
 - 2026-09-26: Review round 4: no unresolved findings; two wording notes fixed.
   Phase 0 done.
+- 2026-09-26: PR #43 opened for the plan and phase 0. Phase 1 implemented
+  (KG-1.1 to KG-1.6) with tagged tests. Verify through phase 1: 13/14, all
+  suites and typecheck green.

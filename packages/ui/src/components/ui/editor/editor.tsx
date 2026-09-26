@@ -155,6 +155,11 @@ export const Editor = ({
         );
     },
     500,
+    // An edit still waiting when the editor goes, or when the tab is hidden,
+    // is reported rather than dropped. The report reaches an owner that is
+    // still mounted, as when the editor alone is replaced, keyed to another
+    // issue or page; an owner that goes with it has to flush its own save.
+    { flushOnExit: true },
   );
 
   // The editor's own handlers are bound once, when it is made, so they read

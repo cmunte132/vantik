@@ -6,6 +6,7 @@ import {
 } from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { UserId } from 'modules/auth/session.decorator';
 
 import NotificationsService from './notifications.service';
 
@@ -21,10 +22,12 @@ export class NotificationsController {
   async updateNotification(
     @Param()
     notificationRequestParams: NotificationIdRequestParams,
+    @UserId() userId: string,
     @Body() notificationData: updateNotificationBody,
   ): Promise<Notification> {
     return await this.notificationsService.updateNotification(
       notificationRequestParams.notificationId,
+      userId,
       notificationData,
     );
   }

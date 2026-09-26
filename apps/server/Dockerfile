@@ -58,7 +58,9 @@ RUN --mount=type=cache,id=turbo,target=/app/.turbo,sharing=locked \
 # Runner. No pnpm: the entrypoint calls prisma and node directly, which drops a
 # 33MB layer from the runtime image.
 FROM node:24-alpine AS runner
-RUN apk add --no-cache openssl dumb-init bash
+# git: the sandbox's git proxy clones and pushes with it, and the issue mirror
+# writes refs/vantik/issues into local repositories with it.
+RUN apk add --no-cache openssl dumb-init bash git
 WORKDIR /app
 ENV NODE_ENV production
 

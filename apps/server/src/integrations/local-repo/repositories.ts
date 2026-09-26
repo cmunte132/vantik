@@ -28,6 +28,14 @@ export interface LocalRepository {
   path: string;
 
   addedAt: string;
+
+  /**
+   * The teams whose issues Vantik mirrors into this repository under
+   * `refs/vantik/issues`, for agents that can reach the repository and not
+   * Vantik. Absent or empty means no mirror, which is the default: anyone who
+   * can read the repository can read what is mirrored into it.
+   */
+  gitIssues?: { teamIds: string[] };
 }
 
 interface AccountSettings {
@@ -129,6 +137,89 @@ export async function removeRepository(
   });
 
   return repository;
+}
+
+/**
+ * This function sets the teams that one repository mirrors, or turns the mirror
+ * off with an empty list.
+ *
+ * It leaves `refs/vantik/issues` where it is when the mirror is turned off. The
+ * ref is data in somebody's repository, and deleting it is theirs to do.
+ */
+export async function setRepositoryGitIssues(
+  ctx: PluginContext,
+  parameters: {
+    workspaceId: string;
+    userId: string;
+    repositoryId: string;
+    teamIds: string[];
+  },
+): Promise<LocalRepository> {
+  const definition = await requireDefinition(ctx);
+  const account = await findAccount(ctx, parameters.workspaceId);
+  const repositories = readRepositories(account?.settings);
+  const repository = repositories.find(
+    (candidate) => candidate.id === parameters.repositoryId,
+  );
+
+  if (!repository) {
+    throw new BadRequestException(
+      'This workspace has no local repository with that id.',
+    );
+  }
+
+  const workspaceTeams = new Map(
+    (
+      (await ctx.workspace.teams()) as Array<{
+        id: string;
+        identifier: string;
+        deleted: Date | null;
+      }>
+    )
+      .filter((team) => !team.deleted)
+      .map((team) => [team.id, team.identifier]),
+  );
+  const unknown = parameters.teamIds.filter((id) => !workspaceTeams.has(id));
+
+  if (unknown.length > 0) {
+    throw new BadRequestException(
+      `This workspace has no team with the id ${unknown.join(', ')}.`,
+    );
+  }
+
+  const teamIds = [...new Set(parameters.teamIds)];
+
+  // An issue's file is named by its key, the identifier and the number, so
+  // two teams with one identifier would write over each other's issues.
+  const identifiers = teamIds.map((id) => workspaceTeams.get(id));
+  const repeated = identifiers.find(
+    (identifier, index) => identifiers.indexOf(identifier) !== index,
+  );
+
+  if (repeated) {
+    throw new BadRequestException(
+      `Two of these teams use the identifier ${repeated}, and one repository can mirror only one of them.`,
+    );
+  }
+
+  const updated: LocalRepository = { ...repository };
+
+  if (teamIds.length > 0) {
+    updated.gitIssues = { teamIds };
+  } else {
+    delete updated.gitIssues;
+  }
+
+  await writeRepositories(ctx, {
+    workspaceId: parameters.workspaceId,
+    userId: parameters.userId,
+    definitionId: definition.id,
+    repositories: repositories.map((candidate) =>
+      candidate.id === repository.id ? updated : candidate,
+    ),
+  });
+
+  return updated;
 }
 
 /**
@@ -270,7 +361,7 @@ async function findAccount(ctx: PluginContext, workspaceId: string) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function readRepositories(settings: any): LocalRepository[] {
+export function readRepositories(settings: any): LocalRepository[] {
   const parsed: AccountSettings =
     typeof settings === 'string' ? JSON.parse(settings) : (settings ?? {});
 

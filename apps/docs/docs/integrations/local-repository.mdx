@@ -1,0 +1,97 @@
+---
+title: 'Local repository'
+sidebar_label: "Local repository"
+---
+
+## Overview
+
+A local repository is a git repository on the disk of the machine that runs the
+Vantik server. You register its path, and a module can then point at it, so an
+agent run knows which checkout holds the code.
+
+A local repository can also carry its teams' issues, for agents that can reach
+the repository but not Vantik: a sandbox with no network, a harness with no
+MCP, a session nobody gave a token. That is the **issue mirror**.
+
+## How to add a repository
+
+1. Open **Settings → Integrations → Local repository**.
+2. Give the absolute path of the checkout, for example `/home/you/code/app`.
+
+The server takes only paths inside `LOCAL_REPO_ROOT`, which is the home
+directory of the account that runs it unless you set the variable. In Docker,
+that means the repository has to be mounted into the server container, at a
+path under `LOCAL_REPO_ROOT`.
+
+## The issue mirror
+
+Turn it on per repository: under each repository in **Settings →
+Integrations → Local repository**, tick the teams whose issues it carries.
+Untick them all to turn it off. Only an admin can change it. The route behind
+the boxes is `POST /api/v1/local_repo/<repository id>/git_issues` with
+`{"teamIds": [...]}`.
+
+**Anyone who can read the repository can read the mirrored issues**, and anyone
+who can write to it can propose changes. Choose the teams with that in mind.
+
+### What Vantik writes
+
+Once a minute (`GIT_ISSUES_CRON`), Vantik writes one ref into the repository,
+`refs/vantik/issues`. It is a commit whose files are the issues:
+
+| File | What it is |
+| --- | --- |
+| `README.md` | How an agent reads and proposes, with the valid states and labels |
+| `index.md` | The open issues of each team |
+| `issues/<KEY>/issue.md` | One issue: front matter, then the description |
+| `issues/<KEY>/checklist.md` | Its definition of done |
+| `issues/<KEY>/comments/*.md` | Its comments |
+
+A pass that finds nothing new writes nothing, so the ref's history is the
+history of the issues.
+
+The ref is outside `refs/heads`, so it is not a branch. `git branch`, `git
+status` and a plain `git clone` show nothing. Vantik writes it without touching
+`HEAD`, the index or the working tree, and with the repository's hooks switched
+off. The one place it shows is `git log --all`.
+
+### What an agent does
+
+The mirror's own `README.md` is the reference. In short, an agent:
+
+1. reads with `git show refs/vantik/issues:index.md`, and
+   `git show refs/vantik/issues:issues/ENG-42/issue.md`;
+2. checks the snapshot out into a detached worktree, edits files, and commits;
+3. hands the commit in under a name of its own:
+   `git update-ref refs/vantik/inbox/<name> HEAD`, or
+   `git push origin HEAD:refs/vantik/inbox/<name>` from a clone.
+
+On its next pass, Vantik reads each inbox and applies it. Then it deletes the
+inbox and writes the outcome into the message of the next snapshot commit,
+under a `Vantik-Inbox: <name>` trailer. That message is the agent's only reply.
+
+An agent can change an issue's title, state, priority, labels and description.
+It can also add a comment, and file an issue under `new/`, which goes to the
+team's triage. Vantik refuses everything else and says why.
+
+### How Vantik applies a change
+
+Vantik never merges an agent's commit. It compares each file with the snapshot
+the agent started from, and it reads the difference field by field: "state from
+Backlog to In Progress". So two agents can change different fields of one issue
+at the same time.
+
+A change to a field that a person changed in Vantik after that snapshot is
+refused. Vantik does not overwrite the person's edit. The agent sees the refusal
+and the current value, and starts again from the newer snapshot.
+
+Vantik writes each change as the local repository's bot. It records the commit's
+author as who proposed the change, the way the GitHub and Email integrations
+record their senders. **The commit author is not checked against Vantik's
+users.** For the same reason, the assignee is read-only from git. Assigning an
+issue to an agent starts a run, and a commit should not be able to do that.
+
+### What it does not cover yet
+
+Cloud sandboxes that may push only to their own branch cannot write an inbox
+ref. Remote repositories, and a write path for those sandboxes, come next.

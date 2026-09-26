@@ -9,13 +9,12 @@ import type { IssueType, LabelType, ModuleType } from 'common/types';
 import { useComputedLabels } from 'hooks/labels';
 
 import {
+  FLAG_FILTER_KEYS,
   TimeBasedFilterEnum,
   FilterTypeEnum,
   OrderingEnum,
+  VALUE_FILTER_KEYS,
   type DisplaySettingsModelType,
-  type FilterModelBooleanType,
-  type FilterModelType,
-  type FilterModelTimeBasedType,
   type FiltersModelType,
 } from 'store/application';
 import {
@@ -24,63 +23,57 @@ import {
 } from 'store/global-context-provider';
 import { UserContext } from 'store/user-context';
 
-interface FilterNormalType extends FilterModelType {
-  key: string;
-}
+import {
+  FLAG_FILTERS,
+  VALUE_FILTERS,
+  isFlagFilter,
+  type IssuePredicate,
+} from './filters-view/filter-registry';
 
-interface FilterBooleanType extends FilterModelBooleanType {
-  key: string;
-}
+export function filterIssue(issue: IssueType, filter: IssuePredicate) {
+  const { key, value, filterType } = filter;
 
-interface FilterTimeBasedType extends FilterModelTimeBasedType {
-  key: string;
-}
-
-type FilterType = FilterNormalType | FilterBooleanType | FilterTimeBasedType;
-
-export function filterIssue(issue: IssueType, filter: FilterType) {
-  // TODO: Fix the type later
-  const { key, value, filterType } = filter as FilterNormalType;
-  const castedValue = value as string[];
-
+  // An unset field is compared as `null`, the value a "No …" choice stands for.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fieldValue = (issue as any)[key];
+  const fieldValue = (issue as any)[key] ?? null;
 
   // A filter with nothing selected is not a filter that matches nothing: it is
   // no filter at all. Reading `includes` off the missing value instead throws,
   // and the throw happens inside the list render, so the whole issues view
-  // goes down rather than one row. `getFilters` builds exactly such a filter
-  // for `source`, which has no case in `filterIssues`.
-  if (filterType !== FilterTypeEnum.UNDEFINED && !castedValue) {
+  // goes down rather than one row.
+  if (filterType !== FilterTypeEnum.UNDEFINED && !value) {
     return true;
   }
 
   switch (filterType) {
     case FilterTypeEnum.IS:
-      return castedValue.includes(fieldValue);
+      return value.includes(fieldValue);
     case FilterTypeEnum.IS_NOT:
-      return !castedValue.includes(fieldValue);
+      return !value.includes(fieldValue);
     // INCLUDES and EXCLUDES compare against array columns — labelIds and the
     // like. A row whose array is null still has to be answered for.
     case FilterTypeEnum.INCLUDES:
-      return castedValue.some((value) => (fieldValue ?? []).includes(value));
+      return value.some((candidate) => (fieldValue ?? []).includes(candidate));
     case FilterTypeEnum.EXCLUDES:
-      return !castedValue.some((value) => (fieldValue ?? []).includes(value));
+      return !value.some((candidate) => (fieldValue ?? []).includes(candidate));
     case FilterTypeEnum.UNDEFINED:
-      return fieldValue === null || fieldValue === undefined;
+      return fieldValue === null;
     default:
       return true; // No filter, return all issues
   }
 }
 
-export function filterTimeBasedIssue(issue: IssueType, filter: FilterType) {
-  // TODO: Fix the type later
-  const { key, filterType } = filter as FilterTimeBasedType;
+export function filterTimeBasedIssue(issue: IssueType, filter: IssuePredicate) {
+  const { key, filterType } = filter;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fieldValue = (issue as any)[key];
 
   // Handle time-based filters
-  if (Object.values(TimeBasedFilterEnum).includes(filterType)) {
+  if (
+    Object.values(TimeBasedFilterEnum).includes(
+      filterType as TimeBasedFilterEnum,
+    )
+  ) {
     const now = new Date().getTime();
 
     switch (filterType) {
@@ -96,31 +89,22 @@ export function filterTimeBasedIssue(issue: IssueType, filter: FilterType) {
 
 export function filterIssues(
   issues: IssueType[],
-  filters: FilterType[],
+  filters: IssuePredicate[],
   { issuesStore, issueRelationsStore }: Partial<StoreContextInstanceType>,
   isCompleted: (stateId: string) => boolean,
 ) {
   return issues.filter((issue: IssueType) => {
     return filters.every((filter) => {
+      if (isFlagFilter(filter.key)) {
+        const matches = FLAG_FILTERS[filter.key].matches(issue, {
+          issuesStore,
+          issueRelationsStore,
+        });
+
+        return filter.filterType === FilterTypeEnum.IS_NOT ? !matches : matches;
+      }
+
       switch (filter.key) {
-        case 'isParent': {
-          return issuesStore.isSubIssue(issue.id);
-        }
-
-        case 'isSubIssue': {
-          return filter.filterType === FilterTypeEnum.IS
-            ? !!issue.parentId
-            : !issue.parentId;
-        }
-
-        case 'isBlocked': {
-          return issueRelationsStore.isBlocked(issue.id);
-        }
-
-        case 'isBlocking': {
-          return issueRelationsStore.isBlocking(issue.id);
-        }
-
         case 'updatedAt': {
           return filterTimeBasedIssue(issue, filter);
         }
@@ -188,138 +172,31 @@ export function getFilters(
    */
   modules: ModuleType[] = [],
 ) {
-  const {
-    status,
-    assignee,
-    label,
-    priority,
-    project,
-    cycle,
-    product,
-    module,
-    capability,
-  } = filters;
   const { showSubIssues, completedFilter } = displaySettings;
+  const context = { workflows, labels, modules };
 
-  const finalFilters: FilterType[] = [];
+  const finalFilters: IssuePredicate[] = [];
 
-  if (status) {
-    const ids = status.value.flatMap(
-      (value: string) =>
-        workflows.find((workflow) => workflow.name === value)?.ids || [],
-    );
-
-    finalFilters.push({
-      key: 'stateId',
-      filterType: status.filterType,
-      value: ids,
-    });
-  }
-
-  if (assignee) {
-    if (assignee.value.includes('no-user')) {
-      finalFilters.push({
-        key: 'assigneeId',
-        filterType: FilterTypeEnum.UNDEFINED,
-      });
-    }
-
-    const restAssigneeValues = assignee.value.filter(
-      (a: string) => a !== 'no-user',
-    );
-
-    if (restAssigneeValues.length > 0) {
-      finalFilters.push({
-        key: 'assigneeId',
-        filterType: assignee.filterType,
-        value: restAssigneeValues,
-      });
+  for (const key of VALUE_FILTER_KEYS) {
+    if (filters[key]) {
+      finalFilters.push(
+        ...VALUE_FILTERS[key].predicates(filters[key], context),
+      );
     }
   }
 
-  if (!assignee && userId) {
+  for (const key of FLAG_FILTER_KEYS) {
+    if (filters[key]) {
+      finalFilters.push({ key, filterType: filters[key].filterType });
+    }
+  }
+
+  // My issues are the ones assigned to me, until an assignee filter says whose.
+  if (!filters.assignee && userId) {
     finalFilters.push({
       key: 'assigneeId',
       filterType: FilterTypeEnum.IS,
       value: [userId],
-    });
-  }
-
-  if (label) {
-    const ids = label.value.flatMap(
-      (value: string) =>
-        labels.find((label) => label.name === value)?.ids || [],
-    );
-
-    finalFilters.push({
-      key: 'labelIds',
-      filterType: label.filterType,
-      value: ids,
-    });
-  }
-
-  if (priority) {
-    finalFilters.push({
-      key: 'priority',
-      filterType: priority.filterType,
-      value: priority.value,
-    });
-  }
-
-  if (project) {
-    finalFilters.push({
-      key: 'projectId',
-      filterType: project.filterType,
-      value: project.value,
-    });
-  }
-
-  if (cycle) {
-    finalFilters.push({
-      key: 'cycleId',
-      filterType: cycle.filterType,
-      value: cycle.value,
-    });
-  }
-
-  // A product owns modules and borrows others, and its issues are the issues of
-  // all of them. This turns the product into that list of modules. A product
-  // with no module gives an empty list, and then the page shows nothing, which
-  // is the truth.
-  if (product) {
-    const ids = modules
-      .filter(
-        (candidate) =>
-          product.value.includes(candidate.ownerProductId) ||
-          (candidate.linkedProductIds ?? []).some((linked: string) =>
-            product.value.includes(linked),
-          ),
-      )
-      .map((candidate) => candidate.id);
-
-    finalFilters.push({
-      key: 'moduleIds',
-      filterType: FilterTypeEnum.INCLUDES,
-      value: ids,
-    });
-  }
-
-  // An issue can change more than one module, so this reads an array and takes
-  // the INCLUDES path in filterIssue, the same as labels.
-  if (module) {
-    finalFilters.push({
-      key: 'moduleIds',
-      filterType: module.filterType,
-      value: module.value,
-    });
-  }
-
-  // One capability, or none, so this compares a single value.
-  if (capability) {
-    finalFilters.push({
-      key: 'capabilityId',
-      filterType: capability.filterType,
-      value: capability.value,
     });
   }
 
@@ -356,21 +233,6 @@ export function getFilters(
         workflow.ids ? workflow.ids : workflow.id,
       ),
     });
-  }
-
-  for (const filterKey of [
-    'isParent',
-    'isSubIssue',
-    'isBlocked',
-    'isBlocking',
-    'source',
-  ]) {
-    if (filters[filterKey as keyof FiltersModelType]) {
-      finalFilters.push({
-        key: filterKey,
-        filterType: FilterTypeEnum.IS,
-      });
-    }
   }
 
   return finalFilters;

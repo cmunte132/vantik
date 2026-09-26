@@ -1,10 +1,14 @@
-import { RiDownloadLine } from '@remixicon/react';
-import { Button } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
 import * as React from 'react';
 
 import { CopyBlock } from '../copy-block';
-import { type Harness, TOKEN_PLACEHOLDER, harnessConfigs } from './harnesses';
+import {
+  type Harness,
+  TOKEN_PLACEHOLDER,
+  contextAppendCommand,
+  harnessConfigs,
+  skillsAddCommand,
+} from './harnesses';
 
 /**
  * Ready-to-paste connection config, one tab per agent harness. It only ever
@@ -25,17 +29,17 @@ interface InstallConfigProps {
   token?: string;
 }
 
-/** The MCP endpoint as the browser sees it — same origin, behind the /api proxy. */
-function mcpUrl(): string {
-  const origin =
-    typeof window !== 'undefined'
-      ? window.location.origin
-      : 'https://your-vantik-host';
-  return `${origin}/api/v1/mcp`;
+/** This instance as the browser sees it. The agent reaches the same origin. */
+function appOrigin(): string {
+  return typeof window !== 'undefined'
+    ? window.location.origin
+    : 'https://your-vantik-host';
 }
 
 export function InstallConfig({ token }: InstallConfigProps) {
-  const url = mcpUrl();
+  const origin = appOrigin();
+  // The MCP endpoint sits behind the webapp's /api proxy.
+  const url = `${origin}/api/v1/mcp`;
   const harnesses = harnessConfigs(url, token ?? TOKEN_PLACEHOLDER);
   const [activeId, setActiveId] = React.useState(harnesses[0].id);
   const active =
@@ -60,71 +64,88 @@ export function InstallConfig({ token }: InstallConfigProps) {
         ))}
       </div>
 
-      <SkillInstall harness={active} />
+      <SkillInstall harness={active} origin={origin} />
+
+      <HookInstall harness={active} />
     </div>
   );
 }
 
-/** Where the server serves the guide from, as the browser sees it. */
-function skillUrl(file: string): string {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  return `${origin}/api/v1/agent-skill/${file}`;
-}
-
 /**
- * The optional second half of connecting an agent: the guide that tells it how
- * to file issues well.
+ * The optional second half of connecting an agent: the guides that tell it how
+ * to use the tracker and the knowledge bank well.
  *
- * Follows the harness tab, because the tools do not agree on any of this — a
- * Claude Code skill in `.claude/skills/`, an `AGENTS.md` in the project root, a
- * `.mdc` rule under `.cursor/rules/`. Offering the same two files to everyone
- * would leave each person working out which one their tool reads and where to
- * put it, which is the digging this was meant to remove.
+ * Installed like any other agent skill, with the skills CLI pointed at this
+ * instance, which publishes them as a discovery index. The CLI knows where each
+ * tool keeps its skills, so the tab only decides the `--agent` flag, and
+ * `npx skills update` brings them in line after Vantik is upgraded.
  */
-function SkillInstall({ harness }: { harness: Harness }) {
+function SkillInstall({
+  harness,
+  origin,
+}: {
+  harness: Harness;
+  origin: string;
+}) {
   const { skill } = harness;
 
   return (
     <div className="border-t border-border pt-3 flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <p className="text-sm">Optional: house style for filing issues</p>
+        <p className="text-sm">Optional: the house style, as agent skills</p>
         <p className="text-sm text-muted-foreground">
           The config above is all your agent needs to read and file issues. Left
           to itself, though, an agent tends to file a long tail of one-line
-          tickets. This guide tells it to file fewer, bigger issues, and to add
-          a note to an existing issue rather than open a near-duplicate.
+          tickets, and to tell only the chat window what it learned. Three
+          guides correct that: one for issues, one for the knowledge bank, and
+          one for handing an issue to Vantik’s own agent. The command asks which
+          to install, and whether for this project or for every project.
         </p>
       </div>
 
       <CopyBlock
-        label={`Install for ${harness.label} — ${skill.target}`}
-        value={skill.install(skillUrl(skill.file))}
+        label={`Install for ${harness.label}`}
+        value={skillsAddCommand(origin, skill.agent)}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-muted-foreground">Or download:</span>
-        <DownloadButton file={skill.file} />
-        {skill.alternative && (
-          <>
-            <DownloadButton file={skill.alternative.file} />
-            <span className="text-sm text-muted-foreground">
-              → {skill.alternative.target}. {skill.alternative.note}
-            </span>
-          </>
-        )}
-      </div>
+      <CopyBlock
+        label={`Or keep the issues guide always in context, in ${skill.contextFile}`}
+        value={contextAppendCommand(origin, skill.contextFile)}
+      />
     </div>
   );
 }
 
-function DownloadButton({ file }: { file: string }) {
+/**
+ * The third, and the one that is checked rather than advised: hooks that brief
+ * the agent when a session begins and hold it at a stop once when an issue it
+ * has in progress has gone quiet.
+ *
+ * Offered after the skills, because they enforce what the skills explain; an
+ * agent held at a stop without the guide still gets told what to do, but one
+ * with the guide rarely needs holding.
+ */
+function HookInstall({ harness }: { harness: Harness }) {
+  const { hooks } = harness;
+
   return (
-    <Button variant="secondary" size="sm" asChild>
-      <a href={skillUrl(file)} download={file}>
-        <RiDownloadLine size={14} className="mr-1" />
-        {file}
-      </a>
-    </Button>
+    <div className="border-t border-border pt-3 flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <p className="text-sm">Optional: hooks that keep the tracker current</p>
+        <p className="text-sm text-muted-foreground">
+          A skill is advice. With these hooks, the first prompt of a session is
+          told what the agent has in progress, and an agent about to stop while
+          an issue it has in progress has gone 20 minutes without an update from
+          it is held once and asked to record where it stands. The check runs on
+          this server; the hooks write nothing to the tracker themselves.
+        </p>
+        <p className="text-sm text-muted-foreground">{hooks.intro}</p>
+      </div>
+
+      {hooks.blocks.map((block) => (
+        <CopyBlock key={block.label} label={block.label} value={block.value} />
+      ))}
+    </div>
   );
 }
 

@@ -1,41 +1,13 @@
-import type { Cycle } from '@vantikhq/types';
+import type { CycleType } from 'common/types';
 
-import { useMutation } from '@tanstack/react-query';
-import { deleteCycle } from '@vantikhq/services';
+import { ajaxDelete, mutationHook } from 'services/utils';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Cycle) => void;
-  onError?: (error: string) => void;
+export function deleteCycle({
+  cycleId,
+}: {
+  cycleId: string;
+}): Promise<CycleType> {
+  return ajaxDelete({ url: `/api/v1/cycles/${cycleId}` });
 }
 
-export function useDeleteCycleMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText =
-      errorResponse?.response?.data?.message ||
-      errorResponse?.errors?.message ||
-      'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Cycle) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: deleteCycle,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useDeleteCycleMutation = mutationHook(deleteCycle);

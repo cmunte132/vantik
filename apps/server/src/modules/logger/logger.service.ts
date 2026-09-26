@@ -2,8 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { trace } from '@opentelemetry/api';
 import winston, { Logger as WinstonLogger, createLogger } from 'winston';
 
-import config from 'common/configs/config';
-
 import { ALS_SERVICE_INSTANCE } from 'modules/als/als.service';
 
 import {
@@ -147,7 +145,7 @@ function printLine({
  * pipeline is not.
  */
 const rootLogger: WinstonLogger = createLogger({
-  level: config().log.level ?? 'info',
+  level: process.env.LOG_LEVEL ?? 'info',
   format: winston.format.combine(
     winston.format.splat(),
     winston.format.errors({ stack: true }),

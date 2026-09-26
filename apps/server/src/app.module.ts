@@ -1,16 +1,15 @@
 import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { PrismaModule } from 'nestjs-prisma';
 
-import config from 'common/configs/config';
 import { BuildStampInterceptor } from 'common/interceptors/build-stamp.interceptor';
 import { ErrorReportingInterceptor } from 'common/interceptors/error-reporting.interceptor';
 
+import { AgentHooksModule } from 'modules/agent-hooks/agent-hooks.module';
 import { AgentSkillModule } from 'modules/agent-skill/agent-skill.module';
 import { AIRequestsModule } from 'modules/ai-requests/ai-requests.module';
 import { ALSModule } from 'modules/als/als.module';
@@ -70,8 +69,6 @@ import { AppService } from './app.service';
         limit: 10,
       },
     ]),
-    ConfigModule.forRoot({ isGlobal: true, load: [config] }),
-    ConfigModule.forRoot({ envFilePath: '.env' }),
     PrismaModule.forRoot({
       isGlobal: true,
     }),
@@ -118,6 +115,7 @@ import { AppService } from './app.service';
     SearchModule,
     McpModule,
     AgentSkillModule,
+    AgentHooksModule,
     AttachmentModule,
     ViewsModule,
     AIRequestsModule,

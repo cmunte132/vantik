@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 
 import { IntegrationEventsModule } from 'modules/integration-events/integration-events.module';
 import { SyncModule } from 'modules/sync/sync.module';
@@ -11,12 +10,7 @@ import ReplicationService from './replication.service';
 @Module({
   imports: [SyncModule, IntegrationEventsModule],
   controllers: [],
-  providers: [
-    ReplicationService,
-    ConfigService,
-    SyncActionsService,
-    SyncRepairService,
-  ],
+  providers: [ReplicationService, SyncActionsService, SyncRepairService],
   exports: [],
 })
 export class ReplicationModule {}

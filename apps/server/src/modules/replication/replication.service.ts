@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { ModelNameEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 import { Client } from 'pg';
@@ -38,7 +37,6 @@ export default class ReplicationService {
   private replicationSlotName = `vantik_replication_slot_${uuidv4().replace(/-/g, '')}`;
 
   constructor(
-    private configService: ConfigService,
     private syncGateway: SyncGateway,
     private syncActionsService: SyncActionsService,
     private integrationEvents: IntegrationEventsService,
@@ -46,11 +44,11 @@ export default class ReplicationService {
     private syncRepair: SyncRepairService,
   ) {
     this.client = new Client({
-      user: configService.get('POSTGRES_USER'),
-      host: configService.get('DB_HOST'),
-      database: configService.get('POSTGRES_DB'),
-      password: configService.get('POSTGRES_PASSWORD'),
-      port: configService.get('DB_PORT'),
+      user: process.env.POSTGRES_USER,
+      host: process.env.DB_HOST,
+      database: process.env.POSTGRES_DB,
+      password: process.env.POSTGRES_PASSWORD,
+      port: Number(process.env.DB_PORT) || 5432,
     });
   }
 
@@ -234,13 +232,13 @@ export default class ReplicationService {
   }
 
   async setupReplication() {
-    const dbSchema = this.configService.get('DB_SCHEMA');
+    const dbSchema = process.env.DB_SCHEMA;
     const clientConfig = {
-      host: this.configService.get('DB_HOST'),
-      database: this.configService.get('POSTGRES_DB'),
-      user: this.configService.get('POSTGRES_USER'),
-      password: this.configService.get('POSTGRES_PASSWORD'),
-      port: this.configService.get('DB_PORT'),
+      host: process.env.DB_HOST,
+      database: process.env.POSTGRES_DB,
+      user: process.env.POSTGRES_USER,
+      password: process.env.POSTGRES_PASSWORD,
+      port: Number(process.env.DB_PORT) || 5432,
     };
     const service = new LogicalReplicationService(clientConfig);
     const plugin = new PgoutputPlugin({

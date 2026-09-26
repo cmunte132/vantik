@@ -1,8 +1,6 @@
-import { useMutation } from '@tanstack/react-query';
-
 import type { LabelType } from 'common/types';
 
-import { ajaxPost } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
 
 export interface CreateLabelParams {
   name: string;
@@ -13,43 +11,11 @@ export interface CreateLabelParams {
   teamId?: string;
 }
 
-export function createLabel(params: CreateLabelParams) {
+export function createLabel(params: CreateLabelParams): Promise<LabelType> {
   return ajaxPost({
     url: '/api/v1/labels',
     data: params,
   });
 }
 
-export interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: LabelType) => void;
-  onError?: (error: string) => void;
-}
-
-export function useCreateLabelMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: LabelType) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: createLabel,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useCreateLabelMutation = mutationHook(createLabel);

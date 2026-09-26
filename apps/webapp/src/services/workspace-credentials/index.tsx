@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
-import { ajaxDelete, ajaxGet, ajaxPost } from 'services/utils';
+import { ajaxDelete, ajaxGet, ajaxPost, mutationHook } from 'services/utils';
 
 /** The two secrets a workspace holds for hosted execution. */
 export type CredentialKind = 'MODEL_API_KEY' | 'GIT_TOKEN';
@@ -145,75 +145,39 @@ export interface PutResult extends CredentialHandle {
  * an append and "replace" and "add" are the same call — which is why the UI can
  * offer them as one control.
  */
-export function usePutCredentialMutation(
-  options: {
-    onSuccess?: (result: PutResult) => void;
-    onError?: (error: string) => void;
-  } = {},
-) {
-  const queryClient = useQueryClient();
+function putCredential(params: PutParams): Promise<PutResult> {
+  return ajaxPost({ url: '/api/v1/workspace_credentials', data: params });
+}
 
-  return useMutation({
-    mutationFn: (params: PutParams): Promise<PutResult> =>
-      ajaxPost({ url: '/api/v1/workspace_credentials', data: params }),
-    onSuccess: (result: PutResult) => {
-      queryClient.invalidateQueries({ queryKey: [CREDENTIALS_KEY] });
-      // A stored key can change whether the hosted executor will take work, and
-      // that answer is cached for five minutes on the delegate control. Without
-      // this, someone adds the key the button told them to add and the button
-      // goes on refusing.
-      queryClient.invalidateQueries({ queryKey: ['agent-run-executors'] });
-      options.onSuccess?.(result);
-    },
-    onError: (error: unknown) => options.onError?.(messageOf(error)),
+// A stored key can change whether the hosted executor will take work, and that
+// answer is cached for five minutes on the delegate control. Without the second
+// key, someone adds the key the button told them to add and the button goes on
+// refusing.
+const CREDENTIAL_WRITE = {
+  invalidates: [CREDENTIALS_KEY, 'agent-run-executors'],
+  fallback: 'Could not save that credential.',
+};
+
+export const usePutCredentialMutation = mutationHook(
+  putCredential,
+  CREDENTIAL_WRITE,
+);
+
+function removeCredential({
+  kind,
+  provider,
+}: {
+  kind: CredentialKind;
+  provider?: string;
+}) {
+  return ajaxDelete({
+    url: `/api/v1/workspace_credentials/${kind}${
+      provider ? `?provider=${encodeURIComponent(provider)}` : ''
+    }`,
   });
 }
 
-export function useRemoveCredentialMutation(
-  options: { onSuccess?: () => void; onError?: (error: string) => void } = {},
-) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({
-      kind,
-      provider,
-    }: {
-      kind: CredentialKind;
-      provider?: string;
-    }) =>
-      ajaxDelete({
-        url: `/api/v1/workspace_credentials/${kind}${
-          provider ? `?provider=${encodeURIComponent(provider)}` : ''
-        }`,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [CREDENTIALS_KEY] });
-      queryClient.invalidateQueries({ queryKey: ['agent-run-executors'] });
-      options.onSuccess?.();
-    },
-    onError: (error: unknown) => options.onError?.(messageOf(error)),
-  });
-}
-
-/**
- * The server's own words where it has any.
- *
- * Its refusals here are written to be read — "the secret is empty", "this
- * workspace has no GIT_TOKEN configured" — and replacing them with a generic
- * failure would throw away the only part of the response worth showing.
- */
-function messageOf(error: unknown): string {
-  const response = error as {
-    response?: { data?: { message?: string } };
-    errors?: { message?: string };
-    message?: string;
-  };
-
-  return (
-    response?.response?.data?.message ??
-    response?.errors?.message ??
-    response?.message ??
-    'Could not save that credential.'
-  );
-}
+export const useRemoveCredentialMutation = mutationHook(
+  removeCredential,
+  CREDENTIAL_WRITE,
+);

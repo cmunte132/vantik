@@ -1,36 +1,9 @@
-import { useMutation } from '@tanstack/react-query';
-import { authorizeCode } from '@vantikhq/services';
+import type { CodeDtoWithWorkspace } from '@vantikhq/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: () => void;
-  onError?: (error: string) => void;
+import { ajaxPost, mutationHook } from 'services/utils';
+
+export function authorizeCode(codeBody: CodeDtoWithWorkspace) {
+  return ajaxPost({ url: `/api/v1/users/authorization`, data: codeBody });
 }
 
-export function useAuthorizeMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = () => {
-    onSuccess && onSuccess();
-  };
-
-  return useMutation({
-    mutationFn: authorizeCode,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useAuthorizeMutation = mutationHook(authorizeCode);

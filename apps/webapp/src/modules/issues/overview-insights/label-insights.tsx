@@ -4,9 +4,10 @@ import { sort } from 'fast-sort';
 import { observer } from 'mobx-react-lite';
 
 import { groupByKeyArray } from 'common/lib/common';
-import { FilterTypeEnum, type IssueType } from 'common/types';
+import { type IssueType } from 'common/types';
 import type { LabelType } from 'common/types';
 
+import { FilterTypeEnum } from 'store/application';
 import { useContextStore } from 'store/global-context-provider';
 
 import { applyFilters } from './utils';

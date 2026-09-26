@@ -1,41 +1,21 @@
-import type { Cycle } from '@vantikhq/types';
+import type { CompleteCycleDto } from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
-import { completeCycle } from '@vantikhq/services';
+import type { CycleType } from 'common/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Cycle) => void;
-  onError?: (error: string) => void;
+import { ajaxPost, mutationHook } from 'services/utils';
+
+interface CompleteCycleDtoWithCycleId extends CompleteCycleDto {
+  cycleId: string;
 }
 
-export function useCompleteCycleMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText =
-      errorResponse?.response?.data?.message ||
-      errorResponse?.errors?.message ||
-      'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Cycle) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: completeCycle,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+export function completeCycle({
+  cycleId,
+  ...completeCycleDto
+}: CompleteCycleDtoWithCycleId): Promise<CycleType> {
+  return ajaxPost({
+    url: `/api/v1/cycles/${cycleId}/complete`,
+    data: completeCycleDto,
   });
 }
+
+export const useCompleteCycleMutation = mutationHook(completeCycle);

@@ -53,14 +53,21 @@ export const ProjectsStore: IAnyStateTreeNode = types
       return self.projects.find((project) => project.id === id);
     },
 
+    // A project that names no team is workspace-wide, as the server has it,
+    // so it belongs to every team. Read as "no team", it could not be picked
+    // from any issue, and a team's board grouped by project left its issues
+    // out of every column.
     getProjectWithTeamId(teamId: string) {
-      return self.projects.filter((project) => project.teams.includes(teamId));
+      return self.projects.filter(
+        (project) =>
+          project.teams.length === 0 || project.teams.includes(teamId),
+      );
     },
 
     hasProjects(teamId: string) {
-      return (
-        self.projects.filter((project) => project.teams.includes(teamId))
-          .length > 0
+      return self.projects.some(
+        (project) =>
+          project.teams.length === 0 || project.teams.includes(teamId),
       );
     },
 

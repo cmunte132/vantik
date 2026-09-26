@@ -1,36 +1,13 @@
-import { useMutation } from '@tanstack/react-query';
-import { deleteTemplate } from '@vantikhq/services';
+import type { TemplateIdDto } from '@vantikhq/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: () => void;
-  onError?: (error: string) => void;
+import type { TemplateType } from 'common/types';
+
+import { ajaxDelete, mutationHook } from 'services/utils';
+
+export function deleteTemplate({
+  templateId,
+}: TemplateIdDto): Promise<TemplateType> {
+  return ajaxDelete({ url: `/api/v1/templates/${templateId}` });
 }
 
-export function useDeleteTemplateMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = () => {
-    onSuccess && onSuccess();
-  };
-
-  return useMutation({
-    mutationFn: deleteTemplate,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useDeleteTemplateMutation = mutationHook(deleteTemplate);

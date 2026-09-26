@@ -1,15 +1,16 @@
-import { useMutation } from '@tanstack/react-query';
-
 import type { Invite } from 'common/types';
 
-import { ajaxPost } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
 
 export interface InviteActionParams {
   inviteId: string;
   accept: boolean;
 }
 
-export function inviteAction({ inviteId, accept }: InviteActionParams) {
+export function inviteAction({
+  inviteId,
+  accept,
+}: InviteActionParams): Promise<Invite> {
   return ajaxPost({
     url: `/api/v1/workspaces/invite_action`,
     data: {
@@ -19,36 +20,4 @@ export function inviteAction({ inviteId, accept }: InviteActionParams) {
   });
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Invite) => void;
-  onError?: (error: string) => void;
-}
-
-export function useInviteActionMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Invite) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: inviteAction,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useInviteActionMutation = mutationHook(inviteAction);

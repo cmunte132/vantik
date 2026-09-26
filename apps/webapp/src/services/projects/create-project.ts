@@ -1,38 +1,13 @@
-import type { Project } from '@vantikhq/types';
+import type { CreateProjectDto } from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
-import { createProject } from '@vantikhq/services';
+import type { ProjectType } from 'common/types';
 
-export interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Project) => void;
-  onError?: (error: string) => void;
+import { ajaxPost, mutationHook } from 'services/utils';
+
+export function createProject(
+  createProjectDto: CreateProjectDto,
+): Promise<ProjectType> {
+  return ajaxPost({ url: `/api/v1/projects`, data: createProjectDto });
 }
 
-export function useCreateProjectMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Project) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: createProject,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useCreateProjectMutation = mutationHook(createProject);

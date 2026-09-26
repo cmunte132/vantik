@@ -19,7 +19,7 @@ export function useCycleIssueCounts(cycleId?: string) {
   const { issuesStore } = useContextStore();
   const { workflows } = useComputedWorkflows();
 
-  const issues = issuesStore.getIssuesForCycle({ cycleId });
+  const issues = issuesStore.getIssues({ cycleId });
 
   return React.useMemo(() => {
     const finished = issues.filter((issue: IssueType) => {

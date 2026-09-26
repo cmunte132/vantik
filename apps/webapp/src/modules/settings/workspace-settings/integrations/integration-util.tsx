@@ -1,6 +1,6 @@
-import type { IntegrationAccount } from '@vantikhq/types';
-
 import React from 'react';
+
+import type { IntegrationAccountType } from 'common/types';
 
 import { useContextStore } from 'store/global-context-provider';
 import { UserContext } from 'store/user-context';
@@ -8,7 +8,7 @@ import { UserContext } from 'store/user-context';
 export function useIntegrationAccount(
   integrationDefinitionId: string,
   personal: boolean = false,
-): IntegrationAccount | undefined {
+): IntegrationAccountType | undefined {
   const {
     integrationAccountsStore: { integrationAccounts: allIntegrationAccounts },
   } = useContextStore();
@@ -16,7 +16,7 @@ export function useIntegrationAccount(
   const currentUser = React.useContext(UserContext);
 
   const integrationAccount = allIntegrationAccounts.find(
-    (integrationAccount: IntegrationAccount) => {
+    (integrationAccount: IntegrationAccountType) => {
       const isPersonal = personal
         ? integrationAccount.integratedById === currentUser.id
         : true;

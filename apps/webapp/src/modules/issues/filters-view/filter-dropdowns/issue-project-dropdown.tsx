@@ -19,8 +19,8 @@ import { useCurrentTeam } from 'hooks/teams';
 import { useContextStore } from 'store/global-context-provider';
 
 interface IssueProjectDropdownProps {
-  value?: string[];
-  onChange?: (projectIds: string[]) => void;
+  value: string[];
+  onChange: (projectIds: string[]) => void;
 }
 
 export const IssueProjectDropdown = observer(

@@ -1,8 +1,10 @@
-import { useMutation } from '@tanstack/react-query';
-
 import type { IssueType, IssueRelationEnum } from 'common/types';
 
-import { ajaxPost } from 'services/utils';
+import {
+  ajaxPost,
+  type MutationCallbacks,
+  useApiMutation,
+} from 'services/utils';
 
 import { vantikDatabase } from 'store/database';
 import { useContextStore } from 'store/global-context-provider';
@@ -39,7 +41,11 @@ export interface UpdateIssueParams {
   };
 }
 
-export function updateIssue({ id, teamId, ...otherParams }: UpdateIssueParams) {
+export function updateIssue({
+  id,
+  teamId,
+  ...otherParams
+}: UpdateIssueParams): Promise<IssueType> {
   const url = `/api/v1/issues/${id}?teamId=${teamId}`;
 
   // The optimistic update has already been applied to the store by the time
@@ -47,9 +53,10 @@ export function updateIssue({ id, teamId, ...otherParams }: UpdateIssueParams) {
   // `useUpdateIssueMutation` never fires for one. That left the change on
   // screen with nothing carrying it to the server: the write was simply lost,
   // silently, which is the exact case this buffer exists for.
-  return ajaxPost({ url, data: otherParams }).catch(async (
-    error,
-  ): Promise<undefined> => {
+  return ajaxPost<typeof otherParams, IssueType>({
+    url,
+    data: otherParams,
+  }).catch(async (error): Promise<undefined> => {
     if (!isRetryable(error)) {
       throw error;
     }
@@ -83,17 +90,9 @@ async function persistLocally(
   }
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: IssueType) => void;
-  onError?: (error: string) => void;
-}
-
-export function useUpdateIssueMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
+export function useUpdateIssueMutation(
+  callbacks: MutationCallbacks<IssueType, UpdateIssueParams> = {},
+) {
   const { issuesStore } = useContextStore();
 
   const update = ({ id, ...otherParams }: UpdateIssueParams) => {
@@ -109,25 +108,5 @@ export function useUpdateIssueMutation({
     }
   };
 
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: IssueType) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: update,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
+  return useApiMutation(update, callbacks);
 }

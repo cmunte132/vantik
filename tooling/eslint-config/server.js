@@ -23,7 +23,8 @@ module.exports = {
   },
   rules: {
     curly: 'warn',
-    eqeqeq: 'error',
+    // `x == null` is the idiom for null-or-undefined; everything else is strict.
+    eqeqeq: ['error', 'always', { null: 'ignore' }],
     'prettier/prettier': 'warn',
     'unused-imports/no-unused-imports': 'warn',
     'no-else-return': 'warn',

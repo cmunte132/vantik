@@ -176,13 +176,13 @@ export function renderModules(modules: Module[]): string {
     style: { head: [], border: [] },
   });
 
-  for (const module of modules) {
+  for (const { key, name, owner, repos } of modules) {
     table.push([
-      chalkGreen(module.key),
-      module.name,
-      module.owner ? module.owner.kind : '—',
+      chalkGreen(key),
+      name,
+      owner ? owner.kind : '—',
       truncate(
-        (module.repos ?? [])
+        (repos ?? [])
           .map((repo) =>
             repo.pathPrefixes.length
               ? `${repo.repository}:${repo.pathPrefixes.join(',')}`

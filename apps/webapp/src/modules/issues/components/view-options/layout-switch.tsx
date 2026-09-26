@@ -25,6 +25,7 @@ export const LayoutSwitch = observer(() => {
           variant="link"
           isActive={applicationStore.displaySettings.view === ViewEnum.list}
           onClick={() => updateView(ViewEnum.list)}
+          aria-label="List view"
           className="rounded-sm py-1 px-2 h-6"
         >
           <RiListUnordered size={20} />
@@ -34,6 +35,7 @@ export const LayoutSwitch = observer(() => {
       <TooltipWrapper tooltip="Kanban View">
         <Button
           onClick={() => updateView(ViewEnum.board)}
+          aria-label="Kanban view"
           variant="link"
           isActive={applicationStore.displaySettings.view === ViewEnum.board}
           className="rounded-sm py-1 px-2 h-6"
@@ -45,6 +47,7 @@ export const LayoutSwitch = observer(() => {
       <TooltipWrapper tooltip="Spreadsheet View">
         <Button
           onClick={() => updateView(ViewEnum.sheet)}
+          aria-label="Spreadsheet view"
           variant="link"
           isActive={applicationStore.displaySettings.view === ViewEnum.sheet}
           className="rounded-sm py-1 px-2 h-6"

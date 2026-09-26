@@ -41,6 +41,7 @@ export function IssueOptionsDropdown() {
           <Button
             variant="ghost"
             size="sm"
+            aria-label="Issue actions"
             onClick={(e) => {
               e.preventDefault();
             }}

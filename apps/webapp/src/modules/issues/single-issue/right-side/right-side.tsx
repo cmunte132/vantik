@@ -108,7 +108,11 @@ export const RightSide = observer(() => {
     <>
       <ScrollArea className="h-full">
         <div className="grow p-6 flex flex-col gap-4 pb-10">
-          <div className="flex flex-col items-start">
+          <div
+            className="flex flex-col items-start"
+            role="group"
+            aria-label="Status"
+          >
             <label className="text-xs">Status</label>
             <IssueStatusDropdown
               value={issue.stateId}
@@ -118,7 +122,11 @@ export const RightSide = observer(() => {
             />
           </div>
 
-          <div className="flex flex-col items-start">
+          <div
+            className="flex flex-col items-start"
+            role="group"
+            aria-label="Priority"
+          >
             <label className="text-xs">Priority</label>
 
             <IssuePriorityDropdown
@@ -128,7 +136,11 @@ export const RightSide = observer(() => {
             />
           </div>
 
-          <div className="flex flex-col items-start">
+          <div
+            className="flex flex-col items-start"
+            role="group"
+            aria-label="Assignee"
+          >
             <label className="text-xs">Assignee</label>
 
             <IssueAssigneeDropdown
@@ -148,7 +160,11 @@ export const RightSide = observer(() => {
 
           <IssueRelatedProperties />
 
-          <div className={cn('flex flex-col items-start')}>
+          <div
+            className={cn('flex flex-col items-start')}
+            role="group"
+            aria-label="Labels"
+          >
             <div className="text-xs text-left">Labels</div>
 
             <IssueLabelDropdown
@@ -160,7 +176,11 @@ export const RightSide = observer(() => {
           </div>
 
           {hasModules && (
-            <div className={cn('flex flex-col items-start')}>
+            <div
+              className={cn('flex flex-col items-start')}
+              role="group"
+              aria-label="Modules"
+            >
               <div className="text-xs text-left">Modules</div>
 
               <ModuleDropdown
@@ -180,7 +200,11 @@ export const RightSide = observer(() => {
           )}
 
           {hasCapabilities && (
-            <div className={cn('flex flex-col items-start')}>
+            <div
+              className={cn('flex flex-col items-start')}
+              role="group"
+              aria-label="Capability"
+            >
               <div className="text-xs text-left">Capability</div>
 
               <CapabilityDropdown
@@ -191,7 +215,11 @@ export const RightSide = observer(() => {
           )}
 
           {hasProjectsForTeam && (
-            <div className={cn('flex flex-col items-start')}>
+            <div
+              className={cn('flex flex-col items-start')}
+              role="group"
+              aria-label="Project"
+            >
               <div className="text-xs text-left">Project</div>
 
               <ProjectDropdown
@@ -204,7 +232,11 @@ export const RightSide = observer(() => {
           )}
 
           {issue.projectId && (
-            <div className={cn('flex flex-col items-start')}>
+            <div
+              className={cn('flex flex-col items-start')}
+              role="group"
+              aria-label="Project Milestone"
+            >
               <div className="text-xs text-left">Project Milestone</div>
 
               <ProjectMilestoneDropdown

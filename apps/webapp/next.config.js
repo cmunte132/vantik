@@ -28,6 +28,19 @@ module.exports = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        // The agent skills discovery index is served by the API server, but
+        // `npx skills add https://your-vantik-host` looks for it at the origin
+        // rather than under /api. Routed through the /api proxy, which reads
+        // BACKEND_URL when the request arrives, because a rewrite straight to
+        // the server would bake in whatever BACKEND_URL was at build time.
+        source: '/.well-known/agent-skills/:path*',
+        destination: '/api/.well-known/agent-skills/:path*',
+      },
+    ];
+  },
   async headers() {
     return [
       {

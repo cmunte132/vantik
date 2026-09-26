@@ -1,9 +1,10 @@
 <!--
-Portable version of the working-vantik-knowledge skill, for agent runners that
-read an AGENTS.md (Cursor, Windsurf, Codex, plain system prompts) rather than
-Claude Code skills. Paste the section below into your repo's AGENTS.md. Claude
-Code users should install the skill instead — see README.md — since it loads on
-demand and keeps context free until knowledge work actually comes up.
+The always-in-context form of the working-vantik-knowledge skill, for an agent
+that reads no skills (a plain system prompt, an older runner), or one that works
+quietly with the skill loaded on demand. Paste the section below into your
+repo's AGENTS.md or CLAUDE.md. Where your agent reads skills, install the skill
+instead — `npx skills add https://your-vantik-host`, see ../README.md — since it
+loads on demand and keeps context free until knowledge work actually comes up.
 -->
 
 ## Working the Vantik knowledge bank
@@ -12,9 +13,9 @@ Vantik keeps a workspace knowledge bank, reachable through the same MCP server
 as the issue tracker. It holds **pages** (canonical documentation, written as
 prose for humans) and **entries** (single asserted facts appended by agents,
 each carrying who claimed it, where it applies, and whether anyone has
-confirmed it). Tools: `load_context`, `recall_knowledge`, `list_pages`,
-`read_page`, `remember`, `write_page`, `consolidate_knowledge`,
-`knowledge_gaps`.
+confirmed it). Tools: `load_context`, `recall_knowledge`, `pages_for`,
+`list_pages`, `read_page`, `remember`, `write_page`, `link_page`,
+`consolidate_knowledge`, `knowledge_gaps`.
 
 **Load context before you start work, not after you get stuck.** Call
 `load_context` with the area you are about to touch and a token budget, before
@@ -37,7 +38,13 @@ this session (that is a note on the issue), anything already in the page body,
 anything the code says plainly. Never secrets or credentials — the bank is
 readable by every agent in the workspace.
 
-**Prefer appending to an existing page.** Check `list_pages` first. Pages are
+**Handed an issue or a project, call `pages_for` with it first** — a direct
+lookup of the pages attached to that work, for when you do not yet know what to
+search for. When a page durably governs a team, project or issue, attach it with
+`link_page`; not to every issue that happened to touch it.
+
+**Prefer appending to an existing page.** Check `list_pages` first, and
+`read_page` before adding: the fact may already be in the body. Pages are
 few, broad and long-lived; the facts under them are many. A bank of forty thin
 pages is one nobody can navigate, and navigability is the whole product. Use
 `write_page` only when no existing page fits, and give it a real body.

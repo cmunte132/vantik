@@ -30,14 +30,14 @@ COPY tooling/typescript-config/package.json tooling/typescript-config/
 ## The cache mount keeps the pnpm store across builds; without it every package
 ## came off the network on each run (`reused 0`), twice per image.
 FROM manifests AS dev-deps
-ENV NODE_ENV development
+ENV NODE_ENV=development
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm install --ignore-scripts --frozen-lockfile \
       --store-dir=/pnpm/store --filter=server...
 
 ## Production deps — what actually ships in the runner.
 FROM manifests AS production-deps
-ENV NODE_ENV production
+ENV NODE_ENV=production
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm install --prod --frozen-lockfile \
       --store-dir=/pnpm/store --filter=server...
@@ -59,7 +59,7 @@ RUN --mount=type=cache,id=turbo,target=/app/.turbo,sharing=locked \
 FROM node:24-alpine AS runner
 RUN apk add --no-cache openssl dumb-init bash
 WORKDIR /app
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 COPY --from=production-deps --chown=node:node /app .
 COPY --from=builder --chown=node:node /app/apps/server/node_modules ./apps/server/node_modules
@@ -71,12 +71,13 @@ COPY --from=builder --chown=node:node /app/apps/server/prisma ./apps/server/pris
 COPY --from=builder --chown=node:node /app/apps/server/templates ./apps/server/templates
 COPY --from=builder --chown=node:node /app/apps/server/scripts ./apps/server/scripts
 
-# The agent guides, served over /v1/agent-skill so the Agents screen can offer
-# them as downloads instead of paths to go find in a checkout. Straight from the
-# build context: they are authored in the docs app, which the server build does
-# not otherwise pull in. Copied as a directory so a guide added later needs no
-# change here.
-COPY --chown=node:node apps/docs/skills ./apps/server/skills
+# The agent guides, published at /.well-known/agent-skills for `npx skills add`
+# and over /v1/agent-skill for the always-in-context forms. Straight from the
+# build context: they are authored in skills/ at the root of the repository,
+# where `npx skills add cmunte132/vantik` also finds them, and the server build
+# does not otherwise pull them in. Copied as a directory so a guide added later
+# needs no change here.
+COPY --chown=node:node skills ./apps/server/skills
 
 # Where local attachment storage writes, and where docker-compose.yaml mounts
 # the attachment-data volume. Docker gives a new, empty named volume the owner

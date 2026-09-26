@@ -90,7 +90,9 @@ test.describe('signing in', () => {
 test.describe('credentials', () => {
   test('a request with no credentials is refused', async ({ anonymous }) => {
     expect((await anonymous.get('/v1/teams')).status()).toBe(401);
-    expect((await anonymous.get('/v1/issues')).status()).toBe(401);
+    expect(
+      (await anonymous.post('/v1/issues/filter', { data: { filters: {} } })).status(),
+    ).toBe(401);
   });
 
   test('an unknown personal access token is refused', async ({ anonymous }) => {

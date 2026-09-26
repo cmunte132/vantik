@@ -1,7 +1,9 @@
 import {
+  commentsOn,
   createComment,
   createIssue,
   getIssue,
+  issuesOf,
   stateNamed,
   unique,
 } from '../../src/api';
@@ -82,26 +84,27 @@ test.describe('issues', () => {
 
     const comment = await createComment(asAlice, issue.id, text);
 
-    const response = await asAlice.get(`/v1/issues/${issue.id}/comments`);
-    expect(response).toBeOK();
-    const comments: Array<{ id: string; bodyMarkdown: string }> =
-      await response.json();
-    const listed = comments.find((c) => c.id === comment.id);
+    const listed = (await commentsOn(asAlice, issue.id)).find(
+      (c) => c.id === comment.id,
+    );
     expect(listed, 'the new comment is not listed').toBeTruthy();
     expect(listed!.bodyMarkdown).toContain(text);
   });
 
-  test('a deleted issue is gone from the team list', async ({ asAlice, alice }) => {
+  test('a deleted issue is gone from the list and cannot be read', async ({
+    asAlice,
+    alice,
+  }) => {
     const issue = await createIssue(asAlice, alice);
+    expect((await issuesOf(asAlice)).map((i) => i.id)).toContain(issue.id);
 
     const response = await asAlice.delete(`/v1/issues/${issue.id}`, {
       params: { teamId: alice.teamId },
     });
     expect(response).toBeOK();
 
-    const list = await asAlice.get('/v1/issues', { params: { teamId: alice.teamId } });
-    expect(list).toBeOK();
-    const ids = ((await list.json()) as Array<{ id: string }>).map((i) => i.id);
-    expect(ids).not.toContain(issue.id);
+    // Deletion is soft, so the row is still there to be served by mistake.
+    expect((await issuesOf(asAlice)).map((i) => i.id)).not.toContain(issue.id);
+    expect((await asAlice.get(`/v1/issues/${issue.id}`)).status()).toBe(404);
   });
 });

@@ -1,6 +1,7 @@
 import type { APIResponse } from '@playwright/test';
 
 import {
+  commentsOn,
   createComment,
   createIssue,
   createLabel,
@@ -8,12 +9,13 @@ import {
   createProject,
   createSpareTeam,
   createView,
+  currentView,
   getIssue,
-  getTeam,
-  getView,
+  issuesOf,
   labelsOf,
   projects,
   stateNamed,
+  teamsOf,
   unique,
   workflows,
 } from '../../src/api';
@@ -55,7 +57,6 @@ function knownHole(fixedBy: string) {
   test.fail(true, `Known hole on main, closed by ${fixedBy}`);
 }
 
-const PR_35 = 'https://github.com/cmunte132/vantik/pull/35';
 const VIEWS_OPEN = 'nothing yet: the view routes take an id and never check its workspace';
 
 test.describe('the workspace boundary', () => {
@@ -65,7 +66,7 @@ test.describe('the workspace boundary', () => {
   }) => {
     const issue = await createIssue(asBob, bob);
     expect((await asBob.get(`/v1/issues/${issue.id}`)).status()).toBe(200);
-    expect((await asBob.get(`/v1/teams/${bob.teamId}`)).status()).toBe(200);
+    expect((await asBob.get(`/v1/teams/${bob.teamId}/members`)).status()).toBe(200);
   });
 
   test.describe('issues', () => {
@@ -76,7 +77,7 @@ test.describe('the workspace boundary', () => {
     }) => {
       const issue = await createIssue(asAlice, alice);
 
-      for (const suffix of ['', '/comments', '/history', '/context']) {
+      for (const suffix of ['', '/context']) {
         expectRefused(
           await asBob.get(`/v1/issues/${issue.id}${suffix}`),
           `GET /v1/issues/:id${suffix}`,
@@ -139,12 +140,7 @@ test.describe('the workspace boundary', () => {
         'POST /v1/issues',
       );
 
-      const list = await asAlice.get('/v1/issues', {
-        params: { teamId: alice.teamId },
-      });
-      const titles = ((await list.json()) as Array<{ title: string }>).map(
-        (i) => i.title,
-      );
+      const titles = (await issuesOf(asAlice)).map((i) => i.title);
       expect(titles).not.toContain(title);
     });
 
@@ -153,8 +149,8 @@ test.describe('the workspace boundary', () => {
       alice,
     }) => {
       // Naming a workspace you are not a member of is refused outright.
-      const response = await asBob.get('/v1/issues', {
-        params: { workspaceId: alice.workspaceId },
+      const response = await asBob.post('/v1/issues/filter', {
+        data: { filters: {}, workspaceId: alice.workspaceId },
       });
       expect(response.status()).toBe(401);
     });
@@ -173,7 +169,7 @@ test.describe('the workspace boundary', () => {
       );
     });
 
-    test("Bob cannot read, edit or delete Alice's comment", async ({
+    test("Bob cannot edit or delete Alice's comment", async ({
       asAlice,
       asBob,
       alice,
@@ -182,10 +178,6 @@ test.describe('the workspace boundary', () => {
       const text = unique('Original');
       const comment = await createComment(asAlice, issue.id, text);
 
-      expectRefused(
-        await asBob.get(`/v1/issue_comments/${comment.id}`),
-        'GET /v1/issue_comments/:id',
-      );
       expectRefused(
         await asBob.post(`/v1/issue_comments/${comment.id}`, {
           data: { bodyMarkdown: 'Rewritten' },
@@ -197,11 +189,7 @@ test.describe('the workspace boundary', () => {
         'DELETE /v1/issue_comments/:id',
       );
 
-      const listed = await asAlice.get(`/v1/issues/${issue.id}/comments`);
-      const comments = (await listed.json()) as Array<{
-        id: string;
-        bodyMarkdown: string;
-      }>;
+      const comments = await commentsOn(asAlice, issue.id);
       expect(comments.find((c) => c.id === comment.id)?.bodyMarkdown).toContain(
         text,
       );
@@ -209,11 +197,11 @@ test.describe('the workspace boundary', () => {
   });
 
   test.describe('teams', () => {
-    test("Bob cannot read Alice's team or its members", async ({
+    test("Bob cannot see Alice's team or its members", async ({
       asBob,
       alice,
     }) => {
-      expectRefused(await asBob.get(`/v1/teams/${alice.teamId}`), 'GET /v1/teams/:id');
+      expect((await teamsOf(asBob)).map((t) => t.id)).not.toContain(alice.teamId);
       expectRefused(
         await asBob.get(`/v1/teams/${alice.teamId}/members`),
         'GET /v1/teams/:id/members',
@@ -222,23 +210,24 @@ test.describe('the workspace boundary', () => {
 
     test("Bob cannot rename Alice's team", async ({ asAlice, asBob }) => {
       const team = await createSpareTeam(asAlice);
-      expect((await getTeam(asAlice, team.id)).name).toBe(team.name);
-      knownHole(PR_35);
+      const nameOf = async () =>
+        (await teamsOf(asAlice)).find((t) => t.id === team.id)?.name;
+      expect(await nameOf()).toBe(team.name);
 
       expectRefused(
         await asBob.post(`/v1/teams/${team.id}`, { data: { name: 'Taken over' } }),
         'POST /v1/teams/:id',
       );
-      expect((await getTeam(asAlice, team.id)).name).toBe(team.name);
+      expect(await nameOf()).toBe(team.name);
     });
 
     test("Bob cannot delete Alice's team", async ({ asAlice, asBob }) => {
       const team = await createSpareTeam(asAlice);
-      expect((await getTeam(asAlice, team.id)).id).toBe(team.id);
-      knownHole(PR_35);
+      const aliceSees = async () => (await teamsOf(asAlice)).map((t) => t.id);
+      expect(await aliceSees()).toContain(team.id);
 
       expectRefused(await asBob.delete(`/v1/teams/${team.id}`), 'DELETE /v1/teams/:id');
-      expect((await getTeam(asAlice, team.id)).id).toBe(team.id);
+      expect(await aliceSees()).toContain(team.id);
     });
   });
 
@@ -249,7 +238,6 @@ test.describe('the workspace boundary', () => {
       alice,
     }) => {
       expect((await workflows(asAlice, alice.teamId)).length).toBeGreaterThan(0);
-      knownHole(PR_35);
 
       expectRefused(
         await asBob.get(`/v1/${alice.teamId}/workflows`),
@@ -262,7 +250,6 @@ test.describe('the workspace boundary', () => {
       // every other test that files an issue into it.
       const team = await createSpareTeam(asAlice);
       const todo = await stateNamed(asAlice, team.id, 'Todo');
-      knownHole(PR_35);
 
       expectRefused(
         await asBob.post(`/v1/${team.id}/workflows/${todo.id}`, {
@@ -276,14 +263,6 @@ test.describe('the workspace boundary', () => {
   });
 
   test.describe('labels', () => {
-    test("Bob cannot read Alice's label", async ({ asAlice, asBob, alice }) => {
-      const label = await createLabel(asAlice, alice);
-      expect(label.workspaceId).toBe(alice.workspaceId);
-      knownHole(PR_35);
-
-      expectRefused(await asBob.get(`/v1/labels/${label.id}`), 'GET /v1/labels/:id');
-    });
-
     test("Bob cannot rename or delete Alice's label", async ({
       asAlice,
       asBob,
@@ -292,7 +271,6 @@ test.describe('the workspace boundary', () => {
       const label = await createLabel(asAlice, alice);
       const listed = await labelsOf(asAlice, alice);
       expect(listed.find((l) => l.id === label.id)?.name).toBe(label.name);
-      knownHole(PR_35);
 
       expectRefused(
         await asBob.post(`/v1/labels/${label.id}`, { data: { name: 'Taken over' } }),
@@ -312,7 +290,6 @@ test.describe('the workspace boundary', () => {
       const label = await createLabel(asAlice, alice);
       const own = (await labelsOf(asAlice, alice)).map((l) => l.id);
       expect(own).toContain(label.id);
-      knownHole(PR_35);
 
       const response = await asBob.get('/v1/labels', {
         params: { workspaceId: alice.workspaceId },
@@ -332,7 +309,6 @@ test.describe('the workspace boundary', () => {
       const name = unique('Planted label');
       // Alice's listing works, so its answer below means something.
       expect((await labelsOf(asAlice, alice)).length).toBeGreaterThan(0);
-      knownHole(PR_35);
 
       await asBob.post('/v1/labels', {
         data: { name, color: '#000000', workspaceId: alice.workspaceId },
@@ -375,7 +351,6 @@ test.describe('the workspace boundary', () => {
       const project = await createProject(asAlice);
       const milestone = await createMilestone(asAlice, project.id);
       expect(milestone.id).toBeTruthy();
-      knownHole(PR_35);
 
       expectRefused(
         await asBob.post(`/v1/projects/milestone/${milestone.id}`, {
@@ -391,16 +366,15 @@ test.describe('the workspace boundary', () => {
   });
 
   test.describe('views', () => {
-    test("Bob cannot read, edit or delete Alice's view", async ({
+    test("Bob cannot edit or delete Alice's view", async ({
       asAlice,
       asBob,
       alice,
     }) => {
       const view = await createView(asAlice, alice);
-      expect((await getView(asAlice, view.id)).name).toBe(view.name);
+      expect((await currentView(asAlice, view)).name).toBe(view.name);
       knownHole(VIEWS_OPEN);
 
-      expectRefused(await asBob.get(`/v1/views/${view.id}`), 'GET /v1/views/:id');
       expectRefused(
         await asBob.post(`/v1/views/${view.id}`, {
           data: { name: 'Taken over', filters: { priority: { filterType: 'IS', value: ['2'] } } },
@@ -409,7 +383,7 @@ test.describe('the workspace boundary', () => {
       );
       expectRefused(await asBob.delete(`/v1/views/${view.id}`), 'DELETE /v1/views/:id');
 
-      const after = await getView(asAlice, view.id);
+      const after = await currentView(asAlice, view);
       expect(after.name).toBe(view.name);
       expect(after.deleted).toBeNull();
     });

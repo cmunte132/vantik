@@ -86,6 +86,18 @@ export async function getIssue(
   return ok(await api.get(`/v1/issues/${issueId}`), 'reading an issue');
 }
 
+/**
+ * Every issue the caller can see in their workspace. The filter route is the
+ * API's issue listing; it leaves out deleted issues and teams the caller is
+ * not in.
+ */
+export async function issuesOf(api: APIRequestContext): Promise<Issue[]> {
+  return ok(
+    await api.post('/v1/issues/filter', { data: { filters: {} } }),
+    'listing issues',
+  );
+}
+
 export interface Comment {
   id: string;
   issueId: string;
@@ -105,6 +117,18 @@ export async function createComment(
     }),
     'creating a comment',
   );
+}
+
+/** An issue's comments, read from its context: the API's one view of them. */
+export async function commentsOn(
+  api: APIRequestContext,
+  issueId: string,
+): Promise<Array<{ id: string; bodyMarkdown: string }>> {
+  const context = await ok<{ comments: Array<{ id: string; bodyMarkdown: string }> }>(
+    await api.get(`/v1/issues/${issueId}/context`),
+    'reading an issue context',
+  );
+  return context.comments;
 }
 
 export interface Label {
@@ -160,11 +184,9 @@ export async function createSpareTeam(api: APIRequestContext): Promise<Team> {
   );
 }
 
-export async function getTeam(
-  api: APIRequestContext,
-  teamId: string,
-): Promise<Team> {
-  return ok(await api.get(`/v1/teams/${teamId}`), 'reading a team');
+/** The teams the caller can see. There is no route that reads one team. */
+export async function teamsOf(api: APIRequestContext): Promise<Team[]> {
+  return ok(await api.get('/v1/teams'), 'listing teams');
 }
 
 export interface Project {
@@ -203,6 +225,7 @@ export async function createMilestone(
 export interface View {
   id: string;
   name: string;
+  filters: Record<string, unknown>;
   deleted: string | null;
 }
 
@@ -222,9 +245,17 @@ export async function createView(
   );
 }
 
-export async function getView(
+/**
+ * A view as it is stored now. The API has no route that reads a view (the
+ * webapp gets them through sync), so this re-saves the view's own filters,
+ * which changes nothing, and reads the row the update returns.
+ */
+export async function currentView(
   api: APIRequestContext,
-  viewId: string,
+  view: View,
 ): Promise<View> {
-  return ok(await api.get(`/v1/views/${viewId}`), 'reading a view');
+  return ok(
+    await api.post(`/v1/views/${view.id}`, { data: { filters: view.filters } }),
+    'reading a view back',
+  );
 }

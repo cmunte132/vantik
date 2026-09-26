@@ -1,0 +1,132 @@
+name: E2E
+
+# Boots the stack a self-hoster runs — both images built from this commit, the
+# stock docker-compose.yaml, plus the mail catcher from docker-compose.e2e.yaml
+# — and drives it from outside with the suite in apps/e2e.
+#
+# The CI workflow proves the code compiles and the units behave. This proves
+# the product starts and works. Those have come apart on main more than once:
+# a server that crash-looped on a DI error with typecheck clean and 891 tests
+# passing, an image shipped without its native modules, an onboarding step that
+# failed on every fresh install, a migration history that could not rebuild the
+# schema, and a run of cross-workspace reads that only a signed-in request from
+# the wrong workspace would ever show.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # docker-compose.yaml names its images ${REGISTRY}/vantik-<app>:${VERSION}.
+  # The images are built under exactly that name below, so `compose up` finds
+  # them locally and neither pulls a release nor rebuilds without the cache.
+  REGISTRY: vantik-e2e
+  VERSION: ci
+  COMPOSE: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml
+
+jobs:
+  e2e:
+    name: Stack and API
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Reads the version from the root package.json `packageManager` field.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # For the test runner and the prisma CLI. The apps themselves run from
+      # the images.
+      - run: pnpm install --frozen-lockfile
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Cached per app in scopes of its own, so this never evicts the release
+      # workflow's cache. Only main writes: a pull request reads what main
+      # left, and does not spend the repository's cache quota on a branch.
+      - name: Build the server image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          tags: ${{ env.REGISTRY }}/vantik-server:${{ env.VERSION }}
+          load: true
+          cache-from: type=gha,scope=e2e-server
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=e2e-server' || '' }}
+
+      - name: Build the webapp image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/webapp/Dockerfile
+          tags: ${{ env.REGISTRY }}/vantik-webapp:${{ env.VERSION }}
+          load: true
+          build-args: |
+            VANTIK_COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=e2e-webapp
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=e2e-webapp' || '' }}
+
+      # The defaults in .env.example are what a self-hoster starts with, and
+      # what the suite should see. --wait holds until the server's healthcheck
+      # (GET /health/ready) passes, which it does only once the migrations have
+      # run and every dependency answers.
+      - name: Start the stack
+        run: |
+          cp .env.example .env
+          $COMPOSE up -d --no-build --wait --wait-timeout 600
+
+      # The server just applied the migration history to an empty database.
+      # This replays the same history into a scratch database and diffs the
+      # result against schema.prisma, so a migration that was never written for
+      # a schema change fails here instead of on someone's upgrade.
+      - name: Check the migrations rebuild the schema
+        working-directory: apps/server
+        env:
+          DATABASE_URL: postgresql://docker:docker@localhost:5432/vantik?schema=vantik
+          SHADOW_DATABASE_URL: postgresql://docker:docker@localhost:5432/vantik_shadow?schema=vantik
+        run: |
+          docker exec vantik-postgres createdb -U docker vantik_shadow
+          docker exec vantik-postgres psql -U docker -d vantik_shadow -c 'CREATE SCHEMA IF NOT EXISTS vantik'
+          pnpm run migrate:check
+
+      - name: Run the end-to-end suite
+        run: pnpm e2e
+
+      - name: Collect container logs
+        if: failure()
+        run: |
+          $COMPOSE ps --all
+          $COMPOSE logs --no-color --timestamps > compose.log
+          tail -n 200 compose.log
+
+      - name: Upload the report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: |
+            apps/e2e/playwright-report
+            apps/e2e/test-results
+            compose.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Stop the stack
+        if: always()
+        run: $COMPOSE down --volumes

@@ -1,0 +1,47 @@
+# Overlay for the end-to-end suite in apps/e2e.
+#
+#   cp .env.example .env
+#   docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml up -d --wait
+#   pnpm e2e
+#
+# It changes as little as it can. The suite is meant to find what breaks on the
+# stack a self-hoster actually runs, so every difference from the default is a
+# place it cannot look. There are two:
+#
+#   - A mail catcher. The suite signs in the way a person does, by typing the
+#     code from the login email, and it needs somewhere to read that email.
+#     Sending it through real SMTP also covers the mail path itself, which the
+#     unit tests mock and which has broken silently before.
+#   - Nothing else is published or reconfigured. Scheduled jobs, rate limits
+#     and the optional services stay at their defaults.
+
+services:
+  mailpit:
+    container_name: vantik-mailpit
+    image: axllent/mailpit:v1.31.2
+    environment:
+      # The server always sends SMTP credentials (see MailerModule in
+      # apps/server/src/app.module.ts), so the catcher has to accept them, and
+      # accept them over a plain connection.
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      # The HTTP API the suite reads messages from, and the inbox UI for a
+      # person looking at a failed run.
+      - "127.0.0.1:8025:8025"
+      # SMTP, for a server run on the host with `pnpm dev` (see apps/e2e).
+      - "127.0.0.1:1025:1025"
+    networks:
+      - vantik
+
+  server:
+    depends_on:
+      mailpit:
+        condition: service_started
+    environment:
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_USER: e2e
+      SMTP_PASSWORD: e2e
+      SMTP_USE_SLS: "false"
+      SMTP_DEFAULT_FROM: "Vantik <noreply@vantik.test>"

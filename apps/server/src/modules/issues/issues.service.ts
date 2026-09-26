@@ -365,25 +365,31 @@ export default class IssuesService {
       ),
       updatedById: userId,
       ...otherIssueData,
-      ...('parentId' in issueData
+      // Each relation below changes only when the request names it: null
+      // disconnects, an id connects, and absent leaves it alone. "Absent" is
+      // `undefined`, not a missing key: the global ValidationPipe (whitelist)
+      // hands back the DTO with every declared field present, so an `in` check
+      // was true for all of them and every update connected a parent,
+      // project, milestone, cycle and capability with an id of undefined.
+      ...(issueData.parentId !== undefined
         ? parentId === null
           ? { parent: { disconnect: true } }
           : { parent: { connect: { id: parentId } } }
         : {}),
 
-      ...('projectId' in issueData
+      ...(issueData.projectId !== undefined
         ? projectId === null
           ? { project: { disconnect: true } }
           : { project: { connect: { id: projectId } } }
         : {}),
 
-      ...('projectMilestoneId' in issueData
+      ...(issueData.projectMilestoneId !== undefined
         ? projectMilestoneId === null
           ? { projectMilestone: { disconnect: true } }
           : { projectMilestone: { connect: { id: projectMilestoneId } } }
         : {}),
 
-      ...('cycleId' in issueData
+      ...(issueData.cycleId !== undefined
         ? cycleId === null
           ? { cycle: { disconnect: true } }
           : { cycle: { connect: { id: cycleId } } }
@@ -392,7 +398,7 @@ export default class IssuesService {
       // Same shape as the four above. A relation cannot go in as a scalar id
       // beside them: Prisma allows the checked form or the unchecked form for a
       // whole update, and never a mixture of the two.
-      ...('capabilityId' in issueData
+      ...(issueData.capabilityId !== undefined
         ? capabilityId === null
           ? { capability: { disconnect: true } }
           : { capability: { connect: { id: capabilityId } } }
@@ -444,7 +450,7 @@ export default class IssuesService {
     // consequence of the assignment, and a queue that will not accept work
     // must not fail the assignment the user actually asked for. It swallows
     // its own errors rather than becoming an unhandled rejection.
-    if ('assigneeId' in issueData) {
+    if (issueData.assigneeId !== undefined) {
       await this.agentDelegation()?.onAssigneeChanged(
         updatedIssue.id,
         updatedIssue.team.workspaceId,

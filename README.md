@@ -146,6 +146,23 @@ pnpm dev
 If the full stack already runs in containers, the app ports are in use. To free
 them, run `docker compose stop webapp server`.
 
+### Tests
+
+```bash
+pnpm typecheck
+pnpm test   # the unit tests. They need no services.
+pnpm e2e    # the end-to-end tests. They need a running stack.
+```
+
+The unit tests include the webapp's sync tests
+(`apps/webapp/src/store/sync-contract.spec.ts`). They run every synced model
+through the real save handlers, into a real IndexedDB and the real store, and
+check that nothing the server sends is lost on the way.
+
+The end-to-end tests drive a running stack from the outside, with the
+`docker-compose.e2e.yaml` overlay. CI runs them on every pull request. To set
+them up, read [apps/e2e/README.md](apps/e2e/README.md).
+
 ### Observability
 
 The server has OpenTelemetry instrumentation, but it exports no data until you

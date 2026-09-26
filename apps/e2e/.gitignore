@@ -1,0 +1,5 @@
+# Credentials minted by the setup project for one run.
+.auth/
+test-results/
+playwright-report/
+blob-report/

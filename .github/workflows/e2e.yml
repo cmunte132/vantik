@@ -82,13 +82,14 @@ jobs:
           cache-from: type=gha,scope=e2e-webapp
           cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=e2e-webapp' || '' }}
 
-      # The defaults in .env.example are what a self-hoster starts with, and
-      # what the suite should see. --wait holds until the server's healthcheck
-      # (GET /health/ready) passes, which it does only once the migrations have
-      # run and every dependency answers.
+      # Exactly the setup README.md gives a self-hoster: the defaults from
+      # .env.example, plus the one secret that has no default. --wait holds
+      # until the server's healthcheck (GET /health/ready) passes, which it does
+      # only once the migrations have run and every dependency answers.
       - name: Start the stack
         run: |
           cp .env.example .env
+          echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
           $COMPOSE up -d --no-build --wait --wait-timeout 600
 
       # The server just applied the migration history to an empty database.

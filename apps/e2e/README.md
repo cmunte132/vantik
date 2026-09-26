@@ -24,6 +24,7 @@ email.
 
 ```bash
 cp .env.example .env
+echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
 docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml up -d --build --wait
 pnpm install
 pnpm e2e
@@ -67,8 +68,9 @@ Mailpit's inbox is at http://localhost:8025.
 ## In CI
 
 `.github/workflows/e2e.yml` runs on every pull request to `main` and on every
-push to `main`. It builds both images from the commit and starts the stack with
-the default `.env.example`. Then it does these checks:
+push to `main`. It builds both images from the commit and starts the stack the
+way `README.md` says to: the defaults from `.env.example`, plus a new
+`CREDENTIAL_ENCRYPTION_KEY`. Then it does these checks:
 
 1. It waits for `GET /health/ready`. The server gives this answer only after it
    has applied the migrations to an empty database and every dependency

@@ -19,6 +19,8 @@ import { useCurrentWorkspace } from 'hooks/workspace';
 import { useKnowledgeSearch, type KnowledgeHit } from 'services/pages';
 import { useGetSearchIssuesQuery } from 'services/search';
 
+import { KNOWLEDGE_SEARCH_DELAY_MS, useSettledQuery } from './settled-query';
+
 interface SearchDialogProps {
   open: boolean;
   setOpen: (value: boolean) => void;
@@ -45,7 +47,10 @@ export function SearchDialog({ open, setOpen }: SearchDialogProps) {
   // The knowledge bank is searched from the same box, because "has anyone
   // written this down" and "has anyone filed this" are the same question asked
   // twice, and a person should not have to guess which surface holds the answer.
-  const { data: knowledge } = useKnowledgeSearch(query);
+  // Only the settled query is sent: each search is recorded as demand, and a
+  // keystroke is not a question anybody asked.
+  const knowledgeQuery = useSettledQuery(query, KNOWLEDGE_SEARCH_DELAY_MS);
+  const { data: knowledge } = useKnowledgeSearch(knowledgeQuery);
 
   React.useEffect(() => {
     fetchData();

@@ -23,8 +23,6 @@ export const tablesToSendMessagesFor = new Map([
   [ModelNameEnum.Notification, true],
   [ModelNameEnum.View, true],
   [ModelNameEnum.IssueSuggestion, true],
-  [ModelNameEnum.Action, true],
-  [ModelNameEnum.ActionEntity, true],
   [ModelNameEnum.Project, true],
   [ModelNameEnum.ProjectMilestone, true],
   [ModelNameEnum.Product, true],

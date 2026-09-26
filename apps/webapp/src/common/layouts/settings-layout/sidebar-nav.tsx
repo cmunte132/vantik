@@ -44,7 +44,7 @@ export function SidebarNav() {
   } = query;
 
   function isActive(item: LinkItem) {
-    if (pathname.includes('integrations') || pathname.includes('actions')) {
+    if (pathname.includes('integrations')) {
       return pathname.includes(item.href);
     }
 

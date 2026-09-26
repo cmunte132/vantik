@@ -1,8 +1,7 @@
 # @vantikhq/cli
 
-The `vantik-cli` command. It does two jobs. It deploys Vantik actions with
-`login`, `init`, `deploy`, and `logout`. It also works issues from the terminal
-with `task …`.
+The `vantik-cli` command. It works issues, projects and pages from the
+terminal with `task …`, `project …` and `knowledge …`, after `login`.
 
 ## Authentication
 
@@ -79,8 +78,3 @@ project. That opinion lives in two places only: the MCP tools `create_task` and
 `create_project`, and the `working-vantik-issues` skill. Those two guide an
 agent to a small number of large issues under projects. A person at a terminal
 knows what that person wants, so `task create tweak` works.
-
-## How to deploy actions
-
-For `init`, `deploy`, and the format of the action configuration, read the
-[documentation for actions](../../apps/docs/docs/actions).

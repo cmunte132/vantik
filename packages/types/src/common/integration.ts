@@ -23,7 +23,7 @@ export enum IntegrationPayloadEventType {
   WEBHOOK_RESPONSE = 'webhook_response',
 
   // Valid and return the response for webhooks
-  IS_ACTION_SUPPORTED_EVENT = 'is_action_supported_event',
+  IS_SUPPORTED_EVENT = 'is_supported_event',
 
   /**
    * Generic event type for platform-specific actions

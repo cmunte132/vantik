@@ -8,70 +8,6 @@ servers:
   - url: https://app.vantik.dev
 
 paths:
-  /api/v1/action/{slug}/run:
-    post:
-      summary: Run an action
-      description: The server runs the action with the given slug and payload.
-      parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RunAction"
-      responses:
-        "200":
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        "400":
-          description: Invalid request parameters
-        "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
-      tags:
-        - Action
-
-  /api/v1/action/{slug}/inputs:
-    post:
-      summary: Update action inputs
-      description: The server updates the inputs of the action with the given slug.
-      parameters:
-        - name: slug
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateActionInputsDto"
-      responses:
-        "200":
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        "400":
-          description: Invalid request parameters
-        "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
-      tags:
-        - Action
-
   /api/v1/integration_definition/{integrationDefinitionId}:
     get:
       summary: Get integration definition by ID
@@ -970,26 +906,6 @@ paths:
 
 components:
   schemas:
-    RunAction:
-      type: object
-      properties:
-        workspaceId:
-          type: string
-        payload:
-          type: object
-      required:
-        - workspaceId
-        - payload
-
-    UpdateActionInputsDto:
-      type: object
-      properties:
-        inputs:
-          type: object
-          # Define the inputs schema if applicable
-      required:
-        - inputs
-
     IntegrationAccount:
       type: object
       properties:
@@ -1143,8 +1059,6 @@ components:
         icon:
           type: string
           nullable: true
-        actionsEnabled:
-          type: boolean
         usersOnWorkspaces:
           type: array
           items:

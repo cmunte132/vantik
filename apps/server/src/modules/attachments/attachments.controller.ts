@@ -7,11 +7,8 @@ import {
   Put,
   Req,
   Res,
-  UploadedFiles,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
 import { SignedURLBody } from '@vantikhq/types';
 import { Request, Response } from 'express';
 
@@ -28,13 +25,6 @@ import { AttachmentService } from './attachments.service';
 export class AttachmentController {
   constructor(private readonly attachementService: AttachmentService) {}
 
-  @Post('upload/action')
-  @UseInterceptors(FilesInterceptor('files'))
-  @UseGuards(AuthGuard)
-  async uploadActionFile(@UploadedFiles() files: Express.Multer.File[]) {
-    return await this.attachementService.uploadActionFile(files[0]);
-  }
-
   @Post('get-signed-url')
   @UseGuards(AuthGuard)
   async getUploadSignedUrl(
@@ -47,28 +37,6 @@ export class AttachmentController {
       userId,
       workspaceId,
     );
-  }
-
-  @Get('actions/:attachmentId')
-  async getFileForAction(
-    @Param() { attachmentId }: { attachmentId: string },
-    @Res() res: Response,
-  ) {
-    try {
-      const buffer =
-        await this.attachementService.getActionFileContents(attachmentId);
-
-      // Set content disposition header with the original filename
-      res.set({
-        'Content-Type': 'application/javascript',
-        'Content-Disposition': 'inline',
-        'Cache-Control': 'public, immutable, max-age=31536000', // Cache for 1 year (effectively infinite)
-      });
-
-      res.send(buffer);
-    } catch (error) {
-      res.status(404).send('File not found');
-    }
   }
 
   /**

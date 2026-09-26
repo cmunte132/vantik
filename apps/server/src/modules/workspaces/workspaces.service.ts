@@ -73,9 +73,6 @@ export default class WorkspacesService {
             slug: workspaceData.workspaceName
               .toLowerCase()
               .replace(/[^a-z0-9]/g, ''),
-            preferences: {
-              actionCount: 2,
-            },
             usersOnWorkspaces: {
               create: { userId },
             },

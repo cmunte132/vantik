@@ -1,9 +1,6 @@
 import { Workspace } from '../workspace';
 
 export enum ModelNameEnum {
-  Action = 'Action',
-  ActionEntity = 'ActionEntity',
-  ActionEvent = 'ActionEvent',
   AgentRun = 'AgentRun',
   AgentRunEvent = 'AgentRunEvent',
   AgentRunIteration = 'AgentRunIteration',
@@ -43,19 +40,14 @@ export enum ModelNameEnum {
   Team = 'Team',
   TeamPreference = 'TeamPreference',
   Template = 'Template',
-  TriggerProject = 'TriggerProject',
   User = 'User',
   UsersOnWorkspaces = 'UsersOnWorkspaces',
   View = 'View',
   Workflow = 'Workflow',
   Workspace = 'Workspace',
-  WorkspaceTriggerProject = 'WorkspaceTriggerProject',
 }
 
 export const ModelName = {
-  Action: 'Action',
-  ActionEntity: 'ActionEntity',
-  ActionEvent: 'ActionEvent',
   AgentRun: 'AgentRun',
   AgentRunEvent: 'AgentRunEvent',
   AgentRunIteration: 'AgentRunIteration',
@@ -95,13 +87,11 @@ export const ModelName = {
   Team: 'Team',
   TeamPreference: 'TeamPreference',
   Template: 'Template',
-  TriggerProject: 'TriggerProject',
   User: 'User',
   UsersOnWorkspaces: 'UsersOnWorkspaces',
   View: 'View',
   Workflow: 'Workflow',
   Workspace: 'Workspace',
-  WorkspaceTriggerProject: 'WorkspaceTriggerProject',
 };
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName];

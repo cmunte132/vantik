@@ -66,7 +66,7 @@ export default async function run(
       return await codeChangeOf(eventPayload.eventBody, botToken);
     }
 
-    case IntegrationPayloadEventType.IS_ACTION_SUPPORTED_EVENT:
+    case IntegrationPayloadEventType.IS_SUPPORTED_EVENT:
       return true;
 
     /* ── Behaviour ──────────────────────────────────────────────────────── */

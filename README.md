@@ -33,10 +33,11 @@ builds with Turbopack. The webapp reads the `NEXT_PUBLIC_*` settings from the
 server at `/api/v1/config`, so a self-hosted installation sets them when the
 container starts. One update is not complete: the ESLint 9 flat config.
 
-The automations subsystem no longer uses trigger.dev. An integration and an
-action are two halves of one vendor, and they are now one plugin that the server
-loads from `apps/server/src/integrations/<slug>`. The server dispatches the work
-on the redis that the stack already needs.
+The automations subsystem no longer uses trigger.dev, and Actions are gone. An
+integration is one plugin that the server loads from
+`apps/server/src/integrations/<slug>`. Connecting it is the whole configuration:
+it then reacts to the record changes and webhooks it declares, and the server
+dispatches that work on the redis that the stack already needs.
 
 ## Attribution and license
 
@@ -105,7 +106,6 @@ To see if a job runs, read `docker compose logs server`.
 | --- | --- | --- | --- |
 | Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
 | Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives each knowledge entry that no person triaged and that the server never served. |
-| Action schedules | per action | (set on the action) | This job runs an action that a person put on a schedule. The server reads the schedules at start and it registers one repeatable job for each. |
 
 To stop a job, set its variable to `off`.
 

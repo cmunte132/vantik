@@ -94,10 +94,10 @@ export function getLLMClient(): OpenAICompatibleProvider {
 /**
  * Coerce whatever a caller sent into one of the two roles.
  *
- * Actions in `actions/` deploy to trigger.dev independently of the server, so a
- * server upgrade meets requests from action code that is months old and still
- * sends wire model IDs. This layer is permanent, not a migration shim: it is
- * what keeps those installs working.
+ * The AI endpoint is public API, so a server upgrade meets requests from
+ * scripts written against an older one that still send wire model IDs — as the
+ * retired Actions did. This layer is permanent, not a migration shim: it is
+ * what keeps those callers working.
  */
 export function coerceRole(requested?: string | null): LLMRole {
   const value = requested?.trim();

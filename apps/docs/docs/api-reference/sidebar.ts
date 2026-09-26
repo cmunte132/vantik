@@ -8,24 +8,6 @@ const sidebar: SidebarsConfig = {
     },
     {
       type: "category",
-      label: "Action",
-      items: [
-        {
-          type: "doc",
-          id: "api-reference/run-an-action",
-          label: "Run an action",
-          className: "api-method post",
-        },
-        {
-          type: "doc",
-          id: "api-reference/update-action-inputs",
-          label: "Update action inputs",
-          className: "api-method post",
-        },
-      ],
-    },
-    {
-      type: "category",
       label: "Integration_definition",
       items: [
         {

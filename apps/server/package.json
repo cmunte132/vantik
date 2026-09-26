@@ -103,7 +103,6 @@
     "@types/nodemailer": "^8.0.1",
     "@types/turndown": "^5.0.5",
     "@vantikhq/agent-core": "workspace:^",
-    "@vantikhq/sdk": "workspace:*",
     "@vantikhq/types": "workspace:*",
     "ai": "^7.0.31",
     "axios": "^1.6.7",

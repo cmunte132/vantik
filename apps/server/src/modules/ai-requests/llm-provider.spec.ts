@@ -5,9 +5,9 @@ describe('coerceRole', () => {
     expect(coerceRole(role)).toBe(role);
   });
 
-  // Actions deploy to trigger.dev independently of the server, so a server can
-  // always be asked for a model id that was current whenever those actions were
-  // last shipped. Nothing here is a temporary shim.
+  // The AI endpoint is public API, so a server can always be asked for a model
+  // id that was current whenever its caller was written. Nothing here is a
+  // temporary shim.
   it.each([
     ['gpt-3.5-turbo', 'fast'],
     ['gpt-3.5-turbo-0125', 'fast'],

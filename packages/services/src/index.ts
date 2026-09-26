@@ -3,7 +3,6 @@ export * from './integration-definition';
 export * from './issue-comment';
 export * from './user';
 export * from './workflow';
-export * from './action';
 export * from './team';
 export * from './projects';
 export * from './product-axis';

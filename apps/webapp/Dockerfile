@@ -29,7 +29,6 @@ COPY packages/cli/package.json              packages/cli/
 COPY packages/services/package.json         packages/services/
 COPY packages/types/package.json            packages/types/
 COPY packages/ui/package.json               packages/ui/
-COPY packages/vantik-sdk/package.json       packages/vantik-sdk/
 COPY tooling/eslint-config/package.json     tooling/eslint-config/
 COPY tooling/typescript-config/package.json tooling/typescript-config/
 

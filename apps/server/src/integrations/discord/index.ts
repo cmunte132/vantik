@@ -7,7 +7,7 @@ import { type PluginContext } from 'plugins/plugin.interface';
 
 import { integrationCreate } from './account-create';
 import { getToken } from './get-token';
-import { isActionSupportedEvent } from './is_action_supported_event';
+import { isSupportedEvent } from './is_supported_event';
 import { discordMessage } from './message';
 import { spec } from './spec';
 export { discordSpec as pluginSpec } from './spec-plugin';
@@ -41,8 +41,8 @@ export default async function run(
     case IntegrationPayloadEventType.GET_TOKEN:
       return await getToken(ctx, eventPayload.integrationAccountId);
 
-    case IntegrationPayloadEventType.IS_ACTION_SUPPORTED_EVENT:
-      return isActionSupportedEvent(eventPayload.eventBody);
+    case IntegrationPayloadEventType.IS_SUPPORTED_EVENT:
+      return isSupportedEvent(eventPayload.eventBody);
 
     /**
      * The behaviour half, folded in from `actions/discord`.

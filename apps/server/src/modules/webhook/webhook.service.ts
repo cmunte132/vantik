@@ -52,15 +52,12 @@ export default class WebhookService {
       response.status(200).json(webhookResponse);
     }
 
-    const isActionSupported = await this.integrations.loadIntegration(
-      sourceName,
-      {
-        event: IntegrationPayloadEventType.IS_ACTION_SUPPORTED_EVENT,
-        eventBody,
-      },
-    );
+    const isSupported = await this.integrations.loadIntegration(sourceName, {
+      event: IntegrationPayloadEventType.IS_SUPPORTED_EVENT,
+      eventBody,
+    });
 
-    if (!isActionSupported) {
+    if (!isSupported) {
       this.logger.log({
         message: `Received webhook event for ${sourceName} is not one it handles`,
         where: `WebhookService.handleEvents`,

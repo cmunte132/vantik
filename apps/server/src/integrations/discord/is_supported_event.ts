@@ -4,6 +4,6 @@ interface Payload {
   t: string;
 }
 
-export function isActionSupportedEvent(payload: Payload) {
+export function isSupportedEvent(payload: Payload) {
   return SUPPORTED_TYPES.includes(payload.t);
 }

@@ -11,7 +11,6 @@ import config from 'common/configs/config';
 import { BuildStampInterceptor } from 'common/interceptors/build-stamp.interceptor';
 import { ErrorReportingInterceptor } from 'common/interceptors/error-reporting.interceptor';
 
-import { ActionModule } from 'modules/action/action.module';
 import { AgentSkillModule } from 'modules/agent-skill/agent-skill.module';
 import { AIRequestsModule } from 'modules/ai-requests/ai-requests.module';
 import { ALSModule } from 'modules/als/als.module';
@@ -121,7 +120,6 @@ import { AppService } from './app.service';
     AgentSkillModule,
     AttachmentModule,
     ViewsModule,
-    ActionModule,
     AIRequestsModule,
     ProjectsModule,
     ProductsModule,

@@ -28,7 +28,7 @@ import { AppModule } from './app.module';
 };
 
 // Several services fire-and-forget calls to optional integrations
-// (trigger.dev, ollama, SMTP). A rejected promise from one of those must not
+// (ollama, SMTP). A rejected promise from one of those must not
 // take down the whole server, so log instead of crashing.
 process.on('unhandledRejection', (reason) => {
   new LoggerService('UnhandledRejection').error({

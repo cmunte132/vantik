@@ -697,9 +697,9 @@ describe('decay', () => {
  * Correcting is a sequence — write, triage, write again — and what matters is
  * the state the entries end in, which a double answering every query with
  * the same row cannot show. This one keeps rows, derives the two sides of the
- * supersede pointer from them, runs writes in the order the service hands
- * them to the transaction, and refuses a second row pointing at the same
- * entry the way the unique index does.
+ * supersede pointer from them, defers writes until the transaction runs them
+ * in array order, and refuses a second row pointing at the same entry the way
+ * the unique index does.
  */
 describe('corrections', () => {
   interface Row {
@@ -718,6 +718,34 @@ describe('corrections', () => {
 
   const PERSON = 'human-1';
   const BOT = 'agent-1';
+
+  interface Deferred<T> extends PromiseLike<T> {
+    run: () => T;
+  }
+
+  /**
+   * A write that runs when a transaction runs it, or when it is awaited on its
+   * own — the way a PrismaPromise does — and only once.
+   */
+  function deferred<T>(write: () => T): Deferred<T> {
+    let done = false;
+    let result: T;
+    const run = () => {
+      if (!done) {
+        result = write();
+        done = true;
+      }
+      return result;
+    };
+    return {
+      run,
+      then: (onFulfilled, onRejected) =>
+        new Promise<T>((resolve) => resolve(run())).then(
+          onFulfilled,
+          onRejected,
+        ),
+    };
+  }
 
   function bank(initial: Array<Partial<Row> & { id: string }>) {
     const rows = new Map<string, Row>();
@@ -819,27 +847,36 @@ describe('corrections', () => {
         findMany: jest.fn(async ({ where }) =>
           [...rows.values()].filter((row) => matches(row, where)).map(view),
         ),
-        create: jest.fn(({ data }) => {
-          const id = `new-${++next}`;
-          assertUniquePointer(id, data.supersedesId);
-          put({ ...data, id });
-          return rows.get(id);
-        }),
-        update: jest.fn(({ where, data }) => {
-          const row = rows.get(where.id) as Row;
-          if ('supersedesId' in data)
-            assertUniquePointer(row.id, data.supersedesId);
-          Object.assign(row, data);
-          return row;
-        }),
-        updateMany: jest.fn(({ where, data }) => {
-          const hit = [...rows.values()].filter((row) => matches(row, where));
-          hit.forEach((row) => Object.assign(row, data));
-          return { count: hit.length };
-        }),
+        create: jest.fn(({ data }) =>
+          deferred(() => {
+            const id = `new-${++next}`;
+            assertUniquePointer(id, data.supersedesId);
+            put({ ...data, id });
+            return rows.get(id);
+          }),
+        ),
+        update: jest.fn(({ where, data }) =>
+          deferred(() => {
+            const row = rows.get(where.id) as Row;
+            if ('supersedesId' in data)
+              assertUniquePointer(row.id, data.supersedesId);
+            Object.assign(row, data);
+            return row;
+          }),
+        ),
+        updateMany: jest.fn(({ where, data }) =>
+          deferred(() => {
+            const hit = [...rows.values()].filter((row) => matches(row, where));
+            hit.forEach((row) => Object.assign(row, data));
+            return { count: hit.length };
+          }),
+        ),
       },
-      // Writes already ran, in the order the service built the array.
-      $transaction: jest.fn(async (results: unknown[]) => results),
+      // Like Prisma, nothing runs until the transaction does, and then in the
+      // order of the array, not the order the service happened to build it.
+      $transaction: jest.fn(async (writes: Array<Deferred<unknown>>) =>
+        writes.map((write) => write.run()),
+      ),
     } as unknown as PrismaService;
 
     const service = new PageEntriesService(prisma);
@@ -978,6 +1015,72 @@ describe('corrections', () => {
     expect(status('X')).toBe(PageEntryStatusEnum.STANDING);
     expect(status(b.id)).toBe(PageEntryStatusEnum.STANDING);
     expect(status(plain.id)).toBe(PageEntryStatusEnum.STANDING);
+  });
+
+  it("[KG-0.1] keeps a disputed correction's claim: an agent cannot take it over, a person's standing correction can", async () => {
+    const { service, status, pointer, correct } = bank([{ id: 'A' }]);
+
+    const b = await correct(BOT, 'A');
+    await service.updateEntry(b.id, PERSON, {
+      status: PageEntryStatusEnum.DISPUTED,
+    });
+
+    await expect(correct(BOT, 'A')).rejects.toThrow(
+      new RegExp(`already waiting for review: ${b.id}`),
+    );
+    expect(pointer(b.id)).toBe('A');
+
+    await correct(PERSON, 'A', true);
+    expect(status('A')).toBe(PageEntryStatusEnum.SUPERSEDED);
+    expect(pointer(b.id)).toBeNull();
+  });
+
+  it('[KG-0.1] does not undo an archived correction by accepting a correction of it', async () => {
+    const { service, status, correct } = bank([{ id: 'A' }]);
+
+    const b = await correct(BOT, 'A');
+    await service.updateEntry(b.id, PERSON, {
+      status: PageEntryStatusEnum.ARCHIVED,
+    });
+    const c = await correct(BOT, b.id);
+    await service.updateEntry(c.id, PERSON, {
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    // C replaces B, which a person had rejected as a replacement for A.
+    expect(status(b.id)).toBe(PageEntryStatusEnum.SUPERSEDED);
+    expect(status('A')).toBe(PageEntryStatusEnum.STANDING);
+  });
+
+  it('[KG-0.1] retires a disputed target accepted in the same batch as its correction', async () => {
+    const { service, status, correct } = bank([{ id: 'A' }]);
+
+    const b = await correct(BOT, 'A');
+    await service.updateEntry('A', PERSON, {
+      status: PageEntryStatusEnum.DISPUTED,
+    });
+
+    // The status write has to land before the retirement, or A comes back.
+    await service.bulkUpdate('workspace-1', PERSON, {
+      entryIds: ['A', b.id],
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    expect(status('A')).toBe(PageEntryStatusEnum.SUPERSEDED);
+    expect(status(b.id)).toBe(PageEntryStatusEnum.STANDING);
+  });
+
+  it('[KG-0.1] sends a correction of text folded into the page body to the body', async () => {
+    const { correct } = bank([
+      { id: 'A', status: PageEntryStatusEnum.CONSOLIDATED },
+    ]);
+
+    await expect(correct(BOT, 'A')).rejects.toThrow(
+      /folded into the page body/,
+    );
+    await expect(correct(PERSON, 'A', true)).rejects.toThrow(
+      /folded into the page body/,
+    );
   });
 
   it('[KG-0.1] never moves an entry out of a decided state', async () => {

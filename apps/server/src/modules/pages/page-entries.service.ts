@@ -471,7 +471,8 @@ export default class PageEntriesService {
    * DISPUTED) changes nothing: the target stays in use, and the pointer stays
    * too, because both states can be revived — a disputed correction accepted
    * later still replaces what it corrected. A new correction of the same
-   * entry takes the pointer over when it is written.
+   * entry takes the pointer over only from an archived one, or from a person
+   * writing standing knowledge (see `assertSupersedable`).
    *
    * Returns the writes for the caller's transaction, and the ids that leave
    * the index.
@@ -529,7 +530,9 @@ export default class PageEntriesService {
    * of the correction already waiting, so it resends superseding that one; a
    * person accepting the latest link has accepted a replacement for the
    * original, and leaving the original in use would serve both truths. The
-   * walk stops at anything already decided (SUPERSEDED or CONSOLIDATED).
+   * walk passes only through corrections still undecided (PROPOSED or
+   * DISPUTED), and never touches anything decided (SUPERSEDED or
+   * CONSOLIDATED).
    * Pointers are set only when an entry is written and always name an older
    * entry, so the chain cannot loop; the visited set is belt and braces.
    */
@@ -549,7 +552,15 @@ export default class PageEntriesService {
           continue;
         }
         retire.add(row.id);
-        if (row.supersedesId && !retire.has(row.supersedesId)) {
+        // Only an undecided correction carries its claim on to what it
+        // corrects. One a person archived was rejected as a replacement, and
+        // accepting a correction of it must not quietly undo that decision.
+        if (
+          row.supersedesId &&
+          !retire.has(row.supersedesId) &&
+          (row.status === PageEntryStatusEnum.PROPOSED ||
+            row.status === PageEntryStatusEnum.DISPUTED)
+        ) {
           frontier.push(row.supersedesId);
         }
       }
@@ -726,9 +737,10 @@ export default class PageEntriesService {
    * replacement instead. An entry with a correction still waiting for review
    * cannot take a second one, or two claims would race to replace it — except
    * from a person writing standing knowledge, who is the review, and whose
-   * correction displaces the waiting one; that one stays in the inbox as an
-   * ordinary claim. A correction that was rejected or is held in dispute
-   * gives way to a new one.
+   * correction displaces the waiting one; that one stays where it is as an
+   * ordinary claim. A correction held in dispute counts as waiting. One that
+   * was rejected (archived) gives way to a new one. An entry already folded
+   * into the page body is corrected in the body.
    */
   private async assertSupersedable(
     supersedesId: string,
@@ -749,6 +761,16 @@ export default class PageEntriesService {
       });
     }
 
+    if (target.status === PageEntryStatusEnum.CONSOLIDATED) {
+      throw new BadRequestException({
+        message:
+          `Entry ${supersedesId} has been folded into the page body, so the ` +
+          'body is what carries it now. Correct the page body instead; a ' +
+          'standing correction beside it would serve the old text and the new ' +
+          'one together.',
+      });
+    }
+
     if (target.status === PageEntryStatusEnum.SUPERSEDED) {
       throw new BadRequestException({
         message:
@@ -763,10 +785,14 @@ export default class PageEntriesService {
       return null;
     }
 
-    if (
-      target.supersededBy.status === PageEntryStatusEnum.PROPOSED &&
-      !options.displacePending
-    ) {
+    // A disputed correction is held, not rejected: it can still be accepted,
+    // and giving its pointer away now would let that later acceptance serve
+    // beside the entry it corrects.
+    const undecided =
+      target.supersededBy.status === PageEntryStatusEnum.PROPOSED ||
+      target.supersededBy.status === PageEntryStatusEnum.DISPUTED;
+
+    if (undecided && !options.displacePending) {
       throw new BadRequestException({
         message:
           `A correction to entry ${supersedesId} is already waiting for ` +

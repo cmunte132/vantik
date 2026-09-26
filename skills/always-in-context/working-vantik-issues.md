@@ -1,10 +1,10 @@
 <!--
-Always-in-context version of the working-vantik-issues skill, for an agent that
+The always-in-context form of the working-vantik-issues skill, for an agent that
 reads no skills (a plain system prompt, an older runner), or one that works
 quietly with the skill loaded on demand. Paste the section below into your
-repo's AGENTS.md. Where your agent reads skills, install the skill instead —
-`npx skills add https://your-vantik-host`, see README.md — since it loads on
-demand and keeps context free until issue work actually comes up.
+repo's AGENTS.md or CLAUDE.md. Where your agent reads skills, install the skill
+instead — `npx skills add https://your-vantik-host`, see ../README.md — since it
+loads on demand and keeps context free until issue work actually comes up.
 -->
 
 ## Working Vantik issues

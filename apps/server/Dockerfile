@@ -74,10 +74,11 @@ COPY --from=builder --chown=node:node /app/apps/server/scripts ./apps/server/scr
 
 # The agent guides, published at /.well-known/agent-skills for `npx skills add`
 # and over /v1/agent-skill for the always-in-context forms. Straight from the
-# build context: they are authored in the docs app, which the server build does
-# not otherwise pull in. Copied as a directory so a guide added later needs no
-# change here.
-COPY --chown=node:node apps/docs/skills ./apps/server/skills
+# build context: they are authored in skills/ at the root of the repository,
+# where `npx skills add cmunte132/vantik` also finds them, and the server build
+# does not otherwise pull them in. Copied as a directory so a guide added later
+# needs no change here.
+COPY --chown=node:node skills ./apps/server/skills
 
 # Where local attachment storage writes, and where docker-compose.yaml mounts
 # the attachment-data volume. Docker gives a new, empty named volume the owner

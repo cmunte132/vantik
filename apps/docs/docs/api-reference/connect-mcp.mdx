@@ -159,6 +159,15 @@ your server, so the copy from your server is the copy that matches it.
 For a source that is not a public GitHub repository, that report holds the name
 of your host.
 
+You can also install the guides from the Vantik repository on GitHub, for
+example to read them before you have a server:
+
+```bash
+npx skills add cmunte132/vantik
+```
+
+That copy follows `main`, which can be ahead of the Vantik version that you run.
+
 ### Always in the context
 
 A skill loads on demand. Sometimes an agent still works quietly, and reports only
@@ -176,4 +185,5 @@ curl -fsSL https://your-vantik-host/api/v1/agent-skill/AGENTS.md >> AGENTS.md
 
 The server makes both files from one source text, so there is one source of
 truth and not copies that become different. The originals are in
-`apps/docs/skills/working-vantik-issues/`.
+[`skills/`](https://github.com/cmunte132/vantik/tree/main/skills) at the root of
+the repository.

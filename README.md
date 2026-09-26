@@ -74,6 +74,22 @@ For a deployment that is not on localhost, do these two steps:
 1. Set `FRONTEND_HOST` and `BACKEND_HOST` in `.env` to your domain.
 2. Change `POSTGRES_PASSWORD` and `TYPESENSE_API_KEY`.
 
+### How to connect your own agent
+
+**Settings → Agents** makes a token for an agent, and gives the MCP
+configuration for Claude Code, Codex, Cursor, and other clients. Two
+[agent skills](./skills/README.md) then teach the agent to use the tracker and
+the knowledge bank well. Install them from your server, which gives the copy
+that matches it:
+
+```bash
+DISABLE_TELEMETRY=1 npx skills add https://your-vantik-host
+```
+
+Or install them from this repository with `npx skills add cmunte132/vantik`.
+Read [How to connect an MCP client](apps/docs/docs/api-reference/connect-mcp.mdx)
+for the details.
+
 ### How agent work gets checked
 
 Delegate an issue to an agent in the hosted sandbox and the work goes round a

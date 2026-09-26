@@ -11,8 +11,8 @@ import { join } from 'path';
  */
 interface ServedFile {
   description: string;
-  /** The authored file this is served from, when the name differs. */
-  source?: string;
+  /** The authored file this is served from, relative to `skills/`. */
+  source: string;
   /** Rewrites the authored text into another tool's format. */
   transform?: (skill: string, body: string) => string;
 }
@@ -27,19 +27,27 @@ interface ServedSkill {
 /**
  * The files each guide is served in.
  *
- * Written once and shared, because both guides are authored the same way — a
- * Claude Code skill plus a portable snippet — and the CLAUDE.md and Cursor
- * forms are *derived* rather than authored. Deriving them is what keeps one
- * piece of guidance from drifting into four slightly different pieces.
+ * Written once and shared, because both guides are authored the same way — an
+ * agent skill plus a shorter always-in-context snippet — and the CLAUDE.md and
+ * Cursor forms are *derived* rather than authored. Deriving them is what keeps
+ * one piece of guidance from drifting into four slightly different pieces.
+ *
+ * The snippet lives outside the skill's own directory, which holds nothing but
+ * SKILL.md: `npx skills add cmunte132/vantik` copies a skill's whole directory
+ * into the user's project, so anything else there would land beside the skill.
  */
 function servedFiles(skill: string): Record<string, ServedFile> {
+  const alwaysInContext = `always-in-context/${skill}.md`;
+
   return {
     'SKILL.md': {
-      description: 'Claude Code skill. Loads on demand when the work comes up.',
+      description: 'Agent skill. Loads on demand when the work comes up.',
+      source: `${skill}/SKILL.md`,
     },
     'AGENTS.md': {
       description:
         'Portable snippet for runners that read an AGENTS.md. Always in context.',
+      source: alwaysInContext,
       // Served stripped like the rest: this one is usually appended to an
       // AGENTS.md the reader already has, where a note telling them to paste
       // the section below is answering a question they just answered.
@@ -48,17 +56,19 @@ function servedFiles(skill: string): Record<string, ServedFile> {
     'CLAUDE.md': {
       description:
         'The same snippet for a Claude Code CLAUDE.md, for anyone who would rather keep it always in context than install the skill.',
-      source: 'AGENTS.md',
+      source: alwaysInContext,
       transform: (_skill, body) => stripAuthorNote(body),
     },
     [`${skill}.mdc`]: {
       description:
         'Cursor project rule. Same guidance, in the format Cursor reads.',
-      source: 'AGENTS.md',
+      source: alwaysInContext,
       transform: toCursorRule,
     },
     'README.md': {
-      description: 'Install instructions for every form.',
+      description: 'What the guides are, and every way to install them.',
+      // One README for both guides, at the top of `skills/`.
+      source: 'README.md',
     },
   };
 }
@@ -109,16 +119,16 @@ function toCursorRule(skill: string, body: string): string {
 }
 
 /**
- * Where the guides sit. The image copies them next to the server; a dev server
- * run from the repo reads them out of the docs app, which is the one place they
- * are authored.
+ * Where the guides sit: `skills/` at the root of the repository, the one place
+ * they are authored and where `npx skills add cmunte132/vantik` finds them. The
+ * image copies that directory next to the server, whose entrypoint runs from
+ * `apps/server`, as a dev server does — two levels below the root.
  */
-function candidateDirs(skill: string): string[] {
+function candidateRoots(): string[] {
   return [
-    join(process.cwd(), 'apps/server/skills', skill),
-    join(process.cwd(), 'skills', skill),
-    join(process.cwd(), 'apps/docs/skills', skill),
-    join(process.cwd(), '../../apps/docs/skills', skill),
+    join(process.cwd(), 'skills'),
+    join(process.cwd(), '../../skills'),
+    join(process.cwd(), 'apps/server/skills'),
   ];
 }
 
@@ -136,18 +146,15 @@ const BODIES: Map<string, string> = loadServedBodies();
 
 function loadServedBodies(): Map<string, string> {
   const bodies = new Map<string, string>();
+  const roots = candidateRoots();
 
   for (const [skill, served] of Object.entries(SKILLS)) {
-    const dir = candidateDirs(skill).find((candidate) => existsSync(candidate));
-
-    if (!dir) {
-      continue;
-    }
-
     for (const [file, servedFile] of Object.entries(served.files)) {
-      const path = join(dir, servedFile.source ?? file);
+      const path = roots
+        .map((root) => join(root, servedFile.source))
+        .find((candidate) => existsSync(candidate));
 
-      if (!existsSync(path)) {
+      if (!path) {
         continue;
       }
 

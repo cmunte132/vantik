@@ -9,6 +9,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { resolveWorkspaceId } from 'common/workspace-access';
 
+import { RequiresScope } from 'modules/auth/agent-scope';
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { UserId, Workspace } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
@@ -59,8 +60,14 @@ export class KnowledgeController {
     });
   }
 
+  /**
+   * A read that arrives as a POST because it carries a body. Declared, or the
+   * method reads as a write and a read-only agent — the one most likely to be
+   * sent to look something up first — is locked out of `load_context`.
+   */
   @Post('context')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  @RequiresScope('read')
   async contextPack(
     @Workspace() sessionWorkspaceId: string,
     @UserId() userId: string,

@@ -1,9 +1,14 @@
-import { KnowledgeSearchQueryDto } from '@vantikhq/types';
+import { ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { KnowledgeSearchQueryDto, RoleEnum } from '@vantikhq/types';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { PrismaService } from 'nestjs-prisma';
 
+import { AgentScopeGuard } from 'modules/auth/agent-scope.guard';
+
 import { KnowledgeController } from './knowledge.controller';
+import { PageEntriesController } from './page-entries.controller';
 import type KnowledgeService from './knowledge.service';
 
 describe('KnowledgeController', () => {
@@ -54,5 +59,85 @@ describe('KnowledgeController', () => {
       'deployment',
       { limit: undefined, scope: undefined },
     );
+  });
+});
+
+describe('agent scopes on the knowledge routes', () => {
+  const TOKEN = 'tg_pat_agent';
+
+  /** The real guard and the real reflector, so the decorators are what count. */
+  function guardForAgentWith(scopes: string[]) {
+    const prisma = {
+      personalAccessToken: {
+        update: jest.fn().mockResolvedValue({}),
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'pat-1',
+          lastUsedAt: null,
+          userId: 'agent-1',
+          workspaceId: 'ws-1',
+          user: {
+            authIdentities: [{ supertokensUserId: 'st-1' }],
+            usersOnWorkspaces: [
+              {
+                workspaceId: 'ws-1',
+                role: RoleEnum.AGENT,
+                settings: { agent: { scopes } },
+              },
+            ],
+          },
+        }),
+      },
+    } as unknown as PrismaService;
+
+    return new AgentScopeGuard(prisma, new Reflector());
+  }
+
+  function request(
+    controller: object,
+    handler: (...args: never[]) => unknown,
+    method: string,
+  ) {
+    return {
+      getType: () => 'http',
+      getHandler: () => handler,
+      getClass: () => controller,
+      switchToHttp: () => ({
+        getRequest: () => ({
+          method,
+          headers: { authorization: `Bearer ${TOKEN}` },
+        }),
+      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+  }
+
+  it('[KG-0.4] lets a read-only agent load context, though the route is a POST', async () => {
+    const guard = guardForAgentWith(['read']);
+
+    await expect(
+      guard.canActivate(
+        request(
+          KnowledgeController,
+          KnowledgeController.prototype.contextPack,
+          'POST',
+        ),
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('[KG-0.4] still holds a read-only agent to the routes that write', async () => {
+    const guard = guardForAgentWith(['read']);
+
+    // The declaration opens the one read that arrives as a POST, not POSTs in
+    // general: appending an entry is still a write.
+    await expect(
+      guard.canActivate(
+        request(
+          PageEntriesController,
+          PageEntriesController.prototype.createEntry,
+          'POST',
+        ),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

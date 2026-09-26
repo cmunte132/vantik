@@ -12,7 +12,11 @@ import { PageEntriesController } from './page-entries.controller';
 import PageEntriesService from './page-entries.service';
 import { PagesController } from './pages.controller';
 import { PAGES_QUEUE } from './pages.interface';
-import { PagesProcessor, PagesScheduler } from './pages.processor';
+import {
+  EntryModulesScheduler,
+  PagesProcessor,
+  PagesScheduler,
+} from './pages.processor';
 import PagesService from './pages.service';
 
 @Module({
@@ -25,6 +29,7 @@ import PagesService from './pages.service';
     KnowledgeService,
     KnowledgeIndexService,
     PagesScheduler,
+    EntryModulesScheduler,
     PagesProcessor,
     UsersService,
   ],

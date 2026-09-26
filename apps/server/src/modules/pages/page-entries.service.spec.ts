@@ -17,6 +17,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import type { VectorService } from 'modules/vector/vector.service';
 
+import type KnowledgeIndexService from './knowledge-index.service';
 import PageEntriesService from './page-entries.service';
 import { PROPOSED_ENTRY_BUDGET, WriterIdentity } from './pages.interface';
 
@@ -66,6 +67,7 @@ function buildService({
     user: {
       findUnique: jest.fn(() => Promise.resolve({ type: userType })),
     },
+    moduleRepo: { findMany: jest.fn(() => Promise.resolve([])) },
     pageEntry: {
       // The budget check asks for one token's untriaged entries; the duplicate
       // check asks for everything live on the page. The double tells them apart
@@ -95,6 +97,7 @@ function buildService({
           supersededBy,
           supersedesId: pointsAt?.id ?? null,
           supersedes: pointsAt ? { status: pointsAt.status } : null,
+          page: { workspaceId: 'workspace-1' },
         }),
       ),
       create: jest.fn(({ data }) => {
@@ -441,6 +444,8 @@ describe('what an agent may change on an entry', () => {
     expect(calls[0][0].data).toEqual({
       content: 'clearer words',
       scope: 'apps/server',
+      // A new scope is resolved to modules again; this workspace has none.
+      moduleIds: [],
     });
     expect(calls[1][0].data).toEqual({ status: PageEntryStatusEnum.ARCHIVED });
   });
@@ -785,6 +790,7 @@ describe('corrections', () => {
       );
       return {
         ...row,
+        page: { workspaceId: 'workspace-1' },
         supersedes: target ? { status: target.status } : null,
         supersededBy: replacement
           ? { id: replacement.id, status: replacement.status }
@@ -839,6 +845,7 @@ describe('corrections', () => {
           type: where.id === BOT ? 'Agent' : 'User',
         })),
       },
+      moduleRepo: { findMany: jest.fn(async (): Promise<unknown[]> => []) },
       pageEntry: {
         findFirst: jest.fn(async ({ where }) => {
           const row = rows.get(where.id);
@@ -1099,5 +1106,109 @@ describe('corrections', () => {
     });
 
     expect(status('A')).toBe(PageEntryStatusEnum.CONSOLIDATED);
+  });
+});
+
+describe("an entry's modules", () => {
+  const repos = [
+    {
+      moduleId: 'server',
+      pathPrefixes: ['apps/server/'],
+      fullName: 'acme/app',
+    },
+    {
+      moduleId: 'webapp',
+      pathPrefixes: ['apps/webapp/'],
+      fullName: 'acme/app',
+    },
+  ];
+
+  function withRepos() {
+    const built = buildService({ userType: 'User' });
+    (
+      built.prisma.moduleRepo.findMany as unknown as jest.Mock
+    ).mockResolvedValue(repos);
+    return built;
+  }
+
+  it('[KG-1.2] resolves the scope to modules when the entry is written', async () => {
+    const { service, created, prisma } = withRepos();
+
+    await service.createEntry('page-1', HUMAN, {
+      content: 'Migrations are hand-written SQL.',
+      scope: 'apps/server/prisma',
+    });
+
+    expect(created[0]).toMatchObject({ moduleIds: ['server'] });
+    // Against this workspace's live repositories only.
+    const { where } = (prisma.moduleRepo.findMany as unknown as jest.Mock).mock
+      .calls[0][0];
+    expect(where).toEqual({
+      deleted: null,
+      module: { workspaceId: 'workspace-1', deleted: null },
+    });
+  });
+
+  it('[KG-1.2] resolves an unscoped entry to no modules without a lookup', async () => {
+    const { service, created, prisma } = withRepos();
+
+    await service.createEntry('page-1', HUMAN, { content: 'A general fact.' });
+
+    expect(created[0]).toMatchObject({ moduleIds: [] });
+    expect(prisma.moduleRepo.findMany).not.toHaveBeenCalled();
+  });
+
+  it('[KG-1.2] resolves the modules again when the scope changes, and not otherwise', async () => {
+    const { service, prisma } = withRepos();
+
+    await service.updateEntry('entry-1', 'human-1', { scope: 'apps' });
+    await service.updateEntry('entry-1', 'human-1', { content: 'reworded' });
+
+    const calls = (prisma.pageEntry.update as jest.Mock).mock.calls;
+    expect(calls[0][0].data.moduleIds).toEqual(['server', 'webapp']);
+    expect(calls[1][0].data).not.toHaveProperty('moduleIds');
+  });
+
+  it("[KG-1.2] rewrites only the entries whose modules moved when a workspace's repositories change", async () => {
+    const update = jest.fn(
+      async (_args: { where: { id: string }; data: unknown }) => ({}),
+    );
+    const indexer = {
+      entriesChanged: jest.fn(async (_ids: string[]): Promise<void> => {}),
+    };
+    const prisma = {
+      moduleRepo: { findMany: jest.fn(async () => repos) },
+      pageEntry: {
+        findMany: jest.fn(async () => [
+          { id: 'still-right', scope: 'apps/server', moduleIds: ['server'] },
+          { id: 'moved', scope: 'apps/webapp/src', moduleIds: ['server'] },
+          { id: 'new-module', scope: 'apps/server/x', moduleIds: [] },
+          { id: 'gone', scope: 'packages/ui', moduleIds: ['ui'] },
+        ]),
+        update,
+      },
+    } as unknown as PrismaService;
+    const service = new PageEntriesService(
+      prisma,
+      indexer as unknown as KnowledgeIndexService,
+    );
+
+    await expect(service.recomputeModules('workspace-1')).resolves.toEqual({
+      changed: 3,
+    });
+
+    expect(
+      update.mock.calls.map(([args]) => [args.where.id, args.data]),
+    ).toEqual([
+      ['moved', { moduleIds: ['webapp'] }],
+      ['new-module', { moduleIds: ['server'] }],
+      ['gone', { moduleIds: [] }],
+    ]);
+    // The index learns the new modules, for exactly the entries that moved.
+    expect(indexer.entriesChanged).toHaveBeenCalledWith([
+      'moved',
+      'new-module',
+      'gone',
+    ]);
   });
 });

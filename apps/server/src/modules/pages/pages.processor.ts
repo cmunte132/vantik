@@ -11,6 +11,7 @@ import {
   DECAY_JOB_ID,
   PAGES_QUEUE,
   PROPOSED_ENTRY_EXPIRY_DAYS,
+  RECOMPUTE_MODULES_JOB,
   STANDING_ENTRY_DECAY_DAYS,
 } from './pages.interface';
 
@@ -91,6 +92,39 @@ export class PagesScheduler implements OnModuleInit {
   }
 }
 
+/**
+ * Resolves every entry's scope to modules once at boot.
+ *
+ * Queued rather than run here, so boot never waits on it. Modules can change
+ * while the server is down (a migration, an edit whose job was lost), and
+ * entries written before modules were resolved have none; one pass at boot
+ * settles both. After that, edits to a module's repositories queue their own.
+ */
+@Injectable()
+export class EntryModulesScheduler implements OnModuleInit {
+  private readonly logger: LoggerService = new LoggerService(
+    'EntryModulesScheduler',
+  );
+
+  constructor(@InjectQueue(PAGES_QUEUE) private pagesQueue: Queue) {}
+
+  async onModuleInit() {
+    try {
+      await this.pagesQueue.add(
+        RECOMPUTE_MODULES_JOB,
+        {},
+        { removeOnComplete: true, removeOnFail: 20 },
+      );
+    } catch (error) {
+      this.logger.error({
+        message: `Could not queue the entry module recompute: ${error}`,
+        where: 'EntryModulesScheduler.onModuleInit',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
+  }
+}
+
 @Processor(PAGES_QUEUE)
 export class PagesProcessor {
   private readonly logger: LoggerService = new LoggerService('PagesProcessor');
@@ -105,6 +139,24 @@ export class PagesProcessor {
    * express the same thing. `runDecay` is idempotent, so a retry after a
    * partial failure re-archives what it already archived and changes nothing.
    */
+  /**
+   * Re-resolves entries' scopes to modules, for one workspace or, with none
+   * given, for every workspace.
+   */
+  @Process(RECOMPUTE_MODULES_JOB)
+  async handleRecomputeModules(job: { data: { workspaceId?: string } }) {
+    const { changed } = await this.pageEntriesService.recomputeModules(
+      job.data?.workspaceId,
+    );
+
+    this.logger.info({
+      message:
+        `Resolved entry scopes to modules for ` +
+        `${job.data?.workspaceId ?? 'every workspace'}: ${changed} changed`,
+      where: 'PagesProcessor.handleRecomputeModules',
+    });
+  }
+
   @Process(DECAY_JOB)
   async handleDecay() {
     let expiredProposed: number;

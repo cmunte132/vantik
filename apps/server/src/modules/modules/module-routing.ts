@@ -130,3 +130,126 @@ export function mergeModuleIds(
 ): string[] {
   return [...new Set([...existing, ...resolved])];
 }
+
+/**
+ * A module mapping with the repository it belongs to, which resolving a
+ * knowledge scope needs and routing a pull request does not: a pull request
+ * arrives from one repository, and a scope names none.
+ */
+export interface ScopedRepoModuleMapping extends RepoModuleMapping {
+  /** The provider's full name of the repository, such as `acme/app`. */
+  fullName: string;
+}
+
+/** Glob characters. A path segment holding one is a pattern, not a folder. */
+const GLOB = /[*?[\]{}]/;
+
+/**
+ * The folder a knowledge scope names, or null when it names none.
+ *
+ * Scopes are written by agents and people, not by a webhook, so they arrive in
+ * the shapes people write: `apps/server`, `./apps/server/`, `apps/server/**`,
+ * `apps/server/**\/*.ts`. Everything from the first segment holding a glob
+ * character is dropped, because the part before it is the folder the pattern
+ * lives in, and that is what a module prefix can be compared with. A scope
+ * that is only a pattern (`**\/*.prisma`) names no folder.
+ */
+export function scopePath(scope: string | null | undefined): string | null {
+  if (!scope) {
+    return null;
+  }
+
+  const segments = scope.trim().replace(/^\.\//, '').split('/').filter(Boolean);
+  const firstGlob = segments.findIndex((segment) => GLOB.test(segment));
+  const folder = firstGlob === -1 ? segments : segments.slice(0, firstGlob);
+
+  return folder.length > 0 ? folder.join('/') : null;
+}
+
+/**
+ * The folder a scope names and every folder above it, outermost first:
+ * `apps/server/prisma` gives `apps`, `apps/server`, `apps/server/prisma`.
+ *
+ * This is what makes scope matching a prefix match inside the search index,
+ * which can test membership in a list but cannot compare prefixes.
+ */
+export function scopeAncestors(scope: string | null | undefined): string[] {
+  const path = scopePath(scope);
+
+  if (!path) {
+    return [];
+  }
+
+  const segments = path.split('/');
+  return segments.map((_, index) => segments.slice(0, index + 1).join('/'));
+}
+
+/**
+ * The modules a knowledge scope falls in.
+ *
+ * The same prefixes that route a pull request's changed files route a scope,
+ * with two differences that come from a scope naming a folder rather than a
+ * file:
+ *
+ * - A scope matches a module whose folder it is in or is, which is the file
+ *   rule applied to the folder (`apps/server` is in `apps/server/`), and also a
+ *   module whose folder is below it: a fact about `apps` is a fact about every
+ *   module under `apps`.
+ * - A scope names no repository, so a module that is a whole repository (no
+ *   prefixes) matches only when that is unambiguous: the scope starts with the
+ *   repository's full name, or the workspace has one repository at all.
+ *   Otherwise every path in every workspace with two small repositories would
+ *   land in both of them.
+ */
+export function modulesForScope(
+  mappings: ScopedRepoModuleMapping[],
+  scope: string | null | undefined,
+): string[] {
+  const path = scopePath(scope);
+
+  if (!path) {
+    return [];
+  }
+
+  const repositories = [
+    ...new Set(mappings.map((mapping) => mapping.fullName)),
+  ];
+  // The longest name that the path starts with, so `acme/app-extra` is not
+  // read as `acme/app` followed by a folder.
+  const named = repositories
+    .filter((name) => path === name || path.startsWith(`${name}/`))
+    .sort((a, b) => b.length - a.length)[0];
+
+  const candidates = named
+    ? mappings.filter((mapping) => mapping.fullName === named)
+    : mappings;
+  const inRepository = named
+    ? path.slice(named.length).replace(/^\/+/, '')
+    : path;
+  const folder = inRepository ? `${inRepository}/` : '';
+  const unambiguous = Boolean(named) || repositories.length === 1;
+
+  const reached: string[] = [];
+
+  for (const mapping of candidates) {
+    if (reached.includes(mapping.moduleId)) {
+      continue;
+    }
+
+    const prefixes = mapping.pathPrefixes.map(normalisePrefix).filter(Boolean);
+
+    const matches =
+      prefixes.length === 0
+        ? unambiguous
+        : // A repository named with no folder is the whole repository.
+          !folder ||
+          pathBelongsToModule(folder, prefixes) ||
+          prefixes.some((prefix) => prefix.startsWith(folder));
+
+    if (matches) {
+      reached.push(mapping.moduleId);
+    }
+  }
+
+  return reached;
+}

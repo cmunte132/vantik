@@ -1,0 +1,360 @@
+/**
+ * Knowledge retrieval, from the documents the index is given to the order a
+ * search returns them in.
+ *
+ * Typesense does the filtering and ranking, and there is none here. So the
+ * documents are built by the real `indexPage` and `indexEntry`, the search
+ * request by the real `searchKnowledge`, and a small evaluator below applies
+ * that request's `filter_by`, `sort_by` and grouping to those documents. It
+ * understands the subset of the filter language the service writes — `field:=`
+ * a value or a list, `field:true`, `&&`, `||` and parentheses — and scores
+ * `_eval` the way Typesense does, by the best tier a document matches. What it
+ * proves is that the documents and the request agree with each other about
+ * what should come back.
+ */
+import { PageEntryKindEnum, PageEntryStatusEnum } from '@vantikhq/types';
+import { PrismaService } from 'nestjs-prisma';
+import { Client as TypesenseClient } from 'typesense';
+
+import { pageSchema } from './vector.interface';
+import { VectorService } from './vector.service';
+
+type Doc = Record<string, unknown>;
+type Predicate = (doc: Doc) => boolean;
+
+const WORKSPACE = '00000000-0000-0000-0000-000000000001';
+
+// ------------------------------------------------------------ the evaluator
+
+/** Parses the filter subset the service writes into a predicate. */
+function parseFilter(expression: string): Predicate {
+  let at = 0;
+  const skip = () => {
+    while (expression[at] === ' ') at++;
+  };
+  const take = (token: string) => {
+    skip();
+    if (expression.startsWith(token, at)) {
+      at += token.length;
+      return true;
+    }
+    return false;
+  };
+  const scalar = (): string => {
+    skip();
+    if (expression[at] === '`') {
+      const end = expression.indexOf('`', at + 1);
+      const value = expression.slice(at + 1, end);
+      at = end + 1;
+      return value;
+    }
+    const match = /^[\w.-]+/.exec(expression.slice(at));
+    if (!match) throw new Error(`Unreadable value at ${at}: ${expression}`);
+    at += match[0].length;
+    return match[0];
+  };
+  const values = (): string[] => {
+    if (!take('[')) return [scalar()];
+    const list = [scalar()];
+    while (take(',')) list.push(scalar());
+    if (!take(']')) throw new Error(`Unclosed list: ${expression}`);
+    return list;
+  };
+  const atom = (): Predicate => {
+    if (take('(')) {
+      const inner = or();
+      if (!take(')')) throw new Error(`Unclosed group: ${expression}`);
+      return inner;
+    }
+    skip();
+    const field = /^\w+/.exec(expression.slice(at))?.[0];
+    if (!field) throw new Error(`No field at ${at}: ${expression}`);
+    at += field.length;
+    if (!take(':')) throw new Error(`No colon after ${field}`);
+    take('=');
+    const wanted = values();
+    return (doc) => {
+      const actual = doc[field];
+      const held = Array.isArray(actual) ? actual : [actual];
+      return held.some((value) => wanted.includes(String(value)));
+    };
+  };
+  const and = (): Predicate => {
+    const parts = [atom()];
+    while (take('&&')) parts.push(atom());
+    return (doc) => parts.every((part) => part(doc));
+  };
+  const or = (): Predicate => {
+    const parts = [and()];
+    while (take('||')) parts.push(and());
+    return (doc) => parts.some((part) => part(doc));
+  };
+
+  const predicate = or();
+  skip();
+  if (at !== expression.length)
+    throw new Error(`Trailing input: ${expression}`);
+  return predicate;
+}
+
+/** Splits on commas that are not inside brackets or parentheses. */
+function splitTop(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    if ('([{'.includes(text[i])) depth++;
+    if (')]}'.includes(text[i])) depth--;
+    if (text[i] === ',' && depth === 0) {
+      parts.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts.map((part) => part.trim());
+}
+
+/** One sort key: a function from document to a number, descending. */
+function sortKey(key: string, query: string): (doc: Doc) => number {
+  if (key.startsWith('_eval(')) {
+    const tiers = splitTop(
+      key.slice('_eval(['.length, key.lastIndexOf('])')),
+    ).map((tier) => {
+      const colon = tier.lastIndexOf('):');
+      return {
+        matches: parseFilter(tier.slice(1, colon)),
+        score: Number(tier.slice(colon + 2)),
+      };
+    });
+    // The best tier a document matches, as Typesense scores it.
+    return (doc) =>
+      Math.max(0, ...tiers.filter((t) => t.matches(doc)).map((t) => t.score));
+  }
+  if (key.startsWith('_text_match')) {
+    const words = query === '*' ? [] : query.toLowerCase().split(/\s+/);
+    return (doc) => {
+      const text = `${doc.title} ${doc.content}`.toLowerCase();
+      return words.reduce(
+        (score, word) => score + text.split(word).length - 1,
+        0,
+      );
+    };
+  }
+  const field = key.split(':')[0];
+  return (doc) => Number(doc[field] ?? 0);
+}
+
+/** A stand-in for the pages collection, holding what was upserted. */
+function fakeIndex() {
+  const docs = new Map<string, Doc>();
+  const searches: Array<Record<string, unknown>> = [];
+
+  const typesense = {
+    collections: () => ({
+      documents: () => ({
+        upsert: async (doc: Doc) => {
+          docs.set(doc.id as string, doc);
+          return doc;
+        },
+      }),
+    }),
+    multiSearch: {
+      perform: async ({
+        searches: [search],
+      }: {
+        searches: Array<Record<string, string | number>>;
+      }) => {
+        searches.push(search);
+        const matches = parseFilter(search.filter_by as string);
+        const keys = splitTop(search.sort_by as string).map((key) =>
+          sortKey(key, search.q as string),
+        );
+        const ranked = [...docs.values()].filter(matches).sort((a, b) => {
+          for (const key of keys) {
+            const difference = key(b) - key(a);
+            if (difference !== 0) return difference;
+          }
+          return 0;
+        });
+
+        const groups = new Map<unknown, Doc[]>();
+        for (const doc of ranked) {
+          const group = groups.get(doc.pageId) ?? [];
+          if (group.length < Number(search.group_limit)) group.push(doc);
+          groups.set(doc.pageId, group);
+        }
+
+        return {
+          results: [
+            {
+              grouped_hits: [...groups.values()]
+                .slice(0, Number(search.per_page))
+                .map((group) => ({
+                  hits: group.map((document) => ({ document })),
+                })),
+              found: ranked.length,
+            },
+          ],
+        };
+      },
+    },
+  } as unknown as TypesenseClient;
+
+  // Everything indexed still exists, so the stale-hit filter keeps it all.
+  const alive = async ({ where }: { where: { id: { in: string[] } } }) =>
+    where.id.in.map((id) => ({ id }));
+  const prisma = {
+    page: { findMany: alive },
+    pageEntry: { findMany: alive },
+  } as unknown as PrismaService;
+
+  return { service: new VectorService(prisma, typesense), docs, searches };
+}
+
+// ------------------------------------------------------------------ fixtures
+
+const moduleId = (n: number) => `00000000-0000-0000-0000-00000000000${n}`;
+const SERVER = moduleId(2);
+const WEBAPP = moduleId(3);
+const TYPES = moduleId(4);
+
+async function seed(service: VectorService) {
+  const entry = (
+    id: string,
+    content: string,
+    extra: Partial<{
+      scope: string | null;
+      moduleIds: string[];
+      kind: string;
+      verifiedAt: Date | null;
+      pageId: string;
+    }> = {},
+  ) =>
+    service.indexEntry({
+      id,
+      content,
+      scope: null,
+      status: PageEntryStatusEnum.STANDING,
+      sourceUserId: 'agent-1',
+      verifiedAt: null,
+      retrievalCount: 0,
+      updatedAt: new Date('2026-09-01'),
+      pageId: extra.pageId ?? `page-${id}`,
+      moduleIds: [],
+      kind: PageEntryKindEnum.FACT,
+      page: { title: 'Server notes', workspaceId: WORKSPACE },
+      ...extra,
+    });
+
+  await service.indexPage({
+    id: 'body',
+    title: 'Architecture',
+    description: null,
+    workspaceId: WORKSPACE,
+    updatedAt: new Date('2026-09-01'),
+  });
+  await entry('server', 'The server owns redis connections.', {
+    scope: 'apps/server',
+    moduleIds: [SERVER],
+  });
+  await entry('migrations', 'Migrations are hand-written redis-free SQL.', {
+    scope: 'apps/server/prisma/migrations',
+    moduleIds: [SERVER],
+    kind: PageEntryKindEnum.CONVENTION,
+  });
+  await entry('webapp', 'The webapp never talks to redis directly.', {
+    scope: 'apps/webapp',
+    moduleIds: [WEBAPP],
+  });
+  await entry('globbed', 'Server tests stub redis.', {
+    scope: 'apps/server/**/*.spec.ts',
+    moduleIds: [SERVER],
+    kind: PageEntryKindEnum.GOTCHA,
+  });
+  await entry('everywhere', 'redis redis redis: it is only ever a cache.', {
+    scope: null,
+  });
+  await entry('types', 'Shared types build to dist before tests.', {
+    scope: 'packages/types',
+    moduleIds: [TYPES],
+    kind: PageEntryKindEnum.DECISION,
+  });
+}
+
+const ids = (hits: Array<{ entryId: string | null; pageId: string }>) =>
+  hits.map((hit) => hit.entryId ?? `page:${hit.pageId}`);
+
+// --------------------------------------------------------------------- tests
+
+describe('knowledge documents', () => {
+  it("[KG-1.2] indexes an entry's modules as a facet", async () => {
+    const { service, docs } = fakeIndex();
+    await seed(service);
+
+    const field = pageSchema.fields.find((f) => f.name === 'moduleIds');
+    expect(field).toMatchObject({ type: 'string[]', facet: true });
+    expect(docs.get('entry:server')).toMatchObject({ moduleIds: [SERVER] });
+    // A page body is about no module in particular.
+    expect(docs.get('page:body')).toMatchObject({ moduleIds: [] });
+  });
+});
+
+describe('scoped retrieval', () => {
+  it('[KG-1.3] serves knowledge scoped above and below the folder asked about', async () => {
+    const { service } = fakeIndex();
+    await seed(service);
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'redis', {
+      scope: 'apps/server/prisma',
+    });
+
+    expect(ids(hits)).toEqual(
+      expect.arrayContaining(['server', 'migrations', 'globbed']),
+    );
+    expect(ids(hits)).not.toContain('webapp');
+    expect(ids(hits)).not.toContain('types');
+  });
+
+  it('[KG-1.3] does not serve knowledge about a sibling folder', async () => {
+    const { service } = fakeIndex();
+    await seed(service);
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'redis', {
+      scope: 'apps/webapp',
+    });
+
+    expect(ids(hits)).toContain('webapp');
+    expect(ids(hits)).not.toContain('migrations');
+    expect(ids(hits)).not.toContain('server');
+  });
+
+  it('[KG-1.3] keeps page bodies and unscoped entries, ranked below every scoped match', async () => {
+    const { service } = fakeIndex();
+    await seed(service);
+
+    // "everywhere" matches the query text three times over, and still ranks
+    // after the scoped matches: asking about a folder puts it first.
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'redis', {
+      scope: 'apps/server',
+    });
+    const order = ids(hits);
+
+    expect(order).toEqual(expect.arrayContaining(['everywhere', 'page:body']));
+    const lastScoped = Math.max(
+      order.indexOf('server'),
+      order.indexOf('migrations'),
+      order.indexOf('globbed'),
+    );
+    expect(order.indexOf('everywhere')).toBeGreaterThan(lastScoped);
+    expect(order.indexOf('page:body')).toBeGreaterThan(lastScoped);
+  });
+
+  it('[KG-1.3] ranks by text match, as before, when no scope is given', async () => {
+    const { service } = fakeIndex();
+    await seed(service);
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'redis');
+
+    expect(ids(hits)[0]).toBe('everywhere');
+  });
+});

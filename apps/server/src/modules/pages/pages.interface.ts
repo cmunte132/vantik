@@ -69,6 +69,13 @@ export const DECAY_JOB = 'runDecay';
 export const DECAY_JOB_ID = 'page-entry-decay';
 
 /**
+ * Re-resolves entries' scopes to modules. Queued with a workspace id when a
+ * module's repositories change, and once at boot with none, which covers every
+ * workspace and fills in entries written before modules were resolved.
+ */
+export const RECOMPUTE_MODULES_JOB = 'recomputeEntryModules';
+
+/**
  * Transitions a client may ask for.
  *
  * `CONSOLIDATED` and `SUPERSEDED` are absent as sources because they are

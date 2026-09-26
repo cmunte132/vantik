@@ -18,6 +18,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'nestjs-prisma';
 
+import { modulesForScope } from 'modules/modules/module-routing';
 import { VectorService } from 'modules/vector/vector.service';
 import type { KnowledgeSearchHit } from 'modules/vector/vector.interface';
 
@@ -134,6 +135,8 @@ export default class PageEntriesService {
     // it corrects keeps being served meanwhile: a claim nobody has reviewed
     // must not be able to take accepted knowledge out of use, and SUPERSEDED
     // cannot be undone.
+    const moduleIds = await this.modulesFor(page.workspaceId, entryData.scope);
+
     const retiresNow =
       Boolean(entryData.supersedesId) &&
       status === PageEntryStatusEnum.STANDING;
@@ -158,6 +161,8 @@ export default class PageEntriesService {
         data: {
           content: entryData.content,
           scope: entryData.scope ?? null,
+          moduleIds,
+          ...(entryData.kind && { kind: entryData.kind }),
           status,
           sourceUserId: writer.userId,
           sourceSession: entryData.sourceSession ?? null,
@@ -206,6 +211,7 @@ export default class PageEntriesService {
         sourceUserId: true,
         supersedesId: true,
         supersedes: { select: { status: true } },
+        page: { select: { workspaceId: true } },
       },
     });
 
@@ -243,7 +249,14 @@ export default class PageEntriesService {
           ...(entryData.content !== undefined && {
             content: entryData.content,
           }),
-          ...(entryData.scope !== undefined && { scope: entryData.scope }),
+          ...(entryData.scope !== undefined && {
+            scope: entryData.scope,
+            moduleIds: await this.modulesFor(
+              current.page.workspaceId,
+              entryData.scope,
+            ),
+          }),
+          ...(entryData.kind !== undefined && { kind: entryData.kind }),
           ...(entryData.status !== undefined && { status: entryData.status }),
           ...(entryData.verified !== undefined && {
             verifiedByUserId: entryData.verified ? userId : null,
@@ -324,6 +337,63 @@ export default class PageEntriesService {
       updated: eligible.length,
       skipped: input.entryIds.length - eligible.length,
     };
+  }
+
+  // ------------------------------------------------------ scope and modules
+
+  /**
+   * Resolves every entry's scope against the modules as they stand now, and
+   * writes the ones that moved.
+   *
+   * An entry's modules are fixed when it is written, but the modules are not:
+   * a repository is added, a prefix is narrowed, a module is deleted. Run when
+   * any of that happens to a workspace, and once at boot for all of them, which
+   * also fills in entries written before modules were resolved at all.
+   * Idempotent: an entry whose modules did not move is not written, so a
+   * second run changes nothing and re-indexes nothing.
+   */
+  async recomputeModules(workspaceId?: string): Promise<{ changed: number }> {
+    const workspaceIds = workspaceId
+      ? [workspaceId]
+      : (
+          await this.prisma.page.findMany({
+            where: { deleted: null },
+            select: { workspaceId: true },
+            distinct: ['workspaceId'],
+          })
+        ).map((page) => page.workspaceId);
+
+    let changed = 0;
+
+    for (const id of workspaceIds) {
+      const mappings = await this.moduleMappings(id);
+      const entries = await this.prisma.pageEntry.findMany({
+        where: { deleted: null, page: { workspaceId: id, deleted: null } },
+        select: { id: true, scope: true, moduleIds: true },
+      });
+
+      const moved = entries
+        .map((entry) => ({
+          id: entry.id,
+          before: entry.moduleIds ?? [],
+          after: modulesForScope(mappings, entry.scope),
+        }))
+        .filter(({ before, after }) => !sameMembers(before, after));
+
+      for (const { id: entryId, after } of moved) {
+        await this.prisma.pageEntry.update({
+          where: { id: entryId },
+          data: { moduleIds: after },
+        });
+      }
+
+      await this.indexer?.entriesChanged(
+        moved.map(({ id: entryId }) => entryId),
+      );
+      changed += moved.length;
+    }
+
+    return { changed };
   }
 
   // ------------------------------------------------------- serving and decay
@@ -410,6 +480,25 @@ export default class PageEntriesService {
   }
 
   // --------------------------------------------------------------- internals
+
+  /** The modules a scope falls in, against this workspace's repositories. */
+  private async modulesFor(
+    workspaceId: string,
+    scope: string | null | undefined,
+  ): Promise<string[]> {
+    if (!scope) {
+      return [];
+    }
+
+    return modulesForScope(await this.moduleMappings(workspaceId), scope);
+  }
+
+  private async moduleMappings(workspaceId: string) {
+    return this.prisma.moduleRepo.findMany({
+      where: { deleted: null, module: { workspaceId, deleted: null } },
+      select: { moduleId: true, pathPrefixes: true, fullName: true },
+    });
+  }
 
   /**
    * Refuses an append once a token is holding too many untriaged entries on one
@@ -838,6 +927,11 @@ export default class PageEntriesService {
 
     return user?.type === UserTypeEnum.Agent;
   }
+}
+
+/** Whether two id lists hold the same ids, in any order. */
+function sameMembers(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((id) => b.includes(id));
 }
 
 /**

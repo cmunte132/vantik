@@ -20,9 +20,9 @@ services:
     container_name: vantik-mailpit
     image: axllent/mailpit:v1.31.2
     environment:
-      # The server always sends SMTP credentials (see MailerModule in
-      # apps/server/src/app.module.ts), so the catcher has to accept them, and
-      # accept them over a plain connection.
+      # The server logs in to its SMTP server whenever SMTP_USER is set, as it
+      # is below (see apps/server/src/common/smtp.ts), so the catcher has to
+      # accept any credentials, and accept them over a plain connection.
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
     ports:

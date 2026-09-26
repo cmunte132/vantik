@@ -150,10 +150,6 @@ test.describe('notifications', () => {
       )
       .toBe(true);
 
-    knownBug(
-      'the notification email transport hard-codes secure and requireTLS, so it cannot send through a plain SMTP server',
-    );
-
     const email = await readEmail(
       request,
       carol.email,

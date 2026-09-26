@@ -16,4 +16,5 @@ export const emailSpec: PluginSpec = {
 
     return token ? `Bearer ${token}` : undefined;
   },
+  webhooks: true,
 };

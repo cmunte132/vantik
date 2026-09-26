@@ -14,6 +14,7 @@
  * loads a plugin. If plugins are ever authored outside this repository they
  * move to `@vantikhq/types` at that point, and not before.
  */
+import { ActionTypesEnum, ModelNameEnum } from '@vantikhq/types';
 
 // The payloads crossing this boundary are vendor-shaped and cannot be usefully
 // typed here; each plugin narrows what it receives.
@@ -165,6 +166,27 @@ export interface PluginSpec {
    * `as` is the identity the plugin asked for, when it asked for one.
    */
   auth?: (account: Json, as?: string) => string | undefined;
+  /**
+   * The changes to Vantik records this plugin acts on.
+   *
+   * The host reads this before it queues anything: a change reaches a plugin
+   * only when the workspace has a connected account for it and the change is
+   * listed here. Declared rather than discovered by calling the plugin, so a
+   * workspace with GitHub connected does not wake every other vendor on every
+   * keystroke in an issue.
+   */
+  onRecord?: RecordTrigger[];
+  /** Whether the webhooks a connected account receives are handed to this plugin. */
+  webhooks?: boolean;
+}
+
+/** One kind of change to one kind of record. */
+export interface RecordTrigger {
+  event: ActionTypesEnum.ON_CREATE | ActionTypesEnum.ON_UPDATE;
+  model:
+    | ModelNameEnum.Issue
+    | ModelNameEnum.IssueComment
+    | ModelNameEnum.LinkedIssue;
 }
 
 /**

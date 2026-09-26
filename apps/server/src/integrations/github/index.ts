@@ -76,6 +76,10 @@ export default async function run(
 
     case ActionTypesEnum.ON_CREATE as string:
       switch (eventPayload.type) {
+        // A new issue in a team mapped to a repository is opened there too.
+        case ModelNameEnum.Issue:
+          return await issueSync(ctx, eventPayload);
+
         case ModelNameEnum.IssueComment:
           return await commentSync(ctx, eventPayload);
 

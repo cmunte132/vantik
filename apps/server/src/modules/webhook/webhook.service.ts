@@ -1,8 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import {
-  ActionEntity,
-  ActionStatusEnum,
-  ActionTypesEnum,
   EventBody,
   EventHeaders,
   EventQueryParams,
@@ -11,8 +8,7 @@ import {
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
 
-import { prepareTriggerPayload } from 'modules/action-event/action-event.utils';
-import { ActionsQueue } from 'modules/action-event/actions.queue';
+import { IntegrationEventsService } from 'modules/integration-events/integration-events.service';
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 import { LoggerService } from 'modules/logger/logger.service';
 import { ModuleRoutingQueue } from 'modules/modules/module-routing.queue';
@@ -25,7 +21,7 @@ export default class WebhookService {
     private prisma: PrismaService,
     private integrations: IntegrationsService,
     private moduleRoutingQueue: ModuleRoutingQueue,
-    private actionsQueue: ActionsQueue,
+    private integrationEvents: IntegrationEventsService,
   ) {}
 
   async handleEvents(
@@ -66,7 +62,7 @@ export default class WebhookService {
 
     if (!isActionSupported) {
       this.logger.log({
-        message: `Received webhook event for ${sourceName} is not supported for actions`,
+        message: `Received webhook event for ${sourceName} is not one it handles`,
         where: `WebhookService.handleEvents`,
       });
       return false;
@@ -116,39 +112,13 @@ export default class WebhookService {
       workspaceId,
     );
 
-    const actionEntities = await this.prisma.actionEntity.findMany({
-      where: {
-        type: ActionTypesEnum.SOURCE_WEBHOOK,
-        action: {
-          workspaceId,
-          status: ActionStatusEnum.ACTIVE,
-          integrations: { has: sourceName },
-        },
-        deleted: null,
-      },
-      include: { action: true },
+    await this.integrationEvents.webhookReceived({
+      slug: sourceName,
+      workspaceId,
+      integrationAccountId: integrationAccount.id,
+      eventBody,
+      eventHeaders,
     });
-
-    // TODO (actons): Send all integration accounts based on the ask
-    await Promise.all(
-      actionEntities.map(async (actionEntity: ActionEntity) => {
-        await this.actionsQueue.run({
-          slug: actionEntity.action.slug,
-          workspaceId,
-          actionId: actionEntity.action.id,
-          event: ActionTypesEnum.SOURCE_WEBHOOK,
-          payload: {
-            eventBody,
-            eventHeaders,
-            ...(await prepareTriggerPayload(
-              this.prisma,
-              this.integrations,
-              actionEntity.action.id,
-            )),
-          },
-        });
-      }),
-    );
 
     return { status: 200 };
   }
@@ -162,8 +132,8 @@ export default class WebhookService {
    * delivery and sends it again.
    *
    * The try stays, because module routing is an addition to a webhook and never
-   * its purpose. A queue that cannot be reached must not stop the actions that
-   * the same webhook triggers.
+   * its purpose. A queue that cannot be reached must not stop the behaviour the
+   * same webhook drives.
    */
   private async routeCodeChange(
     sourceName: string,

@@ -26,20 +26,22 @@ function build(accountId: unknown) {
         workspaceId: 'workspace-1',
       })),
     },
-    actionEntity: { findMany: jest.fn(async (): Promise<unknown[]> => []) },
   };
   const moduleRoutingQueue = {
     routeWebhook: jest.fn(async (): Promise<void> => undefined),
+  };
+  const integrationEvents = {
+    webhookReceived: jest.fn(async (): Promise<void> => undefined),
   };
 
   const service = new WebhookService(
     prisma as never,
     integrations as never,
     moduleRoutingQueue as never,
-    { run: jest.fn() } as never,
+    integrationEvents as never,
   );
 
-  return { service, prisma, moduleRoutingQueue };
+  return { service, prisma, moduleRoutingQueue, integrationEvents };
 }
 
 function handle(service: WebhookService) {
@@ -58,11 +60,13 @@ describe('a webhook and the account it belongs to', () => {
   ])('goes nowhere when the account %s', async (_case, accountId) => {
     // Undefined reached Prisma as "no filter", and the event went to the
     // first account in the table.
-    const { service, prisma, moduleRoutingQueue } = build(accountId);
+    const { service, prisma, moduleRoutingQueue, integrationEvents } =
+      build(accountId);
 
     await expect(handle(service)).resolves.toBeNull();
     expect(prisma.integrationAccount.findFirst).not.toHaveBeenCalled();
     expect(moduleRoutingQueue.routeWebhook).not.toHaveBeenCalled();
+    expect(integrationEvents.webhookReceived).not.toHaveBeenCalled();
   });
 
   it('looks the account up within the provider that sent it', async () => {
@@ -90,6 +94,20 @@ describe('a webhook and the account it belongs to', () => {
     expect(moduleRoutingQueue.routeWebhook).toHaveBeenCalledWith(
       expect.objectContaining({
         sourceName: 'github',
+        integrationAccountId: 'account-1',
+        workspaceId: 'workspace-1',
+      }),
+    );
+  });
+
+  it('hands the delivery to the account it found, not to every workspace', async () => {
+    const { service, integrationEvents } = build('12345');
+
+    await handle(service);
+
+    expect(integrationEvents.webhookReceived).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'github',
         integrationAccountId: 'account-1',
         workspaceId: 'workspace-1',
       }),

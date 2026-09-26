@@ -2,6 +2,7 @@
 // `common/utils/tiptap.utils.ts` documents the same trap; this is the second
 // place to hit it, and a test caught it rather than a deployment.
 import { generateJSON } from '@tiptap/html/server';
+import { type TeamMapping } from '@vantikhq/types';
 import { type PluginContext } from 'plugins/plugin.interface';
 
 import { TIPTAP_EXTENSIONS } from './tiptap-extensions';
@@ -38,7 +39,6 @@ export async function emailTriage(
   ctx: PluginContext,
   eventBody: Json,
   account: Json,
-  action: Json,
 ) {
   const messageId = eventBody?.messageId;
 
@@ -70,12 +70,13 @@ export async function emailTriage(
   const deliveredTo = header('Delivered-To');
 
   // `something+acme-support@…` — the part between the plus and the dash is
-  // which mapping this message belongs to.
+  // the workspace, and what follows the dash is the address tag the account's
+  // settings pair with a team.
   const mappingKey = /\+([^-]+)-([^@]+)@/i.exec(deliveredTo ?? '')?.[2];
 
   const { teamId } =
-    action?.data?.inputs?.teamMappings?.find(
-      ({ id }: { id: string }) => id === mappingKey,
+    account?.settings?.teamMappings?.find(
+      ({ source }: TeamMapping) => source === mappingKey,
     ) ?? {};
 
   if (!teamId) {

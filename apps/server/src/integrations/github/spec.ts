@@ -8,5 +8,10 @@ export function spec() {
         scopes: ['repo'],
       },
     },
+    team_mappings: {
+      source: 'repository',
+      instruction:
+        'Pair a team with a repository of the installation. A new issue in the team is opened there too, and its comments sync both ways.',
+    },
   };
 }

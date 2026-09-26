@@ -32,7 +32,7 @@ export async function linkIssueSync(ctx: PluginContext, payload: Json) {
 }
 
 async function onLinkCreated(ctx: PluginContext, payload: Json) {
-  const account = payload.integrationAccounts?.github;
+  const account = payload.integrationAccount;
 
   if (!account || !payload.modelId) {
     return { message: 'No GitHub account for this workspace' };
@@ -132,7 +132,7 @@ async function onLinkCreated(ctx: PluginContext, payload: Json) {
 }
 
 async function onLinkUpdated(ctx: PluginContext, payload: Json) {
-  const account = payload.integrationAccounts?.github;
+  const account = payload.integrationAccount;
   const changed = payload.changedData ?? {};
 
   if (!account || !payload.modelId) {

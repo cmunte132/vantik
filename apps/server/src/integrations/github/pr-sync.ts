@@ -15,7 +15,7 @@ type Json = any;
  * identifier in brackets — `(ENG-42)`.
  */
 export async function prSync(ctx: PluginContext, payload: Json) {
-  const account = payload.integrationAccounts?.github;
+  const account = payload.integrationAccount;
   const body = payload.eventBody;
   const pull = body?.pull_request;
 

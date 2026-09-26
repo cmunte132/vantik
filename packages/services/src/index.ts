@@ -1,3 +1,4 @@
+export * from './integration-account';
 export * from './integration-definition';
 export * from './issue-comment';
 export * from './user';

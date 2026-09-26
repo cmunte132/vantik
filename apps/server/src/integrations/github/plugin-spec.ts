@@ -1,3 +1,4 @@
+import { ActionTypesEnum, ModelNameEnum } from '@vantikhq/types';
 import { type PluginSpec } from 'plugins/plugin.interface';
 
 /**
@@ -27,6 +28,15 @@ export const githubSpec: PluginSpec = {
 
     return token ? `Bearer ${token}` : undefined;
   },
+  onRecord: [
+    // A new issue in a team mapped to a repository is opened there.
+    { event: ActionTypesEnum.ON_CREATE, model: ModelNameEnum.Issue },
+    { event: ActionTypesEnum.ON_UPDATE, model: ModelNameEnum.Issue },
+    { event: ActionTypesEnum.ON_CREATE, model: ModelNameEnum.IssueComment },
+    { event: ActionTypesEnum.ON_CREATE, model: ModelNameEnum.LinkedIssue },
+    { event: ActionTypesEnum.ON_UPDATE, model: ModelNameEnum.LinkedIssue },
+  ],
+  webhooks: true,
 };
 
 /** The headers GitHub wants on every call, minus the credential. */

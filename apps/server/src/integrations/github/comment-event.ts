@@ -9,7 +9,7 @@ import { type PluginContext } from 'plugins/plugin.interface';
  * makes no outbound call.
  */
 export async function commentEvent(ctx: PluginContext, payload: Json) {
-  const account = payload.integrationAccounts?.github;
+  const account = payload.integrationAccount;
   const body = payload.eventBody;
 
   if (!account || !body?.issue?.id) {

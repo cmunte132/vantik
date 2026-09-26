@@ -16,7 +16,7 @@ import { GITHUB_HEADERS } from './plugin-spec';
  * name. The plugin asks for `user` or `bot`; the host turns that into a token.
  */
 export async function commentSync(ctx: PluginContext, payload: Json) {
-  const account = payload.integrationAccounts?.github;
+  const account = payload.integrationAccount;
   const issueCommentId = payload.modelId;
 
   if (!account || !issueCommentId) {

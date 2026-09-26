@@ -12,6 +12,8 @@ import { useGetIntegrationDefinition } from 'services/integration-definition';
 
 import { IntegrationAuth } from './integration-auth';
 import { LocalRepositories } from './local-repositories';
+import { NoAuthConnect } from './no-auth-connect';
+import { TeamMappingsSection } from './team-mappings';
 
 export function Integration() {
   const { integrationDefinitionId } = useParams();
@@ -40,6 +42,11 @@ export function Integration() {
                       integrationDefinition.spec.local_auth.instruction
                     }
                   />
+                ) : integrationDefinition.spec?.no_auth ? (
+                  <NoAuthConnect
+                    integrationDefinition={integrationDefinition}
+                    instruction={integrationDefinition.spec.no_auth.instruction}
+                  />
                 ) : (
                   <>
                     <IntegrationAuth
@@ -54,6 +61,13 @@ export function Integration() {
                   </>
                 )}
               </SettingSection>
+            )}
+
+            {!isLoading && integrationDefinition.spec?.team_mappings && (
+              <TeamMappingsSection
+                integrationDefinitionId={integrationDefinition.id}
+                params={integrationDefinition.spec.team_mappings}
+              />
             )}
 
             {isLoading && (

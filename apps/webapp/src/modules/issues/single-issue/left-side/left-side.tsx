@@ -80,9 +80,12 @@ export const LeftSide = observer(() => {
           <div className="py-6 flex flex-col">
             {isTriageView && <SimilarIssuesView issueId={issue.id} />}
 
-            {/* Keyed on the issue, so each only ever reports edits to its own. */}
+            {/* Keyed on the issue, so each only ever reports edits to its own.
+                The two keys differ: siblings that shared one left React unable
+                to tell them apart, and every update to the issue drew another
+                title above the last. */}
             <IssueTitle
-              key={issue.id}
+              key={`${issue.id}-title`}
               value={issue.title}
               onChange={(title) => onIssueChange(issue.id, issue.teamId, title)}
             />
@@ -92,7 +95,7 @@ export const LeftSide = observer(() => {
               </div>
             )}
             <Editor
-              key={issue.id}
+              key={`${issue.id}-description`}
               value={issue.description}
               onChange={(content: string) =>
                 onDescriptionChange(issue.id, issue.teamId, content)

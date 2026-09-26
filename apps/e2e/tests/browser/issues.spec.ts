@@ -85,6 +85,12 @@ test.describe('issues', () => {
     await setProperty(page, 'Priority', 'P0');
     await expect(propertyControl(page, 'Priority')).toHaveText(/P0/);
 
+    // The title and the description once shared a key, and each change to the
+    // issue drew another copy of the title above the last.
+    await expect(page.getByRole('textbox', { name: 'Issue title' })).toHaveCount(
+      1,
+    );
+
     // Enter on a label used to do nothing; only a click on its checkbox did.
     await setProperty(page, 'Labels', 'Bug');
     await page.keyboard.press('Escape');

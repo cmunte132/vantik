@@ -5,7 +5,7 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 0 (implementation done; independent review in progress)
+- Current phase: 0 (review round 1 addressed; round 2 in progress)
 - Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phase 0 spec-hash 069a84bf6612`
   (KG-0.1 to KG-0.6 pass; KG-0.R waits on the review)
 
@@ -47,8 +47,20 @@ next session starts by reading it.
   its spec; the dialog uses it through `useSettledQuery`.
 - **KG-0.6:** the standing pass archives an unverified STANDING entry created
   before the window when it was last served before the window, or never served
-  (`lastServedAt` null and `retrievalCount` 0). A row with a count but no date
-  predates `lastServedAt` being recorded and is spared.
+  (`lastServedAt` null). An earlier draft also spared rows with a count and no
+  date as "legacy"; the review showed both columns arrived in one migration and
+  are written together, so that branch and its test were removed.
+- **Supersede waits for acceptance (from review round 1).** A correction used
+  to retire its target immediately, whoever wrote it, and SUPERSEDED is
+  terminal: an agent could take any accepted entry out of use for good. Now the
+  target is retired when the correction is accepted (at once for a person
+  writing STANDING; otherwise when a person moves the correction to STANDING or
+  CONSOLIDATED, singly or in bulk). Rejecting it (ARCHIVED or DISPUTED) or its
+  expiry in decay leaves the target in use and releases the unique pointer. A
+  second correction to an entry is refused while the first waits. This also
+  applies to a person's correction that lands PROPOSED (the CLI without
+  `--standing`), which is consistent: only standing knowledge retires what it
+  replaces.
 - **Existing tests adjusted, not loosened:** the five status-transition tests
   named their writer `human-1` but built an agent (the fixture's default), so
   the new agent rule refused them; they now build a person. The decay test's
@@ -56,6 +68,34 @@ next session starts by reading it.
   tagged decay tests check the replacement against sample rows.
 
 ## Phase reviews
+
+### Phase 0, round 1 (fresh reviewer subagent)
+
+1 blocking, 6 non-blocking findings. Answers:
+
+1. **Blocking: an agent could permanently retire any standing entry by
+   superseding it.** Fixed in `eee2050` (see Decisions: supersede waits for
+   acceptance), with tagged tests.
+2. **Editing skips the duplicate check, and the wording overstated it.** The
+   `distinct` flag is a sanctioned bypass under KG-0.3's own wording, and an
+   agent editing its own PROPOSED entry into a repeat is no worse than
+   `distinct`. The comment and SKILL.md now say the check is skipped with
+   `supersedesId` or `distinct`.
+3. **Two identical writes at the same moment both succeed.** Accepted as a
+   known gap for phase 0: closing it needs a stored content hash with a
+   uniqueness guarantee, which is KG-4.1's corroboration-by-hash. Recorded here
+   for phase 4.
+4. **The decay comment's premise was false.** Fixed: branch and test removed.
+5. **KG-0.5's tests don't cover the dialog wiring.** Accepted: PLAN.md §1 tests
+   webapp criteria through extracted logic, and the vitest setup cannot render
+   the dialog. The wiring is two lines in `search-dialog.tsx`.
+6. **Consolidate lets an agent serve its own prose and retire others' STANDING
+   entries.** Already under "Observed" below; KG-7.4 (consolidation on an
+   AUTHORED page becomes a proposal) is where it is closed. The note now says
+   precisely that the entry's text, not the entry, can reach the body.
+7. **The webapp showed an API instruction.** The refusal now opens with the
+   entry already on the page and its status, which is the part a person can act
+   on; the resend instructions follow for API clients.
 
 When a phase's independent review ends with no unresolved findings, add a line
 in the form `Phase <number> review: PASS - <what the reviewer checked>`, for
@@ -76,11 +116,19 @@ Give the evidence, and stop until the maintainer answers.
   (`pages.service.ts` checks no policy). Not in any phase's criteria; worth a
   separate fix.
 - **Agent-written page bodies are served without review** (`write_page`,
-  `consolidate_knowledge`). Phase 7 (KG-7.4) turns consolidation of an
-  AUTHORED page into a proposal; `write_page` on a new page stays as designed.
+  `consolidate_knowledge`). Consolidation also marks the page's STANDING
+  entries CONSOLIDATED (terminal), so an agent can retire others' entries and
+  have its own prose, which may repeat its PROPOSED entries' text, served in
+  their place. Phase 7 (KG-7.4) turns consolidation of an AUTHORED page into a
+  proposal; `write_page` on a new page stays as designed.
+- **Concurrent identical writes** both pass the duplicate check (read, then
+  write). KG-4.1's content hash is the place to add a uniqueness guarantee.
 
 ## Log
 
 - 2026-09-26: Target phase 0. Prisma engines reachable. Fixed the root-only
   test failure, merged `main`, implemented KG-0.1 to KG-0.6 with tagged tests.
   Verify through phase 0: 6/7, all suites and typecheck green.
+- 2026-09-26: Review round 1: one blocking finding (supersede by an agent
+  retired accepted entries). Fixed with deferred supersede; non-blocking
+  findings answered above. Verify through phase 0: 6/7, all suites green.

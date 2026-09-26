@@ -72,15 +72,21 @@ export async function readLoginEmail(
   expect(response, 'Mailpit message fetch failed').toBeOK();
   const message = (await response.json()) as MailpitMessage;
 
+  // The mailer inlines the template's CSS before sending, which rewrites each
+  // tag with a style attribute and reorders what was there. So a tag is found
+  // by its class, and its attributes are read wherever they ended up.
   const code = message.HTML.match(
-    /<span class="code">\s*([^<\s]+)\s*<\/span>/,
+    /<span\b[^>]*\bclass="code"[^>]*>\s*([^<\s]+)\s*<\/span>/,
   )?.[1];
-  const magicLink = message.HTML.match(
-    /<a href="([^"]+)" class="button">/,
-  )?.[1];
+  const button = message.HTML.match(/<a\b[^>]*\bclass="button"[^>]*>/)?.[0];
+  const magicLink = button?.match(/\bhref="([^"]+)"/)?.[1];
 
-  expect(code, 'the login email carries no code').toBeTruthy();
-  expect(magicLink, 'the login email carries no magic link').toBeTruthy();
+  const excerpt = message.HTML.replace(/\s+/g, ' ').slice(0, 2000);
+  expect(code, `the login email carries no code:\n${excerpt}`).toBeTruthy();
+  expect(
+    magicLink,
+    `the login email carries no magic link:\n${excerpt}`,
+  ).toBeTruthy();
 
   return {
     subject: message.Subject,
@@ -90,8 +96,9 @@ export async function readLoginEmail(
 }
 
 /**
- * Handlebars HTML-escapes every `{{value}}`, and that includes the `=` and `&`
- * of the link's query string, so the href has to be decoded before it is a URL.
+ * The href is HTML: at least its `&` arrives escaped, and depending on what
+ * last serialised the markup (Handlebars or the CSS inliner) so may its `=`.
+ * It has to be decoded before it is a URL.
  */
 export function decodeEntities(value: string): string {
   return value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot);/gi, (_, entity) => {

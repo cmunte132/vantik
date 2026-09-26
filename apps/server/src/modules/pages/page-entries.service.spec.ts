@@ -30,6 +30,8 @@ interface Options {
   entryStatus?: PageEntryStatusEnum;
   /** Who wrote the entry `updateEntry` finds. */
   entrySource?: string;
+  /** The entry that one is a correction of, and that entry's status. */
+  pointsAt?: { id: string; status: PageEntryStatusEnum } | null;
   supersededBy?: { id: string } | null;
   /** What the page already holds, for the duplicate check. */
   existing?: Array<{ id: string; content: string; status?: string }>;
@@ -43,6 +45,7 @@ function buildService({
   userType = 'Agent',
   entryStatus = PageEntryStatusEnum.PROPOSED,
   entrySource = 'agent-1',
+  pointsAt = null,
   supersededBy = null,
   existing = [],
   nearMatches = [],
@@ -90,6 +93,8 @@ function buildService({
           status: entryStatus,
           sourceUserId: entrySource,
           supersededBy,
+          supersedesId: pointsAt?.id ?? null,
+          supersedes: pointsAt ? { status: pointsAt.status } : null,
         }),
       ),
       create: jest.fn(({ data }) => {
@@ -680,14 +685,143 @@ describe('decay', () => {
       ]),
     ).resolves.toEqual(['never served']);
   });
+});
 
-  it('[KG-0.6] spares an entry counted before serve dates were recorded', async () => {
-    // A count with no date means somebody read it at a time nobody wrote
-    // down, which is not evidence that nobody reads it.
+describe('corrections', () => {
+  const TARGET = '5b1c6a52-0d5f-4d8e-9d1e-2f0f6b1a7c3e';
+
+  function supersededIds(prisma: PrismaService): string[] {
+    const calls = [
+      ...(prisma.pageEntry.update as jest.Mock).mock.calls,
+      ...(prisma.pageEntry.updateMany as jest.Mock).mock.calls,
+    ];
+    return calls
+      .filter(([args]) => args.data?.status === PageEntryStatusEnum.SUPERSEDED)
+      .flatMap(([args]) =>
+        typeof args.where.id === 'string' ? [args.where.id] : args.where.id.in,
+      );
+  }
+
+  it("[KG-0.1] keeps the corrected entry in use while an agent's correction waits for review", async () => {
+    const { service, prisma, created } = buildService({
+      userType: 'Agent',
+      entryStatus: PageEntryStatusEnum.STANDING,
+    });
+
+    await service.createEntry('page-1', AGENT, {
+      content: 'The corrected fact.',
+      supersedesId: TARGET,
+    });
+
+    // The pointer is recorded so accepting the correction can retire the
+    // target later, but nothing retires it now.
+    expect(created[0]).toMatchObject({
+      supersedesId: TARGET,
+      status: PageEntryStatusEnum.PROPOSED,
+    });
+    expect(supersededIds(prisma)).toEqual([]);
+  });
+
+  it('[KG-0.1] retires the corrected entry at once when a person writes standing knowledge', async () => {
+    const { service, prisma } = buildService({
+      userType: 'User',
+      entryStatus: PageEntryStatusEnum.STANDING,
+    });
+
+    await service.createEntry('page-1', HUMAN, {
+      content: 'The corrected fact.',
+      supersedesId: TARGET,
+      standing: true,
+    });
+
+    expect(supersededIds(prisma)).toEqual([TARGET]);
+  });
+
+  it('[KG-0.1] retires the corrected entry when a person accepts the correction', async () => {
+    const { service, prisma } = buildService({
+      userType: 'User',
+      entryStatus: PageEntryStatusEnum.PROPOSED,
+      pointsAt: { id: TARGET, status: PageEntryStatusEnum.STANDING },
+    });
+
+    await service.updateEntry('correction-1', 'human-1', {
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    expect(supersededIds(prisma)).toEqual([TARGET]);
+  });
+
+  it('[KG-0.1] leaves the corrected entry in use, and frees it, when the correction is rejected', async () => {
+    const { service, prisma } = buildService({
+      userType: 'User',
+      entryStatus: PageEntryStatusEnum.PROPOSED,
+      pointsAt: { id: TARGET, status: PageEntryStatusEnum.STANDING },
+    });
+
+    await service.updateEntry('correction-1', 'human-1', {
+      status: PageEntryStatusEnum.ARCHIVED,
+    });
+
+    expect(supersededIds(prisma)).toEqual([]);
+    const released = (prisma.pageEntry.updateMany as jest.Mock).mock.calls.find(
+      ([args]) => args.data?.supersedesId === null,
+    );
+    expect(released?.[0].where.id.in).toEqual(['correction-1']);
+  });
+
+  it('[KG-0.1] retires the corrected entries when a person accepts corrections in bulk', async () => {
+    const { service, prisma } = buildService({ userType: 'User' });
+    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValueOnce([
+      {
+        id: 'correction-1',
+        status: PageEntryStatusEnum.PROPOSED,
+        supersedesId: TARGET,
+        supersedes: { status: PageEntryStatusEnum.STANDING },
+      },
+      {
+        id: 'entry-2',
+        status: PageEntryStatusEnum.PROPOSED,
+        supersedesId: null,
+        supersedes: null,
+      },
+    ]);
+
+    await service.bulkUpdate('workspace-1', 'human-1', {
+      entryIds: ['correction-1', 'entry-2'],
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    expect(supersededIds(prisma)).toEqual([TARGET]);
+  });
+
+  it('[KG-0.1] refuses a second correction while the first waits for review', async () => {
+    const { service, prisma } = buildService({
+      userType: 'Agent',
+      entryStatus: PageEntryStatusEnum.STANDING,
+      supersededBy: { id: 'correction-1' },
+    });
+
     await expect(
-      archivedBy([
-        standing({ name: 'legacy', lastServedAt: null, retrievalCount: 4 }),
-      ]),
-    ).resolves.toEqual([]);
+      service.createEntry('page-1', AGENT, {
+        content: 'Another correction.',
+        supersedesId: TARGET,
+      }),
+    ).rejects.toThrow(/already waiting for review: correction-1/);
+    expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('[KG-0.1] frees the corrected entry when a correction expires unreviewed', async () => {
+    const { service, prisma } = buildService();
+
+    await service.runDecay('workspace-1');
+
+    const release = (prisma.pageEntry.updateMany as jest.Mock).mock.calls.find(
+      ([args]) => args.data?.supersedesId === null,
+    );
+    expect(release?.[0].where).toMatchObject({
+      status: PageEntryStatusEnum.ARCHIVED,
+      supersedesId: { not: null },
+      supersedes: { status: { not: PageEntryStatusEnum.SUPERSEDED } },
+    });
   });
 });

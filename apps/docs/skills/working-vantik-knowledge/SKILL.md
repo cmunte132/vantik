@@ -103,7 +103,10 @@ remember(page: "Deployment", content: "…", supersedes: "<entry id>")
 
 Two contradictory facts are worse than neither, because a reader cannot tell
 which one the workspace believes — and the reader is usually another agent,
-acting on it. Superseding keeps the old entry for audit and stops serving it.
+acting on it. Superseding keeps the old entry for audit and stops serving it
+once a person accepts your correction. Until then the old entry stays in use,
+so a correction nobody has reviewed cannot take accepted knowledge away, and a
+second correction to the same entry waits until the first is decided.
 
 `remember` searches before it writes. When near matches come back **nothing was
 written**: read them, then either supersede one or pass `distinct: true` to say
@@ -134,9 +137,10 @@ you call the API.
   yours or anyone else's — one at a time or in bulk. You can reword, rescope or
   archive your own entries while they are still `PROPOSED`; once the workspace
   has decided about an entry, correct it by writing one that supersedes it.
-- **Repeats are refused everywhere.** The search-before-write runs on the
+- **Repeats are refused on every route.** The search-before-write runs on the
   server, so it applies however you reach the API: an exact repeat of an entry
-  on the page, or a near match, comes back with the matches and writes nothing.
+  on the page, or a near match, comes back with the matches and writes nothing
+  unless you supersede one or say the fact is `distinct`.
 - **`CURATED` is the default.** `OPEN` pages exist for scratch work where volume
   genuinely does not matter.
 

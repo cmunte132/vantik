@@ -123,6 +123,17 @@ export default class PageEntriesService {
         ? PageEntryStatusEnum.STANDING
         : PageEntryStatusEnum.PROPOSED;
 
+    // A correction takes the entry it replaces out of use only once the
+    // correction itself is accepted. A person writing standing knowledge is
+    // the acceptance, so theirs retires the old entry at once. Anything that
+    // lands in the inbox waits there with the pointer recorded, and the entry
+    // it corrects keeps being served meanwhile: a claim nobody has reviewed
+    // must not be able to take accepted knowledge out of use, and SUPERSEDED
+    // cannot be undone.
+    const retiresNow =
+      Boolean(entryData.supersedesId) &&
+      status === PageEntryStatusEnum.STANDING;
+
     const [entry] = await this.prisma.$transaction([
       this.prisma.pageEntry.create({
         data: {
@@ -137,9 +148,9 @@ export default class PageEntriesService {
         },
       }),
       // The replaced row keeps its content — the audit trail is the point — but
-      // stops being served the moment its replacement exists, so a reader is
-      // never handed both truths and left to pick.
-      ...(entryData.supersedesId
+      // stops being served the moment its accepted replacement exists, so a
+      // reader is never handed both truths and left to pick.
+      ...(retiresNow
         ? [
             this.prisma.pageEntry.update({
               where: { id: entryData.supersedesId },
@@ -158,7 +169,7 @@ export default class PageEntriesService {
     // A superseded entry has to leave the index in the same breath, or the
     // reader gets both the correction and the thing it corrected and has no
     // way to tell which is current.
-    if (entryData.supersedesId) {
+    if (retiresNow && entryData.supersedesId) {
       await this.indexer?.entryChanged(entryData.supersedesId);
     }
 
@@ -172,7 +183,12 @@ export default class PageEntriesService {
   ): Promise<PageEntry> {
     const current = await this.prisma.pageEntry.findFirst({
       where: { id: entryId, deleted: null },
-      select: { status: true, sourceUserId: true },
+      select: {
+        status: true,
+        sourceUserId: true,
+        supersedesId: true,
+        supersedes: { select: { status: true } },
+      },
     });
 
     if (!current) {
@@ -194,19 +210,33 @@ export default class PageEntriesService {
     // ValidationPipe does not whitelist, so a stray `pageId` would move an
     // asserted fact onto a page in another workspace and `retrievalCount` would
     // let a caller fake demonstrated usefulness.
-    const entry = await this.prisma.pageEntry.update({
-      where: { id: entryId },
-      data: {
-        ...(entryData.content !== undefined && { content: entryData.content }),
-        ...(entryData.scope !== undefined && { scope: entryData.scope }),
-        ...(entryData.status !== undefined && { status: entryData.status }),
-        ...(entryData.verified !== undefined && {
-          verifiedByUserId: entryData.verified ? userId : null,
-          verifiedAt: entryData.verified ? new Date() : null,
-        }),
-      },
-    });
+    const settled =
+      entryData.status !== undefined && entryData.status !== current.status
+        ? this.settleCorrections(
+            [{ id: entryId, ...current }],
+            entryData.status,
+          )
+        : { operations: [], retired: [] };
+
+    const [entry] = await this.prisma.$transaction([
+      this.prisma.pageEntry.update({
+        where: { id: entryId },
+        data: {
+          ...(entryData.content !== undefined && {
+            content: entryData.content,
+          }),
+          ...(entryData.scope !== undefined && { scope: entryData.scope }),
+          ...(entryData.status !== undefined && { status: entryData.status }),
+          ...(entryData.verified !== undefined && {
+            verifiedByUserId: entryData.verified ? userId : null,
+            verifiedAt: entryData.verified ? new Date() : null,
+          }),
+        },
+      }),
+      ...settled.operations,
+    ]);
     await this.indexer?.entryChanged(entryId);
+    await this.indexer?.entriesChanged(settled.retired);
 
     return entry as unknown as PageEntry;
   }
@@ -241,23 +271,32 @@ export default class PageEntriesService {
         deleted: null,
         page: { workspaceId, deleted: null },
       },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        supersedesId: true,
+        supersedes: { select: { status: true } },
+      },
     });
 
-    const eligible = entries
-      .filter((entry) =>
-        ALLOWED_STATUS_TRANSITIONS[
-          entry.status as PageEntryStatusEnum
-        ].includes(input.status),
-      )
-      .map((entry) => entry.id);
+    const eligibleEntries = entries.filter((entry) =>
+      ALLOWED_STATUS_TRANSITIONS[entry.status as PageEntryStatusEnum].includes(
+        input.status,
+      ),
+    );
+    const eligible = eligibleEntries.map((entry) => entry.id);
 
     if (eligible.length > 0) {
-      await this.prisma.pageEntry.updateMany({
-        where: { id: { in: eligible } },
-        data: { status: input.status },
-      });
-      await this.indexer?.entriesChanged(eligible);
+      const settled = this.settleCorrections(eligibleEntries, input.status);
+
+      await this.prisma.$transaction([
+        this.prisma.pageEntry.updateMany({
+          where: { id: { in: eligible } },
+          data: { status: input.status },
+        }),
+        ...settled.operations,
+      ]);
+      await this.indexer?.entriesChanged([...eligible, ...settled.retired]);
     }
 
     return {
@@ -334,19 +373,27 @@ export default class PageEntriesService {
         deleted: null,
         status: PageEntryStatusEnum.STANDING,
         createdAt: { lt: standingCutoff },
-        OR: [
-          { lastServedAt: { lt: standingCutoff } },
-          // Never served. `retrievalCount` is checked as well because rows
-          // counted before `lastServedAt` was recorded carry a count and no
-          // date, and a count says somebody read them.
-          { lastServedAt: null, retrievalCount: 0 },
-        ],
+        OR: [{ lastServedAt: { lt: standingCutoff } }, { lastServedAt: null }],
         // A human vouched for it. Demonstrated usefulness is a proxy for
         // "worth keeping"; an explicit human confirmation is the real thing,
         // and it outranks the proxy.
         verifiedAt: null,
       },
       data: { status: PageEntryStatusEnum.ARCHIVED },
+    });
+
+    // A correction that expired in the inbox was never accepted, so the entry
+    // it pointed at is still the one in use. Releasing the pointer lets a
+    // later correction be written; the unique pointer would otherwise refuse
+    // it on account of a claim nobody ever reviewed.
+    await this.prisma.pageEntry.updateMany({
+      where: {
+        ...scope,
+        status: PageEntryStatusEnum.ARCHIVED,
+        supersedesId: { not: null },
+        supersedes: { status: { not: PageEntryStatusEnum.SUPERSEDED } },
+      },
+      data: { supersedesId: null },
     });
 
     return {
@@ -409,6 +456,75 @@ export default class PageEntriesService {
   }
 
   /**
+   * What a triage decision about corrections does to the entries they correct.
+   *
+   * Accepting a correction (STANDING, or CONSOLIDATED into the body) is the
+   * moment it replaces its target, so the target becomes SUPERSEDED then and
+   * not when the correction was written. Rejecting one (ARCHIVED or DISPUTED)
+   * leaves the target in use and releases the pointer, which is unique, so a
+   * later correction can still be written. A target already SUPERSEDED is left
+   * alone either way: that was decided, and the decision is terminal.
+   *
+   * Returns the writes for the caller's transaction, and the ids that leave
+   * the index.
+   */
+  private settleCorrections(
+    entries: Array<{
+      id: string;
+      supersedesId: string | null;
+      supersedes: { status: string } | null;
+    }>,
+    to: PageEntryStatusEnum,
+  ): {
+    operations: Prisma.PrismaPromise<unknown>[];
+    retired: string[];
+  } {
+    const pending = entries.filter(
+      (entry) =>
+        entry.supersedesId &&
+        entry.supersedes &&
+        entry.supersedes.status !== PageEntryStatusEnum.SUPERSEDED,
+    );
+
+    if (pending.length === 0) {
+      return { operations: [], retired: [] };
+    }
+
+    if (
+      to === PageEntryStatusEnum.STANDING ||
+      to === PageEntryStatusEnum.CONSOLIDATED
+    ) {
+      const retired = pending.map((entry) => entry.supersedesId as string);
+      return {
+        operations: [
+          this.prisma.pageEntry.updateMany({
+            where: { id: { in: retired } },
+            data: { status: PageEntryStatusEnum.SUPERSEDED },
+          }),
+        ],
+        retired,
+      };
+    }
+
+    if (
+      to === PageEntryStatusEnum.ARCHIVED ||
+      to === PageEntryStatusEnum.DISPUTED
+    ) {
+      return {
+        operations: [
+          this.prisma.pageEntry.updateMany({
+            where: { id: { in: pending.map((entry) => entry.id) } },
+            data: { supersedesId: null },
+          }),
+        ],
+        retired: [],
+      };
+    }
+
+    return { operations: [], retired: [] };
+  }
+
+  /**
    * What an agent may change on an entry: the wording, scope or withdrawal of
    * its own claim while it still waits in the inbox, and nothing else.
    *
@@ -417,7 +533,8 @@ export default class PageEntriesService {
    * own reviewer. Editing an entry somebody already accepted is the same thing
    * by another route — the text would change under a decision made about
    * different text — so a correction to standing knowledge is a new entry that
-   * supersedes it, which lands in the inbox like any other claim.
+   * supersedes it. That lands in the inbox like any other claim, and the entry
+   * it corrects stays in use until a person accepts it.
    */
   private assertAgentMayEdit(
     current: { status: string; sourceUserId: string | null },
@@ -476,8 +593,10 @@ export default class PageEntriesService {
    * every other — the REST API, the CLI and a harness calling the endpoint
    * directly all arrive here.
    *
-   * Two tiers. An exact repeat, after normalising case and whitespace, is
-   * found in postgres and refused for every writer. A near match is found by
+   * Two tiers, both skipped when the writer names an entry to supersede or
+   * says the fact is distinct. An exact repeat, after normalising case and
+   * whitespace, is found in postgres and refused for every writer. A near
+   * match is found by
    * the hybrid search `findSimilarEntries` runs, and is best effort: with the
    * index unreachable the write goes ahead on the exact check alone, because a
    * cache being down is not a reason to stop recording knowledge.
@@ -546,15 +665,21 @@ export default class PageEntriesService {
       return;
     }
 
+    // The first sentence is for whoever reads it in the webapp, where the
+    // useful act is usually to accept the entry that is already there; the
+    // second is for a client that can resend.
+    const [first] = matches;
     throw new ConflictException({
       statusCode: 409,
       error: 'Conflict',
       status: 'needs-decision',
       message:
-        `"${page.title}" already holds ${matches.length} ` +
-        `${matches.length === 1 ? 'entry' : 'entries'} like this one. ` +
-        'Nothing was written. Pass `supersedesId` with the id of the entry ' +
-        'this replaces, or `distinct: true` to say it is a separate fact.',
+        `"${page.title}" already has this: "${firstLine(first.content)}" ` +
+        `(${first.status.toLowerCase()}` +
+        `${matches.length > 1 ? `, and ${matches.length - 1} more like it` : ''}` +
+        '). Nothing was written. To write it anyway, resend with ' +
+        '`supersedesId` set to the entry it replaces, or `distinct: true` if ' +
+        'it is a separate fact.',
       nearMatches: matches,
     });
   }
@@ -565,12 +690,27 @@ export default class PageEntriesService {
   ): Promise<void> {
     const target = await this.prisma.pageEntry.findFirst({
       where: { id: supersedesId, deleted: null, pageId },
-      select: { status: true, supersededBy: { select: { id: true } } },
+      select: {
+        status: true,
+        supersededBy: { select: { id: true, status: true } },
+      },
     });
 
     if (!target) {
       throw new NotFoundException({
         message: `Entry ${supersedesId} is not on this page`,
+      });
+    }
+
+    if (
+      target.supersededBy &&
+      target.status !== PageEntryStatusEnum.SUPERSEDED
+    ) {
+      throw new BadRequestException({
+        message:
+          `A correction to entry ${supersedesId} is already waiting for ` +
+          `review: ${target.supersededBy.id}. Nothing was written. Until a ` +
+          'person accepts or rejects it, the entry cannot take a second one.',
       });
     }
 

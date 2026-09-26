@@ -136,7 +136,10 @@ export interface RememberInput {
   scope?: string;
   /** Harness session id, so the claim can be traced back to a run. */
   session?: string;
-  /** The entry this one replaces. Flips that entry to SUPERSEDED. */
+  /**
+   * The entry this one replaces. It becomes SUPERSEDED when this one is
+   * accepted, and is served until then.
+   */
   supersedes?: string;
   /**
    * Confirms the caller has looked at the near matches and considers this fact

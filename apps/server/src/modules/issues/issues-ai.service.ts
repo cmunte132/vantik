@@ -4,7 +4,6 @@ import {
   CreateIssueDto,
   CreateIssueRelationDto,
   IssueRelationEnum,
-  TeamRequestParamsDto,
 } from '@vantikhq/types';
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
@@ -23,7 +22,6 @@ import {
   getIssueTitle,
   getSuggestedLabels,
   getSuggestedModules,
-  getSummary,
   withDismissedModule,
 } from './issues-ai.utils';
 import {
@@ -44,78 +42,6 @@ export default class IssuesAIService {
     private aiRequestsService: AIRequestsService,
     private issueRelationService: IssueRelationService,
   ) {}
-
-  /**
-   * Generates suggestions for labels and assignees based on the issue description.
-   * @param teamRequestParams The team request parameters.
-   * @param suggestionsInput The input for generating suggestions, including the issue description and workspace ID.
-   * @returns An object containing the suggested labels and assignees.
-   */
-  async suggestions(
-    teamRequestParams: TeamRequestParamsDto,
-    suggestionsInput: AIInput,
-  ) {
-    // Check if the description is empty or falsy
-    if (!suggestionsInput.description) {
-      return { labels: [], assignees: [] };
-    }
-
-    // Find labels based on the workspace ID and team ID
-    const labels = await this.prisma.label.findMany({
-      where: {
-        OR: [
-          { workspaceId: suggestionsInput.workspaceId },
-          { teamId: teamRequestParams.teamId },
-        ],
-      },
-    });
-
-    // Get suggested labels and similar issues concurrently
-    const [labelsSuggested, similarIssues] = await Promise.all([
-      getSuggestedLabels(
-        this.prisma,
-        this.aiRequestsService,
-        labels.map((label) => label.name),
-        suggestionsInput.description,
-        suggestionsInput.workspaceId,
-      ),
-      this.vectorService.searchEmbeddings(
-        suggestionsInput.workspaceId,
-        suggestionsInput.description,
-        10,
-        0.2,
-      ),
-    ]);
-
-    // Find suggested labels based on the suggested label names
-    const suggestedLabels = await this.prisma.label.findMany({
-      where: {
-        name: { in: labelsSuggested.split(/,\s*/), mode: 'insensitive' },
-        OR: [
-          { workspaceId: suggestionsInput.workspaceId },
-          { teamId: teamRequestParams.teamId },
-        ],
-      },
-      select: { id: true, name: true, color: true },
-    });
-
-    // Extract unique assignee IDs from similar issues
-    const assigneeIds = new Set(
-      similarIssues
-        .filter((issue) => issue.assigneeId)
-        .map((issue) => issue.assigneeId),
-    );
-
-    // Map assignee IDs to assignee objects with scores
-    const assignees = Array.from(assigneeIds).map((assigneeId) => ({
-      id: assigneeId,
-      score:
-        similarIssues.find((issue) => issue.assigneeId === assigneeId)
-          ?.relevanceScore ?? 0,
-    }));
-
-    return { labels: suggestedLabels, assignees };
-  }
 
   /**
    * This method suggests labels and modules for an issue.
@@ -421,93 +347,6 @@ export default class IssuesAIService {
     });
 
     return similarIssues;
-  }
-
-  /**
-   * Generates similar issue suggestions for a given issue in a workspace.
-   * @param workspaceId The ID of the workspace.
-   * @param issueId The ID of the issue to find similar issues for.
-   * @returns An array of similar issues.
-   */
-  async summarizeIssue(issueId: string) {
-    // Fetch issue comments and their replies for the given issueId
-    const issueComments = await this.prisma.issueComment.findMany({
-      where: { issueId, deleted: null, parentId: null },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        replies: {
-          where: { deleted: null },
-          orderBy: { createdAt: 'asc' },
-        },
-        issue: { include: { team: true } },
-      },
-    });
-
-    // If no comments are found, return undefined
-    if (issueComments.length < 1) {
-      return undefined;
-    }
-
-    // Fetch team users for the workspace and team associated with the issue
-    const teamUsers = await this.prisma.usersOnWorkspaces.findMany({
-      where: {
-        workspaceId: issueComments[0].issue.team.workspaceId,
-        teamIds: {
-          hasSome: [issueComments[0].issue.teamId],
-        },
-      },
-      include: { user: true },
-    });
-
-    // Create a mapping of user IDs to their full names
-    const formattedTeamUsers: Record<string, string> = teamUsers.reduce(
-      (acc: Record<string, string>, member) => {
-        acc[member.user.id] = member.user.fullname;
-        return acc;
-      },
-      {},
-    );
-
-    // Format comments and replies with user names
-    const formattedComments = issueComments.map((comment) => {
-      const sourceMetadata = comment.sourceMetadata as Record<string, string>;
-      const userName =
-        formattedTeamUsers[comment.userId] ||
-        sourceMetadata?.userDisplayName ||
-        null;
-      const message = convertTiptapJsonToText(comment.body);
-      const formattedReplies = comment.replies.map((reply) => {
-        const replySourceMetadata = reply.sourceMetadata as Record<
-          string,
-          string
-        >;
-        const replyUserName =
-          formattedTeamUsers[comment.userId] ||
-          replySourceMetadata?.userDisplayName ||
-          null;
-        const replyMessage = convertTiptapJsonToText(reply.body);
-        return `  Reply - ${replyUserName}: ${replyMessage}`;
-      });
-      return `Message - ${userName}: ${message}\n${formattedReplies.join('\n')}`;
-    });
-
-    // Generate a summary of the formatted comments using OpenAI
-    const rawSummary = await getSummary(
-      this.prisma,
-      this.aiRequestsService,
-      formattedComments.join('\n'),
-      issueComments[0].issue.team.workspaceId,
-    );
-
-    // Extract bullet points from the raw summary using regex
-    const bulletPointRegex = /- (.*)/g;
-    const bulletPoints =
-      rawSummary
-        .match(bulletPointRegex)
-        ?.map((point) => point.replace(/^- /, '').trim()) || [];
-
-    // Return the extracted bullet points
-    return bulletPoints;
   }
 
   /**

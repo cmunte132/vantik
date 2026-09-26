@@ -147,39 +147,39 @@ export default class IssueContextService {
       historyIssues,
       modules,
     ] = await Promise.all([
-        this.prisma.workflow.findMany({
-          where: { id: { in: unique(stateIds) } },
-          select: { id: true, name: true, category: true },
-        }),
-        this.prisma.label.findMany({
-          where: { id: { in: unique(labelIds) } },
-          select: { id: true, name: true },
-        }),
-        this.prisma.user.findMany({
-          where: { id: { in: unique(userIds) } },
-          select: { id: true, fullname: true },
-        }),
-        this.prisma.team.findMany({
-          where: { id: { in: unique(teamIds) } },
-          select: { id: true, name: true },
-        }),
-        this.prisma.project.findMany({
-          where: { id: { in: unique(projectIds) } },
-          select: { id: true, name: true },
-        }),
-        this.prisma.cycle.findMany({
-          where: { id: { in: unique(cycleIds) } },
-          select: { id: true, name: true },
-        }),
-        this.getIssueRefRows(unique(parentIds)),
-        // Named in the same round trip as everything else. A deleted module
-        // keeps its row, so this resolves an id the issue still carries rather
-        // than dropping it silently.
-        this.prisma.module.findMany({
-          where: { id: { in: unique(issue.moduleIds) } },
-          select: { id: true, name: true },
-        }),
-      ]);
+      this.prisma.workflow.findMany({
+        where: { id: { in: unique(stateIds) } },
+        select: { id: true, name: true, category: true },
+      }),
+      this.prisma.label.findMany({
+        where: { id: { in: unique(labelIds) } },
+        select: { id: true, name: true },
+      }),
+      this.prisma.user.findMany({
+        where: { id: { in: unique(userIds) } },
+        select: { id: true, fullname: true },
+      }),
+      this.prisma.team.findMany({
+        where: { id: { in: unique(teamIds) } },
+        select: { id: true, name: true },
+      }),
+      this.prisma.project.findMany({
+        where: { id: { in: unique(projectIds) } },
+        select: { id: true, name: true },
+      }),
+      this.prisma.cycle.findMany({
+        where: { id: { in: unique(cycleIds) } },
+        select: { id: true, name: true },
+      }),
+      this.getIssueRefRows(unique(parentIds)),
+      // Named in the same round trip as everything else. A deleted module
+      // keeps its row, so this resolves an id the issue still carries rather
+      // than dropping it silently.
+      this.prisma.module.findMany({
+        where: { id: { in: unique(issue.moduleIds) } },
+        select: { id: true, name: true },
+      }),
+    ]);
 
     const stateById = byId(states);
     const labelById = byId(labels);
@@ -269,165 +269,6 @@ export default class IssueContextService {
       }),
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
-    };
-  }
-
-  /**
-   * Top-level comments in chronological order, each with its replies nested one
-   * level deep — the same shape the context endpoint returns.
-   */
-  async getIssueComments(issueId: string): Promise<ContextComment[]> {
-    const issue = await this.prisma.issue.findFirst({
-      where: { id: issueId, deleted: null },
-      select: { id: true },
-    });
-
-    if (!issue) {
-      throw new NotFoundException(`Issue ${issueId} not found`);
-    }
-
-    const comments = await this.prisma.issueComment.findMany({
-      where: { issueId, deleted: null },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    const users = await this.prisma.user.findMany({
-      where: { id: { in: unique(comments.map((comment) => comment.userId)) } },
-      select: { id: true, fullname: true },
-    });
-
-    return this.nestComments(comments, byId(users));
-  }
-
-  async getIssueHistory(issueId: string): Promise<ContextHistoryEntry[]> {
-    const issue = await this.prisma.issue.findFirst({
-      where: { id: issueId, deleted: null },
-      select: { id: true },
-    });
-
-    if (!issue) {
-      throw new NotFoundException(`Issue ${issueId} not found`);
-    }
-
-    const historyRows = await this.prisma.issueHistory.findMany({
-      where: { issueId, deleted: null },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    return this.condenseHistory(
-      historyRows,
-      await this.historyLookups(historyRows),
-    );
-  }
-
-  /**
-   * Batched name lookups for every id referenced by a set of history rows.
-   */
-  private async historyLookups(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    historyRows: any[],
-  ): Promise<HistoryLookups> {
-    const [states, labels, users, teams, projects, cycles, issues] =
-      await Promise.all([
-        this.prisma.workflow.findMany({
-          where: {
-            id: {
-              in: unique(
-                historyRows.flatMap(({ fromStateId, toStateId }) => [
-                  fromStateId,
-                  toStateId,
-                ]),
-              ),
-            },
-          },
-          select: { id: true, name: true, category: true },
-        }),
-        this.prisma.label.findMany({
-          where: {
-            id: {
-              in: unique(
-                historyRows.flatMap(({ addedLabelIds, removedLabelIds }) => [
-                  ...addedLabelIds,
-                  ...removedLabelIds,
-                ]),
-              ),
-            },
-          },
-          select: { id: true, name: true },
-        }),
-        this.prisma.user.findMany({
-          where: {
-            id: {
-              in: unique(
-                historyRows.flatMap(
-                  ({ userId, fromAssigneeId, toAssigneeId }) => [
-                    userId,
-                    fromAssigneeId,
-                    toAssigneeId,
-                  ],
-                ),
-              ),
-            },
-          },
-          select: { id: true, fullname: true },
-        }),
-        this.prisma.team.findMany({
-          where: {
-            id: {
-              in: unique(
-                historyRows.flatMap(({ fromTeamId, toTeamId }) => [
-                  fromTeamId,
-                  toTeamId,
-                ]),
-              ),
-            },
-          },
-          select: { id: true, name: true },
-        }),
-        this.prisma.project.findMany({
-          where: {
-            id: {
-              in: unique(
-                historyRows.flatMap(({ fromProjectId, toProjectId }) => [
-                  fromProjectId,
-                  toProjectId,
-                ]),
-              ),
-            },
-          },
-          select: { id: true, name: true },
-        }),
-        this.prisma.cycle.findMany({
-          where: {
-            id: {
-              in: unique(
-                historyRows.flatMap(({ fromCycleId, toCycleId }) => [
-                  fromCycleId,
-                  toCycleId,
-                ]),
-              ),
-            },
-          },
-          select: { id: true, name: true },
-        }),
-        this.getIssueRefRows(
-          unique(
-            historyRows.flatMap(({ fromParentId, toParentId }) => [
-              fromParentId,
-              toParentId,
-            ]),
-          ),
-        ),
-      ]);
-
-    return {
-      stateById: byId(states),
-      labelById: byId(labels),
-      userById: byId(users),
-      teamById: byId(teams),
-      projectById: byId(projects),
-      cycleById: byId(cycles),
-      issueById: byId(issues),
     };
   }
 

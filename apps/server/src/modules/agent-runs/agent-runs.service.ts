@@ -106,29 +106,6 @@ export class AgentRunsService {
 
   // ------------------------------------------------------------------ reads
 
-  /**
-   * One run, or a 404.
-   *
-   * The 404 is the same whether the run does not exist, sits in another
-   * workspace, or belongs to another agent — anything else discloses the
-   * existence of work the caller cannot see.
-   */
-  async getRun(runId: string, scope: AgentRunScope) {
-    const run = await this.prisma.agentRun.findFirst({
-      where: this.scopeWhere(scope, { id: runId }),
-      include: {
-        events: { orderBy: { at: 'asc' }, take: 500 },
-        iterations: { orderBy: { index: 'asc' } },
-      },
-    });
-
-    if (!run) {
-      throw new NotFoundException({ message: `Agent run ${runId} not found` });
-    }
-
-    return run;
-  }
-
   async listRuns(filter: ListAgentRunsFilter, scope: AgentRunScope) {
     const page = filter.page ?? 1;
     const perPage = Math.min(filter.perPage ?? 50, 200);
@@ -151,16 +128,6 @@ export class AgentRunsService {
     ]);
 
     return { items, page, perPage, total };
-  }
-
-  async listEvents(runId: string, scope: AgentRunScope, since?: Date) {
-    // Proves the run is the caller's before handing back a single line of it.
-    await this.requireRun(runId, scope);
-
-    return this.prisma.agentRunEvent.findMany({
-      where: { runId, ...(since ? { at: { gt: since } } : {}) },
-      orderBy: { at: 'asc' },
-    });
   }
 
   // ----------------------------------------------------------------- writes

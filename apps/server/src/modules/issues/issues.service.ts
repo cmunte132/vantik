@@ -7,7 +7,6 @@ import {
   CreateIssueRelationDto,
   DEFAULT_ISSUES_PER_PAGE,
   GetIssuesByFilterDTO,
-  GetIssuesQueryDto,
   Issue,
   IssueHistoryData,
   IssueListItem,
@@ -124,43 +123,6 @@ export default class IssuesService {
     const descriptionMarkdown = convertTiptapJsonToMarkdown(issue.description);
 
     return { descriptionMarkdown, ...issue };
-  }
-
-  async getIssues(
-    sessionWorkspaceId: string,
-    userId: string,
-    {
-      issueIds,
-      teamId,
-      workspaceId: requestedWorkspaceId,
-    }: GetIssuesQueryDto = {},
-  ): Promise<Issue[]> {
-    const workspaceId = await resolveWorkspaceId(
-      this.prisma,
-      userId,
-      sessionWorkspaceId,
-      requestedWorkspaceId,
-    );
-
-    // Nesting teamId under `team` means a teamId from another workspace simply
-    // matches nothing, rather than widening the scope.
-    const issues = await this.prisma.issue.findMany({
-      where: {
-        team: { workspaceId, ...(teamId && { id: teamId }) },
-        ...(issueIds?.length && { id: { in: issueIds } }),
-        // A team is a visibility boundary (ENG-79). This route names its ids in
-        // a query string and has no `WorkspaceResourceGuard` in front of it, so
-        // the limit belongs in the query.
-        teamId: { in: await visibleTeamIds(this.prisma, userId, workspaceId) },
-        deleted: null,
-      },
-      include: { team: true },
-    });
-
-    return issues.map((issue) => ({
-      ...issue,
-      descriptionMarkdown: convertTiptapJsonToMarkdown(issue.description),
-    }));
   }
 
   /**

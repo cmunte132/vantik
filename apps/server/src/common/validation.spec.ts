@@ -15,7 +15,6 @@ import {
   CreateIssueDto,
   CreatePatDto,
   CreateTemplateDto,
-  GetIssuesQueryDto,
   GetUsersDto,
   IntegrationDefinitionIdDto,
   TemplateCategoryEnum,
@@ -158,13 +157,6 @@ describe('the global validation pipe', () => {
       await expect(
         run(AgentRunFilterDto, { page: '2', perPage: '25' }, 'query'),
       ).resolves.toMatchObject({ page: 2, perPage: 25 });
-    });
-
-    it('as a list, for comma-separated issue ids', async () => {
-      // Before, the handler got the raw string and passed it to Prisma's `in`.
-      await expect(
-        run(GetIssuesQueryDto, { issueIds: 'issue-1, issue-2' }, 'query'),
-      ).resolves.toEqual({ issueIds: ['issue-1', 'issue-2'] });
     });
   });
 });

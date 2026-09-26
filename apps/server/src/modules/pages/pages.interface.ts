@@ -106,14 +106,6 @@ export const ALLOWED_STATUS_TRANSITIONS: Record<
   [PageEntryStatusEnum.SUPERSEDED]: [],
 };
 
-/** A page with the counts the tree view needs, without loading every entry. */
-export interface PageWithCounts {
-  id: string;
-  title: string;
-  parentId: string | null;
-  entryCounts: Record<string, number>;
-}
-
 /** Who is writing, resolved once at the controller boundary. */
 export interface WriterIdentity {
   userId: string;

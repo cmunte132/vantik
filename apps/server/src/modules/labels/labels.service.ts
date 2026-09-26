@@ -85,18 +85,6 @@ export default class LabelsService {
     });
   }
 
-  async getLabel(LabelRequestIdParams: LabelRequestParamsDto): Promise<Label> {
-    return await this.prisma.label.findUnique({
-      where: {
-        id: LabelRequestIdParams.labelId,
-      },
-      include: {
-        group: true,
-        labels: true,
-      },
-    });
-  }
-
   async updateLabel(
     LabelRequestIdParams: LabelRequestParamsDto,
     labelData: UpdateLabelDto,

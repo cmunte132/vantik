@@ -1,12 +1,6 @@
 import { OAuth2Params } from '@vantikhq/types';
 import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
-export interface RedirectURLParams {
-  workspaceSlug: string;
-  integrationOAuthAppName: string;
-  config: string;
-}
-
 export interface SessionRecord {
   integrationDefinitionId: string;
   config: OAuth2Params;
@@ -34,14 +28,6 @@ export class OAuthBodyInterface {
 }
 
 export type CallbackParams = Record<string, string>;
-
-export interface SentryCallbackBody {
-  workspaceId: string;
-  integrationDefinitionId: string;
-  installationId: string;
-  code: string;
-  orgSlug: string;
-}
 export interface ProviderConfig {
   client_id: string;
   client_secret: string;

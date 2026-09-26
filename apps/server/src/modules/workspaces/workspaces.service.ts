@@ -25,7 +25,6 @@ import { UsersService } from 'modules/users/users.service';
 
 import {
   CreateInitialResourcesDto,
-  CreateWorkspaceInput,
   InviteUsersBody,
   UpdateWorkspaceInput,
   UserWorkspaceOtherData,
@@ -129,62 +128,6 @@ export default class WorkspacesService {
     res.send({ status: 200, message: 'success' });
   }
 
-  async createWorkspace(
-    userId: string,
-    workspaceData: CreateWorkspaceInput,
-  ): Promise<Workspace> {
-    const workspace = await this.prisma.workspace.create({
-      data: {
-        ...workspaceData,
-        usersOnWorkspaces: {
-          create: { userId },
-        },
-        label: { create: labelSeedData },
-      },
-      include: {
-        usersOnWorkspaces: true,
-      },
-    });
-
-    return workspace;
-  }
-
-  async getWorkspaceByName(name: string): Promise<Workspace> {
-    return await this.prisma.workspace.findFirst({
-      where: {
-        name: {
-          equals: name,
-          mode: 'insensitive',
-        },
-      },
-      include: {
-        usersOnWorkspaces: {
-          include: {
-            user: true,
-          },
-        },
-      },
-    });
-  }
-
-  async getWorkspaceBySlug(slug: string): Promise<Workspace> {
-    return await this.prisma.workspace.findFirst({
-      where: {
-        name: {
-          equals: slug,
-          mode: 'insensitive',
-        },
-      },
-      include: {
-        usersOnWorkspaces: {
-          include: {
-            user: true,
-          },
-        },
-      },
-    });
-  }
-
   async getAllWorkspaces(userId: string): Promise<Workspace[]> {
     return await this.prisma.workspace.findMany({
       where: {
@@ -247,14 +190,6 @@ export default class WorkspacesService {
     });
 
     return workspace;
-  }
-
-  async deleteWorkspace(workspaceId: string): Promise<Workspace> {
-    return await this.prisma.workspace.delete({
-      where: {
-        id: workspaceId,
-      },
-    });
   }
 
   async addUserToWorkspace(
@@ -332,20 +267,6 @@ export default class WorkspacesService {
     }
 
     return responseRecord;
-  }
-
-  async getInvites(workspaceId: string) {
-    // Only the ones still outstanding. `deleted` is what closes an invite;
-    // filtering on status alone worked only while a decline was miswritten as
-    // an acceptance, and would have listed declined invites as pending the
-    // moment that was fixed.
-    return await this.prisma.invite.findMany({
-      where: {
-        workspaceId,
-        deleted: null,
-        status: { not: InviteStatusEnum.ACCEPTED },
-      },
-    });
   }
 
   async inviteAction(

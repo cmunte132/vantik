@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Post,
@@ -15,20 +14,11 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { SignedURLBody } from '@vantikhq/types';
 import { Request, Response } from 'express';
-import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
-import { getAppUserId } from 'modules/auth/session-user';
-import {
-  Session as SessionDecorator,
-  UserId,
-  Workspace,
-} from 'modules/auth/session.decorator';
+import { UserId, Workspace } from 'modules/auth/session.decorator';
 
-import {
-  AttachmentRequestParams,
-  AttachmentBody,
-} from './attachments.interface';
+import { AttachmentRequestParams } from './attachments.interface';
 import { AttachmentService } from './attachments.service';
 
 @Controller({
@@ -37,29 +27,6 @@ import { AttachmentService } from './attachments.service';
 })
 export class AttachmentController {
   constructor(private readonly attachementService: AttachmentService) {}
-
-  @Post('upload')
-  @UseInterceptors(FilesInterceptor('files'))
-  @UseGuards(AuthGuard)
-  async uploadFiles(
-    @SessionDecorator() session: SessionContainer,
-    @Workspace() workspaceId: string,
-    @UploadedFiles() files: Express.Multer.File[],
-    @Body() attachmentBody: AttachmentBody,
-  ) {
-    const userId = getAppUserId(session);
-
-    const sourceMetadata = attachmentBody.sourceMetadata
-      ? JSON.parse(attachmentBody.sourceMetadata)
-      : null;
-
-    return await this.attachementService.uploadAttachment(
-      files,
-      userId,
-      workspaceId,
-      sourceMetadata,
-    );
-  }
 
   @Post('upload/action')
   @UseInterceptors(FilesInterceptor('files'))
@@ -80,22 +47,6 @@ export class AttachmentController {
       userId,
       workspaceId,
     );
-  }
-
-  @Get('get-signed-url/:attachmentId')
-  @UseGuards(AuthGuard)
-  async getSignedUrlForFile(
-    @Workspace() workspaceId: string,
-    @Param() attachementRequestParams: AttachmentRequestParams,
-  ) {
-    try {
-      return await this.attachementService.getFileFromStorageSignedUrl(
-        attachementRequestParams,
-        workspaceId,
-      );
-    } catch (error) {
-      return undefined;
-    }
   }
 
   @Get('actions/:attachmentId')
@@ -208,18 +159,5 @@ export class AttachmentController {
     } catch (error) {
       res.status(404).send('File not found');
     }
-  }
-
-  @Delete(':workspaceId/:attachmentId')
-  @UseGuards(AuthGuard)
-  async deleteAttachment(
-    @Workspace() workspaceId: string,
-    @Param() attachementRequestParams: AttachmentRequestParams,
-  ) {
-    await this.attachementService.deleteAttachment(
-      attachementRequestParams,
-      workspaceId,
-    );
-    return { message: 'Attachment deleted successfully' };
   }
 }

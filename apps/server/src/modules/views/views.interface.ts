@@ -10,14 +10,6 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-
-export interface ViewsRequestBody {
-  /**
-   * Optional. Honoured only if the caller is an active member of it, otherwise
-   * the request is rejected. Falls back to the session's workspace when absent.
-   */
-  workspaceId?: string;
-}
 export class FilterModelType {
   @IsArray()
   @Type(() => String)

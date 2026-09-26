@@ -7,8 +7,6 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
-import { RequestIdParams } from './templates.interface';
-
 @Injectable()
 export default class TemplatesService {
   constructor(private prisma: PrismaService) {}
@@ -27,28 +25,6 @@ export default class TemplatesService {
     });
 
     return template;
-  }
-
-  async getAllTemplates(requestIdParams: RequestIdParams): Promise<Template[]> {
-    const whereClause = {
-      ...(requestIdParams.workspaceId && {
-        workspaceId: requestIdParams.workspaceId,
-        teamId: null,
-      }),
-      ...(requestIdParams.teamId && { teamId: requestIdParams.teamId }),
-    };
-
-    return await this.prisma.template.findMany({
-      where: whereClause,
-    });
-  }
-
-  async getTemplate(templateRequestIdParams: TemplateIdDto): Promise<Template> {
-    return await this.prisma.template.findUnique({
-      where: {
-        id: templateRequestIdParams.templateId,
-      },
-    });
   }
 
   async updateTemplate(

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { CreatePersonDto, UpdatePersonDto } from '@vantikhq/types';
+import { CreatePersonDto } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import CompanyService from 'modules/company/company.service';
@@ -52,18 +52,6 @@ export default class PeopleService {
     });
   }
 
-  async getPeople(companyId?: string) {
-    return this.prisma.people.findMany({
-      where: {
-        companyId: companyId || undefined,
-        deleted: null,
-      },
-      include: {
-        company: true,
-      },
-    });
-  }
-
   async getPerson(id: string) {
     const person = await this.prisma.people.findFirst({
       where: {
@@ -80,28 +68,5 @@ export default class PeopleService {
     }
 
     return person;
-  }
-
-  async updatePerson(id: string, data: UpdatePersonDto) {
-    return this.prisma.people.update({
-      where: { id },
-      data: {
-        ...data,
-      },
-      include: {
-        company: true,
-      },
-    });
-  }
-
-  async deletePerson(id: string) {
-    await this.getPerson(id);
-
-    return this.prisma.people.update({
-      where: { id },
-      data: {
-        deleted: new Date(),
-      },
-    });
   }
 }

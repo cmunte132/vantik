@@ -13,15 +13,12 @@ import {
 } from '@nestjs/common';
 import {
   CreateIssueDto,
-  CreateLinkedIssueDto,
   Issue,
   IssueRequestParamsDto,
   TeamRequestParamsDto,
   UpdateIssueDto,
   GetIssuesByFilterDTO,
-  GetIssuesQueryDto,
   IssueListItem,
-  LinkedIssue,
   PaginatedIssues,
 } from '@vantikhq/types';
 import { Response } from 'express';
@@ -36,14 +33,9 @@ import {
   Workspace,
 } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
-import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { AdminGuard } from 'modules/users/admin.guard';
 
-import {
-  ContextComment,
-  ContextHistoryEntry,
-  IssueContext,
-} from './issue-context.interface';
+import { IssueContext } from './issue-context.interface';
 import IssueContextService from './issue-context.service';
 import { ApiResponse, SubscribeIssueInput } from './issues.interface';
 import IssuesService from './issues.service';
@@ -56,7 +48,6 @@ export class IssuesController {
   constructor(
     private issuesService: IssuesService,
     private issueContextService: IssueContextService,
-    private linkedIssueService: LinkedIssueService,
   ) {}
 
   @Post()
@@ -111,21 +102,6 @@ export class IssuesController {
     @Query() teamParams: TeamRequestParamsDto,
   ): Promise<Issue> {
     return await this.issuesService.deleteIssue(teamParams, issueParams);
-  }
-
-  @Post(':issueId/link')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async linkIssue(
-    @SessionDecorator() session: SessionContainer,
-    @Param() issueParams: IssueRequestParamsDto,
-    @Body() linkData: CreateLinkedIssueDto,
-  ): Promise<LinkedIssue | ApiResponse> {
-    const userId = getAppUserId(session);
-    return await this.linkedIssueService.createLinkIssue(
-      linkData,
-      issueParams,
-      userId,
-    );
   }
 
   @Post(':issueId/subscribe')
@@ -206,39 +182,9 @@ export class IssuesController {
     return await this.issueContextService.getIssueContext(issueParams.issueId);
   }
 
-  @Get(':issueId/comments')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async getIssueComments(
-    @Param() issueParams: IssueRequestParamsDto,
-  ): Promise<ContextComment[]> {
-    return await this.issueContextService.getIssueComments(issueParams.issueId);
-  }
-
-  @Get(':issueId/history')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async getIssueHistory(
-    @Param() issueParams: IssueRequestParamsDto,
-  ): Promise<ContextHistoryEntry[]> {
-    return await this.issueContextService.getIssueHistory(issueParams.issueId);
-  }
-
   @Get(':issueId')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getIssue(@Param() issueParams: IssueRequestParamsDto): Promise<Issue> {
     return await this.issuesService.getIssueById(issueParams);
-  }
-
-  @Get()
-  @UseGuards(AuthGuard)
-  async getIssues(
-    @Workspace() sessionWorkspaceId: string,
-    @UserId() userId: string,
-    @Query() query: GetIssuesQueryDto,
-  ): Promise<Issue[]> {
-    return await this.issuesService.getIssues(
-      sessionWorkspaceId,
-      userId,
-      query,
-    );
   }
 }

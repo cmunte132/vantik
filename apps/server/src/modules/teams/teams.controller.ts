@@ -39,40 +39,6 @@ export class TeamsController {
     return await this.teamsService.getTeams(workspaceId, userId);
   }
 
-  @Get('user')
-  @UseGuards(AuthGuard)
-  async getTeamsByUser(
-    @UserId() userId: string,
-    @Workspace() workspaceId: string,
-  ): Promise<Team[]> {
-    return await this.teamsService.getTeamsByUser(userId, workspaceId);
-  }
-
-  @Get(':teamId')
-  @UseGuards(AuthGuard)
-  async getTeam(
-    @Param()
-    teamId: TeamRequestParams,
-    @UserId() userId: string,
-    @Workspace() workspaceId: string,
-  ): Promise<Team> {
-    return await this.teamsService.getTeam(teamId, userId, workspaceId);
-  }
-
-  @Get('name/:teamName')
-  @UseGuards(AuthGuard)
-  async getTeamByName(
-    @Param('teamName') teamName: string,
-    @Workspace() workspaceId: string,
-    @UserId() userId: string,
-  ): Promise<Team> {
-    return await this.teamsService.getTeamByName(
-      workspaceId,
-      teamName,
-      userId,
-    );
-  }
-
   @Post()
   @UseGuards(AuthGuard, AdminGuard)
   async createTeam(

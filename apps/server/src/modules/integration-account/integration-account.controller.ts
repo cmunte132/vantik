@@ -1,22 +1,7 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
-import {
-  IntegrationAccount,
-  IntegrationAccountIdDto,
-  PersonalAccountDto,
-  UpdateIntegrationAccountDto,
-} from '@vantikhq/types';
+import { Controller, Delete, Param, UseGuards } from '@nestjs/common';
+import { IntegrationAccountIdDto } from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
-import { Workspace } from 'modules/auth/session.decorator';
 
 import { IntegrationAccountService } from './integration-account.service';
 
@@ -26,53 +11,6 @@ import { IntegrationAccountService } from './integration-account.service';
 })
 export class IntegrationAccountController {
   constructor(private integrationAccountService: IntegrationAccountService) {}
-
-  /**
-   * Get all integration accounts in a workspace
-   */
-  @Get()
-  @UseGuards(AuthGuard)
-  async getIntegrationAccounts(
-    @Workspace() workspaceId: string,
-  ): Promise<IntegrationAccount[]> {
-    return await this.integrationAccountService.getIntegrationAccountsForWorkspace(
-      workspaceId,
-    );
-  }
-
-  @Get('account_id')
-  @UseGuards(AuthGuard)
-  async getIntegrationAccountByAccountId(
-    @Query('accountId') accountId: string,
-  ): Promise<IntegrationAccount> {
-    return await this.integrationAccountService.getIntegrationAccountByAccountId(
-      accountId,
-    );
-  }
-
-  @Get('personal')
-  @UseGuards(AuthGuard)
-  async getPersonalIntegrationAccount(
-    @Query() personalAccountParams: PersonalAccountDto,
-  ): Promise<IntegrationAccount> {
-    return await this.integrationAccountService.getPersonalIntegrationAccount(
-      personalAccountParams,
-    );
-  }
-
-  /**
-   * Get a integration accounts in a workspace
-   */
-  @Get(':integrationAccountId')
-  @UseGuards(AuthGuard)
-  async getIntegrationAccount(
-    @Param()
-    integrationAccountIdRequestIdBody: IntegrationAccountIdDto,
-  ): Promise<IntegrationAccount> {
-    return await this.integrationAccountService.getIntegrationAccountWithId(
-      integrationAccountIdRequestIdBody.integrationAccountId,
-    );
-  }
 
   /**
    * Delete a Integration account
@@ -85,23 +23,6 @@ export class IntegrationAccountController {
   ) {
     return await this.integrationAccountService.deleteIntegrationAccount(
       integrationAccountIdRequestIdBody,
-    );
-  }
-
-  /**
-   * Update a integration account in workspace
-   */
-  @Post(':integrationAccountId')
-  @UseGuards(AuthGuard)
-  async updateIntegrationAccount(
-    @Param()
-    integrationAccountIdRequestIdBody: IntegrationAccountIdDto,
-    @Body()
-    updateIntegrationAccountBody: UpdateIntegrationAccountDto,
-  ): Promise<IntegrationAccount> {
-    return await this.integrationAccountService.updateIntegrationAccount(
-      integrationAccountIdRequestIdBody.integrationAccountId,
-      updateIntegrationAccountBody,
     );
   }
 }

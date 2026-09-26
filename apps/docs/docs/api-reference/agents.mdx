@@ -134,14 +134,6 @@ Notes:
   `parent`, and `label`. Each id has its name. The response holds no row where
   nothing changed for a reader.
 
-Two parts of the same data have their own endpoint, for when you need only that
-part:
-
-```
-GET /v1/issues/:issueId/comments   # in time order, with the replies one level below
-GET /v1/issues/:issueId/history    # the short history array
-```
-
 ## How to close an issue with a resolution
 
 There is no endpoint for "close". To close an issue, move it to a workflow state

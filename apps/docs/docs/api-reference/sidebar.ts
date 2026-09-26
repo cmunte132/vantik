@@ -26,42 +26,6 @@ const sidebar: SidebarsConfig = {
     },
     {
       type: "category",
-      label: "Ai_requests",
-      items: [
-        {
-          type: "doc",
-          id: "api-reference/get-ai-request",
-          label: "Get AI request",
-          className: "api-method post",
-        },
-        {
-          type: "doc",
-          id: "api-reference/get-ai-request-stream",
-          label: "Get AI request stream",
-          className: "api-method post",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Integration_account",
-      items: [
-        {
-          type: "doc",
-          id: "api-reference/get-integration-accounts-by-integration-account-id",
-          label: "Get integration accounts by integration account ID",
-          className: "api-method get",
-        },
-        {
-          type: "doc",
-          id: "api-reference/get-integration-accounts-by-account-id",
-          label: "Get integration accounts by account ID",
-          className: "api-method get",
-        },
-      ],
-    },
-    {
-      type: "category",
       label: "Integration_definition",
       items: [
         {
@@ -87,18 +51,6 @@ const sidebar: SidebarsConfig = {
           id: "api-reference/create-an-issue-comment",
           label: "Create an issue comment",
           className: "api-method post",
-        },
-        {
-          type: "doc",
-          id: "api-reference/create-a-linked-comment",
-          label: "Create a linked comment",
-          className: "api-method post",
-        },
-        {
-          type: "doc",
-          id: "api-reference/get-issue-comment",
-          label: "Get issue comment",
-          className: "api-method get",
         },
         {
           type: "doc",
@@ -154,11 +106,119 @@ const sidebar: SidebarsConfig = {
           label: "Move issue to team",
           className: "api-method post",
         },
+      ],
+    },
+    {
+      type: "category",
+      label: "Product",
+      items: [
         {
           type: "doc",
-          id: "api-reference/create-linked-issue",
-          label: "Create linked issue",
+          id: "api-reference/list-products",
+          label: "List products",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/create-product",
+          label: "Create product",
           className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/update-product",
+          label: "Update product",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/delete-product",
+          label: "Delete product",
+          className: "api-method delete",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Module",
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/list-modules",
+          label: "List modules",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/create-module",
+          label: "Create module",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/update-module",
+          label: "Update module",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/delete-module",
+          label: "Delete module",
+          className: "api-method delete",
+        },
+        {
+          type: "doc",
+          id: "api-reference/list-the-repositories-of-a-module",
+          label: "List the repositories of a module",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/point-a-module-at-a-repository",
+          label: "Point a module at a repository",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/update-a-module-repository",
+          label: "Update a module repository",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/unpoint-a-module-from-a-repository",
+          label: "Unpoint a module from a repository",
+          className: "api-method delete",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Capability",
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/list-capabilities",
+          label: "List capabilities",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/create-capability",
+          label: "Create capability",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/update-capability",
+          label: "Update capability",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/delete-capability",
+          label: "Delete capability",
+          className: "api-method delete",
         },
       ],
     },
@@ -194,48 +254,6 @@ const sidebar: SidebarsConfig = {
     },
     {
       type: "category",
-      label: "Linked_issue",
-      items: [
-        {
-          type: "doc",
-          id: "api-reference/get-linked-issue-by-id",
-          label: "Get linked issue by ID",
-          className: "api-method get",
-        },
-        {
-          type: "doc",
-          id: "api-reference/update-linked-issue-by-id",
-          label: "Update linked issue by ID",
-          className: "api-method post",
-        },
-        {
-          type: "doc",
-          id: "api-reference/delete-linked-issue",
-          label: "Delete linked issue",
-          className: "api-method delete",
-        },
-        {
-          type: "doc",
-          id: "api-reference/get-linked-issue-by-source-id",
-          label: "Get linked issue by source ID",
-          className: "api-method get",
-        },
-        {
-          type: "doc",
-          id: "api-reference/get-personal-access-tokens-pa-ts",
-          label: "Get personal access tokens (PATs)",
-          className: "api-method get",
-        },
-        {
-          type: "doc",
-          id: "api-reference/update-linked-issue-by-source-id",
-          label: "Update linked issue by source ID",
-          className: "api-method post",
-        },
-      ],
-    },
-    {
-      type: "category",
       label: "Users",
       items: [
         {
@@ -254,18 +272,6 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/get-user",
           label: "Get user",
-          className: "api-method get",
-        },
-        {
-          type: "doc",
-          id: "api-reference/get-users",
-          label: "Get users",
-          className: "api-method post",
-        },
-        {
-          type: "doc",
-          id: "api-reference/get-view",
-          label: "Get view",
           className: "api-method get",
         },
       ],

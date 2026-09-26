@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -240,62 +239,6 @@ export class AttachmentService {
       contentType: attachment.fileType,
       originalName: attachment.originalName,
     };
-  }
-
-  async getFileFromStorageSignedUrl(
-    attachementRequestParams: AttachmentRequestParams,
-    workspaceId: string,
-  ) {
-    const attachment = await this.getAttachment(
-      attachementRequestParams.attachmentId,
-      workspaceId,
-    );
-    const filePath = this.getFilePath(workspaceId, attachment);
-
-    if (!(await this.storageProvider.fileExists(filePath))) {
-      throw new BadRequestException('File not found');
-    }
-
-    const metadata = await this.storageProvider.getMetadata(filePath);
-    const signedUrl = await this.storageProvider.getSignedUrl(filePath, {
-      action: 'read',
-      expires: Date.now() + 60 * 60 * 1000,
-      responseDisposition: 'inline',
-      responseType: attachment.fileType,
-    });
-
-    return {
-      signedUrl,
-      contentType: attachment.fileType,
-      originalName: attachment.originalName,
-      size: metadata.size,
-    };
-  }
-
-  async deleteAttachment(
-    attachementRequestParams: AttachmentRequestParams,
-    workspaceId: string,
-  ) {
-    const attachment = await this.getAttachment(
-      attachementRequestParams.attachmentId,
-      workspaceId,
-    );
-    const filePath = this.getFilePath(workspaceId, attachment);
-
-    try {
-      await Promise.all([
-        this.storageProvider.deleteFile(filePath),
-        this.prisma.attachment.update({
-          where: { id: attachementRequestParams.attachmentId },
-          data: {
-            deleted: new Date().toISOString(),
-            status: AttachmentStatusEnum.Deleted,
-          },
-        }),
-      ]);
-    } catch (error) {
-      throw new InternalServerErrorException('Error deleting attachment');
-    }
   }
 
   private async getAttachment(attachmentId: string, workspaceId: string) {

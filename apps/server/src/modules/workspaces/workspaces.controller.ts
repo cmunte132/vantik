@@ -1,20 +1,13 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
-  Param,
   Post,
   Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import {
-  UsersOnWorkspaces,
-  Workspace,
-  WorkspaceRequestParamsDto,
-  UpdateWorkspacePreferencesDto,
-} from '@vantikhq/types';
+import { Workspace, UpdateWorkspacePreferencesDto } from '@vantikhq/types';
 import { Request, Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
@@ -106,18 +99,6 @@ export class WorkspacesController {
     );
   }
 
-  @Post('add_users')
-  @UseGuards(AuthGuard)
-  async addUserToWorkspace(
-    @WorkspaceD() workspaceId: string,
-    @Body() UserBody: UserBody,
-  ): Promise<UsersOnWorkspaces> {
-    return await this.workspacesService.addUserToWorkspace(
-      workspaceId,
-      UserBody.userId,
-    );
-  }
-
   @Post()
   @UseGuards(AuthGuard)
   async updateWorkspace(
@@ -127,22 +108,6 @@ export class WorkspacesController {
     return await this.workspacesService.updateWorkspace(
       workspaceId,
       workspaceData,
-    );
-  }
-
-  @Delete()
-  @UseGuards(AuthGuard)
-  async deleteWorkspace(@WorkspaceD() workspaceId: string): Promise<Workspace> {
-    return await this.workspacesService.deleteWorkspace(workspaceId);
-  }
-
-  @Get('invites')
-  @UseGuards(AuthGuard)
-  async invitedUsers(
-    @Param() WorkspaceRequestParamsDto: WorkspaceRequestParamsDto,
-  ) {
-    return await this.workspacesService.getInvites(
-      WorkspaceRequestParamsDto.workspaceId,
     );
   }
 

@@ -242,9 +242,9 @@ describe('AgentRunsService transition table', () => {
   it('names the legal moves when it refuses a live run', async () => {
     const { service } = buildService([makeRun({ status: 'QUEUED' })]);
 
-    await expect(service.transition(RUN, 'SUCCEEDED', {}, scope)).rejects.toThrow(
-      /From QUEUED it may become: CLAIMED, CANCELED, FAILED/,
-    );
+    await expect(
+      service.transition(RUN, 'SUCCEEDED', {}, scope),
+    ).rejects.toThrow(/From QUEUED it may become: CLAIMED, CANCELED, FAILED/);
   });
 
   it('says a finished run is finished rather than listing nothing', async () => {
@@ -486,7 +486,12 @@ describe('AgentRunsService retry', () => {
   it('refuses to fork a chain that was already retried', async () => {
     const { service } = buildService([
       makeRun({ status: 'FAILED' }),
-      makeRun({ id: 'run-2', status: 'QUEUED', attempt: 2, previousRunId: RUN }),
+      makeRun({
+        id: 'run-2',
+        status: 'QUEUED',
+        attempt: 2,
+        previousRunId: RUN,
+      }),
     ]);
 
     await expect(service.retryRun(RUN, scope, 'user-1')).rejects.toThrow(
@@ -497,9 +502,9 @@ describe('AgentRunsService retry', () => {
   it('lets a human retry a run routed to review', async () => {
     const { service } = buildService([makeRun({ status: 'NEEDS_REVIEW' })]);
 
-    await expect(
-      service.retryRun(RUN, scope, 'user-1'),
-    ).resolves.toMatchObject({ status: 'QUEUED', attempt: 2 });
+    await expect(service.retryRun(RUN, scope, 'user-1')).resolves.toMatchObject(
+      { status: 'QUEUED', attempt: 2 },
+    );
   });
 });
 
@@ -542,16 +547,6 @@ describe('AgentRunsService events', () => {
 });
 
 describe('AgentRunsService tenancy', () => {
-  it('does not find a run from another workspace', async () => {
-    const { service } = buildService([
-      makeRun({ workspaceId: 'workspace-theirs' }),
-    ]);
-
-    await expect(
-      service.getRun(RUN, { workspaceId: WORKSPACE }),
-    ).rejects.toBeInstanceOf(NotFoundException);
-  });
-
   it('scopes every list to the caller’s workspace', async () => {
     const { service, prisma } = buildService();
 
@@ -578,14 +573,18 @@ describe('AgentRunsService tenancy', () => {
   });
 
   it('hides another agent’s run behind the same 404 as a missing one', async () => {
-    const { service } = buildService([makeRun({ agentUserId: 'agent-2' })]);
+    const { service, events } = buildService([
+      makeRun({ agentUserId: 'agent-2', status: 'RUNNING' }),
+    ]);
 
     await expect(
-      service.getRun(RUN, {
-        workspaceId: WORKSPACE,
-        onlyAgentUserId: 'agent-1',
-      }),
+      service.appendEvent(
+        RUN,
+        { message: 'injected' },
+        { workspaceId: WORKSPACE, onlyAgentUserId: 'agent-1' },
+      ),
     ).rejects.toThrow(`Agent run ${RUN} not found`);
+    expect(events).toHaveLength(0);
   });
 
   it('refuses to cancel a run in another workspace', async () => {
@@ -605,19 +604,13 @@ describe('AgentRunsService tenancy', () => {
     ]);
 
     await expect(
-      service.appendEvent(RUN, { message: 'injected' }, { workspaceId: WORKSPACE }),
+      service.appendEvent(
+        RUN,
+        { message: 'injected' },
+        { workspaceId: WORKSPACE },
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(events).toHaveLength(0);
-  });
-
-  it('refuses to read the events of a run in another workspace', async () => {
-    const { service } = buildService([
-      makeRun({ workspaceId: 'workspace-theirs' }),
-    ]);
-
-    await expect(
-      service.listEvents(RUN, { workspaceId: WORKSPACE }),
-    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('refuses to retry a run in another workspace', async () => {

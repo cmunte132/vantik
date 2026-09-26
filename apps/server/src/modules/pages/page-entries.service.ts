@@ -58,49 +58,6 @@ export default class PageEntriesService {
     }) as unknown as Promise<PageEntry[]>;
   }
 
-  /**
-   * Counts by source, scope and status.
-   *
-   * A rail that lists entries one per row is usable at five and abandoned at
-   * fifty, and fifty is the realistic steady state for an active page. Grouped
-   * counts turn "38 proposed" into four decisions — accept everything
-   * claude-opus-5 asserted about `apps/server/prisma`, archive the rest —
-   * instead of thirty-eight.
-   */
-  async getFacets(workspaceId: string, pageId?: string): Promise<EntryFacets> {
-    const where: Prisma.PageEntryWhereInput = {
-      deleted: null,
-      page: { workspaceId, deleted: null },
-      ...(pageId ? { pageId } : {}),
-    };
-
-    const [byStatus, bySource, byScope, total] = await Promise.all([
-      this.prisma.pageEntry.groupBy({
-        by: ['status'],
-        where,
-        _count: { _all: true },
-      }),
-      this.prisma.pageEntry.groupBy({
-        by: ['sourceUserId'],
-        where,
-        _count: { _all: true },
-      }),
-      this.prisma.pageEntry.groupBy({
-        by: ['scope'],
-        where,
-        _count: { _all: true },
-      }),
-      this.prisma.pageEntry.count({ where }),
-    ]);
-
-    return {
-      total,
-      status: tally(byStatus, 'status'),
-      sourceUserId: tally(bySource, 'sourceUserId'),
-      scope: tally(byScope, 'scope'),
-    };
-  }
-
   // ----------------------------------------------------------------- writing
 
   /**
@@ -259,9 +216,9 @@ export default class PageEntriesService {
 
     const eligible = entries
       .filter((entry) =>
-        ALLOWED_STATUS_TRANSITIONS[entry.status as PageEntryStatusEnum].includes(
-          input.status,
-        ),
+        ALLOWED_STATUS_TRANSITIONS[
+          entry.status as PageEntryStatusEnum
+        ].includes(input.status),
       )
       .map((entry) => entry.id);
 
@@ -277,16 +234,6 @@ export default class PageEntriesService {
       updated: eligible.length,
       skipped: input.entryIds.length - eligible.length,
     };
-  }
-
-  async deleteEntry(entryId: string): Promise<PageEntry> {
-    const entry = await this.prisma.pageEntry.update({
-      where: { id: entryId },
-      data: { deleted: new Date() },
-    });
-    await this.indexer?.entryChanged(entryId);
-
-    return entry as unknown as PageEntry;
   }
 
   // ------------------------------------------------------- serving and decay
@@ -475,16 +422,6 @@ export default class PageEntriesService {
 
     return user?.type === UserTypeEnum.Agent;
   }
-}
-
-function tally<T extends string>(
-  groups: Array<Record<string, unknown> & { _count: { _all: number } }>,
-  key: T,
-): Record<string, number> {
-  return groups.reduce<Record<string, number>>((counts, group) => {
-    counts[String(group[key] ?? '')] = group._count._all;
-    return counts;
-  }, {});
 }
 
 function firstLine(content: string): string {

@@ -460,32 +460,4 @@ describe('IssueContextService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
-
-  describe('getIssueComments', () => {
-    it('returns top level comments with replies nested', async () => {
-      const service = new IssueContextService(buildPrisma());
-
-      const result = await service.getIssueComments('issue-1');
-
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('comment-1');
-      expect(result[0].replies).toHaveLength(1);
-    });
-  });
-
-  describe('getIssueHistory', () => {
-    it('returns the same condensed entries standalone', async () => {
-      const service = new IssueContextService(buildPrisma());
-
-      const history = await service.getIssueHistory('issue-1');
-
-      expect(history.map((entry) => entry.change)).toEqual([
-        'state',
-        'assignee',
-        'priority',
-        'label',
-        'label',
-      ]);
-    });
-  });
 });

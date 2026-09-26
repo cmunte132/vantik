@@ -16,7 +16,8 @@ import { useUpdateIssueMutation } from 'services/issues';
 
 import { useContextStore } from 'store/global-context-provider';
 
-export const EngineeringProperties = observer(() => {
+/** When the issue is due and which cycle it is in. Every team type has both. */
+export const ScheduleProperties = observer(() => {
   const issue = useIssueData();
   const team = useTeamWithId(issue?.teamId);
 

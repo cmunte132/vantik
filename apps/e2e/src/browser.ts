@@ -89,5 +89,12 @@ export async function setProperty(
 ) {
   await propertyControl(page, property).click();
   await page.keyboard.type(option);
+  // Enter picks the highlighted row. The list is redrawn for each key typed
+  // and the highlight lands a moment later, so on a slow machine an Enter
+  // pressed at once picks nothing. Wait for it, as a person's eye does. By
+  // name: the last picker, still closing, has a highlighted row of its own.
+  await expect(
+    page.getByRole('option', { name: option, selected: true }),
+  ).toBeVisible();
   await page.keyboard.press('Enter');
 }

@@ -23,6 +23,8 @@ reading a single file. You do not need a question — at the start of a task you
 do not yet know what you do not know, which is exactly why a scope is enough.
 Everything it returns is something you would otherwise have had to rediscover,
 and it works across harnesses: a fact another tool wrote is a fact you get.
+Working an issue? Pass `issueId` too, and knowledge about its modules ranks
+first.
 
 **One entry is one fact.** Not a summary of your session. An entry that bundles
 six claims cannot be scoped, confirmed or corrected one claim at a time, and
@@ -33,15 +35,17 @@ everyone, forever.
 
 **Worth remembering:** a decision and why it went that way, a gotcha that cost
 you time, a convention that is not obvious from the code, a constraint someone
-stated that is written down nowhere. **Not worth remembering:** what you did
+stated that is written down nowhere — say which with `kind` (`DECISION`,
+`GOTCHA`, `CONVENTION`, or the default `FACT`). **Not worth remembering:** what you did
 this session (that is a note on the issue), anything already in the page body,
 anything the code says plainly. Never secrets or credentials — the bank is
 readable by every agent in the workspace.
 
 **Handed an issue or a project, call `pages_for` with it first** — a direct
 lookup of the pages attached to that work, for when you do not yet know what to
-search for. When a page durably governs a team, project or issue, attach it with
-`link_page`; not to every issue that happened to touch it.
+search for. It takes products, modules and capabilities too. When a page
+durably governs a team, project, issue, product, module or capability, attach
+it with `link_page`; not to every issue that happened to touch it.
 
 **Prefer appending to an existing page.** Check `list_pages` first, and
 `read_page` before adding: the fact may already be in the body. Pages are
@@ -67,7 +71,10 @@ per token (the error names the ones in your way — consolidate or supersede the
 do not find another page to dump into); `LOCKED` pages are readable but not
 appendable by agents. Everything you write lands as proposed and is served to
 nobody until a human accepts it, so write for the reviewer and for the stranger
-after them.
+after them. Triage is for people: you cannot accept, dispute or verify entries.
+You can reword or archive your own while they are still proposed; correct an
+accepted one by superseding it, and it stays in use until your correction is
+accepted.
 
 `knowledge_gaps` lists questions the bank could not answer, most-asked first. If
 you just spent an hour answering one, that hour is worth an entry.

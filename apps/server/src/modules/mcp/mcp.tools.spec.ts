@@ -870,3 +870,98 @@ describe('vantik MCP tools', () => {
     expect(result.isError).toBe(true);
   });
 });
+
+describe('knowledge tools and the product graph', () => {
+  const pages = [{ id: 'page-1', title: 'Server' }];
+
+  it('[KG-1.4] remember takes a kind, and recall filters by kinds', async () => {
+    const { client, requests } = await connect({
+      'GET /pages': pages,
+      'POST /page_entries': { id: 'entry-1', content: 'x', pageId: 'page-1' },
+      'GET /knowledge/search': { hits: [] },
+    });
+
+    await client.callTool({
+      name: 'remember',
+      arguments: {
+        page: 'Server',
+        content: 'Migrations are hand-written SQL, never generated.',
+        kind: 'CONVENTION',
+      },
+    });
+    await client.callTool({
+      name: 'recall_knowledge',
+      arguments: { query: 'migrations', kinds: ['CONVENTION'] },
+    });
+
+    const write = requests.find((r) => r.method === 'POST');
+    expect(write?.body).toMatchObject({ kind: 'CONVENTION' });
+    const search = requests.find((r) => r.path === '/knowledge/search');
+    expect(new URLSearchParams(search?.query).get('kind')).toBe('CONVENTION');
+  });
+
+  it('[KG-1.4] refuses a kind that does not exist before calling anything', async () => {
+    const { client, requests } = await connect({ 'GET /pages': pages });
+
+    const result = await client.callTool({
+      name: 'remember',
+      arguments: { page: 'Server', content: 'A fact.', kind: 'OPINION' },
+    });
+
+    expect((result as { isError?: boolean }).isError).toBe(true);
+    expect(requests.filter((r) => r.method === 'POST')).toEqual([]);
+  });
+
+  it('[KG-1.5] load_context passes the issue and modules the work is in', async () => {
+    const { client, requests } = await connect({
+      'POST /knowledge/context': { items: [], estimatedTokens: 0 },
+    });
+
+    await client.callTool({
+      name: 'load_context',
+      arguments: { issueId: 'issue-1', moduleIds: ['m-1'] },
+    });
+
+    expect(requests[0].body).toMatchObject({
+      issueId: 'issue-1',
+      moduleIds: ['m-1'],
+    });
+  });
+
+  it('[KG-1.6] pages_for and link_page accept products, modules and capabilities', async () => {
+    const { client, requests } = await connect({
+      'GET /pages': pages,
+      'GET /pages/related': [{ id: 'page-1', title: 'Server' }],
+      'POST /pages/page-1/links': {
+        id: 'link-1',
+        pageId: 'page-1',
+        entityType: 'CAPABILITY',
+        entityId: 'c-1',
+        label: 'Billing',
+      },
+    });
+
+    for (const entityType of ['PRODUCT', 'MODULE', 'CAPABILITY']) {
+      const result = await client.callTool({
+        name: 'pages_for',
+        arguments: { entityType, entityId: 'x-1' },
+      });
+      expect((result as { isError?: boolean }).isError).toBeFalsy();
+    }
+    const linked = await client.callTool({
+      name: 'link_page',
+      arguments: { page: 'Server', entityType: 'CAPABILITY', entityId: 'c-1' },
+    });
+
+    expect((linked as { isError?: boolean }).isError).toBeFalsy();
+    expect(
+      requests
+        .filter((r) => r.path === '/pages/related')
+        .map((r) => new URLSearchParams(r.query).get('entityType')),
+    ).toEqual(['PRODUCT', 'MODULE', 'CAPABILITY']);
+    expect(requests.find((r) => r.method === 'POST')?.body).toEqual({
+      entityType: 'CAPABILITY',
+      entityId: 'c-1',
+    });
+  });
+});

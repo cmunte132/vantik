@@ -13,6 +13,7 @@ import {
   EntryStatus,
   KnowledgeEntry,
   KnowledgeGap,
+  EntryKind,
   KnowledgeHit,
   KnowledgePage,
   KnowledgePageRef,
@@ -1092,6 +1093,11 @@ export class VantikAgent {
           query: input.query,
           scope: input.scope,
           limit: input.limit,
+          kind: input.kinds?.length ? input.kinds.join(',') : undefined,
+          moduleIds: input.moduleIds?.length
+            ? input.moduleIds.join(',')
+            : undefined,
+          issueId: input.issueId,
         },
       },
     );
@@ -1112,6 +1118,8 @@ export class VantikAgent {
         ...(input.task ? { query: input.task } : {}),
         ...(input.scope ? { scope: input.scope } : {}),
         ...(input.tokenBudget ? { tokenBudget: input.tokenBudget } : {}),
+        ...(input.moduleIds?.length ? { moduleIds: input.moduleIds } : {}),
+        ...(input.issueId ? { issueId: input.issueId } : {}),
       },
     });
 
@@ -1158,46 +1166,50 @@ export class VantikAgent {
   /**
    * Appends one asserted fact to a page.
    *
-   * Searches before it writes. When near matches exist and the caller has
-   * neither named an entry to supersede nor confirmed the fact is distinct,
-   * nothing is written and the matches come back instead. The round trip is the
-   * tax: it costs a spamming caller something and costs a careful one almost
-   * nothing.
+   * The server searches before it writes. When the page already holds the
+   * fact, or near matches of it, and the caller has neither named an entry to
+   * supersede nor confirmed the fact is distinct, nothing is written and the
+   * matches come back instead. The round trip is the tax: it costs a spamming
+   * caller something and costs a careful one almost nothing.
+   *
+   * The check used to run here, which meant every client that was not this
+   * one skipped it. It lives on the server now, and this relays its answer.
    */
   async remember(input: RememberInput): Promise<RememberResult> {
     const page = await this.resolvePage(input.page);
 
-    if (!input.supersedes && !input.distinct) {
-      const near = await this.client.get<RawKnowledgeHit[]>(
-        '/knowledge/similar',
-        { query: { pageId: page.id, content: input.content } },
-      );
+    try {
+      const entry = await this.client.post<RawEntry>('/page_entries', {
+        query: { pageId: page.id },
+        body: {
+          content: input.content,
+          ...(input.scope ? { scope: input.scope } : {}),
+          ...(input.kind ? { kind: input.kind } : {}),
+          ...(input.session ? { sourceSession: input.session } : {}),
+          ...(input.supersedes ? { supersedesId: input.supersedes } : {}),
+          ...(input.distinct ? { distinct: true } : {}),
+        },
+      });
 
-      if (near?.length) {
-        return {
-          status: 'needs-decision',
-          nearMatches: near.map(toHit),
-          guidance:
-            `"${page.title}" already holds ${near.length} similar ` +
-            `${near.length === 1 ? 'entry' : 'entries'}. Either pass ` +
-            '`supersedes` with the id of the one this replaces, or pass ' +
-            '`distinct: true` to say this is a separate fact. Nothing was ' +
-            'written.',
-        };
+      return { status: 'written', entry: toEntry(entry) };
+    } catch (error) {
+      const near = needsDecision(error);
+
+      if (!near) {
+        throw error;
       }
+
+      return {
+        status: 'needs-decision',
+        nearMatches: near.map(toHit),
+        guidance:
+          `"${page.title}" already holds ${near.length} similar ` +
+          `${near.length === 1 ? 'entry' : 'entries'}. Either pass ` +
+          '`supersedes` with the id of the one this replaces, or pass ' +
+          '`distinct: true` to say this is a separate fact. Nothing was ' +
+          'written.',
+      };
     }
-
-    const entry = await this.client.post<RawEntry>('/page_entries', {
-      query: { pageId: page.id },
-      body: {
-        content: input.content,
-        ...(input.scope ? { scope: input.scope } : {}),
-        ...(input.session ? { sourceSession: input.session } : {}),
-        ...(input.supersedes ? { supersedesId: input.supersedes } : {}),
-      },
-    });
-
-    return { status: 'written', entry: toEntry(entry) };
   }
 
   /**
@@ -1650,6 +1662,7 @@ interface RawEntry {
 
 interface RawKnowledgeHit {
   kind: 'page' | 'entry';
+  entryKind?: string | null;
   pageId: string;
   pageTitle: string;
   entryId: string | null;
@@ -1689,9 +1702,34 @@ function toEntry(entry: RawEntry): KnowledgeEntry {
   };
 }
 
+/**
+ * The matches out of the server's refusal to write a fact the page already
+ * holds, or null for any other failure. A 409 alone is not enough: only a body
+ * that says `needs-decision` is a question for the caller rather than an error.
+ */
+function needsDecision(error: unknown): RawKnowledgeHit[] | null {
+  if (!(error instanceof VantikApiError) || error.status !== 409) {
+    return null;
+  }
+
+  try {
+    const body = JSON.parse(error.body) as {
+      status?: string;
+      nearMatches?: RawKnowledgeHit[];
+    };
+
+    return body.status === 'needs-decision' && Array.isArray(body.nearMatches)
+      ? body.nearMatches
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function toHit(hit: RawKnowledgeHit): KnowledgeHit {
   return {
     kind: hit.kind,
+    entryKind: (hit.entryKind as EntryKind | null | undefined) ?? null,
     page: { id: hit.pageId, title: hit.pageTitle },
     entryId: hit.entryId ?? null,
     content: hit.content,

@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   CreateModuleDto,
@@ -6,6 +7,7 @@ import {
   UpdateModuleDto,
   UpdateModuleRepoDto,
 } from '@vantikhq/types';
+import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
 import {
@@ -15,11 +17,23 @@ import {
   uniqueKey,
 } from 'common/product-axis';
 
+import { LoggerService } from 'modules/logger/logger.service';
+import {
+  PAGES_QUEUE,
+  RECOMPUTE_MODULES_JOB,
+} from 'modules/pages/pages.interface';
+
 const DEFAULT_MODULE_STATUS = 'active';
 
 @Injectable()
 export class ModulesService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new LoggerService('ModulesService');
+
+  constructor(
+    private prisma: PrismaService,
+    // Optional so the service still stands up where no queue is registered.
+    @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
+  ) {}
 
   async getModules(workspaceId: string) {
     return await this.prisma.module.findMany({
@@ -160,10 +174,13 @@ export class ModulesService {
       data: { deleted: new Date().toISOString() },
     });
 
-    return await this.prisma.module.update({
+    const deleted = await this.prisma.module.update({
       where: { id: moduleId },
       data: { deleted: new Date().toISOString() },
     });
+    await this.repositoriesMoved(deleted.workspaceId);
+
+    return deleted;
   }
 
   async getModuleRepos(moduleId: string) {
@@ -177,7 +194,7 @@ export class ModulesService {
     createModuleRepoDto: CreateModuleRepoDto,
     moduleId: string,
   ) {
-    return await this.prisma.moduleRepo.create({
+    const repo = await this.prisma.moduleRepo.create({
       data: {
         ...createModuleRepoDto,
         // An empty list is the ordinary case: the module is all of the
@@ -185,29 +202,65 @@ export class ModulesService {
         pathPrefixes: normalisePrefixes(createModuleRepoDto.pathPrefixes),
         moduleId,
       },
+      include: { module: { select: { workspaceId: true } } },
     });
+    await this.repositoriesMoved(repo.module.workspaceId);
+
+    return repo;
   }
 
   async updateModuleRepo(
     updateModuleRepoDto: UpdateModuleRepoDto,
     moduleRepoId: string,
   ) {
-    return await this.prisma.moduleRepo.update({
+    const repo = await this.prisma.moduleRepo.update({
       where: { id: moduleRepoId },
       data: {
         ...updateModuleRepoDto,
         ...(updateModuleRepoDto.pathPrefixes
-          ? { pathPrefixes: normalisePrefixes(updateModuleRepoDto.pathPrefixes) }
+          ? {
+              pathPrefixes: normalisePrefixes(updateModuleRepoDto.pathPrefixes),
+            }
           : {}),
       },
+      include: { module: { select: { workspaceId: true } } },
     });
+    await this.repositoriesMoved(repo.module.workspaceId);
+
+    return repo;
   }
 
   async deleteModuleRepo(moduleRepoId: string) {
-    return await this.prisma.moduleRepo.update({
+    const repo = await this.prisma.moduleRepo.update({
       where: { id: moduleRepoId },
       data: { deleted: new Date().toISOString() },
+      include: { module: { select: { workspaceId: true } } },
     });
+    await this.repositoriesMoved(repo.module.workspaceId);
+
+    return repo;
+  }
+
+  /**
+   * Asks the pages processor to re-resolve the workspace's knowledge entries
+   * to modules, because where a module's code is just changed.
+   *
+   * Queued, so the edit returns at once, and never allowed to fail the edit:
+   * the next boot re-resolves everything anyway.
+   */
+  private async repositoriesMoved(workspaceId: string): Promise<void> {
+    try {
+      await this.pagesQueue?.add(
+        RECOMPUTE_MODULES_JOB,
+        { workspaceId },
+        { removeOnComplete: true, removeOnFail: 20 },
+      );
+    } catch (error) {
+      this.logger.error({
+        message: `Could not queue re-resolving knowledge scopes: ${error}`,
+        where: 'ModulesService.repositoriesMoved',
+      });
+    }
   }
 }
 

@@ -8,7 +8,7 @@ import {
   IsUUID,
 } from 'class-validator';
 
-import { PageEntryStatusEnum } from './page.entity';
+import { PageEntryKindEnum, PageEntryStatusEnum } from './page.entity';
 
 /**
  * Accepts `?status=STANDING`, `?status=STANDING,PROPOSED` and repeated
@@ -38,6 +38,23 @@ export function parseEntryStatuses(
 const toStatusArray = ({ value }: { value: unknown }) =>
   value === undefined || value === null ? value : parseEntryStatuses(value);
 
+/**
+ * A list of ids from a query string, in the same three spellings statuses
+ * accept: one value, a comma-separated list, or the parameter repeated.
+ */
+export function parseIdList(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  return (Array.isArray(value) ? value : String(value).split(','))
+    .map((entry) => String(entry).trim())
+    .filter(Boolean);
+}
+
+const toIdArray = ({ value }: { value: unknown }) =>
+  value === undefined || value === null ? value : parseIdList(value);
+
 export class CreatePageEntryDto {
   /** Markdown, short. One self-contained claim. */
   @IsString()
@@ -47,6 +64,11 @@ export class CreatePageEntryDto {
   @IsOptional()
   @IsString()
   scope?: string;
+
+  /** What sort of knowledge this is. FACT when omitted. */
+  @IsOptional()
+  @IsEnum(PageEntryKindEnum)
+  kind?: PageEntryKindEnum;
 
   /** Opaque harness session id, so the claim can be traced back to a run. */
   @IsOptional()
@@ -61,6 +83,15 @@ export class CreatePageEntryDto {
   @IsOptional()
   @IsUUID()
   supersedesId?: string;
+
+  /**
+   * The writer has seen the entries this one resembles and says it is a
+   * separate fact. Without it, or `supersedesId`, a write the page already
+   * holds is refused with the matches so the writer can choose.
+   */
+  @IsOptional()
+  @IsBoolean()
+  distinct?: boolean;
 
   /**
    * Land the entry as STANDING rather than PROPOSED. Only a human reviewer may
@@ -79,6 +110,10 @@ export class UpdatePageEntryDto {
   @IsOptional()
   @IsString()
   scope?: string;
+
+  @IsOptional()
+  @IsEnum(PageEntryKindEnum)
+  kind?: PageEntryKindEnum;
 
   /**
    * Triage. Only the transitions the service allows are accepted — CONSOLIDATED
@@ -130,6 +165,16 @@ export class ListPageEntriesQueryDto {
   @IsArray()
   @IsEnum(PageEntryStatusEnum, { each: true })
   status?: PageEntryStatusEnum[];
+
+  /**
+   * Entries resolved to any of these modules. What a product, module or
+   * capability screen asks for: the knowledge about its code.
+   */
+  @IsOptional()
+  @Transform(toIdArray)
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  moduleIds?: string[];
 }
 
 /**

@@ -75,6 +75,18 @@ export const pageSchema: CollectionCreateSchema = {
     { name: 'content', type: 'string' },
     // Faceted for triage: "24 from claude-opus-5 scoped apps/server/prisma".
     { name: 'scope', type: 'string', facet: true },
+    // The folder the scope names, and it with every folder above it. Together
+    // they make scope matching a prefix match: the index can test membership
+    // in a list, and cannot compare prefixes. Empty for page bodies and for
+    // scopes that name no folder.
+    { name: 'scopePath', type: 'string', facet: true },
+    { name: 'scopeAncestors', type: 'string[]', facet: true },
+    // The modules the scope resolves to, for seeding retrieval from the
+    // product graph and for "what do we know about this module".
+    { name: 'moduleIds', type: 'string[]', facet: true },
+    // FACT, DECISION, CONVENTION or GOTCHA. Empty for page bodies, which are
+    // not entries. Not `kind`: that already says page or entry.
+    { name: 'entryKind', type: 'string', facet: true },
     { name: 'status', type: 'string', facet: true },
     { name: 'sourceUserId', type: 'string', facet: true },
     // Booleans rather than emptiness checks on the strings above, because
@@ -134,7 +146,7 @@ export const KNOWLEDGE_SORT_BY =
   '_text_match:desc,_eval([(verified:true):2,(scoped:true):1]):desc,retrievalCount:desc';
 
 /** Facets the review rail opens on, before it shows a single row. */
-export const KNOWLEDGE_FACET_BY = 'sourceUserId,scope,status,kind';
+export const KNOWLEDGE_FACET_BY = 'sourceUserId,scope,status,kind,entryKind';
 
 /**
  * A measured warning, kept next to the code it constrains.
@@ -186,6 +198,10 @@ export interface KnowledgeSearchHit {
   sourceUserId: string | null;
   verified: boolean;
   retrievalCount: number;
+  /** FACT, DECISION, CONVENTION or GOTCHA; null for a page body. */
+  entryKind?: string | null;
+  /** The modules the entry's scope resolves to. */
+  moduleIds?: string[];
   distance?: number;
   relevanceScore?: number;
 }

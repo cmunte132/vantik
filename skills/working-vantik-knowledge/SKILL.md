@@ -39,6 +39,14 @@ This is the cheapest thing you will do all session. Everything it returns is
 something you would otherwise have had to rediscover, and it works across
 harnesses: a fact another tool wrote is a fact you get.
 
+If you are working an issue, pass it: `load_context(issueId: "…")`. Knowledge
+about the issue's modules then ranks first, and knowledge about their
+neighbours — modules that share a capability or a product with them — next.
+`moduleIds` does the same when you know the modules but have no issue. A scope
+matches by folder: a fact scoped to `apps/server` comes back for work in
+`apps/server/prisma`, and one scoped to `apps/server/prisma` for work in
+`apps/server`.
+
 When you have an actual question, use `recall_knowledge` instead. Ask it before
 investigating something from scratch — the answer may already be in the bank.
 
@@ -59,6 +67,12 @@ Something a future session would otherwise have to work out again.
   `BACKEND_URL=http://server:3001` or its /api proxy 502s")
 - A convention that is not obvious from the code
 - A constraint someone stated that is not written down anywhere
+
+Say which it is with `kind`, so a reader can ask for just the conventions of an
+area: `DECISION` for a choice and its reason, `GOTCHA` for something that cost
+time, `CONVENTION` for how things are done here, and `FACT` (the default) for
+anything else true about the system. `recall_knowledge(kinds: ["CONVENTION"])`
+is the question "how do we do things in here".
 
 **No:**
 
@@ -119,7 +133,13 @@ remember(page: "Deployment", content: "…", supersedes: "<entry id>")
 
 Two contradictory facts are worse than neither, because a reader cannot tell
 which one the workspace believes — and the reader is usually another agent,
-acting on it. Superseding keeps the old entry for audit and stops serving it.
+acting on it. Superseding keeps the old entry for audit and stops serving it
+once a person accepts your correction. Until then the old entry stays in use,
+so a correction nobody has reviewed cannot take accepted knowledge away, and a
+second correction to the same entry waits until the first is decided. An entry
+that has been folded into the page body cannot be superseded: write the
+correction as a new entry, without `supersedes`, and it goes to review like any
+other claim.
 
 `remember` searches before it writes. When near matches come back **nothing was
 written**: read them, then either supersede one or pass `distinct: true` to say
@@ -146,6 +166,14 @@ you call the API.
   them; do not look for another page to dump into.
 - **`LOCKED` pages.** Maintained by hand. You can read them — recall and context
   both work — but you cannot append. Append to a related page instead.
+- **Triage is for people.** You cannot accept, dispute or verify an entry —
+  yours or anyone else's — one at a time or in bulk. You can reword, rescope or
+  archive your own entries while they are still `PROPOSED`; once the workspace
+  has decided about an entry, correct it by writing one that supersedes it.
+- **Repeats are refused on every route.** The search-before-write runs on the
+  server, so it applies however you reach the API: an exact repeat of an entry
+  on the page, or a near match, comes back with the matches and writes nothing
+  unless you supersede one or say the fact is `distinct`.
 - **`CURATED` is the default.** `OPEN` pages exist for scratch work where volume
   genuinely does not matter.
 

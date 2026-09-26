@@ -28,6 +28,7 @@ import { AxisIcon } from './axis-icon';
 import { Header } from './header';
 import { IdentityCard } from './identity-card';
 import { InlineCreate } from './inline-create';
+import { Knowledge } from './knowledge';
 import { Section } from './section';
 
 /**
@@ -177,6 +178,13 @@ export const ProductView = withApplicationStore(
                 ))}
               </>
             )}
+          </Section>
+
+          <Section
+            title="Knowledge"
+            description="What the workspace knows about this product: the pages linked to it, and the standing facts scoped to the code of the modules it owns. Agents are handed the same knowledge when they work here."
+          >
+            <Knowledge target={{ type: 'PRODUCT', id: product.id }} />
           </Section>
         </div>
       </MainLayout>

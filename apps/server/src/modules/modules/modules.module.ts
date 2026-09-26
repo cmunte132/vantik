@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
 import { IntegrationsModule } from 'modules/integrations/integrations.module';
+import { PAGES_QUEUE } from 'modules/pages/pages.interface';
 import { UsersService } from 'modules/users/users.service';
 
 import { ModuleRoutingProcessor } from './module-routing.processor';
@@ -17,6 +18,9 @@ import { ModulesService } from './modules.service';
   imports: [
     IntegrationsModule,
     BullModule.registerQueue({ name: MODULE_ROUTING_QUEUE }),
+    // Edits to a module's repositories move the modules knowledge entries
+    // resolve to; the pages processor re-resolves them.
+    BullModule.registerQueue({ name: PAGES_QUEUE }),
   ],
   controllers: [ModulesController],
   providers: [

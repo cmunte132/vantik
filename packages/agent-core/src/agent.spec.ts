@@ -36,6 +36,10 @@ function makeAgent(
 
     const route = routes[key];
     const payload = typeof route === 'function' ? route(call) : route;
+    // A route that needs a status other than 200 hands back the response whole.
+    if (payload instanceof Response) {
+      return payload;
+    }
     return new Response(JSON.stringify(payload), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -227,8 +231,18 @@ describe('closeTask', () => {
     const { agent } = makeAgent({
       ...baseRoutes,
       'GET /checklist_items': [
-        { id: 'item-1', body: 'Pool sized from config', completed: true, sortOrder: 1 },
-        { id: 'item-2', body: 'Exhaustion is logged', completed: false, sortOrder: 2 },
+        {
+          id: 'item-1',
+          body: 'Pool sized from config',
+          completed: true,
+          sortOrder: 1,
+        },
+        {
+          id: 'item-2',
+          body: 'Exhaustion is logged',
+          completed: false,
+          sortOrder: 2,
+        },
       ],
       'POST /issues/issue-42': issue42,
     });
@@ -423,9 +437,9 @@ describe('projects', () => {
 
     await agent.updateProject('project-search', { name: 'Search rewrite' });
 
-    expect(
-      calls.some((call) => call.path === '/projects/project-search'),
-    ).toBe(true);
+    expect(calls.some((call) => call.path === '/projects/project-search')).toBe(
+      true,
+    );
   });
 
   it('resolves team identifiers to ids when opening a project', async () => {
@@ -548,9 +562,11 @@ describe('projects', () => {
     // Sent as markdown and handed back as markdown — no tiptap JSON anywhere
     // on this path, in either direction.
     expect(
-      (calls.find((call) => call.method === 'POST')?.body as {
-        description: string;
-      }).description,
+      (
+        calls.find((call) => call.method === 'POST')?.body as {
+          description: string;
+        }
+      ).description,
     ).toBe(markdown);
     expect(updated.description).toBe(markdown);
   });
@@ -1011,5 +1027,187 @@ describe('client errors', () => {
     await expect(client.get('/issues')).rejects.toThrow(
       /403.*does not have the delete/,
     );
+  });
+});
+
+describe('remember', () => {
+  const pages = [{ id: 'page-1', title: 'Deployment' }];
+  const written = {
+    id: 'entry-new',
+    pageId: 'page-1',
+    content: 'Redis holds only cache here.',
+    scope: null as string | null,
+    status: 'PROPOSED',
+    createdAt: '2026-09-26T00:00:00.000Z',
+  };
+
+  it('[KG-0.3] leaves the duplicate check to the server, and relays its answer', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /pages': pages,
+      'POST /page_entries': () =>
+        new Response(
+          JSON.stringify({
+            statusCode: 409,
+            status: 'needs-decision',
+            message: 'already holds 1 entry like this one',
+            nearMatches: [
+              {
+                kind: 'entry',
+                pageId: 'page-1',
+                pageTitle: 'Deployment',
+                entryId: 'entry-9',
+                content: 'Redis holds only cache here.',
+                scope: null,
+                verified: false,
+                retrievalCount: 3,
+              },
+            ],
+          }),
+          { status: 409 },
+        ),
+    });
+
+    const result = await agent.remember({
+      page: 'Deployment',
+      content: 'Redis holds only cache here.',
+    });
+
+    expect(result.status).toBe('needs-decision');
+    expect(
+      result.status === 'needs-decision' && result.nearMatches[0].entryId,
+    ).toBe('entry-9');
+    // No search of its own first: the server's check is the one every client
+    // gets, so a second one here would only be a second round trip.
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      'GET /pages',
+      'POST /page_entries',
+    ]);
+  });
+
+  it('[KG-0.3] passes distinct through, so the server writes', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /pages': pages,
+      'POST /page_entries': written,
+    });
+
+    const result = await agent.remember({
+      page: 'Deployment',
+      content: 'Redis holds only cache here.',
+      distinct: true,
+    });
+
+    expect(result.status).toBe('written');
+    const post = calls.find((call) => call.method === 'POST');
+    expect(post?.body).toMatchObject({ distinct: true });
+  });
+
+  it('[KG-0.3] still throws a conflict that is not a question for the caller', async () => {
+    const { agent } = makeAgent({
+      'GET /pages': pages,
+      'POST /page_entries': () =>
+        new Response(JSON.stringify({ message: 'something else' }), {
+          status: 409,
+        }),
+    });
+
+    await expect(
+      agent.remember({ page: 'Deployment', content: 'A fact.' }),
+    ).rejects.toThrow(/409/);
+  });
+});
+
+describe('knowledge by kind and by module', () => {
+  const pages = [{ id: 'page-1', title: 'Server' }];
+  const hit = {
+    kind: 'entry',
+    entryKind: 'CONVENTION',
+    pageId: 'page-1',
+    pageTitle: 'Server',
+    entryId: 'entry-1',
+    content: 'Migrations are hand-written SQL.',
+    scope: 'apps/server',
+    verified: false,
+    retrievalCount: 0,
+  };
+
+  it('[KG-1.4] writes the kind a fact is remembered as', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /pages': pages,
+      'POST /page_entries': { id: 'entry-1', content: 'x', pageId: 'page-1' },
+    });
+
+    await agent.remember({
+      page: 'Server',
+      content: 'Migrations are hand-written SQL.',
+      kind: 'CONVENTION',
+    });
+
+    expect(calls.find((call) => call.method === 'POST')?.body).toMatchObject({
+      kind: 'CONVENTION',
+    });
+  });
+
+  it('[KG-1.4] asks for only the kinds wanted, and says which kind each hit is', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /knowledge/search': { hits: [hit] },
+    });
+
+    const hits = await agent.recallKnowledge({
+      query: 'migrations',
+      kinds: ['CONVENTION', 'GOTCHA'],
+    });
+
+    expect(calls[0].query.kind).toBe('CONVENTION,GOTCHA');
+    expect(hits[0].entryKind).toBe('CONVENTION');
+  });
+
+  it('[KG-1.5] loads context seeded from an issue or modules', async () => {
+    const { agent, calls } = makeAgent({
+      'POST /knowledge/context': { items: [hit], estimatedTokens: 10 },
+      'GET /knowledge/search': { hits: [] },
+    });
+
+    await agent.loadContext({ issueId: 'issue-1', moduleIds: ['m-1'] });
+    await agent.recallKnowledge({ query: 'x', moduleIds: ['m-1', 'm-2'] });
+
+    expect(calls[0].body).toMatchObject({
+      issueId: 'issue-1',
+      moduleIds: ['m-1'],
+    });
+    expect(calls[1].query.moduleIds).toBe('m-1,m-2');
+  });
+
+  it('[KG-1.6] links a page to a module and finds the pages of a product', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /pages': pages,
+      'POST /pages/page-1/links': {
+        id: 'link-1',
+        pageId: 'page-1',
+        entityType: 'MODULE',
+        entityId: 'm-1',
+        label: 'Server',
+      },
+      'GET /pages/related': [{ id: 'page-1', title: 'Server' }],
+    });
+
+    await agent.linkPage({
+      page: 'Server',
+      entityType: 'MODULE',
+      entityId: 'm-1',
+    });
+    const related = await agent.pagesFor({
+      entityType: 'PRODUCT',
+      entityId: 'p-1',
+    });
+
+    expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
+      entityType: 'MODULE',
+      entityId: 'm-1',
+    });
+    expect(calls.at(-1)?.query).toMatchObject({
+      entityType: 'PRODUCT',
+      entityId: 'p-1',
+    });
+    expect(related).toEqual([{ id: 'page-1', title: 'Server' }]);
   });
 });

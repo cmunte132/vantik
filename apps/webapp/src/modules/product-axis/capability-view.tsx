@@ -24,7 +24,9 @@ import { useContextStore } from 'store/global-context-provider';
 
 import { isArchived, statusAfterArchive } from './archive';
 import { Header } from './header';
+import { Knowledge } from './knowledge';
 import { ScopedIssues } from './scoped-issues';
+import { Section } from './section';
 
 /**
  * One capability: the modules that hold its code, and its issues.
@@ -134,6 +136,21 @@ export const CapabilityView = withApplicationStore(
                 }
               />
             </div>
+          </div>
+
+          <div className="px-4 py-4">
+            <Section
+              title="Knowledge"
+              description="What the workspace knows about this capability: the pages linked to it, and the standing facts scoped to the code of the modules it lives in. Agents are handed the same knowledge when they work here."
+            >
+              <Knowledge
+                target={{
+                  type: 'CAPABILITY',
+                  id: capability.id,
+                  moduleIds: capability.moduleIds,
+                }}
+              />
+            </Section>
           </div>
 
           <ScopedIssues capabilityId={capability.id} />

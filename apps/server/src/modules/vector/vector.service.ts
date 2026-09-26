@@ -1,5 +1,9 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { PageEntryStatusEnum, WorkflowCategoryEnum } from '@vantikhq/types';
+import {
+  PageEntryKindEnum,
+  PageEntryStatusEnum,
+  WorkflowCategoryEnum,
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 import { Client as TypesenseClient } from 'typesense';
 
@@ -10,6 +14,7 @@ import {
 
 import { IssueWithRelations } from 'modules/issues/issues.interface';
 import { LoggerService } from 'modules/logger/logger.service';
+import { scopeAncestors, scopePath } from 'modules/modules/module-routing';
 
 import {
   AXIS_OVERFETCH,
@@ -518,6 +523,10 @@ export class VectorService implements OnModuleInit {
         title: page.title,
         content: convertTiptapJsonToText(page.description),
         scope: '',
+        scopePath: '',
+        scopeAncestors: [],
+        moduleIds: [],
+        entryKind: '',
         // A page body is the agreed narrative rather than a claim awaiting
         // triage, so it carries the served status directly.
         status: PageEntryStatusEnum.STANDING,
@@ -541,6 +550,8 @@ export class VectorService implements OnModuleInit {
     retrievalCount: number;
     updatedAt: Date;
     pageId: string;
+    moduleIds?: string[] | null;
+    kind?: string | null;
     page: { title: string; workspaceId: string };
   }) {
     await this.typesenseClient
@@ -556,6 +567,10 @@ export class VectorService implements OnModuleInit {
         title: entry.page.title,
         content: entry.content,
         scope: entry.scope ?? '',
+        scopePath: scopePath(entry.scope) ?? '',
+        scopeAncestors: scopeAncestors(entry.scope),
+        moduleIds: entry.moduleIds ?? [],
+        entryKind: entry.kind ?? '',
         status: entry.status,
         sourceUserId: entry.sourceUserId ?? '',
         verified: Boolean(entry.verifiedAt),
@@ -604,6 +619,13 @@ export class VectorService implements OnModuleInit {
       /** Include statuses other than STANDING. Triage surfaces only. */
       includeStatuses?: string[];
       vectorDistance?: number;
+      /** Only these entry kinds. Page bodies are not entries and drop out. */
+      kinds?: string[];
+      /**
+       * Modules whose knowledge ranks first, and their neighbours in the
+       * product graph, which rank after them and ahead of everything else.
+       */
+      boost?: { modules: string[]; neighbours: string[] };
     } = {},
   ): Promise<KnowledgeSearchResult> {
     const searchParameters = {
@@ -613,7 +635,7 @@ export class VectorService implements OnModuleInit {
           q: query,
           query_by: PAGE_QUERY_BY,
           filter_by: buildKnowledgeFilterBy(workspaceId, options),
-          sort_by: KNOWLEDGE_SORT_BY,
+          sort_by: buildKnowledgeSortBy(options),
           facet_by: KNOWLEDGE_FACET_BY,
           // The control that holds when every other gate has failed: fifty
           // entries on one page contribute at most three documents.
@@ -834,7 +856,12 @@ function buildFilterBy(
  */
 function buildKnowledgeFilterBy(
   workspaceId: string,
-  options: { scope?: string; pageId?: string; includeStatuses?: string[] } = {},
+  options: {
+    scope?: string;
+    pageId?: string;
+    includeStatuses?: string[];
+    kinds?: string[];
+  } = {},
 ): string {
   if (!UUID_REGEX.test(workspaceId)) {
     throw new Error('Invalid workspaceId format');
@@ -862,12 +889,113 @@ function buildKnowledgeFilterBy(
   }
 
   if (options.scope) {
-    // Backticks quote the value, so a scope containing `&&` or a colon cannot
-    // close the literal and append a filter of the caller's choosing.
-    filters.push(`scope:=\`${options.scope}\``);
+    const path = scopePath(options.scope);
+
+    // At or above the folder asked about (an entry about `apps/server` applies
+    // to work in `apps/server/prisma`), at or below it (an entry about
+    // `apps/server/prisma` is about work in `apps/server`), or scoped to
+    // nothing and so true everywhere. Unscoped knowledge stays eligible; the
+    // sort ranks it below the scoped matches.
+    const ancestors = scopeAncestors(options.scope)
+      .map(quoteFilterValue)
+      .join(',');
+
+    filters.push(
+      path
+        ? `(scopePath:=[${ancestors}] || scopeAncestors:=${quoteFilterValue(path)} || scoped:=false)`
+        : `(scope:=${quoteFilterValue(options.scope)} || scoped:=false)`,
+    );
+  }
+
+  const kinds = (options.kinds ?? []).filter((kind) =>
+    Object.values(PageEntryKindEnum).includes(kind as PageEntryKindEnum),
+  );
+  if (kinds.length > 0) {
+    filters.push(`entryKind:=[${kinds.map(quoteFilterValue).join(',')}]`);
   }
 
   return filters.join(' && ');
+}
+
+/**
+ * A value inside a filter or sort expression. Backticks quote it, so a value
+ * containing `&&` or a colon cannot close the literal and append a condition
+ * of the caller's choosing; a backtick in the value itself is dropped, since
+ * no scope, id or kind has one.
+ */
+function quoteFilterValue(value: string): string {
+  return `\`${value.replace(/`/g, '')}\``;
+}
+
+/**
+ * The ranking, as tiers inside one `_eval`.
+ *
+ * With no scope and nothing to boost, the ranking is the default: text match
+ * first, verified and scoped knowledge breaking ties. A scope makes scoped
+ * matches outrank unscoped knowledge outright, which is what asking about a
+ * folder means. Modules to boost rank their knowledge above their neighbours'
+ * and theirs above the rest; with a query to match, the text match is bucketed
+ * first so a boost reorders near-equals without burying the answer.
+ *
+ * Typesense allows three sort fields, so every signal shares one `_eval`, and
+ * it scores a document by the best tier it matches rather than a sum. Each tier
+ * is therefore the conjunction of the signals it counts, scored by how much of
+ * what was asked for it matches, and listed best first.
+ */
+function buildKnowledgeSortBy(options: {
+  scope?: string;
+  boost?: { modules: string[]; neighbours: string[] };
+}): string {
+  const modules = (options.boost?.modules ?? []).filter((id) =>
+    UUID_REGEX.test(id),
+  );
+  const neighbours = (options.boost?.neighbours ?? []).filter(
+    (id) => UUID_REGEX.test(id) && !modules.includes(id),
+  );
+
+  if (!options.scope && modules.length === 0 && neighbours.length === 0) {
+    return KNOWLEDGE_SORT_BY;
+  }
+
+  const inModules = (ids: string[]) =>
+    `moduleIds:=[${ids.map(quoteFilterValue).join(',')}]`;
+
+  const scopeLevels = options.scope ? ['scoped:true', null] : [null];
+  const moduleLevels = [
+    ...(modules.length ? [inModules(modules)] : []),
+    ...(neighbours.length ? [inModules(neighbours)] : []),
+    null,
+  ];
+
+  const tiers: Array<{ conditions: string[]; score: number }> = [];
+  scopeLevels.forEach((scoped, scopeRank) =>
+    moduleLevels.forEach((module, moduleRank) =>
+      [true, false].forEach((verified) => {
+        const score =
+          (scopeLevels.length - 1 - scopeRank) * moduleLevels.length * 2 +
+          (moduleLevels.length - 1 - moduleRank) * 2 +
+          (verified ? 1 : 0);
+        const conditions = [
+          scoped,
+          module,
+          verified ? 'verified:true' : null,
+        ].filter(Boolean) as string[];
+
+        if (score > 0) {
+          tiers.push({ conditions, score });
+        }
+      }),
+    ),
+  );
+
+  const evaluated = `_eval([${tiers
+    .sort((a, b) => b.score - a.score)
+    .map(({ conditions, score }) => `(${conditions.join(' && ')}):${score}`)
+    .join(',')}]):desc`;
+
+  return options.scope
+    ? `${evaluated},_text_match:desc,retrievalCount:desc`
+    : `_text_match(buckets: 10):desc,${evaluated},retrievalCount:desc`;
 }
 
 /** A coarse recency facet — one value per month, not one per timestamp. */
@@ -919,6 +1047,8 @@ function mapKnowledgeResults(searchResults: any): KnowledgeSearchResult {
       sourceUserId: document.sourceUserId || null,
       verified: Boolean(document.verified),
       retrievalCount: document.retrievalCount ?? 0,
+      entryKind: document.entryKind || null,
+      moduleIds: document.moduleIds ?? [],
       distance: vector_distance,
       relevanceScore:
         vector_distance === undefined ? undefined : 1 - vector_distance,

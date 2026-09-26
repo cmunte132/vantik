@@ -2,7 +2,10 @@ import {
   mergeModuleIds,
   modulesForChangedPaths,
   pathBelongsToModule,
+  modulesForScope,
   type RepoModuleMapping,
+  scopeAncestors,
+  type ScopedRepoModuleMapping,
 } from './module-routing';
 
 /**
@@ -187,5 +190,100 @@ describe('mergeModuleIds', () => {
 
   it('returns an empty list when there is nothing on either side', () => {
     expect(mergeModuleIds([], [])).toEqual([]);
+  });
+});
+
+describe('modulesForScope', () => {
+  const monorepo = [
+    {
+      moduleId: 'server',
+      pathPrefixes: ['apps/server/'],
+      fullName: 'acme/app',
+    },
+    {
+      moduleId: 'webapp',
+      pathPrefixes: ['apps/webapp/'],
+      fullName: 'acme/app',
+    },
+    {
+      moduleId: 'types',
+      pathPrefixes: ['packages/types/'],
+      fullName: 'acme/app',
+    },
+  ];
+
+  it('[KG-1.2] resolves a scope inside a module, or naming its folder, to that module', () => {
+    expect(modulesForScope(monorepo, 'apps/server/prisma')).toEqual(['server']);
+    expect(modulesForScope(monorepo, 'apps/server')).toEqual(['server']);
+    expect(modulesForScope(monorepo, './apps/server/')).toEqual(['server']);
+  });
+
+  it('[KG-1.2] resolves a scope above several modules to all of them', () => {
+    expect(modulesForScope(monorepo, 'apps')).toEqual(['server', 'webapp']);
+  });
+
+  it('[KG-1.2] reads the folder in front of a glob, and nothing from a bare pattern', () => {
+    expect(modulesForScope(monorepo, 'apps/webapp/**/*.tsx')).toEqual([
+      'webapp',
+    ]);
+    expect(modulesForScope(monorepo, '**/*.prisma')).toEqual([]);
+  });
+
+  it('[KG-1.2] does not match a folder that merely shares a prefix', () => {
+    expect(modulesForScope(monorepo, 'apps/server-extra')).toEqual([]);
+    expect(modulesForScope(monorepo, 'Platform team')).toEqual([]);
+    expect(modulesForScope(monorepo, null)).toEqual([]);
+  });
+
+  it('[KG-1.2] matches a whole-repository module only when the repository is unambiguous', () => {
+    const repos: ScopedRepoModuleMapping[] = [
+      { moduleId: 'billing', pathPrefixes: [], fullName: 'acme/billing' },
+      { moduleId: 'search', pathPrefixes: [], fullName: 'acme/search' },
+    ];
+
+    // Two small repositories: a bare path could be in either.
+    expect(modulesForScope(repos, 'src/invoices')).toEqual([]);
+    // Naming the repository settles it.
+    expect(modulesForScope(repos, 'acme/billing/src/invoices')).toEqual([
+      'billing',
+    ]);
+    expect(modulesForScope(repos, 'acme/search')).toEqual(['search']);
+    // One repository in the workspace: every path is in it.
+    expect(modulesForScope([repos[0]], 'src/invoices')).toEqual(['billing']);
+  });
+
+  it('[KG-1.2] narrows to the named repository when two hold the same folders', () => {
+    const twins = [
+      {
+        moduleId: 'a-server',
+        pathPrefixes: ['apps/server/'],
+        fullName: 'acme/a',
+      },
+      {
+        moduleId: 'b-server',
+        pathPrefixes: ['apps/server/'],
+        fullName: 'acme/b',
+      },
+    ];
+
+    expect(modulesForScope(twins, 'apps/server')).toEqual([
+      'a-server',
+      'b-server',
+    ]);
+    expect(modulesForScope(twins, 'acme/b/apps/server/src')).toEqual([
+      'b-server',
+    ]);
+  });
+});
+
+describe('scopeAncestors', () => {
+  it('[KG-1.3] lists the folder a scope names and every folder above it', () => {
+    expect(scopeAncestors('apps/server/prisma')).toEqual([
+      'apps',
+      'apps/server',
+      'apps/server/prisma',
+    ]);
+    expect(scopeAncestors('apps/server/**')).toEqual(['apps', 'apps/server']);
+    expect(scopeAncestors('')).toEqual([]);
   });
 });

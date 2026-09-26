@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync } from 'fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -96,7 +96,6 @@ describe('the secret that signs URLs', () => {
 
   afterEach(() => {
     process.env = original;
-    chmodSync(root, 0o700);
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -143,9 +142,14 @@ describe('the secret that signs URLs', () => {
   });
 
   it('stops when it can neither read a secret nor write one', () => {
-    chmodSync(root, 0o500);
+    // A read-only directory stops every user but root, and containers and CI
+    // sandboxes often run as root, where this test then passed a write it
+    // meant to forbid. A file standing where the storage directory has to be
+    // created fails the write for any user, root included.
+    const blocker = join(root, 'not-a-directory');
+    writeFileSync(blocker, '');
 
-    expect(() => resolveUrlSigningSecret(root)).toThrow(
+    expect(() => resolveUrlSigningSecret(join(blocker, 'storage'))).toThrow(
       /ATTACHMENT_URL_SECRET/,
     );
   });

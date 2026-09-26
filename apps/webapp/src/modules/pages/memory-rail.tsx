@@ -354,12 +354,17 @@ const Section = observer(
 const AddFact = observer(
   ({ pageId, onDone }: { pageId: string; onDone: () => void }) => {
     const [content, setContent] = React.useState('');
+    // The server refuses a fact the page already holds, and says which entry
+    // holds it. Without this the Add button did nothing visible.
+    const [error, setError] = React.useState<string | null>(null);
 
     const { mutate: create } = useCreatePageEntryMutation({
+      onMutate: () => setError(null),
       onSuccess: () => {
         setContent('');
         onDone();
       },
+      onError: setError,
     });
 
     return (
@@ -388,6 +393,7 @@ const AddFact = observer(
             Cancel
           </Button>
         </div>
+        {error && <span className="text-destructive">{error}</span>}
         <span className="text-muted-foreground">
           Goes straight into use — agents are given it from now on.
         </span>

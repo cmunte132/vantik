@@ -10,8 +10,16 @@
 import { Queue } from 'bull';
 
 import PageEntriesService from './page-entries.service';
-import { DECAY_JOB, DECAY_JOB_ID } from './pages.interface';
-import { PagesProcessor, PagesScheduler } from './pages.processor';
+import {
+  DECAY_JOB,
+  DECAY_JOB_ID,
+  RECOMPUTE_MODULES_JOB,
+} from './pages.interface';
+import {
+  EntryModulesScheduler,
+  PagesProcessor,
+  PagesScheduler,
+} from './pages.processor';
 
 function buildQueue(existing: Array<{ name: string; key: string }> = []) {
   return {
@@ -60,7 +68,9 @@ describe('PagesScheduler', () => {
 
     // Matching the vector collections: setup that fails degrades the feature
     // rather than taking the deployment with it.
-    await expect(new PagesScheduler(queue).onModuleInit()).resolves.toBeUndefined();
+    await expect(
+      new PagesScheduler(queue).onModuleInit(),
+    ).resolves.toBeUndefined();
     expect(queue.add).not.toHaveBeenCalled();
   });
 });
@@ -77,5 +87,31 @@ describe('PagesProcessor', () => {
     // Unscoped deliberately: the windows are a property of the deployment, not
     // of any one workspace.
     expect(runDecay).toHaveBeenCalledWith();
+  });
+});
+
+describe('re-resolving entry modules', () => {
+  it('[KG-1.2] queues one pass over every workspace at boot', async () => {
+    const queue = buildQueue();
+
+    await new EntryModulesScheduler(queue).onModuleInit();
+
+    expect(queue.add).toHaveBeenCalledWith(
+      RECOMPUTE_MODULES_JOB,
+      {},
+      expect.any(Object),
+    );
+  });
+
+  it('[KG-1.2] runs the pass for the workspace a job names, or for all of them', async () => {
+    const recomputeModules = jest.fn(async () => ({ changed: 2 }));
+    const processor = new PagesProcessor({
+      recomputeModules,
+    } as unknown as PageEntriesService);
+
+    await processor.handleRecomputeModules({ data: { workspaceId: 'ws-1' } });
+    await processor.handleRecomputeModules({ data: {} });
+
+    expect(recomputeModules.mock.calls).toEqual([['ws-1'], [undefined]]);
   });
 });

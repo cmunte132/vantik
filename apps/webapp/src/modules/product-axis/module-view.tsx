@@ -26,6 +26,7 @@ import { statusAfterArchive } from './archive';
 import { CapabilityPicker } from './capability-picker';
 import { Header } from './header';
 import { IdentityCard } from './identity-card';
+import { Knowledge } from './knowledge';
 import { LinkPicker } from './link-picker';
 import { OwnerSelect } from './owner-select';
 import { Repositories } from './repositories';
@@ -165,6 +166,13 @@ export const ModuleView = withApplicationStore(
             description="What this module helps the software do. A capability usually needs code in more than one module, so the same one can appear on several of these pages."
           >
             <CapabilityPicker moduleId={productModule.id} />
+          </Section>
+
+          <Section
+            title="Knowledge"
+            description="What the workspace knows about this module: the pages linked to it, and the standing facts scoped to its code. Agents are handed the same knowledge when they work here."
+          >
+            <Knowledge target={{ type: 'MODULE', id: productModule.id }} />
           </Section>
 
           {/*

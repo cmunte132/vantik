@@ -51,6 +51,10 @@ export interface PageEntryType {
 
   content: string;
   scope?: string | null;
+  /** The modules the scope resolves to, kept by the server. */
+  moduleIds?: string[];
+  /** FACT, DECISION, CONVENTION or GOTCHA. */
+  kind?: string | null;
   /** One of PageEntryStatus. String for the same reason entryPolicy is. */
   status: string;
 

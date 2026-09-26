@@ -199,8 +199,15 @@ function compareOpenIssues(a: SnapshotIssue, b: SnapshotIssue): number {
   return priority !== 0 ? priority : a.number - b.number;
 }
 
+/**
+ * One table cell. Backslashes are escaped before pipes, or a title ending in
+ * `\` would escape the pipe that closes its cell and shift the row.
+ */
 function cell(text: string): string {
-  return text.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ');
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\s*\n\s*/g, ' ');
 }
 
 /**

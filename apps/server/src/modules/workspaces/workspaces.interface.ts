@@ -9,7 +9,13 @@ import {
   subIssuesPrompt,
   viewNameDescriptionPrompt,
 } from '@vantikhq/types';
-import { IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class CreateInitialResourcesDto {
   @IsString()
@@ -47,14 +53,25 @@ export interface UserWorkspaceOtherData {
   role?: RoleEnum;
 }
 
-export interface InviteUsersBody {
+export class InviteUsersBody {
+  /** Comma separated. */
+  @IsString()
   emailIds: string;
+
+  @IsArray()
+  @IsString({ each: true })
   teamIds: string[];
+
+  // A person joins as one or the other; bots and agents are made elsewhere.
+  @IsIn([RoleEnum.ADMIN, RoleEnum.USER])
   role: RoleEnum;
 }
 
-export interface InviteActionBody {
+export class InviteActionBody {
+  @IsBoolean()
   accept: boolean;
+
+  @IsString()
   inviteId: string;
 }
 

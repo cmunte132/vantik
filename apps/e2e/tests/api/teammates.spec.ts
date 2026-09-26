@@ -182,10 +182,6 @@ test.describe('invites', () => {
     const { session: eves } = await signIn(request, outsider);
     const taken = await answerInvite(request, eves, inviteId);
 
-    knownBug(
-      'invite_action finds the invite by id alone, and never checks it was sent to the caller or is still open',
-    );
-
     expect(taken.ok(), `accepting someone else's invite answered ${taken.status()}`).toBe(
       false,
     );

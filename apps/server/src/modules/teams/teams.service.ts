@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   CreateTeamDto,
   RoleEnum,
@@ -177,30 +178,7 @@ export default class TeamsService {
       );
     }
 
-    // First, get all users who have this team
-    const usersWithTeam = await this.prisma.usersOnWorkspaces.findMany({
-      where: {
-        teamIds: {
-          has: teamRequestParams.teamId,
-        },
-      },
-    });
-
-    // Update each user to remove the team ID
-    await Promise.all(
-      usersWithTeam.map((user) =>
-        this.prisma.usersOnWorkspaces.update({
-          where: {
-            id: user.id,
-          },
-          data: {
-            teamIds: {
-              set: user.teamIds.filter((id) => id !== teamRequestParams.teamId),
-            },
-          },
-        }),
-      ),
-    );
+    await this.removeFromTeamIds(teamRequestParams.teamId, { workspaceId });
 
     return await this.prisma.team.update({
       where: {
@@ -226,30 +204,22 @@ export default class TeamsService {
     workspaceId: string,
     userId: string,
   ): Promise<UsersOnWorkspaces> {
-    const existingTeamIds = await this.prisma.usersOnWorkspaces.findUnique({
-      where: {
-        userId_workspaceId: {
-          userId,
-          workspaceId,
-        },
-      },
-      select: {
-        teamIds: true,
-      },
+    // Appended by the database, and only when missing. The list used to be
+    // read, added to and written back, so of two teams added to one person at
+    // once, the second write dropped the first. Making two teams at once does
+    // that to every admin, who is then no member of a team they just made.
+    await this.prisma.usersOnWorkspaces.updateMany({
+      where: { userId, workspaceId, NOT: { teamIds: { has: teamId } } },
+      data: { teamIds: { push: teamId } },
     });
 
-    const updatedTeamIds = existingTeamIds?.teamIds.includes(teamId)
-      ? existingTeamIds.teamIds
-      : [...(existingTeamIds?.teamIds || []), teamId];
-
-    const membership = await this.prisma.usersOnWorkspaces.update({
+    const membership = await this.prisma.usersOnWorkspaces.findUniqueOrThrow({
       where: {
         userId_workspaceId: {
           userId,
           workspaceId,
         },
       },
-      data: { teamIds: updatedTeamIds },
       include: { user: true },
     });
 
@@ -311,24 +281,45 @@ export default class TeamsService {
       throw new BadRequestException('There are issues assigned to this user');
     }
 
-    const updatedTeamIds = userOnWorkspace.teamIds.filter(
-      (id) => id !== teamRequestParams.teamId,
-    );
+    await this.removeFromTeamIds(teamRequestParams.teamId, {
+      workspaceId,
+      userId: teamMemberData.userId,
+    });
 
-    const membership = await this.prisma.usersOnWorkspaces.update({
+    const membership = await this.prisma.usersOnWorkspaces.findUniqueOrThrow({
       where: {
         userId_workspaceId: {
           userId: teamMemberData.userId,
           workspaceId,
         },
       },
-      data: { teamIds: updatedTeamIds },
       include: { user: true },
     });
 
     await this.syncGateway.refreshTeamRooms(teamMemberData.userId, workspaceId);
 
     return membership;
+  }
+
+  /**
+   * Takes a team out of the memberships in a workspace, or out of one person's.
+   *
+   * In one statement, so that a team added to the same person meanwhile is
+   * kept: reading the list and writing it back would drop it. Prisma has no
+   * atomic removal from a list, so this is SQL, and it stamps `updatedAt`
+   * itself because only Prisma's own writes do that.
+   */
+  private async removeFromTeamIds(
+    teamId: string,
+    where: { workspaceId: string; userId?: string },
+  ): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE "UsersOnWorkspaces"
+      SET "teamIds" = array_remove("teamIds", ${teamId}), "updatedAt" = now()
+      WHERE "workspaceId" = ${where.workspaceId}
+        AND ${teamId} = ANY("teamIds")
+        ${where.userId ? Prisma.sql`AND "userId" = ${where.userId}` : Prisma.empty}
+    `;
   }
 
   /**

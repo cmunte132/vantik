@@ -150,6 +150,34 @@ export class AgentDelegationService {
   }
 
   /**
+   * Stops a run, and the machine doing it.
+   *
+   * `cancelRun` only moves the row. A hosted executor notices that at its next
+   * lease renewal, which comes every third of a lease — up to 100 seconds of a
+   * sandbox and a model working on a result nobody will accept. Telling the
+   * executor directly stops it now; the renewal stays as the backstop.
+   *
+   * The cancel stands even if the executor cannot stop the run. The row is
+   * already CANCELED by then, and a sandbox that is already gone is the usual
+   * reason the stop fails.
+   */
+  async cancel(runId: string, scope: AgentRunScope, reason?: string) {
+    const run = await this.agentRuns.cancelRun(runId, scope, reason);
+
+    try {
+      await this.registry.get(run.executor).cancel(run);
+    } catch (error) {
+      this.logger.error({
+        message: `Stopping agent run ${run.id} on ${run.executor} failed: ${error}`,
+        where: 'AgentDelegationService.cancel',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
+
+    return run;
+  }
+
+  /**
    * Hands a run that already exists to its backend.
    *
    * A dispatch that fails has to land as a visible state on the run. The
@@ -244,13 +272,11 @@ export class AgentDelegationService {
     });
 
     for (const run of queued) {
-      await this.agentRuns
-        .cancelRun(
-          run.id,
-          { workspaceId: run.workspaceId },
-          'The issue was reassigned away from the agent.',
-        )
-        .catch((): undefined => undefined);
+      await this.cancel(
+        run.id,
+        { workspaceId: run.workspaceId },
+        'The issue was reassigned away from the agent.',
+      ).catch((): undefined => undefined);
     }
   }
 

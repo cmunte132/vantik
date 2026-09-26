@@ -31,7 +31,6 @@
 # differs from the host view (service names instead of localhost).
 #
 # Not included (optional — the server logs an error and continues without them):
-#   - trigger.dev (background actions/automations) — https://trigger.dev/docs/self-hosting
 #   - an LLM endpoint for the AI features — any OpenAI-compatible one, hosted or
 #     local; point LLM_BASE_URL at it (see .env.example)
 #   - SMTP — without it, magic-link login emails are printed to the server log

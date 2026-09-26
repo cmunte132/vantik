@@ -1,0 +1,21 @@
+---
+title: 'Email'
+sidebar_label: "Email"
+---
+
+## Overview
+
+Send an email to a team's address. The Email integration makes a triage issue
+in that team, with the email thread in the description and its attachments on
+the issue. A reply in the same thread goes onto the same issue.
+
+## How to configure the integration
+
+1. Open **Settings → Integrations → Email** and connect the mailbox.
+2. Under **Team mappings**, pair an address tag with a team — for example
+   `support` with your Support team.
+3. Mail sent to `you+workspace-support@…` now lands in triage of that team,
+   where `workspace` is this workspace's slug and `you@…` is the mailbox you
+   connected.
+
+Mail whose tag has no pair is left alone.

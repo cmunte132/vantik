@@ -35,5 +35,3 @@ export const NewIssueTemplateSchema = z.object({
     }),
   ),
 });
-
-export const draftKey = 'CreateIssueDraft';

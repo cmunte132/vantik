@@ -58,7 +58,6 @@ export async function saveWorkspaceData(
         createdAt: record.data.createdAt,
         updatedAt: record.data.updatedAt,
         name: record.data.name,
-        actionsEnabled: record.data.actionsEnabled,
         preferences: record.data.preferences,
         slug: record.data.slug,
       };

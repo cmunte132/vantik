@@ -39,9 +39,9 @@ export class PluginContextFactory {
    * A context for one invocation.
    *
    * `userId` is who the plugin acts as when it writes. A plugin has no session,
-   * so this is the workflow user the action was provisioned with — passed in by
-   * the caller rather than resolved here, because only the caller knows whether
-   * this is a webhook, a schedule or a reaction to somebody's edit.
+   * so for a connected integration's events this is its bot member — passed in
+   * by the caller rather than resolved here, because only the caller knows
+   * whether this is a webhook, an OAuth callback or a reaction to an edit.
    */
   build(
     slug: string,
@@ -95,7 +95,7 @@ export class PluginContextFactory {
             include: { integrationDefinition: true },
           }),
 
-        upsert: (input) => {
+        upsert: async (input) => {
           const {
             config: integrationConfiguration,
             userId: integratedById,
@@ -106,14 +106,28 @@ export class PluginContextFactory {
             personal,
           } = input;
 
-          return prisma.integrationAccount.upsert({
-            where: {
-              accountId_integrationDefinitionId_workspaceId: {
-                accountId,
-                integrationDefinitionId,
-                workspaceId: accountWorkspaceId,
-              },
+          const where = {
+            accountId_integrationDefinitionId_workspaceId: {
+              accountId,
+              integrationDefinitionId,
+              workspaceId: accountWorkspaceId,
             },
+          };
+
+          // A reconnect refreshes what the vendor says — the repositories an
+          // installation reaches — and keeps what the workspace decided, which
+          // is how its teams are paired. Reconnecting GitHub to add a
+          // repository must not unpair every team.
+          const existing = await prisma.integrationAccount.findUnique({
+            where,
+            select: { settings: true },
+          });
+          const teamMappings = (
+            existing?.settings as { teamMappings?: unknown } | null
+          )?.teamMappings;
+
+          return prisma.integrationAccount.upsert({
+            where,
             create: {
               integrationConfiguration,
               settings,
@@ -127,7 +141,7 @@ export class PluginContextFactory {
             update: {
               deleted: null,
               integrationConfiguration,
-              settings,
+              settings: teamMappings ? { ...settings, teamMappings } : settings,
               personal,
               isActive: true,
             },

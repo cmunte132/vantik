@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","required":["name"],"properties":{"name":{"type":"string"},"description":{"type":"string"},"status":{"type":"string","description":"Defaults to planned."},"moduleIds":{"type":"array","items":{"type":"string"}}},"title":"CreateCapabilityDto"}}}}}

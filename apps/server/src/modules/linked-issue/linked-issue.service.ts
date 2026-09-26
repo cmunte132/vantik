@@ -124,11 +124,4 @@ export default class LinkedIssueService {
       }),
     );
   }
-
-  async deleteLinkIssue(linkedIssueIdParams: LinkedIssueRequestParamsDto) {
-    return this.prisma.linkedIssue.update({
-      where: { id: linkedIssueIdParams.linkedIssueId },
-      data: { deleted: new Date().toISOString() },
-    });
-  }
 }

@@ -27,27 +27,6 @@ import { PrismaService } from 'nestjs-prisma';
  */
 
 /**
- * The models whose records one team owns.
- *
- * Everything that hangs off an issue is here, and not the issue alone. A
- * comment body and a history entry say more about the work than the title
- * does, so a boundary that covered only `Issue` would hide the smaller half.
- */
-export const TEAM_OWNED_MODELS = [
-  'Team',
-  'Issue',
-  'Cycle',
-  'Workflow',
-  'IssueComment',
-  'ChecklistItem',
-  'IssueHistory',
-  'LinkedIssue',
-  'IssueRelation',
-  'IssueSuggestion',
-  'Support',
-] as const;
-
-/**
  * This function returns the teams that one member of a workspace can see.
  *
  * The caller must prove the workspace first, with `resolveWorkspaceId`. This
@@ -276,5 +255,27 @@ export async function assertCyclesVisible(
 
   if (missing) {
     throw new NotFoundException({ message: `Cycle ${missing} not found` });
+  }
+}
+
+/** This function proves that each workflow state sits in a visible team. */
+export async function assertWorkflowsVisible(
+  prisma: PrismaService,
+  workflowIds: string[],
+  teamIds: string[],
+): Promise<void> {
+  if (workflowIds.length === 0) {
+    return;
+  }
+
+  const visible = await prisma.workflow.findMany({
+    where: { id: { in: workflowIds }, teamId: { in: teamIds } },
+    select: { id: true },
+  });
+  const found = new Set(visible.map((workflow) => workflow.id));
+  const missing = workflowIds.find((id) => !found.has(id));
+
+  if (missing) {
+    throw new NotFoundException({ message: `Workflow ${missing} not found` });
   }
 }

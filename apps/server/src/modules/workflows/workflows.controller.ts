@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import {
   CreateWorkflowDTO,
   UpdateWorkflowDTO,
@@ -15,9 +7,13 @@ import {
 } from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
+import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
 import WorkflowsService from './workflows.service';
 
+// Every route carries WorkspaceResourceGuard, which proves the `:teamId` in the
+// path and any `:workflowId` belong to a team the caller can see. Workflow
+// states are team-owned records, so visibility is by membership (ENG-79).
 @Controller({
   version: '1',
   path: ':teamId/workflows',
@@ -26,7 +22,7 @@ export class WorkflowsController {
   constructor(private workflowsService: WorkflowsService) {}
 
   @Get()
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getAllWorkflows(
     @Param() workflowRequestParams: WorkflowRequestParamsDto,
   ): Promise<Workflow[]> {
@@ -34,7 +30,7 @@ export class WorkflowsController {
   }
 
   @Post()
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createWorkflow(
     @Param() workflowRequestParams: WorkflowRequestParamsDto,
     @Body() workflowData: CreateWorkflowDTO,
@@ -45,17 +41,8 @@ export class WorkflowsController {
     );
   }
 
-  @Get(':workflowId')
-  @UseGuards(AuthGuard)
-  async getWorkflow(
-    @Param()
-    workflowRequestParams: WorkflowRequestParamsDto,
-  ): Promise<Workflow> {
-    return await this.workflowsService.getWorkflow(workflowRequestParams);
-  }
-
   @Post(':workflowId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateWorkflow(
     @Param()
     workflowRequestParams: WorkflowRequestParamsDto,
@@ -65,14 +52,5 @@ export class WorkflowsController {
       workflowRequestParams,
       workflowData,
     );
-  }
-
-  @Delete(':workflowId')
-  @UseGuards(AuthGuard)
-  async deleteWorkflow(
-    @Param()
-    workflowRequestParams: WorkflowRequestParamsDto,
-  ): Promise<Workflow> {
-    return await this.workflowsService.deleteWorkflow(workflowRequestParams);
   }
 }

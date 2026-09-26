@@ -1,6 +1,6 @@
 # Security policy
 
-**Last update:** 2025-03-09
+**Last update:** 2026-09-25
 
 ## How to report a vulnerability
 
@@ -11,9 +11,11 @@ a security problem, do these steps:
    - A public report before a fix puts the users in danger. Report the problem
      privately.
 
-2. **Write to the Vantik security team.**
-   - Send an email to **`harshith at vantik.dev`**. Use the subject line
-     **"Security Vulnerability Report"**.
+2. **Report it privately on GitHub.**
+   - Open the repository's **Security** tab and click **Report a
+     vulnerability**, or go straight to
+     <https://github.com/cmunte132/vantik/security/advisories/new>. Only the
+     maintainers can see the report.
    - Give a full description. Include this data:
      - The steps that make the problem occur again
      - The components with the problem
@@ -44,8 +46,8 @@ This policy does not treat these types as a security problem:
 - An absent **Secure** or **HttpOnly** flag on a cookie that is not sensitive.
 - A **dead link**.
 
-If you do not know if this policy includes your issue, you can still write to
-the team for an answer.
+If you do not know if this policy includes your issue, you can still report it
+privately for an answer.
 
 ## Rules for a test
 
@@ -56,8 +58,8 @@ When you test for a vulnerability, obey these rules:
 - **Do not read, change, or delete** user data or sensitive information.
 - **Do not do an aggressive test** that stops the system.
 
-For a deep security test, write to the Vantik security team first. Agree the
-scope with the team, and get its permission.
+For a deep security test, open a private report first. Agree the scope with the
+team, and get its permission.
 
 ## What to expect
 

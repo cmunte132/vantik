@@ -1,9 +1,6 @@
 import { BullModule } from '@nestjs/bull';
 import { Global, Module } from '@nestjs/common';
 
-import { BullController } from './bull.controller';
-import { BullService } from './bull.service';
-
 @Global()
 @Module({
   imports: [
@@ -17,7 +14,5 @@ import { BullService } from './bull.service';
     }),
   ],
   exports: [BullModule],
-  controllers: [BullController],
-  providers: [BullService],
 })
 export class BullConfigModule {}

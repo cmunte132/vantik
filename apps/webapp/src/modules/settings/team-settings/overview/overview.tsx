@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { RoleEnum } from '@vantikhq/types';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Form,
@@ -26,6 +27,9 @@ import { useCurrentTeam } from 'hooks/teams/use-current-team';
 
 import { useUpdateTeamMutation } from 'services/team';
 
+import { useContextStore } from 'store/global-context-provider';
+import { UserContext } from 'store/user-context';
+
 import { DeleteTeamButton } from './delete-team-button';
 import { OverviewSchema } from './overview.interface';
 import { Preferences } from './preferences';
@@ -33,6 +37,12 @@ import { Preferences } from './preferences';
 export const Overview = observer(() => {
   const currentTeam = useCurrentTeam();
   const { toast } = useToast();
+  const { workspaceStore } = useContextStore();
+  const currentUser = React.useContext(UserContext);
+  // The server refuses anyone else, so offering the button would only earn
+  // an error after the confirmation.
+  const isAdmin =
+    workspaceStore.getUserData(currentUser.id)?.role === RoleEnum.ADMIN;
   const {
     replace,
     query: { workspaceSlug },
@@ -144,7 +154,13 @@ export const Overview = observer(() => {
             so below.
           </p>
 
-          <DeleteTeamButton />
+          {isAdmin ? (
+            <DeleteTeamButton />
+          ) : (
+            <p className="text-muted-foreground mt-2">
+              Only a workspace admin can delete a team.
+            </p>
+          )}
         </div>
       </SettingSection>
     </div>

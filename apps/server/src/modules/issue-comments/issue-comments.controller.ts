@@ -6,14 +6,12 @@ import {
   Post,
   Query,
   UseGuards,
-  Get,
 } from '@nestjs/common';
 import {
   CreateIssueCommentDto,
   CreateIssueCommentRequestParamsDto,
   IssueComment,
   IssueCommentRequestParamsDto,
-  LinkedComment,
   UpdateIssueCommentDto,
 } from '@vantikhq/types';
 import { SessionContainer } from 'supertokens-node/recipe/session';
@@ -23,10 +21,6 @@ import { getAppUserId } from 'modules/auth/session-user';
 import { Session as SessionDecorator } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
-import {
-  ReactionInput,
-  ReactionRequestParams,
-} from './issue-comments.interface';
 import IssueCommentsService from './issue-comments.service';
 
 @Controller({
@@ -35,25 +29,6 @@ import IssueCommentsService from './issue-comments.service';
 })
 export class IssueCommentsController {
   constructor(private issueCommentsService: IssueCommentsService) {}
-
-  @Get('linked_comment')
-  @UseGuards(AuthGuard)
-  async getLinkedComment(
-    @Query('sourceId') sourceId: string,
-  ): Promise<LinkedComment> {
-    return await this.issueCommentsService.getLinkedCommentBySource(sourceId);
-  }
-
-  @Post('linked_comment')
-  @UseGuards(AuthGuard)
-  async createLinkedComment(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    @Body() createLinkedCommentInput: any,
-  ): Promise<LinkedComment> {
-    return await this.issueCommentsService.createLinkedComment(
-      createLinkedCommentInput,
-    );
-  }
 
   @Post()
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
@@ -68,22 +43,6 @@ export class IssueCommentsController {
       userId,
       commentData,
     );
-  }
-
-  @Get(':issueCommentId/replies')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async getReplyComment(
-    @Param() issueCommentParams: IssueCommentRequestParamsDto,
-  ): Promise<IssueComment[]> {
-    return await this.issueCommentsService.getReplyComments(issueCommentParams);
-  }
-
-  @Get(':issueCommentId')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async getIssueComment(
-    @Param() issueCommentParams: IssueCommentRequestParamsDto,
-  ): Promise<IssueComment> {
-    return await this.issueCommentsService.getIssueComment(issueCommentParams);
   }
 
   @Post(':issueCommentId')
@@ -105,31 +64,6 @@ export class IssueCommentsController {
   ): Promise<IssueComment> {
     return await this.issueCommentsService.deleteIssueComment(
       issueCommentParams,
-    );
-  }
-
-  @Post(':issueCommentId/reaction')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async createCommentReaction(
-    @SessionDecorator() session: SessionContainer,
-    @Param() issueCommentParams: IssueCommentRequestParamsDto,
-    @Body() reactionData: ReactionInput,
-  ): Promise<IssueComment> {
-    const userId = getAppUserId(session);
-    return await this.issueCommentsService.createCommentReaction(
-      userId,
-      issueCommentParams,
-      reactionData,
-    );
-  }
-
-  @Delete(':issueCommentId/reaction/:reactionId')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async deleteCommentReaction(
-    @Param() reactionParams: ReactionRequestParams,
-  ): Promise<IssueComment> {
-    return await this.issueCommentsService.deleteCommentReaction(
-      reactionParams,
     );
   }
 }

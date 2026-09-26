@@ -3,17 +3,14 @@ import { randomBytes } from 'crypto';
 import { UnauthorizedException } from '@nestjs/common';
 import { verify, decode, JwtPayload } from 'jsonwebtoken';
 import { JwksClient } from 'jwks-rsa';
-import { PrismaService } from 'nestjs-prisma';
 import { Error as STError } from 'supertokens-node';
 import Session from 'supertokens-node/recipe/session';
 import { VerifySessionOptions } from 'supertokens-node/recipe/session';
-import { createNewSessionWithoutRequestResponse } from 'supertokens-node/recipe/session';
 import { verifySession } from 'supertokens-node/recipe/session/framework/express';
 
 import { config } from 'common/configs/config';
 import { bearerToken, createPatSession, isPatToken } from 'common/pat-session';
 
-import { getRecipeUserIdForAccount } from 'modules/auth/session-user';
 import { UsersService } from 'modules/users/users.service';
 
 export async function getKey(jwt: string) {
@@ -211,26 +208,6 @@ export async function isSessionValid(
   }
 
   return true;
-}
-
-/**
- * Mints an access token for an account, for an action to call back with.
- *
- * Takes prisma because the account id has to be resolved to the credential it
- * authenticates with — see getRecipeUserIdForAccount. It used to hand the
- * account id straight to convertToRecipeUserId, which SuperTokens rejected.
- */
-export async function generateKeyForUserId(
-  prisma: PrismaService,
-  userId: string,
-) {
-  const session = await createNewSessionWithoutRequestResponse(
-    'public',
-    await getRecipeUserIdForAccount(prisma, userId),
-  );
-
-  const accessToken = session.getAccessToken();
-  return accessToken;
 }
 
 export function generatePersonalAccessToken(): string {

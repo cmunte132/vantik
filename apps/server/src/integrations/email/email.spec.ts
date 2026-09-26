@@ -68,11 +68,10 @@ describe('triaging an email', () => {
     return { ctx, uploaded };
   }
 
-  const action = {
-    data: { inputs: { teamMappings: [{ id: 'support', teamId: 'team-1' }] } },
+  const account = {
+    integrationDefinition: { slug: 'email' },
+    settings: { teamMappings: [{ source: 'support', teamId: 'team-1' }] },
   };
-
-  const account = { integrationDefinition: { slug: 'email' } };
 
   /**
    * The routing rule: which team an email lands in is decided by what somebody
@@ -98,7 +97,7 @@ describe('triaging an email', () => {
       },
     });
 
-    await emailTriage(ctx, { messageId: 'm1' }, account, action);
+    await emailTriage(ctx, { messageId: 'm1' }, account);
 
     expect(ctx.issues.create).toHaveBeenCalledWith(
       'team-1',
@@ -120,7 +119,7 @@ describe('triaging an email', () => {
       },
     });
 
-    await emailTriage(ctx, { messageId: 'm1' }, account, action);
+    await emailTriage(ctx, { messageId: 'm1' }, account);
 
     expect(ctx.issues.create).not.toHaveBeenCalled();
   });
@@ -158,7 +157,7 @@ describe('triaging an email', () => {
       },
     });
 
-    await emailTriage(ctx, { messageId: 'm1' }, account, action);
+    await emailTriage(ctx, { messageId: 'm1' }, account);
 
     expect(uploaded).toHaveLength(1);
     // The traversal-shaped name survives as a *name*, which is harmless, and
@@ -195,7 +194,7 @@ describe('triaging an email', () => {
       },
     });
 
-    await emailTriage(ctx, { messageId: 'm1' }, account, action);
+    await emailTriage(ctx, { messageId: 'm1' }, account);
 
     const [, created] = (ctx.issues.create as jest.Mock).mock.calls[0];
     expect(created.description).toContain('buried');

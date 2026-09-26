@@ -13,10 +13,6 @@ import { CreateLinkedIssueDto } from '../linked-issue';
 export class UpdateIssueDto {
   @IsOptional()
   @IsString()
-  issueId?: string;
-
-  @IsOptional()
-  @IsString()
   title?: string;
 
   @IsOptional()

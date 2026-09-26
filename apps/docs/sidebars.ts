@@ -17,23 +17,6 @@ const sidebars: SidebarsConfig = {
         'fundamentals/cycles',
         'fundamentals/projects',
         'fundamentals/views',
-        'fundamentals/actions',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Actions',
-      items: [
-        'actions/overview',
-        {
-          type: 'category',
-          label: 'Marketplace',
-          items: [
-            'actions/marketplace/overview',
-            'actions/marketplace/bug-enricher',
-            'actions/marketplace/email-actions',
-          ],
-        },
       ],
     },
     {
@@ -47,7 +30,8 @@ const sidebars: SidebarsConfig = {
       items: [
         'integrations/overview',
         'integrations/github',
-        'integrations/contribute',
+        'integrations/email',
+        'integrations/bug-enricher',
       ],
     },
     {

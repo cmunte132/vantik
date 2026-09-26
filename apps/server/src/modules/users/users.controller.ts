@@ -17,7 +17,6 @@ import {
   CodeDto,
   CodeDtoWithWorkspace,
   CreatePatDto,
-  GetUsersDto,
   PatIdDto,
   PublicUser,
   User,
@@ -25,7 +24,7 @@ import {
 import { Response } from 'express';
 import { SessionContainer } from 'supertokens-node/recipe/session';
 
-import { RequiresScope, sanitizeScopes } from 'modules/auth/agent-scope';
+import { sanitizeScopes } from 'modules/auth/agent-scope';
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
 import {
@@ -71,17 +70,6 @@ export class UsersController {
     const user = await this.users.getUser(userId);
 
     return user;
-  }
-
-  // Reads a set of users; POST only because the id list travels in the body.
-  @RequiresScope('read')
-  @Post()
-  @UseGuards(AuthGuard)
-  async getUsersById(
-    @Body() getUsersDto: GetUsersDto,
-    @Workspace() workspaceId: string,
-  ): Promise<PublicUser[]> {
-    return await this.users.getUsersbyId(getUsersDto, workspaceId);
   }
 
   @Post('impersonate')

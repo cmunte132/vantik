@@ -202,31 +202,6 @@ export async function getSuggestedLabels(
   );
 }
 
-export async function getSummary(
-  prisma: PrismaService,
-  aiRequestsService: AIRequestsService,
-  conversations: string,
-  workspaceId: string,
-) {
-  const summarizePrompt = await prisma.prompt.findFirst({
-    where: { name: 'IssueSummary', workspaceId },
-  });
-  return await aiRequestsService.getLLMRequest(
-    {
-      messages: [
-        { role: 'system', content: summarizePrompt.prompt },
-        {
-          role: 'user',
-          content: `[INPUT] conversations: ${conversations}`,
-        },
-      ],
-      llmModel: summarizePrompt.model,
-      model: 'IssueSummary',
-    },
-    workspaceId,
-  );
-}
-
 /** The key that holds the dismissed modules inside `IssueSuggestion.metadata`. */
 export const DISMISSED_MODULES_KEY = 'dismissedModuleIds';
 

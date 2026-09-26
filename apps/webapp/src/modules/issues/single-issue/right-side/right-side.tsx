@@ -36,9 +36,9 @@ import { useContextStore } from 'store/global-context-provider';
 
 import { AgentRunPanel } from './agent-run-panel';
 import { DelegateControl } from './delegate-control';
-import { EngineeringProperties } from './engineering-properties';
 import { IssuePages } from './issue-pages';
 import { IssueRelatedProperties } from './issue-related-properties';
+import { ScheduleProperties } from './schedule-properties';
 import { SupportProperties } from './support-properties';
 
 export const RightSide = observer(() => {
@@ -217,11 +217,10 @@ export const RightSide = observer(() => {
             </div>
           )}
 
-          {team.preferences?.teamType === 'support' ? (
-            <SupportProperties />
-          ) : (
-            <EngineeringProperties />
-          )}
+          <ScheduleProperties />
+
+          {/* Who reported it, for an issue that came in through support. */}
+          <SupportProperties />
 
           <IssuePages />
         </div>

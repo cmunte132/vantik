@@ -17,8 +17,8 @@ export function getUserFromUsersData(usersData: User[], userId: string) {
  * agents did, and role is what older payloads and the sync cache carry. Reading
  * both means an agent still reads as an agent through either.
  *
- * An AGENT is not a BOT: BOT is the actions feature's automation, badged with
- * its own integration icon.
+ * An AGENT is not a BOT: BOT is the member a connected integration writes as,
+ * badged with its integration's icon.
  */
 export function isAgentUser(user?: User) {
   return user?.type === UserTypeEnum.Agent || user?.role === RoleEnum.AGENT;

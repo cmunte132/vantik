@@ -1,9 +1,7 @@
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import {
-  IsArray,
   IsEnum,
   IsInt,
-  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -29,44 +27,6 @@ export enum IssueOrderByEnum {
 
 export const DEFAULT_ISSUES_PER_PAGE = 50;
 export const MAX_ISSUES_PER_PAGE = 200;
-
-/**
- * Query params for `GET /v1/issues`.
- *
- * Both fields narrow the result set; neither widens it. The workspace is always
- * taken from the caller's session, so an unfiltered request returns that
- * workspace's issues and nothing else.
- */
-export class GetIssuesQueryDto {
-  /**
-   * Repeated (`?issueIds=a&issueIds=b`) or comma-separated. A single value
-   * arrives as a bare string, so normalise to an array before validating.
-   */
-  @IsOptional()
-  @Transform(({ value }) =>
-    value === undefined || value === null
-      ? undefined
-      : (Array.isArray(value) ? value : String(value).split(','))
-          .map((id: string) => id.trim())
-          .filter(Boolean),
-  )
-  @IsArray()
-  @IsString({ each: true })
-  issueIds?: string[];
-
-  /** Restrict to one team. A team outside the resolved workspace matches nothing. */
-  @IsOptional()
-  @IsString()
-  teamId?: string;
-
-  /**
-   * Optional. Honoured only if the caller is an active member of it, otherwise
-   * the request is rejected. Falls back to the session's workspace when absent.
-   */
-  @IsOptional()
-  @IsString()
-  workspaceId?: string;
-}
 
 export class GetIssuesByFilterDTO {
   @IsObject()
@@ -111,11 +71,6 @@ export class GetIssuesByFilterDTO {
   @IsOptional()
   @IsEnum(IssueViewEnum)
   view?: IssueViewEnum;
-}
-
-export class GetIssuesByNumberDTO {
-  @IsNumber()
-  number: number;
 }
 
 export interface IssueListItem {

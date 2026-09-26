@@ -36,19 +36,6 @@ export async function getWorkspaceId(
     case ModelName.Workspace:
       return modelId;
 
-    case ModelName.Action:
-      const action = await prisma.action.findUnique({
-        where: { id: modelId },
-      });
-      return action.workspaceId;
-
-    case ModelName.ActionEntity:
-      const actionEntity = await prisma.actionEntity.findUnique({
-        where: { id: modelId },
-        include: { action: true },
-      });
-      return actionEntity.action.workspaceId;
-
     case ModelName.Conversation:
       const conversationEntity = await prisma.conversation.findUnique({
         where: { id: modelId },
@@ -436,8 +423,6 @@ export async function getModelData(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const modelMap: Record<ModelName, any> = {
     Workspace: prisma.workspace,
-    Action: prisma.action,
-    ActionEntity: prisma.actionEntity,
     AgentRun: prisma.agentRun,
     AgentRunEvent: prisma.agentRunEvent,
     AgentRunIteration: prisma.agentRunIteration,

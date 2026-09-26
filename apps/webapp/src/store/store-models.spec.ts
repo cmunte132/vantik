@@ -2,7 +2,6 @@ import type { IAnyType, IModelType } from 'mobx-state-tree';
 
 import { describe, expect, it } from 'vitest';
 
-import { Action } from './action/models';
 import { Capability } from './capabilities/models';
 import { ChecklistItem } from './checklist-items/models';
 import { Comment } from './comments/models';
@@ -62,7 +61,6 @@ interface ModelUnderTest {
 }
 
 const MODELS_UNDER_TEST: ModelUnderTest[] = [
-  { syncName: MODELS.Action, prismaName: 'Action', model: Action },
   {
     syncName: MODELS.ChecklistItem,
     prismaName: 'ChecklistItem',

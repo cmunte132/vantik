@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { UpsertCompanyDto } from '@vantikhq/types';
 import axios from 'axios';
 import { PrismaService } from 'nestjs-prisma';
@@ -32,68 +32,6 @@ export default class CompanyService {
       },
       include: {
         people: true,
-      },
-    });
-  }
-
-  async getCompanies(workspaceId: string) {
-    return this.prisma.company.findMany({
-      where: {
-        workspaceId,
-        deleted: null,
-      },
-      include: {
-        people: true,
-      },
-    });
-  }
-
-  async getCompany(id: string, workspaceId: string) {
-    const company = await this.prisma.company.findFirst({
-      where: {
-        id,
-        workspaceId,
-        deleted: null,
-      },
-      include: {
-        people: true,
-      },
-    });
-
-    if (!company) {
-      throw new NotFoundException(`Company with ID ${id} not found`);
-    }
-
-    return company;
-  }
-
-  async updateCompany(id: string, data: UpsertCompanyDto, workspaceId: string) {
-    const company = await this.prisma.company.findFirst({
-      where: {
-        id,
-        workspaceId,
-        deleted: null,
-      },
-    });
-
-    if (!company) {
-      throw new NotFoundException(`Company with ID ${id} not found`);
-    }
-
-    return this.prisma.company.update({
-      where: { id },
-      data,
-      include: {
-        people: true,
-      },
-    });
-  }
-
-  async deleteCompany(id: string) {
-    return this.prisma.company.update({
-      where: { id },
-      data: {
-        deleted: new Date(),
       },
     });
   }

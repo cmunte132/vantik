@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
 
 import { TemplateCategoryEnum } from './template.entity';
 
@@ -10,6 +10,7 @@ export class CreateTemplateDto {
   category: TemplateCategoryEnum;
 
   // TODO: Manoj change this when you have finalised the issue thing
+  @IsObject()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   templateData: Record<string, any>;
 

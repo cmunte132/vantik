@@ -7,47 +7,81 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import {
+  assertTeamInWorkspace,
+  resolveWorkspaceId,
+} from 'common/workspace-access';
+
 import { RequestIdParams } from './labels.interface';
 
 @Injectable()
 export default class LabelsService {
   constructor(private prisma: PrismaService) {}
 
-  async createLabel(labelData: CreateLabelDto): Promise<Label> {
+  /**
+   * The body names the workspace the label lands in, and that name is honoured
+   * only once the caller is shown to be a member of it. Before, it was written
+   * as sent, so any signed-in caller could plant labels in any workspace.
+   *
+   * The fields are copied one by one rather than spread, because the global
+   * ValidationPipe does not strip keys the DTO does not declare.
+   */
+  async createLabel(
+    labelData: CreateLabelDto,
+    userId: string,
+    sessionWorkspaceId: string,
+  ): Promise<Label> {
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      labelData.workspaceId,
+    );
+
+    // The guard proved the team against the session's workspace, which is not
+    // always the one the body names.
+    if (labelData.teamId) {
+      await assertTeamInWorkspace(this.prisma, labelData.teamId, workspaceId);
+    }
+
     return await this.prisma.label.upsert({
       where: {
-        name_workspaceId: {
-          name: labelData.name,
-          workspaceId: labelData.workspaceId,
-        },
+        name_workspaceId: { name: labelData.name, workspaceId },
       },
       update: { deleted: null, name: labelData.name, color: labelData.color },
-      create: labelData,
+      create: {
+        name: labelData.name,
+        color: labelData.color,
+        description: labelData.description,
+        groupId: labelData.groupId,
+        teamId: labelData.teamId,
+        workspaceId,
+      },
     });
   }
 
-  async getAllLabels(requestIdParams: RequestIdParams): Promise<Label[]> {
-    const whereClause = {
-      OR: [
-        { workspaceId: requestIdParams.workspaceId },
-        { teamId: requestIdParams.teamId },
-      ],
-    };
+  /**
+   * Every label of one workspace the caller belongs to.
+   *
+   * This used to match `workspaceId OR teamId`, and Prisma drops an undefined
+   * side, so a request without a workspace matched every label on the server.
+   * A team's labels carry its workspace too, so the workspace alone returns
+   * everything the old filter did for a well-formed request.
+   */
+  async getAllLabels(
+    requestIdParams: RequestIdParams,
+    userId: string,
+    sessionWorkspaceId: string,
+  ): Promise<Label[]> {
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      requestIdParams.workspaceId,
+    );
 
     return await this.prisma.label.findMany({
-      where: whereClause,
-    });
-  }
-
-  async getLabel(LabelRequestIdParams: LabelRequestParamsDto): Promise<Label> {
-    return await this.prisma.label.findUnique({
-      where: {
-        id: LabelRequestIdParams.labelId,
-      },
-      include: {
-        group: true,
-        labels: true,
-      },
+      where: { workspaceId },
     });
   }
 
@@ -57,7 +91,10 @@ export default class LabelsService {
   ): Promise<Label> {
     return await this.prisma.label.update({
       data: {
-        ...labelData,
+        name: labelData.name,
+        color: labelData.color,
+        description: labelData.description,
+        groupId: labelData.groupId,
       },
       where: {
         id: LabelRequestIdParams.labelId,

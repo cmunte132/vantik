@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -11,7 +10,6 @@ import {
   SignedURLBody,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
-import { v4 as uuidv4 } from 'uuid'; // Add this import at the top with other imports
 
 import { LoggerService } from 'modules/logger/logger.service';
 
@@ -130,33 +128,6 @@ export class AttachmentService {
     return await Promise.all(attachmentPromises);
   }
 
-  async uploadActionFile(file: Express.Multer.File): Promise<string> {
-    const uniqueId = uuidv4(); //
-    const filePath = `actions/${uniqueId}.js`;
-    await this.storageProvider.uploadFile(filePath, file.buffer, {
-      contentType: file.mimetype,
-      resumable: false,
-      validation: false,
-    });
-
-    return `${process.env.PUBLIC_ATTACHMENT_URL}/v1/attachment/actions/${uniqueId}`;
-  }
-
-  /**
-   * Reads the JavaScript of an action. The remote module loader asks for this
-   * over HTTP, and the server sends the bytes it holds rather than a redirect
-   * to storage.
-   */
-  async getActionFileContents(attachmentId: string): Promise<Buffer> {
-    const filePath = `actions/${attachmentId}.js`;
-
-    if (!(await this.storageProvider.fileExists(filePath))) {
-      throw new BadRequestException('File not found');
-    }
-
-    return await this.storageProvider.downloadFile(filePath);
-  }
-
   /**
    * The local backend has no bucket to sign against, so its signed URLs come
    * back to this server and this method answers them. Only that backend makes
@@ -240,62 +211,6 @@ export class AttachmentService {
       contentType: attachment.fileType,
       originalName: attachment.originalName,
     };
-  }
-
-  async getFileFromStorageSignedUrl(
-    attachementRequestParams: AttachmentRequestParams,
-    workspaceId: string,
-  ) {
-    const attachment = await this.getAttachment(
-      attachementRequestParams.attachmentId,
-      workspaceId,
-    );
-    const filePath = this.getFilePath(workspaceId, attachment);
-
-    if (!(await this.storageProvider.fileExists(filePath))) {
-      throw new BadRequestException('File not found');
-    }
-
-    const metadata = await this.storageProvider.getMetadata(filePath);
-    const signedUrl = await this.storageProvider.getSignedUrl(filePath, {
-      action: 'read',
-      expires: Date.now() + 60 * 60 * 1000,
-      responseDisposition: 'inline',
-      responseType: attachment.fileType,
-    });
-
-    return {
-      signedUrl,
-      contentType: attachment.fileType,
-      originalName: attachment.originalName,
-      size: metadata.size,
-    };
-  }
-
-  async deleteAttachment(
-    attachementRequestParams: AttachmentRequestParams,
-    workspaceId: string,
-  ) {
-    const attachment = await this.getAttachment(
-      attachementRequestParams.attachmentId,
-      workspaceId,
-    );
-    const filePath = this.getFilePath(workspaceId, attachment);
-
-    try {
-      await Promise.all([
-        this.storageProvider.deleteFile(filePath),
-        this.prisma.attachment.update({
-          where: { id: attachementRequestParams.attachmentId },
-          data: {
-            deleted: new Date().toISOString(),
-            status: AttachmentStatusEnum.Deleted,
-          },
-        }),
-      ]);
-    } catch (error) {
-      throw new InternalServerErrorException('Error deleting attachment');
-    }
   }
 
   private async getAttachment(attachmentId: string, workspaceId: string) {

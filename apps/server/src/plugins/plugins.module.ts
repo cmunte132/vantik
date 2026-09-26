@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule, PrismaService } from 'nestjs-prisma';
 
 import AIRequestsService from 'modules/ai-requests/ai-requests.services';
 import { AttachmentModule } from 'modules/attachments/attachments.module';
@@ -19,13 +18,12 @@ import { PluginContextFactory } from './plugin-context.factory';
  */
 @Module({
   imports: [
-    PrismaModule,
     IssuesModule,
     IssueCommentsModule,
     LinkedIssueModule,
     AttachmentModule,
   ],
-  providers: [PluginContextFactory, PrismaService, AIRequestsService],
+  providers: [PluginContextFactory, AIRequestsService],
   exports: [PluginContextFactory],
 })
 export class PluginsModule {}

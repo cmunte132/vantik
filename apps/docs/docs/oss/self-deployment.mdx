@@ -21,18 +21,22 @@ scale of the deployment, the backups, and the security beyond the basic level.
 
 ## Instructions
 
-1. Clone the repository and make your `.env` file:
+1. Clone the repository, make your `.env` file, and make the key that
+   encrypts the credentials of agent runs. The server does not start without
+   the key. Keep it in your backup: with a different key, the server cannot
+   read the credentials already saved.
 
 ```bash
 git clone https://github.com/cmunte132/vantik.git
 cd vantik
 cp .env.example .env
+echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
 ```
 
 2. For a deployment that is more than a test on localhost, edit `.env`:
 
    - Set `FRONTEND_HOST` and `BACKEND_HOST` to your domain.
-   - Change `POSTGRES_PASSWORD`, `TYPESENSE_API_KEY`, and `TRIGGER_TOKEN`.
+   - Change `POSTGRES_PASSWORD` and `TYPESENSE_API_KEY`.
 
 3. Start the stack:
 
@@ -165,9 +169,8 @@ The other features do not change. You still create an issue with no title, but
 the AI writes no title for you. The issue suggestions still return an assignee
 from the search, but they suggest no label.
 
-One request can still reach an AI endpoint: a direct API call, or an action that
-you deployed against an older server. That request fails with an error, and the
-error names the variable that you did not set. The server does not answer with a
+One request can still reach an AI endpoint: a direct API call. That request fails
+with an error, and the error names the variable that you did not set. The server does not answer with a
 model that nobody chose.
 :::
 

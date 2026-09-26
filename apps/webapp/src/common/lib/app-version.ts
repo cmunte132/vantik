@@ -9,25 +9,15 @@
  * Everything here exists to notice that, cheaply and from several directions.
  */
 
-import { DEXIE_SCHEMA_VERSION } from 'store/schema-version';
-
 /**
  * Inlined by next.config.js `env` at build time. Not read from the container's
  * environment on purpose — it names the bundle the browser is running, which is
  * a build-time fact, unlike the settings served by /api/v1/config.
  */
 export const BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID ?? 'unknown';
-export const BUILD_COMMIT = process.env.NEXT_PUBLIC_BUILD_COMMIT ?? 'unknown';
-export const BUILT_AT = process.env.NEXT_PUBLIC_BUILT_AT ?? '';
 
 /** The header every webapp response carries, including the /api/* proxy's. */
 export const BUILD_HEADER = 'x-vantik-build';
-
-/**
- * The server image's own stamp. Reported for visibility only — an old client is
- * never refused, so this exists to make skew observable, not to gate anything.
- */
-export const SERVER_BUILD_HEADER = 'x-vantik-server-build';
 
 /**
  * In development the stamp is the fixed string 'dev', so there is nothing to
@@ -79,14 +69,4 @@ export function isDifferentBuild(served: string | undefined | null): boolean {
   }
 
   return served !== BUILD_ID;
-}
-
-/** For the debug surface and for reporting; not used in any decision. */
-export function describeClientBuild() {
-  return {
-    buildId: BUILD_ID,
-    commit: BUILD_COMMIT,
-    builtAt: BUILT_AT,
-    dexieSchemaVersion: DEXIE_SCHEMA_VERSION,
-  };
 }

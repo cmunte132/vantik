@@ -7,13 +7,17 @@
  * transitioned the row and stopped, so the issue said nothing, and the next
  * attempt was a QUEUED row that no backend was ever handed.
  */
-import type { ExpiredRun } from './agent-runs.service';
+import type { ExpiredRun, UnstartedRun } from './agent-runs.service';
 
 import { AgentRunsProcessor } from './agent-runs.processor';
 
-function build(expired: ExpiredRun[], options: { retryThrows?: boolean } = {}) {
+function build(
+  expired: ExpiredRun[],
+  options: { retryThrows?: boolean; unstarted?: UnstartedRun[] } = {},
+) {
   const agentRuns = {
     expireLapsedLeases: jest.fn(async () => expired),
+    failUnstartedRuns: jest.fn(async () => options.unstarted ?? []),
   };
 
   const retried: string[] = [];
@@ -131,6 +135,7 @@ describe('the sweep says what happened', () => {
     await expect(processor.sweep()).resolves.toEqual({
       expired: 2,
       requeued: 2,
+      unstarted: 0,
     });
     expect(handbacks.map((entry) => entry.runId)).toEqual(['run-2']);
   });
@@ -141,8 +146,53 @@ describe('the sweep says what happened', () => {
     await expect(processor.sweep()).resolves.toEqual({
       expired: 0,
       requeued: 0,
+      unstarted: 0,
     });
     expect(delegation.retry).not.toHaveBeenCalled();
     expect(handback.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('the sweep and a run that never started', () => {
+  const unstarted: UnstartedRun = {
+    id: 'run-queued',
+    issueId: 'issue-1',
+    agentUserId: 'agent-1',
+    workspaceId: 'workspace-1',
+    attempt: 1,
+    error: 'Nothing started this run.',
+  };
+
+  it('tells the issue why, in the words the run recorded', async () => {
+    const { processor, handbacks } = build([], { unstarted: [unstarted] });
+
+    await expect(processor.sweep()).resolves.toEqual({
+      expired: 0,
+      requeued: 0,
+      unstarted: 1,
+    });
+    expect(handbacks).toEqual([
+      {
+        issueId: 'issue-1',
+        agentUserId: 'agent-1',
+        runId: 'run-queued',
+        outcome: {
+          status: 'FAILED',
+          failure: 'LEASE_LOST',
+          error: 'Nothing started this run.',
+          attempt: 1,
+        },
+      },
+    ]);
+  });
+
+  it('leaves the retry to a person', async () => {
+    // Nothing is known about why it was dropped, so opening another attempt
+    // would spend the budget again on a guess.
+    const { processor, delegation } = build([], { unstarted: [unstarted] });
+
+    await processor.sweep();
+
+    expect(delegation.retry).not.toHaveBeenCalled();
   });
 });

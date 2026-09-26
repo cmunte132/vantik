@@ -356,6 +356,81 @@ export async function assertProjectInWorkspace(
 }
 
 /**
+ * Proves a project milestone's project belongs to the given workspace.
+ *
+ * Update and delete name the milestone by id and nothing else. Deleting one
+ * also clears it from every issue that carried it, so an unchecked id let a
+ * caller strip milestones off another workspace's issues.
+ */
+export async function assertProjectMilestoneInWorkspace(
+  prisma: PrismaService,
+  projectMilestoneId: string,
+  workspaceId: string,
+): Promise<void> {
+  const milestone = await prisma.projectMilestone.findFirst({
+    where: {
+      id: projectMilestoneId,
+      deleted: null,
+      project: { workspaceId, deleted: null },
+    },
+    select: { id: true },
+  });
+
+  if (!milestone) {
+    throw new NotFoundException({
+      message: `Project milestone ${projectMilestoneId} not found`,
+    });
+  }
+}
+
+/**
+ * Proves a label belongs to the given workspace.
+ *
+ * The label routes are older than this guard and addressed the row by id
+ * behind AuthGuard alone, so any signed-in caller could read, rename or delete
+ * any label on the server. A label also names a parent label as its group, and
+ * that id is checked the same way.
+ */
+export async function assertLabelInWorkspace(
+  prisma: PrismaService,
+  labelId: string,
+  workspaceId: string,
+): Promise<void> {
+  const label = await prisma.label.findFirst({
+    where: { id: labelId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!label) {
+    throw new NotFoundException({ message: `Label ${labelId} not found` });
+  }
+}
+
+/**
+ * Proves a workflow state's team belongs to the given workspace.
+ *
+ * Same history as the label routes: update and delete named the state by id
+ * behind AuthGuard alone, so a caller could rename or remove the states of a
+ * team in another workspace.
+ */
+export async function assertWorkflowInWorkspace(
+  prisma: PrismaService,
+  workflowId: string,
+  workspaceId: string,
+): Promise<void> {
+  const workflow = await prisma.workflow.findFirst({
+    where: { id: workflowId, deleted: null, team: { workspaceId } },
+    select: { id: true },
+  });
+
+  if (!workflow) {
+    throw new NotFoundException({
+      message: `Workflow ${workflowId} not found`,
+    });
+  }
+}
+
+/**
  * Proves a product belongs to the given workspace.
  *
  * The update and delete routes name the product by id and nothing else, which

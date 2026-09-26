@@ -1,0 +1,21 @@
+---
+title: 'Bug Enricher'
+sidebar_label: "Bug Enricher"
+---
+
+## Overview
+
+A person creates an issue in Vantik with the `bug` label on it. The Bug
+Enricher then does two steps:
+
+1. It sends the description of the issue to this deployment's AI model, and it
+   asks that model for a possible resolution.
+2. It adds the answer as a comment on the issue.
+
+It talks to no third party, so it needs no account. Open **Settings →
+Integrations → Bug Enricher** and click **Turn on**.
+
+:::tip
+The code is in
+[`apps/server/src/integrations/bug-enricher`](https://github.com/cmunte132/vantik/tree/main/apps/server/src/integrations/bug-enricher).
+:::

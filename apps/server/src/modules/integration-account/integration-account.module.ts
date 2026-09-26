@@ -1,16 +1,17 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule, PrismaService } from 'nestjs-prisma';
 
-import { IntegrationDefinitionModule } from 'modules/integration-definition/integration-definition.module';
+import { IntegrationsModule } from 'modules/integrations/integrations.module';
 import { UsersService } from 'modules/users/users.service';
 
 import { IntegrationAccountController } from './integration-account.controller';
 import { IntegrationAccountService } from './integration-account.service';
 
 @Module({
-  imports: [PrismaModule, IntegrationDefinitionModule],
+  // IntegrationsModule to ask a plugin whether it connects without OAuth.
+  imports: [IntegrationsModule],
   controllers: [IntegrationAccountController],
-  providers: [PrismaService, IntegrationAccountService, UsersService],
+  // UsersService because AuthGuard resolves it from the module it guards.
+  providers: [IntegrationAccountService, UsersService],
   exports: [IntegrationAccountService],
 })
 export class IntegrationAccountModule {}

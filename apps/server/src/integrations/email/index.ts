@@ -50,8 +50,7 @@ export default async function run(
       return await emailTriage(
         ctx,
         eventPayload.eventBody,
-        eventPayload.integrationAccounts?.email,
-        eventPayload.action,
+        eventPayload.integrationAccount,
       );
 
     default:

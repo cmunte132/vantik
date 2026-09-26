@@ -1,1 +1,1 @@
-export * from './get-integration-accounts';
+export * from './integration-account';

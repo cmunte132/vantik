@@ -34,21 +34,6 @@ export default class WorkflowsService {
     });
   }
 
-  async getWorkflow(
-    workflowRequestParams: WorkflowRequestParamsDto,
-  ): Promise<Workflow> {
-    this.logger.debug({
-      message: `Fetching workflow with id ${workflowRequestParams.workflowId}`,
-      where: `WorkflowsService.getWorkflow`,
-    });
-
-    return await this.prisma.workflow.findUnique({
-      where: {
-        id: workflowRequestParams.workflowId,
-      },
-    });
-  }
-
   async createWorkflow(
     workflowRequestParams: TeamRequestParamsDto,
     workflowData: CreateWorkflowDTO,
@@ -60,8 +45,18 @@ export default class WorkflowsService {
     });
 
     try {
+      // Field by field, because the global ValidationPipe keeps undeclared
+      // keys: spreading the body after `teamId` let a `teamId` in the body
+      // decide which team the state landed in.
       return await this.prisma.workflow.create({
-        data: { teamId: workflowRequestParams.teamId, ...workflowData },
+        data: {
+          teamId: workflowRequestParams.teamId,
+          name: workflowData.name,
+          description: workflowData.description,
+          position: workflowData.position,
+          color: workflowData.color,
+          category: workflowData.category,
+        },
       });
     } catch (error) {
       this.logger.error({
@@ -94,7 +89,13 @@ export default class WorkflowsService {
 
     try {
       return await this.prisma.workflow.update({
-        data: workflowData,
+        data: {
+          name: workflowData.name,
+          description: workflowData.description,
+          position: workflowData.position,
+          color: workflowData.color,
+          category: workflowData.category,
+        },
         where: {
           id: workflowRequestParams.workflowId,
         },
@@ -116,23 +117,5 @@ export default class WorkflowsService {
         `Error while creating workflow`,
       );
     }
-  }
-
-  async deleteWorkflow(
-    workflowRequestParams: WorkflowRequestParamsDto,
-  ): Promise<Workflow> {
-    this.logger.debug({
-      message: `Deleting workflow with id ${workflowRequestParams.workflowId}`,
-      where: `WorkflowsService.deleteWorkflow`,
-    });
-
-    return await this.prisma.workflow.update({
-      where: {
-        id: workflowRequestParams.workflowId,
-      },
-      data: {
-        deleted: new Date().toISOString(),
-      },
-    });
   }
 }

@@ -1,9 +1,10 @@
 import { join } from 'path';
 
 import { Injectable } from '@nestjs/common';
+import { PluginContextFactory } from 'plugins/plugin-context.factory';
+import { type PluginSpec } from 'plugins/plugin.interface';
 
 import { LoggerService } from 'modules/logger/logger.service';
-import { PluginContextFactory } from 'plugins/plugin-context.factory';
 
 @Injectable()
 export class IntegrationsService {
@@ -31,11 +32,7 @@ export class IntegrationsService {
     });
 
     try {
-      // Dynamically build the path based on the slug (e.g., 'github', 'discord')
-      const modulePath = join(__dirname, `../../integrations/${slug}`);
-
-      // Dynamically import the module
-      const integrationModule = await import(modulePath);
+      const integrationModule = await this.importPlugin(slug);
 
       // Call the default function exported by the module
       if (typeof integrationModule.default === 'function') {
@@ -58,5 +55,30 @@ export class IntegrationsService {
     } catch (error) {
       this.logger.error(error);
     }
+  }
+
+  /**
+   * What a plugin declares about itself, read without running it.
+   *
+   * The host decides from this whether a record change or a webhook is the
+   * plugin's business at all, before anything is queued. A slug with no plugin
+   * behind it declares nothing.
+   */
+  async pluginSpecOf(slug: string): Promise<PluginSpec | undefined> {
+    try {
+      return (await this.importPlugin(slug)).pluginSpec;
+    } catch (error) {
+      this.logger.error({
+        message: `No plugin for ${slug}: ${error}`,
+        where: 'IntegrationsService.pluginSpecOf',
+      });
+
+      return undefined;
+    }
+  }
+
+  /** The module in `apps/server/src/integrations/<slug>`; Node caches it. */
+  private importPlugin(slug: string) {
+    return import(join(__dirname, `../../integrations/${slug}`));
   }
 }

@@ -9,10 +9,13 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { providerById } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
+
+import { LoggerService } from 'modules/logger/logger.service';
 
 import { type CatalogueModel, fetchCatalogue } from './model-catalogue';
 
@@ -59,8 +62,106 @@ const HANDLE_FIELDS = {
  * database is protected.
  */
 @Injectable()
-export class CredentialsService {
+export class CredentialsService implements OnModuleInit {
+  private readonly logger = new LoggerService(CredentialsService.name);
+
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Refuses to start without a key, then moves old credentials onto it.
+   *
+   * The check is here rather than at the first save, because the first save
+   * can be weeks after a deploy, and by then nobody connects the failure to
+   * the variable they never set.
+   */
+  async onModuleInit() {
+    // Outside the try on purpose. Every other failure here is survivable; a
+    // server with no key would take credentials it can never seal.
+    currentKey();
+
+    try {
+      await this.resealLegacyCredentials();
+    } catch (error) {
+      // Nothing is lost by waiting: a row the re-seal did not reach is still
+      // readable under the old key, and the next start tries again.
+      this.logger.error({
+        message: `Moving credentials onto CREDENTIAL_ENCRYPTION_KEY failed: ${error}`,
+        where: 'CredentialsService.onModuleInit',
+      });
+    }
+  }
+
+  /**
+   * Re-seals every credential that an old fallback key opens.
+   *
+   * Before the key was required, a server without one sealed credentials under
+   * SUPERTOKEN_CONNECTION_URI. That is not a secret: the compose file sets it
+   * to `http://supertokens:3567`, so every default install used a key anyone
+   * could read. Requiring a real key fixes new rows; this moves the old ones,
+   * so that turning the key on does not make a workspace enter its keys again.
+   *
+   * Soft-deleted rows are moved too. They still hold the secret somebody
+   * removed, and it should not stay under a public key.
+   */
+  async resealLegacyCredentials(): Promise<{
+    resealed: number;
+    unreadable: number;
+  }> {
+    const rows = await this.prisma.workspaceCredential.findMany({
+      select: {
+        id: true,
+        ciphertext: true,
+        nonce: true,
+        tag: true,
+        deleted: true,
+      },
+    });
+
+    const current = currentKey();
+    const legacy = legacyKeys();
+    let resealed = 0;
+    let unreadable = 0;
+
+    for (const row of rows) {
+      if (tryOpen(row, current) !== null) {
+        continue;
+      }
+
+      const secret = legacy
+        .map((key) => tryOpen(row, key))
+        .find((opened) => opened !== null);
+
+      if (secret === undefined) {
+        // A removed credential nobody can open is not worth a warning.
+        unreadable += row.deleted ? 0 : 1;
+        continue;
+      }
+
+      // Conditional on the ciphertext that was read, so a key saved from the
+      // settings screen in the meantime is not overwritten with the old one.
+      const { count } = await this.prisma.workspaceCredential.updateMany({
+        where: { id: row.id, ciphertext: row.ciphertext },
+        data: seal(secret, current),
+      });
+      resealed += count;
+    }
+
+    if (resealed > 0) {
+      this.logger.info({
+        message: `Re-sealed ${resealed} workspace credentials under CREDENTIAL_ENCRYPTION_KEY.`,
+        where: 'CredentialsService.resealLegacyCredentials',
+      });
+    }
+
+    if (unreadable > 0) {
+      this.logger.warn({
+        message: `${unreadable} workspace credentials cannot be opened with CREDENTIAL_ENCRYPTION_KEY or any old fallback. Agent runs in those workspaces will fail until an admin saves the key again in agent settings.`,
+        where: 'CredentialsService.resealLegacyCredentials',
+      });
+    }
+
+    return { resealed, unreadable };
+  }
 
   async list(workspaceId: string): Promise<CredentialHandle[]> {
     const rows = await this.prisma.workspaceCredential.findMany({
@@ -376,34 +477,77 @@ export interface ModelCredential {
   baseUrl: string | null;
 }
 
+/** Enough that a guessed or reused value is not a real risk. */
+const MIN_KEY_LENGTH = 32;
+
+/**
+ * The shipped defaults of SUPERTOKEN_CONNECTION_URI, for the compose file and
+ * for a server run on the host. A server that set no key sealed under
+ * whichever one it was started with, and an install may since have moved from
+ * one to the other.
+ */
+const LEGACY_DEFAULTS = ['http://supertokens:3567', 'http://localhost:3567'];
+
+const derived = new Map<string, Buffer>();
+
+/**
+ * Stretches a secret into an AES-256 key.
+ *
+ * Derived rather than used raw, so the secret does not have to be exactly 32
+ * bytes. Cached because scrypt is slow on purpose, and every seal and open
+ * needs the key.
+ */
+function derive(secret: string): Buffer {
+  let key = derived.get(secret);
+
+  if (!key) {
+    key = scryptSync(secret, 'vantik-workspace-credential', 32);
+    derived.set(secret, key);
+  }
+
+  return key;
+}
+
 /**
  * The key everything here is encrypted under.
  *
- * Derived from a server secret rather than used raw, so the secret does not
- * have to be exactly 32 bytes and a short one is stretched rather than
- * silently rejected. Falling back to the database URL is deliberate: a
- * self-hosted install that has set nothing still gets encryption at rest tied
- * to something deployment-specific, rather than a hardcoded constant that
- * would be worse than nothing.
+ * It must be set. It once fell back to SUPERTOKEN_CONNECTION_URI and then to
+ * DATABASE_URL, so that an install with no key still had encryption at rest.
+ * But the first of those is a public constant in a default install, so the
+ * encryption protected nothing.
  */
-function encryptionKey(): Buffer {
-  const secret =
-    process.env.CREDENTIAL_ENCRYPTION_KEY ??
-    process.env.SUPERTOKEN_CONNECTION_URI ??
-    process.env.DATABASE_URL;
+function currentKey(): Buffer {
+  const secret = process.env.CREDENTIAL_ENCRYPTION_KEY?.trim();
 
   if (!secret) {
     throw new Error(
-      'No CREDENTIAL_ENCRYPTION_KEY is configured, and no fallback is available.',
+      'CREDENTIAL_ENCRYPTION_KEY is not set. It encrypts the model keys and git tokens that agent runs use, and the server does not start without it. Make one with `openssl rand -base64 32` and add it to .env.',
     );
   }
 
-  return scryptSync(secret, 'vantik-workspace-credential', 32);
+  if (secret.length < MIN_KEY_LENGTH) {
+    throw new Error(
+      `CREDENTIAL_ENCRYPTION_KEY has ${secret.length} characters, and it needs at least ${MIN_KEY_LENGTH}. Make one with \`openssl rand -base64 32\`.`,
+    );
+  }
+
+  return derive(secret);
 }
 
-function seal(value: string) {
+/** Every key a credential may have been sealed under before one was required. */
+function legacyKeys(): Buffer[] {
+  const secrets = [
+    process.env.SUPERTOKEN_CONNECTION_URI,
+    process.env.DATABASE_URL,
+    ...LEGACY_DEFAULTS,
+  ].filter((secret): secret is string => Boolean(secret));
+
+  return [...new Set(secrets)].map(derive);
+}
+
+function seal(value: string, key = currentKey()) {
   const nonce = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', encryptionKey(), nonce);
+  const cipher = createCipheriv('aes-256-gcm', key, nonce);
 
   const ciphertext = Buffer.concat([
     cipher.update(value, 'utf8'),
@@ -417,14 +561,16 @@ function seal(value: string) {
   };
 }
 
-function open(sealed: {
+interface Sealed {
   ciphertext: string;
   nonce: string;
   tag: string;
-}): string {
+}
+
+function open(sealed: Sealed, key = currentKey()): string {
   const decipher = createDecipheriv(
     'aes-256-gcm',
-    encryptionKey(),
+    key,
     Buffer.from(sealed.nonce, 'hex'),
   );
   decipher.setAuthTag(Buffer.from(sealed.tag, 'hex'));
@@ -433,6 +579,15 @@ function open(sealed: {
     decipher.update(Buffer.from(sealed.ciphertext, 'hex')),
     decipher.final(),
   ]).toString('utf8');
+}
+
+/** The plaintext, or null when this key did not seal it. */
+function tryOpen(sealed: Sealed, key: Buffer): string | null {
+  try {
+    return open(sealed, key);
+  } catch {
+    return null;
+  }
 }
 
 /**

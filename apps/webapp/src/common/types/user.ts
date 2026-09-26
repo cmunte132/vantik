@@ -6,7 +6,6 @@ interface Workspace {
   icon: string;
   status?: string;
   id: string;
-  actionsEnabled: boolean;
 }
 
 export interface Invite {

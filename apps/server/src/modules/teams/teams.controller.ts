@@ -39,40 +39,6 @@ export class TeamsController {
     return await this.teamsService.getTeams(workspaceId, userId);
   }
 
-  @Get('user')
-  @UseGuards(AuthGuard)
-  async getTeamsByUser(
-    @UserId() userId: string,
-    @Workspace() workspaceId: string,
-  ): Promise<Team[]> {
-    return await this.teamsService.getTeamsByUser(userId, workspaceId);
-  }
-
-  @Get(':teamId')
-  @UseGuards(AuthGuard)
-  async getTeam(
-    @Param()
-    teamId: TeamRequestParams,
-    @UserId() userId: string,
-    @Workspace() workspaceId: string,
-  ): Promise<Team> {
-    return await this.teamsService.getTeam(teamId, userId, workspaceId);
-  }
-
-  @Get('name/:teamName')
-  @UseGuards(AuthGuard)
-  async getTeamByName(
-    @Param('teamName') teamName: string,
-    @Workspace() workspaceId: string,
-    @UserId() userId: string,
-  ): Promise<Team> {
-    return await this.teamsService.getTeamByName(
-      workspaceId,
-      teamName,
-      userId,
-    );
-  }
-
   @Post()
   @UseGuards(AuthGuard, AdminGuard)
   async createTeam(
@@ -118,10 +84,14 @@ export class TeamsController {
     @Param()
     teamRequestParams: TeamRequestParams,
     @Body() updateTeamPreferences: UpdateTeamPreferencesDto,
+    @UserId() userId: string,
+    @Workspace() workspaceId: string,
   ): Promise<Team> {
     return await this.teamsService.updateTeamPreferences(
       teamRequestParams,
       updateTeamPreferences,
+      userId,
+      workspaceId,
     );
   }
 
@@ -131,8 +101,15 @@ export class TeamsController {
     @Param()
     teamRequestParams: TeamRequestParams,
     @Body() teamData: UpdateTeamDto,
+    @UserId() userId: string,
+    @Workspace() workspaceId: string,
   ): Promise<Team> {
-    return await this.teamsService.updateTeam(teamRequestParams, teamData);
+    return await this.teamsService.updateTeam(
+      teamRequestParams,
+      teamData,
+      userId,
+      workspaceId,
+    );
   }
 
   @Delete(':teamId')
@@ -140,8 +117,14 @@ export class TeamsController {
   async deleteTeam(
     @Param()
     teamRequestParams: TeamRequestParams,
+    @UserId() userId: string,
+    @Workspace() workspaceId: string,
   ): Promise<Team> {
-    return await this.teamsService.deleteTeam(teamRequestParams);
+    return await this.teamsService.deleteTeam(
+      teamRequestParams,
+      userId,
+      workspaceId,
+    );
   }
 
   @Get(':teamId/members')

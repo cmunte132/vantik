@@ -1,8 +1,9 @@
-import { ActionTypesEnum } from '@vantikhq/types';
 import {
-  type PluginContext,
-  type PluginSpec,
-} from 'plugins/plugin.interface';
+  ActionTypesEnum,
+  IntegrationPayloadEventType,
+  ModelNameEnum,
+} from '@vantikhq/types';
+import { type PluginContext, type PluginSpec } from 'plugins/plugin.interface';
 
 import { convertMarkdownToTiptapJson } from 'common/utils/tiptap.utils';
 
@@ -28,6 +29,7 @@ export const pluginSpec: PluginSpec = {
   // No vendor, so nothing to reach. An empty allowlist is not an oversight
   // here — `ctx.vendor.fetch` refuses every call, which is correct.
   egress: [],
+  onRecord: [{ event: ActionTypesEnum.ON_CREATE, model: ModelNameEnum.Issue }],
 };
 
 export default async function run(
@@ -35,6 +37,16 @@ export default async function run(
   ctx: PluginContext,
 ) {
   switch (eventPayload.event) {
+    // No third party, so nothing to authorise: the settings page shows a
+    // Connect button that only records the workspace wants this.
+    case IntegrationPayloadEventType.SPEC:
+      return {
+        no_auth: {
+          instruction:
+            'Posts a suggested resolution on each new issue labelled bug, written by this deployment’s model.',
+        },
+      };
+
     case ActionTypesEnum.ON_CREATE:
       return await enrich(ctx, eventPayload.modelId);
 

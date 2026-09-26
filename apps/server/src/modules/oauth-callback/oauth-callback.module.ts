@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from 'nestjs-prisma';
 
 import { IntegrationAccountModule } from 'modules/integration-account/integration-account.module';
 import { IntegrationDefinitionModule } from 'modules/integration-definition/integration-definition.module';
@@ -11,7 +10,6 @@ import { OAuthCallbackService } from './oauth-callback.service';
 
 @Module({
   imports: [
-    PrismaModule,
     IntegrationAccountModule,
     IntegrationDefinitionModule,
     IntegrationsModule,

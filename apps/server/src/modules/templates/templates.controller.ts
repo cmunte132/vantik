@@ -2,10 +2,8 @@ import {
   Body,
   Controller,
   Delete,
-  Get,
   Param,
   Post,
-  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -18,7 +16,6 @@ import {
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { UserId, Workspace } from 'modules/auth/session.decorator';
 
-import { RequestIdParams } from './templates.interface';
 import TemplatesService from './templates.service';
 
 @Controller({
@@ -40,23 +37,6 @@ export class TemplatesController {
       workspaceId,
       templateData,
     );
-  }
-
-  @Get()
-  @UseGuards(AuthGuard)
-  async getAllTemplates(
-    @Query() requestParams: RequestIdParams,
-  ): Promise<Template[]> {
-    return await this.templatesService.getAllTemplates(requestParams);
-  }
-
-  @Get(':templateId')
-  @UseGuards(AuthGuard)
-  async getTemplate(
-    @Param()
-    templateId: TemplateIdDto,
-  ): Promise<Template> {
-    return await this.templatesService.getTemplate(templateId);
   }
 
   @Post(':templateId')

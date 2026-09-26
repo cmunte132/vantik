@@ -31,23 +31,3 @@ runs for a long time, and a scheduled job, can therefore use it. Keep a PAT as
 safe as a password, because it holds all the permissions of the user who made
 it.
 
-## The TypeScript SDK
-
-The repository holds a Node.js SDK with types, in
-[`packages/vantik-sdk`](https://github.com/cmunte132/vantik/tree/main/packages/vantik-sdk).
-The maintainers **do not publish it to npm**. If you work inside the monorepo,
-use it from the workspace. If you work outside, build it from the source:
-
-```ts
-import { configure, createIssue } from "@vantikhq/sdk";
-
-configure({
-  // You can omit this if the VANTIK_TOKEN environment variable holds the token
-  token: "<token>",
-});
-
-await createIssue({
-  title: "Issue title",
-  description: "Issue description",
-});
-```

@@ -1,4 +1,13 @@
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  scryptSync,
+} from 'node:crypto';
+
 import { CredentialsService } from './credentials.service';
+
+const CURRENT_KEY = 'test-suite-encryption-key-of-enough-length';
 
 /**
  * Which model key a run gets, and where it comes from.
@@ -16,16 +25,13 @@ describe('CredentialsService model access', () => {
   const SECRET = 'sk-workspace-owned-key-value';
 
   // `sealed` below runs the service's real encryption, which needs a key.
-  // This suite has to bring its own: `encryptionKey` falls back to
-  // SUPERTOKEN_CONNECTION_URI and then DATABASE_URL, so without one set here
-  // the suite silently borrowed whatever the machine running it happened to
-  // have. That passed on a developer machine, where `.env` supplies a database
-  // URL, and failed on CI, where nothing supplies one.
+  // Set here rather than taken from the machine, so the suite does not pass on
+  // a developer's `.env` and fail on CI.
   let previousKey: string | undefined;
 
   beforeAll(() => {
     previousKey = process.env.CREDENTIAL_ENCRYPTION_KEY;
-    process.env.CREDENTIAL_ENCRYPTION_KEY = 'test-suite-encryption-key';
+    process.env.CREDENTIAL_ENCRYPTION_KEY = CURRENT_KEY;
   });
 
   afterAll(() => {
@@ -286,6 +292,263 @@ describe('CredentialsService model access', () => {
     });
   });
 });
+
+/**
+ * The key, and the credentials sealed before it was required.
+ *
+ * A server with no key once sealed under SUPERTOKEN_CONNECTION_URI, which a
+ * default install sets to a value printed in the compose file. Requiring a key
+ * is only half the fix; the rows already written have to move onto it, or
+ * turning the key on breaks every workspace's agent runs.
+ */
+describe('CredentialsService encryption key', () => {
+  const ENV = [
+    'CREDENTIAL_ENCRYPTION_KEY',
+    'SUPERTOKEN_CONNECTION_URI',
+    'DATABASE_URL',
+  ] as const;
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const name of ENV) {
+      saved[name] = process.env[name];
+    }
+    process.env.CREDENTIAL_ENCRYPTION_KEY = CURRENT_KEY;
+    // What a server run on the host has, while the rows below were sealed by
+    // the compose server. The two disagree on this dev machine, and could on
+    // any install that moved between them.
+    process.env.SUPERTOKEN_CONNECTION_URI = 'http://localhost:3567';
+    process.env.DATABASE_URL =
+      'postgresql://docker:docker@localhost:5432/vantik';
+  });
+
+  afterEach(() => {
+    for (const name of ENV) {
+      restore(name, saved[name]);
+    }
+  });
+
+  interface Row {
+    id: string;
+    ciphertext: string;
+    nonce: string;
+    tag: string;
+    deleted: Date | null;
+  }
+
+  function store(rows: Row[]) {
+    const writes: Array<{ where: Record<string, unknown>; data: Row }> = [];
+    const prisma = {
+      workspaceCredential: {
+        findMany: jest.fn(async () => rows),
+        updateMany: jest.fn(
+          async (args: { where: Record<string, unknown>; data: Row }) => {
+            writes.push(args);
+            return { count: 1 };
+          },
+        ),
+      },
+    };
+
+    return {
+      service: new CredentialsService(prisma as never),
+      prisma,
+      writes,
+    };
+  }
+
+  function row(
+    sealed: Omit<Row, 'id' | 'deleted'>,
+    over: Partial<Row> = {},
+  ): Row {
+    return { id: 'cred-1', deleted: null, ...sealed, ...over };
+  }
+
+  describe('at start', () => {
+    it('refuses to start without one, and says how to make one', async () => {
+      delete process.env.CREDENTIAL_ENCRYPTION_KEY;
+      const { service } = store([]);
+
+      // SUPERTOKEN_CONNECTION_URI and DATABASE_URL are both set. Neither is
+      // taken instead any more.
+      await expect(service.onModuleInit()).rejects.toThrow(
+        /CREDENTIAL_ENCRYPTION_KEY is not set.*openssl rand -base64 32/,
+      );
+    });
+
+    it('refuses a key too short to be a secret', async () => {
+      process.env.CREDENTIAL_ENCRYPTION_KEY = 'changeme';
+      const { service } = store([]);
+
+      await expect(service.onModuleInit()).rejects.toThrow(
+        /has 8 characters, and it needs at least 32/,
+      );
+    });
+
+    it('refuses a key of only whitespace', async () => {
+      process.env.CREDENTIAL_ENCRYPTION_KEY = ' '.repeat(40);
+      const { service } = store([]);
+
+      await expect(service.onModuleInit()).rejects.toThrow(/is not set/);
+    });
+
+    it('still starts when the credentials cannot be read', async () => {
+      // The next start tries again, and until then a row sealed the old way
+      // is still readable under the old key.
+      const { service, prisma } = store([]);
+      prisma.workspaceCredential.findMany.mockRejectedValueOnce(
+        new Error('relation "WorkspaceCredential" does not exist'),
+      );
+
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('moving old credentials onto it', () => {
+    it('re-seals a credential the compose server sealed under its default', async () => {
+      const old = sealWith('http://supertokens:3567', 'sk-old-key');
+      const { service, writes } = store([row(old)]);
+
+      await expect(service.resealLegacyCredentials()).resolves.toEqual({
+        resealed: 1,
+        unreadable: 0,
+      });
+      expect(openWith(CURRENT_KEY, writes[0].data)).toBe('sk-old-key');
+    });
+
+    it('re-seals one sealed under whatever this server was started with', async () => {
+      process.env.SUPERTOKEN_CONNECTION_URI = 'https://auth.example.com';
+      const old = sealWith('https://auth.example.com', 'ghp-old-token');
+      const { service, writes } = store([row(old)]);
+
+      await service.resealLegacyCredentials();
+
+      expect(openWith(CURRENT_KEY, writes[0].data)).toBe('ghp-old-token');
+    });
+
+    it('re-seals one sealed under the database url', async () => {
+      const old = sealWith(process.env.DATABASE_URL as string, 'sk-db-url');
+      const { service, writes } = store([row(old)]);
+
+      await service.resealLegacyCredentials();
+
+      expect(openWith(CURRENT_KEY, writes[0].data)).toBe('sk-db-url');
+    });
+
+    it('does not overwrite a key saved since it was read', async () => {
+      const old = sealWith('http://supertokens:3567', 'sk-old-key');
+      const { service, writes } = store([row(old)]);
+
+      await service.resealLegacyCredentials();
+
+      // Matching on the ciphertext is what makes the write lose to a newer
+      // save, instead of putting the old secret back over it.
+      expect(writes[0].where).toEqual({
+        id: 'cred-1',
+        ciphertext: old.ciphertext,
+      });
+    });
+
+    it('leaves a credential already under the key alone', async () => {
+      const current = sealWith(CURRENT_KEY, 'sk-new-key');
+      const { service, prisma } = store([row(current)]);
+
+      await expect(service.resealLegacyCredentials()).resolves.toEqual({
+        resealed: 0,
+        unreadable: 0,
+      });
+      expect(prisma.workspaceCredential.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('moves a removed credential too', async () => {
+      const old = sealWith('http://supertokens:3567', 'sk-removed');
+      const { service, writes } = store([
+        row(old, { deleted: new Date('2026-09-01') }),
+      ]);
+
+      await service.resealLegacyCredentials();
+
+      expect(openWith(CURRENT_KEY, writes[0].data)).toBe('sk-removed');
+    });
+
+    it('counts a live credential no key opens, and writes nothing', async () => {
+      const lost = sealWith('a-key-this-server-never-had', 'sk-lost');
+      const { service, prisma } = store([
+        row(lost, { id: 'cred-live' }),
+        row(lost, { id: 'cred-removed', deleted: new Date('2026-09-01') }),
+      ]);
+
+      await expect(service.resealLegacyCredentials()).resolves.toEqual({
+        resealed: 0,
+        unreadable: 1,
+      });
+      expect(prisma.workspaceCredential.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('seals what it saves from now on under the key', async () => {
+      const stored: Row[] = [];
+      const prisma = {
+        workspaceCredential: {
+          findFirst: async (): Promise<null> => null,
+          create: async ({ data }: { data: Row }) => {
+            stored.push(data);
+            return data;
+          },
+        },
+      };
+
+      await new CredentialsService(prisma as never).put({
+        workspaceId: 'ws-1',
+        kind: 'GIT_TOKEN',
+        secret: 'ghp-fresh-token',
+      });
+
+      expect(openWith(CURRENT_KEY, stored[0])).toBe('ghp-fresh-token');
+    });
+  });
+});
+
+/**
+ * The on-disk format, written out independently of the service.
+ *
+ * So these tests prove the service still reads what older servers wrote, not
+ * merely that it agrees with itself.
+ */
+function keyFrom(secret: string): Buffer {
+  return scryptSync(secret, 'vantik-workspace-credential', 32);
+}
+
+function sealWith(secret: string, value: string) {
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', keyFrom(secret), nonce);
+  const ciphertext = Buffer.concat([
+    cipher.update(value, 'utf8'),
+    cipher.final(),
+  ]).toString('hex');
+
+  return {
+    ciphertext,
+    nonce: nonce.toString('hex'),
+    tag: cipher.getAuthTag().toString('hex'),
+  };
+}
+
+function openWith(
+  secret: string,
+  sealed: { ciphertext: string; nonce: string; tag: string },
+): string {
+  const decipher = createDecipheriv(
+    'aes-256-gcm',
+    keyFrom(secret),
+    Buffer.from(sealed.nonce, 'hex'),
+  );
+  decipher.setAuthTag(Buffer.from(sealed.tag, 'hex'));
+
+  return Buffer.concat([
+    decipher.update(Buffer.from(sealed.ciphertext, 'hex')),
+    decipher.final(),
+  ]).toString('utf8');
+}
 
 function restore(name: string, value: string | undefined): void {
   if (value === undefined) {

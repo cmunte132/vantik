@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Param,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
 import {
   Notification,
   NotificationIdRequestParams,
@@ -33,17 +26,6 @@ export class NotificationsController {
     return await this.notificationsService.updateNotification(
       notificationRequestParams.notificationId,
       notificationData,
-    );
-  }
-
-  @Delete(':notificationId')
-  @UseGuards(AuthGuard)
-  async deleteNotification(
-    @Param()
-    notificationRequestParams: NotificationIdRequestParams,
-  ): Promise<Notification> {
-    return await this.notificationsService.deleteNotification(
-      notificationRequestParams.notificationId,
     );
   }
 }

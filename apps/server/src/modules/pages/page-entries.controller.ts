@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Post,
@@ -26,7 +25,7 @@ import { AuthGuard } from 'modules/auth/auth.guard';
 import { TokenId, UserId, Workspace } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
-import PageEntriesService, { EntryFacets } from './page-entries.service';
+import PageEntriesService from './page-entries.service';
 
 @Controller({
   version: '1',
@@ -59,27 +58,6 @@ export class PageEntriesController {
       // and a string would reach Prisma as `status: { in: 'STANDING' }`.
       status: parseEntryStatuses(query.status),
     });
-  }
-
-  /**
-   * Counts by source, scope and status. The review rail opens on these rather
-   * than on rows, so a reviewer makes four decisions instead of thirty-eight.
-   */
-  @Get('facets')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async getFacets(
-    @Workspace() sessionWorkspaceId: string,
-    @UserId() userId: string,
-    @Query() query: ListPageEntriesQueryDto,
-  ): Promise<EntryFacets> {
-    const workspaceId = await resolveWorkspaceId(
-      this.prisma,
-      userId,
-      sessionWorkspaceId,
-      query.workspaceId,
-    );
-
-    return this.pageEntriesService.getFacets(workspaceId, query.pageId);
   }
 
   /**
@@ -133,13 +111,5 @@ export class PageEntriesController {
       userId,
       entryData,
     );
-  }
-
-  @Delete(':pageEntryId')
-  @UseGuards(AuthGuard, WorkspaceResourceGuard)
-  async deleteEntry(
-    @Param() params: PageEntryRequestParamsDto,
-  ): Promise<PageEntry> {
-    return this.pageEntriesService.deleteEntry(params.pageEntryId);
   }
 }

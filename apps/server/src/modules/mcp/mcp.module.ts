@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from 'nestjs-prisma';
 
 import { UsersService } from 'modules/users/users.service';
 
@@ -14,7 +13,6 @@ import { McpController } from './mcp.controller';
  * guards, the same way every other controller in the app supplies it.
  */
 @Module({
-  imports: [PrismaModule],
   controllers: [McpController],
   providers: [UsersService],
 })

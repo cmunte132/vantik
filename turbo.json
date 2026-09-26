@@ -14,6 +14,10 @@
     "NEXT_PUBLIC_POSTHOG_KEY",
     "NEXT_PUBLIC_POSTHOG_HOST",
     "NEXT_PUBLIC_SENTRY_DSN",
+    // Turns on the source map upload in next.config.js. Turbo hands a task only
+    // the variables listed here, so without this line the image build's token
+    // never reached the build, and the upload was silently skipped.
+    "SENTRY_AUTH_TOKEN",
     "LOG_LEVEL",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
     "OTEL_EXPORTER_OTLP_HEADERS",
@@ -26,19 +30,15 @@
     "DB_PORT",
     "DB_SCHEMA",
     "DATABASE_URL",
-    "REPLICATION_DATABASE_URL",
-    "SYNC_SERVER",
     "SUPERTOKEN_CONNECTION_URI",
     "SUPERTOKENS_DOMAIN",
     "PASSKEY_SIGNUP_ENABLED",
-    "SENTRY_DSN",
     "REDIS_URL",
     "REDIS_PORT",
     "PORT",
     "FRONTEND_HOST",
     "BACKEND_HOST",
     "BACKEND_URL",
-    "CHAT_URL",
     "PUBLIC_ATTACHMENT_URL",
     "BASE_HOST",
     "OAUTH_CALLBACK_URL",
@@ -76,6 +76,19 @@
     "MCP_LOOPBACK_URL",
     "MCP_RATE_LIMIT",
     "MCP_RATE_LIMIT_WINDOW_MS",
+    // Tunables the server reads at import time. Each has a default; these let
+    // an operator override it.
+    "AGENT_RUN_EVENT_CAP",
+    "AGENT_RUN_LEASE_MS",
+    "AGENT_RUN_LEASE_SWEEP_CRON",
+    "AGENT_RUN_MAX_ATTEMPTS",
+    "AGENT_RUN_WORKSPACE_CONCURRENCY",
+    "VANTIK_SANDBOX_ROOTFS_MB",
+    "CYCLE_MAINTENANCE_CRON",
+    "PAGE_DECAY_CRON",
+    "PAGE_PROPOSED_ENTRY_BUDGET",
+    "PAGE_PROPOSED_ENTRY_EXPIRY_DAYS",
+    "PAGE_STANDING_ENTRY_DECAY_DAYS",
     // The directory that holds every local repository. It is empty on a
     // machine that one person runs, and then any absolute path is allowed.
     "LOCAL_REPO_ROOT",

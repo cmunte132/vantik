@@ -1,5 +1,8 @@
 import { defineConfig } from 'tsup';
 
+// pnpm sets this for the script it runs, so it reaches tsup whatever turbo
+// passes through, and it is not an input for turbo to hash.
+// eslint-disable-next-line turbo/no-undeclared-env-vars
 const isDev = process.env.npm_lifecycle_event === 'dev:main'; // This must match the npm script name
 
 export default defineConfig({

@@ -1,43 +1,13 @@
-import type { Pat } from '@vantikhq/types';
+import type { Pat, PatIdDto } from '@vantikhq/types';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { deletePat } from '@vantikhq/services';
+import { ajaxDelete, mutationHook } from 'services/utils';
 
 import { GetPats } from './get-pats';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Pat) => void;
-  onError?: (error: string) => void;
+export function deletePat(patIdDto: PatIdDto): Promise<Pat> {
+  return ajaxDelete({ url: `/api/v1/users/pats/${patIdDto.patId}` });
 }
 
-export function useDeletePatMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const queryClient = useQueryClient();
-
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Pat) => {
-    queryClient.invalidateQueries({ queryKey: [GetPats] });
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: deletePat,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useDeletePatMutation = mutationHook(deletePat, {
+  invalidates: [GetPats],
+});

@@ -7,7 +7,7 @@
     "build": "NODE_ENV=production next build",
     "start": "next start",
     "start-prod": "node server.js",
-    "lint": "eslint . --fix",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
@@ -22,7 +22,6 @@
     "@tiptap/core": "^3.30.5",
     "@tiptap/extension-mention": "^3.28.0",
     "@tiptap/react": "^3.28.0",
-    "@vantikhq/services": "workspace:*",
     "@vantikhq/types": "workspace:*",
     "@vantikhq/ui": "workspace:*",
     "copy-to-clipboard": "^3.3.3",

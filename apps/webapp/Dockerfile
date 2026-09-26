@@ -26,7 +26,6 @@ COPY apps/server/package.json               apps/server/
 COPY apps/webapp/package.json               apps/webapp/
 COPY packages/agent-core/package.json       packages/agent-core/
 COPY packages/cli/package.json              packages/cli/
-COPY packages/services/package.json         packages/services/
 COPY packages/types/package.json            packages/types/
 COPY packages/ui/package.json               packages/ui/
 COPY tooling/eslint-config/package.json     tooling/eslint-config/
@@ -36,7 +35,7 @@ COPY tooling/typescript-config/package.json tooling/typescript-config/
 ## The cache mount keeps the pnpm store across builds; without it every package
 ## came off the network on each run (`reused 0`).
 FROM manifests AS dev-deps
-ENV NODE_ENV development
+ENV NODE_ENV=development
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm install --ignore-scripts --frozen-lockfile \
       --store-dir=/pnpm/store --filter=webapp...
@@ -78,7 +77,7 @@ RUN --mount=type=cache,id=next-cache,target=/app/apps/webapp/.next/cache,sharing
 FROM node:24-alpine AS runner
 RUN apk add --no-cache dumb-init bash
 WORKDIR /app
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 COPY --from=builder --chown=node:node /app/apps/webapp/.next/standalone ./
 COPY --from=builder --chown=node:node /app/apps/webapp/.next/static ./apps/webapp/.next/static

@@ -19,7 +19,7 @@ export const ProjectProgress = observer(
     const { issuesStore, projectsStore } = useContextStore();
     const project = projectsStore.getProjectWithId(id);
     const { workflows } = useComputedWorkflows();
-    const issues = issuesStore.getIssuesForProject({ projectId: project?.id });
+    const issues = issuesStore.getIssues({ projectId: project?.id });
 
     // An issue whose state this view cannot resolve is counted as neither
     // done nor started, the way the cycle view already counts it. Nothing

@@ -367,10 +367,12 @@ export default class IssuesService {
       ...otherIssueData,
       // Each relation below changes only when the request names it: null
       // disconnects, an id connects, and absent leaves it alone. "Absent" is
-      // `undefined`, not a missing key: the global ValidationPipe (whitelist)
-      // hands back the DTO with every declared field present, so an `in` check
-      // was true for all of them and every update connected a parent,
-      // project, milestone, cycle and capability with an id of undefined.
+      // `undefined`, not a missing key. The global pipe now drops the fields a
+      // request didn't send (common/validation.ts), but it once handed back
+      // the DTO with every declared field present, so an `in` check was true
+      // for all of them and every update connected a parent, project,
+      // milestone, cycle and capability with an id of undefined. Testing for
+      // undefined holds whichever way the DTO arrives.
       ...(issueData.parentId !== undefined
         ? parentId === null
           ? { parent: { disconnect: true } }

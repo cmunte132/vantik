@@ -1,3 +1,5 @@
+import type { FilterChipProps, FilterPickerProps } from './types';
+
 import { Button } from '@vantikhq/ui/components/button';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import {
@@ -22,7 +24,6 @@ import type { CapabilityType, ModuleType, ProductType } from 'common/types';
 
 import { useScope } from 'hooks';
 
-import { FilterTypeEnum } from 'store/application';
 import { useContextStore } from 'store/global-context-provider';
 
 /**
@@ -109,40 +110,6 @@ function AxisList({
         </div>
       )}
     </CommandGroup>
-  );
-}
-
-/**
- * The list that opens when somebody picks one of these from the filter menu.
- */
-function AxisFilter({
-  kind,
-  options,
-  onChange,
-}: {
-  kind: AxisKind;
-  options: AxisOption[];
-  onChange: (value: string[], filterType: FilterTypeEnum) => void;
-}) {
-  const { applicationStore } = useContextStore();
-  const current = applicationStore.filters[kind]
-    ? applicationStore.filters[kind].value
-    : [];
-
-  return (
-    <AxisList
-      kind={kind}
-      options={options}
-      value={current}
-      // A module list on an issue holds several values, so it takes the
-      // INCLUDES path. A capability and a product each compare one value.
-      onChange={(ids) =>
-        onChange(
-          ids,
-          kind === 'module' ? FilterTypeEnum.INCLUDES : FilterTypeEnum.IS,
-        )
-      }
-    />
   );
 }
 
@@ -243,44 +210,70 @@ function useCapabilityOptions(): AxisOption[] {
   );
 }
 
-interface FilterProps {
-  onChange: (value: string[], filterType: FilterTypeEnum) => void;
-  onClose: () => void;
-}
+// The list that opens from the filter menu is the chip's list without the chip.
 
-export const IssueProductFilter = observer(({ onChange }: FilterProps) => (
-  <AxisFilter
-    kind="product"
-    options={useProductOptions()}
-    onChange={onChange}
-  />
-));
+export const IssueProductFilter = observer(
+  ({ value, onChange }: FilterPickerProps) => (
+    <AxisList
+      kind="product"
+      options={useProductOptions()}
+      value={value as string[]}
+      onChange={onChange}
+    />
+  ),
+);
 
-export const IssueModuleFilter = observer(({ onChange }: FilterProps) => (
-  <AxisFilter kind="module" options={useModuleOptions()} onChange={onChange} />
-));
+export const IssueModuleFilter = observer(
+  ({ value, onChange }: FilterPickerProps) => (
+    <AxisList
+      kind="module"
+      options={useModuleOptions()}
+      value={value as string[]}
+      onChange={onChange}
+    />
+  ),
+);
 
-export const IssueCapabilityFilter = observer(({ onChange }: FilterProps) => (
-  <AxisFilter
-    kind="capability"
-    options={useCapabilityOptions()}
-    onChange={onChange}
-  />
-));
+export const IssueCapabilityFilter = observer(
+  ({ value, onChange }: FilterPickerProps) => (
+    <AxisList
+      kind="capability"
+      options={useCapabilityOptions()}
+      value={value as string[]}
+      onChange={onChange}
+    />
+  ),
+);
 
-interface ChipProps {
-  value?: string[];
-  onChange?: (ids: string[]) => void;
-}
+export const IssueProductDropdown = observer(
+  ({ value, onChange }: FilterChipProps) => (
+    <AxisChip
+      kind="product"
+      options={useProductOptions()}
+      value={value as string[]}
+      onChange={onChange}
+    />
+  ),
+);
 
-export const IssueProductDropdown = observer((props: ChipProps) => (
-  <AxisChip kind="product" options={useProductOptions()} {...props} />
-));
+export const IssueModuleDropdown = observer(
+  ({ value, onChange }: FilterChipProps) => (
+    <AxisChip
+      kind="module"
+      options={useModuleOptions()}
+      value={value as string[]}
+      onChange={onChange}
+    />
+  ),
+);
 
-export const IssueModuleDropdown = observer((props: ChipProps) => (
-  <AxisChip kind="module" options={useModuleOptions()} {...props} />
-));
-
-export const IssueCapabilityDropdown = observer((props: ChipProps) => (
-  <AxisChip kind="capability" options={useCapabilityOptions()} {...props} />
-));
+export const IssueCapabilityDropdown = observer(
+  ({ value, onChange }: FilterChipProps) => (
+    <AxisChip
+      kind="capability"
+      options={useCapabilityOptions()}
+      value={value as string[]}
+      onChange={onChange}
+    />
+  ),
+);

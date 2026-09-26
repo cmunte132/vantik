@@ -1,38 +1,9 @@
-import type { Pat } from '@vantikhq/types';
+import type { CreatePatDto } from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
-import { createPat } from '@vantikhq/services';
+import { ajaxPost, mutationHook } from 'services/utils';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: typeof Pat) => void;
-  onError?: (error: string) => void;
+export function createPat(createPatDto: CreatePatDto) {
+  return ajaxPost({ url: `/api/v1/users/pat`, data: createPatDto });
 }
 
-export function useCreatePatMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: typeof Pat) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: createPat,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useCreatePatMutation = mutationHook(createPat);

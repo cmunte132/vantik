@@ -6,7 +6,6 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import {
   AgentAccount,
@@ -49,10 +48,7 @@ import { generateUniqueId } from './users.utils';
 export class UsersService {
   private readonly logger = new LoggerService(UsersService.name);
 
-  constructor(
-    private prisma: PrismaService,
-    private config: ConfigService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   /**
    * Records a way in to an account, creating the account if this is the first
@@ -996,7 +992,7 @@ export class UsersService {
 
   // Impersonate into accounts for better support
   async impersonate(key: string, userId: string, res: Response, req: Request) {
-    if (key !== this.config.get('POSTGRES_PASSWORD')) {
+    if (key !== process.env.POSTGRES_PASSWORD) {
       throw new BadRequestException('Wrong URL');
     }
 

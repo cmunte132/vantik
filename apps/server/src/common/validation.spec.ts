@@ -28,7 +28,7 @@ import {
   UpdateViewsRequestBody,
 } from 'modules/views/views.interface';
 
-import { validationPipe } from './validation';
+import { validationPipe, withoutUnsentFields } from './validation';
 
 function run(
   metatype: Type<unknown>,
@@ -158,5 +158,59 @@ describe('the global validation pipe', () => {
         run(AgentRunFilterDto, { page: '2', perPage: '25' }, 'query'),
       ).resolves.toMatchObject({ page: 2, perPage: 25 });
     });
+  });
+
+  /**
+   * An issue update reads `'parentId' in dto` as "the client changed the
+   * parent". A transformed DTO carried every declared field as undefined, so
+   * each update that moved a card or set a priority tried to connect a parent
+   * of `undefined`, and failed. `toEqual` cannot see an undefined key, which is
+   * how the tests above missed it; these ask about the keys themselves.
+   */
+  describe('hands over only the keys the request sent', () => {
+    it('leaves out every field the body did not name', async () => {
+      const dto = await run(UpdateIssueDto, { priority: 3 });
+
+      expect(Object.keys(dto as object)).toEqual(['priority']);
+      expect('parentId' in (dto as object)).toBe(false);
+    });
+
+    it('keeps a field the body set to null, which clears it', async () => {
+      const dto = await run(UpdateIssueDto, { parentId: null });
+
+      expect('parentId' in (dto as object)).toBe(true);
+      expect((dto as UpdateIssueDto).parentId).toBeNull();
+    });
+
+    // A custom decorator can hand over the request itself, which refers to
+    // itself; walking it overflowed the stack on every request that had one.
+    it('passes what a custom decorator hands over through untouched', async () => {
+      const request: Record<string, unknown> = { session: undefined };
+      request.self = request;
+
+      const passed = await validationPipe().transform(request, {
+        type: 'custom',
+        metatype: undefined,
+      });
+
+      expect(passed).toBe(request);
+      expect('session' in request).toBe(true);
+    });
+  });
+});
+
+describe('withoutUnsentFields', () => {
+  it('removes undefined all the way down, and keeps the rest', () => {
+    const when = new Date('2026-01-01T00:00:00.000Z');
+
+    expect(
+      withoutUnsentFields({
+        a: undefined,
+        b: null,
+        c: { d: undefined, e: 0 },
+        f: [{ g: undefined, h: '' }],
+        when,
+      }),
+    ).toStrictEqual({ b: null, c: { e: 0 }, f: [{ h: '' }], when });
   });
 });

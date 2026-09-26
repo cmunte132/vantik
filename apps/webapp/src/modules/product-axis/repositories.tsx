@@ -1,6 +1,5 @@
 import { RiAddLine, RiCheckLine, RiDeleteBinLine } from '@remixicon/react';
 import { useQuery } from '@tanstack/react-query';
-import { getModuleRepos } from '@vantikhq/services';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import {
@@ -28,6 +27,7 @@ import { workspaceHref } from 'common/workspace-href';
 import { useScope } from 'hooks';
 
 import { useGetLocalRepositoryFolders } from 'services/local-repo';
+import { getModuleRepos } from 'services/product-axis';
 import {
   useCreateModuleRepoMutation,
   useDeleteModuleRepoMutation,

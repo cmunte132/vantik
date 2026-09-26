@@ -1,9 +1,19 @@
-import type { IntegrationDefinition } from '@vantikhq/types';
+import type {
+  IntegrationDefinition,
+  WorkspaceRequestParamsDto,
+} from '@vantikhq/types';
 
 import { type UseQueryResult, useQuery } from '@tanstack/react-query';
-import { getIntegrationDefinitions } from '@vantikhq/services';
 
-import { type XHRErrorResponse } from 'services/utils';
+import { ajaxGet, type XHRErrorResponse } from 'services/utils';
+
+export function getIntegrationDefinitions({
+  workspaceId,
+}: WorkspaceRequestParamsDto): Promise<IntegrationDefinition[]> {
+  return ajaxGet({
+    url: `/api/v1/integration_definition?workspaceId=${workspaceId}`,
+  });
+}
 
 /**
  * Query Key for Get user.

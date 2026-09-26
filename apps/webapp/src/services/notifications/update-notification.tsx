@@ -1,8 +1,6 @@
-import { useMutation } from '@tanstack/react-query';
-
 import type { NotificationType } from 'common/types';
 
-import { ajaxPost } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
 
 export interface UpdateNotificationParams {
   notificationId: string;
@@ -12,43 +10,11 @@ export interface UpdateNotificationParams {
 export function updateNotification({
   notificationId,
   readAt,
-}: UpdateNotificationParams) {
+}: UpdateNotificationParams): Promise<NotificationType> {
   return ajaxPost({
     url: `/api/v1/notifications/${notificationId}`,
     data: { readAt },
   });
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: NotificationType) => void;
-  onError?: (error: string) => void;
-}
-
-export function useUpdateNotificationMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: NotificationType) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: updateNotification,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useUpdateNotificationMutation = mutationHook(updateNotification);

@@ -16,8 +16,8 @@ import type { LabelType } from 'common/types';
 import { useComputedLabels } from 'hooks/labels';
 
 interface IssueLabelDropdownProps {
-  value?: string[];
-  onChange?: (assigneeIds: string[]) => void;
+  value: string[];
+  onChange: (labelNames: string[]) => void;
 }
 
 export const IssueLabelDropdown = observer(

@@ -11,8 +11,9 @@
     "dist"
   ],
   "scripts": {
-    "generate": "tsup --watch",
-    "lint": "eslint . --fix",
+    "generate": "tsup",
+    "watch": "tsup --watch",
+    "lint": "eslint .",
     "clean": "rimraf dist",
     "build": "npm run clean && npm run build:tsup",
     "build:tsup": "tsup --dts-resolve",

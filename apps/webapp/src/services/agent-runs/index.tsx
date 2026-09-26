@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
-import { ajaxGet, ajaxPost } from 'services/utils';
+import { ajaxGet, ajaxPost, mutationHook } from 'services/utils';
 
 export interface DelegateParams {
   issueId: string;
@@ -12,56 +11,37 @@ export interface DelegateParams {
   force?: boolean;
 }
 
-export function useDelegateMutation(options: {
-  onSuccess?: (data: any) => void;
-  onError?: (error: string) => void;
+export function delegate(params: DelegateParams) {
+  return ajaxPost({ url: '/api/v1/agent_runs', data: params });
+}
+
+// The server's refusals here are written to be read — "this issue already has
+// a run in progress", "this deployment has 2 executors; name one" — and each
+// names a different thing to do next, so they reach the screen as they are.
+export const useDelegateMutation = mutationHook(delegate, {
+  fallback: 'Could not delegate this issue.',
+});
+
+export function cancelRun({
+  runId,
+  reason,
+}: {
+  runId: string;
+  reason?: string;
 }) {
-  return useMutation({
-    mutationFn: (params: DelegateParams) =>
-      ajaxPost({ url: '/api/v1/agent_runs', data: params }),
-    onSuccess: options.onSuccess,
-    onError: (error: unknown) => options.onError?.(messageOf(error)),
+  return ajaxPost({
+    url: `/api/v1/agent_runs/${runId}/cancel`,
+    data: { reason },
   });
 }
 
-/**
- * The server's own words where it has any.
- *
- * Its refusals are written to be read — "this issue already has a run in
- * progress", "this deployment has 2 executors; name one" — and each names a
- * different thing to do next. The ajax layer here is superagent, not axios: a
- * Nest error body arrives under `errors`, and only a body carrying `details`
- * ever reaches `message`. Reading the axios shape threw every one of those
- * sentences away and left the generic line below.
- */
-function messageOf(error: unknown): string {
-  const response = error as {
-    errors?: { message?: string };
-    message?: string;
-  };
+export const useCancelRunMutation = mutationHook(cancelRun);
 
-  return (
-    response?.errors?.message ??
-    response?.message ??
-    'Could not delegate this issue.'
-  );
+export function retryRun({ runId }: { runId: string }) {
+  return ajaxPost({ url: `/api/v1/agent_runs/${runId}/retry`, data: {} });
 }
 
-export function useCancelRunMutation(options: { onSuccess?: () => void } = {}) {
-  return useMutation({
-    mutationFn: ({ runId, reason }: { runId: string; reason?: string }) =>
-      ajaxPost({ url: `/api/v1/agent_runs/${runId}/cancel`, data: { reason } }),
-    onSuccess: options.onSuccess,
-  });
-}
-
-export function useRetryRunMutation(options: { onSuccess?: () => void } = {}) {
-  return useMutation({
-    mutationFn: ({ runId }: { runId: string }) =>
-      ajaxPost({ url: `/api/v1/agent_runs/${runId}/retry`, data: {} }),
-    onSuccess: options.onSuccess,
-  });
-}
+export const useRetryRunMutation = mutationHook(retryRun);
 
 /**
  * Which backends this deployment can run work on, and whether each is usable.

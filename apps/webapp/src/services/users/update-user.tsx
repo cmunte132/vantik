@@ -1,8 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
-
-import type { User } from 'common/types';
-
-import { ajaxPut } from 'services/utils';
+import { ajaxPut, mutationHook } from 'services/utils';
 
 export interface UpdateUserParams {
   fullname: string;
@@ -19,36 +15,4 @@ function updateUser({ fullname, username }: UpdateUserParams) {
   });
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: User) => void;
-  onError?: (error: string) => void;
-}
-
-export function useUpdateUserMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: User) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: updateUser,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useUpdateUserMutation = mutationHook(updateUser);

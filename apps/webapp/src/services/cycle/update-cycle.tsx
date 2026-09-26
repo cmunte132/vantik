@@ -1,38 +1,18 @@
-import type { Cycle } from '@vantikhq/types';
+import type { UpdateCycleDto } from '@vantikhq/types';
 
-import { useMutation } from '@tanstack/react-query';
-import { updateCycle } from '@vantikhq/services';
+import type { CycleType } from 'common/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: Cycle) => void;
-  onError?: (error: string) => void;
+import { ajaxPost, mutationHook } from 'services/utils';
+
+interface UpdateCycleDtoWithCycleId extends UpdateCycleDto {
+  cycleId: string;
 }
 
-export function useUpdateCycleMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: Cycle) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: updateCycle,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
+export function updateCycle({
+  cycleId,
+  ...updateCycleDto
+}: UpdateCycleDtoWithCycleId): Promise<CycleType> {
+  return ajaxPost({ url: `/api/v1/cycles/${cycleId}`, data: updateCycleDto });
 }
+
+export const useUpdateCycleMutation = mutationHook(updateCycle);

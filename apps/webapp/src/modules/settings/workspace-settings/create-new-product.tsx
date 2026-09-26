@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Product } from '@vantikhq/types';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Form,
@@ -18,6 +17,7 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import type { ProductType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
 
 import { useCreateProductMutation } from 'services/product-axis';
@@ -59,7 +59,7 @@ export const CreateNewProduct = observer(() => {
   const { workspaceSlug } = router.query;
   const { productsStore } = useContextStore();
 
-  const [created, setCreated] = React.useState<Product | undefined>();
+  const [created, setCreated] = React.useState<ProductType | undefined>();
   const inStore = created
     ? Boolean(productsStore.getProductWithId(created.id))
     : false;
@@ -94,7 +94,7 @@ export const CreateNewProduct = observer(() => {
   }, [created, inStore]);
 
   const { mutate: createProduct } = useCreateProductMutation({
-    onSuccess: (data: Product) => {
+    onSuccess: (data: ProductType) => {
       toast({
         title: 'Created!',
         description: `New product ${data.name} is created`,

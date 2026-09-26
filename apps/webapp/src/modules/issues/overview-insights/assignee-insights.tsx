@@ -6,11 +6,12 @@ import { sort } from 'fast-sort';
 import { observer } from 'mobx-react-lite';
 
 import { groupBy } from 'common/lib/common';
-import { FilterTypeEnum, type IssueType } from 'common/types';
+import { type IssueType } from 'common/types';
 import type { User } from 'common/types';
 
 import { useUsersData } from 'hooks/users';
 
+import { FilterTypeEnum } from 'store/application';
 import { useContextStore } from 'store/global-context-provider';
 
 import { applyFilters } from './utils';

@@ -20,6 +20,8 @@ import { AuthGuard } from 'modules/auth/auth.guard';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import { McpThrottleGuard } from './mcp-throttle.guard';
+import { registerHookTools } from './mcp.hook-tools';
+import { MCP_INSTRUCTIONS } from './mcp.instructions';
 import { registerVantikTools } from './mcp.tools';
 
 const SERVER_INFO = { name: 'vantik', version: '0.1.0' };
@@ -57,12 +59,13 @@ export class McpController {
   async handleRequest(@Req() request: Request, @Res() response: Response) {
     const token = this.extractToken(request);
 
-    const agent = new VantikAgent(
-      new VantikClient({ baseUrl: this.loopbackUrl(), token }),
-    );
+    const client = new VantikClient({ baseUrl: this.loopbackUrl(), token });
 
-    const server = new McpServer(SERVER_INFO);
-    registerVantikTools(server, agent);
+    const server = new McpServer(SERVER_INFO, {
+      instructions: MCP_INSTRUCTIONS,
+    });
+    registerVantikTools(server, new VantikAgent(client));
+    registerHookTools(server, client);
 
     const transport = new StreamableHTTPServerTransport({
       // Stateless mode: no session ids, no server-side session store.

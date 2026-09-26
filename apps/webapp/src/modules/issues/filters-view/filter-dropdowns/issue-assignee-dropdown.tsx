@@ -16,8 +16,8 @@ import type { User } from 'common/types';
 import { useUsersData } from 'hooks/users';
 
 interface IssueAssigneeDropdownProps {
-  value?: string[];
-  onChange?: (assigneeIds: string[]) => void;
+  value: string[];
+  onChange: (assigneeIds: string[]) => void;
 }
 
 export function IssueAssigneeDropdown({

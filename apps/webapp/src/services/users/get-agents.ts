@@ -1,8 +1,22 @@
 import { type UseQueryResult, useQuery } from '@tanstack/react-query';
-import { getAgents } from '@vantikhq/services';
 import { type AgentSummary } from '@vantikhq/types';
 
-import { type XHRErrorResponse } from 'services/utils';
+import { ajaxGet, type XHRErrorResponse } from 'services/utils';
+
+/**
+ * The workspace's agent accounts.
+ *
+ * `mine` is the account-settings view — the agents you own, readable by any
+ * member. `all` is the admin view of everything operating in the workspace.
+ */
+export function getAgents(
+  workspaceId: string,
+  scope: 'mine' | 'all' = 'all',
+): Promise<AgentSummary[]> {
+  return ajaxGet({
+    url: `/api/v1/users/agents?workspaceId=${workspaceId}&scope=${scope}`,
+  });
+}
 
 /**
  * Query key for the workspace's agent accounts.

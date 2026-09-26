@@ -1,15 +1,16 @@
-// MUST be first. OpenTelemetry patches modules as they are required, so
+// MUST be first: many modules read their settings the moment they are
+// imported, the OpenTelemetry setup below among them. See src/env.ts.
+import './env';
+// MUST be next. OpenTelemetry patches modules as they are required, so
 // anything imported above this line runs uninstrumented. See src/otel.ts.
 import './otel';
 
 import { VersioningType } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import * as bodyParser from 'body-parser';
 import { PrismaClientExceptionFilter } from 'nestjs-prisma';
 import supertokens from 'supertokens-node';
 
-import type { CorsConfig } from 'common/configs/config.interface';
 import { validationPipe } from 'common/validation';
 
 import {
@@ -63,22 +64,16 @@ async function bootstrap() {
     new SupertokensExceptionFilter(),
   );
 
-  const configService = app.get(ConfigService);
-  const corsConfig = configService.get<CorsConfig>('cors');
-
   // Versioning
   app.enableVersioning({
     type: VersioningType.URI,
   });
 
-  // Cors
-  if (corsConfig.enabled) {
-    app.enableCors({
-      origin: configService.get('FRONTEND_HOST').split(',') || '',
-      allowedHeaders: ['content-type', ...supertokens.getAllCORSHeaders()],
-      credentials: true,
-    });
-  }
+  app.enableCors({
+    origin: process.env.FRONTEND_HOST.split(','),
+    allowedHeaders: ['content-type', ...supertokens.getAllCORSHeaders()],
+    credentials: true,
+  });
 
   await app.listen(process.env.PORT || 3001);
 }

@@ -1,6 +1,8 @@
 import type { ParsedUrlQuery } from 'querystring';
 
-import { FilterTypeEnum } from 'store/application';
+import { defaultOperator } from 'modules/issues/filters-view/filter-registry';
+
+import type { FilterTypeEnum } from 'store/application';
 
 /** The query parameters that this reads, and the filter each one sets. */
 const AXIS_PARAMS = ['product', 'module', 'capability'] as const;
@@ -43,14 +45,7 @@ export function readFiltersFromQuery(query: ParsedUrlQuery): QueryFilters {
       continue;
     }
 
-    filters[param] = {
-      value,
-      // An issue holds a list of modules and one capability. A product reads as
-      // the modules of that product, which is also a comparison of one value
-      // here.
-      filterType:
-        param === 'module' ? FilterTypeEnum.INCLUDES : FilterTypeEnum.IS,
-    };
+    filters[param] = { value, filterType: defaultOperator(param) };
 
     delete rest[param];
   }

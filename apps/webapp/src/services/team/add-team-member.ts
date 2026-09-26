@@ -1,36 +1,14 @@
-import { useMutation } from '@tanstack/react-query';
-import { addTeamMember } from '@vantikhq/services';
+import type { AddTeamMemberDto } from '@vantikhq/types';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: () => void;
-  onError?: (error: string) => void;
-}
+import { ajaxPost, mutationHook } from 'services/utils';
 
-export function useAddTeamMemberMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = () => {
-    onSuccess && onSuccess();
-  };
-
-  return useMutation({
-    mutationFn: addTeamMember,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
+export function addTeamMember({ teamId, userId }: AddTeamMemberDto) {
+  return ajaxPost({
+    url: `/api/v1/teams/${teamId}/add-member`,
+    data: {
+      userId,
+    },
   });
 }
+
+export const useAddTeamMemberMutation = mutationHook(addTeamMember);

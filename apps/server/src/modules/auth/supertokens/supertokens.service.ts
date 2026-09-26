@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
 import supertokens, { deleteUser } from 'supertokens-node';
 
+import { AUTH_API_BASE_PATH } from 'common/authentication';
+
 import { UsersService } from 'modules/users/users.service';
 
 import { recipeList } from './supertokens.config';
@@ -24,7 +26,7 @@ export class SupertokensService {
         // else here means the refresh cookie is never sent and sessions die
         // when the access token expires. The Next proxy forwards /api/auth/*
         // through unstripped to keep both sides in agreement.
-        apiBasePath: '/api/auth',
+        apiBasePath: AUTH_API_BASE_PATH,
         websiteBasePath: '/auth',
       },
       supertokens: {

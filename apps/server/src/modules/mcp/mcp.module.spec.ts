@@ -1,4 +1,3 @@
-import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -21,12 +20,8 @@ describe('the MCP endpoint wiring', () => {
       controllers: [McpController],
       providers: [
         UsersService,
-        // Global in the real app, so they are stood in for rather than imported.
+        // Global in the real app, so it is stood in for rather than imported.
         { provide: PrismaService, useValue: {} },
-        {
-          provide: ConfigService,
-          useValue: { get: (): undefined => undefined },
-        },
       ],
     }).compile();
 

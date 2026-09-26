@@ -1,13 +1,14 @@
-import { useMutation } from '@tanstack/react-query';
-
-import { ajaxPost } from 'services/utils';
+import { ajaxPost, mutationHook } from 'services/utils';
 
 export interface AITitleParams {
   description: string;
   workspaceId: string;
 }
 
-export function aiTitleIssues({ description, workspaceId }: AITitleParams) {
+export function aiTitleIssues({
+  description,
+  workspaceId,
+}: AITitleParams): Promise<string> {
   return ajaxPost({
     url: `/api/v1/issues/ai/ai_title`,
     data: {
@@ -17,36 +18,4 @@ export function aiTitleIssues({ description, workspaceId }: AITitleParams) {
   });
 }
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (data: string) => void;
-  onError?: (error: string) => void;
-}
-
-export function useAITitleMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (data: string) => {
-    onSuccess && onSuccess(data);
-  };
-
-  return useMutation({
-    mutationFn: aiTitleIssues,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
-}
+export const useAITitleMutation = mutationHook(aiTitleIssues);

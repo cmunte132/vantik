@@ -1,30 +1,35 @@
-import { useMutation } from '@tanstack/react-query';
-import { updateTeam, type UpdateTeamDtoWithTeamId } from '@vantikhq/services';
+import type { UpdateTeamDto } from '@vantikhq/types';
 
 import type { TeamType } from 'common/types';
 
+import {
+  ajaxPost,
+  type MutationCallbacks,
+  useApiMutation,
+} from 'services/utils';
+
 import { useContextStore } from 'store/global-context-provider';
 
-interface MutationParams {
-  onMutate?: () => void;
-  onSuccess?: (team: TeamType) => void;
-  onError?: (error: string) => void;
+export interface UpdateTeamDtoWithTeamId extends UpdateTeamDto {
+  teamId: string;
 }
 
-export function useUpdateTeamMutation({
-  onMutate,
-  onSuccess,
-  onError,
-}: MutationParams) {
+export function updateTeam({
+  teamId,
+  ...updateData
+}: UpdateTeamDtoWithTeamId): Promise<TeamType> {
+  return ajaxPost({ url: `/api/v1/teams/${teamId}`, data: updateData });
+}
+
+export function useUpdateTeamMutation(
+  callbacks: MutationCallbacks<TeamType, UpdateTeamDtoWithTeamId> = {},
+) {
   const { teamsStore } = useContextStore();
-  const onMutationTriggered = () => {
-    onMutate && onMutate();
-  };
 
   const update = async ({
     teamId,
     ...otherParams
-  }: UpdateTeamDtoWithTeamId) => {
+  }: UpdateTeamDtoWithTeamId): Promise<TeamType> => {
     const team = teamsStore.getTeamWithId(teamId);
 
     try {
@@ -36,21 +41,5 @@ export function useUpdateTeamMutation({
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onMutationError = (errorResponse: any) => {
-    const errorText = errorResponse?.errors?.message || 'Error occurred';
-
-    onError && onError(errorText);
-  };
-
-  const onMutationSuccess = (team: TeamType) => {
-    onSuccess && onSuccess(team);
-  };
-
-  return useMutation({
-    mutationFn: update,
-    onError: onMutationError,
-    onMutate: onMutationTriggered,
-    onSuccess: onMutationSuccess,
-  });
+  return useApiMutation(update, callbacks);
 }

@@ -10,11 +10,10 @@ import { noteServerDeployAnnouncement } from 'common/wrappers/app-version-provid
 import { useCurrentWorkspace } from 'hooks/workspace';
 
 import { useContextStore } from 'store/global-context-provider';
-import { MODELS } from 'store/models';
 import { resync } from 'store/resync';
 import { UserContext } from 'store/user-context';
 
-import { saveSocketData } from './socket-data-util';
+import { modelStoreMap, saveSocketData } from './socket-data-util';
 
 interface Props {
   children: React.ReactElement;
@@ -26,37 +25,8 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
     const { children } = props;
     const workspace = useCurrentWorkspace();
 
-    const {
-      commentsStore,
-      checklistItemsStore,
-      agentRunsStore,
-      pagesStore,
-      pageEntriesStore,
-      issuesHistoryStore,
-      issuesStore,
-      workflowsStore,
-      workspaceStore,
-      teamsStore,
-      labelsStore,
-      integrationAccountsStore,
-      linkedIssuesStore,
-      issueRelationsStore,
-      notificationsStore,
-      viewsStore,
-      issueSuggestionsStore,
-      projectsStore,
-      projectMilestonesStore,
-      productsStore,
-      modulesStore,
-      capabilitiesStore,
-      cyclesStore,
-      conversationsStore,
-      conversationHistoryStore,
-      templatesStore,
-      peopleStore,
-      companiesStore,
-      supportStore,
-    } = useContextStore();
+    const stores = useContextStore();
+    const { workspaceStore } = stores;
     const user = React.useContext(UserContext);
     const hashKey = `${workspace.id}__${user.id}`;
 
@@ -101,40 +71,7 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
       });
       setSocket(socket);
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const MODEL_STORE_MAP = {
-        [MODELS.Label]: labelsStore,
-        [MODELS.Workspace]: workspaceStore,
-        [MODELS.UsersOnWorkspaces]: workspaceStore,
-        [MODELS.Team]: teamsStore,
-        [MODELS.Workflow]: workflowsStore,
-        [MODELS.Issue]: issuesStore,
-        [MODELS.IssueHistory]: issuesHistoryStore,
-        [MODELS.IssueComment]: commentsStore,
-        [MODELS.ChecklistItem]: checklistItemsStore,
-        [MODELS.AgentRun]: agentRunsStore,
-        [MODELS.AgentRunEvent]: agentRunsStore,
-        [MODELS.Page]: pagesStore,
-        [MODELS.PageEntry]: pageEntriesStore,
-        [MODELS.IntegrationAccount]: integrationAccountsStore,
-        [MODELS.LinkedIssue]: linkedIssuesStore,
-        [MODELS.IssueRelation]: issueRelationsStore,
-        [MODELS.Notification]: notificationsStore,
-        [MODELS.View]: viewsStore,
-        [MODELS.IssueSuggestion]: issueSuggestionsStore,
-        [MODELS.Project]: projectsStore,
-        [MODELS.ProjectMilestone]: projectMilestonesStore,
-        [MODELS.Product]: productsStore,
-        [MODELS.Module]: modulesStore,
-        [MODELS.Capability]: capabilitiesStore,
-        [MODELS.Cycle]: cyclesStore,
-        [MODELS.Conversation]: conversationsStore,
-        [MODELS.ConversationHistory]: conversationHistoryStore,
-        [MODELS.Template]: templatesStore,
-        [MODELS.People]: peopleStore,
-        [MODELS.Company]: companiesStore,
-        [MODELS.Support]: supportStore,
-      };
+      const MODEL_STORE_MAP = modelStoreMap(stores);
 
       socket.on('message', async (newMessage: string) => {
         const data = JSON.parse(newMessage);

@@ -10,6 +10,7 @@ import { saveCompanyData } from 'store/company';
 import { saveConversationHistorytData } from 'store/conversation-history';
 import { saveConversationData } from 'store/conversations';
 import { saveCyclesData } from 'store/cycle';
+import type { StoreContextInstanceType } from 'store/global-context-provider';
 import { saveIntegrationAccountData } from 'store/integration-accounts';
 import { saveIssueHistoryData } from 'store/issue-history';
 import { saveIssueRelationData } from 'store/issue-relation';
@@ -72,6 +73,47 @@ export const SAVE_HANDLERS: Record<string, Function> = {
   [MODELS.Company]: saveCompanyData,
   [MODELS.Support]: saveSupportData,
 };
+
+/**
+ * Which store each synced model's records go into. Bootstrap, delta and the
+ * socket all save through this one map, and so do the tests, so a model wired
+ * to the wrong store is wrong everywhere at once rather than in one path.
+ */
+export function modelStoreMap(stores: StoreContextInstanceType) {
+  return {
+    [MODELS.Label]: stores.labelsStore,
+    [MODELS.Workspace]: stores.workspaceStore,
+    [MODELS.UsersOnWorkspaces]: stores.workspaceStore,
+    [MODELS.Team]: stores.teamsStore,
+    [MODELS.Workflow]: stores.workflowsStore,
+    [MODELS.Issue]: stores.issuesStore,
+    [MODELS.IssueHistory]: stores.issuesHistoryStore,
+    [MODELS.IssueComment]: stores.commentsStore,
+    [MODELS.ChecklistItem]: stores.checklistItemsStore,
+    [MODELS.AgentRun]: stores.agentRunsStore,
+    [MODELS.AgentRunEvent]: stores.agentRunsStore,
+    [MODELS.Page]: stores.pagesStore,
+    [MODELS.PageEntry]: stores.pageEntriesStore,
+    [MODELS.IntegrationAccount]: stores.integrationAccountsStore,
+    [MODELS.LinkedIssue]: stores.linkedIssuesStore,
+    [MODELS.IssueRelation]: stores.issueRelationsStore,
+    [MODELS.Notification]: stores.notificationsStore,
+    [MODELS.View]: stores.viewsStore,
+    [MODELS.IssueSuggestion]: stores.issueSuggestionsStore,
+    [MODELS.Project]: stores.projectsStore,
+    [MODELS.ProjectMilestone]: stores.projectMilestonesStore,
+    [MODELS.Product]: stores.productsStore,
+    [MODELS.Module]: stores.modulesStore,
+    [MODELS.Capability]: stores.capabilitiesStore,
+    [MODELS.Cycle]: stores.cyclesStore,
+    [MODELS.Conversation]: stores.conversationsStore,
+    [MODELS.ConversationHistory]: stores.conversationHistoryStore,
+    [MODELS.Template]: stores.templatesStore,
+    [MODELS.People]: stores.peopleStore,
+    [MODELS.Company]: stores.companiesStore,
+    [MODELS.Support]: stores.supportStore,
+  };
+}
 
 // Saves the data from the socket and call explicitly functions from individual models
 export async function saveSocketData(

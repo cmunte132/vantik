@@ -9,7 +9,10 @@ import { noteServerDeployAnnouncement } from 'common/wrappers/app-version-provid
 
 import { useCurrentWorkspace } from 'hooks/workspace';
 
+import { getDeltaRecords } from 'services/sync';
+
 import { useContextStore } from 'store/global-context-provider';
+import { MODELS } from 'store/models';
 import { resync } from 'store/resync';
 import { UserContext } from 'store/user-context';
 
@@ -72,16 +75,59 @@ export const SocketDataSyncWrapper: React.FC<Props> = observer(
       setSocket(socket);
 
       const MODEL_STORE_MAP = modelStoreMap(stores);
+      const sequenceKey = `lastSequenceId_${hash(hashKey)}`;
 
-      socket.on('message', async (newMessage: string) => {
-        const data = JSON.parse(newMessage);
+      // Everything reaches the store in the order it arrived, so a delta
+      // fetched on connecting cannot land over a newer live message.
+      let applying = Promise.resolve();
+      const inOrder = (work: () => Promise<void>) => {
+        const next = applying.then(work);
+        applying = next.catch((): void => undefined);
+        return next;
+      };
 
-        await saveSocketData([data], MODEL_STORE_MAP);
-        localStorage.setItem(
-          `lastSequenceId_${hash(hashKey)}`,
-          `${data.sequenceId}`,
+      // A live message covers only the time the socket is connected. Whatever
+      // was announced before it first connected, or while it was reconnecting
+      // after a drop, never arrives, and the page went without it until it was
+      // reloaded. So each time it connects, it asks for what it missed.
+      const catchUp = async () => {
+        const lastSequenceId = localStorage.getItem(sequenceKey);
+
+        // None yet: the bootstrap is still bringing everything up to now.
+        if (!lastSequenceId || !/^\d+$/.test(lastSequenceId)) {
+          return;
+        }
+
+        const delta = await getDeltaRecords(
+          workspaceStore.workspace.id,
+          Object.values(MODELS),
+          lastSequenceId,
+          user.id,
         );
+
+        if (delta.resync) {
+          await resync();
+          return;
+        }
+
+        await saveSocketData(delta.syncActions, MODEL_STORE_MAP);
+        localStorage.setItem(sequenceKey, `${delta.lastSequenceId}`);
+      };
+
+      // A catch-up that fails leaves things as they were before it existed;
+      // the next reconnection tries again.
+      socket.on('connect', () => {
+        inOrder(catchUp).catch((): void => undefined);
       });
+
+      socket.on('message', (newMessage: string) =>
+        inOrder(async () => {
+          const data = JSON.parse(newMessage);
+
+          await saveSocketData([data], MODEL_STORE_MAP);
+          localStorage.setItem(sequenceKey, `${data.sequenceId}`);
+        }),
+      );
 
       // The fastest deploy signal available: this connection is already open, so
       // a window that has been sitting untouched for days hears about a new

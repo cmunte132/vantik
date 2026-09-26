@@ -1,5 +1,6 @@
 import {
   commentsOn,
+  createComment,
   createIssue,
   createSpareTeam,
   getIssue,
@@ -17,6 +18,7 @@ import {
   setProperty,
 } from '../../src/browser';
 import { expect, test } from '../../src/fixtures';
+import { cursor, synced } from '../../src/sync';
 
 // Each test files its issues into a team of its own, so the list it opens
 // holds only what it made, whatever the API tests file meanwhile.
@@ -287,5 +289,38 @@ test.describe('live updates', () => {
     await updateIssue(asAlice, issue, { title: renamed });
 
     await expect(issueRow(page, renamed)).toBeVisible({ timeout: 15_000 });
+  });
+
+  // A change is pushed only to a socket connected at the moment it happens.
+  // One made while the page was still connecting, or reconnecting after a
+  // drop, never arrived until a reload; a comment sent from the sheet went
+  // missing that way.
+  test('a change made while the socket was down arrives once it connects', async ({
+    page,
+    asAlice,
+    alice,
+  }) => {
+    const team = await createSpareTeam(asAlice);
+    const issue = await createIssue(asAlice, alice, {
+      teamId: team.id,
+      title: unique('Talked about while away'),
+    });
+    const text = unique('Posted while the page was away');
+
+    // Refused, the socket keeps trying again, a few seconds apart.
+    const socket = '**/socket.io/**';
+    await page.route(socket, (route) => route.abort());
+    await gotoTeamIssues(page, alice, team);
+    await openIssue(page, issue.title);
+
+    const since = await cursor(asAlice);
+    const comment = await createComment(asAlice, issue.id, text);
+    // Announced, and so gone for good for a socket that was not there.
+    await synced(asAlice, since, 'IssueComment', comment.id, 'I');
+    await page.unroute(socket);
+
+    await expect(page.getByRole('tabpanel')).toContainText(text, {
+      timeout: 20_000,
+    });
   });
 });

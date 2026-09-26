@@ -17,7 +17,8 @@
     "prisma:studio": "dotenv -- turbo run prisma:studio --filter=server",
     "migrate": "dotenv -- turbo run migrate --filter=server",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "e2e": "pnpm --filter @vantikhq/e2e e2e"
   },
   "packageManager": "pnpm@10.34.5",
   "pnpm": {

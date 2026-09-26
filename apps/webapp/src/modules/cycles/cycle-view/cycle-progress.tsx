@@ -19,7 +19,7 @@ export const CycleProgress = observer(
     const { issuesStore, cyclesStore } = useContextStore();
     const cycle = cyclesStore.getCycleForId(id);
     const { workflows } = useComputedWorkflows();
-    const issues = issuesStore.getIssuesForCycle({ cycleId: cycle?.id });
+    const issues = issuesStore.getIssues({ cycleId: cycle?.id });
 
     const totalCompletedIssues = issues.filter((issue: IssueType) => {
       const workflow = workflows.find((workflow: WorkflowType) =>

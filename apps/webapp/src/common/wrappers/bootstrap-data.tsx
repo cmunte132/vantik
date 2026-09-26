@@ -16,7 +16,7 @@ import { MODELS } from 'store/models';
 import { resync } from 'store/resync';
 import { UserContext } from 'store/user-context';
 
-import { saveSocketData } from './socket-data-util';
+import { modelStoreMap, saveSocketData } from './socket-data-util';
 
 interface Props {
   children: React.ReactElement;
@@ -30,71 +30,7 @@ export function BootstrapWrapper({ children }: Props) {
   const lastSequenceId =
     localStorage && localStorage.getItem(`lastSequenceId_${hash(hashKey)}`);
 
-  const {
-    commentsStore,
-    checklistItemsStore,
-    agentRunsStore,
-    pagesStore,
-    pageEntriesStore,
-    issuesHistoryStore,
-    issuesStore,
-    workflowsStore,
-    workspaceStore,
-    teamsStore,
-    labelsStore,
-    integrationAccountsStore,
-    linkedIssuesStore,
-    issueRelationsStore,
-    notificationsStore,
-    viewsStore,
-    issueSuggestionsStore,
-    projectsStore,
-    projectMilestonesStore,
-    productsStore,
-    modulesStore,
-    capabilitiesStore,
-    cyclesStore,
-    conversationsStore,
-    conversationHistoryStore,
-    templatesStore,
-    supportStore,
-    peopleStore,
-    companiesStore,
-  } = useContextStore();
-
-  const MODEL_STORE_MAP = {
-    [MODELS.Label]: labelsStore,
-    [MODELS.Workspace]: workspaceStore,
-    [MODELS.UsersOnWorkspaces]: workspaceStore,
-    [MODELS.Team]: teamsStore,
-    [MODELS.Workflow]: workflowsStore,
-    [MODELS.Issue]: issuesStore,
-    [MODELS.IssueHistory]: issuesHistoryStore,
-    [MODELS.IssueComment]: commentsStore,
-    [MODELS.ChecklistItem]: checklistItemsStore,
-    [MODELS.AgentRun]: agentRunsStore,
-    [MODELS.AgentRunEvent]: agentRunsStore,
-    [MODELS.Page]: pagesStore,
-    [MODELS.PageEntry]: pageEntriesStore,
-    [MODELS.IntegrationAccount]: integrationAccountsStore,
-    [MODELS.LinkedIssue]: linkedIssuesStore,
-    [MODELS.IssueRelation]: issueRelationsStore,
-    [MODELS.Notification]: notificationsStore,
-    [MODELS.View]: viewsStore,
-    [MODELS.IssueSuggestion]: issueSuggestionsStore,
-    [MODELS.Project]: projectsStore,
-    [MODELS.ProjectMilestone]: projectMilestonesStore,
-    [MODELS.Product]: productsStore,
-    [MODELS.Module]: modulesStore,
-    [MODELS.Capability]: capabilitiesStore,
-    [MODELS.Cycle]: cyclesStore,
-    [MODELS.Conversation]: conversationsStore,
-    [MODELS.ConversationHistory]: conversationHistoryStore,
-    [MODELS.Template]: templatesStore,
-    [MODELS.People]: peopleStore,
-    [MODELS.Company]: companiesStore,
-    [MODELS.Support]: supportStore,
-  };
+  const MODEL_STORE_MAP = modelStoreMap(useContextStore());
 
   React.useEffect(() => {
     if (workspace) {

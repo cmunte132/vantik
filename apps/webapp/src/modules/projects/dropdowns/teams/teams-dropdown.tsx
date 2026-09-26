@@ -7,6 +7,7 @@ import { Command, CommandInput } from '@vantikhq/ui/components/command';
 import {
   Popover,
   PopoverContent,
+  PopoverPortal,
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
@@ -30,6 +31,7 @@ interface TeamsProps {
 export const TeamsDropdown = observer(
   ({ value, onChange, variant }: TeamsProps) => {
     const [open, setOpen] = React.useState(false);
+    const [search, setSearch] = React.useState('');
     const { teamsStore } = useContextStore();
     const { toast } = useToast();
 
@@ -121,17 +123,29 @@ export const TeamsDropdown = observer(
               {getTrigger()}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-72 p-0" align="start">
-            <Command shouldFilter={false}>
-              <CommandInput placeholder="Set teams..." autoFocus />
-              <TeamsDropdownContent
-                onChange={change}
-                onClose={() => setOpen(false)}
-                value={value}
-                multiple
-              />
-            </Command>
-          </PopoverContent>
+          {/* In a portal, as the label picker is. Left in the new project
+              dialog's form, each row's checkbox clicks a hidden input of its
+              own whenever it changes, for the form's sake; that click reaches
+              the row, which ticks the team again, and so on until React gives
+              up and the page is lost. */}
+          <PopoverPortal>
+            <PopoverContent className="w-72 p-0" align="start">
+              <Command shouldFilter={false}>
+                <CommandInput
+                  placeholder="Set teams..."
+                  onValueChange={setSearch}
+                  autoFocus
+                />
+                <TeamsDropdownContent
+                  onChange={change}
+                  onClose={() => setOpen(false)}
+                  value={value}
+                  search={search}
+                  multiple
+                />
+              </Command>
+            </PopoverContent>
+          </PopoverPortal>
         </Popover>
       </div>
     );

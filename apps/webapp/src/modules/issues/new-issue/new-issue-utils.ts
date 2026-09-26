@@ -21,20 +21,6 @@ interface DefaultValues {
   teamId?: string;
 }
 
-export function getDefaultValues(
-  teamId: string,
-  workflows: WorkflowType[],
-): DefaultValues {
-  return {
-    teamId,
-    labelIds: [],
-    stateId: workflows.find(
-      (workflow: WorkflowType) => workflow.name === 'Backlog',
-    ).id,
-    priority: 0,
-  };
-}
-
 export function setDefaultValuesAgain({
   form,
   index,

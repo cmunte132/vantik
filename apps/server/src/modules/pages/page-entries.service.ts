@@ -25,14 +25,6 @@ import {
   WriterIdentity,
 } from './pages.interface';
 
-/** Facet counts, which is what makes reviewing fifty entries tractable. */
-export interface EntryFacets {
-  total: number;
-  status: Record<string, number>;
-  sourceUserId: Record<string, number>;
-  scope: Record<string, number>;
-}
-
 @Injectable()
 export default class PageEntriesService {
   /** Optional for the same reason it is on PagesService: indexing is a cache. */

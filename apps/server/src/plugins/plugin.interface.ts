@@ -218,20 +218,6 @@ export interface DefinitionCapability {
 }
 
 /**
- * What a plugin is asked to do.
- *
- * Every member is plain data. Nothing is a live object, a client or a
- * connection, so the same event can be passed to a function, written to a
- * queue, or sent across a process boundary unchanged. That is what makes where
- * a plugin runs a deployment choice rather than a rewrite.
- */
-export interface PluginEvent {
-  /** `ActionTypesEnum` or `IntegrationPayloadEventType`, depending on the half. */
-  event: string;
-  [key: string]: Json;
-}
-
-/**
  * What a plugin is allowed to do, and the only way it can do anything.
  *
  * A plugin asks the host to do a thing rather than being handed the means to do
@@ -252,15 +238,3 @@ export interface PluginContext {
   readonly vendor: VendorCapability;
   readonly attachments: AttachmentCapability;
 }
-
-/**
- * A plugin's entry point.
- *
- * Second argument, not first, so that every integration written against the
- * old single-argument signature keeps working while the vendors are ported one
- * at a time.
- */
-export type PluginHandler = (
-  event: PluginEvent,
-  ctx: PluginContext,
-) => Promise<Json>;

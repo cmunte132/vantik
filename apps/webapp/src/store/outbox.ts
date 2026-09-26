@@ -45,10 +45,6 @@ export function initOutbox(hash: number) {
   outbox = new OutboxDatabase(`VantikOutbox_${hash}`);
 }
 
-export function outboxReady(): boolean {
-  return Boolean(outbox);
-}
-
 /**
  * Records a write to send later, merging it into anything already queued for
  * the same record.

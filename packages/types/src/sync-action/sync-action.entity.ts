@@ -111,14 +111,6 @@ export const SyncActionType = {
 export type SyncActionType =
   (typeof SyncActionType)[keyof typeof SyncActionType];
 
-export interface ReplicationPayload {
-  action: string;
-  modelId: string;
-  modelName: string;
-  isDeleted: boolean;
-  actionApiKey: string;
-}
-
 export class SyncAction {
   id: string;
   createdAt: Date;

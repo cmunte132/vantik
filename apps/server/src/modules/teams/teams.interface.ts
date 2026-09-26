@@ -6,18 +6,6 @@ export class TeamRequestParams {
   teamId: string;
 }
 
-export enum IssueEstimateValues {
-  EXPONENTIAL,
-  FIBONACCI,
-  LINEAR,
-  T_SHIRT,
-}
-
-export enum Priorities {
-  NO_PRIORITY_FIRST,
-  NO_PRIORITY_LAST,
-}
-
 export const workflowSeedData = [
   {
     name: 'Triage',

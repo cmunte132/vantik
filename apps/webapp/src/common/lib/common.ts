@@ -52,35 +52,6 @@ export function groupByKeyArray<T extends Record<string, any>>(
   return groupedMap;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getUniqueValuesForKeys<T extends Record<string, any>>(
-  arr: T[],
-  keys: Array<keyof T>,
-): Map<keyof T, Set<T[keyof T]>> {
-  const uniqueValuesMap = new Map<keyof T, Set<T[keyof T]>>();
-
-  // Iterate over the array once
-  for (const obj of arr) {
-    for (const key of keys) {
-      const value = obj[key];
-      if (value !== undefined) {
-        let uniqueValues = uniqueValuesMap.get(key);
-        if (!uniqueValues) {
-          uniqueValues = new Set<T[keyof T]>();
-          uniqueValuesMap.set(key, uniqueValues);
-        }
-        if (Array.isArray(value)) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          value.forEach((v: any) => uniqueValues!.add(v)); // Add each value to the Set
-        } else {
-          uniqueValues.add(value as T[keyof T]); // Add single value to the Set
-        }
-      }
-    }
-  }
-  return uniqueValuesMap;
-}
-
 export function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

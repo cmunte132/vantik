@@ -27,7 +27,6 @@ export * from './sync-action';
 export * from './team';
 export * from './template';
 export * from './user';
-export * from './users-on-teams';
 export * from './users-on-workspaces';
 export * from './view';
 export * from './workflow';

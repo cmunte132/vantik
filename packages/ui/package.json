@@ -88,8 +88,7 @@
     "@tiptap/extension-highlight": "^3.28.0",
     "@tiptap/extension-horizontal-rule": "^3.28.0",
     "@tiptap/suggestion": "^3.28.0",
-    "tiptap-markdown": "^0.9.0",
-    "@ai-sdk/react": "^4.0.40"
+    "tiptap-markdown": "^0.9.0"
   },
   "exports": {
     "./index.css": "./dist/index.css",
@@ -104,7 +103,6 @@
     "./components/logo": "./src/components/logo.tsx",
     "./components/dynamic-logo": "./src/components/dynamic-logo.tsx",
     "./components/use-toast": "./src/components/ui/use-toast.ts",
-    "./components/chat/index": "./src/components/ui/chat/index.ts",
     "./components/editor/index": "./src/components/ui/editor/index.ts",
     "./components/editor/editor-extensions": "./src/components/ui/editor/editor-extensions.ts",
     "./components/editor/utils": "./src/components/ui/editor/utils.ts",

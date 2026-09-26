@@ -50,17 +50,6 @@ export enum PageLinkTypeEnum {
   PAGE = 'PAGE',
 }
 
-/** Statuses retrieval is allowed to serve. Everything else is withheld. */
-export const SERVED_ENTRY_STATUSES: PageEntryStatusEnum[] = [
-  PageEntryStatusEnum.STANDING,
-];
-
-/** Statuses an entry can never move out of once it lands there. */
-export const TERMINAL_ENTRY_STATUSES: PageEntryStatusEnum[] = [
-  PageEntryStatusEnum.CONSOLIDATED,
-  PageEntryStatusEnum.SUPERSEDED,
-];
-
 export class Page {
   id: string;
   createdAt: Date;

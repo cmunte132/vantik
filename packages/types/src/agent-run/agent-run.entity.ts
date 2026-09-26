@@ -204,17 +204,6 @@ export interface AgentRunVerification {
   buildCommand?: string;
 }
 
-/** Whether a module has anything to say about verifying its code. */
-export function hasVerification(value: AgentRunVerification | undefined) {
-  return Boolean(
-    value?.testCommand ||
-      value?.lintCommand ||
-      value?.typecheckCommand ||
-      value?.buildCommand ||
-      value?.setupCommands?.length,
-  );
-}
-
 /**
  * Where the code is, how to deliver the work, and how to verify it.
  *

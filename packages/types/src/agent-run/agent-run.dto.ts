@@ -15,11 +15,9 @@ import {
 import {
   AGENT_RUN_DELIVERIES,
   AGENT_RUN_EVENT_LEVELS,
-  AGENT_RUN_FAILURES,
   AGENT_RUN_STATUSES,
   type AgentRunDelivery,
   type AgentRunEventLevel,
-  type AgentRunFailure,
   type AgentRunPhases,
   type AgentRunStatus,
 } from './agent-run.entity';
@@ -220,76 +218,6 @@ export class AgentRunFilterDto {
   perPage?: number;
 }
 
-/** What a runner is willing to take. */
-export class ClaimAgentRunDto {
-  /** Only take work for this backend. Omit to take anything queued. */
-  @IsOptional()
-  @IsString()
-  executor?: string;
-}
-
-/**
- * What the runner knows once the harness is actually going.
- *
- * The base commit in particular: the patch is computed as `git diff` against
- * it, so it has to be recorded before any file is touched.
- */
-export class StartAgentRunDto {
-  @IsOptional()
-  @IsString()
-  baseCommit?: string;
-
-  @IsOptional()
-  @IsString()
-  harnessVersion?: string;
-
-  @IsOptional()
-  @IsString()
-  modelId?: string;
-}
-
-/**
- * One pass of the ENG-62 loop.
- *
- * Δ is computed server-side from the two pass rates rather than accepted from
- * the caller: it is the reward-hacking metric, and a metric the party being
- * measured gets to report is not a metric.
- */
-export class RecordIterationDto {
-  @IsInt()
-  @Min(1)
-  index: number;
-
-  /** Pass rate over the suite the implementer could see, 0..1. */
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  validationPassRate?: number;
-
-  /** Pass rate over the suite it never saw, 0..1. */
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  heldOutPassRate?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  verificationPassed?: boolean;
-
-  /** Each must cite a file:line or a failing command; others are discarded. */
-  @IsOptional()
-  @IsArray()
-  findings?: unknown[];
-
-  @IsOptional()
-  @IsString()
-  diffHash?: string;
-
-  @IsOptional()
-  @IsObject()
-  phaseTimings?: Record<string, number>;
-}
-
 export class AgentRunRequestParamsDto {
   @IsString()
   agentRunId: string;
@@ -321,77 +249,4 @@ export class CancelAgentRunDto {
   @IsOptional()
   @IsString()
   reason?: string;
-}
-
-/**
- * The terminal report. Deliberately does not accept a status: the outcome is
- * derived from `failure` being present or absent, so a runner cannot claim
- * SUCCEEDED while also reporting why it failed.
- */
-export class ReportAgentRunDto {
-  @IsOptional()
-  @IsIn(AGENT_RUN_FAILURES)
-  failure?: AgentRunFailure;
-
-  @IsOptional()
-  @IsString()
-  summary?: string;
-
-  @IsOptional()
-  @IsString()
-  error?: string;
-
-  @IsOptional()
-  @IsIn(AGENT_RUN_DELIVERIES)
-  delivery?: AgentRunDelivery;
-
-  @IsOptional()
-  @IsString()
-  branch?: string;
-
-  @IsOptional()
-  @IsString()
-  prUrl?: string;
-
-  /** Absolute path of the worktree holding the branch, for local delivery. */
-  @IsOptional()
-  @IsString()
-  worktreePath?: string;
-
-  @IsOptional()
-  @IsString()
-  headCommit?: string;
-
-  @IsOptional()
-  @IsString()
-  baseCommit?: string;
-
-  @IsOptional()
-  @IsString()
-  harnessVersion?: string;
-
-  @IsOptional()
-  @IsString()
-  modelId?: string;
-
-  @IsOptional()
-  @IsObject()
-  counters?: Record<string, number>;
-
-  @IsOptional()
-  @IsObject()
-  phaseTimings?: Record<string, number>;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  iterationCount?: number;
-
-  /**
-   * Route to human review instead of reporting success — the issue was not
-   * test-specifiable, or the loop aborted on a widening Δ.
-   */
-  @IsOptional()
-  @IsBoolean()
-  needsReview?: boolean;
 }

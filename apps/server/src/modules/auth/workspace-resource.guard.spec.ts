@@ -24,6 +24,7 @@ const FOREIGN_WORKFLOW = 'workflow-foreign';
 const OWN_MILESTONE = 'milestone-own';
 const FOREIGN_MILESTONE = 'milestone-foreign';
 const OWN_CYCLE = 'cycle-own';
+const OWN_ACCOUNT = 'account-own';
 const FOREIGN_CYCLE = 'cycle-foreign';
 
 // A team is a visibility boundary inside the workspace (ENG-79). These three
@@ -53,6 +54,7 @@ function buildPrisma(callerTeamIds: string[] = [OWN_TEAM]) {
       OWN_WORKFLOW,
       OWN_MILESTONE,
       OWN_CYCLE,
+      OWN_ACCOUNT,
       OTHER_TEAM,
       OTHER_TEAM_ISSUE,
       OTHER_TEAM_COMMENT,
@@ -293,6 +295,24 @@ describe('WorkspaceResourceGuard', () => {
     it('rejects a repository that belongs to a different module', async () => {
       const ctx = buildContext({
         params: { moduleId: FOREIGN_MODULE, moduleRepoId: OWN_REPO },
+      });
+
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('allows an integration account of the caller-s workspace in the path', async () => {
+      const ctx = buildContext({ params: { integrationAccountId: OWN_ACCOUNT } });
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+
+    it('rejects a foreign integration account named in the path', async () => {
+      // Disconnecting an integration addresses the account by id alone, so
+      // without this any signed-in user could remove another workspace's.
+      const ctx = buildContext({
+        params: { integrationAccountId: 'account-foreign' },
       });
 
       await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(

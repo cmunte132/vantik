@@ -83,6 +83,7 @@ export class WorkspaceResourceGuard implements CanActivate {
       labelId,
       workflowId,
       projectMilestoneId,
+      integrationAccountId,
       teamId: pathTeamId,
     } = request.params ?? {};
 
@@ -217,9 +218,10 @@ export class WorkspaceResourceGuard implements CanActivate {
       );
     }
 
-    const integrationAccountIds = unique(
-      bodies.map((body) => body?.integrationAccountId),
-    );
+    const integrationAccountIds = unique([
+      integrationAccountId,
+      ...bodies.map((body) => body?.integrationAccountId),
+    ]);
 
     for (const id of integrationAccountIds) {
       await assertIntegrationAccountInWorkspace(this.prisma, id, workspaceId);

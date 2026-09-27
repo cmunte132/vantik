@@ -7,7 +7,7 @@ make Claude print the evidence: the verifier's verdict line, the review line,
 and git state. The detailed spec stays in [PLAN.md](./PLAN.md), because a goal
 condition is limited to 4,000 characters.
 
-**The spec hash `069a84bf6612`** is computed from `checklist.json` and
+**The spec hash `8409159da053`** is computed from `checklist.json` and
 `verify.mjs`. If either file changes, the hash changes, and every condition
 below stops being satisfiable until you update it here. That is deliberate:
 a session cannot pass by editing the criteria or the checker.
@@ -36,7 +36,7 @@ phase also ends in a reviewable set of commits.
 Start: read PLAN.md and PROGRESS.md in full, run `pnpm install`, run `node docs/plans/knowledge-gardener/verify.mjs`, and state one line "Target phase: P", where P is the lowest phase with a failing criterion. Work only on phase P, following PLAN.md section 1 exactly: tests tagged with criterion ids, an independent review by a fresh subagent before the phase is done, no edits to checklist.json or verify.mjs, PROGRESS.md kept current, small commits pushed to this session's branch.
 
 The goal is met only when the final turn shows all of these as raw command output, not paraphrased:
-1. `node docs/plans/knowledge-gardener/verify.mjs --through P` ends with a line starting `KNOWLEDGE-GARDENER VERIFY: PASS` that names phase P as the end of its range and contains `spec-hash 069a84bf6612`. A FAIL, a different hash, or "never a pass" in that line means not met.
+1. `node docs/plans/knowledge-gardener/verify.mjs --through P` ends with a line starting `KNOWLEDGE-GARDENER VERIFY: PASS` that names phase P as the end of its range and contains `spec-hash 8409159da053`. A FAIL, a different hash, or "never a pass" in that line means not met.
 2. `grep -n "Phase P review: PASS" docs/plans/knowledge-gardener/PROGRESS.md` (with P replaced by the number) prints a line, and the reviewer's final report, with no unresolved findings, appears earlier in the conversation.
 3. `git diff origin/main...HEAD | grep -nE '^\+.*\b(it|test|describe)\.(skip|only|todo)\('` prints nothing.
 4. `git status -sb` shows a clean working tree and no "ahead" count.
@@ -55,7 +55,7 @@ setup, and it runs for a long time.
 Start: read PLAN.md and PROGRESS.md in full and run `pnpm install`. Then, for each phase in order: implement it following PLAN.md section 1 exactly (tests tagged with criterion ids, no edits to checklist.json or verify.mjs, PROGRESS.md kept current, small commits pushed to this session's branch); run `node docs/plans/knowledge-gardener/verify.mjs --through <phase>` until only the phase's review criterion fails; get an independent review from a fresh subagent and fix its findings; record "Phase <n> review: PASS" in PROGRESS.md; and show that phase's passing verdict line before starting the next phase.
 
 The goal is met only when the final turn shows all of these as raw command output, not paraphrased:
-1. `node docs/plans/knowledge-gardener/verify.mjs` ends with the line `KNOWLEDGE-GARDENER VERIFY: PASS phases 0-7 spec-hash 069a84bf6612`. Anything else in that line means not met.
+1. `node docs/plans/knowledge-gardener/verify.mjs` ends with the line `KNOWLEDGE-GARDENER VERIFY: PASS phases 0-7 spec-hash 8409159da053`. Anything else in that line means not met.
 2. `grep -cE '^[-* ]*Phase [0-7] review: PASS' docs/plans/knowledge-gardener/PROGRESS.md` prints 8, and a passing verdict line for each phase 0 to 7 appears earlier in the conversation.
 3. `git diff origin/main...HEAD | grep -nE '^\+.*\b(it|test|describe)\.(skip|only|todo)\('` prints nothing.
 4. `git status -sb` shows a clean working tree and no "ahead" count.

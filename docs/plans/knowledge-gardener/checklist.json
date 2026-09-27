@@ -127,7 +127,7 @@
       "detail": "A PageEntryCitation model (kind CODE, ISSUE, PULL_REQUEST, COMMENT or RUN; for CODE the repository, path, commit SHA, line range, snippet text and snippet hash; last check time, SHA and result) with a migration. remember, the REST API, agent-core and the CLI accept citations, and the skill tells agents that a claim about code must cite it and a decision must cite where it was decided.",
       "checks": [
         { "type": "file", "path": "apps/server/prisma/schema.prisma", "pattern": "model PageEntryCitation \\{" },
-        { "type": "file", "path": "apps/docs/skills/working-vantik-knowledge/SKILL.md", "pattern": "[Cc]itation" },
+        { "type": "file", "path": "skills/working-vantik-knowledge/SKILL.md", "pattern": "[Cc]itation" },
         { "type": "test" }
       ]
     },

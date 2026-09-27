@@ -5,17 +5,18 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 2, implemented and reviewed (PASS). Its verdict waits only
-  on KG-2.1's stale checklist path (see Needs a decision). Phase 1's review
-  fixes and phase 2 ride PR #44; phase 3 joins it once that is answered.
+- Current phase: 2 done. Next: phase 3. Phase 1's review fixes, phase 2
+  and phase 3 ride PR #44.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
-- Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phases 0-2 spec-hash 069a84bf6612`
-  (22/23; server 1422, agent-core 63, cli 10, webapp 616 tests; typecheck ok).
-  KG-2.1 fails only on a checklist path that no longer exists (see Needs a
-  decision).
+- Last verify: `KNOWLEDGE-GARDENER VERIFY: PASS phases 0-2 spec-hash 8409159da053`
+  (23/23; server 1422, agent-core 63, cli 10, webapp 616 tests; typecheck ok).
+- Spec hash: `8409159da053` since KG-2.1's file check was moved to
+  `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
+  (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
+  hash.
 
 ## Decisions
 
@@ -293,8 +294,8 @@ next session starts by reading it.
 - **Skill moved on `main`.** The guides moved from `apps/docs/skills/` to
   `skills/` (e7b9c44). The citation guidance is in
   `skills/working-vantik-knowledge/SKILL.md` and the always-in-context form.
-  PLAN.md's orientation row now points there. KG-2.1's file check still names
-  the old path; see Needs a decision.
+  PLAN.md's orientation row now points there. KG-2.1's file check named the
+  old path; the maintainer had it moved (see Status).
 
 ## Phase reviews
 
@@ -533,8 +534,8 @@ unread (never failed) and retried; text-only relocation; a judge on another
 role, stored, UNCLEAR with no model; non-code existence checks scoped to the
 workspace; trust tiers and Typesense ranking; proof from postgres on every
 served path, a written entry included; mutation checks on each; no skipped
-or loosened tests, checklist and verifier untouched. KG-2.1's file check
-still names a path `main` moved (see Needs a decision).
+or loosened tests, checklist and verifier untouched by the session (KG-2.1's
+path was later moved at the maintainer's request).
 
 ## Needs a decision
 
@@ -542,19 +543,7 @@ Anything that blocks the plan: a criterion that is wrong or cannot be met, or
 an environment problem such as Prisma being unable to download its engines.
 Give the evidence, and stop until the maintainer answers.
 
-- **KG-2.1's file check names a path `main` removed.** The check is
-  `{ "type": "file", "path": "apps/docs/skills/working-vantik-knowledge/SKILL.md", "pattern": "[Cc]itation" }`.
-  `main`'s e7b9c44 ("Move the agent guides to skills/, so `npx skills add
-  cmunte132/vantik` works") moved the guides to
-  `skills/working-vantik-knowledge/SKILL.md`, and the server now serves them
-  from there. That file carries the citation guidance and matches the
-  pattern. Recreating the old path would pass the check without meaning
-  anything, and this session may not edit `checklist.json`.
-  **Proposed fix (maintainer):** change that path in `checklist.json` to
-  `skills/working-vantik-knowledge/SKILL.md`, and put the new spec hash that
-  `verify.mjs` prints into GOAL.md. Nothing else in phase 2 depends on it.
-  KG-7's `apps/docs/docs/fundamentals/knowledge.mdx` check is unaffected:
-  that file is created in phase 7 and the path is still valid.
+(Nothing blocking.)
 
 ## Observed, outside the current phase
 
@@ -624,3 +613,6 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-27: Review round 3: no unresolved findings; the one test gap
   fixed. Phase 2 review: PASS. Stopped for the maintainer's answer on
   KG-2.1's checklist path before phase 3.
+- 2026-09-27: The maintainer asked for KG-2.1's checklist path to be moved to
+  `skills/`; done, with GOAL.md's hash updated to `8409159da053`. Verify
+  through phase 2: PASS, 23/23. Phase 2 done; starting phase 3.

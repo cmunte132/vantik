@@ -11,6 +11,7 @@ import {
   KnowledgeTriageDecisionType,
   KnowledgeTriagePolicy,
   KnowledgeVerdict,
+  PageEntryStatus,
 } from '@prisma/client';
 
 /** Cohen's kappa for two raters over the same items, with what it rests on. */
@@ -86,6 +87,15 @@ export function isActing(
   decision: KnowledgeTriageDecisionType,
 ): decision is ActingDecision {
   return (ACTING_DECISIONS as readonly string[]).includes(decision);
+}
+
+/** The status an acted-on decision left its entry in. */
+export function statusLeftBy(
+  decision: KnowledgeTriageDecisionType,
+): PageEntryStatus {
+  return decision === KnowledgeTriageDecisionType.AUTO_ACCEPT
+    ? PageEntryStatus.STANDING
+    : PageEntryStatus.ARCHIVED;
 }
 
 /**

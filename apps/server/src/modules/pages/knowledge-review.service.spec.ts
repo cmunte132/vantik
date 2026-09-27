@@ -989,6 +989,32 @@ describe('verdicts from what people do', () => {
     expect((await t.review.queue(WORKSPACE)).items).toEqual([]);
   });
 
+  it('[KG-5.5] acting by hand on an audited entry that has moved on gives no verdict', async () => {
+    const decayed = audited('decayed', Decision.AUTO_ACCEPT);
+    decayed.entry.status = PageEntryStatusEnum.ARCHIVED;
+    const refused = audited('refused', Decision.REJECT);
+    const t = harness({
+      entries: [decayed.entry, refused.entry],
+      decisions: [decayed.decision, refused.decision],
+    });
+
+    await t.pageEntries.updateEntry('decayed', 'person-1', {
+      status: PageEntryStatusEnum.STANDING,
+    });
+    await t.pageEntries.updateEntry('refused', 'person-1', {
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    // Decay moved the accepted entry on, so bringing it back judges decay.
+    expect(t.entries.get('decayed')?.status).toBe('STANDING');
+    expect(decided(t, 'decayed')).toMatchObject({ verdict: null });
+    // The refusal still stands as triage left it, so this is a verdict on it.
+    expect(decided(t, 'refused')).toMatchObject({
+      verdict: Verdict.ACCEPTED,
+      agreed: false,
+    });
+  });
+
   it('[KG-5.5] a person folding an audited entry into its page keeps it; an agent decides nothing', async () => {
     const kept = audited('kept', Decision.AUTO_ACCEPT);
     const byAgent = audited('by-agent', Decision.AUTO_ACCEPT, {

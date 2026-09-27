@@ -20,6 +20,7 @@ import {
   agrees,
   isActing,
   shouldBackOff,
+  statusLeftBy,
   type TypeAgreement,
   weightOf,
 } from './agreement';
@@ -122,8 +123,9 @@ export async function backoffState(
  * A verdict is recorded when a person first acts on an entry that reached
  * them because of triage: one waiting in the inbox, whatever triage decided
  * about it (an escalation, or anything in shadow mode), or one drawn for
- * audit. Nothing else a person does to an entry is a verdict, because the
- * entries people happen to act on later are not a sample of anything.
+ * audit while it is still where triage left it. Nothing else a person does
+ * to an entry is a verdict, because the entries people happen to act on
+ * later are not a sample of anything.
  */
 @Injectable()
 export default class KnowledgeAgreementService {
@@ -192,10 +194,15 @@ export default class KnowledgeAgreementService {
 
       seen.add(decision.entryId);
 
+      // An audit is open only while its entry is where triage left it, as
+      // in the queue: once something else has moved it on (decay, a person,
+      // a later consolidation), acting on the entry judges that, not triage.
+      const status = statusOf.get(decision.entryId);
+
       if (
         decision.verdict !== null ||
-        (statusOf.get(decision.entryId) !== PageEntryStatus.PROPOSED &&
-          !decision.audit)
+        (status !== PageEntryStatus.PROPOSED &&
+          !(decision.audit && status === statusLeftBy(decision.decision)))
       ) {
         continue;
       }

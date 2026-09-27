@@ -20,6 +20,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { knowledgeSettings } from './knowledge-settings';
 import PageEntriesService from './page-entries.service';
+import { statusLeftBy } from './triage/agreement';
 
 const ENTRY_SELECT = {
   id: true,
@@ -47,13 +48,6 @@ const DECISION_SELECT = {
 type Decision = Prisma.KnowledgeTriageDecisionGetPayload<{
   select: typeof DECISION_SELECT;
 }>;
-
-/** The status an acted-on decision left its entry in. */
-function statusLeftBy(decision: KnowledgeTriageDecisionType): PageEntryStatus {
-  return decision === KnowledgeTriageDecisionType.AUTO_ACCEPT
-    ? PageEntryStatus.STANDING
-    : PageEntryStatus.ARCHIVED;
-}
 
 /**
  * The review queue: what waits on a person, and why.
@@ -188,7 +182,7 @@ export default class KnowledgeReviewService {
    * hand: an entry accepted without a person is set aside, and one folded
    * into what it repeats or rejected on a policy is put into use. The change
    * records the verdict on the decision, as any person's action on an
-   * audited entry does.
+   * audited entry still where triage left it does.
    */
   async resolveAudit(
     workspaceId: string,

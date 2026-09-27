@@ -566,7 +566,8 @@ next session starts by reading it.
   (ACCEPTED, REJECTED, EDITED), `agreed`, `verdictById` and `verdictAt`. A
   verdict is recorded when a person (never an agent) acts on an entry whose
   latest decision has none yet, and the entry was PROPOSED before the change
-  or the decision was drawn for audit. Setting STANDING or CONSOLIDATED is
+  or the decision was drawn for audit and the entry was still where it left
+  it (review round 3). Setting STANDING or CONSOLIDATED is
   ACCEPTED; ARCHIVED or DISPUTED is REJECTED; changing the content, scope or
   kind (compared with what they were) is EDITED, whatever the status. Confirming
   alone gives no verdict: it says nothing about whether the entry stays.
@@ -608,7 +609,7 @@ next session starts by reading it.
   the minimum on verdicts about the others (review round 1). With verdicts
   about the type, kappa is null only when both sides said it on every one,
   which back-off reads as complete agreement. Tested against hand-worked
-  values (1, 0, 0.4, -1, a weighted 0.625, a per-type table).
+  values (1, 0, 0.4, -1, a per-type table).
 - **Audits (KG-5.2).** `KNOWLEDGE_AUDIT_RATE` (0.1, per workspace
   `auditRate`). The decision id is generated before the row is written, and
   the draw is the first 52 bits of sha256(id) over 2^52: seeded by the id,
@@ -633,7 +634,11 @@ next session starts by reading it.
   verdict as the first gave it; the second gets 409. Disagreeing with a
   folded repeat takes its corroboration back off the entry it repeated.
   Any other action on an audited entry (setting it aside from the rail,
-  editing it, folding it into the page) gives the verdict too.
+  editing it, folding it into the page) gives the verdict too, while the
+  entry is still where the decision left it: once decay, a person or a
+  consolidation has moved it on, the audit is closed on every route, since
+  acting on the entry then judges what moved it, not triage (review
+  round 3).
 - **Back-off (KG-5.4).** `KNOWLEDGE_KAPPA_FLOOR` (0.6) and
   `KNOWLEDGE_KAPPA_MIN_SAMPLES` (20), per workspace. A type with at least
   the minimum verdicts about it and a kappa under the floor backs off; a
@@ -1236,6 +1241,24 @@ answered:
   status the decision left it, as the queue does. Test: "[KG-5.2] closes an
   audit whose entry has moved on since".
 
+### Phase 5, round 3 (same reviewer, on the round 2 fixes)
+
+The reviewer checked d1688df and 500a859: the pages suites (377 tests), the
+webapp specs, `pnpm typecheck --force`, and 76/98 by hand. A and C fixed, B's
+answer accepted, every earlier finding still resolved, no blocking findings.
+Verdict PASS, with two new non-blocking points, both now fixed:
+
+- **1. PROGRESS still listed the weighted 0.625 test** removed in d1688df.
+  The Kappa bullet no longer lists it.
+- **2. Acting on an audited entry by hand still gave a verdict once the
+  audit was closed** (decay archives an audited acceptance, and a person
+  bringing it back was counted against AUTO_ACCEPT). `verdictsFor` now
+  takes a verdict on an audit only while the entry is in the status the
+  decision left it, the rule the queue and `resolveAudit` use
+  (`statusLeftBy` moved to `triage/agreement.ts` so all three share it).
+  Test: "[KG-5.5] acting by hand on an audited entry that has moved on
+  gives no verdict", which fails against the old condition.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -1417,3 +1440,8 @@ Give the evidence, and stop until the maintainer answers.
   blocking findings, three non-blocking (audit weights backing acceptance
   off at 95% agreement, a decrement race, stale audits answerable): two
   fixed with tagged tests, one answered. Round 3 started.
+- 2026-09-27: Phase 5 review round 3: verdict PASS, round 2's points
+  resolved, two new non-blocking points (a stale line in PROGRESS, a
+  verdict on a closed audit through a by-hand action), both fixed, the
+  second with a tagged test that the old condition fails. Round 4 started
+  to confirm them.

@@ -140,7 +140,7 @@ const ReviewRow = observer(
                 />
                 <Choice
                   label={audit.disagree}
-                  hint="Triage was wrong. Undoes what it did, and counts against it"
+                  hint="Triage was wrong. Reverses what it did to this fact, and counts against it"
                   onClick={() => audit.onAnswer(false)}
                 />
               </div>

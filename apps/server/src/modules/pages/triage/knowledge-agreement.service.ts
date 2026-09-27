@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { KnowledgeVerdict, PageEntryStatus, Prisma } from '@prisma/client';
+import {
+  KnowledgeTriageDecisionType,
+  KnowledgeVerdict,
+  PageEntryStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from 'nestjs-prisma';
 
 import { LoggerService } from 'modules/logger/logger.service';
@@ -13,6 +18,7 @@ import {
   type ActingDecision,
   agreementByType,
   agrees,
+  isActing,
   shouldBackOff,
   type TypeAgreement,
   weightOf,
@@ -127,22 +133,31 @@ export default class KnowledgeAgreementService {
 
   /**
    * The writes that record a person's verdict on each of these entries, to
-   * run in the same transaction as the change itself, and the workspaces to
-   * re-evaluate once it commits. Each entry is given with its status before
-   * the change. An entry with no open decision gets nothing.
+   * run in the same transaction as the change itself, the decisions they
+   * give a verdict on, and the workspaces to re-evaluate once it commits.
+   * Each entry is given with its status before the change. An entry with no
+   * open decision gets nothing.
+   *
+   * `strict` names a decision whose verdict must be this one: its write then
+   * fails, and with it the whole transaction, when another verdict landed
+   * first. An audit answered as such needs that, or two people answering at
+   * once would leave the entry as the second left it and the verdict as the
+   * first gave it.
    */
   async verdictsFor(
     entries: ReadonlyArray<{ id: string; status: string }>,
     change: EntryChange,
     userId: string,
+    options: { strict?: string } = {},
   ): Promise<{
     operations: Array<Prisma.PrismaPromise<unknown>>;
+    decisionIds: string[];
     workspaceIds: string[];
   }> {
     const verdict = verdictOf(change);
 
     if (!verdict || entries.length === 0) {
-      return { operations: [], workspaceIds: [] };
+      return { operations: [], decisionIds: [], workspaceIds: [] };
     }
 
     const open = await this.prisma.knowledgeTriageDecision.findMany({
@@ -157,12 +172,15 @@ export default class KnowledgeAgreementService {
         policy: true,
         backedOffFrom: true,
         audit: true,
+        applied: true,
+        corroboratedEntryId: true,
         verdict: true,
       },
     });
     const statusOf = new Map(entries.map((entry) => [entry.id, entry.status]));
     const seen = new Set<string>();
     const operations: Array<Prisma.PrismaPromise<unknown>> = [];
+    const decisionIds: string[] = [];
     const workspaceIds = new Set<string>();
     const verdictAt = new Date();
 
@@ -184,25 +202,50 @@ export default class KnowledgeAgreementService {
 
       // Conditional, so of two people acting at once only the first gives
       // the verdict.
+      const where: Prisma.KnowledgeTriageDecisionWhereUniqueInput = {
+        id: decision.id,
+        verdict: null,
+      };
+      const data = {
+        verdict,
+        agreed: agrees(decision, verdict),
+        verdictById: userId,
+        verdictAt,
+      };
+
       operations.push(
-        this.prisma.knowledgeTriageDecision.updateMany({
-          where: { id: decision.id, verdict: null },
-          data: {
-            verdict,
-            agreed: agrees(decision, verdict),
-            verdictById: userId,
-            verdictAt,
-          },
-        }),
+        decision.id === options.strict
+          ? this.prisma.knowledgeTriageDecision.update({ where, data })
+          : this.prisma.knowledgeTriageDecision.updateMany({ where, data }),
       );
+      decisionIds.push(decision.id);
       workspaceIds.add(decision.workspaceId);
+
+      // A repeat triage folded in and a person puts back into use was not a
+      // repeat, so the corroboration it counted is taken back.
+      if (
+        decision.decision === KnowledgeTriageDecisionType.CORROBORATE &&
+        decision.applied &&
+        decision.corroboratedEntryId &&
+        change.status === PageEntryStatus.STANDING
+      ) {
+        operations.push(
+          this.prisma.pageEntry.updateMany({
+            where: {
+              id: decision.corroboratedEntryId,
+              corroborationCount: { gt: 0 },
+            },
+            data: { corroborationCount: { decrement: 1 } },
+          }),
+        );
+      }
     }
 
-    return { operations, workspaceIds: [...workspaceIds] };
+    return { operations, decisionIds, workspaceIds: [...workspaceIds] };
   }
 
   /**
-   * Agreement per acting decision type over the window, from the verdicts
+   * Agreement per measured decision type over the window, from the verdicts
    * given in it.
    */
   async measure(
@@ -267,7 +310,14 @@ export default class KnowledgeAgreementService {
       const made: BackoffChange[] = [];
 
       for (const agreement of types) {
-        const was = state.get(agreement.decision)?.backedOff ?? false;
+        // Escalation is measured but never backs off: it already waits on a
+        // person.
+        if (!isActing(agreement.decision)) {
+          continue;
+        }
+
+        const decision = agreement.decision;
+        const was = state.get(decision)?.backedOff ?? false;
         const backedOff = shouldBackOff(agreement, settings, was);
 
         if (backedOff === was) {
@@ -277,7 +327,7 @@ export default class KnowledgeAgreementService {
         await tx.knowledgeBackoffChange.create({
           data: {
             workspaceId,
-            decision: agreement.decision,
+            decision,
             backedOff,
             kappa: agreement.kappa,
             samples: agreement.samples,
@@ -287,7 +337,7 @@ export default class KnowledgeAgreementService {
           },
         });
         made.push({
-          decision: agreement.decision,
+          decision,
           backedOff,
           kappa: agreement.kappa,
           samples: agreement.samples,
@@ -367,7 +417,7 @@ export default class KnowledgeAgreementService {
       auditRate: settings.auditRate,
       types: types.map((agreement) => ({
         ...agreement,
-        ...(state.get(agreement.decision) ?? {
+        ...((isActing(agreement.decision) && state.get(agreement.decision)) || {
           backedOff: false,
           changedAt: null,
         }),

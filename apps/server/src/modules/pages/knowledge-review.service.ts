@@ -235,11 +235,35 @@ export default class KnowledgeReviewService {
       decision.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT
         ? agree
         : !agree;
-    const entry = await this.pageEntries.updateEntry(decision.entryId, userId, {
-      status: keep
-        ? PageEntryStatusEnum.STANDING
-        : PageEntryStatusEnum.ARCHIVED,
-    });
+    let entry: Awaited<ReturnType<PageEntriesService['updateEntry']>>;
+
+    try {
+      entry = await this.pageEntries.updateEntry(
+        decision.entryId,
+        userId,
+        {
+          status: keep
+            ? PageEntryStatusEnum.STANDING
+            : PageEntryStatusEnum.ARCHIVED,
+        },
+        { audit: decision.id },
+      );
+    } catch (error) {
+      // Someone else's answer landed between the check above and this one,
+      // and this answer was rolled back with its change.
+      const now = await this.prisma.knowledgeTriageDecision.findUnique({
+        where: { id: decision.id },
+        select: { verdict: true },
+      });
+
+      if (now?.verdict) {
+        throw new ConflictException({
+          message: `This audit already has a verdict: ${now.verdict.toLowerCase()}.`,
+        });
+      }
+
+      throw error;
+    }
 
     return {
       entry,

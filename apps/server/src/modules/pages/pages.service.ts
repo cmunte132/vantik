@@ -5,6 +5,7 @@ import {
   Page,
   PageEntryStatusEnum,
   UpdatePageDto,
+  UserTypeEnum,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -14,6 +15,7 @@ import {
 } from 'common/utils/tiptap.utils';
 
 import KnowledgeIndexService from './knowledge-index.service';
+import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 
 /**
  * The body to store, from whichever form the caller sent.
@@ -86,6 +88,7 @@ export default class PagesService {
   constructor(
     private prisma: PrismaService,
     private indexer?: KnowledgeIndexService,
+    private agreement?: KnowledgeAgreementService,
   ) {}
 
   // ----------------------------------------------------------------- reading
@@ -386,6 +389,21 @@ export default class PagesService {
       select: { description: true },
     });
 
+    // A person folding an entry drawn for audit into the page keeps it,
+    // which answers the audit as keeping it by hand would. An agent
+    // consolidating is not a verdict on anything.
+    const verdicts =
+      this.agreement && entries.length && !(await this.isAgent(userId))
+        ? await this.agreement.verdictsFor(
+            entries.map((entry) => ({
+              id: entry.id,
+              status: PageEntryStatusEnum.STANDING,
+            })),
+            { status: PageEntryStatusEnum.CONSOLIDATED, edited: false },
+            userId,
+          )
+        : { operations: [], decisionIds: [], workspaceIds: [] };
+
     const [page] = await this.prisma.$transaction([
       this.prisma.page.update({
         where: { id: pageId },
@@ -400,6 +418,7 @@ export default class PagesService {
         where: { id: { in: entries.map((entry) => entry.id) } },
         data: { status: PageEntryStatusEnum.CONSOLIDATED },
       }),
+      ...verdicts.operations,
     ]);
 
     await this.recordHistory(
@@ -413,8 +432,18 @@ export default class PagesService {
     // the entry it was written from, reading as two confirmations of one thing.
     await this.indexer?.pageChanged(pageId);
     await this.indexer?.entriesChanged(entries.map((entry) => entry.id));
+    await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
 
     return this.withMarkdown(page);
+  }
+
+  private async isAgent(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { type: true },
+    });
+
+    return user?.type === UserTypeEnum.Agent;
   }
 
   /**

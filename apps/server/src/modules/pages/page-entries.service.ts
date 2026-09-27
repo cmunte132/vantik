@@ -302,10 +302,16 @@ export default class PageEntriesService {
     return this.citations.checkForWrite(workspaceId, inputs);
   }
 
+  /**
+   * `audit` names a decision drawn for audit that this change answers: the
+   * change then lands only with that decision's verdict, and is refused when
+   * someone else's verdict landed first.
+   */
   async updateEntry(
     entryId: string,
     userId: string,
     entryData: UpdatePageEntryDto,
+    options: { audit?: string } = {},
   ): Promise<PageEntry> {
     const current = await this.prisma.pageEntry.findFirst({
       where: { id: entryId, deleted: null },
@@ -359,7 +365,7 @@ export default class PageEntriesService {
     // entry is not a verdict on anything.
     const verdicts =
       agent || !this.agreement
-        ? { operations: [], workspaceIds: [] }
+        ? { operations: [], decisionIds: [], workspaceIds: [] }
         : await this.agreement.verdictsFor(
             [{ id: entryId, status: current.status }],
             {
@@ -373,7 +379,15 @@ export default class PageEntriesService {
                   entryData.kind !== current.kind),
             },
             userId,
+            { strict: options.audit },
           );
+
+    if (options.audit && !verdicts.decisionIds.includes(options.audit)) {
+      throw new ConflictException({
+        message:
+          'This audit can no longer be answered: it has a verdict, or a later decision replaced it.',
+      });
+    }
 
     const [entry] = await this.prisma.$transaction([
       this.prisma.pageEntry.update({
@@ -468,7 +482,7 @@ export default class PageEntriesService {
             { status: input.status, edited: false },
             userId,
           )
-        : { operations: [], workspaceIds: [] };
+        : { operations: [], decisionIds: [], workspaceIds: [] };
 
       await this.prisma.$transaction([
         this.prisma.pageEntry.updateMany({

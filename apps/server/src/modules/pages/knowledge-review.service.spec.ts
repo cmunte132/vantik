@@ -25,6 +25,7 @@ import { LoggerService } from 'modules/logger/logger.service';
 import { KnowledgeReviewController } from './knowledge-review.controller';
 import KnowledgeReviewService from './knowledge-review.service';
 import PageEntriesService from './page-entries.service';
+import PagesService from './pages.service';
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 
 const WORKSPACE = 'workspace-1';
@@ -176,11 +177,30 @@ function store(seed: Seed) {
   };
   const apply = (row: Row, data: Row) => {
     for (const [key, value] of Object.entries(data)) {
-      row[key] = value;
+      const step = value as { increment?: number; decrement?: number } | null;
+
+      row[key] =
+        step && typeof step === 'object' && !(step instanceof Date)
+          ? (row[key] as number) + (step.increment ?? 0) - (step.decrement ?? 0)
+          : value;
     }
   };
 
   const client = {
+    page: {
+      findUnique: jest.fn(({ where }: { where: { id: string } }) =>
+        lazy(() => pages.get(where.id) ?? null),
+      ),
+      update: jest.fn(({ where, data }: { where: { id: string }; data: Row }) =>
+        lazy(() => {
+          const row = pages.get(where.id) as Row;
+          apply(row, data);
+
+          return row;
+        }),
+      ),
+    },
+    pageHistory: { create: jest.fn(() => lazy(() => ({}))) },
     workspace: {
       findUnique: jest.fn(({ where }: { where: { id: string } }) =>
         lazy(() => workspaces.get(where.id) ?? null),
@@ -267,6 +287,21 @@ function store(seed: Seed) {
       ),
       findUnique: jest.fn(({ where }: { where: { id: string } }) =>
         lazy(() => decisions.find((row) => row.id === where.id) ?? null),
+      ),
+      // As Prisma's: a row the filter no longer matches is an error, which
+      // rolls back the transaction it is in.
+      update: jest.fn(({ where, data }: { where: Where; data: Row }) =>
+        lazy(() => {
+          const row = decisions.find((candidate) => matches(candidate, where));
+
+          if (!row) {
+            throw new Error('Record to update not found.');
+          }
+
+          apply(row, data);
+
+          return row;
+        }),
       ),
       updateMany: jest.fn(({ where, data }: { where: Where; data: Row }) =>
         lazy(() => {
@@ -446,8 +481,9 @@ function harness(seed: Seed) {
   );
   const review = new KnowledgeReviewService(prisma, pageEntries);
   const controller = new KnowledgeReviewController(review, agreement, prisma);
+  const pagesService = new PagesService(prisma, undefined, agreement);
 
-  return { ...s, agreement, pageEntries, review, controller };
+  return { ...s, agreement, pageEntries, pagesService, review, controller };
 }
 
 const decided = (t: ReturnType<typeof harness>, id: string) =>
@@ -896,7 +932,7 @@ describe('verdicts from what people do', () => {
         { status: PageEntryStatusEnum.STANDING, edited: false },
         'person-1',
       ),
-    ).resolves.toEqual({ operations: [], workspaceIds: [] });
+    ).resolves.toEqual({ operations: [], decisionIds: [], workspaceIds: [] });
   });
 
   it('[KG-5.5] is not given by an agent, by confirming alone, or on what never reached a person', async () => {
@@ -951,6 +987,36 @@ describe('verdicts from what people do', () => {
       agreed: false,
     });
     expect((await t.review.queue(WORKSPACE)).items).toEqual([]);
+  });
+
+  it('[KG-5.5] a person folding an audited entry into its page keeps it; an agent decides nothing', async () => {
+    const kept = audited('kept', Decision.AUTO_ACCEPT);
+    const byAgent = audited('by-agent', Decision.AUTO_ACCEPT, {
+      id: 'decision-by-agent',
+    });
+    byAgent.entry.pageId = OTHER_PAGE;
+    const t = harness({
+      entries: [kept.entry, byAgent.entry],
+      decisions: [kept.decision, byAgent.decision],
+    });
+
+    await t.pagesService.consolidate(PAGE, 'person-1', {
+      descriptionMarkdown: 'Fact kept.',
+    });
+    await t.pagesService.consolidate(OTHER_PAGE, 'agent-1', {
+      descriptionMarkdown: 'Fact by-agent.',
+    });
+
+    expect(t.entries.get('kept')?.status).toBe('CONSOLIDATED');
+    expect(decided(t, 'kept')).toMatchObject({
+      verdict: Verdict.ACCEPTED,
+      agreed: true,
+      verdictById: 'person-1',
+    });
+    expect(t.entries.get('by-agent')?.status).toBe('CONSOLIDATED');
+    expect(decided(t, 'by-agent')).toMatchObject({ verdict: null });
+    // Agreement was measured again once, after the person's verdict.
+    expect(t.prisma.$executeRaw).toHaveBeenCalledTimes(1);
   });
 
   it('[KG-5.5] lands with the change or not at all', async () => {
@@ -1036,6 +1102,86 @@ describe('audits', () => {
       verdict: Verdict.REJECTED,
       agreed: true,
     });
+  });
+
+  it('[KG-5.2] of two answers at once, keeps the first and refuses the second with its change', async () => {
+    const { entry: row, decision: audit } = audited(
+      'accepted',
+      Decision.AUTO_ACCEPT,
+    );
+    const t = harness({ entries: [row], decisions: [audit] });
+    const otherAnswer = () =>
+      Object.assign(decided(t, 'accepted'), {
+        verdict: Verdict.ACCEPTED,
+        agreed: true,
+        verdictById: 'person-2',
+        verdictAt: new Date(),
+      });
+    const transaction = t.prisma.$transaction as jest.Mock;
+    const run = transaction.getMockImplementation() as (
+      work: unknown,
+    ) => Promise<unknown>;
+
+    // The other answer commits after this one read the audit as open, but
+    // before this one's change commits: the change is rolled back.
+    transaction.mockImplementationOnce(async (work: unknown) => {
+      otherAnswer();
+      return run(work);
+    });
+
+    await expect(
+      t.review.resolveAudit(WORKSPACE, 'decision-accepted', 'person-1', false),
+    ).rejects.toThrow('This audit already has a verdict: accepted.');
+    expect(t.entries.get('accepted')?.status).toBe('STANDING');
+    expect(decided(t, 'accepted')).toMatchObject({ verdictById: 'person-2' });
+
+    // And one that commits before this one reads it for the verdict: no
+    // change is attempted.
+    const again = audited('accepted', Decision.AUTO_ACCEPT);
+    const u = harness({ entries: [again.entry], decisions: [again.decision] });
+    const read = u.prisma.knowledgeTriageDecision.findMany as jest.Mock;
+    const find = read.getMockImplementation() as (args: unknown) => unknown;
+    read.mockImplementationOnce((args: unknown) => {
+      Object.assign(decided(u, 'accepted'), { verdict: Verdict.ACCEPTED });
+      return find(args);
+    });
+
+    await expect(
+      u.review.resolveAudit(WORKSPACE, 'decision-accepted', 'person-1', false),
+    ).rejects.toThrow('This audit already has a verdict: accepted.');
+    expect(u.entries.get('accepted')?.status).toBe('STANDING');
+    expect(u.prisma.pageEntry.update).not.toHaveBeenCalled();
+  });
+
+  it('[KG-5.2] disagreeing with a folded repeat takes back the corroboration it counted', async () => {
+    const repeat = audited('repeat', Decision.CORROBORATE, {
+      corroboratedEntryId: 'original',
+    });
+    const kept = audited('kept', Decision.CORROBORATE, {
+      corroboratedEntryId: 'original',
+    });
+    const t = harness({
+      entries: [
+        entry('original', {
+          status: PageEntryStatusEnum.STANDING,
+          corroborationCount: 2,
+        }),
+        repeat.entry,
+        kept.entry,
+      ],
+      decisions: [repeat.decision, kept.decision],
+    });
+
+    await t.review.resolveAudit(
+      WORKSPACE,
+      'decision-repeat',
+      'person-1',
+      false,
+    );
+    await t.review.resolveAudit(WORKSPACE, 'decision-kept', 'person-1', true);
+
+    expect(t.entries.get('repeat')?.status).toBe('STANDING');
+    expect(t.entries.get('original')?.corroborationCount).toBe(1);
   });
 
   it('[KG-5.2] answers once, only for an audit, and only in its own workspace', async () => {
@@ -1126,7 +1272,7 @@ describe('agreement', () => {
     const t = measured();
 
     const report = await t.agreement.report(WORKSPACE);
-    const [accept, corroborate, reject] = report.types;
+    const [accept, corroborate, reject, escalate] = report.types;
 
     expect(report).toMatchObject({
       autoTriage: 'on',
@@ -1136,11 +1282,12 @@ describe('agreement', () => {
       auditRate: 0.1,
     });
     expect(report.since.getTime()).toBeCloseTo(daysAgo(30).getTime(), -4);
-    // AUTO_ACCEPT over six verdicts: both 2, triage only 1, person only 1,
-    // neither 2. alike 4; chance = 3×3 + 3×3 = 18; (24 - 18) / (36 - 18).
+    // AUTO_ACCEPT over six verdicts, four about acceptance: both 2, triage
+    // only 1, person only 1, neither 2. alike 4; chance = 3×3 + 3×3 = 18;
+    // (24 - 18) / (36 - 18).
     expect(accept).toMatchObject({
       decision: Decision.AUTO_ACCEPT,
-      samples: 6,
+      samples: 4,
       counts: { both: 2, triageOnly: 1, personOnly: 1, neither: 2 },
       backedOff: false,
       changedAt: null,
@@ -1154,8 +1301,19 @@ describe('agreement', () => {
       backedOff: true,
       changedAt: daysAgo(3),
     });
-    // REJECT: nothing refused by anyone: undefined.
-    expect(reject).toMatchObject({ kappa: null, samples: 6, backedOff: false });
+    // REJECT: nothing refused by anyone, so nothing to go on.
+    expect(reject).toMatchObject({ kappa: null, samples: 0, backedOff: false });
+    // ESCALATE, reported and never backed off: both 1, triage only 1, person
+    // only 1, neither 3. alike 4; chance = 2×2 + 4×4 = 20; (24 - 20) / (36 -
+    // 20) = 0.25.
+    expect(escalate).toMatchObject({
+      decision: Decision.ESCALATE,
+      kappa: 0.25,
+      samples: 3,
+      counts: { both: 1, triageOnly: 1, personOnly: 1, neither: 3 },
+      backedOff: false,
+      changedAt: null,
+    });
   });
 
   it('[KG-5.3] counts each audited decision for all it was drawn from', async () => {
@@ -1182,7 +1340,7 @@ describe('agreement', () => {
     // chance = 20×11 + 3×12 = 256; (12×23 - 256) / (23² - 256) = 20/273.
     // Counted once each it would be (15 - 13) / (25 - 13) = 1/6.
     expect(accept).toMatchObject({
-      samples: 5,
+      samples: 3,
       counts: { both: 1, triageOnly: 1, personOnly: 1, neither: 2 },
       weighted: { both: 10, triageOnly: 10, personOnly: 1, neither: 2 },
     });
@@ -1200,8 +1358,9 @@ describe('agreement', () => {
       'AUTO_ACCEPT',
       'CORROBORATE',
       'REJECT',
+      'ESCALATE',
     ]);
-    expect(report.types[0].samples).toBe(6);
+    expect(report.types[0].samples).toBe(4);
 
     await expect(
       t.controller.agreementReport(WORKSPACE, RoleEnum.AGENT),
@@ -1365,16 +1524,80 @@ describe('backing off as verdicts arrive', () => {
         decision: Decision.AUTO_ACCEPT,
         backedOff: false,
         kappa: 1,
-        samples: 5,
+        samples: 4,
       }),
     ]);
     expect(logged).toHaveBeenLastCalledWith(
       expect.objectContaining({
         message: expect.stringContaining(
-          'Triage resumed acting on AUTO_ACCEPT in workspace workspace-1: kappa 1.00 over 5 verdicts',
+          'Triage resumed acting on AUTO_ACCEPT in workspace workspace-1: kappa 1.00 over 4 verdicts',
         ),
       }),
     );
+  });
+
+  it('[KG-5.4] resumes or backs off a type only on verdicts about that type', async () => {
+    const stopped = {
+      id: 'change-0',
+      createdAt: daysAgo(40),
+      workspaceId: WORKSPACE,
+      decision: Decision.REJECT,
+      backedOff: true,
+    };
+    const repeat = audited('repeat', Decision.CORROBORATE);
+    const shadow = { mode: 'SHADOW', applied: false };
+    const t = harness({
+      entries: [entry('open'), repeat.entry],
+      decisions: [
+        // What refusing backed off on has aged out of the window.
+        ...['r1', 'r2', 'r3'].map((id) =>
+          ruled(id, Decision.REJECT, Verdict.ACCEPTED, {
+            policy: 'ONE_FACT',
+            verdictAt: daysAgo(40),
+          }),
+        ),
+        // Since then: acceptances people kept, escalations they set aside,
+        // and nothing refused.
+        ...Array.from({ length: 16 }, (_, index) =>
+          ruled(`a${index}`, Decision.AUTO_ACCEPT, Verdict.ACCEPTED, shadow),
+        ),
+        ...['x1', 'x2', 'x3'].map((id) =>
+          ruled(id, Decision.ESCALATE, Verdict.REJECTED),
+        ),
+        decision('open', {
+          ...shadow,
+          decision: Decision.AUTO_ACCEPT,
+          reasons: [],
+        }),
+        repeat.decision,
+      ],
+      backoff: [stopped],
+    });
+
+    // Twenty-one verdicts in the window: past the minimum of twenty, but
+    // none about refusing and one about folding in.
+    await t.pageEntries.updateEntry('open', 'person-1', {
+      status: PageEntryStatusEnum.STANDING,
+    });
+    await t.review.resolveAudit(
+      WORKSPACE,
+      'decision-repeat',
+      'person-1',
+      false,
+    );
+
+    expect(t.backoff).toEqual([stopped]);
+    expect(logged).not.toHaveBeenCalled();
+
+    const report = await t.agreement.report(WORKSPACE);
+    expect(
+      report.types.map((type) => [type.decision, type.samples, type.backedOff]),
+    ).toEqual([
+      [Decision.AUTO_ACCEPT, 18, false],
+      [Decision.CORROBORATE, 1, false],
+      [Decision.REJECT, 0, true],
+      [Decision.ESCALATE, 3, false],
+    ]);
   });
 
   it('[KG-5.4] never fails the person for a re-evaluation that could not run', async () => {

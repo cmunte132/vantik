@@ -5,7 +5,8 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 4 (implemented, review pending); phase 5 next. Both go in
+- Current phase: 4 (implemented; review round 1 answered, round 2
+  pending); phase 5 next. Both go in
   the second pull request, after PR #44 (phase 1's review fixes, phase 2 and
   phase 3), which is merged.
 - Pull requests: the maintainer asked for the remaining phases in two or three
@@ -421,13 +422,23 @@ next session starts by reading it.
   with ONE_FACT. Credentials are also refused at write (422
   `secret-refused`, content not echoed) on create and on edit, for a person
   too: entries are replicated to every member's browser, so triage finding
-  one afterwards is too late. External input: the writing run is found by the
-  session id a hosted run writes with (its run id); its issue is outside
-  input when an integration filed it (`sourceMetadata.type`), it is a
-  support issue or on a support team, or a non-PR linked issue carries a
-  source type or syncs. Such an entry always escalates with EXTERNAL_INPUT,
-  even as an exact repeat, so a poisoned run cannot raise another entry's
-  corroboration count either.
+  one afterwards is too late. External input is established by the server,
+  never from the session a writer names (hosted runs cannot write yet,
+  ENG-84, so every writer is a client that picks its own session). The runs
+  are the writer's own: `AgentRun` rows in the workspace whose `agentUserId`
+  is the writer, not deleted, created at or before the entry and not
+  finished before it. An issue is outside input when an integration filed it
+  (`sourceMetadata.type`), it is a support issue or on a support team, a
+  non-PR linked issue carries a source type or syncs, or it carries a
+  comment mirrored from outside (`sourceMetadata.type`) written before the
+  entry, deleted or not, since the comment stays after the link goes. A
+  cited issue or comment is held to the same test. Any of these escalates
+  with EXTERNAL_INPUT. An entry by an agent (or a writer with no user
+  record) that falls in no run escalates with UNKNOWN_SOURCE (a new
+  reason): what it read cannot be checked. A person's entry is not held to a
+  run. Both reasons apply even to an exact repeat, so text from outside, or
+  from an unknown source, cannot raise another entry's corroboration count
+  either. The session is recorded as given, for tracing.
 - **Exact repeats (KG-4.1).** `PageEntry.contentHash` is sha256 of
   `normaliseContent`, written on create and on every content edit, and
   backfilled by the migration in SQL. The neighbourhood is PROPOSED and
@@ -462,11 +473,17 @@ next session starts by reading it.
   `smart` roles at temperature 0, or, when both roles resolve to the same
   model id, `smart` twice at 0.7. Prompts treat the entries as data, not
   instructions. The acceptance judgment is shown the claim and each
-  citation as the server read it (path, lines, result and snippet; or the
-  issue key). An answer that cannot be read, or a model that cannot be
-  reached, counts as not accepting.
+  citation as the server read it: path, lines, result and snippet; a cited
+  issue's title and description or a comment's body, as plain text, in this
+  workspace only, cut to 1500 characters; for a pull request or a run, its
+  label and that its text is not shown. Any credential in what a model is
+  shown (a neighbour's content, a snippet, a cited text) is replaced by
+  `[withheld: <kind>]`, redacted before any cut. Plain text rather than
+  markdown, because markdown escapes a token's underscores and an escaped
+  token no longer matches. An answer that cannot be read, or a model that
+  cannot be reached, counts as not accepting.
 - **Auto-accept conditions (KG-4.4).** Reasons are collected, every one that
-  applies: EXTERNAL_INPUT; SUPERSEDE_REQUEST (added to the plan's list: a
+  applies: EXTERNAL_INPUT; UNKNOWN_SOURCE; SUPERSEDE_REQUEST (added to the plan's list: a
   declared correction retires accepted knowledge only on a person's
   acceptance, as phase 0 decided); CONTRADICTS_VERIFIED and
   CONTRADICTS_LOCKED for an agreed CONTRADICTS or SUPERSEDES against a
@@ -474,7 +491,8 @@ next session starts by reading it.
   an entry that is not a repeat, UNGROUNDED (no citations), CITATION_FAILED
   (any citation not HOLDS or MOVED, UNKNOWN included), PIN_REQUEST (every
   CONVENTION, since standing conventions are packed into every run in their
-  modules), BROAD_SCOPE (more than three modules). The acceptance judgment
+  modules), BROAD_SCOPE (more than three modules, or no scope, since an
+  unscoped entry is served to every query). The acceptance judgment
   is asked only when no reason applies. Decision: a broken policy rejects;
   any reason escalates; else a repeat corroborates; else it is accepted.
   HARMFUL_SIGNAL and AUDIT are in the enum for phase 5.
@@ -494,13 +512,21 @@ next session starts by reading it.
   relations and changes no status or count. `on` applies the decision in the
   transaction that records it: accept sets STANDING, a repeat or a reject
   sets ARCHIVED, an escalation changes nothing. Applying is conditional on
-  the entry still being PROPOSED with the `updatedAt` it was read with, so
-  an entry edited or triaged by a person during the pass is left alone and
-  the decision says `applied: false`. Changed entries are re-indexed.
+  everything it touches being as it was read: the entry PROPOSED with the
+  `updatedAt` it was read with; the entry it repeats live, PROPOSED or
+  STANDING, on a live page, with the same hash (an exact repeat) or content
+  (a near duplicate); each entry it disputes STANDING, unverified, with the
+  content it was compared with, on a page that is not LOCKED. Any of these
+  failing throws inside the interactive transaction, which rolls back what
+  was already changed; the decision and relations are then recorded in a
+  second transaction with `applied: false` and `outputs.notApplied` saying
+  which entry changed. Changed entries are re-indexed.
 - **The record (KG-4.3).** `KnowledgeTriageDecision`: decision, reasons,
   policy, mode, applied, the corroborated entry, `inputs` (content hash,
-  kind, scope, modules, citations and their results, the writer, run, issue
-  and outside source, the threshold, the repeat found, each neighbour with
+  kind, scope, modules, citations and their results, the writer (user,
+  type, session as given, each run with its model, issue and outside
+  source, and whether the source was unknown), each cited issue or comment
+  with its outside source, the threshold, the repeat found, each neighbour with
   its similarity, status, trust, relation and preferred entry),
   `inputsDigest` (sha256 of the inputs as sorted JSON), every model asked in
   order, and the judges' raw answers. The content is not copied into it.
@@ -510,8 +536,17 @@ next session starts by reading it.
   adds NO_LLM, and so does an entry that reached the acceptance judgment.
 - **Migration** `20260927040000_knowledge_triage`: `prisma migrate diff`'s
   output verbatim (two tables, six enums, two PageEntry columns and an
-  index) plus the hash backfill. Postgres and JavaScript agree on the
-  normalisation for ASCII; an entry where they differ is not found by hash,
+  index) plus the hash backfill. The backfill trims and folds with
+  `regexp_replace` over JavaScript's `\s` spelled out as a class, not
+  `btrim`'s character list (no `\v` escape in postgres, so it trimmed the
+  letter v) nor postgres's `\s` (which follows the locale and leaves out
+  U+00A0, U+2007, U+202F and U+FEFF). The class matches JavaScript's `\s`
+  on every code point from 1 to 65535, checked on postgres 16. The
+  migration's own UPDATE, run over 20 sample rows, agrees with
+  `contentHashOf` on each: text starting or ending in v, tabs, vertical
+  tabs, form feeds and newlines, no-break and ideographic spaces, accented
+  and Japanese text. Lower-casing outside ASCII follows the database's
+  locale; an entry where it differs from JavaScript's is not found by hash,
   and the near-match stage still compares it.
 - **Webapp sync contract.** `contentHash` and `corroborationCount` are
   listed as not kept; nothing on screen reads them yet.
@@ -848,6 +883,85 @@ and a per-workspace override that can be saved, read through one function;
 a hand-written migration matching `prisma migrate diff`; mutation checks on
 each fix; no skipped or loosened tests, checklist and verifier untouched.
 
+### Phase 4, round 1 (fresh reviewer subagent)
+
+The reviewer read the phase diff (3daa793..87579fb) against PLAN.md and the
+KG-4 criteria, ran the seven affected suites (194 tests), replayed
+`prisma migrate diff` against the migration (it matches), and tested one
+SQL expression on the container's postgres. Three blocking findings and
+five non-blocking, all fixed:
+
+1. **Blocking: EXTERNAL_INPUT rested on the session the writer names.** The
+   run was found only by `sourceSession`, which any MCP, CLI or REST client
+   sets or leaves out, so an agent on a GitHub-synced issue could write
+   without a session and be accepted. Now established by the server
+   (`writerOf`, `knowledge-triage.service.ts:642`): the writer's own runs
+   open when the entry was written, as under Decisions; an agent's entry in
+   no run escalates with the new UNKNOWN_SOURCE; comments mirrored from
+   outside count, including after their link is gone (`triage-policy.ts`,
+   `commentSourceOf`). SKILL.md's wording now says what the check does.
+   Tests: "[KG-4.8] finds the runs the writer was in from its own record,
+   never from the session it names" (a session naming another agent's
+   internal run, a harness id, none), "counts the runs of the writer that
+   were open when the entry was written, and no others" (finished before,
+   started after, another agent, deleted, another workspace; the two edges
+   count), "escalates an agent's entry written outside any run the server
+   knows of" (its repeat too, and a writer with no user record), "holds a
+   person to what they wrote, not to a run", "reads a comment mirrored from
+   outside as outside input, after its link is gone too".
+2. **Blocking: applying acted on neighbours as read before the model
+   calls.** A neighbour verified, reworded or locked while the judges
+   answered was still disputed, and a repeat was archived against a target
+   deleted or archived meanwhile. Each update is now conditional as under
+   Decisions, and any miss rolls the whole application back and records the
+   decision as not applied (`apply` and `record`). The spec's store now rolls
+   back a transaction that throws, as postgres does. Tests: "[KG-4.6]
+   disputes nothing, and accepts nothing, when what it contradicts was
+   verified by a person / reworded / on a page that was locked / archived
+   while it decided", "undoes every change it made when one entry it
+   contradicts changed", "[KG-4.1] leaves the repeat in the inbox when what
+   it repeats was archived / deleted / reworded after it was found",
+   "[KG-4.2] folds in nothing when the near duplicate was reworded while
+   the judges answered"; the KG-4.3 stale-entry test now checks the recorded
+   reason.
+3. **Blocking: the backfill hashed differently from `contentHashOf` for
+   text starting or ending in v.** Fixed as under Decisions (migration).
+   Checking the fix on non-ASCII samples found a second difference, the
+   no-break space, which postgres's `\s` leaves out; the backfill now spells
+   out JavaScript's whitespace, and all 20 samples agree. All migrations
+   replayed on postgres 16, with `migrate diff` against the schema empty.
+4. **Credentials could reach the models** through a citation's snippet or
+   an older neighbour's content. Both, and cited issue and comment text, are
+   now redacted (`redactSecrets`). Tests: "[KG-4.8] withholds a credential
+   in anything it shows a model" (each route, both prompts) and "withholds
+   every credential in text it shows a model, and leaves the rest as
+   written". Writing that test found that markdown escaping hid a token from
+   the patterns, hence plain text for cited issues and comments.
+5. **Unscoped entries were never BROAD_SCOPE**, though served everywhere
+   and compared with one page. Now BROAD_SCOPE, and the constant's comment
+   says "more than three". Tests: a KG-4.4 case for no scope, and "[KG-4.4]
+   reads a scope over three modules as broad, and three as not".
+6. **A non-code citation that held only said its target existed**, and the
+   judges saw just its label. The judges now see a cited issue's and a
+   comment's text, and one from outside escalates with EXTERNAL_INPUT.
+   Tests: "[KG-4.4] the text of a cited issue or comment, not only that it
+   exists" (another workspace's issue and a pull request are not shown),
+   "no more of a cited issue than one screen of it", and "[KG-4.8] never
+   accepts an entry that rests on an issue or comment from outside".
+7. **The production wiring of "is a model configured" was untested.** New
+   test "[KG-4.7] read the deployment: no model until all four settings are
+   there", on `new TriageJudges()` with the `LLM_*` variables cleared and
+   restored.
+8. **Any member or write-scoped agent token could overwrite workspace
+   preferences** through `POST /workspaces`, which passed its body to
+   Prisma; with triage settings there, that could switch triage on and set a
+   threshold at which nothing is compared. Fixed here rather than split off,
+   because this phase is what made it matter: `updateWorkspace` now writes
+   only `name` and `icon`. Test: `update-workspace.spec.ts` "[KG-4.5]
+   changes its name and icon, and never its preferences".
+
+35 mutations over the fixes, each a change that compiles, all caught.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -962,3 +1076,7 @@ Give the evidence, and stop until the maintainer answers.
   The goal's spec hash differs from the checklist's current one; recorded
   under Needs a decision. Verify through phase 4: 38/39, only the review
   open; all suites and typecheck green.
+- 2026-09-27: Phase 4 review round 1: three blocking findings (external
+  input rested on the writer's session, applying acted on stale neighbours,
+  the backfill trimmed the letter v) and five non-blocking; all fixed with
+  tagged tests, 35 mutations caught. Server suite 1625 passed.

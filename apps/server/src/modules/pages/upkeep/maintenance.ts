@@ -21,6 +21,8 @@ export interface CitationEvidence {
   judgment: string | null;
   judgeModel: string | null;
   judgeReason: string | null;
+  /** A hash of the code the judge read, so a ruling on it is known again. */
+  judgedCodeHash?: string | null;
 }
 
 /**

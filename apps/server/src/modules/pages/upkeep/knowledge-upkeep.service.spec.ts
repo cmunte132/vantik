@@ -197,6 +197,7 @@ function harness(seed: Seed = {}) {
   const issues: Row[] = [];
   // Locks taken and citations stored, in order.
   const ops: string[] = [];
+  const hooks: { rowLock?: (entryId: string) => void } = {};
   let next = 0;
 
   const moduleView = (id: unknown) => modules.find((row) => row.id === id);
@@ -225,7 +226,16 @@ function harness(seed: Seed = {}) {
 
   const client = {
     $executeRaw: jest.fn(
-      async (_sql: TemplateStringsArray, ...values: unknown[]) => {
+      async (sql: TemplateStringsArray, ...values: unknown[]) => {
+        if (sql.join('?').includes('FOR UPDATE')) {
+          ops.push(`row:${String(values[0])}`);
+          // What a person's change waiting on the row does once it gets it,
+          // as if it had committed just before.
+          hooks.rowLock?.(String(values[0]));
+
+          return 1;
+        }
+
         ops.push(`lock:${String(values[0])}`);
 
         return 1;
@@ -503,6 +513,7 @@ function harness(seed: Seed = {}) {
     judge,
     issueService,
     ops,
+    hooks,
     upkeep: build(),
     build,
   };
@@ -529,6 +540,7 @@ function citation(id: string, entryId: string, overrides: Row = {}): Row {
   return {
     id,
     entryId,
+    createdAt: new Date(Date.now() - 31 * DAY),
     kind: 'CODE',
     moduleRepoId: 'repo-row-1',
     path: 'src/retry.ts',
@@ -1139,8 +1151,88 @@ describe('a change that landed re-checks the citations it touches', () => {
 
     await t.upkeep.codeLanded(landed());
 
-    expect(t.ops.slice(0, 2)).toEqual(['lock:knowledge-entry:e1', 'store:c1']);
+    expect(t.ops.slice(0, 3)).toEqual([
+      'lock:knowledge-entry:e1',
+      'store:c1',
+      'row:e1',
+    ]);
     expect(t.maintenance).toHaveLength(1);
+  });
+
+  it('[KG-6.2] holds the entry’s row before reading it, so a person rewording it meanwhile is read, not disputed over', async () => {
+    const t = harness({
+      entries: [entry('e1')],
+      citations: [citation('c1', 'e1')],
+    });
+    t.repo.code['src/retry.ts'] = CHANGED;
+    // The person's change was waiting on the row, and lands first.
+    t.hooks.rowLock = (id) =>
+      Object.assign(t.entries.get(id) as Row, {
+        content: 'Retries make five attempts.',
+        contentHash: 'hash-reworded',
+      });
+
+    await expect(t.upkeep.codeLanded(landed())).rejects.toMatchObject({
+      stale: 1,
+    });
+    expect(t.entries.get('e1')?.status).toBe(Status.STANDING);
+    expect(t.maintenance).toEqual([]);
+  });
+
+  it('[KG-6.2] ranks a reading of the commit a citation cites below a reading of a head, even in the same millisecond', async () => {
+    jest.useFakeTimers({
+      now: new Date('2026-01-01T00:00:00Z'),
+      doNotFake: [
+        'nextTick',
+        'queueMicrotask',
+        'setImmediate',
+        'clearImmediate',
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+      ],
+    });
+
+    try {
+      const written = new Date(Date.now() - DAY);
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [
+          citation('c1', 'e1', {
+            createdAt: written,
+            checkResult: Check.UNKNOWN,
+            checkedAt: null,
+            checkedSha: null,
+          }),
+        ],
+      });
+      const citations = new EntryCitationsService(
+        t.prisma as never,
+        t.files as never,
+        t.judge as never,
+      );
+
+      // The retry reads the commit c1 cites, where the claim holds...
+      await citations.retryUnknown('e1');
+
+      expect(t.citations[0]).toMatchObject({
+        checkResult: Check.HOLDS,
+        checkedAt: written,
+      });
+
+      // ...and in the same millisecond a change lands that contradicts it.
+      t.repo.code['src/retry.ts'] = CHANGED;
+      await t.upkeep.codeLanded(landed());
+
+      expect(t.citations[0]).toMatchObject({
+        checkedSha: SHA,
+        judgment: Judgment.CONTRADICTED,
+      });
+      expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('[KG-6.2] acts on what is stored once it holds the lock, not on a stored reading it found before', async () => {
@@ -1302,6 +1394,69 @@ describe('a change that landed re-checks the citations it touches', () => {
       expect(t.entries.get('e1')?.status).toBe(Status.STANDING);
       expect(t.maintenance).toHaveLength(1);
       expect(t.issues).toHaveLength(1);
+    });
+
+    it('[KG-6.2] does not raise again a contradiction a person overruled once unrelated commits moved the head, and asks when the code judged changed', async () => {
+      const { t, change } = await disputedWithOneUnread();
+
+      // Commits that leave the cited lines as they were land meanwhile.
+      t.repo.head = { sha: NEWER };
+      putBack(t);
+      await t.upkeep.codeLanded(change);
+
+      expect(t.citations[0]).toMatchObject({ checkedSha: NEWER });
+      expect(t.maintenance).toHaveLength(1);
+      expect(t.issues).toHaveLength(1);
+
+      // Code around the cited lines changes again: that is not what the
+      // person overruled, so they are asked.
+      const again = await disputedWithOneUnread();
+
+      again.t.repo.head = { sha: NEWER };
+      again.t.repo.code['src/retry.ts'] = CHANGED.replace(
+        'return attempts;',
+        'return attempts + 1;',
+      );
+      putBack(again.t);
+      await again.t.upkeep.codeLanded(again.change);
+
+      expect(again.t.maintenance[1]).toMatchObject({
+        action: Action.ARCHIVE_PROPOSED,
+        evidence: expect.objectContaining({ askedBecause: 'RESTORED' }),
+      });
+    });
+
+    it('[KG-6.2] does not raise again a stored judgment a person overruled, read again after they put the entry back', async () => {
+      const first = await disputedWithOneUnread();
+      const code = first.t.citations[0].judgedCodeHash;
+      // A re-check after the person put it back found the same, and stored
+      // it without acting on it.
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [
+          citation('c1', 'e1', {
+            checkedSha: SHA,
+            checkedAt: new Date(Date.now() - MINUTE),
+            checkResult: Check.CHANGED,
+            judgment: Judgment.CONTRADICTED,
+            judgedContentHash: 'hash-e1',
+            judgedCodeHash: code,
+          }),
+        ],
+        maintenance: [
+          {
+            ...first.t.maintenance[0],
+            reversedAt: new Date(Date.now() - 2 * MINUTE),
+            reversedById: 'person-1',
+          },
+        ],
+      });
+
+      await t.upkeep.codeLanded(landed());
+
+      expect(t.reads).toEqual([]);
+      expect(t.maintenance).toHaveLength(1);
+      expect(t.issues).toEqual([]);
     });
 
     it('[KG-6.2] judges the words a person corrected an entry to on its retry, not the words disputed', async () => {
@@ -1635,6 +1790,17 @@ describe('a change that landed re-checks the citations it touches', () => {
   });
 
   it('[KG-6.2] disputes again an entry a person corrected before putting it back, and asks about one put back unchanged', async () => {
+    // The code this change gives c1 to judge, as a hash.
+    const judged = harness({
+      entries: [entry('e1')],
+      citations: [citation('c1', 'e1')],
+    });
+    judged.repo.code['src/retry.ts'] = CHANGED;
+    await judged.upkeep.codeLanded(landed());
+    const code = judged.citations[0].judgedCodeHash;
+
+    expect(code).toEqual(expect.any(String));
+
     const run = async (claim: string) => {
       const t = harness({
         entries: [entry('e1')],
@@ -1648,13 +1814,13 @@ describe('a change that landed re-checks the citations it touches', () => {
             reason: Reason.CITATION_CONTRADICTED,
             proposalState: null,
             issueId: 'issue-old',
-            // Overruled for c1 at another commit, and for c2 at this one:
-            // neither is the reading this change gives.
+            // Overruled for c1 over other code, and for c2 over this code:
+            // neither is the judgment this change gives.
             evidence: {
               claim,
               citations: [
-                { citationId: 'c1', readSha: 'b'.repeat(40) },
-                { citationId: 'c2', readSha: SHA },
+                { citationId: 'c1', judgedCodeHash: 'other code' },
+                { citationId: 'c2', judgedCodeHash: code },
               ],
             },
             reversedAt: new Date(Date.now() - 5 * DAY),

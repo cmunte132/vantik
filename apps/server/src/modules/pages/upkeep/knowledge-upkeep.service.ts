@@ -18,6 +18,7 @@ import { LoggerService } from 'modules/logger/logger.service';
 import EntryCitationsService, {
   type LandedCheck,
   lockEntry,
+  lockEntryRow,
   putBackAt,
   readBefore,
   readBeforeActedOn,
@@ -89,7 +90,7 @@ export class UnreadCitations extends Error {
  * - A person verified the entry, its page is locked, or a person already put
  *   it back after the gardener disputed it: the gardener asks instead, with
  *   an archive proposal and the same issue. A contradiction a person put
- *   back, for the same words, citation and commit, is not raised again.
+ *   back, for the same words and the same code, is not raised again.
  * - A cited file is gone, or no judge could say whether the changed code
  *   still supports the claim: an archive proposal waits in the review queue.
  *   Neither is evidence the claim is false, only that nothing now shows it
@@ -197,8 +198,8 @@ export default class KnowledgeUpkeepService {
    *
    * A reading taken before a person last acted on the entry is not acted
    * on, and neither is a contradiction a person has already overruled: the
-   * same citation, read at the same commit, disputed for the same words and
-   * put back.
+   * same citation's same code, judged for the same words, disputed and put
+   * back.
    */
   private async settle(
     entryId: string,
@@ -246,7 +247,10 @@ export default class KnowledgeUpkeepService {
       }
 
       // As it is now, not as it was when the citations were read: a person
-      // may have acted on it since.
+      // may have acted on it since. Its row is held first, so a person
+      // rewording it or putting it out of use waits until this is done,
+      // rather than landing between reading the entry and acting on it.
+      await lockEntryRow(tx, entryId);
       const entry = await tx.pageEntry.findFirst({
         where: { id: entryId, deleted: null, status: PageEntryStatus.STANDING },
         select: {
@@ -353,9 +357,10 @@ export default class KnowledgeUpkeepService {
    * What people have said about the gardener disputing this entry within
    * the decay window, for the words it has now. `restored`: a person put
    * these words back after a dispute, so a new contradiction is asked about
-   * rather than acted on. `ruledOn`: a reading a person has overruled
-   * already, the same citation read at the same commit, which is not raised
-   * again. A dispute that recorded no words counts for any.
+   * rather than acted on. `ruledOn`: a judgment a person has overruled
+   * already, of the same citation's same code, which is not raised again
+   * however far the repository's head has moved. A dispute that recorded
+   * no words counts for any.
    */
   private async overruled(
     tx: Prisma.TransactionClient,
@@ -384,7 +389,7 @@ export default class KnowledgeUpkeepService {
           (evidence?.citations ?? []).some(
             (citation) =>
               citation.citationId === reading.citationId &&
-              citation.readSha === reading.readSha,
+              citation.judgedCodeHash === reading.judgedCodeHash,
           ),
         ),
     };
@@ -660,6 +665,7 @@ function citationEvidence(check: LandedCheck): CitationEvidence {
     judgment: check.judgment,
     judgeModel: check.judgeModel,
     judgeReason: check.judgeReason ? redactSecrets(check.judgeReason) : null,
+    judgedCodeHash: check.judgedCodeHash,
   };
 }
 

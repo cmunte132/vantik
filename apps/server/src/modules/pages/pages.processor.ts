@@ -308,9 +308,10 @@ export class PagesProcessor {
   /**
    * Checks the knowledge a change that landed on a default branch touches,
    * and acts on what no longer holds. Throws while citations it touches are
-   * still unread, so Bull tries again after its backoff; a retry reads only
-   * those, while the head is still the change's commit, as the rest are
-   * stored as read at it.
+   * still unread, or were read before a person last acted on their entry,
+   * so Bull tries again after its backoff. While the head is still the
+   * change's commit, a retry reads only those, as the rest are stored as
+   * read at it.
    */
   @Process(CODE_LANDED_JOB)
   async handleCodeLanded(job: { data: CodeLandedJob }) {

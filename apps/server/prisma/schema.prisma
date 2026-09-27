@@ -986,6 +986,10 @@ model PageEntryCitation {
   /// the entry afterwards, and a judgment of the old words says nothing
   /// about the new ones, so the gardener never acts on it for them.
   judgedContentHash String?
+  /// A hash of the code the judge read: the cited snippet and the current
+  /// lines around it. A person who overruled a judgment overruled it for
+  /// this code, however far the repository's head has moved since.
+  judgedCodeHash    String?
 
   @@index([entryId])
   @@index([moduleRepoId, path])

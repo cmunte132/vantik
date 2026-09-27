@@ -26,6 +26,7 @@ import CitationJudge from './citation-judge';
 import {
   formatLineRange,
   fileLines,
+  hashSnippet,
   parseLineRange,
   relocate,
   snippetAt,
@@ -141,13 +142,28 @@ export async function lockEntry(
 }
 
 /**
+ * Holds an entry's row until the transaction ends. A person changing the
+ * entry meanwhile waits, so its words and status, read after this, are the
+ * ones whatever the transaction does is done to.
+ */
+export async function lockEntryRow(
+  tx: Prisma.TransactionClient,
+  entryId: string,
+): Promise<void> {
+  await tx.$executeRaw`SELECT 1 FROM "PageEntry" WHERE "id" = ${entryId} FOR UPDATE`;
+}
+
+/**
  * A citation with no stored reading, or one older than a reading stamped
  * `checkedAt`: the newer reading wins, whichever is stored first.
  *
- * Stamps come from the clocks of the servers that read, which keep time
- * with each other to within milliseconds. Two readings could be put in the
- * wrong order only if their heads were asked for within that time of each
- * other and a change landed between the two.
+ * A reading of a head is stamped with when the head was asked for, and a
+ * reading of the commit a citation cites with when the citation was
+ * written, which is older than any head read since. Stamps come from the
+ * clocks of the servers that read, which keep time with each other to
+ * within milliseconds. Two readings of heads could be put in the wrong
+ * order only if the heads were asked for within that time of each other
+ * and a change landed between the two.
  */
 export function readBefore(
   checkedAt: Date,
@@ -192,6 +208,8 @@ export interface LandedCheck {
   judgeReason: string | null;
   /** The entry's content hash the judge read; null when none judged. */
   judgedContentHash: string | null;
+  /** A hash of the code the judge read; null when none judged. */
+  judgedCodeHash: string | null;
   /** When the head it read was asked for, as stored on the citation. */
   checkedAt: Date;
   /**
@@ -216,6 +234,7 @@ export const STORED_READING_SELECT = {
   judgeModel: true,
   judgeReason: true,
   judgedContentHash: true,
+  judgedCodeHash: true,
 } as const;
 
 type StoredReading = Prisma.PageEntryCitationGetPayload<{
@@ -259,6 +278,7 @@ export function storedCheck(
     judgeModel: row.judgeModel,
     judgeReason: row.judgeReason,
     judgedContentHash: row.judgedContentHash,
+    judgedCodeHash: row.judgedCodeHash,
     checkedAt: row.checkedAt,
     update: null,
   };
@@ -324,6 +344,7 @@ interface CheckedEntry {
 
 interface CitationRow {
   id: string;
+  createdAt: Date;
   kind: string;
   moduleRepoId: string | null;
   path: string | null;
@@ -964,6 +985,7 @@ export default class EntryCitationsService {
         judgeModel: update.judgeModel,
         judgeReason: update.judgeReason,
         judgedContentHash: update.judgedContentHash,
+        judgedCodeHash: update.judgedCodeHash,
         checkedAt: update.checkedAt,
         update,
       });
@@ -1089,7 +1111,10 @@ export default class EntryCitationsService {
     const checked = {
       moduleRepoId: repo.id,
       commitSha: ref,
-      checkedAt: new Date(),
+      // When the citation was written: the reading says whether the claim
+      // held at the commit it was written against, and so never outranks
+      // a reading of a head, which is newer, whenever this one finishes.
+      checkedAt: citation.createdAt,
       checkedSha: ref,
       pendingQuote: null as string | null,
     };
@@ -1179,11 +1204,12 @@ export default class EntryCitationsService {
     const lines = fileLines(read.content);
     const to = Math.min(lines.length, range.end + JUDGE_CONTEXT_LINES);
     const from = Math.max(1, Math.min(range.start, to) - JUDGE_CONTEXT_LINES);
+    const region = { startLine: from, lines: lines.slice(from - 1, to) };
     const verdict = await this.judge.judge({
       claim: entry.content,
       path: citation.path,
       snippet: citation.snippet,
-      region: { startLine: from, lines: lines.slice(from - 1, to) },
+      region,
       writerModel: await this.writerModel(entry),
     });
 
@@ -1195,6 +1221,9 @@ export default class EntryCitationsService {
       judgeLines: verdict.lines,
       judgeReason: verdict.reason,
       judgedContentHash: entry.contentHash,
+      judgedCodeHash: hashSnippet(
+        JSON.stringify([citation.snippet, region.startLine, region.lines]),
+      ),
     };
   }
 
@@ -1316,6 +1345,7 @@ export default class EntryCitationsService {
 
 const CITATION_SELECT = {
   id: true,
+  createdAt: true,
   kind: true,
   moduleRepoId: true,
   path: true,
@@ -1335,6 +1365,7 @@ const NO_JUDGMENT = {
   judgeLines: null as string | null,
   judgeReason: null as string | null,
   judgedContentHash: null as string | null,
+  judgedCodeHash: null as string | null,
 };
 
 /**

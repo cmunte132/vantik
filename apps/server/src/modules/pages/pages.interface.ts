@@ -203,9 +203,11 @@ export interface CodeLandedJob {
 /**
  * One check per commit. A merged pull request and the push that lands its
  * merge commit both report the same commit, and need it checked once; a
- * citation already checked at that commit is not read again either. Tried
- * again when a repository could not be read, as a rate limit or an outage
- * clears on its own.
+ * citation already checked at that commit is not read again either, unless
+ * a person has put its entry back or reworded it since. Tried again when a
+ * repository could not be read, as a rate limit or an outage clears on its
+ * own, and when a person acted on an entry after its citations were read,
+ * so they are read again.
  */
 export function codeLandedJobOptions(job: CodeLandedJob): JobOptions {
   return {

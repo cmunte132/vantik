@@ -5,24 +5,18 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 6, in review: KG-6.1 to KG-6.5 implemented and
-  mutation-checked; review round 1 (FAIL, two blocking findings) fixed and
-  answered; round 2 PASS with five non-blocking findings, all fixed; round
-  3 PASS with four non-blocking findings, all fixed; round 4 PASS with
-  two low findings, both fixed; round 5 PASS with one non-blocking
-  finding, fixed; round 6 PASS with two non-blocking findings, both
-  fixed; round 7 PASS with two non-blocking findings, both fixed; round 8
-  next, to confirm them. PR #45
+- Current phase: 7, not started. Phase 6 is done: KG-6.1 to KG-6.5
+  implemented and mutation-checked, and its review passed after eight
+  rounds with no finding left (see "Phase 6 review: PASS" below). PR #45
   is open from this branch, so the phase 6 commits are in it too; its
-  description says so.
-  Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
-  request.
+  description says so. Phases 4 and 5 are in PR #45; phases 6 and 7 go in
+  the third pull request.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
-- Last verify: phases 0-5, PASS, 45/45 (server 1702, agent-core 67,
-  cli 10, webapp 637; typecheck ok).
+- Last verify: phases 0-6, PASS, 51/51 (server 1850, agent-core 67,
+  cli 10, webapp 638; typecheck ok).
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
   (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
@@ -1934,6 +1928,35 @@ non-blocking findings, both fixed:
 Mutation-checked: 3 mutants over these fixes, all killed. Full server
 suite: 1835 passed, 15 skipped.
 
+### Phase 6, round 8 (same reviewer, on the round 7 fixes)
+
+The reviewer read 0fdfc7d..de6f920, ran tsc, the pages suites (505 tests)
+and the full server suite (1835 passed), and probed the handed-on job:
+only its citation is read and judged, and another entry citing the file
+gets no `since`. The `citationIds` filter hides nothing that should be
+checked: a citation's path is never rewritten (a move changes its lines),
+an entry out of use is rightly skipped, and every change's own job still
+carries no `citationIds` and checks every citation of its files, with the
+query unchanged. Verdict PASS, no findings; every finding of rounds 1 to 7
+resolved.
+
+Phase 6 review: PASS - eight rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-6 criteria: merged pull requests and
+pushes to the default branch reach the server with their commit (merges
+into other branches neither fail nor fetch for nothing, a page of files
+that fails fails the job); the citations a landed change touches are read
+once at the head, newest reading wins by the time the head was asked for
+and is stored only over an older one under the entry's lock, readings of
+a cited commit never outrank a head's, the entry's row is held while it is
+acted on, readings taken before a person acted on the entry are read
+again and an overruled contradiction is not raised again; a citation
+first read after changes passed it over is handed back to the check,
+alone; contradictions dispute the entry with a correction issue and the
+rest become proposals; recurring reviewer findings become candidate
+conventions, knowledge gaps become issues, and decay weighs checks and
+outcomes. Every finding (N1-N5, R1-R4, S1-S2, F1, U1-U2, W1-W2) fixed with
+a tagged, mutation-checked test.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -2202,3 +2225,5 @@ Give the evidence, and stop until the maintainer answers.
   findings, both fixed with tagged tests: a handed-on job checks only its
   citation (`citationIds`), and its issue names the head only through the
   citation's line. 3 mutants, all killed.
+- 2026-09-27: Phase 6 review round 8: PASS, no findings. Phase 6 review:
+  PASS. Phase 6 done; starting phase 7. Verify through phase 6: PASS, 51/51.

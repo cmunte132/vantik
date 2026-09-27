@@ -5,17 +5,15 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 4 (implemented; review round 2 answered, round 3
-  pending); phase 5 next. Both go in
-  the second pull request, after PR #44 (phase 1's review fixes, phase 2 and
+- Current phase: 5 (phase 4 reviewed and done). Phases 4 and 5 go in the
+  second pull request, after PR #44 (phase 1's review fixes, phase 2 and
   phase 3), which is merged.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
-- Last verify: phases 0-4, 38/39, only KG-4.R open (server 1617 with the
-  15 database-only skipped, agent-core 67, cli 10, webapp 622; typecheck
-  ok).
+- Last verify: phases 0-4, PASS, 39/39 (server 1625 with the 15
+  database-only skipped, agent-core 67, cli 10, webapp 622; typecheck ok).
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
   (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
@@ -1009,6 +1007,41 @@ non-blocking one, both fixed:
 UNKNOWN_SOURCE for an agent with an open run (the finding itself) and
 adding it before the repeat stage.
 
+### Phase 4, round 3 (same reviewer, on the round 2 fixes, and a final pass)
+
+No unresolved findings. The reviewer re-ran its round 2 scenario (a
+self-assigned internal issue's hosted run, then an entry drawn from a
+GitHub-synced issue the agent only read) and the shared-account and
+`delegate_task` variants: each now escalates with UNKNOWN_SOURCE. N6
+confirmed, with the date filter exercised. It agreed with folding an
+agent's repeat in despite UNKNOWN_SOURCE, finding no failure scenario:
+folding only archives the new row and counts it on a target that is still
+live and unchanged; nothing outside triage reads `corroborationCount` or
+`PageEntryRelation`; displacement needs AUTO_ACCEPT, which an agent's entry
+cannot reach; and stopping it would leave KG-4.1 unmet for the writer of
+nearly every proposed entry. A caution it raised, recorded under Observed:
+a later phase that reads `corroborationCount` as a signal must tell
+unknown-source increments apart. Final pass: KG-4.1 to KG-4.8 met as
+written, UNKNOWN_SOURCE recorded under Decisions as an addition, and every
+round 1 fix still in place.
+
+Phase 4 review: PASS - three rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-4 criteria: a triage job per new entry
+on the `pages` queue, once per entry, recording every decision with its
+inputs, digest, models and raw answers; exact repeats found by a hash the
+migration backfills exactly as the server computes it, and near neighbours
+related by rule first and by two agreeing judgments otherwise, as links;
+auto-acceptance only when every condition holds, with an agent's entry
+never accepted without a person while runs have no credential of their own,
+and outside input (a run's issue, its mirrored comments, a cited issue or
+comment) escalating even a repeat; precedence decided in code; acting only
+in `on` mode, only on what was compared, rolled back and recorded as not
+applied when anything changed; credentials refused at write and withheld
+from every model; shadow by default with a per-workspace override only an
+admin can change; a hand-written migration matching `prisma migrate diff`;
+mutation checks on every fix; no skipped or loosened tests, checklist and
+verifier untouched.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -1060,6 +1093,15 @@ Give the evidence, and stop until the maintainer answers.
 - **Pull request outcomes come only from GitHub.** Another source that opens
   pull requests would call the same `agentRuns.pullRequestChanged`
   capability.
+- **`corroborationCount` counts repeats from unknown sources too.** An
+  agent's repeat is folded in although what it read is unknown (phase 4,
+  round 3). Nothing reads the count yet; a phase that starts using it as a
+  signal should tell those increments apart, from the decision rows (writer
+  and `corroboratedEntryId`).
+- **Runs write with no credential of their own (ENG-84).** Until they do,
+  triage cannot vouch for what an agent read, so no agent's entry is
+  auto-accepted. A run-bound credential stamped by the server would let a
+  run vouch for what it wrote.
 
 ## Log
 
@@ -1131,3 +1173,6 @@ Give the evidence, and stop until the maintainer answers.
   open run of the same agent cleared its entry); every entry not written by
   a person now waits for one. N6 (a cited issue's comments) fixed. 39
   mutations caught.
+- 2026-09-27: Phase 4 review round 3: no unresolved findings. Phase 4
+  review: PASS. Verify through phase 4: PASS, 39/39. Phase 4 done; starting
+  phase 5.

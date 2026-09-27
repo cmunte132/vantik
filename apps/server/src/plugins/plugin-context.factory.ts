@@ -5,6 +5,7 @@ import AIRequestsService from 'modules/ai-requests/ai-requests.services';
 import { AttachmentService } from 'modules/attachments/attachments.service';
 import IssueCommentsService from 'modules/issue-comments/issue-comments.service';
 import IssuesService from 'modules/issues/issues.service';
+import { KnowledgeSignalsService } from 'modules/knowledge-signals/knowledge-signals.service';
 import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
@@ -33,6 +34,7 @@ export class PluginContextFactory {
     private linkedIssueService: LinkedIssueService,
     private aiRequestsService: AIRequestsService,
     private attachmentService: AttachmentService,
+    private knowledgeSignals: KnowledgeSignalsService,
   ) {}
 
   /**
@@ -225,6 +227,20 @@ export class PluginContextFactory {
           this.issueCommentsService.getLinkedCommentBySource(sourceId),
         createComment: (input) =>
           this.issueCommentsService.createLinkedComment(input),
+      },
+
+      // Scoped to the plugin's workspace, like the reads below: a pull request
+      // is matched only to runs in the workspace whose integration saw it.
+      agentRuns: {
+        pullRequestChanged: async (input) =>
+          workspaceId
+            ? this.knowledgeSignals.pullRequestChanged({
+                workspaceId,
+                url: input.url,
+                state: input.state,
+                closedAt: input.closedAt ? new Date(input.closedAt) : null,
+              })
+            : { runs: 0 },
       },
 
       // Plain reads, and all of them workspace-scoped. A plugin acts for one

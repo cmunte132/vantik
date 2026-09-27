@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -30,6 +31,7 @@ import { AgentRunsService, type AgentRunScope } from './agent-runs.service';
 import { ContextPackService } from './context-pack.service';
 import { CredentialsService } from './credentials/credentials.service';
 import { ExecutorRegistry } from './executors/executor.registry';
+import { KnowledgeArmsService } from './knowledge-arms.service';
 import { runIdentityName } from './run-identity';
 
 /**
@@ -59,6 +61,7 @@ export class AgentRunsController {
     private contextPacks: ContextPackService,
     private users: UsersService,
     private prisma: PrismaService,
+    private knowledgeArms: KnowledgeArmsService,
   ) {}
 
   @Get()
@@ -174,6 +177,38 @@ export class AgentRunsController {
       delivery: repo.delivery ?? null,
       limits: AGENT_RUN_DEFAULT_LIMITS,
     };
+  }
+
+  /**
+   * The runs handed the workspace's knowledge beside the runs held out from
+   * it: how many, how often their checks passed, how many passes and how
+   * much they took, and how often their pull requests merged.
+   *
+   * For the people deciding whether the knowledge earns its place in the
+   * prompt, so not for an agent token, which sees only its own runs.
+   */
+  @Get('meta/knowledge-arms')
+  @UseGuards(AuthGuard)
+  async knowledgeArmComparison(
+    @Workspace() workspace: string,
+    @Role() role: string,
+    @Query('since') since?: string,
+  ) {
+    if (role === RoleEnum.AGENT) {
+      throw new ForbiddenException({
+        message: 'The knowledge holdout comparison is for workspace members.',
+      });
+    }
+
+    const from = since ? new Date(since) : null;
+
+    if (from && Number.isNaN(from.getTime())) {
+      throw new BadRequestException({
+        message: `"${since}" is not a date. Pass an ISO date, such as 2026-09-01.`,
+      });
+    }
+
+    return this.knowledgeArms.compare(workspace, from);
   }
 
   /**

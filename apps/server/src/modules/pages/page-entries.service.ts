@@ -36,6 +36,7 @@ import {
   PROPOSED_ENTRY_BUDGET,
   PROPOSED_ENTRY_EXPIRY_DAYS,
   STANDING_ENTRY_DECAY_DAYS,
+  type ServedTo,
   WriterIdentity,
 } from './pages.interface';
 
@@ -464,22 +465,42 @@ export default class PageEntriesService {
   // ------------------------------------------------------- serving and decay
 
   /**
-   * Records that entries were actually served.
+   * Records that entries were actually served, and to whom.
    *
    * `increment` compiles to `SET "retrievalCount" = "retrievalCount" + 1`, so
    * two searches landing on the same entry at the same moment both count —
    * a read-then-write would lose one, and this number decides what survives
    * the decay pass.
+   *
+   * A use row per entry goes in with one insert, so a recall of twenty hits
+   * is one statement, not twenty. The counters and the rows are written
+   * together or not at all: a use nobody counted, or a count nobody can
+   * attribute, would make the two disagree about how often an entry is read.
    */
-  async recordServed(entryIds: string[]): Promise<void> {
-    if (entryIds.length === 0) {
+  async recordServed(entryIds: string[], to: ServedTo): Promise<void> {
+    const ids = [...new Set(entryIds)];
+
+    if (ids.length === 0) {
       return;
     }
 
-    await this.prisma.pageEntry.updateMany({
-      where: { id: { in: entryIds } },
-      data: { retrievalCount: { increment: 1 }, lastServedAt: new Date() },
-    });
+    await this.prisma.$transaction([
+      this.prisma.pageEntry.updateMany({
+        where: { id: { in: ids } },
+        data: { retrievalCount: { increment: 1 }, lastServedAt: new Date() },
+      }),
+      this.prisma.pageEntryUse.createMany({
+        data: ids.map((entryId) => ({
+          entryId,
+          workspaceId: to.workspaceId,
+          via: to.via,
+          agentRunId: to.agentRunId ?? null,
+          sessionId: to.sessionId ?? null,
+          tokenId: to.tokenId ?? null,
+          userId: to.userId ?? null,
+        })),
+      }),
+    ]);
   }
 
   /**

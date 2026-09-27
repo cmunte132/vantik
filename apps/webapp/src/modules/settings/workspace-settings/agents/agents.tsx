@@ -29,6 +29,7 @@ import { useContextStore } from 'store/global-context-provider';
 import { UserContext } from 'store/user-context';
 
 import { CredentialBlock } from './credential-block';
+import { KnowledgeHoldout } from './knowledge-holdout';
 import { ModelAccess } from './model-access';
 import { ReviewCycle } from './review-cycle';
 
@@ -178,6 +179,13 @@ export const Agents = observer(() => {
             </NextLink>
           </Button>
         </div>
+      </SettingSection>
+
+      <SettingSection
+        title="Does knowledge help?"
+        description="Runs are handed what this workspace knows about the issue's code, except a share held out that get nothing. Side by side, the two show whether the knowledge earns its place in the prompt. Each figure says how many runs it is over; a few runs prove nothing either way."
+      >
+        <KnowledgeHoldout enabled={enabled} />
       </SettingSection>
 
       <SettingSection

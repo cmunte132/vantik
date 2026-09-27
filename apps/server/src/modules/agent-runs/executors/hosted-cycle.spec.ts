@@ -69,6 +69,8 @@ interface GuestScript {
   modelFailure?: Record<string, string>;
   /** Exit codes for the repository's own checks, keyed by pass. */
   checks?: Record<number, number>;
+  /** What the repository's own checks print, keyed by pass. */
+  checkOutput?: Record<number, string>;
   /** Exit code for the harness, keyed by the prompt file it was given. */
   harnessExit?: Record<string, number>;
   /** Tree hash per implementing pass, so oscillation can be forced. */
@@ -155,7 +157,7 @@ function buildGuest(script: GuestScript) {
         return {
           ...ok,
           exitCode: script.checks?.[implementPasses] ?? 0,
-          stdout: 'ran the suite',
+          stdout: script.checkOutput?.[implementPasses] ?? 'ran the suite',
         };
       }
 
@@ -446,6 +448,34 @@ describe('a run the reviewer sends back', () => {
       'Checks that are currently failing',
     );
     expect(harness.iterations[0]).toMatchObject({ verificationPassed: false });
+  });
+
+  it('[KG-3.4] records whether the reviewer accepted each pass, and the files a failing check failed in', async () => {
+    // What a run's end is traced back to the knowledge it was handed by.
+    const harness = build({
+      verdicts: { 1: REJECTED, 2: ACCEPTED },
+      checks: { 1: 1 },
+      checkOutput: {
+        1: 'FAIL /workspace/repo/src/importer.spec.ts\n  at readRows (src/importer.ts:88:3)',
+      },
+    });
+
+    await harness.execute();
+
+    expect(harness.iterations[0]).toMatchObject({
+      accepted: false,
+      failedChecks: [
+        {
+          label: expect.any(String),
+          command: 'pnpm test',
+          paths: ['src/importer.spec.ts', 'src/importer.ts'],
+        },
+      ],
+    });
+    expect(harness.iterations[1]).toMatchObject({
+      accepted: true,
+      failedChecks: [],
+    });
   });
 
   it('records every pass separately', async () => {

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { AgentRun } from '@prisma/client';
 import { BadRequestException, Injectable } from '@nestjs/common';
@@ -14,6 +14,7 @@ import { PrismaService } from 'nestjs-prisma';
 import { convertTiptapJsonToMarkdown } from 'common/utils/tiptap.utils';
 
 import { LoggerService } from 'modules/logger/logger.service';
+import { knowledgeSettings } from 'modules/pages/knowledge-settings';
 
 import {
   agentBoundExecutor,
@@ -27,6 +28,7 @@ import {
 } from './agent-runs.service';
 import { ContextPackService } from './context-pack.service';
 import { ExecutorRegistry } from './executors/executor.registry';
+import { knowledgeArmFor } from './knowledge-arm';
 
 /** States in which a run still counts against the concurrency cap. */
 const LIVE_STATUSES: AgentRunStatus[] = ['QUEUED', 'CLAIMED', 'RUNNING'];
@@ -92,7 +94,8 @@ export class AgentDelegationService {
     // and reading it per question is both three round trips and three chances
     // for a delegation to be resolved against settings that changed halfway
     // through it.
-    const defaults = await this.workspaceDefaults(input.workspaceId);
+    const preferences = await this.workspacePreferences(input.workspaceId);
+    const defaults = workspaceAgentDefaults(preferences);
 
     const executor = await this.resolveExecutor(defaults, input);
 
@@ -101,11 +104,21 @@ export class AgentDelegationService {
       throw new BadRequestException({ message: availability.reason });
     }
 
+    // The run's id is chosen here rather than by the database, because the
+    // pack is built before the row exists and whether it carries knowledge
+    // depends on the id.
+    const runId = randomUUID();
+    const knowledgeArm = knowledgeArmFor(
+      runId,
+      knowledgeSettings(preferences).holdoutRate,
+    );
+
     const contextPack = await this.contextPacks.build(
       input.issueId,
       input.workspaceId,
       input.config,
       input.guidance,
+      knowledgeArm,
     );
 
     // What to run on, layered the same way everything else is: the workspace's
@@ -119,6 +132,7 @@ export class AgentDelegationService {
     };
 
     const run = await this.agentRuns.createRun({
+      id: runId,
       workspaceId: input.workspaceId,
       issueId: input.issueId,
       agentUserId: input.agentUserId,
@@ -126,8 +140,11 @@ export class AgentDelegationService {
       executor: executor.key,
       config,
       contextPack,
+      knowledgeArm,
       configHash: hashConfig(config, executor.key),
     });
+
+    await this.contextPacks.recordServed(run);
 
     return this.dispatchRun(run);
   }
@@ -145,6 +162,8 @@ export class AgentDelegationService {
    */
   async retry(runId: string, scope: AgentRunScope, createdById: string) {
     const next = await this.agentRuns.retryRun(runId, scope, createdById);
+
+    await this.contextPacks.recordServed(next);
 
     return this.dispatchRun(next);
   }
@@ -344,14 +363,14 @@ export class AgentDelegationService {
 
   // --------------------------------------------------------------- resolving
 
-  /** The workspace's agent settings, read once per delegation. */
-  private async workspaceDefaults(workspaceId: string) {
+  /** The workspace's settings, agent and knowledge, read once per delegation. */
+  private async workspacePreferences(workspaceId: string) {
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
       select: { preferences: true },
     });
 
-    return workspaceAgentDefaults(workspace?.preferences);
+    return workspace?.preferences;
   }
 
   private async resolveExecutor(

@@ -68,7 +68,12 @@ export async function prSync(ctx: PluginContext, payload: Json) {
     }
 
     case 'closed':
+      await reportToRuns(ctx, pull);
+
       return await onClosed(ctx, { pullId, sourceData, account, body });
+
+    case 'reopened':
+      return await reportToRuns(ctx, pull);
 
     case 'synchronize':
       return await linkFromCommits(ctx, pull, sourceData);
@@ -201,6 +206,33 @@ async function linkFromCommits(
       });
     }),
   );
+}
+
+/**
+ * Tells the host what became of a pull request, in case an agent run opened
+ * it: merged, closed without merging, or reopened. Whatever the host makes of
+ * it, the issue's own handling goes on, so a failure is logged and not thrown.
+ */
+async function reportToRuns(ctx: PluginContext, pull: Json) {
+  const state = pull.merged_at
+    ? 'MERGED'
+    : pull.state === 'closed'
+      ? 'CLOSED'
+      : 'OPEN';
+
+  try {
+    return await ctx.agentRuns.pullRequestChanged({
+      url: pull.html_url,
+      state,
+      closedAt: pull.closed_at ?? null,
+    });
+  } catch (error) {
+    ctx.log.error(
+      `Could not report pull request ${pull.html_url} to the runs: ${error}`,
+    );
+
+    return undefined;
+  }
 }
 
 /**

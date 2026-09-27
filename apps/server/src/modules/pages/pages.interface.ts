@@ -1,3 +1,4 @@
+import { type PageEntryUseVia } from '@prisma/client';
 import { PageEntryStatusEnum } from '@vantikhq/types';
 import type { JobOptions } from 'bull';
 
@@ -149,6 +150,27 @@ export function retryCitationsJobOptions(entryId: string): JobOptions {
 }
 
 /**
+ * Checks an entry's citations again, because a run it was served to went
+ * wrong somewhere it speaks about. A harmful signal is a reason to look, not
+ * a verdict: the check decides whether the entry still holds, and nothing is
+ * archived either way.
+ */
+export const RECHECK_ENTRY_JOB = 'recheckEntryCitations';
+
+/**
+ * One queued check per entry: several runs going wrong over the same entry
+ * before the check runs need it checked once. Removed when done or failed, so
+ * the next harmful signal can queue another.
+ */
+export function recheckEntryJobOptions(entryId: string): JobOptions {
+  return {
+    jobId: `${RECHECK_ENTRY_JOB}:${entryId}`,
+    removeOnComplete: true,
+    removeOnFail: true,
+  };
+}
+
+/**
  * Transitions a client may ask for.
  *
  * `CONSOLIDATED` and `SUPERSEDED` are absent as sources because they are
@@ -192,3 +214,45 @@ export interface WriterIdentity {
   /** Null for a browser session, which is not issued for any token. */
   tokenId: string | null;
 }
+
+/**
+ * Who an entry was served to, and how. Every field but the workspace and the
+ * route is known on some paths and not others: a run has no token, a browser
+ * session no harness session, a recall no run.
+ */
+export interface ServedTo {
+  workspaceId: string;
+  via: PageEntryUseVia;
+  agentRunId?: string | null;
+  sessionId?: string | null;
+  tokenId?: string | null;
+  userId?: string | null;
+}
+
+/**
+ * The harness session a request names, from `X-Vantik-Session`, or null.
+ *
+ * The MCP endpoint is stateless, so no session is carried by the protocol; a
+ * harness that wants its uses traced to a session says so in this header, and
+ * the MCP server passes it on to the calls it makes. Held to the same length
+ * as a hook's session id, and to printable characters, since it is stored.
+ */
+export function harnessSessionOf(header: unknown): string | null {
+  const value = Array.isArray(header) ? header[0] : header;
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 &&
+    trimmed.length <= MAX_HARNESS_SESSION_LENGTH &&
+    /^[\x21-\x7e]+$/.test(trimmed)
+    ? trimmed
+    : null;
+}
+
+export const HARNESS_SESSION_HEADER = 'x-vantik-session';
+
+const MAX_HARNESS_SESSION_LENGTH = 200;

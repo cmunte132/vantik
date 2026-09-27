@@ -5,14 +5,14 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 2 done. Next: phase 3. Phase 1's review fixes, phase 2
-  and phase 3 ride PR #44.
+- Current phase: 3 implemented; its independent review is next. Phase 1's
+  review fixes, phase 2 and phase 3 ride PR #44.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
-- Last verify: `KNOWLEDGE-GARDENER VERIFY: PASS phases 0-2 spec-hash 8409159da053`
-  (23/23; server 1422, agent-core 63, cli 10, webapp 616 tests; typecheck ok).
+- Last verify: phases 0-2 PASS; phase 3 6/7, KG-3.R waiting on the review
+  (server 1513, agent-core 65, cli 10, webapp 621 tests; typecheck ok).
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
   (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
@@ -297,6 +297,94 @@ next session starts by reading it.
   PLAN.md's orientation row now points there. KG-2.1's file check named the
   old path; the maintainer had it moved (see Status).
 
+### Phase 3
+
+- **Uses (KG-3.1).** A `PageEntryUse` row per entry per serve, written in
+  the same transaction that bumps `retrievalCount` and `lastServedAt`. `via`
+  is CONTEXT_PACK (packed into a run: the run and its agent user), RECALL
+  (search) or LOAD_CONTEXT (the context pack route). The token comes from the
+  request; the session from an `x-vantik-session` header, which agent-core
+  sends when given a `sessionId` and the MCP loopback passes through from its
+  caller. A header that is not printable ASCII of at most 200 characters is
+  dropped, not stored.
+- **Run knowledge (KG-3.2).** `KnowledgeService.knowledgeForRun` packs, in
+  order: the STANDING CONVENTION entries whose modules overlap the issue's
+  (verified first, then newest; at most 25 read), which are not held to a
+  trust tier because a person accepted each as how that module works; then
+  the top K entries a seeded search on the issue title ranks, re-read from
+  Postgres and kept only if GROUNDED or HUMAN_VERIFIED. One token budget
+  covers both, conventions first; an item that does not fit is skipped and a
+  smaller one after it can still go in. An index that cannot be reached
+  leaves the conventions. The prompt line gains `· written YYYY-MM-DD` beside
+  the proof.
+- **Settings.** `pages/knowledge-settings.ts` is the one reader for
+  `KNOWLEDGE_HOLDOUT_RATE` (0.1), `KNOWLEDGE_CONTEXT_TOP_K` (5) and
+  `KNOWLEDGE_CONTEXT_TOKEN_BUDGET` (1500, capped at 20000), each overridable
+  per workspace under `Workspace.preferences.knowledge` (`holdoutRate`,
+  `contextTopK`, `contextTokenBudget`). A value that cannot be read (a stored
+  string, a share above 1, a fraction of an entry) falls to the layer
+  beneath. Documented in `.env.example` and declared in `turbo.json`.
+- **Holdout (KG-3.3).** The arm is the first 32 bits of the sha256 of the
+  run's id, as a fraction, against the rate: below is HOLDOUT. The id is
+  chosen (`randomUUID`) before the pack is built, since whether it carries
+  knowledge depends on it, and the arm is stored on `AgentRun.knowledgeArm`.
+  Raising the rate only moves runs from treatment to holdout. A retry keeps
+  its run's arm and pack. Hosted is the only executor, and its guest reaches
+  only the model and the module repositories, so the pack is a run's only
+  knowledge and the holdout is clean. An executor added later whose agent can
+  call `recall` itself would leak knowledge into its holdout. Runs from before
+  phase 3 have no arm and are left out of the comparison.
+- **Run signals (KG-3.4).** When a run ends SUCCEEDED, NEEDS_REVIEW or FAILED
+  (not CANCELED or EXPIRED, which say nothing about the work),
+  `KnowledgeSignalsService.runFinished` reads its last pass, whose findings
+  are the ones still standing, and the entries it was served (its
+  `PageEntryUse` rows). An entry gets HARMFUL (weight 1) when a finding's
+  evidence or a failing check's output names a file it cites (in the run's
+  repository, or where either repository is unknown) or a path under its
+  scope's folder; otherwise HELPFUL (1) when the last pass's checks passed
+  and the reviewer accepted; otherwise nothing.
+  - The hosted executor now stores, per pass, `accepted` and `failedChecks`
+    (`label`, `command`, and the repository paths its output names, not the
+    output). `evidencePaths` reads paths: the sandbox checkout prefix is
+    stripped, absolute and `../` paths are dropped, dotted folders and
+    dotfiles are read, at most 50 are kept, and the text is split into runs
+    of path characters first so the pattern stays linear on long output.
+  - Counts are weighted Floats, `helpfulCount` and `harmfulCount` on the
+    entry. Each signal is a `PageEntrySignal` row unique per entry, run and
+    source (RUN or PULL_REQUEST), so attributing a run twice counts once, and
+    a changed outcome moves the counts by the difference.
+  - A harmful signal queues `recheckEntryCitations` (one job per entry),
+    which runs phase 2's re-check. Nothing archives or deletes on a signal.
+  - Attribution runs after the terminal transition commits. A failure is
+    logged per signal and never fails the transition.
+- **Pull request signals (KG-3.5).** The GitHub plugin reports `closed` and
+  `reopened` pull request events through a new `agentRuns` plugin capability,
+  scoped to the plugin's workspace. Runs are matched by `result.prUrl` equal
+  to the pull request's URL: "a merged pull request for a run's issue" is
+  read as the run's own pull request, so one a person opened for the same
+  issue credits nothing the run was handed. Merged gives HELPFUL (1); closed
+  without merging HARMFUL (0.5, weak) with a re-check; a reopen withdraws the
+  pull request's signal. The run records `pullRequestOutcome` and
+  `pullRequestClosedAt`. A held-out run records its outcome, for the merge
+  rate, and gives no signal, having been served nothing. Pull requests from
+  other integrations are not reported yet.
+- **Comparison (KG-3.6).** `GET /api/v1/agent_runs/meta/knowledge-arms`
+  (`?since=` an ISO date; members only, an agent token gets 403) summarises
+  each arm over finished runs that have one: runs; verification pass rate
+  over runs whose last pass ran checks; mean review passes over runs that
+  reached a pass; mean cost over runs that reported one; merge rate over
+  decided pull requests, with the open ones counted apart. Every figure
+  carries what it was measured over. Settings → Agents has a "Does knowledge
+  help?" section with both arms, the rate in force, and a warning while the
+  smaller arm has fewer than 30 finished runs.
+- **Migration** `20260927030000_knowledge_uses_and_outcomes`, hand-written
+  from `prisma migrate diff` between the old and new schema: two tables, five
+  enums, new nullable or defaulted columns, no existing row touched. No
+  Postgres could be started in this sandbox; CI's `migrate:check` replays it.
+- **Webapp sync contract.** The new AgentRun and PageEntry columns are listed
+  as not kept, with reasons: the arm and outcome are read per arm from the
+  endpoint, and nothing shows the counts yet.
+
 ## Phase reviews
 
 ### Phase 0, round 1 (fresh reviewer subagent)
@@ -572,6 +660,13 @@ Give the evidence, and stop until the maintainer answers.
   correction cannot see what it retires. Predates phase 0; worth surfacing in
   the review queue, which phase 5 reworks (KG-5.1).
 
+- **`PageEntryUse` grows one row per entry per serve** and nothing prunes
+  it. It is indexed for the reads phase 3 makes (by run, by entry and time,
+  by workspace and time). Worth a retention pass, perhaps beside decay.
+- **Pull request outcomes come only from GitHub.** Another source that opens
+  pull requests would call the same `agentRuns.pullRequestChanged`
+  capability.
+
 ## Log
 
 - 2026-09-26: Target phase 0. Prisma engines reachable. Fixed the root-only
@@ -616,3 +711,7 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-27: The maintainer asked for KG-2.1's checklist path to be moved to
   `skills/`; done, with GOAL.md's hash updated to `8409159da053`. Verify
   through phase 2: PASS, 23/23. Phase 2 done; starting phase 3.
+- 2026-09-27: Phase 3 implemented (KG-3.1 to KG-3.6) with tagged tests; the
+  knowledge settings reader added for the plan's per-workspace override. 29
+  mutations over the new code, all caught. Verify: phases 0-2 PASS, phase 3
+  6/7 (review pending); all suites and typecheck green.

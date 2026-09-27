@@ -10,6 +10,12 @@ export interface VantikClientConfig {
   baseUrl?: string;
   /** Personal access token — the `tg_pat_…` value from Settings → API. */
   token?: string;
+  /**
+   * The harness session making the calls, when known. Sent as
+   * `X-Vantik-Session`, so the knowledge a session is served is recorded
+   * against it.
+   */
+  sessionId?: string;
   /** Request timeout in milliseconds. */
   timeoutMs?: number;
   /** Injectable for tests; defaults to global fetch. */
@@ -35,6 +41,7 @@ export class VantikClient {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly timeoutMs: number;
+  private readonly sessionId: string | undefined;
   private readonly fetchImpl: typeof globalThis.fetch;
 
   constructor(config: VantikClientConfig = {}) {
@@ -56,6 +63,7 @@ export class VantikClient {
     this.baseUrl = normalizedUrl;
     this.token = token;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.sessionId = config.sessionId?.trim() || undefined;
     this.fetchImpl = config.fetch ?? globalThis.fetch;
   }
 
@@ -89,6 +97,7 @@ export class VantikClient {
         signal: controller.signal,
         headers: {
           authorization: `Bearer ${this.token}`,
+          ...(this.sessionId ? { 'x-vantik-session': this.sessionId } : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

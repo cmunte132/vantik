@@ -11,6 +11,7 @@ import { PrismaService } from 'nestjs-prisma';
 import type { IssueContext } from 'modules/issues/issue-context.interface';
 import type IssueContextService from 'modules/issues/issue-context.service';
 import type { LocalRepoService } from 'modules/local-repo/local-repo.service';
+import type KnowledgeService from 'modules/pages/knowledge.service';
 
 import { ContextPackService } from './context-pack.service';
 
@@ -111,7 +112,34 @@ function buildService(preferences: unknown = null, routing: Routing = {}) {
     pathOf: jest.fn(() => Promise.resolve(routing.localPath ?? null)),
   } as unknown as LocalRepoService;
 
-  return new ContextPackService(prisma, context, localRepo);
+  return new ContextPackService(prisma, context, localRepo, knowledgeDouble());
+}
+
+const PACKED = {
+  entryId: 'entry-1',
+  kind: 'CONVENTION',
+  scope: 'apps/server',
+  body: 'Filters always carry deleted: null.',
+  writtenAt: '2026-08-01T09:00:00.000Z',
+  trust: 'GROUNDED',
+  citations: [] as unknown[],
+  lastCheckedAt: null as string | null,
+  lastCheckedSha: null as string | null,
+};
+
+function knowledgeDouble() {
+  return {
+    knowledgeForRun: jest.fn(async () => [PACKED]),
+    recordPacked: jest.fn(async (): Promise<void> => undefined),
+  } as unknown as KnowledgeService;
+}
+
+/** The service and its knowledge double, for the tests that look at both. */
+function withKnowledge() {
+  const service = buildService();
+  const knowledge = (service as unknown as { knowledge: KnowledgeService })
+    .knowledge;
+  return { service, knowledge };
 }
 
 describe('ContextPackService', () => {
@@ -587,5 +615,83 @@ issues come back in results.",
       expect(pack.repo.repoPath).toBeUndefined();
       expect(pack.repo.testCommand).toBe('make test');
     });
+  });
+});
+
+describe('the knowledge in a pack', () => {
+  it("[KG-3.2] hands a run in the treatment arm what the workspace knows about its issue", async () => {
+    const { service, knowledge } = withKnowledge();
+
+    const pack = await service.build(
+      'issue-1',
+      WORKSPACE,
+      undefined,
+      undefined,
+      'TREATMENT',
+    );
+
+    expect(pack.knowledge).toEqual([PACKED]);
+    // Asked by the issue's title, which is what the work is about.
+    expect(knowledge.knowledgeForRun).toHaveBeenCalledWith(WORKSPACE, {
+      issueId: 'issue-1',
+      query: 'Search returns deleted issues',
+    });
+  });
+
+  it('[KG-3.3] hands a held-out run no knowledge, and does not look any up', async () => {
+    const { service, knowledge } = withKnowledge();
+
+    const held = await service.build(
+      'issue-1',
+      WORKSPACE,
+      undefined,
+      undefined,
+      'HOLDOUT',
+    );
+    const unassigned = await service.build('issue-1', WORKSPACE);
+
+    expect(held.knowledge).toEqual([]);
+    expect(unassigned.knowledge).toEqual([]);
+    expect(knowledge.knowledgeForRun).not.toHaveBeenCalled();
+  });
+
+  it('[KG-3.1] records what a treatment run was packed as served to that run', async () => {
+    const { service, knowledge } = withKnowledge();
+    const run = {
+      id: 'run-1',
+      workspaceId: WORKSPACE,
+      agentUserId: 'agent-1',
+      knowledgeArm: 'TREATMENT' as const,
+      contextPack: { knowledge: [PACKED, { ...PACKED, entryId: 'entry-2' }] },
+    };
+
+    await service.recordServed(run);
+
+    expect(knowledge.recordPacked).toHaveBeenCalledWith(WORKSPACE, run, [
+      'entry-1',
+      'entry-2',
+    ]);
+  });
+
+  it('[KG-3.3] records no uses for a held-out run, which was served nothing', async () => {
+    const { service, knowledge } = withKnowledge();
+
+    await service.recordServed({
+      id: 'run-1',
+      workspaceId: WORKSPACE,
+      agentUserId: 'agent-1',
+      knowledgeArm: 'HOLDOUT',
+      // Even were a pack to carry knowledge, a holdout records none.
+      contextPack: { knowledge: [PACKED] },
+    });
+    await service.recordServed({
+      id: 'run-2',
+      workspaceId: WORKSPACE,
+      agentUserId: 'agent-1',
+      knowledgeArm: 'TREATMENT',
+      contextPack: { knowledge: [] },
+    });
+
+    expect(knowledge.recordPacked).not.toHaveBeenCalled();
   });
 });

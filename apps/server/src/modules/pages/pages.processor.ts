@@ -12,6 +12,7 @@ import {
   DECAY_JOB_ID,
   PAGES_QUEUE,
   PROPOSED_ENTRY_EXPIRY_DAYS,
+  RECHECK_ENTRY_JOB,
   RECOMPUTE_MODULES_JOB,
   recomputeModulesJobOptions,
   RETRY_CITATIONS_JOB,
@@ -154,6 +155,20 @@ export class PagesProcessor {
         `${stillUnknown} citation(s) of entry ${job.data.entryId} could not be read yet`,
       );
     }
+  }
+
+  /**
+   * Checks an entry's citations again after a run it was served to went wrong
+   * in code it speaks about.
+   */
+  @Process(RECHECK_ENTRY_JOB)
+  async handleRecheckEntry(job: { data: { entryId: string } }) {
+    const { checked } = await this.entryCitations.recheck(job.data.entryId);
+
+    this.logger.info({
+      message: `Checked ${checked} citation(s) of entry ${job.data.entryId} after a harmful signal`,
+      where: 'PagesProcessor.handleRecheckEntry',
+    });
   }
 
   /**

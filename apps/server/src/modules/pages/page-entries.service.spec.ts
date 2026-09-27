@@ -135,6 +135,11 @@ function buildService({
       })),
       updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
     },
+    pageEntryUse: {
+      createMany: jest.fn(({ data }) =>
+        Promise.resolve({ count: data.length }),
+      ),
+    },
     // The transaction double runs whatever the service handed it, so a create
     // that was never reached stays absent from `created`.
     $transaction: jest.fn((operations: unknown[]) =>
@@ -361,10 +366,12 @@ describe('status transitions', () => {
 });
 
 describe('serving and decay', () => {
+  const RECALL = { workspaceId: 'workspace-1', via: 'RECALL' as const };
+
   it('increments retrieval counts atomically', async () => {
     const { service, prisma } = buildService();
 
-    await service.recordServed(['entry-1', 'entry-2']);
+    await service.recordServed(['entry-1', 'entry-2'], RECALL);
 
     const { data } = (prisma.pageEntry.updateMany as jest.Mock).mock
       .calls[0][0];
@@ -372,6 +379,64 @@ describe('serving and decay', () => {
     // number decides what survives the decay pass.
     expect(data.retrievalCount).toEqual({ increment: 1 });
     expect(data.lastServedAt).toBeInstanceOf(Date);
+  });
+
+  it('[KG-3.1] writes a use row for each entry served, with who it went to and how', async () => {
+    const { service, prisma } = buildService();
+
+    await service.recordServed(['entry-1', 'entry-2', 'entry-1'], {
+      workspaceId: 'workspace-1',
+      via: 'RECALL',
+      sessionId: 'session-7',
+      tokenId: 'token-3',
+      userId: 'agent-1',
+    });
+
+    // One insert for the lot, one row per entry however often it appeared.
+    expect(prisma.pageEntryUse.createMany).toHaveBeenCalledTimes(1);
+    const { data } = (prisma.pageEntryUse.createMany as jest.Mock).mock
+      .calls[0][0];
+    expect(data).toEqual(
+      ['entry-1', 'entry-2'].map((entryId) => ({
+        entryId,
+        workspaceId: 'workspace-1',
+        via: 'RECALL',
+        agentRunId: null as string | null,
+        sessionId: 'session-7',
+        tokenId: 'token-3',
+        userId: 'agent-1',
+      })),
+    );
+
+    // The counters move for the same entries, once each.
+    const counted = (prisma.pageEntry.updateMany as jest.Mock).mock.calls[0][0];
+    expect(counted.where).toEqual({ id: { in: ['entry-1', 'entry-2'] } });
+  });
+
+  it('[KG-3.1] writes the counts and the uses together, so they cannot disagree', async () => {
+    const { service, prisma } = buildService();
+
+    await service.recordServed(['entry-1'], {
+      workspaceId: 'workspace-1',
+      via: 'CONTEXT_PACK',
+      agentRunId: 'run-1',
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    const [writes] = (prisma.$transaction as jest.Mock).mock.calls[0];
+    expect(writes).toHaveLength(2);
+    expect(
+      (prisma.pageEntryUse.createMany as jest.Mock).mock.calls[0][0].data[0],
+    ).toMatchObject({ via: 'CONTEXT_PACK', agentRunId: 'run-1' });
+  });
+
+  it('[KG-3.1] writes nothing when nothing was served', async () => {
+    const { service, prisma } = buildService();
+
+    await service.recordServed([], RECALL);
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.pageEntryUse.createMany).not.toHaveBeenCalled();
   });
 
   it('leaves verified standing entries alone even when nothing reads them', async () => {

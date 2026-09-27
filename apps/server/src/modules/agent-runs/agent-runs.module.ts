@@ -3,8 +3,10 @@ import { Module } from '@nestjs/common';
 
 import { IssueCommentsModule } from 'modules/issue-comments/issue-comments.module';
 import { IssuesModule } from 'modules/issues/issues.module';
+import { KnowledgeSignalsModule } from 'modules/knowledge-signals/knowledge-signals.module';
 import { LinkedIssueModule } from 'modules/linked-issue/linked-issue.module';
 import { LocalRepoModule } from 'modules/local-repo/local-repo.module';
+import { PagesModule } from 'modules/pages/pages.module';
 import { UsersService } from 'modules/users/users.service';
 
 import { AgentDelegationService } from './agent-delegation.service';
@@ -21,6 +23,7 @@ import {
 import { AgentRunsProcessor, AgentRunsScheduler } from './agent-runs.processor';
 import { AgentRunsService } from './agent-runs.service';
 import { ContextPackService } from './context-pack.service';
+import { KnowledgeArmsService } from './knowledge-arms.service';
 import { RunHandbackService } from './run-handback.service';
 import { ExecutorRegistry } from './executors/executor.registry';
 
@@ -33,6 +36,9 @@ import { ExecutorRegistry } from './executors/executor.registry';
     // The issue's modules say which repository a run opens, and a repository on
     // this disk keeps its path here.
     LocalRepoModule,
+    // What the workspace knows, for the run's pack, and what came of it.
+    PagesModule,
+    KnowledgeSignalsModule,
   ],
   controllers: [AgentRunsController, CredentialsController],
   providers: [
@@ -42,6 +48,7 @@ import { ExecutorRegistry } from './executors/executor.registry';
     // without a value import back into this module.
     { provide: AGENT_DELEGATION_SERVICE, useExisting: AgentDelegationService },
     ContextPackService,
+    KnowledgeArmsService,
     RunHandbackService,
     ExecutorRegistry,
     HostedExecutor,

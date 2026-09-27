@@ -1,3 +1,5 @@
+import type { KnowledgeArmComparison } from '@vantikhq/types';
+
 import { useQuery } from '@tanstack/react-query';
 
 import { ajaxGet, ajaxPost, mutationHook } from 'services/utils';
@@ -112,5 +114,20 @@ export function useModelCatalogue() {
     queryKey: ['agent-run-models'],
     queryFn: () => ajaxGet({ url: '/api/v1/agent_runs/meta/models' }),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * The runs handed the workspace's knowledge beside the runs held out from it.
+ *
+ * Numbers that move slowly — a run takes minutes and a pull request days — so
+ * there is no reason to ask again while the page stays open.
+ */
+export function useKnowledgeArms(enabled = true) {
+  return useQuery<KnowledgeArmComparison>({
+    queryKey: ['agent-run-knowledge-arms'],
+    queryFn: () => ajaxGet({ url: '/api/v1/agent_runs/meta/knowledge-arms' }),
+    staleTime: 5 * 60 * 1000,
+    enabled,
   });
 }

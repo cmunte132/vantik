@@ -10,7 +10,11 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { VantikAgent, VantikClient } from '@vantikhq/agent-core';
+import {
+  VantikAgent,
+  VantikClient,
+  type VantikClientConfig,
+} from '@vantikhq/agent-core';
 import { Request, Response } from 'express';
 
 import { bearerToken } from 'common/pat-session';
@@ -18,6 +22,10 @@ import { bearerToken } from 'common/pat-session';
 import { SkipAgentScope } from 'modules/auth/agent-scope';
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { LoggerService } from 'modules/logger/logger.service';
+import {
+  HARNESS_SESSION_HEADER,
+  harnessSessionOf,
+} from 'modules/pages/pages.interface';
 
 import { McpThrottleGuard } from './mcp-throttle.guard';
 import { registerHookTools } from './mcp.hook-tools';
@@ -59,7 +67,9 @@ export class McpController {
   async handleRequest(@Req() request: Request, @Res() response: Response) {
     const token = this.extractToken(request);
 
-    const client = new VantikClient({ baseUrl: this.loopbackUrl(), token });
+    const client = new VantikClient(
+      loopbackClientConfig(request, token, this.loopbackUrl()),
+    );
 
     const server = new McpServer(SERVER_INFO, {
       instructions: MCP_INSTRUCTIONS,
@@ -146,4 +156,23 @@ export class McpController {
       `http://127.0.0.1:${process.env.PORT || 3001}`
     );
   }
+}
+
+/**
+ * How the tools reach the API for one request: as the caller's token, and in
+ * the caller's harness session when it names one. The protocol is stateless
+ * and carries no session, so a harness that wants the knowledge it is served
+ * recorded against its session says so in a header, and it is passed on.
+ */
+export function loopbackClientConfig(
+  request: Pick<Request, 'headers'>,
+  token: string,
+  baseUrl: string,
+): VantikClientConfig {
+  return {
+    baseUrl,
+    token,
+    sessionId:
+      harnessSessionOf(request.headers[HARNESS_SESSION_HEADER]) ?? undefined,
+  };
 }

@@ -119,7 +119,8 @@ export function buildAgentPrompt(pack: ContextPack): string {
       ...pack.knowledge.map(
         (item) =>
           `- ${item.scope ? `(${item.scope}) ` : ''}${item.body}\n` +
-          `  _${describeProof(item)}_`,
+          `  _${describeProof(item)}` +
+          `${item.writtenAt ? ` · written ${item.writtenAt.slice(0, 10)}` : ''}_`,
       ),
     );
   }

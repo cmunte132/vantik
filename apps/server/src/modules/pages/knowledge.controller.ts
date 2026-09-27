@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   KnowledgeContextDto,
   KnowledgeGapsQueryDto,
@@ -11,7 +19,7 @@ import { resolveWorkspaceId } from 'common/workspace-access';
 
 import { RequiresScope } from 'modules/auth/agent-scope';
 import { AuthGuard } from 'modules/auth/auth.guard';
-import { UserId, Workspace } from 'modules/auth/session.decorator';
+import { TokenId, UserId, Workspace } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 import {
   KnowledgeSearchHit,
@@ -21,7 +29,9 @@ import {
 import KnowledgeService, {
   ContextPack,
   KnowledgeGap,
+  type KnowledgeReader,
 } from './knowledge.service';
+import { HARNESS_SESSION_HEADER, harnessSessionOf } from './pages.interface';
 
 /**
  * Reading the knowledge bank.
@@ -45,6 +55,8 @@ export class KnowledgeController {
   async search(
     @Workspace() sessionWorkspaceId: string,
     @UserId() userId: string,
+    @TokenId() tokenId: string | null,
+    @Headers(HARNESS_SESSION_HEADER) session: string | undefined,
     @Query() query: KnowledgeSearchQueryDto,
   ): Promise<KnowledgeSearchResult> {
     const workspaceId = await this.workspace(
@@ -60,6 +72,7 @@ export class KnowledgeController {
       kinds: query.kind,
       moduleIds: query.moduleIds,
       issueId: query.issueId,
+      reader: reader(userId, tokenId, session),
     });
   }
 
@@ -74,6 +87,8 @@ export class KnowledgeController {
   async contextPack(
     @Workspace() sessionWorkspaceId: string,
     @UserId() userId: string,
+    @TokenId() tokenId: string | null,
+    @Headers(HARNESS_SESSION_HEADER) session: string | undefined,
     @Body() input: KnowledgeContextDto,
   ): Promise<ContextPack> {
     const workspaceId = await this.workspace(
@@ -82,7 +97,10 @@ export class KnowledgeController {
       input.workspaceId,
     );
 
-    return this.knowledgeService.contextPack(workspaceId, input);
+    return this.knowledgeService.contextPack(workspaceId, {
+      ...input,
+      reader: reader(userId, tokenId, session),
+    });
   }
 
   @Get('similar')
@@ -143,4 +161,13 @@ export function parseKnowledgeLimit(limit?: string): number | undefined {
   const parsed = Number(limit);
 
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+/** Who a request came from, for the uses it records. */
+function reader(
+  userId: string,
+  tokenId: string | null,
+  session: string | undefined,
+): KnowledgeReader {
+  return { userId, tokenId, sessionId: harnessSessionOf(session) };
 }

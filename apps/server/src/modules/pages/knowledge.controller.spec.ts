@@ -15,6 +15,7 @@ import { KnowledgeController } from './knowledge.controller';
 import { PageEntriesController } from './page-entries.controller';
 import type KnowledgeService from './knowledge.service';
 import type PageEntriesService from './page-entries.service';
+import { harnessSessionOf } from './pages.interface';
 
 describe('KnowledgeController', () => {
   it('trims and rejects empty or wildcard search queries', async () => {
@@ -54,7 +55,7 @@ describe('KnowledgeController', () => {
       .spyOn(controllerWithWorkspace, 'workspace')
       .mockResolvedValue('workspace-1');
 
-    await controller.search('session-workspace', 'user-1', {
+    await controller.search('session-workspace', 'user-1', null, undefined, {
       query: 'deployment',
       limit: 'NaN',
     } as KnowledgeSearchQueryDto);
@@ -62,8 +63,76 @@ describe('KnowledgeController', () => {
     expect(knowledgeService.search).toHaveBeenCalledWith(
       'workspace-1',
       'deployment',
-      { limit: undefined, scope: undefined },
+      {
+        limit: undefined,
+        scope: undefined,
+        reader: { userId: 'user-1', tokenId: null, sessionId: null },
+      },
     );
+  });
+
+  function withWorkspace(knowledgeService: KnowledgeService) {
+    const controller = new KnowledgeController(
+      knowledgeService,
+      {} as PrismaService,
+    );
+    jest
+      .spyOn(
+        controller as unknown as { workspace: () => Promise<string> },
+        'workspace',
+      )
+      .mockResolvedValue('workspace-1');
+    return controller;
+  }
+
+  it('[KG-3.1] tells the search who is reading: the user, the token and the harness session', async () => {
+    const knowledgeService = {
+      search: jest.fn().mockResolvedValue({ hits: [] }),
+      contextPack: jest.fn().mockResolvedValue({ items: [] }),
+    } as unknown as KnowledgeService;
+    const controller = withWorkspace(knowledgeService);
+
+    await controller.search(
+      'session-workspace',
+      'agent-1',
+      'token-9',
+      'claude-session-42',
+      { query: 'deployment' } as KnowledgeSearchQueryDto,
+    );
+    await controller.contextPack(
+      'session-workspace',
+      'agent-1',
+      'token-9',
+      'claude-session-42',
+      // A reader sent in the body is not believed; the request says who it is.
+      { scope: 'apps/server', reader: { userId: 'someone-else' } } as never,
+    );
+
+    const reader = {
+      userId: 'agent-1',
+      tokenId: 'token-9',
+      sessionId: 'claude-session-42',
+    };
+    expect(knowledgeService.search).toHaveBeenCalledWith(
+      'workspace-1',
+      'deployment',
+      expect.objectContaining({ reader }),
+    );
+    expect(knowledgeService.contextPack).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({ scope: 'apps/server', reader }),
+    );
+  });
+
+  it('[KG-3.1] keeps a session id only when it is one: printable, and not too long', () => {
+    expect(harnessSessionOf(' abc-123 ')).toBe('abc-123');
+    expect(harnessSessionOf(['first', 'second'])).toBe('first');
+    expect(harnessSessionOf(undefined)).toBeNull();
+    expect(harnessSessionOf('')).toBeNull();
+    expect(harnessSessionOf('has a space')).toBeNull();
+    expect(harnessSessionOf('line\nbreak')).toBeNull();
+    expect(harnessSessionOf('x'.repeat(201))).toBeNull();
+    expect(harnessSessionOf('x'.repeat(200))).toBe('x'.repeat(200));
   });
 });
 
@@ -172,7 +241,13 @@ describe('KnowledgeController.search', () => {
     });
     await expect(validate(query)).resolves.toEqual([]);
 
-    await controller.search('session-workspace', 'user-1', query);
+    await controller.search(
+      'session-workspace',
+      'user-1',
+      null,
+      undefined,
+      query,
+    );
 
     expect(knowledgeService.search).toHaveBeenCalledWith(
       'workspace-1',

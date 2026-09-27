@@ -32,6 +32,7 @@ import {
   skillFiles,
 } from '../agent-skills';
 import { CredentialsService } from '../credentials/credentials.service';
+import { evidencePaths } from '../evidence-paths';
 import {
   MIN_USEFUL_MS,
   decideCycle,
@@ -1010,7 +1011,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       };
 
       history.push(record);
-      await this.recordPass(cx, record, {
+      await this.recordPass(cx, record, checks.outcomes, {
         [verifyPhase]: phaseTimings[verifyPhase],
         [reviewPhase]: phaseTimings[reviewPhase],
         [working]: phaseTimings[working],
@@ -1367,6 +1368,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
   private async recordPass(
     cx: CycleContext,
     pass: CyclePass,
+    checks: VerificationOutcome[],
     phaseTimings: Record<string, number>,
   ): Promise<void> {
     await this.agentRuns
@@ -1378,6 +1380,16 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
             ? {}
             : { verificationPassed: pass.verificationPassed }),
           findings: pass.findings,
+          accepted: pass.accepted,
+          // Where each failing check failed, for attributing the failure to
+          // the knowledge the run was handed. The output is not kept.
+          failedChecks: checks
+            .filter((check) => !check.ok)
+            .map((check) => ({
+              label: check.label,
+              command: check.command,
+              paths: evidencePaths(check.output),
+            })),
           ...(pass.diffHash ? { diffHash: pass.diffHash } : {}),
           phaseTimings,
         },

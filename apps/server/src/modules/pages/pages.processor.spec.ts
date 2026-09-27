@@ -14,6 +14,8 @@ import PageEntriesService from './page-entries.service';
 import {
   DECAY_JOB,
   DECAY_JOB_ID,
+  RECHECK_ENTRY_JOB,
+  recheckEntryJobOptions,
   RECOMPUTE_MODULES_GRACE_MS,
   RECOMPUTE_MODULES_JOB,
   RECOMPUTE_MODULES_WINDOW_MS,
@@ -196,5 +198,33 @@ describe('retrying citations that could not be read', () => {
       removeOnComplete: true,
     });
     expect(RETRY_CITATIONS_ATTEMPTS).toBeGreaterThan(1);
+  });
+});
+
+describe('checking an entry again after a harmful signal', () => {
+  it('[KG-3.4] checks the entry the job names against the code as it is now', async () => {
+    const recheck = jest.fn(async () => ({ checked: 2 }));
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      { recheck } as unknown as EntryCitationsService,
+    );
+
+    await expect(
+      processor.handleRecheckEntry({ data: { entryId: 'entry-1' } }),
+    ).resolves.toBeUndefined();
+    expect(recheck).toHaveBeenCalledWith('entry-1');
+  });
+
+  it('[KG-3.4] folds signals against one entry into one check, and keeps no history of them', () => {
+    // Several runs can blame an entry at once; while a check is waiting, a
+    // second is the same work, so the job id is the entry's.
+    expect(recheckEntryJobOptions('entry-1')).toEqual({
+      jobId: `${RECHECK_ENTRY_JOB}:entry-1`,
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+    expect(recheckEntryJobOptions('entry-2').jobId).not.toBe(
+      recheckEntryJobOptions('entry-1').jobId,
+    );
   });
 });

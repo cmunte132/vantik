@@ -1030,6 +1030,42 @@ describe('client errors', () => {
   });
 });
 
+describe('the harness session', () => {
+  function recording(sessionId?: string) {
+    const headers: Array<Record<string, string>> = [];
+    const client = new VantikClient({
+      baseUrl: 'http://vantik.test',
+      token: 'tg_pat_test',
+      sessionId,
+      fetch: (async (_url: string, init: RequestInit = {}) => {
+        headers.push(init.headers as Record<string, string>);
+        return new Response('{}', { status: 200 });
+      }) as unknown as typeof globalThis.fetch,
+    });
+    return { client, headers };
+  }
+
+  it('[KG-3.1] names the session on every call, so what it reads is recorded against it', async () => {
+    const { client, headers } = recording('claude-session-42');
+
+    await client.get('/knowledge/search', { query: { query: 'redis' } });
+    await client.post('/knowledge/context', { body: { scope: 'apps' } });
+
+    expect(headers.map((sent) => sent['x-vantik-session'])).toEqual([
+      'claude-session-42',
+      'claude-session-42',
+    ]);
+  });
+
+  it('[KG-3.1] sends no session header when it has none', async () => {
+    const { client, headers } = recording('   ');
+
+    await client.get('/knowledge/search');
+
+    expect(headers[0]).not.toHaveProperty('x-vantik-session');
+  });
+});
+
 describe('remember', () => {
   const pages = [{ id: 'page-1', title: 'Deployment' }];
   const written = {

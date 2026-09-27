@@ -72,8 +72,16 @@ const NOT_KEPT: Record<string, Record<string, string>> = {
     contextPack: 'executor bookkeeping, and large',
     configHash: 'executor bookkeeping',
     baseCommit: NOT_READ,
+    // Read in aggregate, per arm, from /agent_runs/meta/knowledge-arms.
+    knowledgeArm: 'read per arm, through the knowledge arms endpoint',
+    pullRequestOutcome: 'read per arm, through the knowledge arms endpoint',
+    pullRequestClosedAt: NOT_READ,
   },
-  PageEntry: { sourceTokenId: NOT_READ },
+  PageEntry: {
+    sourceTokenId: NOT_READ,
+    helpfulCount: NOT_READ,
+    harmfulCount: NOT_READ,
+  },
   IntegrationAccount: {
     integrationConfiguration: NOT_READ,
     isActive: NOT_READ,

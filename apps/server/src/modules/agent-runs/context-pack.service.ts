@@ -1,13 +1,13 @@
+import type { AgentRun, KnowledgeArm } from '@prisma/client';
 import { Injectable, Logger } from '@nestjs/common';
-import type {
-  AgentRunConfig,
-  AgentRunRepoConfig,
-  KnowledgeProof,
-} from '@vantikhq/types';
+import type { AgentRunConfig, AgentRunRepoConfig } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import IssueContextService from 'modules/issues/issue-context.service';
 import { LocalRepoService } from 'modules/local-repo/local-repo.service';
+import KnowledgeService, {
+  type PackedEntry,
+} from 'modules/pages/knowledge.service';
 
 import { workspaceAgentDefaults } from './agent-run-settings';
 import { chooseVerification } from './module-verification';
@@ -78,17 +78,17 @@ export interface ContextPack {
   /**
    * What the workspace knows that bears on the work, each item with its proof
    * so the agent can weigh a person's confirmation above a claim nothing
-   * backs. Set when a knowledge bank is wired up; empty until then.
+   * backs. Empty for a run held out from knowledge, so the two arms can be
+   * compared.
    */
   knowledge: RunKnowledgeItem[];
 }
 
-/** One item of knowledge in a run's pack: the claim, and what it rests on. */
-export interface RunKnowledgeItem extends KnowledgeProof {
-  /** Null for page-level knowledge. */
-  scope: string | null;
-  body: string;
-}
+/**
+ * One item of knowledge in a run's pack: the claim, what it rests on, and
+ * when it was written.
+ */
+export type RunKnowledgeItem = PackedEntry;
 
 @Injectable()
 export class ContextPackService {
@@ -98,6 +98,7 @@ export class ContextPackService {
     private prisma: PrismaService,
     private issueContext: IssueContextService,
     private localRepo: LocalRepoService,
+    private knowledge: KnowledgeService,
   ) {}
 
   /**
@@ -107,17 +108,29 @@ export class ContextPackService {
    * resolves every id to a name for `get_task`. Re-walking it here would mean
    * two definitions of "the working context of an issue" drifting apart, and
    * the agent surface is exactly where they must not.
+   *
+   * Knowledge goes in only for a run in the treatment arm. A run held out, or
+   * one with no arm, gets an empty section; see `knowledge-arm.ts`.
    */
   async build(
     issueId: string,
     workspaceId: string,
     overrides?: AgentRunConfig,
     guidance?: string,
+    arm?: KnowledgeArm,
   ): Promise<ContextPack> {
     const [context, repo] = await Promise.all([
       this.issueContext.getIssueContext(issueId),
       this.resolveRepo(issueId, workspaceId, overrides),
     ]);
+
+    const knowledge =
+      arm === 'TREATMENT'
+        ? await this.knowledge.knowledgeForRun(workspaceId, {
+            issueId,
+            query: context.title,
+          })
+        : [];
 
     return {
       version: 1,
@@ -169,11 +182,37 @@ export class ContextPackService {
         title: linked.title ?? null,
       })),
       repo,
-      // Reserved for the Pages knowledge bank (ENG-52..ENG-54). When it lands,
-      // STANDING entries and linked pages join the pack here and every
-      // executor gets them without a single adapter changing.
-      knowledge: [],
+      knowledge,
     };
+  }
+
+  /**
+   * Records the knowledge in a run's pack as served to that run.
+   *
+   * Called once the run exists, since a use names its run, and again for
+   * each retry, which is handed the same pack. A run held out records
+   * nothing: it was served nothing.
+   */
+  async recordServed(
+    run: Pick<AgentRun, 'id' | 'workspaceId' | 'agentUserId'> & {
+      knowledgeArm?: KnowledgeArm | null;
+      contextPack?: unknown;
+    },
+  ): Promise<void> {
+    if (run.knowledgeArm !== 'TREATMENT') {
+      return;
+    }
+
+    const items = (run.contextPack as Partial<ContextPack> | null)?.knowledge;
+    const entryIds = Array.isArray(items)
+      ? items
+          .map((item) => item?.entryId)
+          .filter((id): id is string => typeof id === 'string')
+      : [];
+
+    if (entryIds.length) {
+      await this.knowledge.recordPacked(run.workspaceId, run, entryIds);
+    }
   }
 
   /**

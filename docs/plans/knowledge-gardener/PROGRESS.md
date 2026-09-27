@@ -5,10 +5,10 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 1 (implementation merged in PR #43; review round 1 fixes
-  with the reviewer)
-- Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phases 0-1 spec-hash 069a84bf6612`
-  (KG-1.1 to KG-1.6 pass; KG-1.R waits on the review)
+- Current phase: 1 done (implementation merged in PR #43; review fixes on
+  the branch). Next: phase 2.
+- Last verify: `KNOWLEDGE-GARDENER VERIFY: PASS phases 0-1 spec-hash 069a84bf6612`
+  (14/14; server 1316, agent-core 57, webapp 616 tests; typecheck ok)
 
 ## Decisions
 
@@ -103,9 +103,10 @@ next session starts by reading it.
   stand). The boot pass also fills in entries written before this phase.
   Requests are folded per workspace in five-second windows
   (`recomputeModulesJobOptions`): one job id per window, run once the window
-  closes. A burst of edits, or replicas booting together, queue one pass, and
-  no request can land while its own pass is already running and be dropped,
-  which a fixed job id would allow.
+  closes plus a one-second grace for servers whose clocks disagree. A burst
+  of edits, or replicas booting together, queue one pass, and no request can
+  land while its own pass is already running and be dropped, which a fixed
+  job id would allow.
 - **Typesense:** four new faceted fields: `scopePath`, `scopeAncestors`,
   `moduleIds`, and `entryKind` (not `kind`, which already means page or
   entry). They are in `requiredPageFields`, so an existing collection is
@@ -288,6 +289,28 @@ The reviewer also corrected the recorded reason the CLI has no tests (its
 jest cannot load chalk's ESM, not a missing TypeScript transform). Fixed
 above.
 
+### Phase 1, round 2 (same reviewer, on the round 1 fixes)
+
+`VERDICT: NO UNRESOLVED FINDINGS`. All six fixes confirmed, each by mutation,
+and the folding argument checked against Bull 4.16.5's source (`addJob`
+ignores an id that exists in any state; the run time is the adder's clock
+plus the delay; the edit is committed before the window is read). One
+non-blocking note, fixed: the window comes from the adding server's clock and
+the worker promotes by its own, so the "never dropped" claim assumed agreeing
+clocks. The delay now runs a one-second grace past the window's end, which
+covers any smaller skew, and the comment says so.
+
+Phase 1 review: PASS - two rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-1 criteria: link resolution for
+products, modules and capabilities; scope-to-module resolution on every
+writer (entries, repository edits, module deletion, boot) with folded
+recompute jobs; prefix-matched scoped search ranked above unscoped knowledge;
+entry kinds end to end; one-hop seeding checked against the workspace and
+deletion; product-axis screens showing standing entries only, capped; the
+search evaluator matching Typesense's filter, `_eval` and bucketing
+semantics; mutation checks on each; no skipped or loosened tests, checklist
+and verifier untouched.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -340,3 +363,5 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-27: PR #43 merged with phase 1's implementation; the branch was
   restarted from `main` (a fast-forward). Review round 1: no unresolved
   findings; all six non-blocking findings fixed and sent back to the reviewer.
+- 2026-09-27: Review round 2: no unresolved findings; the clock-skew note
+  fixed with a grace on the recompute delay. Phase 1 done.

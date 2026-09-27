@@ -13,6 +13,7 @@ import PageEntriesService from './page-entries.service';
 import {
   DECAY_JOB,
   DECAY_JOB_ID,
+  RECOMPUTE_MODULES_GRACE_MS,
   RECOMPUTE_MODULES_JOB,
   RECOMPUTE_MODULES_WINDOW_MS,
   recomputeModulesJobOptions,
@@ -116,10 +117,12 @@ describe('re-resolving entry modules', () => {
 
     // Same window, same id: Bull ignores the second add.
     expect(last.jobId).toBe(first.jobId);
-    // Neither starts before the window has closed, so no request in it can
-    // arrive after its pass has already read the repositories.
-    expect(start + 1 + (first.delay as number)).toBe(start + W);
-    expect(start + W - 1 + (last.delay as number)).toBe(start + W);
+    // Neither starts before the window has closed, plus a grace for servers
+    // whose clocks disagree, so no request in it can arrive after its pass
+    // has already read the repositories.
+    const closes = start + W + RECOMPUTE_MODULES_GRACE_MS;
+    expect(start + 1 + (first.delay as number)).toBe(closes);
+    expect(start + W - 1 + (last.delay as number)).toBe(closes);
   });
 
   it('[KG-1.2] gives a later request, or another workspace, a pass of its own', () => {

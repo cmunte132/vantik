@@ -80,16 +80,25 @@ export const RECOMPUTE_MODULES_JOB = 'recomputeEntryModules';
 export const RECOMPUTE_MODULES_WINDOW_MS = 5_000;
 
 /**
+ * How long after its window a pass waits before it starts. The window is read
+ * from the clock of the server that queued the request, and the pass is
+ * started by the worker's clock; the grace absorbs any disagreement smaller
+ * than itself.
+ */
+export const RECOMPUTE_MODULES_GRACE_MS = 1_000;
+
+/**
  * Queue options that fold a burst of recompute requests into one pass.
  *
  * Every request in the same window gets the same job id, and Bull ignores a
  * job whose id is already queued, so a run of repository edits, or replicas
- * booting together, queue one pass. The job waits until its window closes,
- * which is what makes the folding safe: a request can never find its pass
- * already running and be dropped. A request that comes later falls in a later
- * window and gets a pass of its own, which reads the state after its edit. A
- * fixed id would not do that; it would swallow every request made while the
- * pass ran, and every one after a failed pass kept for inspection.
+ * booting together, queue one pass. The job waits until its window has closed
+ * (plus a grace, for servers whose clocks disagree by less than it), which is
+ * what makes the folding safe: a request cannot find its pass already running
+ * and be dropped. A request that comes later falls in a later window and gets
+ * a pass of its own, which reads the state after its edit. A fixed id would
+ * not do that; it would swallow every request made while the pass ran, and
+ * every one after a failed pass kept for inspection.
  */
 export function recomputeModulesJobOptions(
   workspaceId: string | undefined,
@@ -99,7 +108,10 @@ export function recomputeModulesJobOptions(
 
   return {
     jobId: `${RECOMPUTE_MODULES_JOB}:${workspaceId ?? 'all'}:${window}`,
-    delay: (window + 1) * RECOMPUTE_MODULES_WINDOW_MS - now,
+    delay:
+      (window + 1) * RECOMPUTE_MODULES_WINDOW_MS +
+      RECOMPUTE_MODULES_GRACE_MS -
+      now,
     removeOnComplete: true,
     removeOnFail: 20,
   };

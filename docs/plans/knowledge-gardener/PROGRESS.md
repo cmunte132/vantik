@@ -5,15 +5,15 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 5, implemented and in review (phase 4 reviewed and done).
-  Phases 4 and 5 go in the second pull request, after PR #44 (phase 1's
-  review fixes, phase 2 and phase 3), which is merged.
+- Current phase: 6, starting (phases 4 and 5 reviewed and done). Phases 4
+  and 5 go in the second pull request, after PR #44 (phase 1's review
+  fixes, phase 2 and phase 3), which is merged.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
-- Last verify: phases 0-5, 44/45, every criterion but KG-5.R (server
-  1694, agent-core 67, cli 10, webapp 636; typecheck ok).
+- Last verify: phases 0-5, PASS, 45/45 (server 1702, agent-core 67,
+  cli 10, webapp 637; typecheck ok).
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
   (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
@@ -1259,6 +1259,35 @@ Verdict PASS, with two new non-blocking points, both now fixed:
   Test: "[KG-5.5] acting by hand on an audited entry that has moved on
   gives no verdict", which fails against the old condition.
 
+### Phase 5, round 4 (same reviewer, on the round 3 fixes)
+
+No unresolved findings, blocking or not, from any round. The reviewer read
+05e696a, ran the pages suites (378 tests), `pnpm typecheck --force` and
+eslint on the changed files. Both round 3 points resolved: the Kappa bullet
+lists only the tests that exist, and `verdictsFor` takes a verdict on an
+audit only while its entry is where the decision left it, the rule the
+queue and `resolveAudit` share through `statusLeftBy`. It checked the other
+callers still meet it (bulk triage on an audited repeat or refusal sees
+ARCHIVED; consolidation passes STANDING) and that the earlier by-hand and
+consolidation tests still pass.
+
+Phase 5 review: PASS - four rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-5 criteria: a review queue that is the
+inbox with each escalation's reasons, plus open audits, and exactly the
+inbox with triage off; audits drawn by a hash of the decision id over every
+applied acting decision but a SECRET refusal, answered strictly (the second
+answer, and an answer on an entry that moved on, get 409) and undone
+through the ordinary entry update, a folded repeat's corroboration taken
+back; Cohen's kappa per decision type, one type against the rest, each
+verdict counted once, ESCALATE reported but never backing off, the weighted
+cells for reading only; back-off and resumption only on enough verdicts
+about the type, as append-only rows under a per-workspace advisory lock;
+verdicts recorded in the change's own transaction, the first of two people
+kept, never from an agent, on audits only while their entry is where triage
+left it; a hand-written migration matching `prisma migrate diff`; mutation
+checks on every fix; no skipped or loosened tests, checklist and verifier
+untouched.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -1445,3 +1474,7 @@ Give the evidence, and stop until the maintainer answers.
   verdict on a closed audit through a by-hand action), both fixed, the
   second with a tagged test that the old condition fails. Round 4 started
   to confirm them.
+
+- 2026-09-27: Phase 5 review round 4: both round 3 points resolved, no
+  unresolved findings from any round. Phase 5 review: PASS. Verify through
+  phase 5: PASS, 45/45. Phase 5 done; starting phase 6.

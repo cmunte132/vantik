@@ -144,13 +144,15 @@ export async function lockEntry(
 /**
  * Holds an entry's row until the transaction ends. A person changing the
  * entry meanwhile waits, so its words and status, read after this, are the
- * ones whatever the transaction does is done to.
+ * ones whatever the transaction does is done to. Not a key lock: rows that
+ * refer to the entry, such as its uses when it is served, are still
+ * written meanwhile.
  */
 export async function lockEntryRow(
   tx: Prisma.TransactionClient,
   entryId: string,
 ): Promise<void> {
-  await tx.$executeRaw`SELECT 1 FROM "PageEntry" WHERE "id" = ${entryId} FOR UPDATE`;
+  await tx.$executeRaw`SELECT 1 FROM "PageEntry" WHERE "id" = ${entryId} FOR NO KEY UPDATE`;
 }
 
 /**
@@ -159,7 +161,8 @@ export async function lockEntryRow(
  *
  * A reading of a head is stamped with when the head was asked for, and a
  * reading of the commit a citation cites with when the citation was
- * written, which is older than any head read since. Stamps come from the
+ * written, which is older than any head read since. An unread citation
+ * that names no commit is read at the head, and stamped as a head is. Stamps come from the
  * clocks of the servers that read, which keep time with each other to
  * within milliseconds. Two readings of heads could be put in the wrong
  * order only if the heads were asked for within that time of each other
@@ -1111,10 +1114,14 @@ export default class EntryCitationsService {
     const checked = {
       moduleRepoId: repo.id,
       commitSha: ref,
-      // When the citation was written: the reading says whether the claim
-      // held at the commit it was written against, and so never outranks
-      // a reading of a head, which is newer, whenever this one finishes.
-      checkedAt: citation.createdAt,
+      // Of the commit it cites, when the citation was written: the reading
+      // says whether the claim held at the commit it was written against,
+      // and so never outranks a reading of a head, which is newer, whenever
+      // this one finishes. Of the head, when that was asked for, as any
+      // reading of a head is.
+      checkedAt: citation.commitSha
+        ? citation.createdAt
+        : reads.headAskedAt(repo),
       checkedSha: ref,
       pendingQuote: null as string | null,
     };

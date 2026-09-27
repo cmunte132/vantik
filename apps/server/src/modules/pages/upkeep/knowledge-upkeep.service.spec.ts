@@ -227,7 +227,7 @@ function harness(seed: Seed = {}) {
   const client = {
     $executeRaw: jest.fn(
       async (sql: TemplateStringsArray, ...values: unknown[]) => {
-        if (sql.join('?').includes('FOR UPDATE')) {
+        if (sql.join('?').includes('FOR NO KEY UPDATE')) {
           ops.push(`row:${String(values[0])}`);
           // What a person's change waiting on the row does once it gets it,
           // as if it had committed just before.
@@ -1177,6 +1177,60 @@ describe('a change that landed re-checks the citations it touches', () => {
     });
     expect(t.entries.get('e1')?.status).toBe(Status.STANDING);
     expect(t.maintenance).toEqual([]);
+  });
+
+  it('[KG-6.2] stamps an unread citation that names no commit, read at the head, with when the head was asked for', async () => {
+    const asked = new Date('2026-01-01T00:00:00Z');
+    jest.useFakeTimers({
+      now: asked,
+      doNotFake: [
+        'nextTick',
+        'queueMicrotask',
+        'setImmediate',
+        'clearImmediate',
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+      ],
+    });
+
+    try {
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [
+          citation('c1', 'e1', {
+            createdAt: new Date(asked.getTime() - DAY),
+            commitSha: null,
+            checkResult: Check.UNKNOWN,
+            checkedAt: null,
+            checkedSha: null,
+          }),
+        ],
+      });
+      const read = t.files.read.getMockImplementation() as NonNullable<
+        ReturnType<typeof t.files.read.getMockImplementation>
+      >;
+      t.files.read.mockImplementation(async (...args) => {
+        jest.setSystemTime(asked.getTime() + MINUTE);
+
+        return read(...args);
+      });
+
+      await new EntryCitationsService(
+        t.prisma as never,
+        t.files as never,
+        t.judge as never,
+      ).retryUnknown('e1');
+
+      expect(t.citations[0]).toMatchObject({
+        checkResult: Check.HOLDS,
+        checkedSha: SHA,
+        checkedAt: asked,
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('[KG-6.2] ranks a reading of the commit a citation cites below a reading of a head, even in the same millisecond', async () => {

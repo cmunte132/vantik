@@ -5,14 +5,16 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 3 done; phases 4 and 5 are next, in a new pull request once
-  PR #44 (phase 1's review fixes, phase 2 and phase 3) is merged.
+- Current phase: 4 (implemented, review pending); phase 5 next. Both go in
+  the second pull request, after PR #44 (phase 1's review fixes, phase 2 and
+  phase 3), which is merged.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
-- Last verify: phases 0-3 PASS, 30/30 (server 1519 with the 15 database-only skipped, agent-core 67, cli 10,
-  webapp 621 with its 2 expected failures; typecheck and lint ok).
+- Last verify: phases 0-4, 38/39, only KG-4.R open (server 1617 with the
+  15 database-only skipped, agent-core 67, cli 10, webapp 622; typecheck
+  ok).
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
   (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
@@ -401,6 +403,119 @@ next session starts by reading it.
   as not kept, with reasons: the arm and outcome are read per arm from the
   endpoint, and nothing shows the counts yet.
 
+### Phase 4
+
+- **The pipeline (KG-4.3).** `pages/triage/knowledge-triage.service.ts`, one
+  pass per entry on the `pages` queue (`triageEntry:<entryId>`, three
+  attempts with backoff). `createEntry` queues it for every entry that lands
+  PROPOSED; a person's STANDING write is already triaged and queues nothing.
+  A queue that refuses the job leaves the entry in the inbox, as before. The
+  pass skips an entry that is gone, no longer PROPOSED, already decided about
+  (one decision per entry), or whose workspace has triage off. Stages, in
+  order: policy, exact repeat, near neighbours, grounding, decision.
+- **Policy (KG-4.8).** `triage/triage-policy.ts`. A credential pattern (key
+  armour, provider key prefixes with their lengths, a password in a URL, a
+  JWT, a Vantik token) rejects with policy SECRET before any model or the
+  index sees the content, and the decision records the pattern's name, never
+  the content. A list of two or more items, or over 1000 characters, rejects
+  with ONE_FACT. Credentials are also refused at write (422
+  `secret-refused`, content not echoed) on create and on edit, for a person
+  too: entries are replicated to every member's browser, so triage finding
+  one afterwards is too late. External input: the writing run is found by the
+  session id a hosted run writes with (its run id); its issue is outside
+  input when an integration filed it (`sourceMetadata.type`), it is a
+  support issue or on a support team, or a non-PR linked issue carries a
+  source type or syncs. Such an entry always escalates with EXTERNAL_INPUT,
+  even as an exact repeat, so a poisoned run cannot raise another entry's
+  corroboration count either.
+- **Exact repeats (KG-4.1).** `PageEntry.contentHash` is sha256 of
+  `normaliseContent`, written on create and on every content edit, and
+  backfilled by the migration in SQL. The neighbourhood is PROPOSED and
+  STANDING entries, not deleted, in the same workspace, sharing a module
+  (`moduleIds hasSome`), or on the same page when the entry has no modules;
+  and only entries written before it, ordered by `createdAt` then `id`, so of
+  two identical entries written at once exactly one corroborates the other.
+  A repeat corroborates the STANDING match if there is one, else the oldest.
+  In `on` mode the target's `corroborationCount` goes up by one and the
+  repeat is ARCHIVED, so no second row is ever served; a DUPLICATE relation
+  (decided by HASH) from the repeat records who said it again and when.
+- **Near neighbours (KG-4.2).** `VectorService.findNearEntries` asks the
+  index for PROPOSED and STANDING entries in the entry's modules (a new
+  `moduleIds` filter) or on its page, with the similarity threshold as the
+  vector distance ceiling, and keeps only hits the embedding matched at or
+  above it. Postgres then narrows them to the neighbourhood above, and the
+  nearest three are compared. `KNOWLEDGE_SIMILARITY_THRESHOLD` (0.25, i.e.
+  distance 0.75, the write-time near-match distance; overridable per
+  workspace as `similarityThreshold`) is deliberately loose, since the
+  vector distance is not calibrated (`SIMILARITY_MEASUREMENT_NOTE`) and at
+  most three pairs are asked about. For each pair, `relation-guard.ts`
+  first: a different number, month or weekday, negation parity or set of
+  condition words makes it DISTINCT (decided by RULE) with no model asked.
+  Otherwise two judgments classify it; only two readable, identical answers
+  are a relation (decided by MODEL). Anything else is stored as DISTINCT and
+  escalates with JUDGES_DISAGREE, so two unreadable answers never count as
+  agreeing. An agreed DUPLICATE corroborates as an exact repeat does.
+  Relations are upserted rows (`@@unique([fromId, toId])`); no entry's text
+  is changed. An index that cannot be asked fails the pass, which Bull
+  retries: a pass that cannot look for contradictions does not decide.
+- **Two judgments (KG-4.4).** `triage/triage-judges.ts`: the `fast` and
+  `smart` roles at temperature 0, or, when both roles resolve to the same
+  model id, `smart` twice at 0.7. Prompts treat the entries as data, not
+  instructions. The acceptance judgment is shown the claim and each
+  citation as the server read it (path, lines, result and snippet; or the
+  issue key). An answer that cannot be read, or a model that cannot be
+  reached, counts as not accepting.
+- **Auto-accept conditions (KG-4.4).** Reasons are collected, every one that
+  applies: EXTERNAL_INPUT; SUPERSEDE_REQUEST (added to the plan's list: a
+  declared correction retires accepted knowledge only on a person's
+  acceptance, as phase 0 decided); CONTRADICTS_VERIFIED and
+  CONTRADICTS_LOCKED for an agreed CONTRADICTS or SUPERSEDES against a
+  verified entry or one on a LOCKED page; JUDGES_DISAGREE; NO_LLM; and, for
+  an entry that is not a repeat, UNGROUNDED (no citations), CITATION_FAILED
+  (any citation not HOLDS or MOVED, UNKNOWN included), PIN_REQUEST (every
+  CONVENTION, since standing conventions are packed into every run in their
+  modules), BROAD_SCOPE (more than three modules). The acceptance judgment
+  is asked only when no reason applies. Decision: a broken policy rejects;
+  any reason escalates; else a repeat corroborates; else it is accepted.
+  HARMFUL_SIGNAL and AUDIT are in the enum for phase 5.
+- **Precedence (KG-4.6).** `triage/precedence.ts`: HUMAN_VERIFIED over
+  GROUNDED over UNGROUNDED, then the newer. The new entry is ranked as it
+  would stand if accepted (STANDING with its citations). The relation stores
+  `preferredId`. When an accepted entry wins against a STANDING one in `on`
+  mode, that one becomes DISPUTED (reversible, withheld until a person
+  looks), in the same transaction. Precedence can only rule against the new
+  entry when a reason already escalates it (a verified neighbour, or the
+  entry ungrounded), so nothing precedence ruled against is accepted. A
+  PROPOSED entry it outranks is left for its own triage.
+- **Shadow and on (KG-4.5).** `KNOWLEDGE_AUTO_TRIAGE` off | shadow | on,
+  default shadow, per workspace as `autoTriage`, read through
+  `knowledgeSettings`; the environment's value is read case-insensitively,
+  a stored one only as written. Shadow records the decision and the
+  relations and changes no status or count. `on` applies the decision in the
+  transaction that records it: accept sets STANDING, a repeat or a reject
+  sets ARCHIVED, an escalation changes nothing. Applying is conditional on
+  the entry still being PROPOSED with the `updatedAt` it was read with, so
+  an entry edited or triaged by a person during the pass is left alone and
+  the decision says `applied: false`. Changed entries are re-indexed.
+- **The record (KG-4.3).** `KnowledgeTriageDecision`: decision, reasons,
+  policy, mode, applied, the corroborated entry, `inputs` (content hash,
+  kind, scope, modules, citations and their results, the writer, run, issue
+  and outside source, the threshold, the repeat found, each neighbour with
+  its similarity, status, trust, relation and preferred entry),
+  `inputsDigest` (sha256 of the inputs as sorted JSON), every model asked in
+  order, and the judges' raw answers. The content is not copied into it.
+  The human verdict column arrives with phase 5, which writes it.
+- **No LLM (KG-4.7).** With none configured the policy, the hash, the rules
+  and grounding still run; a pair that needed a model has no relation and
+  adds NO_LLM, and so does an entry that reached the acceptance judgment.
+- **Migration** `20260927040000_knowledge_triage`: `prisma migrate diff`'s
+  output verbatim (two tables, six enums, two PageEntry columns and an
+  index) plus the hash backfill. Postgres and JavaScript agree on the
+  normalisation for ASCII; an entry where they differ is not found by hash,
+  and the near-match stage still compares it.
+- **Webapp sync contract.** `contentHash` and `corroborationCount` are
+  listed as not kept; nothing on screen reads them yet.
+
 ## Phase reviews
 
 ### Phase 0, round 1 (fresh reviewer subagent)
@@ -739,7 +854,16 @@ Anything that blocks the plan: a criterion that is wrong or cannot be met, or
 an environment problem such as Prisma being unable to download its engines.
 Give the evidence, and stop until the maintainer answers.
 
-(Nothing blocking.)
+(Nothing blocking the work.)
+
+- **The goal's spec hash.** The goal set for phases 4-7 asks for a verify
+  line containing `spec-hash 069a84bf6612`, the hash of the original
+  `checklist.json` and `verify.mjs` (885adff). They now hash to
+  `8409159da053`, because KG-2.1's file check was moved to `skills/` at the
+  maintainer's request (60f5db7; GOAL.md carries the new hash). Going back
+  would mean editing `checklist.json`, which the plan forbids, and would
+  fail KG-2.1 against `main`. So the verify line will read
+  `8409159da053`; the maintainer should confirm that hash as the goal's.
 
 ## Observed, outside the current phase
 
@@ -754,7 +878,8 @@ Give the evidence, and stop until the maintainer answers.
   their place. Phase 7 (KG-7.4) turns consolidation of an AUTHORED page into a
   proposal; `write_page` on a new page stays as designed.
 - **Concurrent identical writes** both pass the duplicate check (read, then
-  write). KG-4.1's content hash is the place to add a uniqueness guarantee.
+  write). Since phase 4, triage orders them by time and id, so exactly one
+  corroborates the other; the write itself still admits both.
 - **Consolidating an entry that has a pending correction** leaves the old text
   in the body if the correction is later accepted. For KG-7.4.
 - **`IntegrationsService.loadIntegration` does not catch async plugin
@@ -832,3 +957,8 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-27: Review round 3 (cc25aa1): no unresolved findings. Phase 3
   review: PASS. Verify through phase 3: PASS. Phase 3 done; PR #44 ready for
   review.
+- 2026-09-27: Phase 4 implemented (KG-4.1 to KG-4.8) with tagged tests
+  against an in-memory store; 27 mutations over the new code, all caught.
+  The goal's spec hash differs from the checklist's current one; recorded
+  under Needs a decision. Verify through phase 4: 38/39, only the review
+  open; all suites and typecheck green.

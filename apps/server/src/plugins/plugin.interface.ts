@@ -97,6 +97,28 @@ export interface LinkCapability {
   createComment(input: Json): Promise<Json>;
 }
 
+/**
+ * News about the work agent runs produced. A plugin says what it saw; what
+ * that means for the run and the knowledge it was handed is the host's
+ * business.
+ */
+export interface AgentRunCapability {
+  /**
+   * A pull request was merged, closed without merging, or reopened. A pull
+   * request no run opened, or opened from a run's branch, is ignored.
+   */
+  pullRequestChanged(input: {
+    url: string;
+    state: 'MERGED' | 'CLOSED' | 'OPEN';
+    closedAt?: string | null;
+    /** The branch it was opened from, and the repository that branch is in. */
+    branch?: string | null;
+    repo?: string | null;
+    /** When it was opened. */
+    openedAt?: string | null;
+  }): Promise<unknown>;
+}
+
 /** Read-only workspace metadata a plugin reads to place its work. */
 export interface WorkspaceCapability {
   teams(): Promise<Json>;
@@ -232,6 +254,7 @@ export interface PluginContext {
   readonly issues: IssueCapability;
   readonly comments: CommentCapability;
   readonly links: LinkCapability;
+  readonly agentRuns: AgentRunCapability;
   readonly workspace: WorkspaceCapability;
   readonly ai: AiCapability;
   readonly definitions: DefinitionCapability;

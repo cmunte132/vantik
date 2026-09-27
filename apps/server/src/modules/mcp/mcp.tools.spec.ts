@@ -17,6 +17,8 @@ async function connect(routes: Record<string, unknown>) {
     /** The query string, so a test can assert on a filter the tool applied. */
     query: string;
     body: unknown;
+    /** The harness session the call named, if any. */
+    session?: string;
   }> = [];
 
   const fetchImpl = (async (url: string, init: RequestInit = {}) => {
@@ -28,6 +30,9 @@ async function connect(routes: Record<string, unknown>) {
       path,
       query: parsed.search,
       body: init.body ? JSON.parse(init.body as string) : undefined,
+      session: (init.headers as Record<string, string> | undefined)?.[
+        'x-vantik-session'
+      ],
     });
 
     const key = `${method} ${path}`;
@@ -35,6 +40,11 @@ async function connect(routes: Record<string, unknown>) {
       return new Response(JSON.stringify({ message: 'not found' }), {
         status: 404,
       });
+    }
+
+    // A route that needs a status other than 200 hands back the response whole.
+    if (routes[key] instanceof Response) {
+      return routes[key];
     }
 
     return new Response(JSON.stringify(routes[key]), {
@@ -928,6 +938,34 @@ describe('knowledge tools and the product graph', () => {
     });
   });
 
+  it('[KG-3.1] recall_knowledge and load_context record what they serve against the session named', async () => {
+    const { client, requests } = await connect({
+      'GET /knowledge/search': { hits: [] },
+      'POST /knowledge/context': { items: [], estimatedTokens: 0 },
+    });
+
+    await client.callTool({
+      name: 'recall_knowledge',
+      arguments: { query: 'migrations', session: 'claude-session-9' },
+    });
+    await client.callTool({
+      name: 'load_context',
+      arguments: { scope: 'apps/server', session: 'claude-session-9' },
+    });
+    await client.callTool({
+      name: 'recall_knowledge',
+      arguments: { query: 'migrations' },
+    });
+
+    expect(requests.map((request) => request.session)).toEqual([
+      'claude-session-9',
+      'claude-session-9',
+      undefined,
+    ]);
+    // Asked for, not searched for: the session is not a query parameter.
+    expect(new URLSearchParams(requests[0].query).has('session')).toBe(false);
+  });
+
   it('[KG-1.6] pages_for and link_page accept products, modules and capabilities', async () => {
     const { client, requests } = await connect({
       'GET /pages': pages,
@@ -963,5 +1001,191 @@ describe('knowledge tools and the product graph', () => {
       entityType: 'CAPABILITY',
       entityId: 'c-1',
     });
+  });
+});
+
+describe('citations and proof over MCP', () => {
+  const pages = [{ id: 'page-1', title: 'Server' }];
+  const proof = {
+    trust: 'GROUNDED',
+    citations: [
+      {
+        kind: 'CODE',
+        repo: 'acme/api',
+        path: 'src/cache.ts',
+        lines: '12-30',
+        commitSha: 'abcdef1',
+        result: 'HOLDS',
+        checkedAt: '2026-09-20T10:00:00.000Z',
+        checkedSha: 'fedcba9',
+      },
+    ],
+    lastCheckedAt: '2026-09-20T10:00:00.000Z',
+    lastCheckedSha: 'fedcba9',
+  };
+  const hit = {
+    kind: 'entry',
+    pageId: 'page-1',
+    pageTitle: 'Server',
+    entryId: 'entry-1',
+    content: 'Redis holds only cache here.',
+    scope: 'apps/server',
+    verified: false,
+    retrievalCount: 2,
+    ...proof,
+  };
+
+  it('[KG-2.1] remember takes citations and asks for them in its description', async () => {
+    const { client, requests } = await connect({
+      'GET /pages': pages,
+      'POST /page_entries': { id: 'entry-1', content: 'x', pageId: 'page-1' },
+    });
+    const citations = [
+      { path: 'src/cache.ts', lines: '12-30', sha: 'abcdef1', quote: 'flush' },
+      { pullRequest: 'https://github.com/acme/api/pull/5' },
+    ];
+
+    const { tools } = await client.listTools();
+    const remember = tools.find((tool) => tool.name === 'remember');
+    expect(remember?.description).toContain(
+      'A claim about code cites the lines it is about',
+    );
+    expect(remember?.inputSchema.properties).toHaveProperty('citations');
+
+    await client.callTool({
+      name: 'remember',
+      arguments: {
+        page: 'Server',
+        content: 'Redis holds only cache here; it may be flushed at will.',
+        citations,
+      },
+    });
+
+    expect(requests.find((r) => r.method === 'POST')?.body).toMatchObject({
+      citations,
+    });
+  });
+
+  it('[KG-2.8] remember answers with the entry and what its citations came to', async () => {
+    const { client } = await connect({
+      'GET /pages': pages,
+      'POST /page_entries': {
+        id: 'entry-1',
+        content: 'Redis holds only cache here.',
+        pageId: 'page-1',
+        status: 'PROPOSED',
+        ...proof,
+        trust: 'UNGROUNDED',
+      },
+    });
+
+    const result = await client.callTool({
+      name: 'remember',
+      arguments: {
+        page: 'Server',
+        content: 'Redis holds only cache here.',
+        citations: [{ path: 'src/cache.ts', lines: '12-30', sha: 'abcdef1' }],
+      },
+    });
+
+    expect(jsonOf(result)).toMatchObject({
+      status: 'written',
+      entry: {
+        id: 'entry-1',
+        trust: 'UNGROUNDED',
+        citations: proof.citations,
+        lastCheckedAt: proof.lastCheckedAt,
+        lastCheckedSha: proof.lastCheckedSha,
+      },
+    });
+  });
+
+  it('[KG-2.1] relays a citation that does not hold, naming it, so the agent can fix it', async () => {
+    const { client } = await connect({
+      'GET /pages': pages,
+      'POST /page_entries': new Response(
+        JSON.stringify({
+          statusCode: 422,
+          status: 'citation-failed',
+          citation: 1,
+          message:
+            'Nothing was written: citation 1 (src/cache.ts:99): the file has 40 lines at that commit.',
+        }),
+        { status: 422 },
+      ),
+    });
+
+    const result = await client.callTool({
+      name: 'remember',
+      arguments: {
+        page: 'Server',
+        content: 'Redis holds only cache here; it may be flushed at will.',
+        citations: [{ path: 'src/cache.ts', lines: '99', sha: 'abcdef1' }],
+      },
+    });
+
+    expect(jsonOf(result)).toEqual({
+      status: 'citation-failed',
+      citation: 1,
+      message:
+        'Nothing was written: citation 1 (src/cache.ts:99): the file has 40 lines at that commit.',
+    });
+  });
+
+  it('[KG-2.8] recall_knowledge, load_context and read_page serve each item with its proof', async () => {
+    const { client } = await connect({
+      'GET /pages': pages,
+      'GET /knowledge/search': { hits: [hit] },
+      'POST /knowledge/context': {
+        items: [hit],
+        estimatedTokens: 40,
+        tokenBudget: 2000,
+        omitted: 0,
+      },
+      'GET /pages/page-1': {
+        id: 'page-1',
+        title: 'Server',
+        descriptionMarkdown: '',
+        entryPolicy: 'CURATED',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+        ancestors: [],
+      },
+      'GET /page_entries': [
+        {
+          id: 'entry-1',
+          content: 'Redis holds only cache here.',
+          scope: 'apps/server',
+          status: 'STANDING',
+          verifiedAt: null,
+          retrievalCount: 2,
+          pageId: 'page-1',
+          createdAt: '2026-09-20T10:00:00.000Z',
+          ...proof,
+        },
+      ],
+    });
+
+    const recalled = jsonOf(
+      await client.callTool({
+        name: 'recall_knowledge',
+        arguments: { query: 'redis' },
+      }),
+    );
+    const context = jsonOf(
+      await client.callTool({
+        name: 'load_context',
+        arguments: { scope: 'apps/server' },
+      }),
+    );
+    const page = jsonOf(
+      await client.callTool({
+        name: 'read_page',
+        arguments: { page: 'Server' },
+      }),
+    );
+
+    expect(recalled[0]).toMatchObject(proof);
+    expect(context.items[0]).toMatchObject(proof);
+    expect(page.standing[0]).toMatchObject(proof);
   });
 });

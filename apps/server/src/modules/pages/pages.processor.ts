@@ -4,6 +4,7 @@ import { Queue } from 'bull';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
+import EntryCitationsService from './entry-citations.service';
 import PageEntriesService from './page-entries.service';
 import {
   DECAY_CRON,
@@ -11,7 +12,10 @@ import {
   DECAY_JOB_ID,
   PAGES_QUEUE,
   PROPOSED_ENTRY_EXPIRY_DAYS,
+  RECHECK_ENTRY_JOB,
   RECOMPUTE_MODULES_JOB,
+  recomputeModulesJobOptions,
+  RETRY_CITATIONS_JOB,
   STANDING_ENTRY_DECAY_DAYS,
 } from './pages.interface';
 
@@ -113,7 +117,7 @@ export class EntryModulesScheduler implements OnModuleInit {
       await this.pagesQueue.add(
         RECOMPUTE_MODULES_JOB,
         {},
-        { removeOnComplete: true, removeOnFail: 20 },
+        recomputeModulesJobOptions(undefined),
       );
     } catch (error) {
       this.logger.error({
@@ -129,16 +133,44 @@ export class EntryModulesScheduler implements OnModuleInit {
 export class PagesProcessor {
   private readonly logger: LoggerService = new LoggerService('PagesProcessor');
 
-  constructor(private pageEntriesService: PageEntriesService) {}
+  constructor(
+    private pageEntriesService: PageEntriesService,
+    private entryCitations: EntryCitationsService,
+  ) {}
 
   /**
-   * Runs decay across every workspace.
-   *
-   * Deliberately unscoped: the windows are a property of the deployment, not of
-   * a workspace, and a per-workspace fan-out would need a job per workspace to
-   * express the same thing. `runDecay` is idempotent, so a retry after a
-   * partial failure re-archives what it already archived and changes nothing.
+   * Reads again an entry's citations that the server could not read when the
+   * entry was written. Throws while any is still unread, so Bull tries again
+   * after its backoff; once the attempts are spent the citations stay
+   * UNKNOWN, which never counts against the entry.
    */
+  @Process(RETRY_CITATIONS_JOB)
+  async handleRetryCitations(job: { data: { entryId: string } }) {
+    const { stillUnknown } = await this.entryCitations.retryUnknown(
+      job.data.entryId,
+    );
+
+    if (stillUnknown > 0) {
+      throw new Error(
+        `${stillUnknown} citation(s) of entry ${job.data.entryId} could not be read yet`,
+      );
+    }
+  }
+
+  /**
+   * Checks an entry's citations again after a run it was served to went wrong
+   * in code it speaks about.
+   */
+  @Process(RECHECK_ENTRY_JOB)
+  async handleRecheckEntry(job: { data: { entryId: string } }) {
+    const { checked } = await this.entryCitations.recheck(job.data.entryId);
+
+    this.logger.info({
+      message: `Checked ${checked} citation(s) of entry ${job.data.entryId} after a harmful signal`,
+      where: 'PagesProcessor.handleRecheckEntry',
+    });
+  }
+
   /**
    * Re-resolves entries' scopes to modules, for one workspace or, with none
    * given, for every workspace.
@@ -157,6 +189,14 @@ export class PagesProcessor {
     });
   }
 
+  /**
+   * Runs decay across every workspace.
+   *
+   * Deliberately unscoped: the windows are a property of the deployment, not of
+   * a workspace, and a per-workspace fan-out would need a job per workspace to
+   * express the same thing. `runDecay` is idempotent, so a retry after a
+   * partial failure re-archives what it already archived and changes nothing.
+   */
   @Process(DECAY_JOB)
   async handleDecay() {
     let expiredProposed: number;

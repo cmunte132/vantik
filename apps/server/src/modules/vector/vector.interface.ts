@@ -1,4 +1,4 @@
-import { PageEntryStatusEnum } from '@vantikhq/types';
+import { KnowledgeProof, PageEntryStatusEnum } from '@vantikhq/types';
 import { CollectionFieldSchema } from 'typesense/lib/Typesense/Collection';
 import { CollectionCreateSchema } from 'typesense/lib/Typesense/Collections';
 
@@ -93,6 +93,10 @@ export const pageSchema: CollectionCreateSchema = {
     // `_eval` needs a filter it can evaluate and `scope:!=''` is not one.
     { name: 'verified', type: 'bool', facet: true },
     { name: 'scoped', type: 'bool', facet: true },
+    // HUMAN_VERIFIED, GROUNDED or UNGROUNDED, from the entry's verification
+    // and its citations' last checks. Empty for page bodies. Ranking reads it;
+    // what is served is derived again from postgres, which is the truth.
+    { name: 'trust', type: 'string', facet: true },
     // Demonstrated usefulness, refreshed from postgres on re-index.
     { name: 'retrievalCount', type: 'int32' },
     // Coarse bucket ("2026-07") so recency can be faceted without turning every
@@ -139,11 +143,18 @@ export const KNOWLEDGE_GROUP_LIMIT = 3;
  * `_eval` scores conditionally during the search, so it composes with grouping
  * — a Node-side re-sort would reorder rows typesense had already grouped and
  * truncated, which is a different (and wrong) answer. Verified knowledge beats
- * unverified, and a narrowly-scoped fact beats a page-level one because it is
- * the one that actually applies to what the caller is doing.
+ * grounded, grounded beats the rest, and a narrowly-scoped fact beats a
+ * page-level one because it is the one that actually applies to what the
+ * caller is doing.
  */
 export const KNOWLEDGE_SORT_BY =
-  '_text_match:desc,_eval([(verified:true):2,(scoped:true):1]):desc,retrievalCount:desc';
+  '_text_match:desc,_eval([(verified:true):3,(trust:=GROUNDED):2,(scoped:true):1]):desc,retrievalCount:desc';
+
+/** The relations an entry's document is built from. */
+export const ENTRY_INDEX_INCLUDE = {
+  page: { select: { title: true, workspaceId: true } },
+  citations: { select: { checkResult: true } },
+} as const;
 
 /** Facets the review rail opens on, before it shows a single row. */
 export const KNOWLEDGE_FACET_BY = 'sourceUserId,scope,status,kind,entryKind';
@@ -185,7 +196,12 @@ export const INDEXED_STATUSES: PageEntryStatusEnum[] = [
   PageEntryStatusEnum.PROPOSED,
 ];
 
-export interface KnowledgeSearchHit {
+/**
+ * One served item of knowledge, with its proof: trust tier, citations, and the
+ * last check of them. The proof is read from postgres after the search, never
+ * from the index.
+ */
+export interface KnowledgeSearchHit extends KnowledgeProof {
   id: string;
   kind: 'page' | 'entry';
   pageId: string;

@@ -1,0 +1,11 @@
+-- A quote the server could not check yet.
+--
+-- A writer may quote the text it expects at the cited lines, which catches
+-- wrong line numbers. When the repository cannot be read at write, the
+-- citation is stored unread and retried; the quote is kept here until the
+-- retry reads the lines, compared with them, then cleared. It is never
+-- served and never used as the snippet.
+--
+-- One nullable column; no existing row changes.
+-- AlterTable
+ALTER TABLE "PageEntryCitation" ADD COLUMN     "pendingQuote" TEXT;

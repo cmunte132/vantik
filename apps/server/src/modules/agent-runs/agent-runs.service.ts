@@ -1,3 +1,4 @@
+import type { KnowledgeArm } from '@prisma/client';
 import {
   BadRequestException,
   ConflictException,
@@ -14,6 +15,9 @@ import {
   RETRYABLE_AGENT_RUN_STATUSES,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
+
+import { KnowledgeSignalsService } from 'modules/knowledge-signals/knowledge-signals.service';
+import { LoggerService } from 'modules/logger/logger.service';
 
 import {
   AGENT_RUN_EVENT_CAP,
@@ -102,7 +106,12 @@ export interface ListAgentRunsFilter {
  */
 @Injectable()
 export class AgentRunsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new LoggerService('AgentRunsService');
+
+  constructor(
+    private prisma: PrismaService,
+    private knowledgeSignals: KnowledgeSignalsService,
+  ) {}
 
   // ------------------------------------------------------------------ reads
 
@@ -142,6 +151,8 @@ export class AgentRunsService {
    * sites in issues.service do today.
    */
   async createRun(input: {
+    /** Chosen by the caller when something built before the row needs it. */
+    id?: string;
     workspaceId: string;
     issueId: string;
     agentUserId: string;
@@ -152,11 +163,13 @@ export class AgentRunsService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     contextPack?: any;
     configHash?: string;
+    knowledgeArm?: KnowledgeArm | null;
     attempt?: number;
     previousRunId?: string;
   }) {
     return this.prisma.agentRun.create({
       data: {
+        ...(input.id ? { id: input.id } : {}),
         workspaceId: input.workspaceId,
         issueId: input.issueId,
         agentUserId: input.agentUserId,
@@ -168,6 +181,7 @@ export class AgentRunsService {
         config: input.config ?? undefined,
         contextPack: input.contextPack ?? undefined,
         configHash: input.configHash,
+        knowledgeArm: input.knowledgeArm ?? undefined,
       },
     });
   }
@@ -243,7 +257,29 @@ export class AgentRunsService {
       });
     }
 
+    // Only the writer that moved the run into its end gets here, so a run's
+    // outcome is attributed to its knowledge once.
+    if (isTerminalAgentRunStatus(to)) {
+      await this.attributeOutcome(runId);
+    }
+
     return this.requireRunUnscoped(runId);
+  }
+
+  /**
+   * Turns a finished run into signals about the knowledge it was served.
+   * Bookkeeping: a run's end is never refused because it could not be done.
+   */
+  private async attributeOutcome(runId: string): Promise<void> {
+    try {
+      await this.knowledgeSignals.runFinished(runId);
+    } catch (error) {
+      this.logger.error({
+        message: `The outcome of agent run ${runId} was not attributed to its knowledge: ${error}`,
+        where: 'AgentRunsService.attributeOutcome',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
   }
 
   /**
@@ -326,6 +362,8 @@ export class AgentRunsService {
       verificationPassed?: boolean;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       findings?: any;
+      accepted?: boolean | null;
+      failedChecks?: Array<{ label: string; command: string; paths: string[] }>;
       diffHash?: string;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       phaseTimings?: any;
@@ -349,6 +387,8 @@ export class AgentRunsService {
         delta,
         verificationPassed: input.verificationPassed,
         findings: input.findings ?? undefined,
+        accepted: input.accepted,
+        failedChecks: input.failedChecks ?? undefined,
         diffHash: input.diffHash,
         phaseTimings: input.phaseTimings ?? undefined,
       },
@@ -358,6 +398,8 @@ export class AgentRunsService {
         delta,
         verificationPassed: input.verificationPassed,
         findings: input.findings ?? undefined,
+        accepted: input.accepted,
+        failedChecks: input.failedChecks ?? undefined,
         diffHash: input.diffHash,
         phaseTimings: input.phaseTimings ?? undefined,
       },
@@ -433,6 +475,9 @@ export class AgentRunsService {
       config: previous.config ?? undefined,
       contextPack: previous.contextPack ?? undefined,
       configHash: previous.configHash ?? undefined,
+      // The same pack, so the same arm: a retry of a held-out run is handed
+      // no knowledge either, and counts where its first attempt did.
+      knowledgeArm: previous.knowledgeArm,
       attempt: previous.attempt + 1,
       previousRunId: previous.id,
     });

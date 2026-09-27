@@ -5,7 +5,11 @@ import React from 'react';
 
 import type { ModuleType } from 'common/types';
 
-import { useModuleKnowledge, useRelatedPages } from 'services/pages';
+import {
+  MODULE_KNOWLEDGE_LIMIT,
+  useModuleKnowledge,
+  useRelatedPages,
+} from 'services/pages';
 
 import { useContextStore } from 'store/global-context-provider';
 
@@ -96,6 +100,12 @@ export const Knowledge = observer(({ target }: { target: KnowledgeTarget }) => {
             {moduleIds.length === 0
               ? `This ${NOUN[target.type]} has no modules yet, so no fact can be scoped to it.`
               : 'No standing fact is scoped to its code yet.'}
+          </p>
+        )}
+        {entries?.length === MODULE_KNOWLEDGE_LIMIT && (
+          <p className="text-muted-foreground">
+            Showing the {MODULE_KNOWLEDGE_LIMIT} newest. Search the knowledge
+            bank for the rest.
           </p>
         )}
       </div>

@@ -13,3 +13,13 @@ export const getToken = async (
 
   return { token, botToken };
 };
+
+/**
+ * The installation token alone, which is all reading a repository needs.
+ * Skipping the person's token also skips refreshing it, a call to GitHub of
+ * its own that a citation check would otherwise make for every file.
+ */
+export const getBotToken = async (
+  ctx: PluginContext,
+  integrationAccountId: string,
+) => getBotAccessToken(await ctx.account.get(integrationAccountId));

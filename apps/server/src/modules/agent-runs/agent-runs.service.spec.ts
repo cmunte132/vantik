@@ -19,6 +19,8 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import type { KnowledgeSignalsService } from 'modules/knowledge-signals/knowledge-signals.service';
+
 import { AgentRunsService } from './agent-runs.service';
 
 const WORKSPACE = 'workspace-mine';
@@ -40,6 +42,7 @@ interface FakeRun {
   config: unknown;
   contextPack: unknown;
   configHash: string | null;
+  knowledgeArm?: string | null;
   deleted: Date | null;
   createdAt: Date | null;
 }
@@ -157,6 +160,9 @@ function buildService(initial: FakeRun[] = [makeRun()]) {
         return Promise.resolve(run);
       }),
     },
+    agentRunIteration: {
+      upsert: jest.fn(({ create }) => Promise.resolve(create)),
+    },
     agentRunEvent: {
       create: jest.fn(({ data }) => {
         events.push(data);
@@ -168,7 +174,17 @@ function buildService(initial: FakeRun[] = [makeRun()]) {
     },
   } as unknown as PrismaService;
 
-  return { service: new AgentRunsService(prisma), rows, events, prisma };
+  const knowledgeSignals = {
+    runFinished: jest.fn(async () => ({ helpful: 0, harmful: 0 })),
+  } as unknown as KnowledgeSignalsService;
+
+  return {
+    service: new AgentRunsService(prisma, knowledgeSignals),
+    rows,
+    events,
+    prisma,
+    knowledgeSignals,
+  };
 }
 
 const scope = { workspaceId: WORKSPACE };
@@ -253,6 +269,68 @@ describe('AgentRunsService transition table', () => {
     await expect(service.transition(RUN, 'RUNNING', {}, scope)).rejects.toThrow(
       /already finished as SUCCEEDED/,
     );
+  });
+});
+
+describe('AgentRunsService outcomes', () => {
+  it('[KG-3.4] attributes a run’s end to its knowledge once, when it ends', async () => {
+    const { service, knowledgeSignals } = buildService([
+      makeRun({ status: 'RUNNING' }),
+    ]);
+
+    await service.transition(RUN, 'SUCCEEDED', { summary: 'done' });
+
+    expect(knowledgeSignals.runFinished).toHaveBeenCalledTimes(1);
+    expect(knowledgeSignals.runFinished).toHaveBeenCalledWith(RUN);
+
+    // A repeat of the end, and a writer that lost the race to it, attribute
+    // nothing more.
+    await service.transition(RUN, 'SUCCEEDED');
+    await expect(service.transition(RUN, 'FAILED')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(knowledgeSignals.runFinished).toHaveBeenCalledTimes(1);
+  });
+
+  it('[KG-3.4] attributes nothing while a run is still going', async () => {
+    const { service, knowledgeSignals } = buildService();
+
+    await service.transition(RUN, 'CLAIMED');
+    await service.transition(RUN, 'RUNNING');
+
+    expect(knowledgeSignals.runFinished).not.toHaveBeenCalled();
+  });
+
+  it('[KG-3.4] never refuses a run its end because the attribution failed', async () => {
+    const { service, rows, knowledgeSignals } = buildService([
+      makeRun({ status: 'RUNNING' }),
+    ]);
+    (knowledgeSignals.runFinished as jest.Mock).mockRejectedValueOnce(
+      new Error('connection reset'),
+    );
+
+    await expect(
+      service.transition(RUN, 'NEEDS_REVIEW'),
+    ).resolves.toMatchObject({ status: 'NEEDS_REVIEW' });
+    expect(rows.get(RUN)?.status).toBe('NEEDS_REVIEW');
+  });
+
+  it('[KG-3.4] records the reviewer’s verdict and where the failing checks failed', async () => {
+    const { service, prisma } = buildService([makeRun({ status: 'RUNNING' })]);
+    const failedChecks = [
+      { label: 'test', command: 'pnpm test', paths: ['src/a.spec.ts'] },
+    ];
+
+    await service.recordIteration(
+      RUN,
+      { index: 1, verificationPassed: false, accepted: false, failedChecks },
+      scope,
+    );
+
+    const { create, update } = (prisma.agentRunIteration.upsert as jest.Mock)
+      .mock.calls[0][0];
+    expect(create).toMatchObject({ accepted: false, failedChecks });
+    expect(update).toMatchObject({ accepted: false, failedChecks });
   });
 });
 
@@ -446,6 +524,16 @@ describe('AgentRunsService retry', () => {
       config: { baseBranch: 'main' },
       contextPack: { title: 'Fix the thing' },
     });
+  });
+
+  it('[KG-3.3] keeps the knowledge arm, since it hands the retry the same pack', async () => {
+    const { service } = buildService([
+      makeRun({ status: 'FAILED', knowledgeArm: 'HOLDOUT' }),
+    ]);
+
+    const retry = await service.retryRun(RUN, scope, 'user-1');
+
+    expect(retry).toMatchObject({ knowledgeArm: 'HOLDOUT' });
   });
 
   it('refuses to retry work that succeeded', async () => {

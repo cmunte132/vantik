@@ -48,6 +48,9 @@ describe('the plugin context', () => {
       .fn()
       .mockResolvedValue([{ publicURL: 'https://x/1' }]),
   };
+  const knowledgeSignals = {
+    pullRequestChanged: jest.fn().mockResolvedValue({ runs: 1 }),
+  };
 
   function build(workspaceId = 'ws-1', userId = 'user-1') {
     return new PluginContextFactory(
@@ -57,6 +60,7 @@ describe('the plugin context', () => {
       linkedIssueService as never,
       aiService as never,
       attachmentService as never,
+      knowledgeSignals as never,
     ).build('discord', workspaceId, userId);
   }
 
@@ -70,6 +74,7 @@ describe('the plugin context', () => {
 
     expect(Object.keys(ctx).sort()).toEqual([
       'account',
+      'agentRuns',
       'ai',
       'attachments',
       'comments',
@@ -130,6 +135,43 @@ describe('the plugin context', () => {
     expect(prisma.label.findMany).toHaveBeenCalledWith({
       where: { workspaceId: 'ws-42' },
     });
+  });
+
+  /**
+   * A pull request is matched to runs by its url, and a url is not a secret:
+   * a plugin in one workspace must not be able to credit or blame the runs of
+   * another by naming a pull request it has seen.
+   */
+  it('[KG-3.5] reports a pull request only to the runs of its own workspace', async () => {
+    knowledgeSignals.pullRequestChanged.mockClear();
+
+    await build('ws-7').agentRuns.pullRequestChanged({
+      url: 'https://github.com/acme/api/pull/12',
+      state: 'MERGED',
+      closedAt: '2026-09-01T10:00:00Z',
+      branch: 'agent/eng-42',
+      repo: 'acme/api',
+      openedAt: '2026-08-30T10:00:00Z',
+    });
+
+    expect(knowledgeSignals.pullRequestChanged).toHaveBeenCalledWith({
+      workspaceId: 'ws-7',
+      url: 'https://github.com/acme/api/pull/12',
+      state: 'MERGED',
+      closedAt: new Date('2026-09-01T10:00:00Z'),
+      branch: 'agent/eng-42',
+      repo: 'acme/api',
+      openedAt: new Date('2026-08-30T10:00:00Z'),
+    });
+
+    // Without a workspace there is nothing to scope to, and nothing is told.
+    await expect(
+      build('').agentRuns.pullRequestChanged({
+        url: 'https://github.com/acme/api/pull/12',
+        state: 'CLOSED',
+      }),
+    ).resolves.toEqual({ runs: 0 });
+    expect(knowledgeSignals.pullRequestChanged).toHaveBeenCalledTimes(1);
   });
 
   it('finds an account from a workspace slug, for inbound email', async () => {

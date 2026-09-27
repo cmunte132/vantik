@@ -1,4 +1,6 @@
+import { type PageEntryUseVia } from '@prisma/client';
 import { PageEntryStatusEnum } from '@vantikhq/types';
+import type { JobOptions } from 'bull';
 
 /**
  * The mechanical limits on writing to the knowledge bank.
@@ -75,6 +77,99 @@ export const DECAY_JOB_ID = 'page-entry-decay';
  */
 export const RECOMPUTE_MODULES_JOB = 'recomputeEntryModules';
 
+/** How long requests to re-resolve one workspace are gathered into one pass. */
+export const RECOMPUTE_MODULES_WINDOW_MS = 5_000;
+
+/**
+ * How long after its window a pass waits before it starts. The window is read
+ * from the clock of the server that queued the request, and the pass is
+ * started by the worker's clock; the grace absorbs any disagreement smaller
+ * than itself.
+ */
+export const RECOMPUTE_MODULES_GRACE_MS = 1_000;
+
+/**
+ * Queue options that fold a burst of recompute requests into one pass.
+ *
+ * Every request in the same window gets the same job id, and Bull ignores a
+ * job whose id is already queued, so a run of repository edits, or replicas
+ * booting together, queue one pass. The job waits until its window has closed
+ * (plus a grace, for servers whose clocks disagree by less than it), which is
+ * what makes the folding safe: a request cannot find its pass already running
+ * and be dropped. A request that comes later falls in a later window and gets
+ * a pass of its own, which reads the state after its edit. A fixed id would
+ * not do that; it would swallow every request made while the pass ran, and
+ * every one after a failed pass kept for inspection.
+ */
+export function recomputeModulesJobOptions(
+  workspaceId: string | undefined,
+  now: number = Date.now(),
+): JobOptions {
+  const window = Math.floor(now / RECOMPUTE_MODULES_WINDOW_MS);
+
+  return {
+    jobId: `${RECOMPUTE_MODULES_JOB}:${workspaceId ?? 'all'}:${window}`,
+    delay:
+      (window + 1) * RECOMPUTE_MODULES_WINDOW_MS +
+      RECOMPUTE_MODULES_GRACE_MS -
+      now,
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
+
+/**
+ * Reads again the code citations an entry was written with that the server
+ * could not read at the time, because the repository did not answer.
+ */
+export const RETRY_CITATIONS_JOB = 'retryUnknownCitations';
+
+/** How many times an entry's unread citations are tried before giving up. */
+export const RETRY_CITATIONS_ATTEMPTS = 6;
+
+/** The first retry's wait; each later one waits twice as long as the last. */
+export const RETRY_CITATIONS_BACKOFF_MS = 5 * 60_000;
+
+/**
+ * One retry per entry: a second write naming the same entry cannot exist, and
+ * a job already queued for it reads every unread citation it has. Bull's own
+ * backoff spaces the attempts, so a repository down for an hour is read once
+ * it is back, and one down for good stops being asked after about five hours.
+ * A citation that is never read stays UNKNOWN, which never counts against the
+ * entry.
+ */
+export function retryCitationsJobOptions(entryId: string): JobOptions {
+  return {
+    jobId: `${RETRY_CITATIONS_JOB}:${entryId}`,
+    attempts: RETRY_CITATIONS_ATTEMPTS,
+    backoff: { type: 'exponential', delay: RETRY_CITATIONS_BACKOFF_MS },
+    delay: RETRY_CITATIONS_BACKOFF_MS,
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
+
+/**
+ * Checks an entry's citations again, because a run it was served to went
+ * wrong somewhere it speaks about. A harmful signal is a reason to look, not
+ * a verdict: the check decides whether the entry still holds, and nothing is
+ * archived either way.
+ */
+export const RECHECK_ENTRY_JOB = 'recheckEntryCitations';
+
+/**
+ * One queued check per entry: several runs going wrong over the same entry
+ * before the check runs need it checked once. Removed when done or failed, so
+ * the next harmful signal can queue another.
+ */
+export function recheckEntryJobOptions(entryId: string): JobOptions {
+  return {
+    jobId: `${RECHECK_ENTRY_JOB}:${entryId}`,
+    removeOnComplete: true,
+    removeOnFail: true,
+  };
+}
+
 /**
  * Transitions a client may ask for.
  *
@@ -119,3 +214,45 @@ export interface WriterIdentity {
   /** Null for a browser session, which is not issued for any token. */
   tokenId: string | null;
 }
+
+/**
+ * Who an entry was served to, and how. Every field but the workspace and the
+ * route is known on some paths and not others: a run has no token, a browser
+ * session no harness session, a recall no run.
+ */
+export interface ServedTo {
+  workspaceId: string;
+  via: PageEntryUseVia;
+  agentRunId?: string | null;
+  sessionId?: string | null;
+  tokenId?: string | null;
+  userId?: string | null;
+}
+
+/**
+ * The harness session a request names, from `X-Vantik-Session`, or null.
+ *
+ * The MCP endpoint is stateless, so no session is carried by the protocol; a
+ * harness that wants its uses traced to a session says so in this header, and
+ * the MCP server passes it on to the calls it makes. Held to the same length
+ * as a hook's session id, and to printable characters, since it is stored.
+ */
+export function harnessSessionOf(header: unknown): string | null {
+  const value = Array.isArray(header) ? header[0] : header;
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 &&
+    trimmed.length <= MAX_HARNESS_SESSION_LENGTH &&
+    /^[\x21-\x7e]+$/.test(trimmed)
+    ? trimmed
+    : null;
+}
+
+export const HARNESS_SESSION_HEADER = 'x-vantik-session';
+
+const MAX_HARNESS_SESSION_LENGTH = 200;

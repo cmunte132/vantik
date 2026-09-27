@@ -1,5 +1,11 @@
 import type { ContextPack } from './context-pack.service';
 
+import {
+  KnowledgeTrustEnum,
+  PageEntryCitationCheckEnum,
+  PageEntryCitationKindEnum,
+} from '@vantikhq/types';
+
 import { buildAgentPrompt } from './agent-prompt';
 
 function packWith(overrides: Partial<ContextPack> = {}): ContextPack {
@@ -143,5 +149,96 @@ describe('the prompt an agent is given', () => {
 
     expect(prompt).toContain('Do not commit');
     expect(prompt).toContain('open a pull request');
+  });
+
+  it('[KG-2.8] gives every item of knowledge its trust tier, citations and last check', () => {
+    const prompt = buildAgentPrompt(
+      packWith({
+        knowledge: [
+          {
+            entryId: 'entry-1',
+            kind: 'FACT',
+            writtenAt: '2026-08-01T09:00:00.000Z',
+            scope: 'apps/server',
+            body: 'Redis holds only cache here.',
+            trust: KnowledgeTrustEnum.GROUNDED,
+            citations: [
+              {
+                kind: PageEntryCitationKindEnum.CODE,
+                repo: 'acme/api',
+                path: 'src/cache.ts',
+                lines: '12-30',
+                commitSha: 'abcdef1',
+                result: PageEntryCitationCheckEnum.MOVED,
+                checkedAt: '2026-09-20T10:00:00.000Z',
+                checkedSha: '9f8e7d6c5b4a3210',
+              },
+            ],
+            lastCheckedAt: '2026-09-20T10:00:00.000Z',
+            lastCheckedSha: '9f8e7d6c5b4a3210',
+          },
+          {
+            entryId: 'entry-2',
+            kind: 'GOTCHA',
+            writtenAt: '2026-09-02T09:00:00.000Z',
+            scope: null,
+            body: 'Deploys drain the worker pool first.',
+            trust: KnowledgeTrustEnum.UNGROUNDED,
+            citations: [],
+            lastCheckedAt: null,
+            lastCheckedSha: null,
+          },
+        ],
+      }),
+    );
+
+    expect(prompt).toContain('## What this workspace already knows');
+    expect(prompt).toContain(
+      '- (apps/server) Redis holds only cache here.\n  _grounded · cites ' +
+        'acme/api:src/cache.ts:12-30 (moved) · checked 2026-09-20 at ' +
+        '9f8e7d6c5b4a · written 2026-08-01_',
+    );
+    expect(prompt).toContain(
+      '- Deploys drain the worker pool first.\n  _ungrounded · cites nothing' +
+        ' · written 2026-09-02_',
+    );
+    expect(prompt).toContain('Check an ungrounded claim before relying on it');
+  });
+
+  it('[KG-3.2] renders each item with its citation and its age', () => {
+    const prompt = buildAgentPrompt(
+      packWith({
+        knowledge: [
+          {
+            entryId: 'entry-1',
+            kind: 'CONVENTION',
+            writtenAt: '2026-05-14T09:00:00.000Z',
+            scope: 'apps/server/prisma',
+            body: 'Migrations are written by hand.',
+            trust: KnowledgeTrustEnum.HUMAN_VERIFIED,
+            citations: [
+              {
+                kind: PageEntryCitationKindEnum.CODE,
+                repo: 'acme/api',
+                path: 'prisma/migrations/README.md',
+                lines: '1-4',
+                commitSha: 'abcdef1',
+                result: PageEntryCitationCheckEnum.HOLDS,
+                checkedAt: '2026-09-21T10:00:00.000Z',
+                checkedSha: '0123456789abcdef',
+              },
+            ],
+            lastCheckedAt: '2026-09-21T10:00:00.000Z',
+            lastCheckedSha: '0123456789abcdef',
+          },
+        ],
+      }),
+    );
+
+    const line = prompt
+      .split('\n')
+      .find((text) => text.startsWith('  _verified by a person'));
+    expect(line).toContain('cites acme/api:prisma/migrations/README.md:1-4');
+    expect(line).toContain('written 2026-05-14');
   });
 });

@@ -10,6 +10,12 @@ export interface VantikClientConfig {
   baseUrl?: string;
   /** Personal access token — the `tg_pat_…` value from Settings → API. */
   token?: string;
+  /**
+   * The harness session making the calls, when known. Sent as
+   * `X-Vantik-Session`, so the knowledge a session is served is recorded
+   * against it.
+   */
+  sessionId?: string;
   /** Request timeout in milliseconds. */
   timeoutMs?: number;
   /** Injectable for tests; defaults to global fetch. */
@@ -19,10 +25,34 @@ export interface VantikClientConfig {
 interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined | null>;
   body?: unknown;
+  /**
+   * The harness session this one call is for, over the client's own: a
+   * shared client serving several sessions knows each only per call.
+   */
+  sessionId?: string;
 }
 
 const DEFAULT_BASE_URL = 'http://localhost:3001';
 const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_SESSION_LENGTH = 200;
+
+/**
+ * A session as the `X-Vantik-Session` header can carry it, or nothing.
+ *
+ * The server drops a session it cannot use rather than failing the read, and
+ * so does this: `fetch` refuses a header with a newline or a character past
+ * Latin-1 outright, and a session a model typed is not worth losing a read
+ * over. Held to what the server keeps: printable ASCII, at most 200.
+ */
+function headerSession(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+
+  return trimmed &&
+    trimmed.length <= MAX_SESSION_LENGTH &&
+    /^[\x21-\x7e]+$/.test(trimmed)
+    ? trimmed
+    : undefined;
+}
 
 /**
  * Thin authenticated HTTP client over the Vantik REST API.
@@ -35,6 +65,7 @@ export class VantikClient {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly timeoutMs: number;
+  private readonly sessionId: string | undefined;
   private readonly fetchImpl: typeof globalThis.fetch;
 
   constructor(config: VantikClientConfig = {}) {
@@ -56,6 +87,7 @@ export class VantikClient {
     this.baseUrl = normalizedUrl;
     this.token = token;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.sessionId = headerSession(config.sessionId);
     this.fetchImpl = config.fetch ?? globalThis.fetch;
   }
 
@@ -70,8 +102,9 @@ export class VantikClient {
   private async request<T>(
     method: string,
     path: string,
-    { query, body }: RequestOptions,
+    { query, body, sessionId }: RequestOptions,
   ): Promise<T> {
+    const session = headerSession(sessionId) ?? this.sessionId;
     const url = new URL(`${this.baseUrl}/v1${path}`);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value !== undefined && value !== null && value !== '') {
@@ -89,6 +122,7 @@ export class VantikClient {
         signal: controller.signal,
         headers: {
           authorization: `Bearer ${this.token}`,
+          ...(session ? { 'x-vantik-session': session } : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

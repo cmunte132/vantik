@@ -26,6 +26,7 @@ import { AuthGuard } from 'modules/auth/auth.guard';
 import { TokenId, UserId, Workspace } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
+import { parseKnowledgeLimit } from './knowledge.controller';
 import PageEntriesService from './page-entries.service';
 
 @Controller({
@@ -61,6 +62,7 @@ export class PageEntriesController {
       // The same caveat: `?moduleIds=a` arrives as a string whatever the DTO
       // made of it, so it is split here too.
       moduleIds: parseIdList(query.moduleIds),
+      limit: parseKnowledgeLimit(query.limit),
     });
   }
 

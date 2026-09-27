@@ -22,12 +22,21 @@ import { modulesForScope } from 'modules/modules/module-routing';
 import { VectorService } from 'modules/vector/vector.service';
 import type { KnowledgeSearchHit } from 'modules/vector/vector.interface';
 
+import EntryCitationsService, {
+  type CitationDraft,
+} from './entry-citations.service';
 import KnowledgeIndexService from './knowledge-index.service';
+import {
+  entryProof,
+  PROOF_CITATION_SELECT,
+  type ProofRow,
+} from './knowledge-proof';
 import {
   ALLOWED_STATUS_TRANSITIONS,
   PROPOSED_ENTRY_BUDGET,
   PROPOSED_ENTRY_EXPIRY_DAYS,
   STANDING_ENTRY_DECAY_DAYS,
+  type ServedTo,
   WriterIdentity,
 } from './pages.interface';
 
@@ -39,11 +48,14 @@ export default class PageEntriesService {
    * The indexer and the vector service are optional for the same reason the
    * indexer is on PagesService: the index is a cache. A write that finds
    * Typesense down still gets the exact-duplicate check, which is postgres.
+   * The citation checker is not a cache, so a write that names citations is
+   * refused rather than stored unchecked when it is absent.
    */
   constructor(
     private prisma: PrismaService,
     private indexer?: KnowledgeIndexService,
     private vectorService?: VectorService,
+    private citations?: EntryCitationsService,
   ) {}
 
   // ----------------------------------------------------------------- reading
@@ -55,9 +67,11 @@ export default class PageEntriesService {
       status?: PageEntryStatusEnum[];
       /** Entries resolved to any of these modules. */
       moduleIds?: string[];
+      /** At most this many, newest first. */
+      limit?: number;
     } = {},
   ): Promise<PageEntry[]> {
-    return this.prisma.pageEntry.findMany({
+    const entries = await this.prisma.pageEntry.findMany({
       where: {
         deleted: null,
         page: { workspaceId, deleted: null },
@@ -68,7 +82,16 @@ export default class PageEntriesService {
           : {}),
       },
       orderBy: { createdAt: 'desc' },
-    }) as unknown as Promise<PageEntry[]>;
+      ...(filters.limit ? { take: filters.limit } : {}),
+      include: { citations: { select: PROOF_CITATION_SELECT } },
+    });
+
+    // Every entry read goes out with its proof, the same as a search hit, so
+    // an agent reading a page is told what each claim rests on.
+    return entries.map((entry) => ({
+      ...entry,
+      ...entryProof(entry),
+    })) as unknown as PageEntry[];
   }
 
   // ----------------------------------------------------------------- writing
@@ -145,6 +168,14 @@ export default class PageEntriesService {
     // cannot be undone.
     const moduleIds = await this.modulesFor(page.workspaceId, entryData.scope);
 
+    // Last of the gates, because it is the only one that reads from outside
+    // the database: every citation is checked, and one that does not hold
+    // refuses the write before anything is stored.
+    const citations = await this.checkCitations(
+      page.workspaceId,
+      entryData.citations,
+    );
+
     const retiresNow =
       Boolean(entryData.supersedesId) &&
       status === PageEntryStatusEnum.STANDING;
@@ -177,7 +208,11 @@ export default class PageEntriesService {
           sourceTokenId: writer.tokenId,
           supersedesId: entryData.supersedesId ?? null,
           pageId,
+          ...(citations.length && { citations: { create: citations } }),
         },
+        // Returned with its proof, so a writer sees what its citations came
+        // to: held, or unread and to be retried.
+        include: { citations: { select: PROOF_CITATION_SELECT } },
       }),
       // The replaced row keeps its content — the audit trail is the point — but
       // stops being served the moment its accepted replacement exists, so a
@@ -191,7 +226,7 @@ export default class PageEntriesService {
           ]
         : []),
     ]);
-    const entry = results[detach ? 1 : 0] as { id: string };
+    const entry = results[detach ? 1 : 0] as ProofRow & { id: string };
 
     // The new entry enters the index in the same breath as it is written. A
     // human writing a fact by hand *is* the review step, so it lands STANDING
@@ -204,7 +239,26 @@ export default class PageEntriesService {
     // way to tell which is current.
     await this.indexer?.entriesChanged(retired);
 
-    return entry as unknown as PageEntry;
+    // Citations the repository did not answer for are read again later; until
+    // then the entry is written, and simply not grounded.
+    await this.citations?.retryLater(entry.id, citations);
+
+    return { ...entry, ...entryProof(entry) } as unknown as PageEntry;
+  }
+
+  private async checkCitations(
+    workspaceId: string,
+    inputs: CreatePageEntryDto['citations'],
+  ): Promise<CitationDraft[]> {
+    if (!inputs?.length) {
+      return [];
+    }
+
+    if (!this.citations) {
+      throw new Error('Citations cannot be checked: no checker is configured');
+    }
+
+    return this.citations.checkForWrite(workspaceId, inputs);
   }
 
   async updateEntry(
@@ -271,13 +325,17 @@ export default class PageEntriesService {
             verifiedAt: entryData.verified ? new Date() : null,
           }),
         },
+        include: { citations: { select: PROOF_CITATION_SELECT } },
       }),
       ...settled.operations,
     ]);
     await this.indexer?.entryChanged(entryId);
     await this.indexer?.entriesChanged(settled.retired);
 
-    return entry as unknown as PageEntry;
+    return {
+      ...entry,
+      ...entryProof(entry as unknown as ProofRow),
+    } as unknown as PageEntry;
   }
 
   /**
@@ -407,22 +465,42 @@ export default class PageEntriesService {
   // ------------------------------------------------------- serving and decay
 
   /**
-   * Records that entries were actually served.
+   * Records that entries were actually served, and to whom.
    *
    * `increment` compiles to `SET "retrievalCount" = "retrievalCount" + 1`, so
    * two searches landing on the same entry at the same moment both count —
    * a read-then-write would lose one, and this number decides what survives
    * the decay pass.
+   *
+   * A use row per entry goes in with one insert, so a recall of twenty hits
+   * is one statement, not twenty. The counters and the rows are written
+   * together or not at all: a use nobody counted, or a count nobody can
+   * attribute, would make the two disagree about how often an entry is read.
    */
-  async recordServed(entryIds: string[]): Promise<void> {
-    if (entryIds.length === 0) {
+  async recordServed(entryIds: string[], to: ServedTo): Promise<void> {
+    const ids = [...new Set(entryIds)];
+
+    if (ids.length === 0) {
       return;
     }
 
-    await this.prisma.pageEntry.updateMany({
-      where: { id: { in: entryIds } },
-      data: { retrievalCount: { increment: 1 }, lastServedAt: new Date() },
-    });
+    await this.prisma.$transaction([
+      this.prisma.pageEntry.updateMany({
+        where: { id: { in: ids } },
+        data: { retrievalCount: { increment: 1 }, lastServedAt: new Date() },
+      }),
+      this.prisma.pageEntryUse.createMany({
+        data: ids.map((entryId) => ({
+          entryId,
+          workspaceId: to.workspaceId,
+          via: to.via,
+          agentRunId: to.agentRunId ?? null,
+          sessionId: to.sessionId ?? null,
+          tokenId: to.tokenId ?? null,
+          userId: to.userId ?? null,
+        })),
+      }),
+    ]);
   }
 
   /**
@@ -768,6 +846,7 @@ export default class PageEntriesService {
         sourceUserId: true,
         verifiedAt: true,
         retrievalCount: true,
+        citations: { select: PROOF_CITATION_SELECT },
       },
     });
 
@@ -786,6 +865,7 @@ export default class PageEntriesService {
         sourceUserId: entry.sourceUserId,
         verified: entry.verifiedAt !== null,
         retrievalCount: entry.retrievalCount,
+        ...entryProof(entry),
       }));
 
     if (options.nearMatches && this.vectorService) {

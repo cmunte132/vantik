@@ -8,6 +8,7 @@ import { Command } from 'commander';
 
 import { resolveAgent } from '../utilities/agent';
 import { configureKnowledgeSyncCommands } from './knowledge-sync';
+import { collectCitation } from '../utilities/citations';
 import { chalkError } from '../utilities/cliOutput';
 import {
   renderContextPack,
@@ -247,6 +248,12 @@ export function configureKnowledgeCommands(program: Command) {
       'Append even though similar entries exist. Without it, a write with ' +
         'near matches returns them and writes nothing.',
     )
+    .option(
+      '--cite <citation>',
+      'What the fact rests on; repeatable. path:40-52[@commit], ' +
+        'issue:ENG-42, pr:<url>, comment:<id>, run:<id>, or a JSON object',
+      collectCitation,
+    )
     .option('--json', 'Output raw JSON')
     .action(async (page, content, options) => {
       await run(
@@ -260,6 +267,7 @@ export function configureKnowledgeCommands(program: Command) {
             session: options.session,
             supersedes: options.supersedes,
             distinct: options.distinct,
+            citations: options.cite,
           }),
         renderRemember,
       );

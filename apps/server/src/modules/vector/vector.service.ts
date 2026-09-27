@@ -15,6 +15,12 @@ import {
 import { IssueWithRelations } from 'modules/issues/issues.interface';
 import { LoggerService } from 'modules/logger/logger.service';
 import { scopeAncestors, scopePath } from 'modules/modules/module-routing';
+import {
+  entryProof,
+  entryTrust,
+  pageBodyProof,
+  PROOF_CITATION_SELECT,
+} from 'modules/pages/knowledge-proof';
 
 import {
   AXIS_OVERFETCH,
@@ -38,6 +44,7 @@ import {
   pageSchema,
   requiredIssueFields,
   requiredPageFields,
+  ENTRY_INDEX_INCLUDE,
   typesenseEmbedding,
 } from './vector.interface';
 
@@ -533,6 +540,7 @@ export class VectorService implements OnModuleInit {
         sourceUserId: '',
         verified: true,
         scoped: false,
+        trust: '',
         retrievalCount: 0,
         updatedBucket: monthBucket(page.updatedAt),
         updatedAt: page.updatedAt.getTime(),
@@ -552,6 +560,8 @@ export class VectorService implements OnModuleInit {
     pageId: string;
     moduleIds?: string[] | null;
     kind?: string | null;
+    /** The last check of each citation, which decides whether it is grounded. */
+    citations?: Array<{ checkResult: string | null }> | null;
     page: { title: string; workspaceId: string };
   }) {
     await this.typesenseClient
@@ -575,6 +585,7 @@ export class VectorService implements OnModuleInit {
         sourceUserId: entry.sourceUserId ?? '',
         verified: Boolean(entry.verifiedAt),
         scoped: Boolean(entry.scope),
+        trust: entryTrust(entry),
         retrievalCount: entry.retrievalCount,
         updatedBucket: monthBucket(entry.updatedAt),
         updatedAt: entry.updatedAt.getTime(),
@@ -656,7 +667,7 @@ export class VectorService implements OnModuleInit {
 
     const result = mapKnowledgeResults(searchResults);
 
-    return { ...result, hits: await this.dropDeletedKnowledge(result.hits) };
+    return { ...result, hits: await this.liveWithProof(result.hits) };
   }
 
   /**
@@ -695,13 +706,17 @@ export class VectorService implements OnModuleInit {
   }
 
   /**
-   * Drops hits whose page or entry no longer exists.
+   * Drops hits whose page or entry no longer exists, and gives the rest their
+   * proof.
    *
    * The index is a cache and postgres is the truth. Serving a fact the
    * workspace has deleted is the failure that loses trust in the bank, and one
-   * indexed lookup per search is a cheap guarantee against it.
+   * indexed lookup per search is a cheap guarantee against it. The same lookup
+   * reads each entry's verification and citations, so what a reader is told
+   * about an entry's grounding is what postgres says now, not what it said
+   * when the document was last written.
    */
-  private async dropDeletedKnowledge(
+  private async liveWithProof(
     hits: KnowledgeSearchHit[],
   ): Promise<KnowledgeSearchHit[]> {
     if (hits.length === 0) {
@@ -718,23 +733,35 @@ export class VectorService implements OnModuleInit {
           id: { in: hits.map((hit) => hit.entryId).filter(Boolean) },
           deleted: null,
         },
-        select: { id: true },
+        select: {
+          id: true,
+          status: true,
+          verifiedAt: true,
+          citations: { select: PROOF_CITATION_SELECT },
+        },
       }),
     ]);
 
     const livePageIds = new Set(livePages.map((page) => page.id));
-    const liveEntryIds = new Set(liveEntries.map((entry) => entry.id));
+    const entriesById = new Map(liveEntries.map((entry) => [entry.id, entry]));
 
-    const live = hits.filter(
-      (hit) =>
-        livePageIds.has(hit.pageId) &&
-        (!hit.entryId || liveEntryIds.has(hit.entryId)),
-    );
+    const live = hits
+      .filter(
+        (hit) =>
+          livePageIds.has(hit.pageId) &&
+          (!hit.entryId || entriesById.has(hit.entryId)),
+      )
+      .map((hit) => ({
+        ...hit,
+        ...(hit.entryId
+          ? entryProof(entriesById.get(hit.entryId))
+          : pageBodyProof()),
+      }));
 
     if (live.length !== hits.length) {
       this.logger.info({
         message: `Knowledge index is stale: dropped ${hits.length - live.length} hit(s) for deleted pages or entries`,
-        where: `VectorService.dropDeletedKnowledge`,
+        where: `VectorService.liveWithProof`,
       });
     }
 
@@ -758,7 +785,7 @@ export class VectorService implements OnModuleInit {
         status: { in: INDEXED_STATUSES },
         page: { workspaceId, deleted: null },
       },
-      include: { page: { select: { title: true, workspaceId: true } } },
+      include: ENTRY_INDEX_INCLUDE,
     });
 
     for (const entry of entries) {
@@ -931,7 +958,9 @@ function quoteFilterValue(value: string): string {
  * The ranking, as tiers inside one `_eval`.
  *
  * With no scope and nothing to boost, the ranking is the default: text match
- * first, verified and scoped knowledge breaking ties. A scope makes scoped
+ * first, then verified knowledge, grounded knowledge and scoped knowledge
+ * breaking ties in that order. Within every tier below, verified outranks
+ * grounded and grounded outranks the rest. A scope makes scoped
  * matches outrank unscoped knowledge outright, which is what asking about a
  * folder means. Modules to boost rank their knowledge above their neighbours'
  * and theirs above the rest; with a query to match, the text match is bucketed
@@ -942,6 +971,12 @@ function quoteFilterValue(value: string): string {
  * is therefore the conjunction of the signals it counts, scored by how much of
  * what was asked for it matches, and listed best first.
  */
+/**
+ * Trust, best first, as conditions a tier can require. Page bodies are indexed
+ * verified: they are the narrative a person maintains.
+ */
+const TRUST_LEVELS = ['verified:true', 'trust:=GROUNDED', null];
+
 function buildKnowledgeSortBy(options: {
   scope?: string;
   boost?: { modules: string[]; neighbours: string[] };
@@ -970,16 +1005,14 @@ function buildKnowledgeSortBy(options: {
   const tiers: Array<{ conditions: string[]; score: number }> = [];
   scopeLevels.forEach((scoped, scopeRank) =>
     moduleLevels.forEach((module, moduleRank) =>
-      [true, false].forEach((verified) => {
+      TRUST_LEVELS.forEach((trust, trustRank) => {
         const score =
-          (scopeLevels.length - 1 - scopeRank) * moduleLevels.length * 2 +
-          (moduleLevels.length - 1 - moduleRank) * 2 +
-          (verified ? 1 : 0);
-        const conditions = [
-          scoped,
-          module,
-          verified ? 'verified:true' : null,
-        ].filter(Boolean) as string[];
+          (scopeLevels.length - 1 - scopeRank) *
+            moduleLevels.length *
+            TRUST_LEVELS.length +
+          (moduleLevels.length - 1 - moduleRank) * TRUST_LEVELS.length +
+          (TRUST_LEVELS.length - 1 - trustRank);
+        const conditions = [scoped, module, trust].filter(Boolean) as string[];
 
         if (score > 0) {
           tiers.push({ conditions, score });
@@ -1033,26 +1066,33 @@ function mapKnowledgeResults(searchResults: any): KnowledgeSearchResult {
   }
 
   return {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    hits: rawHits.map(({ document, vector_distance }: any) => ({
-      id: document.id,
-      kind: document.kind,
-      pageId: document.pageId,
-      pageTitle: document.pageTitle,
-      entryId: document.entryId || null,
-      title: document.title,
-      content: document.content,
-      scope: document.scope || null,
-      status: document.status,
-      sourceUserId: document.sourceUserId || null,
-      verified: Boolean(document.verified),
-      retrievalCount: document.retrievalCount ?? 0,
-      entryKind: document.entryKind || null,
-      moduleIds: document.moduleIds ?? [],
-      distance: vector_distance,
-      relevanceScore:
-        vector_distance === undefined ? undefined : 1 - vector_distance,
-    })),
+    hits: rawHits.map(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ({ document, vector_distance }: any): KnowledgeSearchHit => ({
+        id: document.id,
+        kind: document.kind,
+        pageId: document.pageId,
+        pageTitle: document.pageTitle,
+        entryId: document.entryId || null,
+        title: document.title,
+        content: document.content,
+        scope: document.scope || null,
+        status: document.status,
+        sourceUserId: document.sourceUserId || null,
+        verified: Boolean(document.verified),
+        retrievalCount: document.retrievalCount ?? 0,
+        entryKind: document.entryKind || null,
+        moduleIds: document.moduleIds ?? [],
+        // The index's word for it, until the proof is read from postgres.
+        trust: document.trust || null,
+        citations: [],
+        lastCheckedAt: null,
+        lastCheckedSha: null,
+        distance: vector_distance,
+        relevanceScore:
+          vector_distance === undefined ? undefined : 1 - vector_distance,
+      }),
+    ),
     facets,
     found: result.found ?? rawHits.length,
   };

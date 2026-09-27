@@ -1,11 +1,14 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
   IsUUID,
+  MaxLength,
+  ValidateNested,
 } from 'class-validator';
 
 import { PageEntryKindEnum, PageEntryStatusEnum } from './page.entity';
@@ -55,6 +58,78 @@ export function parseIdList(value: unknown): string[] | undefined {
 const toIdArray = ({ value }: { value: unknown }) =>
   value === undefined || value === null ? value : parseIdList(value);
 
+/**
+ * One citation, as a writer gives it. Exactly one kind of target per citation:
+ * a file (`path`, with `lines`), or an `issue`, `pullRequest`, `comment` or
+ * `run`. The server works out which from what is present, and refuses a
+ * citation that names none or more than one.
+ */
+export class PageEntryCitationInputDto {
+  /** A file, relative to the repository root. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  path?: string;
+
+  /** The cited lines, "40-52" or "40". Required with `path`. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  lines?: string;
+
+  /**
+   * The commit the lines are at. Omitted, the head of the repository's default
+   * branch is read and recorded.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sha?: string;
+
+  /**
+   * The repository's full name, e.g. "acme/app". Needed only when the path
+   * alone does not tell which of the workspace's repositories is meant.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  repo?: string;
+
+  /**
+   * Text the writer expects within the cited lines. Checked, never stored: the
+   * snippet kept is the one the server read.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  quote?: string;
+
+  /** An issue id or key, e.g. "ENG-42". */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  issue?: string;
+
+  /** A pull request's URL, as linked to an issue. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  pullRequest?: string;
+
+  /** An issue comment id. */
+  @IsOptional()
+  @IsUUID()
+  comment?: string;
+
+  /** An agent run id. */
+  @IsOptional()
+  @IsUUID()
+  run?: string;
+}
+
+/** The most citations one entry may carry: one claim needs few. */
+export const MAX_ENTRY_CITATIONS = 10;
+
 export class CreatePageEntryDto {
   /** Markdown, short. One self-contained claim. */
   @IsString()
@@ -100,6 +175,18 @@ export class CreatePageEntryDto {
   @IsOptional()
   @IsBoolean()
   standing?: boolean;
+
+  /**
+   * What the claim rests on. A claim about code cites the code; a decision
+   * cites where it was decided. Each is checked when the entry is written, and
+   * a citation that does not hold refuses the write.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_ENTRY_CITATIONS)
+  @ValidateNested({ each: true })
+  @Type(() => PageEntryCitationInputDto)
+  citations?: PageEntryCitationInputDto[];
 }
 
 export class UpdatePageEntryDto {
@@ -175,6 +262,12 @@ export class ListPageEntriesQueryDto {
   @IsArray()
   @IsUUID(undefined, { each: true })
   moduleIds?: string[];
+
+  /** At most this many entries, newest first. */
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  limit?: string;
 }
 
 /**

@@ -3,7 +3,10 @@ import { PageEntryStatusEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { LoggerService } from 'modules/logger/logger.service';
-import { INDEXED_STATUSES } from 'modules/vector/vector.interface';
+import {
+  ENTRY_INDEX_INCLUDE,
+  INDEXED_STATUSES,
+} from 'modules/vector/vector.interface';
 import { VectorService } from 'modules/vector/vector.service';
 
 /**
@@ -63,7 +66,7 @@ export default class KnowledgeIndexService {
     try {
       const entry = await this.prisma.pageEntry.findUnique({
         where: { id: entryId },
-        include: { page: { select: { title: true, workspaceId: true } } },
+        include: ENTRY_INDEX_INCLUDE,
       });
 
       // Standing and proposed entries are indexed; everything else is removed.
@@ -113,7 +116,7 @@ export default class KnowledgeIndexService {
         deleted: null,
         status: { in: INDEXED_STATUSES },
       },
-      include: { page: { select: { title: true, workspaceId: true } } },
+      include: ENTRY_INDEX_INCLUDE,
     });
 
     for (const entry of entries) {

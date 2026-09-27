@@ -21,6 +21,7 @@ import { LoggerService } from 'modules/logger/logger.service';
 import {
   PAGES_QUEUE,
   RECOMPUTE_MODULES_JOB,
+  recomputeModulesJobOptions,
 } from 'modules/pages/pages.interface';
 
 const DEFAULT_MODULE_STATUS = 'active';
@@ -253,7 +254,7 @@ export class ModulesService {
       await this.pagesQueue?.add(
         RECOMPUTE_MODULES_JOB,
         { workspaceId },
-        { removeOnComplete: true, removeOnFail: 20 },
+        recomputeModulesJobOptions(workspaceId),
       );
     } catch (error) {
       this.logger.error({

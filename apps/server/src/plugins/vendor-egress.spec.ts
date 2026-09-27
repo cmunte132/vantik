@@ -35,6 +35,7 @@ describe('reaching a vendor', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     ).build('discord', 'ws-1', 'user-1', pluginSpec, 'acc-1');
   }
 

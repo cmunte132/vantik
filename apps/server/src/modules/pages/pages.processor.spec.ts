@@ -9,11 +9,21 @@
  */
 import { Queue } from 'bull';
 
+import EntryCitationsService from './entry-citations.service';
 import PageEntriesService from './page-entries.service';
 import {
   DECAY_JOB,
   DECAY_JOB_ID,
+  RECHECK_ENTRY_JOB,
+  recheckEntryJobOptions,
+  RECOMPUTE_MODULES_GRACE_MS,
   RECOMPUTE_MODULES_JOB,
+  RECOMPUTE_MODULES_WINDOW_MS,
+  recomputeModulesJobOptions,
+  RETRY_CITATIONS_ATTEMPTS,
+  RETRY_CITATIONS_BACKOFF_MS,
+  RETRY_CITATIONS_JOB,
+  retryCitationsJobOptions,
 } from './pages.interface';
 import {
   EntryModulesScheduler,
@@ -82,7 +92,10 @@ describe('PagesProcessor', () => {
     );
     const service = { runDecay } as unknown as PageEntriesService;
 
-    await new PagesProcessor(service).handleDecay();
+    await new PagesProcessor(
+      service,
+      {} as EntryCitationsService,
+    ).handleDecay();
 
     // Unscoped deliberately: the windows are a property of the deployment, not
     // of any one workspace.
@@ -99,19 +112,119 @@ describe('re-resolving entry modules', () => {
     expect(queue.add).toHaveBeenCalledWith(
       RECOMPUTE_MODULES_JOB,
       {},
-      expect.any(Object),
+      expect.objectContaining({
+        jobId: expect.stringMatching(`^${RECOMPUTE_MODULES_JOB}:all:`),
+      }),
     );
+  });
+
+  it('[KG-1.2] folds requests in one window into one pass that starts after the window closes', () => {
+    const W = RECOMPUTE_MODULES_WINDOW_MS;
+    const start = 1_000 * W;
+
+    const first = recomputeModulesJobOptions('ws-1', start + 1);
+    const last = recomputeModulesJobOptions('ws-1', start + W - 1);
+
+    // Same window, same id: Bull ignores the second add.
+    expect(last.jobId).toBe(first.jobId);
+    // Neither starts before the window has closed, plus a grace for servers
+    // whose clocks disagree, so no request in it can arrive after its pass
+    // has already read the repositories.
+    const closes = start + W + RECOMPUTE_MODULES_GRACE_MS;
+    expect(start + 1 + (first.delay as number)).toBe(closes);
+    expect(start + W - 1 + (last.delay as number)).toBe(closes);
+  });
+
+  it('[KG-1.2] gives a later request, or another workspace, a pass of its own', () => {
+    const W = RECOMPUTE_MODULES_WINDOW_MS;
+    const start = 1_000 * W;
+    const pass = recomputeModulesJobOptions('ws-1', start).jobId;
+
+    // Made while the first pass may be running: never swallowed by it.
+    expect(recomputeModulesJobOptions('ws-1', start + W).jobId).not.toBe(pass);
+    expect(recomputeModulesJobOptions('ws-2', start).jobId).not.toBe(pass);
+    expect(recomputeModulesJobOptions(undefined, start).jobId).not.toBe(pass);
   });
 
   it('[KG-1.2] runs the pass for the workspace a job names, or for all of them', async () => {
     const recomputeModules = jest.fn(async () => ({ changed: 2 }));
-    const processor = new PagesProcessor({
-      recomputeModules,
-    } as unknown as PageEntriesService);
+    const processor = new PagesProcessor(
+      { recomputeModules } as unknown as PageEntriesService,
+      {} as EntryCitationsService,
+    );
 
     await processor.handleRecomputeModules({ data: { workspaceId: 'ws-1' } });
     await processor.handleRecomputeModules({ data: {} });
 
     expect(recomputeModules.mock.calls).toEqual([['ws-1'], [undefined]]);
+  });
+});
+
+describe('retrying citations that could not be read', () => {
+  function processorWith(stillUnknown: number) {
+    const retryUnknown = jest.fn(async () => ({ stillUnknown }));
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      { retryUnknown } as unknown as EntryCitationsService,
+    );
+
+    return { processor, retryUnknown };
+  }
+
+  it('[KG-2.3] completes once every citation of the entry has been read', async () => {
+    const { processor, retryUnknown } = processorWith(0);
+
+    await expect(
+      processor.handleRetryCitations({ data: { entryId: 'entry-1' } }),
+    ).resolves.toBeUndefined();
+    expect(retryUnknown).toHaveBeenCalledWith('entry-1');
+  });
+
+  it('[KG-2.3] fails while any is still unread, so the queue tries again after its backoff', async () => {
+    const { processor } = processorWith(2);
+
+    await expect(
+      processor.handleRetryCitations({ data: { entryId: 'entry-1' } }),
+    ).rejects.toThrow('2 citation(s) of entry entry-1 could not be read yet');
+  });
+
+  it('[KG-2.3] retries one entry at a time, spaced further apart each time, and then gives up', () => {
+    const options = retryCitationsJobOptions('entry-1');
+
+    expect(options).toMatchObject({
+      jobId: `${RETRY_CITATIONS_JOB}:entry-1`,
+      attempts: RETRY_CITATIONS_ATTEMPTS,
+      backoff: { type: 'exponential', delay: RETRY_CITATIONS_BACKOFF_MS },
+      removeOnComplete: true,
+    });
+    expect(RETRY_CITATIONS_ATTEMPTS).toBeGreaterThan(1);
+  });
+});
+
+describe('checking an entry again after a harmful signal', () => {
+  it('[KG-3.4] checks the entry the job names against the code as it is now', async () => {
+    const recheck = jest.fn(async () => ({ checked: 2 }));
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      { recheck } as unknown as EntryCitationsService,
+    );
+
+    await expect(
+      processor.handleRecheckEntry({ data: { entryId: 'entry-1' } }),
+    ).resolves.toBeUndefined();
+    expect(recheck).toHaveBeenCalledWith('entry-1');
+  });
+
+  it('[KG-3.4] folds signals against one entry into one check, and keeps no history of them', () => {
+    // Several runs can blame an entry at once; while a check is waiting, a
+    // second is the same work, so the job id is the entry's.
+    expect(recheckEntryJobOptions('entry-1')).toEqual({
+      jobId: `${RECHECK_ENTRY_JOB}:entry-1`,
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+    expect(recheckEntryJobOptions('entry-2').jobId).not.toBe(
+      recheckEntryJobOptions('entry-1').jobId,
+    );
   });
 });

@@ -4,6 +4,7 @@ import AIRequestsService from 'modules/ai-requests/ai-requests.services';
 import { AttachmentModule } from 'modules/attachments/attachments.module';
 import { IssueCommentsModule } from 'modules/issue-comments/issue-comments.module';
 import { IssuesModule } from 'modules/issues/issues.module';
+import { KnowledgeSignalsModule } from 'modules/knowledge-signals/knowledge-signals.module';
 import { LinkedIssueModule } from 'modules/linked-issue/linked-issue.module';
 
 import { PluginContextFactory } from './plugin-context.factory';
@@ -22,6 +23,7 @@ import { PluginContextFactory } from './plugin-context.factory';
     IssueCommentsModule,
     LinkedIssueModule,
     AttachmentModule,
+    KnowledgeSignalsModule,
   ],
   providers: [PluginContextFactory, AIRequestsService],
   exports: [PluginContextFactory],

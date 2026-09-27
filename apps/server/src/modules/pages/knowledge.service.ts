@@ -1,4 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import {
+  KnowledgeProof,
+  KnowledgeTrustEnum,
+  PageEntryKindEnum,
+  PageEntryStatusEnum,
+} from '@vantikhq/types';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'nestjs-prisma';
 
 import {
@@ -7,7 +14,17 @@ import {
 } from 'modules/vector/vector.interface';
 import { VectorService } from 'modules/vector/vector.service';
 
+import {
+  describeProof,
+  entryProof,
+  PROOF_CITATION_SELECT,
+} from './knowledge-proof';
+import {
+  knowledgeSettings,
+  MAX_KNOWLEDGE_TOKEN_BUDGET,
+} from './knowledge-settings';
 import PageEntriesService from './page-entries.service';
+import { type ServedTo } from './pages.interface';
 
 /**
  * A context pack: the knowledge that matters for a piece of work, under a
@@ -28,6 +45,26 @@ export interface KnowledgeSeeds {
   issueId?: string;
 }
 
+/**
+ * Who is reading, as far as the request says: recorded with each entry served,
+ * so a use can be traced to the session, token or run it went to.
+ */
+export type KnowledgeReader = Omit<ServedTo, 'workspaceId' | 'via'>;
+
+/**
+ * One entry packed into a run: the claim, what it rests on, and when it was
+ * written, so the agent can weigh a person's confirmation above a claim
+ * nothing backs, and an old claim against a new one.
+ */
+export interface PackedEntry extends KnowledgeProof {
+  entryId: string;
+  /** FACT, DECISION, CONVENTION or GOTCHA. */
+  kind: string;
+  scope: string | null;
+  body: string;
+  writtenAt: string;
+}
+
 export interface KnowledgeGap {
   query: string;
   count: number;
@@ -44,11 +81,46 @@ export interface KnowledgeGap {
 const CHARS_PER_TOKEN = 4;
 
 /** Ceiling on a caller-supplied budget, so "budget" cannot mean "everything". */
-const MAX_TOKEN_BUDGET = 20_000;
+const MAX_TOKEN_BUDGET = MAX_KNOWLEDGE_TOKEN_BUDGET;
 const DEFAULT_TOKEN_BUDGET = 2_000;
+
+/** How much knowledge a run may be handed. */
+export interface RunKnowledgeLimits {
+  topK: number;
+  tokenBudget: number;
+}
+
+/**
+ * The most conventions read for one run before the budget is applied. Bounds
+ * the read; the budget bounds the pack.
+ */
+const MAX_PACKED_CONVENTIONS = 25;
+
+/** Candidates asked of the search, so trust can filter and still leave K. */
+const PACK_SEARCH_LIMIT = 20;
+
+/** The trust a relevant entry needs to be packed without a person asking. */
+const PACKABLE_TRUST: Array<KnowledgeTrustEnum | null> = [
+  KnowledgeTrustEnum.GROUNDED,
+  KnowledgeTrustEnum.HUMAN_VERIFIED,
+];
+
+/** The columns a packed entry is built from. */
+const PACKED_ENTRY_SELECT = {
+  id: true,
+  content: true,
+  scope: true,
+  kind: true,
+  status: true,
+  verifiedAt: true,
+  createdAt: true,
+  citations: { select: PROOF_CITATION_SELECT },
+} as const;
 
 @Injectable()
 export default class KnowledgeService {
+  private readonly logger = new Logger(KnowledgeService.name);
+
   constructor(
     private prisma: PrismaService,
     private vectorService: VectorService,
@@ -69,6 +141,7 @@ export default class KnowledgeService {
       limit?: number;
       scope?: string;
       kinds?: string[];
+      reader?: KnowledgeReader;
     } & KnowledgeSeeds = {},
   ): Promise<KnowledgeSearchResult> {
     const result = await this.vectorService.searchKnowledge(
@@ -82,7 +155,11 @@ export default class KnowledgeService {
       },
     );
 
-    await this.recordDemand(workspaceId, query, result.hits);
+    await this.recordDemand(workspaceId, query, result.hits, {
+      ...options.reader,
+      workspaceId,
+      via: 'RECALL',
+    });
 
     return result;
   }
@@ -102,6 +179,7 @@ export default class KnowledgeService {
       scope?: string;
       query?: string;
       tokenBudget?: number;
+      reader?: KnowledgeReader;
     } & KnowledgeSeeds,
   ): Promise<ContextPack> {
     const tokenBudget = Math.min(
@@ -145,7 +223,13 @@ export default class KnowledgeService {
     // that matched fifty things and could afford none of them answered the
     // question; recording it as a gap would put questions the bank handles well
     // at the top of the list of things nobody has written down.
-    await this.recordDemand(workspaceId, query, items, hits.length);
+    await this.recordDemand(
+      workspaceId,
+      query,
+      items,
+      { ...input.reader, workspaceId, via: 'LOAD_CONTEXT' },
+      hits.length,
+    );
 
     return {
       items,
@@ -153,6 +237,171 @@ export default class KnowledgeService {
       tokenBudget,
       omitted: hits.length - items.length,
     };
+  }
+
+  /**
+   * What a run on this issue is handed: the conventions of the issue's
+   * modules, then the few entries most relevant to its title that are
+   * grounded or verified by a person, within a token budget.
+   *
+   * Conventions come first and are not held to a trust tier: a person
+   * accepted each one as how work is done in that module, and the agent is
+   * told each item's tier either way. The relevant entries are, because
+   * nobody chose them for this issue; a search did. Everything is read from
+   * postgres, trust included, so an entry retracted or no longer grounded
+   * since it was indexed is not packed. An index that cannot be reached
+   * leaves the conventions, which do not need it.
+   *
+   * The limits are the workspace's settings unless given.
+   */
+  async knowledgeForRun(
+    workspaceId: string,
+    input: { issueId: string; query: string },
+    given?: RunKnowledgeLimits,
+  ): Promise<PackedEntry[]> {
+    const limits = given ?? (await this.runLimits(workspaceId));
+    const issue = await this.prisma.issue.findFirst({
+      where: { id: input.issueId, deleted: null, team: { workspaceId } },
+      select: { moduleIds: true },
+    });
+
+    if (!issue) {
+      return [];
+    }
+
+    const live: Prisma.PageEntryWhereInput = {
+      status: PageEntryStatusEnum.STANDING,
+      deleted: null,
+      page: { workspaceId, deleted: null },
+    };
+
+    const conventions = issue.moduleIds.length
+      ? await this.prisma.pageEntry.findMany({
+          where: {
+            ...live,
+            kind: PageEntryKindEnum.CONVENTION,
+            moduleIds: { hasSome: issue.moduleIds },
+          },
+          orderBy: [
+            { verifiedAt: { sort: 'desc', nulls: 'last' } },
+            { createdAt: 'desc' },
+          ],
+          take: MAX_PACKED_CONVENTIONS,
+          select: PACKED_ENTRY_SELECT,
+        })
+      : [];
+
+    const conventionIds = new Set(conventions.map((entry) => entry.id));
+    const ranked = (await this.rankedEntryIds(workspaceId, input)).filter(
+      (id) => !conventionIds.has(id),
+    );
+
+    const rows = ranked.length
+      ? await this.prisma.pageEntry.findMany({
+          where: { ...live, id: { in: ranked } },
+          select: PACKED_ENTRY_SELECT,
+        })
+      : [];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+
+    const relevant = ranked
+      .map((id) => byId.get(id))
+      .filter((row): row is (typeof rows)[number] => Boolean(row))
+      .map(packedEntry)
+      .filter((entry) => PACKABLE_TRUST.includes(entry.trust))
+      .slice(0, limits.topK);
+
+    const packed: PackedEntry[] = [];
+    let spent = 0;
+
+    for (const entry of [...conventions.map(packedEntry), ...relevant]) {
+      const cost = packedTokens(entry);
+
+      if (spent + cost > limits.tokenBudget) {
+        continue;
+      }
+
+      packed.push(entry);
+      spent += cost;
+    }
+
+    return packed;
+  }
+
+  /** The workspace's limits on the knowledge a run is handed. */
+  private async runLimits(workspaceId: string): Promise<RunKnowledgeLimits> {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { preferences: true },
+    });
+    const settings = knowledgeSettings(workspace?.preferences);
+
+    return {
+      topK: settings.contextTopK,
+      tokenBudget: settings.contextTokenBudget,
+    };
+  }
+
+  /**
+   * Records the entries packed into a run as served to it. Best-effort, like
+   * every other record of demand: a run is not failed over bookkeeping.
+   */
+  async recordPacked(
+    workspaceId: string,
+    run: { id: string; agentUserId: string },
+    entryIds: string[],
+  ): Promise<void> {
+    try {
+      await this.pageEntriesService.recordServed(entryIds, {
+        workspaceId,
+        via: 'CONTEXT_PACK',
+        agentRunId: run.id,
+        userId: run.agentUserId,
+      });
+    } catch (error) {
+      this.logger.warn({
+        message: `The knowledge packed into run ${run.id} was not recorded: ${error}`,
+        where: 'KnowledgeService.recordPacked',
+      });
+    }
+  }
+
+  /** Entry ids by relevance to the query, seeded by the issue's modules. */
+  private async rankedEntryIds(
+    workspaceId: string,
+    input: { issueId: string; query: string },
+  ): Promise<string[]> {
+    const query = input.query.trim();
+
+    if (!query) {
+      return [];
+    }
+
+    try {
+      const { hits } = await this.vectorService.searchKnowledge(
+        workspaceId,
+        query,
+        {
+          limit: PACK_SEARCH_LIMIT,
+          boost: await this.seedsFor(workspaceId, { issueId: input.issueId }),
+        },
+      );
+
+      return [
+        ...new Set(
+          hits
+            .map((hit) => hit.entryId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+    } catch (error) {
+      this.logger.warn({
+        message: `The knowledge index could not be searched for a run, so it gets its modules' conventions only: ${error}`,
+        where: 'KnowledgeService.rankedEntryIds',
+      });
+
+      return [];
+    }
   }
 
   /**
@@ -230,9 +479,22 @@ export default class KnowledgeService {
         : [],
     ]);
 
+    // A capability's module list is plain ids, not a relation, so it can name
+    // a module since deleted, or one no longer in this workspace. Checked like
+    // every other seed rather than trusted.
+    const listed = [
+      ...new Set(capabilities.flatMap((capability) => capability.moduleIds)),
+    ];
+    const capabilityModules = listed.length
+      ? await this.prisma.module.findMany({
+          where: { id: { in: listed }, workspaceId, deleted: null },
+          select: { id: true },
+        })
+      : [];
+
     const neighbours = [
       ...new Set([
-        ...capabilities.flatMap((capability) => capability.moduleIds),
+        ...capabilityModules.map((productModule) => productModule.id),
         ...productModules.map((productModule) => productModule.id),
       ]),
     ].filter((id) => !moduleIds.includes(id));
@@ -280,8 +542,8 @@ export default class KnowledgeService {
   // --------------------------------------------------------------- internals
 
   /**
-   * Records what a search actually produced: usage counts when it found
-   * something, a knowledge gap when it did not.
+   * Records what a search actually produced: usage counts and a use row per
+   * entry served when it found something, a knowledge gap when it did not.
    *
    * Both are best-effort. A failure to record demand must not fail the read the
    * caller asked for — the counters steer ranking and decay, and being slightly
@@ -291,6 +553,7 @@ export default class KnowledgeService {
     workspaceId: string,
     query: string,
     served: KnowledgeSearchHit[],
+    to: ServedTo,
     /** What the search matched, which is not always what was served. */
     found = served.length,
   ): Promise<void> {
@@ -300,7 +563,7 @@ export default class KnowledgeService {
         .filter((id): id is string => Boolean(id));
 
       if (entryIds.length > 0) {
-        await this.pageEntriesService.recordServed(entryIds);
+        await this.pageEntriesService.recordServed(entryIds, to);
       }
 
       if (found === 0) {
@@ -332,11 +595,40 @@ export default class KnowledgeService {
   }
 }
 
+function packedEntry(row: {
+  id: string;
+  content: string;
+  scope: string | null;
+  kind: string;
+  status: string;
+  verifiedAt: Date | null;
+  createdAt: Date;
+  citations: Parameters<typeof entryProof>[0]['citations'];
+}): PackedEntry {
+  return {
+    entryId: row.id,
+    kind: row.kind,
+    scope: row.scope,
+    body: row.content,
+    writtenAt: row.createdAt.toISOString(),
+    ...entryProof(row),
+  };
+}
+
+/** What an entry costs in a prompt, rendered as the prompt renders it. */
+function packedTokens(entry: PackedEntry): number {
+  const text = `${entry.scope ?? ''}${entry.body}${describeProof(entry)}${entry.writtenAt}`;
+
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
+}
+
 function estimateTokens(hit: KnowledgeSearchHit): number {
   // Provenance travels with the item, so it costs budget too — an agent
-  // weighing a claim needs to see that a human confirmed it, and pretending
-  // that metadata is free is how a budget silently overruns.
-  const text = `${hit.title}\n${hit.content}\n${hit.scope ?? ''}`;
+  // weighing a claim needs to see that a human confirmed it, and what it
+  // cites, and pretending that metadata is free is how a budget silently
+  // overruns.
+  const cited = hit.citations?.length ? JSON.stringify(hit.citations) : '';
+  const text = `${hit.title}\n${hit.content}\n${hit.scope ?? ''}\n${hit.trust ?? ''}${cited}`;
 
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }

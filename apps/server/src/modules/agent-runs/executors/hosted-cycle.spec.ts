@@ -69,6 +69,8 @@ interface GuestScript {
   modelFailure?: Record<string, string>;
   /** Exit codes for the repository's own checks, keyed by pass. */
   checks?: Record<number, number>;
+  /** What the repository's own checks print, keyed by pass. */
+  checkOutput?: Record<number, string>;
   /** Exit code for the harness, keyed by the prompt file it was given. */
   harnessExit?: Record<string, number>;
   /** Tree hash per implementing pass, so oscillation can be forced. */
@@ -155,7 +157,7 @@ function buildGuest(script: GuestScript) {
         return {
           ...ok,
           exitCode: script.checks?.[implementPasses] ?? 0,
-          stdout: 'ran the suite',
+          stdout: script.checkOutput?.[implementPasses] ?? 'ran the suite',
         };
       }
 
@@ -196,7 +198,7 @@ function buildGuest(script: GuestScript) {
 function build(
   script: GuestScript,
   config: Record<string, unknown> = {},
-  options: { leaseHeld?: boolean } = {},
+  options: { leaseHeld?: boolean; nothingPushed?: boolean } = {},
 ) {
   const guest = buildGuest(script);
   const specs: SandboxSpec[] = [];
@@ -222,11 +224,14 @@ function build(
 
   const pushWorkTree = jest.fn(async (request: { summary: string }) => {
     void request;
-    return {
-      branch: 'agent/eng-42',
-      headCommit: 'head111',
-      prUrl: 'https://example.test/pr/1',
-    };
+    // The proxy answers null when the tree matches the base: nothing to push.
+    return options.nothingPushed
+      ? null
+      : {
+          branch: 'agent/eng-42',
+          headCommit: 'head111',
+          prUrl: 'https://example.test/pr/1',
+        };
   });
 
   const executor = new HostedExecutor(
@@ -446,6 +451,34 @@ describe('a run the reviewer sends back', () => {
       'Checks that are currently failing',
     );
     expect(harness.iterations[0]).toMatchObject({ verificationPassed: false });
+  });
+
+  it('[KG-3.4] records whether the reviewer accepted each pass, and the files a failing check failed in', async () => {
+    // What a run's end is traced back to the knowledge it was handed by.
+    const harness = build({
+      verdicts: { 1: REJECTED, 2: ACCEPTED },
+      checks: { 1: 1 },
+      checkOutput: {
+        1: 'FAIL /workspace/repo/src/importer.spec.ts\n  at readRows (src/importer.ts:88:3)',
+      },
+    });
+
+    await harness.execute();
+
+    expect(harness.iterations[0]).toMatchObject({
+      accepted: false,
+      failedChecks: [
+        {
+          label: expect.any(String),
+          command: 'pnpm test',
+          paths: ['src/importer.spec.ts', 'src/importer.ts'],
+        },
+      ],
+    });
+    expect(harness.iterations[1]).toMatchObject({
+      accepted: true,
+      failedChecks: [],
+    });
   });
 
   it('records every pass separately', async () => {
@@ -733,6 +766,29 @@ describe('when a pass crashes', () => {
 
     expect(harness.final().status).toBe('FAILED');
     expect(harness.final().patch).toMatchObject({ failure: 'HARNESS_CRASHED' });
+  });
+
+  it('[KG-3.6] says what a failed run spent, so the arms compare what runs cost', async () => {
+    // Each fake pass reports $0.50. Leaving a failed run's spend out would
+    // make whichever arm fails expensively look cheap.
+    const crashed = build({ verdicts: {}, harnessExit: { 'prompt.md': 1 } });
+    await crashed.execute();
+    expect(crashed.final().patch).toMatchObject({
+      failure: 'HARNESS_CRASHED',
+      result: { costUsd: 0.5 },
+    });
+
+    const empty = build(
+      { verdicts: { 1: ACCEPTED } },
+      {},
+      { nothingPushed: true },
+    );
+    await empty.execute();
+    expect(empty.final().patch).toMatchObject({
+      failure: 'NO_DIFF_PRODUCED',
+      // One implementing pass and one review.
+      result: { costUsd: 1 },
+    });
   });
 
   it('delivers what the earlier passes built when a later one crashes', async () => {

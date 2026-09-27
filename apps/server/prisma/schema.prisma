@@ -101,8 +101,20 @@ model AgentRun {
   /// `git diff` versus this, never a model-emitted patch.
   baseCommit String?
 
-  events     AgentRunEvent[]
-  iterations AgentRunIteration[]
+  /// Whether this run was handed the workspace's knowledge (TREATMENT) or held
+  /// out from it (HOLDOUT), so the two can be compared. Chosen from the run's
+  /// id when it is delegated, and kept by its retries, which are handed the
+  /// same pack. Null for runs delegated before the holdout existed.
+  knowledgeArm KnowledgeArm?
+  /// What became of the pull request this run opened: null while it is open,
+  /// and for a run that opened none.
+  pullRequestOutcome  AgentRunPullRequestOutcome?
+  pullRequestClosedAt DateTime?
+
+  events       AgentRunEvent[]
+  iterations   AgentRunIteration[]
+  entryUses    PageEntryUse[]
+  entrySignals PageEntrySignal[]
 
   @@index([workspaceId, status])
   @@index([issueId])
@@ -163,6 +175,13 @@ model AgentRunIteration {
   /// Review findings, each carrying a `file:line` or a failing command.
   /// Findings without evidence are discarded before they get here.
   findings Json?
+  /// The reviewer's verdict on this pass: accepted, not accepted, or null when
+  /// no review ran or none could be read.
+  accepted Boolean?
+  /// The verification commands that failed this pass, each with the file
+  /// paths its output named: `[{ label, command, paths }]`. The output itself
+  /// is not kept; the paths are what a failure is attributed by.
+  failedChecks Json?
   /// Hash of the patch this iteration produced, for detecting the oscillation
   /// case where two passes change nothing.
   diffHash String?
@@ -867,11 +886,145 @@ model PageEntry {
   retrievalCount Int       @default(0)
   lastServedAt   DateTime?
 
+  /// Outcome signals from the runs this entry was served to, weighted: a full
+  /// signal counts 1 and a weak one (a pull request closed without merging)
+  /// counts half. Each is explained by a PageEntrySignal row. A harmful signal
+  /// has the entry's citations checked again; neither archives anything.
+  helpfulCount Float @default(0)
+  harmfulCount Float @default(0)
+
   page   Page   @relation(fields: [pageId], references: [id])
   pageId String
 
+  /// What the claim rests on: code at a commit, or where it was decided.
+  citations PageEntryCitation[]
+  uses      PageEntryUse[]
+  signals   PageEntrySignal[]
+
   @@index([pageId])
   @@index([status])
+}
+
+/// One piece of evidence for an entry, checked by the server.
+///
+/// A claim about code is only as good as the code still saying it, and a model
+/// asked whether its own claim holds is the least reliable judge there is. So
+/// a code citation records the lines at a commit, as the server read them, and
+/// each check compares that text with the file as it is now. A decision cites
+/// the issue, pull request, comment or run where it was made, and is checked
+/// for existence in the workspace.
+model PageEntryCitation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entry   PageEntry @relation(fields: [entryId], references: [id])
+  entryId String
+
+  kind PageEntryCitationKind
+
+  // CODE
+  moduleRepo   ModuleRepo? @relation(fields: [moduleRepoId], references: [id])
+  moduleRepoId String?
+  /// Relative to the repository root.
+  path         String?
+  /// The commit the lines were cited at.
+  commitSha    String?
+  /// The cited lines at the last check. A MOVED check updates them.
+  startLine    Int?
+  endLine      Int?
+  /// The cited lines as the server read them, whitespace-normalised, so a
+  /// re-check can tell a snippet that moved from one that changed. Never text
+  /// the writer supplied.
+  snippet      String?
+  snippetHash  String?
+
+  // ISSUE, PULL_REQUEST, COMMENT, RUN
+  /// The issue, linked pull request, comment or run, by id.
+  targetId    String?
+  /// What a reader recognises it by: an issue key or a pull request URL.
+  targetLabel String?
+
+  /// A quote the writer gave that could not be checked because the source was
+  /// unreachable at write. Compared with the lines when they are first read,
+  /// then cleared; never served, and never the snippet.
+  pendingQuote String?
+
+  // The last check
+  checkedAt   DateTime?
+  checkedSha  String?
+  checkResult PageEntryCitationCheck?
+
+  /// For a CHANGED check only: whether the current code still supports the
+  /// claim, as a model other than the writer's judged it, and which model.
+  judgment    PageEntryCitationJudgment?
+  judgeModel  String?
+  judgeLines  String?
+  judgeReason String?
+
+  @@index([entryId])
+  @@index([moduleRepoId, path])
+  @@index([checkResult])
+}
+
+/// One entry served to one reader, once.
+///
+/// `retrievalCount` says how often an entry is served; this says to whom and
+/// for what. A run's outcome can only be attributed to the knowledge it was
+/// given if what it was given is written down.
+model PageEntryUse {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  entry   PageEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entryId String
+
+  workspaceId String
+
+  /// The run the entry was packed for, when it was served to one.
+  agentRun   AgentRun? @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  agentRunId String?
+  /// The harness session that asked, when it said which.
+  sessionId  String?
+  /// The token the request came in on. Null for a browser session or a run.
+  tokenId    String?
+  /// Who asked. Null for a run, which is the agent the run belongs to.
+  userId     String?
+
+  via PageEntryUseVia
+
+  @@index([entryId, createdAt])
+  @@index([agentRunId])
+  @@index([workspaceId, createdAt])
+}
+
+/// One outcome attributed to one entry: why its helpful or harmful count moved.
+///
+/// One row per entry, run and source, so an outcome reported twice (a webhook
+/// delivered again) moves a count once, and a later outcome from the same
+/// source (a pull request reopened and merged) replaces the earlier one, the
+/// counts moving by the difference.
+model PageEntrySignal {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entry   PageEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entryId String
+
+  agentRun   AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  agentRunId String
+
+  source PageEntrySignalSource
+  kind   PageEntrySignalKind
+  /// 1 for a full signal, 0.5 for a weak one.
+  weight Float
+  /// What pointed at the entry, for a harmful signal: the finding's
+  /// `file:line`, or the failing command and the path its output named.
+  evidence String?
+
+  @@unique([entryId, agentRunId, source])
+  @@index([agentRunId])
 }
 
 /// A question an agent asked that the bank could not answer.
@@ -1053,6 +1206,9 @@ model ModuleRepo {
   pathPrefixes  String[]
   bidirectional Boolean  @default(false)
   isDefault     Boolean  @default(false)
+
+  /// Knowledge citing code in this repository.
+  citations PageEntryCitation[]
 
   @@index([moduleId])
   @@index([externalRepoId])
@@ -1683,6 +1839,69 @@ enum PageEntryKind {
   CONVENTION
   /// Something that cost somebody time, so it should not cost the next one.
   GOTCHA
+}
+
+enum PageEntryCitationKind {
+  /// Lines of a file in a module's repository, at a commit.
+  CODE
+  ISSUE
+  PULL_REQUEST
+  COMMENT
+  RUN
+}
+
+/// How an entry reached a reader.
+enum PageEntryUseVia {
+  /// Packed into a run's context when it was delegated.
+  CONTEXT_PACK
+  /// Returned by a search (`recall`).
+  RECALL
+  /// Returned by a budgeted load (`load_context`).
+  LOAD_CONTEXT
+}
+
+/// What produced an outcome signal.
+enum PageEntrySignalSource {
+  /// The run's own end: its checks and its review.
+  RUN
+  /// The pull request the run opened, merged or closed.
+  PULL_REQUEST
+}
+
+enum PageEntrySignalKind {
+  HELPFUL
+  HARMFUL
+}
+
+/// Whether a run was handed the workspace's knowledge.
+enum KnowledgeArm {
+  TREATMENT
+  HOLDOUT
+}
+
+enum AgentRunPullRequestOutcome {
+  MERGED
+  /// Closed without merging.
+  CLOSED
+}
+
+enum PageEntryCitationCheck {
+  /// The cited lines read the same. For a non-code citation: it exists.
+  HOLDS
+  /// The cited lines read the same elsewhere in the file.
+  MOVED
+  /// The cited lines are no longer in the file.
+  CHANGED
+  /// The file, or the non-code target, is gone.
+  MISSING
+  /// The source could not be reached. Retried; never counts as a failure.
+  UNKNOWN
+}
+
+enum PageEntryCitationJudgment {
+  HOLDS
+  CONTRADICTED
+  UNCLEAR
 }
 
 enum PageEntryStatus {

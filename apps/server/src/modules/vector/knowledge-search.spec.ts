@@ -144,8 +144,12 @@ function sortKey(key: string, query: string): (doc: Doc) => number {
   return (doc) => Number(doc[field] ?? 0);
 }
 
-/** A stand-in for the pages collection, holding what was upserted. */
-function fakeIndex() {
+/**
+ * A stand-in for the pages collection, holding what was upserted. `entries`
+ * is what postgres holds for an entry beyond its id: its status,
+ * verification and citations, which the proof is read from.
+ */
+function fakeIndex(entries: Record<string, Doc> = {}) {
   const docs = new Map<string, Doc>();
   const searches: Array<Record<string, unknown>> = [];
 
@@ -166,16 +170,35 @@ function fakeIndex() {
       }) => {
         searches.push(search);
         const matches = parseFilter(search.filter_by as string);
-        const keys = splitTop(search.sort_by as string).map((key) =>
-          sortKey(key, search.q as string),
-        );
-        const ranked = [...docs.values()].filter(matches).sort((a, b) => {
+        const sortBy = splitTop(search.sort_by as string);
+        const keys = sortBy.map((key) => sortKey(key, search.q as string));
+        const order = (a: Doc, b: Doc) => {
           for (const key of keys) {
             const difference = key(b) - key(a);
             if (difference !== 0) return difference;
           }
           return 0;
-        });
+        };
+        const ranked = [...docs.values()].filter(matches).sort(order);
+
+        // `_text_match(buckets: N)` as Typesense applies it: rank on the raw
+        // score, cut the ranking into blocks of floor(results / N), give every
+        // document in a block its first document's score, and rank again. With
+        // fewer than N results nothing is bucketed.
+        const bucketed = sortBy.findIndex((key) =>
+          /^_text_match\(buckets: \d+\)/.test(key),
+        );
+        const buckets = Number(/buckets: (\d+)/.exec(sortBy[bucketed])?.[1]);
+        if (bucketed >= 0 && ranked.length >= buckets) {
+          const raw = keys[bucketed];
+          const block = Math.floor(ranked.length / buckets);
+          const anchored = new Map<Doc, number>();
+          ranked.forEach((doc, i) =>
+            anchored.set(doc, raw(ranked[i - (i % block)])),
+          );
+          keys[bucketed] = (doc) => anchored.get(doc) ?? 0;
+          ranked.sort(order);
+        }
 
         const groups = new Map<unknown, Doc[]>();
         for (const doc of ranked) {
@@ -205,7 +228,10 @@ function fakeIndex() {
     where.id.in.map((id) => ({ id }));
   const prisma = {
     page: { findMany: alive },
-    pageEntry: { findMany: alive },
+    pageEntry: {
+      findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in.map((id) => ({ id, ...entries[id] })),
+    },
   } as unknown as PrismaService;
 
   return { service: new VectorService(prisma, typesense), docs, searches };
@@ -408,17 +434,41 @@ describe('retrieval seeded from the product graph', () => {
 
   it('[KG-1.5] lets a boost reorder near-equal answers without burying a far better one', async () => {
     const { searches, service } = fakeIndex();
-    await seed(service);
 
-    await service.searchKnowledge(WORKSPACE, 'redis', {
+    // Twenty answers to "cache", entry `cN` mentioning it N times, so each is
+    // a little more relevant than the last. Two of them are about the seed
+    // module: c17, next to c18 in relevance, and c1, far behind everything.
+    for (let n = 1; n <= 20; n++) {
+      await service.indexEntry({
+        id: `c${n}`,
+        content: Array(n).fill('cache').join(' '),
+        scope: null,
+        status: PageEntryStatusEnum.STANDING,
+        sourceUserId: 'agent-1',
+        verifiedAt: null,
+        retrievalCount: 0,
+        updatedAt: new Date('2026-09-01'),
+        pageId: `page-c${n}`,
+        moduleIds: n === 17 || n === 1 ? [WEBAPP] : [],
+        kind: PageEntryKindEnum.FACT,
+        page: { title: 'Notes', workspaceId: WORKSPACE },
+      });
+    }
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'cache', {
+      limit: 20,
       boost: { modules: [WEBAPP], neighbours: [] },
     });
+    const order = ids(hits);
 
-    // With a question, text relevance is bucketed first and the boost breaks
-    // ties inside a bucket, rather than outranking relevance outright.
+    // Relevance is bucketed first and the boost breaks ties inside a bucket:
+    // c17 shares a bucket with c18 and overtakes it, but not c19 or c20, which
+    // are in a better bucket, and c1 stays behind every far better answer.
     expect(String(searches[0].sort_by)).toMatch(
       /^_text_match\(buckets: \d+\):desc,_eval\(/,
     );
+    expect(order.slice(0, 4)).toEqual(['c20', 'c19', 'c17', 'c18']);
+    expect(order.indexOf('c1')).toBeGreaterThan(order.indexOf('c3'));
   });
 
   it('[KG-1.5] refuses to put anything but a module id into the ranking', async () => {
@@ -433,5 +483,172 @@ describe('retrieval seeded from the product graph', () => {
     });
 
     expect(searches[0].sort_by).not.toContain('moduleIds');
+  });
+});
+
+describe('ranking by trust', () => {
+  /**
+   * Three entries that match a query equally, on pages of their own so the
+   * per-page cap keeps all three: one a person verified, one grounded, one
+   * with nothing checked behind it.
+   */
+  async function equals(service: VectorService, extra: Partial<Doc> = {}) {
+    const entry = (
+      id: string,
+      verifiedAt: Date | null,
+      checks: Array<string | null>,
+    ) =>
+      service.indexEntry({
+        id,
+        content: 'Deploys drain the worker pool first.',
+        scope: null,
+        status: PageEntryStatusEnum.STANDING,
+        sourceUserId: 'agent-1',
+        verifiedAt,
+        retrievalCount: 0,
+        updatedAt: new Date('2026-09-01'),
+        pageId: `page-${id}`,
+        moduleIds: [],
+        kind: PageEntryKindEnum.FACT,
+        citations: checks.map((checkResult) => ({ checkResult })),
+        page: { title: 'Deploys', workspaceId: WORKSPACE },
+        ...extra,
+      });
+
+    // Indexed worst first, so an order that merely kept insertion would fail.
+    await entry('ungrounded', null, ['CHANGED']);
+    await entry('grounded', null, ['HOLDS', 'MOVED']);
+    await entry('verified', new Date(), []);
+  }
+
+  it("[KG-2.7] indexes each entry's trust as a facet, and none for a page body", async () => {
+    const { service, docs } = fakeIndex();
+    await seed(service);
+    await equals(service);
+
+    expect(pageSchema.fields.find((f) => f.name === 'trust')).toMatchObject({
+      type: 'string',
+      facet: true,
+    });
+    expect(docs.get('entry:verified')).toMatchObject({
+      trust: 'HUMAN_VERIFIED',
+    });
+    expect(docs.get('entry:grounded')).toMatchObject({ trust: 'GROUNDED' });
+    expect(docs.get('entry:ungrounded')).toMatchObject({
+      trust: 'UNGROUNDED',
+    });
+    expect(docs.get('page:body')).toMatchObject({ trust: '' });
+  });
+
+  it('[KG-2.7] ranks human-verified above grounded above ungrounded for otherwise equal matches', async () => {
+    const { service } = fakeIndex();
+    await equals(service);
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'worker pool');
+
+    expect(ids(hits)).toEqual(['verified', 'grounded', 'ungrounded']);
+  });
+
+  it('[KG-2.7] keeps that order inside a scope and inside a module boost', async () => {
+    const scoped = fakeIndex();
+    await equals(scoped.service, { scope: 'apps/server' });
+    const { hits: inScope } = await scoped.service.searchKnowledge(
+      WORKSPACE,
+      'worker pool',
+      { scope: 'apps/server' },
+    );
+    expect(ids(inScope)).toEqual(['verified', 'grounded', 'ungrounded']);
+
+    const boosted = fakeIndex();
+    await equals(boosted.service, { moduleIds: [SERVER] });
+    const { hits: inModule } = await boosted.service.searchKnowledge(
+      WORKSPACE,
+      '*',
+      { boost: { modules: [SERVER], neighbours: [] } },
+    );
+    expect(ids(inModule)).toEqual(['verified', 'grounded', 'ungrounded']);
+  });
+
+  it('[KG-2.7] never lets trust outrank what was asked for: a boosted module beats a grounded fact elsewhere', async () => {
+    const { service } = fakeIndex();
+    await equals(service);
+    await service.indexEntry({
+      id: 'seeded',
+      content: 'Deploys drain the worker pool first.',
+      scope: null,
+      status: PageEntryStatusEnum.STANDING,
+      sourceUserId: 'agent-1',
+      verifiedAt: null,
+      retrievalCount: 0,
+      updatedAt: new Date('2026-09-01'),
+      pageId: 'page-seeded',
+      moduleIds: [SERVER],
+      kind: PageEntryKindEnum.FACT,
+      page: { title: 'Deploys', workspaceId: WORKSPACE },
+    });
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, '*', {
+      boost: { modules: [SERVER], neighbours: [] },
+    });
+
+    expect(ids(hits)[0]).toBe('seeded');
+  });
+});
+
+describe('served proof', () => {
+  it('[KG-2.8] serves every hit with its trust, citations and last check, read from postgres', async () => {
+    const checkedAt = new Date('2026-09-20T10:00:00Z');
+    const { service } = fakeIndex({
+      server: {
+        status: PageEntryStatusEnum.STANDING,
+        verifiedAt: null,
+        citations: [
+          {
+            kind: 'CODE',
+            path: 'apps/server/src/redis.ts',
+            commitSha: 'abcdef1',
+            startLine: 10,
+            endLine: 12,
+            targetLabel: null,
+            checkedAt,
+            checkedSha: 'fedcba9',
+            checkResult: 'HOLDS',
+            judgment: null,
+            judgeModel: null,
+            moduleRepo: { fullName: 'acme/api' },
+          },
+        ],
+      },
+    });
+    await seed(service);
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'redis');
+    const byId = new Map(hits.map((hit) => [ids([hit])[0], hit]));
+
+    expect(byId.get('server')).toMatchObject({
+      trust: 'GROUNDED',
+      citations: [
+        {
+          kind: 'CODE',
+          repo: 'acme/api',
+          path: 'apps/server/src/redis.ts',
+          lines: '10-12',
+          result: 'HOLDS',
+          checkedSha: 'fedcba9',
+        },
+      ],
+      lastCheckedAt: checkedAt.toISOString(),
+      lastCheckedSha: 'fedcba9',
+    });
+    // Nothing checked behind it, whatever the index last recorded.
+    expect(byId.get('webapp')).toMatchObject({
+      trust: 'UNGROUNDED',
+      citations: [],
+      lastCheckedAt: null,
+    });
+    expect(byId.get('page:body')).toMatchObject({
+      trust: null,
+      citations: [],
+    });
   });
 });

@@ -1,6 +1,7 @@
 import type {
   ContextPack,
   KnowledgeEntry,
+  KnowledgeProof,
   KnowledgeGap,
   KnowledgeHit,
   KnowledgePage,
@@ -23,6 +24,43 @@ import { chalkGreen, chalkGrey, chalkWarning } from './cliOutput';
 function truncate(text: string, max: number): string {
   const oneLine = text.replace(/\s+/g, ' ').trim();
   return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
+}
+
+const TRUST: Record<string, string> = {
+  HUMAN_VERIFIED: 'verified',
+  GROUNDED: 'grounded',
+  UNGROUNDED: 'ungrounded',
+};
+
+/**
+ * What an item rests on and when that was last looked at, in one line:
+ * "cites src/a.ts:40-52 (holds), issue ENG-12 (holds) · checked 2026-09-01 at
+ * 1a2b3c4d5e6f". Empty when it cites nothing.
+ */
+export function renderProof(proof: KnowledgeProof): string {
+  if (!proof.citations?.length) {
+    return '';
+  }
+
+  const cited = proof.citations
+    .map((citation) => {
+      const what =
+        citation.kind === 'CODE'
+          ? `${citation.path}${citation.lines ? `:${citation.lines}` : ''}`
+          : `${citation.kind.toLowerCase().replace('_', ' ')} ${citation.target}`;
+
+      return `${what} (${(citation.result ?? 'unchecked').toLowerCase()})`;
+    })
+    .join(', ');
+
+  const at = proof.lastCheckedSha
+    ? ` at ${proof.lastCheckedSha.slice(0, 12)}`
+    : '';
+  const checked = proof.lastCheckedAt
+    ? ` · checked ${proof.lastCheckedAt.slice(0, 10)}${at}`
+    : '';
+
+  return `cites ${cited}${checked}`;
 }
 
 export function renderPageList(
@@ -81,7 +119,7 @@ export function renderEntries(entries: KnowledgeEntry[]): string {
   }
 
   const table = new Table({
-    head: ['id', 'status', 'scope', 'fact', 'served', 'ok'],
+    head: ['id', 'status', 'scope', 'fact', 'served', 'trust'],
     style: { head: [], border: [] },
   });
 
@@ -92,11 +130,20 @@ export function renderEntries(entries: KnowledgeEntry[]): string {
       entry.scope ?? chalkGrey('—'),
       truncate(entry.content, 60),
       String(entry.retrievalCount),
-      entry.verified ? '✓' : '',
+      entry.trust ? TRUST[entry.trust] : entry.verified ? 'verified' : '',
     ]);
   }
 
-  return table.toString();
+  // Beneath the table, whole: a proof squeezed into a column would lose the
+  // commit and the results, which are the point of it.
+  const proofs = entries
+    .map((entry) => ({ id: entry.id.slice(0, 8), proof: renderProof(entry) }))
+    .filter(({ proof }) => proof)
+    .map(({ id, proof }) => `${id}  ${chalkGrey(proof)}`);
+
+  return [table.toString(), ...(proofs.length ? ['', ...proofs] : [])].join(
+    '\n',
+  );
 }
 
 export function renderHits(hits: KnowledgeHit[]): string {
@@ -109,14 +156,16 @@ export function renderHits(hits: KnowledgeHit[]): string {
       const badges = [
         hit.kind === 'page' ? 'page' : 'fact',
         hit.scope ?? null,
-        hit.verified ? 'verified' : null,
+        hit.trust ? TRUST[hit.trust] : hit.verified ? 'verified' : null,
       ]
         .filter(Boolean)
         .join(' · ');
+      const proof = renderProof(hit);
 
       return [
         `${chalkGreen(hit.page.title)} ${chalkGrey(badges)}`,
         truncate(hit.content, 300),
+        ...(proof ? [chalkGrey(proof)] : []),
       ].join('\n');
     })
     .join('\n\n');
@@ -133,7 +182,16 @@ export function renderContextPack(pack: ContextPack): string {
 
 export function renderRemember(result: RememberResult): string {
   if (result.status === 'written') {
-    return `${chalkGreen('Remembered')} ${chalkGrey(result.entry.id)}`;
+    const proof = renderProof(result.entry);
+
+    return [
+      `${chalkGreen('Remembered')} ${chalkGrey(result.entry.id)}`,
+      ...(proof ? [chalkGrey(proof)] : []),
+    ].join('\n');
+  }
+
+  if (result.status === 'citation-failed') {
+    return chalkWarning(result.message);
   }
 
   // Nothing was written, and saying so first matters more than the list: a

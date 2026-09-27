@@ -15,6 +15,7 @@ import type { AgentRunsService } from './agent-runs.service';
 import type { ContextPackService } from './context-pack.service';
 import { ExecutorRegistry } from './executors/executor.registry';
 import type { AgentExecutor } from './executors/executor.interface';
+import { knowledgeArmFor } from './knowledge-arm';
 
 const WORKSPACE = 'workspace-1';
 const ISSUE = 'issue-1';
@@ -117,6 +118,7 @@ function build(options: {
       version: 1 as const,
       repo: { baseBranch: 'main', delivery: 'worktree' as const },
     })),
+    recordServed: jest.fn(async (): Promise<void> => undefined),
   } as unknown as ContextPackService;
 
   const service = new AgentDelegationService(
@@ -126,7 +128,7 @@ function build(options: {
     registry,
   );
 
-  return { service, prisma, agentRuns, registry, created };
+  return { service, prisma, agentRuns, registry, created, contextPacks };
 }
 
 const delegateInput = {
@@ -300,7 +302,7 @@ describe('AgentDelegationService routing', () => {
   });
 
   it('records a dispatch failure on the run instead of dropping it', async () => {
-    const { service, agentRuns } = build({
+    const { service, agentRuns, created } = build({
       executors: [
         fakeExecutor('hosted', {
           dispatch: async () => {
@@ -312,8 +314,10 @@ describe('AgentDelegationService routing', () => {
 
     await service.delegate(delegateInput);
 
+    // The run delegation opened, under the id it chose for it.
+    const [{ id }] = created as Array<{ id: string }>;
     expect(agentRuns.transition).toHaveBeenCalledWith(
-      'run-1',
+      id,
       'FAILED',
       expect.objectContaining({ failure: 'ENVIRONMENT_SETUP_FAILED' }),
     );
@@ -389,6 +393,67 @@ describe('AgentDelegationService routing', () => {
 
     expect(hashOf(a.created)).toBe(hashOf(b.created));
     expect(hashOf(a.created)).toHaveLength(16);
+  });
+});
+
+describe('AgentDelegationService knowledge arm', () => {
+  it('[KG-3.3] chooses the arm from the id the run is created with, and stores it on the run', async () => {
+    const { service, created, contextPacks } = build();
+
+    await service.delegate(delegateInput);
+
+    const [run] = created as Array<{ id: string; knowledgeArm: string }>;
+    expect(run.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(run.knowledgeArm).toBe(knowledgeArmFor(run.id, 0.1));
+    // The pack was built for that arm, before the row existed.
+    expect(contextPacks.build).toHaveBeenCalledWith(
+      ISSUE,
+      WORKSPACE,
+      undefined,
+      undefined,
+      run.knowledgeArm,
+    );
+  });
+
+  it('[KG-3.3] holds out the share the workspace sets, over the deployment’s', async () => {
+    const original = process.env.KNOWLEDGE_HOLDOUT_RATE;
+
+    try {
+      process.env.KNOWLEDGE_HOLDOUT_RATE = '1';
+      const held = build();
+      await held.service.delegate(delegateInput);
+      expect(held.created[0]).toMatchObject({ knowledgeArm: 'HOLDOUT' });
+
+      // A workspace that sets its own rate is held to it.
+      const treated = build({ preferences: { knowledge: { holdoutRate: 0 } } });
+      await treated.service.delegate(delegateInput);
+      expect(treated.created[0]).toMatchObject({ knowledgeArm: 'TREATMENT' });
+    } finally {
+      if (original === undefined) {
+        delete process.env.KNOWLEDGE_HOLDOUT_RATE;
+      } else {
+        process.env.KNOWLEDGE_HOLDOUT_RATE = original;
+      }
+    }
+  });
+
+  it('[KG-3.1] records what the run was packed once the run exists', async () => {
+    const { service, agentRuns, contextPacks } = build();
+
+    await service.delegate(delegateInput);
+
+    const run = await (agentRuns.createRun as jest.Mock).mock.results[0].value;
+    expect(contextPacks.recordServed).toHaveBeenCalledWith(run);
+  });
+
+  it('[KG-3.1] records the pack again for a retry, which is handed it too', async () => {
+    const { service, contextPacks } = build();
+
+    await service.retry('run-1', { workspaceId: WORKSPACE }, 'user-1');
+
+    expect(contextPacks.recordServed).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'run-1-next' }),
+    );
   });
 });
 

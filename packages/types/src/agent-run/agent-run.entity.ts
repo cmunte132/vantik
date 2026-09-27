@@ -1,4 +1,8 @@
 import type { ThinkingLevel } from './model-providers';
+import type {
+  AgentRunPullRequestOutcomeEnum,
+  KnowledgeArmEnum,
+} from './knowledge-arms';
 
 /**
  * One agent's attempt at one issue.
@@ -405,6 +409,14 @@ export class AgentRunIteration {
   delta: number | null;
   verificationPassed: boolean | null;
   findings: unknown;
+  /** The reviewer's verdict; null when no review ran or none was readable. */
+  accepted: boolean | null;
+  /** Failing checks, each with the file paths its output named. */
+  failedChecks: Array<{
+    label: string;
+    command: string;
+    paths: string[];
+  }> | null;
   diffHash: string | null;
   phaseTimings: AgentRunPhaseTimings | null;
 }
@@ -444,6 +456,11 @@ export class AgentRun {
   iterationCount: number;
   phaseTimings: AgentRunPhaseTimings | null;
   baseCommit: string | null;
+
+  /** Null for a run delegated before the knowledge holdout. */
+  knowledgeArm: KnowledgeArmEnum | null;
+  pullRequestOutcome: AgentRunPullRequestOutcomeEnum | null;
+  pullRequestClosedAt: Date | null;
 
   events?: AgentRunEvent[];
   iterations?: AgentRunIteration[];

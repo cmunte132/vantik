@@ -1,4 +1,5 @@
 import { Workspace } from '../workspace';
+import type { KnowledgeProof } from './citation';
 
 /**
  * How strictly a page polices appended entries.
@@ -123,6 +124,15 @@ export class PageEntry {
 
   page?: Page;
   pageId: string;
+
+  /**
+   * The proof, when the entry is served: trust tier, citations, and the last
+   * check of them. Derived by the server on the way out, never stored.
+   */
+  trust?: KnowledgeProof['trust'];
+  citations?: KnowledgeProof['citations'];
+  lastCheckedAt?: KnowledgeProof['lastCheckedAt'];
+  lastCheckedSha?: KnowledgeProof['lastCheckedSha'];
 }
 
 export class PageHistory {

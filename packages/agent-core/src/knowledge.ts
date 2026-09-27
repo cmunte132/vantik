@@ -43,7 +43,88 @@ export interface KnowledgePage extends KnowledgePageRef {
   updatedAt: string;
 }
 
-export interface KnowledgeEntry {
+/**
+ * How far an item of knowledge can be trusted. HUMAN_VERIFIED: a person
+ * confirmed it. GROUNDED: accepted, and every citation it makes still reads
+ * the same. UNGROUNDED: anything else. Null for a page body.
+ */
+export type KnowledgeTrust = 'HUMAN_VERIFIED' | 'GROUNDED' | 'UNGROUNDED';
+
+/**
+ * The last check of a citation. HOLDS: the cited lines read the same (or the
+ * target exists). MOVED: they read the same elsewhere in the file. CHANGED:
+ * they are gone from the file. MISSING: the file or target is gone. UNKNOWN:
+ * the source could not be reached, so it has not been checked yet.
+ */
+export type CitationCheck =
+  | 'HOLDS'
+  | 'MOVED'
+  | 'CHANGED'
+  | 'MISSING'
+  | 'UNKNOWN';
+
+export type CitationKind =
+  | 'CODE'
+  | 'ISSUE'
+  | 'PULL_REQUEST'
+  | 'COMMENT'
+  | 'RUN';
+
+/**
+ * What a claim rests on, as a writer names it: lines of code, or where a
+ * decision was made. One citation names one thing.
+ */
+export type CitationInput =
+  | {
+      /** Relative to the repository root. */
+      path: string;
+      /** "40-52", or "40" for one line. */
+      lines: string;
+      /** The commit the lines are at. The default branch head when omitted. */
+      sha?: string;
+      /** owner/name, when the workspace has more than one repository. */
+      repo?: string;
+      /** Text that must be in the cited lines. Checked, never stored. */
+      quote?: string;
+    }
+  /** An issue key such as ENG-42, or its id. */
+  | { issue: string }
+  /** A linked pull request's URL, or its link id. */
+  | { pullRequest: string }
+  /** An issue comment's id. */
+  | { comment: string }
+  /** An agent run's id. */
+  | { run: string };
+
+/** A citation as it is served, with its last check. */
+export interface KnowledgeCitation {
+  kind: CitationKind;
+  /** CODE: the repository, path, commit and lines as last checked. */
+  repo?: string | null;
+  path?: string | null;
+  commitSha?: string | null;
+  lines?: string | null;
+  /** Non-code: the issue key, pull request URL, or comment or run id. */
+  target?: string | null;
+  result: CitationCheck | null;
+  checkedAt: string | null;
+  checkedSha: string | null;
+  /** CHANGED only: whether a judge model thinks the new code still agrees. */
+  judgment?: 'HOLDS' | 'CONTRADICTED' | 'UNCLEAR' | null;
+  judgeModel?: string | null;
+}
+
+/** What every served item of knowledge carries: how far to trust it, and why. */
+export interface KnowledgeProof {
+  trust: KnowledgeTrust | null;
+  citations: KnowledgeCitation[];
+  /** The latest check of any citation. */
+  lastCheckedAt: string | null;
+  /** The commit of the latest check of code; an issue or run has none. */
+  lastCheckedSha: string | null;
+}
+
+export interface KnowledgeEntry extends KnowledgeProof {
   id: string;
   content: string;
   /** Repo path glob, team or project this applies to; null is page-level. */
@@ -64,7 +145,7 @@ export interface KnowledgeEntry {
 /** What sort of knowledge an entry is. */
 export type EntryKind = 'FACT' | 'DECISION' | 'CONVENTION' | 'GOTCHA';
 
-export interface KnowledgeHit {
+export interface KnowledgeHit extends KnowledgeProof {
   /** Agreed narrative from a page body, or one agent's asserted fact. */
   kind: 'page' | 'entry';
   /** For an entry, what sort of knowledge it is. Null for a page body. */
@@ -103,6 +184,8 @@ export interface RecallInput extends KnowledgeSeeds {
   limit?: number;
   /** Only these kinds of entry. Page bodies drop out. */
   kinds?: EntryKind[];
+  /** Harness session id, so what it is served is recorded against it. */
+  session?: string;
 }
 
 export interface LoadContextInput extends KnowledgeSeeds {
@@ -111,6 +194,8 @@ export interface LoadContextInput extends KnowledgeSeeds {
   scope?: string;
   /** How much context the caller can afford, in tokens. */
   tokenBudget?: number;
+  /** Harness session id, so what it is served is recorded against it. */
+  session?: string;
 }
 
 /** What a page can be linked to. */
@@ -182,10 +267,22 @@ export interface RememberInput {
    * facts does that far better — so it gets shown the candidates and decides.
    */
   distinct?: boolean;
+  /**
+   * What the fact rests on. Every citation is checked before anything is
+   * written, and one that does not hold refuses the write.
+   */
+  citations?: CitationInput[];
 }
 
 export type RememberResult =
   | { status: 'written'; entry: KnowledgeEntry }
+  | {
+      status: 'citation-failed';
+      /** Which citation, counted from 1. */
+      citation: number;
+      /** What is wrong with it, in words the caller can act on. */
+      message: string;
+    }
   | {
       status: 'needs-decision';
       nearMatches: KnowledgeHit[];

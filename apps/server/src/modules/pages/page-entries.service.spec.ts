@@ -11,8 +11,12 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
+  KnowledgeTrustEnum,
+  PageEntryCitationCheckEnum,
+  PageEntryCitationKindEnum,
   PageEntryKindEnum,
   PageEntryPolicyEnum,
   PageEntryStatusEnum,
@@ -21,6 +25,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import type { VectorService } from 'modules/vector/vector.service';
 
+import type EntryCitationsService from './entry-citations.service';
 import type KnowledgeIndexService from './knowledge-index.service';
 import PageEntriesService from './page-entries.service';
 import { PROPOSED_ENTRY_BUDGET, WriterIdentity } from './pages.interface';
@@ -104,12 +109,36 @@ function buildService({
           page: { workspaceId: 'workspace-1' },
         }),
       ),
-      create: jest.fn(({ data }) => {
+      // Returns what postgres would: the row, and its citations as rows when
+      // they are asked for.
+      create: jest.fn(({ data, include }) => {
         created.push(data);
-        return { id: 'entry-new', ...data };
+        const { citations, ...row } = data;
+        return {
+          id: 'entry-new',
+          ...row,
+          ...(include?.citations && {
+            citations: (citations?.create ?? []).map((citation: object) => ({
+              targetLabel: null as string | null,
+              judgment: null as string | null,
+              judgeModel: null as string | null,
+              moduleRepo: { fullName: 'acme/api' },
+              ...citation,
+            })),
+          }),
+        };
       }),
-      update: jest.fn(({ where, data }) => ({ id: where.id, ...data })),
+      update: jest.fn(({ where, data, include }) => ({
+        id: where.id,
+        ...data,
+        ...(include?.citations && { citations: [] }),
+      })),
       updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
+    },
+    pageEntryUse: {
+      createMany: jest.fn(({ data }) =>
+        Promise.resolve({ count: data.length }),
+      ),
     },
     // The transaction double runs whatever the service handed it, so a create
     // that was never reached stays absent from `created`.
@@ -337,10 +366,12 @@ describe('status transitions', () => {
 });
 
 describe('serving and decay', () => {
+  const RECALL = { workspaceId: 'workspace-1', via: 'RECALL' as const };
+
   it('increments retrieval counts atomically', async () => {
     const { service, prisma } = buildService();
 
-    await service.recordServed(['entry-1', 'entry-2']);
+    await service.recordServed(['entry-1', 'entry-2'], RECALL);
 
     const { data } = (prisma.pageEntry.updateMany as jest.Mock).mock
       .calls[0][0];
@@ -348,6 +379,64 @@ describe('serving and decay', () => {
     // number decides what survives the decay pass.
     expect(data.retrievalCount).toEqual({ increment: 1 });
     expect(data.lastServedAt).toBeInstanceOf(Date);
+  });
+
+  it('[KG-3.1] writes a use row for each entry served, with who it went to and how', async () => {
+    const { service, prisma } = buildService();
+
+    await service.recordServed(['entry-1', 'entry-2', 'entry-1'], {
+      workspaceId: 'workspace-1',
+      via: 'RECALL',
+      sessionId: 'session-7',
+      tokenId: 'token-3',
+      userId: 'agent-1',
+    });
+
+    // One insert for the lot, one row per entry however often it appeared.
+    expect(prisma.pageEntryUse.createMany).toHaveBeenCalledTimes(1);
+    const { data } = (prisma.pageEntryUse.createMany as jest.Mock).mock
+      .calls[0][0];
+    expect(data).toEqual(
+      ['entry-1', 'entry-2'].map((entryId) => ({
+        entryId,
+        workspaceId: 'workspace-1',
+        via: 'RECALL',
+        agentRunId: null as string | null,
+        sessionId: 'session-7',
+        tokenId: 'token-3',
+        userId: 'agent-1',
+      })),
+    );
+
+    // The counters move for the same entries, once each.
+    const counted = (prisma.pageEntry.updateMany as jest.Mock).mock.calls[0][0];
+    expect(counted.where).toEqual({ id: { in: ['entry-1', 'entry-2'] } });
+  });
+
+  it('[KG-3.1] writes the counts and the uses together, so they cannot disagree', async () => {
+    const { service, prisma } = buildService();
+
+    await service.recordServed(['entry-1'], {
+      workspaceId: 'workspace-1',
+      via: 'CONTEXT_PACK',
+      agentRunId: 'run-1',
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    const [writes] = (prisma.$transaction as jest.Mock).mock.calls[0];
+    expect(writes).toHaveLength(2);
+    expect(
+      (prisma.pageEntryUse.createMany as jest.Mock).mock.calls[0][0].data[0],
+    ).toMatchObject({ via: 'CONTEXT_PACK', agentRunId: 'run-1' });
+  });
+
+  it('[KG-3.1] writes nothing when nothing was served', async () => {
+    const { service, prisma } = buildService();
+
+    await service.recordServed([], RECALL);
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.pageEntryUse.createMany).not.toHaveBeenCalled();
   });
 
   it('leaves verified standing entries alone even when nothing reads them', async () => {
@@ -1261,5 +1350,294 @@ describe('entries about modules', () => {
       status: { in: [PageEntryStatusEnum.STANDING] },
       moduleIds: { hasSome: ['server', 'webapp'] },
     });
+  });
+
+  it('[KG-1.6] returns at most the number asked for, newest first', async () => {
+    const { service, prisma } = buildService();
+
+    await service.getEntries('workspace-1', {
+      moduleIds: ['server'],
+      limit: 50,
+    });
+
+    expect(
+      (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0],
+    ).toMatchObject({ orderBy: { createdAt: 'desc' }, take: 50 });
+  });
+});
+
+describe('citations on a write', () => {
+  const drafts = [
+    {
+      kind: PageEntryCitationKindEnum.CODE,
+      moduleRepoId: 'repo-1',
+      path: 'src/a.ts',
+      commitSha: 'abcdef1',
+      startLine: 3,
+      endLine: 5,
+      snippet: 'a();',
+      snippetHash: 'hash',
+      checkedAt: new Date(),
+      checkedSha: 'abcdef1',
+      checkResult: PageEntryCitationCheckEnum.HOLDS,
+    },
+  ];
+
+  function withCitations(
+    options: Options = {},
+    checkForWrite: jest.Mock = jest.fn(async () => drafts),
+  ) {
+    const built = buildService(options);
+    const citations = {
+      checkForWrite,
+      retryLater: jest.fn(async (): Promise<void> => undefined),
+    };
+    const service = new PageEntriesService(
+      built.prisma,
+      undefined,
+      built.vectorService,
+      citations as unknown as EntryCitationsService,
+    );
+
+    return { ...built, service, citations };
+  }
+
+  it('[KG-2.1] [KG-2.2] stores the checked citations with the entry, in the same write', async () => {
+    const { service, created, citations } = withCitations();
+    const cited = [{ path: 'src/a.ts', lines: '3-5', sha: 'abcdef1' }];
+
+    await service.createEntry('page-1', AGENT, {
+      content: 'The importer drops the last row when the file has no newline.',
+      citations: cited,
+    });
+
+    expect(citations.checkForWrite).toHaveBeenCalledWith('workspace-1', cited);
+    expect(created).toEqual([
+      expect.objectContaining({ citations: { create: drafts } }),
+    ]);
+    // A citation the repository did not answer for is read again later.
+    expect(citations.retryLater).toHaveBeenCalledWith('entry-new', drafts);
+  });
+
+  it('[KG-2.2] writes nothing when a citation does not hold', async () => {
+    const refusal = new UnprocessableEntityException({
+      status: 'citation-failed',
+      citation: 1,
+      message: 'Nothing was written: citation 1 …',
+    });
+    const { service, created, prisma, citations } = withCitations(
+      {},
+      jest.fn(async () => {
+        throw refusal;
+      }),
+    );
+
+    await expect(
+      service.createEntry('page-1', AGENT, {
+        content:
+          'The importer drops the last row when the file has no newline.',
+        citations: [{ path: 'src/a.ts', lines: '99', sha: 'abcdef1' }],
+      }),
+    ).rejects.toBe(refusal);
+
+    expect(created).toEqual([]);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(citations.retryLater).not.toHaveBeenCalled();
+  });
+
+  it("[KG-2.2] reads no code for a write the page's own gates refuse, or one citing nothing", async () => {
+    const locked = withCitations({ policy: PageEntryPolicyEnum.LOCKED });
+
+    await expect(
+      locked.service.createEntry('page-1', AGENT, {
+        content:
+          'The importer drops the last row when the file has no newline.',
+        citations: [{ issue: 'ENG-1' }],
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(locked.citations.checkForWrite).not.toHaveBeenCalled();
+
+    const plain = withCitations();
+    await plain.service.createEntry('page-1', AGENT, {
+      content: 'The importer drops the last row when the file has no newline.',
+    });
+    expect(plain.citations.checkForWrite).not.toHaveBeenCalled();
+    expect(plain.created[0]).not.toHaveProperty('citations');
+  });
+
+  it('[KG-2.1] refuses citations rather than storing them unchecked when no checker is configured', async () => {
+    const { service, created } = buildService();
+
+    await expect(
+      service.createEntry('page-1', AGENT, {
+        content:
+          'The importer drops the last row when the file has no newline.',
+        citations: [{ issue: 'ENG-1' }],
+      }),
+    ).rejects.toThrow('no checker');
+    expect(created).toEqual([]);
+  });
+});
+
+describe('an entry as it is written', () => {
+  it('[KG-2.8] comes back with its trust, citations and last check, so the writer sees what they came to', async () => {
+    const checkedAt = new Date('2026-09-27T01:00:00Z');
+    const { prisma, vectorService } = buildService();
+    const withCitations = new PageEntriesService(
+      prisma,
+      undefined,
+      vectorService,
+      {
+        checkForWrite: jest.fn(async () => [
+          {
+            kind: PageEntryCitationKindEnum.CODE,
+            moduleRepoId: 'repo-1',
+            path: 'src/a.ts',
+            commitSha: 'abcdef1',
+            startLine: 3,
+            endLine: 5,
+            snippet: 'a();',
+            snippetHash: 'hash',
+            checkedAt,
+            checkedSha: 'abcdef1',
+            checkResult: PageEntryCitationCheckEnum.HOLDS,
+          },
+          {
+            kind: PageEntryCitationKindEnum.CODE,
+            moduleRepoId: 'repo-1',
+            path: 'src/b.ts',
+            commitSha: 'abcdef1',
+            startLine: 1,
+            endLine: 1,
+            checkedAt: null as Date | null,
+            checkResult: PageEntryCitationCheckEnum.UNKNOWN,
+          },
+        ]),
+        retryLater: jest.fn(async (): Promise<void> => undefined),
+      } as unknown as EntryCitationsService,
+    );
+
+    const entry = await withCitations.createEntry('page-1', AGENT, {
+      content: 'The importer drops the last row when the file has no newline.',
+      citations: [
+        { path: 'src/a.ts', lines: '3-5', sha: 'abcdef1' },
+        { path: 'src/b.ts', lines: '1', sha: 'abcdef1' },
+      ],
+    });
+
+    expect(entry).toMatchObject({
+      id: 'entry-new',
+      // Proposed: not grounded until a person accepts it.
+      trust: KnowledgeTrustEnum.UNGROUNDED,
+      citations: [
+        {
+          kind: 'CODE',
+          repo: 'acme/api',
+          path: 'src/a.ts',
+          lines: '3-5',
+          result: 'HOLDS',
+          checkedSha: 'abcdef1',
+        },
+        { kind: 'CODE', path: 'src/b.ts', lines: '1', result: 'UNKNOWN' },
+      ],
+      lastCheckedAt: checkedAt.toISOString(),
+      lastCheckedSha: 'abcdef1',
+    });
+  });
+
+  it('[KG-2.8] comes back with its proof when it is edited', async () => {
+    const { service, prisma } = buildService({ userType: 'User' });
+    (prisma.pageEntry.update as jest.Mock).mockImplementationOnce(
+      ({ where, data, include }) => ({
+        id: where.id,
+        status: PageEntryStatusEnum.STANDING,
+        verifiedAt: null,
+        ...data,
+        ...(include?.citations && {
+          citations: [
+            {
+              kind: 'ISSUE',
+              path: null,
+              commitSha: null,
+              startLine: null,
+              endLine: null,
+              targetLabel: 'ENG-42',
+              checkedAt: new Date('2026-09-27T01:00:00Z'),
+              checkedSha: null,
+              checkResult: 'HOLDS',
+              judgment: null,
+              judgeModel: null,
+              moduleRepo: null,
+            },
+          ],
+        }),
+      }),
+    );
+
+    const entry = await service.updateEntry('entry-1', HUMAN.userId, {
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    expect(entry).toMatchObject({
+      trust: KnowledgeTrustEnum.GROUNDED,
+      citations: [{ kind: 'ISSUE', target: 'ENG-42', result: 'HOLDS' }],
+    });
+  });
+});
+
+describe('entries as they are read', () => {
+  it('[KG-2.8] carry their trust tier, citations and last check', async () => {
+    const { service, prisma } = buildService();
+    const checkedAt = new Date('2026-09-20T10:00:00Z');
+    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValueOnce([
+      {
+        id: 'entry-1',
+        content: 'A fact.',
+        status: PageEntryStatusEnum.STANDING,
+        verifiedAt: null,
+        citations: [
+          {
+            kind: 'CODE',
+            path: 'src/a.ts',
+            commitSha: 'abcdef1',
+            startLine: 3,
+            endLine: 5,
+            targetLabel: null,
+            checkedAt,
+            checkedSha: 'fedcba9',
+            checkResult: 'MOVED',
+            judgment: null,
+            judgeModel: null,
+            moduleRepo: { fullName: 'acme/api' },
+          },
+        ],
+      },
+    ]);
+
+    const [entry] = await service.getEntries('workspace-1', {
+      pageId: 'page-1',
+    });
+
+    expect(entry).toMatchObject({
+      id: 'entry-1',
+      trust: KnowledgeTrustEnum.GROUNDED,
+      citations: [
+        {
+          kind: 'CODE',
+          repo: 'acme/api',
+          path: 'src/a.ts',
+          lines: '3-5',
+          commitSha: 'abcdef1',
+          result: 'MOVED',
+          checkedAt: checkedAt.toISOString(),
+          checkedSha: 'fedcba9',
+        },
+      ],
+      lastCheckedAt: checkedAt.toISOString(),
+      lastCheckedSha: 'fedcba9',
+    });
+    expect(
+      (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0].include,
+    ).toEqual({ citations: { select: expect.any(Object) } });
   });
 });

@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import {
   KnowledgeTriageDecisionType,
+  PageEntryMaintenanceAction,
+  PageEntryProposalState,
   PageEntryStatus,
   Prisma,
 } from '@prisma/client';
@@ -21,6 +23,11 @@ import { PrismaService } from 'nestjs-prisma';
 import { knowledgeSettings } from './knowledge-settings';
 import PageEntriesService from './page-entries.service';
 import { statusLeftBy } from './triage/agreement';
+import {
+  type MaintenanceEvidence,
+  proposalSummary,
+  reviewReasonOf,
+} from './upkeep/maintenance';
 
 const ENTRY_SELECT = {
   id: true,
@@ -53,9 +60,10 @@ type Decision = Prisma.KnowledgeTriageDecisionGetPayload<{
  * The review queue: what waits on a person, and why.
  *
  * Every entry still in the inbox, as before, with the reasons triage
- * escalated it when it did; and, beside them, decisions triage acted on that
- * were drawn for audit. Where triage is off, the queue is the inbox alone,
- * with nothing added to it.
+ * escalated it when it did; beside them, decisions triage acted on that were
+ * drawn for audit; and entries in use the gardener asks a person to archive.
+ * Where triage is off, the queue is the inbox and the gardener's proposals,
+ * with nothing of triage's added.
  */
 @Injectable()
 export default class KnowledgeReviewService {
@@ -136,6 +144,26 @@ export default class KnowledgeReviewService {
         )
       : [];
 
+    // Proposals about entries still in use. One whose entry a person has
+    // since moved (archived it by hand, disputed it) asks about nothing.
+    const proposals = await this.prisma.pageEntryMaintenance.findMany({
+      where: {
+        workspaceId,
+        action: PageEntryMaintenanceAction.ARCHIVE_PROPOSED,
+        proposalState: PageEntryProposalState.OPEN,
+        entry: { deleted: null, status: PageEntryStatus.STANDING, page },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        reason: true,
+        evidence: true,
+        issueId: true,
+        createdAt: true,
+        entry: { select: ENTRY_SELECT },
+      },
+    });
+
     const all: KnowledgeReviewItem[] = [
       ...waiting.map((entry) => {
         const decision = open.get(entry.id) ?? null;
@@ -151,6 +179,18 @@ export default class KnowledgeReviewService {
       ...audits.map((decision) =>
         item(decision.entry, decision, [KnowledgeReviewReasonEnum.AUDIT]),
       ),
+      ...proposals.map((proposal): KnowledgeReviewItem => ({
+        ...item(proposal.entry, null, [reviewReasonOf(proposal.reason)]),
+        proposal: {
+          id: proposal.id,
+          summary: proposalSummary(
+            proposal.reason,
+            proposal.evidence as MaintenanceEvidence | null,
+          ),
+          issueId: proposal.issueId,
+          createdAt: proposal.createdAt,
+        },
+      })),
     ];
 
     const counts = new Map<KnowledgeReviewReasonEnum, number>();
@@ -174,6 +214,101 @@ export default class KnowledgeReviewService {
         .map(([reason, count]) => ({ reason, count }))
         .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason)),
     };
+  }
+
+  /**
+   * A person's answer to the gardener's proposal to archive an entry.
+   * Accepting archives it through the same change a person makes by hand,
+   * with the proposal resolved in the same transaction; declining keeps it in
+   * use, and the gardener does not ask again for the same reason within the
+   * decay window. A second answer, or one about an entry that has moved on,
+   * is refused with 409.
+   */
+  async resolveProposal(
+    workspaceId: string,
+    proposalId: string,
+    userId: string,
+    accept: boolean,
+  ) {
+    const proposal = await this.prisma.pageEntryMaintenance.findFirst({
+      where: {
+        id: proposalId,
+        workspaceId,
+        action: PageEntryMaintenanceAction.ARCHIVE_PROPOSED,
+        entry: { deleted: null, page: { workspaceId, deleted: null } },
+      },
+      select: {
+        id: true,
+        entryId: true,
+        proposalState: true,
+        entry: { select: { status: true } },
+      },
+    });
+
+    if (!proposal) {
+      throw new NotFoundException({
+        message: `Proposal ${proposalId} not found`,
+      });
+    }
+
+    if (proposal.proposalState !== PageEntryProposalState.OPEN) {
+      throw new ConflictException({
+        message: `This proposal was already answered: ${String(proposal.proposalState).toLowerCase()}.`,
+      });
+    }
+
+    if (proposal.entry.status !== PageEntryStatus.STANDING) {
+      throw new ConflictException({
+        message:
+          `This entry has moved on since the proposal was made (it is now ` +
+          `${proposal.entry.status.toLowerCase()}). Act on the entry itself instead.`,
+      });
+    }
+
+    if (!accept) {
+      const { count } = await this.prisma.pageEntryMaintenance.updateMany({
+        where: { id: proposal.id, proposalState: PageEntryProposalState.OPEN },
+        data: {
+          proposalState: PageEntryProposalState.DECLINED,
+          resolvedById: userId,
+          resolvedAt: new Date(),
+        },
+      });
+
+      if (count === 0) {
+        throw new ConflictException({
+          message: 'This proposal was answered by someone else first.',
+        });
+      }
+
+      return { proposalId: proposal.id, accepted: false };
+    }
+
+    try {
+      await this.pageEntries.updateEntry(
+        proposal.entryId,
+        userId,
+        { status: PageEntryStatusEnum.ARCHIVED },
+        { proposal: proposal.id },
+      );
+    } catch (error) {
+      // Someone else's answer landed between the check above and this one,
+      // and this answer was rolled back with its change.
+      const now = await this.prisma.pageEntryMaintenance.findFirst({
+        where: { id: proposal.id },
+        select: { proposalState: true },
+      });
+
+      if (now && now.proposalState !== PageEntryProposalState.OPEN) {
+        throw new ConflictException({
+          message: 'This proposal was answered by someone else first.',
+        });
+      }
+
+      throw error;
+    }
+
+    return { proposalId: proposal.id, accepted: true };
   }
 
   /**

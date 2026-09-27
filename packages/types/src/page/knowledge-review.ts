@@ -19,7 +19,8 @@ export enum KnowledgeTriageDecisionEnum {
 
 /**
  * Why an entry is in front of a person: the reasons triage escalated it
- * with, or AUDIT for one it acted on that was drawn to be checked.
+ * with, AUDIT for one it acted on that was drawn to be checked, or the reason
+ * the gardener asks a person to archive one.
  */
 export enum KnowledgeReviewReasonEnum {
   CONTRADICTS_VERIFIED = 'CONTRADICTS_VERIFIED',
@@ -36,6 +37,14 @@ export enum KnowledgeReviewReasonEnum {
   HARMFUL_SIGNAL = 'HARMFUL_SIGNAL',
   AUDIT = 'AUDIT',
   LOW_AGREEMENT = 'LOW_AGREEMENT',
+  /** The code now contradicts a verified entry, or one on a locked page. */
+  CITATION_CONTRADICTED = 'CITATION_CONTRADICTED',
+  /** A change to the code removed a file the entry cites. */
+  CITATION_MISSING = 'CITATION_MISSING',
+  /** Cited code changed, and no judge could say whether the entry holds. */
+  CITATION_UNJUDGED = 'CITATION_UNJUDGED',
+  /** A verified entry nobody used or found to hold within the decay window. */
+  UNUSED = 'UNUSED',
 }
 
 /** What a person did with an entry triage had decided about. */
@@ -74,6 +83,22 @@ export interface KnowledgeReviewItem {
   policy: string | null;
   /** The decision it reached, when its type was backed off. */
   backedOffFrom: KnowledgeTriageDecisionEnum | null;
+  /**
+   * For an entry the gardener asks a person to archive, the proposal: the
+   * reasons then hold the one reason it gives, and the decision fields are
+   * null.
+   */
+  proposal?: KnowledgeReviewProposal | null;
+}
+
+/** What the gardener asks a person to do with an entry, and on what. */
+export interface KnowledgeReviewProposal {
+  id: string;
+  /** Said as a reviewer would read it: the file, the commit, the judge's reason. */
+  summary: string;
+  /** The correction issue opened with it, if one was. */
+  issueId: string | null;
+  createdAt: string | Date;
 }
 
 export interface KnowledgeReviewQueue {
@@ -125,6 +150,15 @@ export class KnowledgeReviewQueryDto {
 export class ResolveAuditDto {
   @IsBoolean()
   agree: boolean;
+}
+
+/**
+ * A person's answer to a proposal to archive an entry: archive it, or keep
+ * it as it is.
+ */
+export class ResolveProposalDto {
+  @IsBoolean()
+  accept: boolean;
 }
 
 /** Cells of the table one decision type is measured on. */

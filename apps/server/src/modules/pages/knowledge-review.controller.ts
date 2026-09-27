@@ -14,6 +14,7 @@ import {
   KnowledgeReviewQueryDto,
   parseReviewReasons,
   ResolveAuditDto,
+  ResolveProposalDto,
   RoleEnum,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
@@ -71,6 +72,26 @@ export class KnowledgeReviewController {
       // query string reaches the handler as a string however it validated.
       reasons: parseReviewReasons(query.reason),
     });
+  }
+
+  /** A person's answer to the gardener's proposal to archive an entry. */
+  @Post('review/proposals/:proposalId')
+  @UseGuards(AuthGuard)
+  async resolveProposal(
+    @Workspace() workspaceId: string,
+    @UserId() userId: string,
+    @Role() role: string,
+    @Param('proposalId') proposalId: string,
+    @Body() body: ResolveProposalDto,
+  ) {
+    forPeople(role);
+
+    return this.review.resolveProposal(
+      workspaceId,
+      proposalId,
+      userId,
+      body.accept,
+    );
   }
 
   /** A person's answer to an audit: was triage right to do what it did? */

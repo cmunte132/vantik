@@ -7,6 +7,8 @@ import { LoggerService } from 'modules/logger/logger.service';
 import EntryCitationsService from './entry-citations.service';
 import PageEntriesService from './page-entries.service';
 import {
+  CODE_LANDED_JOB,
+  type CodeLandedJob,
   DECAY_CRON,
   DECAY_JOB,
   DECAY_JOB_ID,
@@ -20,6 +22,7 @@ import {
   TRIAGE_ENTRY_JOB,
 } from './pages.interface';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
+import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
 
 /**
  * The scheduler for the decay pass.
@@ -139,6 +142,7 @@ export class PagesProcessor {
     private pageEntriesService: PageEntriesService,
     private entryCitations: EntryCitationsService,
     private triage: KnowledgeTriageService,
+    private upkeep: KnowledgeUpkeepService,
   ) {}
 
   /**
@@ -201,6 +205,17 @@ export class PagesProcessor {
       message: `Checked ${checked} citation(s) of entry ${job.data.entryId} after a harmful signal`,
       where: 'PagesProcessor.handleRecheckEntry',
     });
+  }
+
+  /**
+   * Checks the knowledge a change that landed on a default branch touches,
+   * and acts on what no longer holds. Throws while citations it touches are
+   * still unread, so Bull tries again after its backoff; a retry reads only
+   * those, since the job's creation time marks what was checked since.
+   */
+  @Process(CODE_LANDED_JOB)
+  async handleCodeLanded(job: { data: CodeLandedJob; timestamp: number }) {
+    await this.upkeep.codeLanded(job.data, new Date(job.timestamp));
   }
 
   /**

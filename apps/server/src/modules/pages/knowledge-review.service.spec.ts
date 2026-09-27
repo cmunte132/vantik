@@ -12,6 +12,9 @@ import {
   KnowledgeTriageDecisionType as Decision,
   KnowledgeTriagePolicy as Policy,
   KnowledgeVerdict as Verdict,
+  PageEntryMaintenanceAction as MaintenanceAction,
+  PageEntryMaintenanceReason as MaintenanceReason,
+  PageEntryProposalState as ProposalState,
 } from '@prisma/client';
 import {
   KnowledgeReviewReasonEnum,
@@ -138,6 +141,7 @@ interface Seed {
   entries: Row[];
   decisions?: Row[];
   backoff?: Row[];
+  maintenance?: Row[];
   preferences?: Row;
 }
 
@@ -160,6 +164,7 @@ function store(seed: Seed) {
   const entries = new Map(seed.entries.map((row) => [row.id as string, row]));
   const decisions = [...(seed.decisions ?? [])];
   const backoff = [...(seed.backoff ?? [])];
+  const maintenance = [...(seed.maintenance ?? [])];
   let clock = NOW;
 
   const entryView = (row: Row) => ({
@@ -175,6 +180,7 @@ function store(seed: Seed) {
 
     return { ...row, entry: of ? entryView(of) : null };
   };
+  const maintenanceView = decisionView;
   const apply = (row: Row, data: Row) => {
     for (const [key, value] of Object.entries(data)) {
       const step = value as { increment?: number; decrement?: number } | null;
@@ -336,6 +342,50 @@ function store(seed: Seed) {
         }),
       ),
     },
+    pageEntryMaintenance: {
+      findMany: jest.fn(
+        ({ where, orderBy }: { where: Where; orderBy?: unknown }) =>
+          lazy(() =>
+            ordered(
+              maintenance
+                .map(maintenanceView)
+                .filter((row) => matches(row, where)),
+              orderBy,
+            ),
+          ),
+      ),
+      findFirst: jest.fn(({ where }: { where: Where }) =>
+        lazy(
+          () =>
+            maintenance
+              .map(maintenanceView)
+              .find((row) => matches(row, where)) ?? null,
+        ),
+      ),
+      update: jest.fn(({ where, data }: { where: Where; data: Row }) =>
+        lazy(() => {
+          const row = maintenance.find((candidate) =>
+            matches(candidate, where),
+          );
+
+          if (!row) {
+            throw new Error('Record to update not found.');
+          }
+
+          apply(row, data);
+
+          return row;
+        }),
+      ),
+      updateMany: jest.fn(({ where, data }: { where: Where; data: Row }) =>
+        lazy(() => {
+          const found = maintenance.filter((row) => matches(row, where));
+          found.forEach((row) => apply(row, data));
+
+          return { count: found.length };
+        }),
+      ),
+    },
     $executeRaw: jest.fn(() => lazy(() => 1)),
   };
 
@@ -343,6 +393,7 @@ function store(seed: Seed) {
     entries: [...entries.values()].map((row) => ({ ...row })),
     decisions: decisions.map((row) => ({ ...row })),
     backoff: backoff.length,
+    maintenance: maintenance.map((row) => ({ ...row })),
   });
   const restore = (saved: ReturnType<typeof snapshot>) => {
     saved.entries.forEach((row) =>
@@ -350,6 +401,7 @@ function store(seed: Seed) {
     );
     decisions.splice(0, decisions.length, ...saved.decisions);
     backoff.length = saved.backoff;
+    maintenance.splice(0, maintenance.length, ...saved.maintenance);
   };
 
   const prisma = {
@@ -377,7 +429,7 @@ function store(seed: Seed) {
     ),
   };
 
-  return { prisma, entries, decisions, backoff };
+  return { prisma, entries, decisions, backoff, maintenance };
 }
 
 // ------------------------------------------------------------------ fixtures
@@ -1699,5 +1751,248 @@ describe('backing off as verdicts arrive', () => {
       }),
     );
     failed.mockRestore();
+  });
+});
+
+describe("the gardener's proposals", () => {
+  function proposal(entryId: string, overrides: Row = {}): Row {
+    return {
+      id: `proposal-${entryId}`,
+      createdAt: daysAgo(1),
+      updatedAt: daysAgo(1),
+      workspaceId: WORKSPACE,
+      entryId,
+      action: MaintenanceAction.ARCHIVE_PROPOSED,
+      reason: MaintenanceReason.CITATION_MISSING,
+      evidence: {
+        change: {
+          sha: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678',
+          externalRepoId: 'gh-1',
+          repo: 'acme/api',
+        },
+        citations: [
+          {
+            citationId: 'c1',
+            path: 'src/retry.ts',
+            lines: '2-4',
+            readSha: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678',
+            result: 'MISSING',
+            judgment: null,
+            judgeModel: null,
+            judgeReason: null,
+          },
+        ],
+      },
+      issueId: null,
+      proposalState: ProposalState.OPEN,
+      resolvedById: null,
+      resolvedAt: null,
+      reversedById: null,
+      reversedAt: null,
+      ...overrides,
+    };
+  }
+  const inUse = (id: string, overrides: Row = {}) =>
+    entry(id, {
+      status: PageEntryStatusEnum.STANDING,
+      sourceUserId: 'person-2',
+      ...overrides,
+    });
+  const proposed = (t: ReturnType<typeof harness>, entryId: string) =>
+    t.maintenance.find((row) => row.id === `proposal-${entryId}`) as Row;
+
+  it('[KG-6.2] lists what the gardener asks a person to archive, with what it found, with triage off too', async () => {
+    const t = harness({
+      entries: [
+        entry('waiting'),
+        inUse('gone'),
+        inUse('moved-on', { status: PageEntryStatusEnum.ARCHIVED }),
+        inUse('answered'),
+        inUse('foreign', { pageId: FOREIGN_PAGE }),
+      ],
+      maintenance: [
+        proposal('gone'),
+        proposal('moved-on'),
+        proposal('answered', { proposalState: ProposalState.DECLINED }),
+        proposal('foreign', { workspaceId: OTHER_WORKSPACE }),
+      ],
+      preferences: { knowledge: { autoTriage: 'off' } },
+    });
+
+    const queue = await t.review.queue(WORKSPACE);
+
+    expect(queue.items.map((item) => item.entry.id)).toEqual([
+      'waiting',
+      'gone',
+    ]);
+    const [, gone] = queue.items;
+
+    expect(gone).toMatchObject({
+      reasons: [KnowledgeReviewReasonEnum.CITATION_MISSING],
+      decisionId: null,
+      audit: false,
+      proposal: { id: 'proposal-gone', issueId: null },
+    });
+    expect(gone.proposal?.summary).toContain('src/retry.ts lines 2-4 is gone');
+    expect(gone.proposal?.summary).toContain('a1b2c3d');
+    expect(queue.reasons).toEqual([
+      { reason: KnowledgeReviewReasonEnum.CITATION_MISSING, count: 1 },
+    ]);
+  });
+
+  it('[KG-6.2] archiving on a proposal takes the entry out of use and resolves it; a second answer is refused', async () => {
+    const t = harness({
+      entries: [inUse('gone')],
+      maintenance: [proposal('gone')],
+    });
+
+    await expect(
+      t.controller.resolveProposal(
+        WORKSPACE,
+        'person-1',
+        RoleEnum.USER,
+        'proposal-gone',
+        { accept: true },
+      ),
+    ).resolves.toEqual({ proposalId: 'proposal-gone', accepted: true });
+
+    expect(t.entries.get('gone')?.status).toBe(PageEntryStatusEnum.ARCHIVED);
+    expect(proposed(t, 'gone')).toMatchObject({
+      proposalState: ProposalState.ACCEPTED,
+      resolvedById: 'person-1',
+    });
+    await expect(
+      t.review.resolveProposal(WORKSPACE, 'proposal-gone', 'person-2', false),
+    ).rejects.toThrow('already answered: accepted');
+  });
+
+  it('[KG-6.2] of two answers at once, keeps the first and rolls back the second with its change', async () => {
+    const t = harness({
+      entries: [inUse('gone')],
+      maintenance: [proposal('gone')],
+    });
+    const transaction = t.prisma.$transaction as jest.Mock;
+    const run = transaction.getMockImplementation() as (
+      work: unknown,
+    ) => Promise<unknown>;
+
+    transaction.mockImplementationOnce(async (work: unknown) => {
+      Object.assign(proposed(t, 'gone'), {
+        proposalState: ProposalState.DECLINED,
+        resolvedById: 'person-2',
+      });
+      return run(work);
+    });
+
+    await expect(
+      t.review.resolveProposal(WORKSPACE, 'proposal-gone', 'person-1', true),
+    ).rejects.toThrow('answered by someone else first');
+    expect(t.entries.get('gone')?.status).toBe(PageEntryStatusEnum.STANDING);
+    expect(proposed(t, 'gone')).toMatchObject({ resolvedById: 'person-2' });
+  });
+
+  it('[KG-6.2] keeping the entry declines the proposal and leaves it in use', async () => {
+    const t = harness({
+      entries: [inUse('gone')],
+      maintenance: [proposal('gone')],
+    });
+
+    await t.review.resolveProposal(
+      WORKSPACE,
+      'proposal-gone',
+      'person-1',
+      false,
+    );
+
+    expect(t.entries.get('gone')?.status).toBe(PageEntryStatusEnum.STANDING);
+    expect(proposed(t, 'gone')).toMatchObject({
+      proposalState: ProposalState.DECLINED,
+      resolvedById: 'person-1',
+    });
+    expect((await t.review.queue(WORKSPACE)).items).toEqual([]);
+  });
+
+  it('[KG-6.2] cannot be answered once its entry has moved on, by an agent, or from another workspace', async () => {
+    const t = harness({
+      entries: [
+        inUse('moved-on', { status: PageEntryStatusEnum.DISPUTED }),
+        inUse('gone'),
+        inUse('foreign', { pageId: FOREIGN_PAGE }),
+      ],
+      maintenance: [
+        proposal('moved-on'),
+        proposal('gone'),
+        proposal('foreign', { workspaceId: OTHER_WORKSPACE }),
+      ],
+    });
+
+    await expect(
+      t.review.resolveProposal(
+        WORKSPACE,
+        'proposal-moved-on',
+        'person-1',
+        true,
+      ),
+    ).rejects.toThrow('has moved on');
+    await expect(
+      t.controller.resolveProposal(
+        WORKSPACE,
+        'agent-1',
+        RoleEnum.AGENT,
+        'proposal-gone',
+        { accept: true },
+      ),
+    ).rejects.toThrow('Review is for people');
+    await expect(
+      t.review.resolveProposal(WORKSPACE, 'proposal-foreign', 'person-1', true),
+    ).rejects.toThrow('not found');
+    expect(proposed(t, 'gone').proposalState).toBe(ProposalState.OPEN);
+    expect(t.entries.get('moved-on')?.status).toBe(
+      PageEntryStatusEnum.DISPUTED,
+    );
+  });
+
+  it('[KG-6.2] a person putting back an entry the gardener took out of use records the undo', async () => {
+    const undone = (id: string, action: MaintenanceAction): Row => ({
+      ...proposal(id),
+      id: `done-${id}`,
+      action,
+      reason:
+        action === MaintenanceAction.DISPUTED
+          ? MaintenanceReason.CITATION_CONTRADICTED
+          : MaintenanceReason.HARMFUL_SIGNALS,
+      proposalState: null,
+    });
+    const t = harness({
+      entries: [
+        inUse('disputed', { status: PageEntryStatusEnum.DISPUTED }),
+        inUse('archived', { status: PageEntryStatusEnum.ARCHIVED }),
+        inUse('kept-out', { status: PageEntryStatusEnum.DISPUTED }),
+      ],
+      maintenance: [
+        undone('disputed', MaintenanceAction.DISPUTED),
+        undone('archived', MaintenanceAction.ARCHIVED),
+        undone('kept-out', MaintenanceAction.DISPUTED),
+      ],
+    });
+    const done = (id: string) =>
+      t.maintenance.find((row) => row.id === `done-${id}`) as Row;
+
+    await t.pageEntries.updateEntry('disputed', 'person-1', {
+      status: PageEntryStatusEnum.STANDING,
+    });
+    await t.pageEntries.bulkUpdate(WORKSPACE, 'person-2', {
+      entryIds: ['archived'],
+      status: PageEntryStatusEnum.STANDING,
+    });
+    // Agreeing that it is wrong is not an undo.
+    await t.pageEntries.updateEntry('kept-out', 'person-1', {
+      status: PageEntryStatusEnum.ARCHIVED,
+    });
+
+    expect(done('disputed')).toMatchObject({ reversedById: 'person-1' });
+    expect(done('disputed').reversedAt).toBeInstanceOf(Date);
+    expect(done('archived')).toMatchObject({ reversedById: 'person-2' });
+    expect(done('kept-out')).toMatchObject({ reversedAt: null });
   });
 });

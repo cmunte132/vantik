@@ -111,10 +111,11 @@ model AgentRun {
   pullRequestOutcome  AgentRunPullRequestOutcome?
   pullRequestClosedAt DateTime?
 
-  events       AgentRunEvent[]
-  iterations   AgentRunIteration[]
-  entryUses    PageEntryUse[]
-  entrySignals PageEntrySignal[]
+  events            AgentRunEvent[]
+  iterations        AgentRunIteration[]
+  entryUses         PageEntryUse[]
+  entrySignals      PageEntrySignal[]
+  knowledgeFindings KnowledgeFinding[]
 
   @@index([workspaceId, status])
   @@index([issueId])
@@ -915,6 +916,10 @@ model PageEntry {
   triageDecisions KnowledgeTriageDecision[]
   relationsFrom   PageEntryRelation[]       @relation("PageEntryRelationFrom")
   relationsTo     PageEntryRelation[]       @relation("PageEntryRelationTo")
+  maintenance     PageEntryMaintenance[]
+  /// The reviewer findings this entry was proposed from, for a candidate
+  /// convention.
+  findings        KnowledgeFinding[]
 
   @@index([pageId])
   @@index([status])
@@ -1135,6 +1140,89 @@ model KnowledgeBackoffChange {
   @@index([workspaceId, decision, createdAt])
 }
 
+/// Something the gardener did to an entry on its own, or asks a person to do,
+/// and why.
+///
+/// Knowledge is kept true by changes nobody asked for at the time: a claim the
+/// code now contradicts is taken out of use, a convention whose outcomes went
+/// against it is disabled. Each is recorded with what it rested on, so a
+/// person can see why an entry changed and undo it, and an undo is recorded
+/// too. What the gardener may not do alone, archiving an entry a person
+/// verified or one whose cited file is gone, is a proposal, which waits in the
+/// review queue until a person accepts or declines it.
+model PageEntryMaintenance {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+
+  entry   PageEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entryId String
+
+  action PageEntryMaintenanceAction
+  reason PageEntryMaintenanceReason
+  /// What it rested on: the citation and the commit it was read at, the
+  /// judge's reason, the counts and the margin, the window.
+  evidence Json?
+
+  /// The correction issue opened for a claim the code now contradicts.
+  issueId String?
+
+  /// A proposal's state: OPEN until a person accepts or declines it. Null for
+  /// a change made alone.
+  proposalState PageEntryProposalState?
+  resolvedById  String?
+  resolvedAt    DateTime?
+
+  /// For a change made alone: when a person undid it, and who.
+  reversedById String?
+  reversedAt   DateTime?
+
+  @@index([workspaceId, proposalState])
+  @@index([entryId, action])
+}
+
+/// One reviewer finding in one agent run, placed in a module by the file it
+/// points at.
+///
+/// A reviewer telling several runs the same thing about the same module is a
+/// rule the module has that nobody wrote down, which is what a candidate
+/// convention is made of. One row per run, module and finding, so distinct
+/// runs can be counted; linked to the candidate once one is written, so the
+/// same findings do not propose it twice.
+model KnowledgeFinding {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  workspaceId String
+  moduleId    String
+
+  agentRun   AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  agentRunId String
+
+  /// The reviewer's words, as it gave them.
+  message String
+  /// The message's words, lower-cased and without the common ones, which
+  /// findings are compared by.
+  words   String[]
+  /// sha256 of the module and the words, so one run records a finding once.
+  key     String
+
+  /// The evidence as the reviewer gave it (`src/thing.ts:42`), and the file
+  /// and line read from it.
+  evidence String?
+  path     String?
+  line     Int?
+
+  /// The candidate convention written from this finding and those like it.
+  candidate   PageEntry? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+  candidateId String?
+
+  @@unique([agentRunId, key])
+  @@index([workspaceId, moduleId, createdAt])
+}
+
 /// How one entry relates to another, as triage found it.
 ///
 /// Relations are rows beside the entries, never edits to them: no entry's
@@ -1189,6 +1277,15 @@ model PageKnowledgeGap {
   count Int    @default(1)
 
   workspaceId String
+
+  /// The issue opened to answer it, once one is. A gap has at most one, so
+  /// the job that opens them never opens a second for the same question.
+  issueId    String?
+  /// The module the question resolved to when its issue was opened, if one.
+  moduleId   String?
+  /// When an entry citing that issue was accepted, and which.
+  answeredAt        DateTime?
+  answeredByEntryId String?
 
   @@unique([workspaceId, query])
   @@index([workspaceId])
@@ -2059,6 +2156,40 @@ enum KnowledgeEscalationReason {
   /// People have lately disagreed with decisions of the type it reached, so
   /// a person decides instead (see KnowledgeBackoffChange).
   LOW_AGREEMENT
+}
+
+/// What the gardener did to an entry, or asks a person to do.
+enum PageEntryMaintenanceAction {
+  /// Taken out of use as DISPUTED, with a correction issue opened.
+  DISPUTED
+  /// Archived.
+  ARCHIVED
+  /// A person is asked to archive it.
+  ARCHIVE_PROPOSED
+}
+
+/// Why the gardener changed an entry, or proposes to.
+enum PageEntryMaintenanceReason {
+  /// A change to the code left a cited snippet changed, and a judge found the
+  /// code now contradicts the claim.
+  CITATION_CONTRADICTED
+  /// A change to the code removed a cited file.
+  CITATION_MISSING
+  /// A change to the code left a cited snippet changed, and no judge could
+  /// say whether the claim still holds.
+  CITATION_UNJUDGED
+  /// Neither served nor found to hold by a check within the decay window.
+  UNUSED
+  /// A candidate convention whose harmful outcomes outnumber its helpful ones
+  /// by the margin.
+  HARMFUL_SIGNALS
+}
+
+/// Where a proposal to a person stands.
+enum PageEntryProposalState {
+  OPEN
+  ACCEPTED
+  DECLINED
 }
 
 /// What a person did with an entry triage had decided about.

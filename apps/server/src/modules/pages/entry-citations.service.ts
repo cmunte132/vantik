@@ -4,6 +4,7 @@ import {
   Optional,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { PageEntryStatus, Prisma } from '@prisma/client';
 import {
   PageEntryCitationCheckEnum,
   PageEntryCitationInputDto,
@@ -33,6 +34,7 @@ import {
 } from './citation-matching';
 import KnowledgeIndexService from './knowledge-index.service';
 import {
+  type CodeLandedJob,
   PAGES_QUEUE,
   RETRY_CITATIONS_JOB,
   retryCitationsJobOptions,
@@ -127,6 +129,37 @@ const JUDGE_CONTEXT_LINES = 20;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const ISSUE_KEY = /^([A-Za-z][A-Za-z0-9]*)-(\d+)$/;
+
+/** A code citation checked against a change that landed, and what it found. */
+export interface LandedCheck {
+  citationId: string;
+  entryId: string;
+  /** The entry's status when the change was checked. */
+  entryStatus: PageEntryStatus;
+  path: string;
+  /** The lines it cited before this check. */
+  startLine: number;
+  endLine: number;
+  /** The code as it was cited. */
+  snippet: string;
+  /** The module repository it was read from; null when none lists it now. */
+  moduleRepoId: string | null;
+  /** The commit it was read at; null when there was nothing to read. */
+  readSha: string | null;
+  result: PageEntryCitationCheckEnum;
+  judgment: PageEntryCitationJudgmentEnum | null;
+  judgeModel: string | null;
+  judgeReason: string | null;
+  /** What to store on the citation. */
+  update: Prisma.PageEntryCitationUncheckedUpdateInput;
+}
+
+/** An entry's content and origin, as checking one of its citations needs. */
+interface CheckedEntry {
+  content: string;
+  sourceSession: string | null;
+  page: { workspaceId: string };
+}
 
 interface CitationRow {
   id: string;
@@ -583,6 +616,131 @@ export default class EntryCitationsService {
   }
 
   /**
+   * Checks the code citations a change that landed on a repository's default
+   * branch touches: those of live entries, in use or waiting, citing one of
+   * the changed files in that repository under any module that lists it.
+   *
+   * Each is read at the head of the default branch, which contains the
+   * change: it is the change's own commit unless more has landed since.
+   * Reading the change's commit when newer ones have landed could put back
+   * what a later check found, since changes are handled by several workers
+   * and not always in the order they landed.
+   *
+   * Left alone: a citation already checked at the change's commit, or since
+   * `since`, when the job for this change was queued, since any check since
+   * then read a head that contains the change. So the same commit reported
+   * twice (a merged pull request and the push of its merge commit) is
+   * checked once, and a retry reads only what could not be read before. A
+   * citation never read, or one that never held, says nothing about this
+   * change and is left to its retry.
+   *
+   * Nothing is written: each check comes back with what to store, for the
+   * caller to store with whatever it does about the result, so a failure
+   * between the two cannot leave a result stored and not acted on. Returns
+   * how many could not be read, so the caller can try again.
+   */
+  async recheckLanded(
+    change: CodeLandedJob,
+    since: Date,
+  ): Promise<{ checks: LandedCheck[]; unread: number }> {
+    const paths = [
+      ...new Set(
+        change.changedPaths
+          .map((path) => cleanRepoPath(path))
+          .filter((path): path is string => path !== null),
+      ),
+    ];
+
+    if (paths.length === 0) {
+      return { checks: [], unread: 0 };
+    }
+
+    // Deleted rows too: a citation keeps the row it was written against, and
+    // is read through whichever row lists the repository now.
+    const rows = await this.prisma.moduleRepo.findMany({
+      where: {
+        externalRepoId: change.externalRepoId,
+        module: { workspaceId: change.workspaceId },
+      },
+      select: { id: true },
+    });
+
+    if (rows.length === 0) {
+      return { checks: [], unread: 0 };
+    }
+
+    const citations = await this.prisma.pageEntryCitation.findMany({
+      where: {
+        kind: PageEntryCitationKindEnum.CODE,
+        moduleRepoId: { in: rows.map((row) => row.id) },
+        path: { in: paths },
+        snippet: { not: null },
+        checkResult: { not: PageEntryCitationCheckEnum.UNKNOWN },
+        AND: [
+          { OR: [{ checkedSha: null }, { checkedSha: { not: change.sha } }] },
+          { OR: [{ checkedAt: null }, { checkedAt: { lt: since } }] },
+        ],
+        entry: {
+          deleted: null,
+          status: { in: [PageEntryStatus.STANDING, PageEntryStatus.PROPOSED] },
+          page: { workspaceId: change.workspaceId, deleted: null },
+        },
+      },
+      orderBy: { id: 'asc' },
+      select: {
+        ...CITATION_SELECT,
+        entry: {
+          select: {
+            id: true,
+            status: true,
+            content: true,
+            sourceSession: true,
+            page: { select: { workspaceId: true } },
+          },
+        },
+      },
+    });
+
+    const checks: LandedCheck[] = [];
+    const reads = new RepoReads(this.files);
+    let unread = 0;
+
+    for (const citation of citations) {
+      const range = rangeOf(citation);
+
+      if (!range || !citation.path || !citation.snippet) {
+        continue;
+      }
+
+      const update = await this.recheckCode(citation.entry, citation, reads);
+
+      if (!update) {
+        unread++;
+        continue;
+      }
+
+      checks.push({
+        citationId: citation.id,
+        entryId: citation.entry.id,
+        entryStatus: citation.entry.status,
+        path: citation.path,
+        startLine: range.start,
+        endLine: range.end,
+        snippet: citation.snippet,
+        moduleRepoId: 'moduleRepoId' in update ? update.moduleRepoId : null,
+        readSha: 'checkedSha' in update ? update.checkedSha : null,
+        result: update.checkResult,
+        judgment: update.judgment,
+        judgeModel: update.judgeModel,
+        judgeReason: update.judgeReason,
+        update,
+      });
+    }
+
+    return { checks, unread };
+  }
+
+  /**
    * Reads again the code citations that could not be read when they were
    * written. The write checked everything it could; this finishes the job.
    * Returns how many are still unread, so the caller can try again later.
@@ -703,9 +861,7 @@ export default class EntryCitationsService {
   }
 
   private async recheckCode(
-    entry: NonNullable<
-      Awaited<ReturnType<EntryCitationsService['entryWithCitations']>>
-    >,
+    entry: CheckedEntry,
     citation: CitationRow,
     reads: RepoReads,
   ) {
@@ -838,21 +994,7 @@ export default class EntryCitationsService {
         content: true,
         sourceSession: true,
         page: { select: { workspaceId: true } },
-        citations: {
-          select: {
-            id: true,
-            kind: true,
-            moduleRepoId: true,
-            path: true,
-            commitSha: true,
-            startLine: true,
-            endLine: true,
-            snippet: true,
-            targetId: true,
-            checkResult: true,
-            pendingQuote: true,
-          },
-        },
+        citations: { select: CITATION_SELECT },
       },
     });
   }
@@ -916,6 +1058,20 @@ export default class EntryCitationsService {
     return live ? { ...live, workspaceId } : null;
   }
 }
+
+const CITATION_SELECT = {
+  id: true,
+  kind: true,
+  moduleRepoId: true,
+  path: true,
+  commitSha: true,
+  startLine: true,
+  endLine: true,
+  snippet: true,
+  targetId: true,
+  checkResult: true,
+  pendingQuote: true,
+} as const;
 
 /** A judgment only describes a CHANGED check; any other clears it. */
 const NO_JUDGMENT = {

@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
 import { IntegrationsModule } from 'modules/integrations/integrations.module';
+import { IssuesModule } from 'modules/issues/issues.module';
 import { LocalRepoModule } from 'modules/local-repo/local-repo.module';
 import { UsersService } from 'modules/users/users.service';
 import { VectorModule } from 'modules/vector/vector.module';
@@ -28,6 +29,8 @@ import RepoFileSourceService from './repo-file-source.service';
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
 import TriageJudges from './triage/triage-judges';
+import KnowledgeIssues from './upkeep/knowledge-issues';
+import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
 
 @Module({
   imports: [
@@ -35,6 +38,8 @@ import TriageJudges from './triage/triage-judges';
     // For reading the code a citation names, from whichever source holds it.
     IntegrationsModule,
     LocalRepoModule,
+    // The gardener opens issues for knowledge that needs a person.
+    IssuesModule,
     BullModule.registerQueue({ name: PAGES_QUEUE }),
   ],
   controllers: [
@@ -56,6 +61,8 @@ import TriageJudges from './triage/triage-judges';
     KnowledgeTriageService,
     KnowledgeAgreementService,
     KnowledgeReviewService,
+    KnowledgeIssues,
+    KnowledgeUpkeepService,
     PagesScheduler,
     EntryModulesScheduler,
     PagesProcessor,

@@ -31,6 +31,7 @@ import {
   PagesScheduler,
 } from './pages.processor';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
+import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
 
 function buildQueue(existing: Array<{ name: string; key: string }> = []) {
   return {
@@ -97,6 +98,7 @@ describe('PagesProcessor', () => {
       service,
       {} as EntryCitationsService,
       {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
     ).handleDecay();
 
     // Unscoped deliberately: the windows are a property of the deployment, not
@@ -154,6 +156,7 @@ describe('re-resolving entry modules', () => {
       { recomputeModules } as unknown as PageEntriesService,
       {} as EntryCitationsService,
       {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
     );
 
     await processor.handleRecomputeModules({ data: { workspaceId: 'ws-1' } });
@@ -170,6 +173,7 @@ describe('retrying citations that could not be read', () => {
       {} as PageEntriesService,
       { retryUnknown } as unknown as EntryCitationsService,
       {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
     );
 
     return { processor, retryUnknown };
@@ -212,6 +216,7 @@ describe('checking an entry again after a harmful signal', () => {
       {} as PageEntriesService,
       { recheck } as unknown as EntryCitationsService,
       {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
     );
 
     await expect(
@@ -248,6 +253,7 @@ describe('triaging a new entry', () => {
       {} as PageEntriesService,
       {} as EntryCitationsService,
       { triage } as unknown as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
     );
 
     await expect(
@@ -265,10 +271,43 @@ describe('triaging a new entry', () => {
           throw new Error('typesense is down');
         }),
       } as unknown as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
     );
 
     await expect(
       processor.handleTriageEntry({ data: { entryId: 'entry-1' } }),
     ).rejects.toThrow('typesense is down');
+  });
+});
+
+describe('a change that landed', () => {
+  it('[KG-6.2] is handed to the upkeep with the time its job was queued, and fails the job while citations are unread', async () => {
+    const codeLanded = jest.fn(async () => ({
+      checked: 1,
+      disputed: 0,
+      proposed: 0,
+      unread: 0,
+    }));
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      {} as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      { codeLanded } as unknown as KnowledgeUpkeepService,
+    );
+    const data = {
+      workspaceId: 'workspace-1',
+      externalRepoId: 'repo-1',
+      sha: 'a'.repeat(40),
+      changedPaths: ['src/main.ts'],
+    };
+
+    await processor.handleCodeLanded({ data, timestamp: 1_700_000_000_000 });
+
+    expect(codeLanded).toHaveBeenCalledWith(data, new Date(1_700_000_000_000));
+
+    codeLanded.mockRejectedValueOnce(new Error('1 citation(s) unread'));
+    await expect(
+      processor.handleCodeLanded({ data, timestamp: 1_700_000_000_000 }),
+    ).rejects.toThrow('unread');
   });
 });

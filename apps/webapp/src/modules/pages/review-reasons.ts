@@ -29,6 +29,10 @@ export const REASON_LABELS: Record<KnowledgeReviewReasonEnum, string> = {
   [KnowledgeReviewReasonEnum.HARMFUL_SIGNAL]: 'Runs went wrong with it',
   [KnowledgeReviewReasonEnum.AUDIT]: 'Audit',
   [KnowledgeReviewReasonEnum.LOW_AGREEMENT]: 'Triage is holding back',
+  [KnowledgeReviewReasonEnum.CITATION_CONTRADICTED]: 'The code now disagrees',
+  [KnowledgeReviewReasonEnum.CITATION_MISSING]: 'Its cited file is gone',
+  [KnowledgeReviewReasonEnum.CITATION_UNJUDGED]: 'Its cited code changed',
+  [KnowledgeReviewReasonEnum.UNUSED]: 'Nobody uses it',
 };
 
 /** One row of the queue. */
@@ -41,34 +45,59 @@ export interface ReviewRow {
     decision: KnowledgeTriageDecisionEnum;
     policy: string | null;
   } | null;
+  /** For an entry in use the gardener asks you to archive, what it found. */
+  proposal?: { id: string; summary: string } | null;
 }
 
 /**
  * The queue's rows: every entry waiting, as before, each with the reasons
- * triage gave for holding it back; then the decisions drawn for audit.
+ * triage gave for holding it back; then the decisions drawn for audit; then
+ * the entries in use the gardener asks you to archive.
  *
  * The waiting entries come from the synced store, so the queue stays live;
- * the reasons and audits from the review endpoint. Until that answers, and
- * whenever triage is off, the rows are exactly the entries waiting, with no
- * reasons and nothing else, which is the queue as it was before triage.
+ * the reasons, audits and proposals from the review endpoint. Until that
+ * answers, the rows are exactly the entries waiting, with no reasons and
+ * nothing else, which is the queue as it was before triage. Whenever triage
+ * is off, the gardener's proposals are added to that and nothing of
+ * triage's.
  */
 export function reviewRows(
   waiting: PageEntryType[],
   review: KnowledgeReviewQueue | undefined,
   find: (entryId: string, pageId: string) => PageEntryType | undefined,
 ): ReviewRow[] {
+  const proposals = (review?.items ?? []).flatMap((item): ReviewRow[] =>
+    item.proposal
+      ? [
+          {
+            entry: find(item.entry.id, item.entry.pageId) ?? fromItem(item),
+            reasons: item.reasons,
+            audit: null,
+            proposal: { id: item.proposal.id, summary: item.proposal.summary },
+          },
+        ]
+      : [],
+  );
+
   if (!review || review.autoTriage === 'off') {
-    return waiting.map((entry): ReviewRow => ({
-      entry,
-      reasons: [],
-      audit: null,
-    }));
+    return [
+      ...waiting.map((entry): ReviewRow => ({
+        entry,
+        reasons: [],
+        audit: null,
+      })),
+      ...proposals,
+    ];
   }
 
   const reasons = new Map<string, KnowledgeReviewReasonEnum[]>();
   const audits: KnowledgeReviewItem[] = [];
 
   for (const item of review.items) {
+    if (item.proposal) {
+      continue;
+    }
+
     if (item.audit) {
       audits.push(item);
     } else {
@@ -97,6 +126,7 @@ export function reviewRows(
           ]
         : [],
     ),
+    ...proposals,
   ];
 }
 
@@ -161,7 +191,24 @@ export function auditPrompt(audit: NonNullable<ReviewRow['audit']>): {
   }
 }
 
-/** An audited entry the store does not hold, as the endpoint sent it. */
+/**
+ * What a proposal asks, and what each answer does. Archiving takes the entry
+ * out of use as you would by hand; keeping it leaves it in use, and the
+ * gardener does not ask again for the same reason for a while.
+ */
+export function proposalPrompt(proposal: NonNullable<ReviewRow['proposal']>): {
+  question: string;
+  agree: string;
+  disagree: string;
+} {
+  return {
+    question: `${proposal.summary} Archive it?`,
+    agree: 'Archive it',
+    disagree: 'Keep it',
+  };
+}
+
+/** A row's entry the store does not hold, as the endpoint sent it. */
 function fromItem(item: KnowledgeReviewItem): PageEntryType {
   const createdAt = String(item.entry.createdAt);
 

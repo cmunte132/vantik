@@ -18,7 +18,7 @@ import {
   UpdatePageEntryDto,
   UserTypeEnum,
 } from '@vantikhq/types';
-import { Prisma } from '@prisma/client';
+import { PageEntryProposalState, Prisma } from '@prisma/client';
 import type { Queue } from 'bull';
 import { createHash } from 'node:crypto';
 import { PrismaService } from 'nestjs-prisma';
@@ -49,6 +49,7 @@ import {
 } from './pages.interface';
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 import { secretIn } from './triage/triage-policy';
+import { reversalsFor } from './upkeep/maintenance';
 
 @Injectable()
 export default class PageEntriesService {
@@ -311,7 +312,7 @@ export default class PageEntriesService {
     entryId: string,
     userId: string,
     entryData: UpdatePageEntryDto,
-    options: { audit?: string } = {},
+    options: { audit?: string; proposal?: string } = {},
   ): Promise<PageEntry> {
     const current = await this.prisma.pageEntry.findFirst({
       where: { id: entryId, deleted: null },
@@ -389,6 +390,37 @@ export default class PageEntriesService {
       });
     }
 
+    // A person putting back what the gardener took out of use undoes it, and
+    // says so on the record the gardener reads before acting again.
+    const reversals =
+      agent || entryData.status === undefined
+        ? []
+        : reversalsFor(
+            this.prisma,
+            [{ id: entryId, status: current.status }],
+            entryData.status,
+            userId,
+          );
+    // A proposal answered by this change is resolved with it, and only while
+    // it is still open: of two people answering at once, the second's change
+    // fails with its answer.
+    const proposal = options.proposal
+      ? [
+          this.prisma.pageEntryMaintenance.update({
+            where: {
+              id: options.proposal,
+              entryId,
+              proposalState: PageEntryProposalState.OPEN,
+            },
+            data: {
+              proposalState: PageEntryProposalState.ACCEPTED,
+              resolvedById: userId,
+              resolvedAt: new Date(),
+            },
+          }),
+        ]
+      : [];
+
     const [entry] = await this.prisma.$transaction([
       this.prisma.pageEntry.update({
         where: { id: entryId },
@@ -415,6 +447,8 @@ export default class PageEntriesService {
       }),
       ...settled.operations,
       ...verdicts.operations,
+      ...reversals,
+      ...proposal,
     ]);
     await this.indexer?.entryChanged(entryId);
     await this.indexer?.entriesChanged(settled.retired);
@@ -491,6 +525,7 @@ export default class PageEntriesService {
         }),
         ...settled.operations,
         ...verdicts.operations,
+        ...reversalsFor(this.prisma, eligibleEntries, input.status, userId),
       ]);
       await this.indexer?.entriesChanged([...eligible, ...settled.retired]);
       await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);

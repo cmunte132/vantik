@@ -5,9 +5,10 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 6, starting (phases 4 and 5 reviewed and done). Phases 4
-  and 5 go in the second pull request, after PR #44 (phase 1's review
-  fixes, phase 2 and phase 3), which is merged.
+- Current phase: 6, in progress: KG-6.1 and KG-6.2 implemented and
+  mutation-checked; KG-6.5, KG-6.3 and KG-6.4 next, then the review.
+  Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
+  request.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
@@ -674,6 +675,104 @@ next session starts by reading it.
   columns, a table, two indexes). Replayed on postgres 16 over the earlier
   migrations; the diff against the schema is then empty. The new table is
   not replicated.
+
+### Phase 6
+
+- **Landed changes (KG-6.1).** `CodeChangeEvent` gains `mergeSha`: the
+  merge commit of a pull request merged into the repository's default
+  branch, or the new head of a push to that branch. A merge into any other
+  branch has none: its code is not what agents are told about. A push is
+  recognised by its shape (a `ref`, an `after` and a `commits` list, no
+  `pull_request`), must be to `refs/heads/<default_branch>`, not a deletion,
+  and its paths come from the commits' added, modified and removed lists
+  (the head commit's when the list is empty); it names no issue keys, so
+  routing is unchanged. `ModuleRoutingProcessor` routes keyed changes as
+  before, and queues `recheckLandedChange` on the `pages` queue for any
+  change with a `mergeSha` and paths, with the job id
+  `recheckLandedChange:<workspace>:<repo>:<sha>`, so a merged pull request
+  and the push of its merge commit queue one job while either is waiting.
+- **Re-checking a landed change (KG-6.2).** `EntryCitationsService.recheckLanded`
+  finds CODE citations by `(moduleRepoId, path)`: every module repository
+  row with the change's `externalRepoId` in the workspace, deleted rows
+  included (a citation keeps the row it was written against), and the
+  changed paths, cleaned as citation paths are. Only live STANDING or
+  PROPOSED entries, only citations that held once (they have a snippet), and
+  not UNKNOWN ones, which their retry reads at the commit they cite.
+  - **The commit read.** Each is read at the head of the default branch,
+    not at the merge SHA itself. The head contains the change, and is the
+    merge SHA unless more has landed since; jobs run on several workers and
+    not always in the order changes landed, so reading an older commit than
+    the newest could put back a result a later change had already
+    corrected. The merge SHA names the job, is cited in the evidence, and
+    skips a citation already checked at it. Also skipped: a citation checked
+    since the job was queued (Bull's `job.timestamp`), since any check since
+    then read a head containing the change. That makes the duplicate report
+    and a retry read only what is left.
+  - **Nothing is written by the check.** Each result comes back with what to
+    store, and the upkeep stores it in the same transaction as what it does
+    about it, so a crash cannot leave a result stored and not acted on
+    (the retry would skip it). Unread citations fail the job after
+    everything read was acted on; Bull retries with its backoff.
+  - **What is done (`upkeep/knowledge-upkeep.service.ts`).** HOLDS and MOVED
+    are stored (check time and sha; MOVED also the lines). For an entry in
+    use: CHANGED with a CONTRADICTED judgment moves it to DISPUTED (a
+    conditional `updateMany` on STANDING and unverified) with a
+    `PageEntryMaintenance` row (DISPUTED, CITATION_CONTRADICTED, evidence:
+    the change and each citation's path, lines, sha read and judgment) and a
+    correction issue. MISSING gives an archive proposal
+    (ARCHIVE_PROPOSED, CITATION_MISSING). CHANGED with no judgment either
+    way (UNCLEAR, as without an LLM) gives a proposal with
+    CITATION_UNJUDGED: the no-LLM escalation. Contradicted beats missing
+    beats unjudged, one row per entry per change. A PROPOSED entry is only
+    checked: triage reads the fresh results.
+  - **When it asks instead of acting.** A verified entry, one on a LOCKED
+    page, or one a person put back after a dispute in the last 90 days
+    (`STANDING_ENTRY_DECAY_DAYS`) gets an archive proposal with
+    CITATION_CONTRADICTED and the same issue, not a dispute: a person has
+    read the claim or the code, and the judge is a model. A proposal is not
+    made while one is open for the entry, nor for 90 days after a person
+    declined one for the same reason, so the queue does not ask again on
+    every change to the file.
+  - **The correction issue (`upkeep/knowledge-issues.ts`).** Opened through
+    `IssuesService.createIssueAPI` (numbering, history, notifications and
+    the team's triage suggestions all apply) by a System bot member
+    (`ensureIntegrationBot`, slug `vantik-knowledge`), with no assignee: a
+    person or the team's own automation decides. The team: the module's
+    owning team; a module a product owns has none and a product has no
+    default team, so the first live team it links stands in, then the team
+    with the most issues in the modules, then the workspace's oldest team.
+    The modules: the cited file's module and the entry's modules. The state:
+    the team's TRIAGE state, else BACKLOG, else UNSTARTED, else its first.
+    The label `knowledge`, made on first use (revived if deleted). The
+    title quotes the entry; the body cites the entry id and page, the
+    change's sha and repository, each citation's lines as cited and the
+    judge's reason, all through `redactSecrets`, since cited code can hold a
+    credential the entry never could. The issue is opened after the dispute
+    commits; one a run failed to open is opened by the next run in the
+    workspace once the row is ten minutes old, claimed by a compare-and-set
+    on `updatedAt` so two runs never open two.
+  - **Proposals in the review queue.** `GET /api/v1/knowledge/review` lists
+    open proposals whose entry is still STANDING, with or without triage,
+    with the reason (`CITATION_MISSING`, `CITATION_UNJUDGED`,
+    `CITATION_CONTRADICTED`, and later `UNUSED`) and a summary built from
+    the evidence. `POST /api/v1/knowledge/review/proposals/:id {accept}`:
+    accepting archives the entry through `updateEntry`, with the proposal
+    resolved (`update` where OPEN) in the same transaction, so of two
+    answers the second fails with its change (409); declining marks it
+    DECLINED with a conditional update. People only. The webapp shows each
+    as a question with "Archive it" and "Keep it", never in bulk.
+  - **Undo.** A person setting STANDING on a DISPUTED or ARCHIVED entry
+    (`updateEntry` or bulk) marks the gardener's unreversed DISPUTED or
+    ARCHIVED rows for it reversed, in the same transaction. Archiving a
+    disputed entry is agreeing with it, not an undo.
+  - **Tests.** The fakes of two existing suites gained a
+    `pageEntryMaintenance` table (the undo write goes through it); no
+    assertion changed.
+- **Migration** `20260927060000_knowledge_upkeep`: `prisma migrate diff`'s
+  output for all of phase 6 (three enums, `PageEntryMaintenance`,
+  `KnowledgeFinding`, and four nullable columns on `PageKnowledgeGap`).
+  Replayed on postgres 16 over the earlier migrations; the diff against
+  the schema is then empty. The new tables are not replicated.
 
 ## Phase reviews
 
@@ -1478,3 +1577,10 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-27: Phase 5 review round 4: both round 3 points resolved, no
   unresolved findings from any round. Phase 5 review: PASS. Verify through
   phase 5: PASS, 45/45. Phase 5 done; starting phase 6.
+- 2026-09-27: KG-6.1 (merged pull requests and default-branch pushes carry
+  the commit they landed as; one re-check job per commit) and KG-6.2
+  (landed changes re-check the citations they touch; disputes with a
+  correction issue labelled knowledge; archive proposals in the review
+  queue; undo recorded) implemented with tagged tests. Mutation-checked:
+  19 server mutants for KG-6.2, 15 killed at once, three survivors and one
+  that did not compile killed by new tests or a compiling rewording.

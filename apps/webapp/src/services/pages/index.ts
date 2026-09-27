@@ -398,6 +398,24 @@ export const useResolveAuditMutation = mutationHook(resolveAudit, {
   invalidates: ['knowledge-review', 'knowledge-agreement'],
 });
 
+export interface ResolveProposalParams {
+  proposalId: string;
+  /** Whether to archive the entry, as the gardener asks. */
+  accept: boolean;
+}
+
+export function resolveProposal({ proposalId, accept }: ResolveProposalParams) {
+  return ajaxPost({
+    url: `/api/v1/knowledge/review/proposals/${proposalId}`,
+    data: { accept },
+  });
+}
+
+// Accepting archives the entry, which can be one an audit was about.
+export const useResolveProposalMutation = mutationHook(resolveProposal, {
+  invalidates: ['knowledge-review', 'knowledge-agreement'],
+});
+
 /**
  * How far triage and people agree, per decision type, and which types have
  * stopped acting because of it. Moves only as verdicts arrive.

@@ -10,6 +10,7 @@ import { PageEntryStatus, type PageEntryType } from 'common/types';
 
 import {
   auditPrompt,
+  proposalPrompt,
   REASON_LABELS,
   reasonFacets,
   reviewRows,
@@ -251,5 +252,55 @@ describe('the review queue', () => {
     expect(folded.disagree).toBe('Not a repeat: use it');
     expect(refused.question).toMatch(/several claims/);
     expect(refused.disagree).toBe('Use it');
+  });
+
+  it("[KG-6.2] shows the gardener's proposals, with triage off too, each answered on its own", () => {
+    const inUse = entry({ id: 'gone', status: PageEntryStatus.STANDING });
+    const proposed = item({
+      entryId: 'gone',
+      decisionId: null,
+      decision: null,
+      mode: null,
+      reasons: [KnowledgeReviewReasonEnum.CITATION_MISSING],
+      proposal: {
+        id: 'proposal-1',
+        summary: 'src/retry.ts lines 2-4 is gone at a1b2c3d (acme/api).',
+        issueId: null,
+        createdAt: '2026-09-20T10:00:00.000Z',
+      },
+    });
+
+    for (const autoTriage of ['on', 'off'] as const) {
+      const rows = reviewRows(
+        [entry({ id: 'a' })],
+        queue([item({ entryId: 'a' }), proposed], autoTriage),
+        (entryId) => (entryId === 'gone' ? inUse : undefined),
+      );
+
+      expect(rows.map((row) => row.entry.id)).toEqual(['a', 'gone']);
+      expect(rows[1]).toEqual({
+        entry: inUse,
+        reasons: ['CITATION_MISSING'],
+        audit: null,
+        proposal: {
+          id: 'proposal-1',
+          summary: 'src/retry.ts lines 2-4 is gone at a1b2c3d (acme/api).',
+        },
+      });
+      // Not a waiting fact, so nothing else is said about it.
+      expect(rows[0].proposal).toBeUndefined();
+    }
+
+    // Before the server answers, the inbox alone.
+    expect(reviewRows([entry({ id: 'a' })], undefined, nowhere)).toHaveLength(
+      1,
+    );
+
+    const prompt = proposalPrompt({ id: 'proposal-1', summary: 'It is gone.' });
+    expect(prompt).toEqual({
+      question: 'It is gone. Archive it?',
+      agree: 'Archive it',
+      disagree: 'Keep it',
+    });
   });
 });

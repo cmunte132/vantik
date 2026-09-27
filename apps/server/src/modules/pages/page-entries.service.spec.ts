@@ -1093,6 +1093,10 @@ describe('corrections', () => {
           }),
         ),
       },
+      // Nothing the gardener did to these entries, so nothing to undo.
+      pageEntryMaintenance: {
+        updateMany: jest.fn(() => deferred(() => ({ count: 0 }))),
+      },
       // Like Prisma, nothing runs until the transaction does, and then in the
       // order of the array, not the order the service happened to build it.
       $transaction: jest.fn(async (writes: Array<Deferred<unknown>>) =>

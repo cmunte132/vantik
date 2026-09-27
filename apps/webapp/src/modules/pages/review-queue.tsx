@@ -11,6 +11,7 @@ import {
   useBulkTriageMutation,
   useKnowledgeReview,
   useResolveAuditMutation,
+  useResolveProposalMutation,
 } from 'services/pages';
 
 import { useContextStore } from 'store/global-context-provider';
@@ -18,6 +19,7 @@ import { useContextStore } from 'store/global-context-provider';
 import { EntryRow } from './entry-row';
 import {
   auditPrompt,
+  proposalPrompt,
   REASON_LABELS,
   reasonFacets,
   reviewRows,
@@ -198,9 +200,10 @@ const ReasonFilter = observer(
 );
 
 /**
- * One row: a waiting fact with its choices, or an audit with its question.
- * An audit is answered on its own, never in bulk, since each asks whether
- * triage was right about that one fact.
+ * One row: a waiting fact with its choices, or an audit or a proposal with
+ * its question. Either is answered on its own, never in bulk: an audit asks
+ * whether triage was right about that one fact, a proposal whether the
+ * change the gardener found means that one fact should go.
  */
 const QueueRow = observer(
   ({
@@ -213,32 +216,42 @@ const QueueRow = observer(
     onToggle: (id: string) => void;
   }) => {
     const { mutate: answer } = useResolveAuditMutation();
-    const { audit } = row;
+    const { mutate: answerProposal } = useResolveProposalMutation();
+    const { audit, proposal } = row;
+    const question = audit
+      ? {
+          ...auditPrompt(audit),
+          onAnswer: (agree: boolean) =>
+            answer({ decisionId: audit.decisionId, agree }),
+        }
+      : proposal
+        ? {
+            ...proposalPrompt(proposal),
+            onAnswer: (accept: boolean) =>
+              answerProposal({ proposalId: proposal.id, accept }),
+          }
+        : undefined;
 
     return (
       <EntryRow
         entry={row.entry}
         variant="review"
         reasons={row.reasons.map((reason) => REASON_LABELS[reason])}
-        audit={
-          audit
-            ? {
-                ...auditPrompt(audit),
-                onAnswer: (agree: boolean) =>
-                  answer({ decisionId: audit.decisionId, agree }),
-              }
-            : undefined
-        }
-        selected={!audit && selected.has(row.entry.id)}
+        audit={question}
+        selected={!question && selected.has(row.entry.id)}
         selecting={selected.size > 0}
-        onToggle={audit ? undefined : onToggle}
+        onToggle={question ? undefined : onToggle}
       />
     );
   },
 );
 
 function rowKey(row: ReviewRow): string {
-  return row.audit ? `audit:${row.audit.decisionId}` : row.entry.id;
+  return row.audit
+    ? `audit:${row.audit.decisionId}`
+    : row.proposal
+      ? `proposal:${row.proposal.id}`
+      : row.entry.id;
 }
 
 /**
@@ -273,9 +286,9 @@ const ByPage = observer(
         {[...groups.entries()].map(([pageId, group]) => {
           const page = pagesStore.getPageWithId(pageId);
           // Selecting a page selects what can be decided in bulk: its
-          // waiting facts, not its audits.
+          // waiting facts, not its audits or proposals.
           const ids = group
-            .filter((row) => !row.audit)
+            .filter((row) => !row.audit && !row.proposal)
             .map((row) => row.entry.id);
           const allSelected =
             ids.length > 0 && ids.every((id) => selected.has(id));

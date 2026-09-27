@@ -890,7 +890,8 @@ export default class EntryCitationsService {
    * acted on. A reading taken before a person last acted on the entry is
    * read again, as nothing acts on it. A citation never read, or one that
    * never held, says nothing about this change and is left to its retry,
-   * which hands a citation found to hold at an older commit back here.
+   * which hands a citation found to hold at an older commit back here, to
+   * be checked alone (`citationIds`).
    *
    * Nothing is written: each check comes back with what to store, for the
    * caller to store with whatever it does about the result, so a failure
@@ -931,6 +932,7 @@ export default class EntryCitationsService {
         kind: PageEntryCitationKindEnum.CODE,
         moduleRepoId: { in: rows.map((row) => row.id) },
         path: { in: paths },
+        ...(change.citationIds ? { id: { in: change.citationIds } } : {}),
         snippet: { not: null },
         checkResult: { not: PageEntryCitationCheckEnum.UNKNOWN },
         entry: {
@@ -1145,6 +1147,7 @@ export default class EntryCitationsService {
         sha: head.sha,
         changedPaths: [citation.path],
         ...(sha ? { since: sha } : {}),
+        citationIds: [citation.id],
       };
 
       try {

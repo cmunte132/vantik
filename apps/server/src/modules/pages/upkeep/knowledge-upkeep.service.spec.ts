@@ -1425,7 +1425,7 @@ describe('a change that landed re-checks the citations it touches', () => {
         checkResult: Check.HOLDS,
         checkedSha: cited,
       });
-      const job = { ...landed(), since: cited };
+      const job = { ...landed(), since: cited, citationIds: ['c1'] };
       expect(queue.add).toHaveBeenCalledTimes(1);
       expect(queue.add).toHaveBeenCalledWith(
         CODE_LANDED_JOB,
@@ -1449,8 +1449,12 @@ describe('a change that landed re-checks the citations it touches', () => {
       // so the correction issue names none of them as the change.
       expect(t.issues).toHaveLength(1);
       expect(t.issues[0].descriptionMarkdown).toContain(
-        `It was checked at \`${SHA}\` on acme/api, against the changes ` +
-          `that landed after \`${cited}\`, the commit it was first read at.`,
+        'It was checked at the head of the default branch on acme/api, ' +
+          `against the changes that landed after \`${cited}\`, the commit ` +
+          'it was first read at.',
+      );
+      expect(t.issues[0].descriptionMarkdown).toContain(
+        `read at \`${SHA.slice(0, 7)}\``,
       );
       expect(t.issues[0].descriptionMarkdown).not.toContain('landed as');
     }
@@ -1519,12 +1523,64 @@ describe('a change that landed re-checks the citations it touches', () => {
           sha: NEWER,
           changedPaths: ['src/retry.ts'],
           since: read1,
+          citationIds: ['c1'],
         },
         expect.objectContaining({
           jobId: `${CODE_LANDED_JOB}:citation:c1:${NEWER}`,
         }),
       );
     }
+  });
+
+  it('[KG-6.2] checks only the citation it hands on, not the other citations of its file', async () => {
+    const cited = 'c'.repeat(40);
+    const older = 'b'.repeat(40);
+    const t = harness({
+      entries: [entry('e1'), entry('e2')],
+      citations: [
+        citation('c1', 'e1', {
+          checkResult: Check.UNKNOWN,
+          checkedAt: null,
+          checkedSha: null,
+        }),
+        // Read at an older commit: a change's own job gave up on it, or its
+        // entry came back into use since.
+        citation('c2', 'e2', { commitSha: older, checkedSha: older }),
+      ],
+    });
+    t.repo.code['src/retry.ts'] = CHANGED;
+    const read = t.files.read.getMockImplementation() as NonNullable<
+      ReturnType<typeof t.files.read.getMockImplementation>
+    >;
+    t.files.read.mockImplementation(async (repo, path, ref) =>
+      ref === cited ? { content: ORIGINAL } : read(repo, path, ref),
+    );
+    const queue = { add: jest.fn(async (): Promise<void> => undefined) };
+
+    await new EntryCitationsService(
+      t.prisma as never,
+      t.files as never,
+      t.judge as never,
+      undefined,
+      queue as never,
+    ).retryUnknown('e1');
+
+    const [[, job]] = queue.add.mock.calls as unknown as Array<
+      [string, CodeLandedJob]
+    >;
+    const summary = await t.upkeep.codeLanded(job);
+
+    expect(summary).toMatchObject({ checked: 1, disputed: 1 });
+    expect(t.reads).toEqual([{ path: 'src/retry.ts', ref: SHA }]);
+    expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
+    // c2 is left to the checks of the changes themselves, whose commits it
+    // was not read at.
+    expect(t.entries.get('e2')?.status).toBe(Status.STANDING);
+    expect(t.citations.find((c) => c.id === 'c2')).toMatchObject({
+      checkedSha: older,
+      judgment: null,
+    });
+    expect(t.issues).toHaveLength(1);
   });
 
   it('[KG-6.2] hands the landed check nothing for a first reading that no change since could have been checked against', async () => {

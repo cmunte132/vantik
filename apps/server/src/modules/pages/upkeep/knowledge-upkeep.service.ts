@@ -737,7 +737,8 @@ function correctionMarkdown(
  * What the check was of. A citation handed on after its first reading is
  * checked at the head against every change since the commit it was read at,
  * and which of them changed the cited code is not known, so no one commit is
- * named as the change.
+ * named as the change. Nor is the head named: the check read whatever the
+ * head was when it ran, which the citation's own line gives.
  */
 function changeText(
   change: NonNullable<MaintenanceEvidence['change']>,
@@ -745,8 +746,9 @@ function changeText(
   const on = change.repo ? ` on ${change.repo}` : '';
 
   return change.since
-    ? `It was checked at \`${change.sha}\`${on}, against the changes that ` +
-        `landed after \`${change.since}\`, the commit it was first read at.`
+    ? `It was checked at the head of the default branch${on}, against the ` +
+        `changes that landed after \`${change.since}\`, the commit it was ` +
+        'first read at.'
     : `The change landed as \`${change.sha}\`${on}.`;
 }
 

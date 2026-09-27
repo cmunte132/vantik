@@ -11,7 +11,8 @@ next session starts by reading it.
   3 PASS with four non-blocking findings, all fixed; round 4 PASS with
   two low findings, both fixed; round 5 PASS with one non-blocking
   finding, fixed; round 6 PASS with two non-blocking findings, both
-  fixed; round 7 next, to confirm them. PR #45
+  fixed; round 7 PASS with two non-blocking findings, both fixed; round 8
+  next, to confirm them. PR #45
   is open from this branch, so the phase 6 commits are in it too; its
   description says so.
   Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
@@ -759,14 +760,16 @@ next session starts by reading it.
     again once the reading is stored, the citation is handed to the
     landed-change check at the head (`checkSinceCited`: a
     `CODE_LANDED_JOB` for the head and the cited path, carrying the commit
-    read as `since`, under a job id of its own), so the changes that
-    landed meanwhile are checked against it after all. Asking again, rather
+    read as `since` and the citation as `citationIds`, under a job id of
+    its own), so the changes that landed meanwhile are checked against it
+    after all. The job checks that citation alone: the other citations of
+    its file were checked by the changes' own jobs. Asking again, rather
     than reusing the head the reading's own job asked for, covers a change
     that landed while the citation was read. A reading that lost to a
     newer one has already been acted on, and is not handed on. The
     correction issue of a handed-on check says it was checked at the head
     against the changes since the commit read, naming none of them as the
-    change.
+    change; the citation's own line gives the commit the head was.
   - **A person's word is newer.** A reading taken before a person last put
     the entry back (the newest `reversedAt` of its maintenance rows), or a
     judgment of words the entry no longer has (`judgedContentHash`, a new
@@ -1906,6 +1909,31 @@ passed back in, from both callers and from the re-check alone; `since`
 dropped from the job, from the evidence and from the wording; the
 repository dropped from it). Full server suite: 1834 passed, 15 skipped.
 
+### Phase 6, round 7 (same reviewer, on the round 6 fixes)
+
+The reviewer read ca142cd..0fdfc7d, ran tsc and the full server suite
+(1834 passed), and re-ran the round 6 probes: both now queue one job, at
+the new head, with `since` the commit read. The extra head ask costs one
+request per repository per retry or re-check that stored a holding first
+reading; a retried job keeps its `since`. Verdict PASS, with two
+non-blocking findings, both fixed:
+
+- **W1 (low). The handed-on job checked every citation of its file.** Its
+  `since` then went into the evidence and correction issue of other
+  entries, whose citations were not read at that commit, and their
+  citations were read and judged again. The job now carries
+  `citationIds: [the citation]`, and `recheckLanded` checks only those.
+  Test: "[KG-6.2] checks only the citation it hands on, not the other
+  citations of its file" (a second entry citing the file, read at an older
+  commit, is neither read nor acted on; one issue, one dispute).
+- **W2 (cosmetic). The issue named the head at the handoff,** which can be
+  older than the head the job read. It now says "checked at the head of
+  the default branch", and the citation's line gives the commit read;
+  the handoff test asserts both.
+
+Mutation-checked: 3 mutants over these fixes, all killed. Full server
+suite: 1835 passed, 15 skipped.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -2170,3 +2198,7 @@ Give the evidence, and stop until the maintainer answers.
   again after the store, so a change landing while a citation was read is
   checked against it; a handed-on check's correction issue names the
   commit read rather than a single change. 6 mutants, all killed.
+- 2026-09-27: Phase 6 review round 7: PASS, with two non-blocking
+  findings, both fixed with tagged tests: a handed-on job checks only its
+  citation (`citationIds`), and its issue names the head only through the
+  citation's line. 3 mutants, all killed.

@@ -204,6 +204,12 @@ export interface CodeLandedJob {
    * and not of one change that landed as `sha`.
    */
   since?: string;
+  /**
+   * For a citation handed on after its first reading: only it is checked.
+   * The other citations of its file were checked by the changes' own jobs,
+   * and `since` is not the commit they were read at.
+   */
+  citationIds?: string[];
 }
 
 /**

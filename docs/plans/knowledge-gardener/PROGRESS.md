@@ -7,7 +7,8 @@ next session starts by reading it.
 
 - Current phase: 6, in review: KG-6.1 to KG-6.5 implemented and
   mutation-checked; review round 1 (FAIL, two blocking findings) fixed and
-  answered, round 2 next. PR #45
+  answered; round 2 PASS with five non-blocking findings, all fixed; round
+  3 next, to confirm them. PR #45
   is open from this branch, so the phase 6 commits are in it too; its
   description says so.
   Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
@@ -691,11 +692,13 @@ next session starts by reading it.
   `pull_request`), must be to `refs/heads/<default_branch>`, not a deletion,
   and its paths come from the commits' added, modified and removed lists
   (the head commit's when the list is empty); it names no issue keys, so
-  routing is unchanged. For a merged pull request, a page of its files
-  that fails fails the webhook's job, which Bull tries again (three
-  attempts): a list cut short would leave knowledge citing the rest
-  unchecked, with nothing to check it later. An open pull request keeps the
-  pages it read, as before. `ModuleRoutingProcessor` routes keyed changes
+  routing is unchanged. For a pull request merged into the default branch,
+  a page of its files that fails fails the webhook's job, which Bull tries
+  again (three attempts): a list cut short would leave knowledge citing the
+  rest unchecked, with nothing to check it later. Any other pull request,
+  open or merged elsewhere, keeps the pages it read, as before, since its
+  files are only routed; and one merged elsewhere that names no issue is
+  not read at all. `ModuleRoutingProcessor` routes keyed changes
   as before, and queues `recheckLandedChange` on the `pages` queue for any
   change with a `mergeSha` on the default branch and paths, with the job id
   `recheckLandedChange:<workspace>:<repo>:<sha>`, so a merged pull request
@@ -719,18 +722,34 @@ next session starts by reading it.
     never read less. A reading is stored only over an older one
     (`readBefore`), by a landed change's check and by the re-check after a
     harmful signal alike, each under the entry's advisory lock
-    (`knowledge-entry:<id>`). Where a newer reading is stored already, the
-    landed check acts on that one instead: its head was asked for after
-    this change landed, so it contains it, and a re-check stores what it
-    finds without acting on it.
+    (`knowledge-entry:<id>`). What is acted on is what is stored once the
+    lock is held: the check's own reading, or a newer one stored first,
+    whose head was asked for after this change landed, so it contains it
+    (a re-check stores what it finds without acting on it). A stored
+    reading the check found when it queried is read again under the lock
+    too. A reading of the commit a citation cites (the retry of an unread
+    citation, or the re-check of one) is stored only while the citation is
+    still unread, under the lock: it is older than any head read since.
+    Stamps come from the servers' clocks; two readings could be misordered
+    only if their heads were asked for within the servers' skew of each
+    other with a change landing between, which is noted at `readBefore`.
   - **Read once.** A citation already read at the change's own commit is
     not read or judged again: that reading comes back as stored and is
-    acted on like any other. So the duplicate report (a merged pull request
-    and the push of its merge commit) is read and judged once, a retry
-    reads only what is left while the head is still that commit, and a
+    acted on like any other. So while the change is still the head, the
+    duplicate report (a merged pull request and the push of its merge
+    commit) is read and judged once and a retry reads only what is left;
+    once more has landed, the second report reads the newer head. A
     contradiction a re-check stored at that commit is acted on here. The
     first version also skipped anything checked since the job was queued;
     round 1 of the review found that unsound (below), and it is gone.
+  - **A person's word is newer.** A reading taken before a person last put
+    the entry back (the newest `reversedAt` of its maintenance rows), or a
+    judgment of words the entry no longer has (`judgedContentHash`, a new
+    column holding the entry's content hash the judge read), is not acted
+    on: the job counts it as stale and is retried, and the retry reads and
+    judges it again rather than reusing it. A contradiction a person has
+    already put back, the same citation read at the same commit and
+    disputed for the same words, is not raised again.
   - **Nothing is written by the check.** Each result comes back with what to
     store, and the upkeep stores it in the same transaction as what it does
     about it, so a crash cannot leave a result stored and not acted on.
@@ -1661,6 +1680,67 @@ compile or matched twice at first and were reworded; one (a blank
 per-workspace schedule read as a schedule) survived and a new case killed
 it. Full server suite: 1817 passed, 15 skipped.
 
+### Phase 6, round 2 (same reviewer, on the round 1 fixes)
+
+The reviewer read 8e3d8db..e17beb7 and the answers above, re-ran the
+phase 6 suites, tsc and the full server suite, checked on Postgres that
+the entry lock can be taken twice in one transaction, and reproduced each
+new finding with the real services in scratch specs. All eleven round 1
+findings resolved. Verdict PASS, with five non-blocking findings and a
+doc nit, all fixed:
+
+- **N1. A stored reading the check found when it queried was acted on as
+  found**, so a fix stored meanwhile was missed. `settle` now reads every
+  reading it did not store itself again under the lock. Test: "[KG-6.2]
+  acts on what is stored once it holds the lock, not on a stored reading
+  it found before".
+- **N2. A reading of the commit a citation cites could replace a newer
+  reading of a head** (`readUnread` stamps when it finishes; the retry
+  stored unconditionally and without the lock). Both the retry and the
+  re-check now store such a reading only while the citation is still
+  unread, under the entry's lock. The servers'-clock remark is answered at
+  `readBefore`: a misorder needs two head asks within the servers' skew
+  and a change landing between them, and taking stamps from the database
+  would mean taking every stamp compared with them from there too
+  (write-time checks, reversals). Test: "[KG-6.2] never lets a reading of
+  the commit a citation cites replace a reading of a head" (retry and
+  re-check).
+- **N3. A stored reading at the change's commit was acted on again after
+  a person acted on it** (B1 corrected and put back: re-disputed on the old
+  words' judgment; B2 put back unchanged: asked again about the reading
+  they overruled). A reading taken before the entry was last put back, or
+  judging other words (new column `judgedContentHash`, migration
+  `20260927070000_citation_judged_claim`, cross-checked with
+  `prisma migrate diff`), is no longer reused or acted on; the job is
+  retried and reads and judges again. And a contradiction a person put
+  back for the same words, citation and commit is not raised again. Tests
+  in "a person acting on an entry after its citations were read": B2
+  ("reads again on its retry, and does not raise again, a contradiction a
+  person overruled"), B1 ("judges the words a person corrected an entry to
+  on its retry, not the words disputed"), a rewording without a dispute,
+  a rewording while the judge reads, and a reading stored before a
+  put-back found under the lock; plus the evidence of "disputes again an
+  entry a person corrected before putting it back, and asks about one put
+  back unchanged" now names other citations and commits, which must not
+  count.
+- **N4. Merges into another branch were fetched and could fail for
+  nothing.** Only a merge into the default branch fails on a refused page;
+  a merge elsewhere that names no issue is not read; `codeChangeOf`'s doc
+  says so. Tests: "[KG-6.1] reads a keyed pull request merged into another
+  branch ..., and keeps the files it could read", "[KG-6.1] reads nothing
+  of a pull request merged into another branch that names no issue".
+- **N5. "Judged once" held only while the change is the head.** The doc
+  and the test now say so, and the test shows the second report reading a
+  newer head. Reusing any reading stamped after the job was queued was not
+  taken: a reading of the commit a citation cites is stored over an unread
+  citation later than that and says nothing about the change.
+- **Doc nit.** The `CITATION_CONTRADICTED` review reason's comment names
+  all three reasons it is asked about.
+
+Mutation-checked: 21 mutants over these fixes, all killed (two did not
+compile at first and were reworded). Full server suite: 1825 passed, 15
+skipped.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -1899,3 +1979,11 @@ Give the evidence, and stop until the maintainer answers.
   recorded, and a corrected entry disputed again; gap issues switchable
   per workspace; the gardener refused on locked pages; the agent guides
   updated. 39 mutants, all killed.
+- 2026-09-27: Phase 6 review round 2: PASS, with five non-blocking
+  findings, all fixed with tagged tests: `settle` acts on what is stored
+  under the lock; a reading of a cited commit is stored only over an
+  unread citation, under the lock; a reading taken before a person put the
+  entry back, or judging words it no longer has (new `judgedContentHash`),
+  is read again, and an overruled contradiction is not raised again; merges
+  into other branches neither fail nor fetch for nothing; "judged once"
+  documented as while the change is the head. 21 mutants, all killed.

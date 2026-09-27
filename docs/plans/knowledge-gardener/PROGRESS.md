@@ -5,15 +5,15 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 5 (phase 4 reviewed and done). Phases 4 and 5 go in the
-  second pull request, after PR #44 (phase 1's review fixes, phase 2 and
-  phase 3), which is merged.
+- Current phase: 5, implemented and in review (phase 4 reviewed and done).
+  Phases 4 and 5 go in the second pull request, after PR #44 (phase 1's
+  review fixes, phase 2 and phase 3), which is merged.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
-- Last verify: phases 0-4, PASS, 39/39 (server 1625 with the 15
-  database-only skipped, agent-core 67, cli 10, webapp 622; typecheck ok).
+- Last verify: phases 0-5, 44/45, every criterion but KG-5.R (server
+  1694, agent-core 67, cli 10, webapp 636; typecheck ok).
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
   (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
@@ -1177,8 +1177,9 @@ Give the evidence, and stop until the maintainer answers.
   behaviour, so changing it is a separate fix.
 - **The webapp shows no supersede links** (nothing under
   `apps/webapp/src/modules` reads `supersedesId`), so a reviewer accepting a
-  correction cannot see what it retires. Predates phase 0; worth surfacing in
-  the review queue, which phase 5 reworks (KG-5.1).
+  correction cannot see what it retires. Predates phase 0. Phase 5's queue
+  shows why an entry waits (SUPERSEDE_REQUEST among the reasons) but still
+  not what it would retire.
 
 - **`PageEntryUse` grows one row per entry per serve** and nothing prunes
   it. It is indexed for the reads phase 3 makes (by run, by entry and time,
@@ -1191,6 +1192,16 @@ Give the evidence, and stop until the maintainer answers.
   round 3). Nothing reads the count yet; a phase that starts using it as a
   signal should tell those increments apart, from the decision rows (writer
   and `corroboratedEntryId`).
+- **Undoing a folded repeat leaves the count.** A person who puts a
+  corroboration back into use (by hand, or by disagreeing with its audit)
+  does not take one off the target's `corroborationCount`. Nothing reads
+  the count yet; the decision row and its verdict say what happened.
+- **An audited acceptance that is undone leaves what it displaced
+  DISPUTED.** When an accepted entry won against a STANDING neighbour,
+  that neighbour was disputed in the same transaction; a person setting
+  the accepted entry aside afterwards does not restore it. DISPUTED is
+  reversible and withheld until a person looks, so nothing wrong is
+  served, but the neighbour waits on someone finding it.
 - **Runs write with no credential of their own (ENG-84).** Until they do,
   triage cannot vouch for what an agent read, so no agent's entry is
   auto-accepted. A run-bound credential stamped by the server would let a
@@ -1269,3 +1280,15 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-27: Phase 4 review round 3: no unresolved findings. Phase 4
   review: PASS. Verify through phase 4: PASS, 39/39. Phase 4 done; starting
   phase 5.
+- 2026-09-27: Phase 5 implemented (KG-5.1 to KG-5.5) with tagged tests:
+  verdicts recorded with the change, weighted kappa per acting type, audits
+  drawn by decision id, back-off with hysteresis under an advisory lock, the
+  review and agreement endpoints, the queue's reasons and audits, and the
+  Settings panel. Mutation-checked: of 55 server mutants, 46 were killed at
+  once; four survivors were killed by new tests (the verdict race, a verdict
+  already given, audit weights in the report, the latest decision in the
+  queue); four that did not compile or whose pattern missed were reworded
+  and killed; one was equivalent (only an escalation carries reasons) and
+  was removed by simplifying the code. 13 webapp mutants, all killed after
+  two tests were tightened. Verify through phase 5: 44/45, only
+  KG-5.R left. Review round 1 started.

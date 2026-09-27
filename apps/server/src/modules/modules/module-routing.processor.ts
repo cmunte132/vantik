@@ -74,9 +74,13 @@ export class ModuleRoutingProcessor {
       });
     }
 
-    // Every change that landed, named issue or not, has the knowledge citing
-    // its files checked against the commit it landed as.
-    if (change.mergeSha && change.changedPaths?.length) {
+    // Every change that landed on the default branch, named issue or not, has
+    // the knowledge citing its files checked against the commit it landed as.
+    if (
+      change.mergeSha &&
+      change.onDefaultBranch &&
+      change.changedPaths?.length
+    ) {
       await this.checkKnowledge(change, workspaceId);
     }
   }

@@ -34,11 +34,10 @@ export interface PullRequestRef {
   fullName: string;
   pullNumber: number;
   issueKeys: string[];
-  /**
-   * The merge commit, for a pull request merged into the default branch.
-   * Absent otherwise.
-   */
+  /** The merge commit, for a merged pull request. Absent otherwise. */
   mergeSha?: string;
+  /** For a merged pull request: whether it was merged into the default branch. */
+  onDefaultBranch?: boolean;
 }
 
 /**
@@ -105,9 +104,9 @@ export function parsePullRequestEvent(
     ]),
   ];
 
-  const mergeSha = mergeShaOf(eventBody);
+  const merged = mergeOf(eventBody);
 
-  if (issueKeys.length === 0 && !mergeSha) {
+  if (issueKeys.length === 0 && !merged) {
     return null;
   }
 
@@ -116,33 +115,42 @@ export function parsePullRequestEvent(
     fullName: repository.full_name,
     pullNumber: pullRequest.number,
     issueKeys,
-    ...(mergeSha ? { mergeSha } : {}),
+    ...(merged ?? {}),
   };
 }
 
 /**
- * The merge commit of a pull request that was just merged into the default
- * branch, or null.
+ * The merge commit of a pull request that was just merged, and whether it was
+ * merged into the default branch; or null.
  *
- * Only the default branch: knowledge is checked against the code there, and a
- * pull request merged into another branch (a release branch, or the branch of
- * a stacked pull request) has not changed it yet. That change arrives when the
- * branch is itself merged.
+ * Knowledge is checked against the code on the default branch, so only a
+ * merge there is checked. A pull request merged into another branch (a release
+ * branch, or the branch of a stacked pull request) is still reported with its
+ * merge commit, marked as not on the default branch: its change reaches the
+ * default branch when that branch is itself merged, and is checked then.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mergeShaOf(eventBody: any): string | null {
+function mergeOf(
+  eventBody: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+): { mergeSha: string; onDefaultBranch: boolean } | null {
   const pullRequest = eventBody?.pull_request;
   const sha = pullRequest?.merge_commit_sha;
   const defaultBranch = eventBody?.repository?.default_branch;
 
-  return eventBody?.action === 'closed' &&
-    pullRequest?.merged === true &&
-    typeof sha === 'string' &&
-    COMMIT_SHA.test(sha) &&
-    typeof defaultBranch === 'string' &&
-    pullRequest.base?.ref === defaultBranch
-    ? sha
-    : null;
+  if (
+    eventBody?.action !== 'closed' ||
+    pullRequest?.merged !== true ||
+    typeof sha !== 'string' ||
+    !COMMIT_SHA.test(sha)
+  ) {
+    return null;
+  }
+
+  return {
+    mergeSha: sha,
+    onDefaultBranch:
+      typeof defaultBranch === 'string' &&
+      pullRequest.base?.ref === defaultBranch,
+  };
 }
 
 /** What a push to the default branch says about the change it lands. */
@@ -150,6 +158,7 @@ export interface PushRef {
   externalRepoId: string;
   /** The new head of the default branch. */
   mergeSha: string;
+  onDefaultBranch: true;
   changedPaths: string[];
 }
 
@@ -213,6 +222,7 @@ export function parsePushEvent(eventBody: any): PushRef | null {
     ? {
         externalRepoId: repository.id.toString(),
         mergeSha: after,
+        onDefaultBranch: true,
         changedPaths: [...paths],
       }
     : null;
@@ -225,6 +235,11 @@ export function parsePushEvent(eventBody: any): PushRef | null {
  * order, and it stops at an empty page or at the page limit. A pull request
  * with more files than the limit allows is a rare thing, and the modules of the
  * first three thousand files describe it well enough.
+ *
+ * For a merged pull request, a page that fails fails the read: the knowledge
+ * citing its files is checked against this list, once, and a list cut short
+ * would leave the rest unchecked with nothing to check it later. The error
+ * fails the webhook's job, which is tried again.
  */
 export async function changedPathsOf(
   ref: PullRequestRef,
@@ -243,6 +258,13 @@ export async function changedPathsOf(
     // this the error left the function, which is not what its caller was told
     // to expect.
     const data = await pageOrNull(url, accessToken);
+
+    if (data === null && ref.mergeSha) {
+      throw new Error(
+        `Could not read page ${page} of the files of merged pull request ` +
+          `${ref.fullName}#${ref.pullNumber}`,
+      );
+    }
 
     if (!Array.isArray(data) || data.length === 0) {
       break;
@@ -324,6 +346,8 @@ export async function codeChangeOf(
     externalRepoId: ref.externalRepoId,
     changedPaths,
     issueKeys: ref.issueKeys,
-    ...(ref.mergeSha ? { mergeSha: ref.mergeSha } : {}),
+    ...(ref.mergeSha
+      ? { mergeSha: ref.mergeSha, onDefaultBranch: ref.onDefaultBranch }
+      : {}),
   };
 }

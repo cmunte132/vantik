@@ -52,7 +52,7 @@ const job = {
 
 describe('routing a change to code', () => {
   it('[KG-6.1] checks the knowledge a merged change touches though it names no issue, and routes nothing', async () => {
-    const t = harness({ mergeSha: SHA });
+    const t = harness({ mergeSha: SHA, onDefaultBranch: true });
 
     await t.processor.routeWebhook(job as never);
 
@@ -82,12 +82,29 @@ describe('routing a change to code', () => {
     );
     expect(open.pagesQueue.add).not.toHaveBeenCalled();
 
-    const merged = harness({ issueKeys: ['ENG-42'], mergeSha: SHA });
+    const merged = harness({
+      issueKeys: ['ENG-42'],
+      mergeSha: SHA,
+      onDefaultBranch: true,
+    });
 
     await merged.processor.routeWebhook(job as never);
 
     expect(merged.moduleRouting.routeCodeChange).toHaveBeenCalledTimes(1);
     expect(merged.pagesQueue.add).toHaveBeenCalledTimes(1);
+  });
+
+  it('[KG-6.1] checks nothing for a pull request merged into another branch, which lands on the default branch later', async () => {
+    const t = harness({
+      issueKeys: ['ENG-42'],
+      mergeSha: SHA,
+      onDefaultBranch: false,
+    });
+
+    await t.processor.routeWebhook(job as never);
+
+    expect(t.moduleRouting.routeCodeChange).toHaveBeenCalledTimes(1);
+    expect(t.pagesQueue.add).not.toHaveBeenCalled();
   });
 
   it('[KG-6.1] does nothing for a webhook that is not a change to code', async () => {

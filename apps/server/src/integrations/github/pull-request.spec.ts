@@ -217,6 +217,7 @@ describe('landed changes', () => {
       pullNumber: 8,
       issueKeys: [],
       mergeSha: MERGE_SHA,
+      onDefaultBranch: true,
     });
 
     mockedAxios.get.mockResolvedValueOnce({
@@ -228,7 +229,51 @@ describe('landed changes', () => {
       changedPaths: ['apps/server/src/main.ts'],
       issueKeys: [],
       mergeSha: MERGE_SHA,
+      onDefaultBranch: true,
     });
+  });
+
+  it('[KG-6.1] reads a pull request merged into another branch with its merge SHA, as not on the default branch', async () => {
+    const body = mergedBody();
+    body.pull_request.base = { ref: 'release/1.2' };
+
+    expect(parsePullRequestEvent(body)).toMatchObject({
+      issueKeys: [],
+      mergeSha: MERGE_SHA,
+      onDefaultBranch: false,
+    });
+
+    mockedAxios.get.mockResolvedValueOnce({
+      data: [{ filename: 'apps/server/src/main.ts' }],
+    });
+
+    expect(await codeChangeOf(body, 'a-token')).toMatchObject({
+      changedPaths: ['apps/server/src/main.ts'],
+      mergeSha: MERGE_SHA,
+      onDefaultBranch: false,
+    });
+  });
+
+  it('[KG-6.1] fails, to be tried again, when the files of a merged pull request cannot all be read', async () => {
+    const full = Array.from({ length: 100 }, (_unused, index) => ({
+      filename: `file-${index}.ts`,
+    }));
+    mockedAxios.get
+      .mockResolvedValueOnce({ data: full })
+      .mockRejectedValueOnce(new Error('rate limited'));
+
+    await expect(codeChangeOf(mergedBody(), 'a-token')).rejects.toThrow(
+      'page 2',
+    );
+
+    // An open pull request keeps the pages it read, as before.
+    mockedAxios.get
+      .mockResolvedValueOnce({ data: full })
+      .mockRejectedValueOnce(new Error('rate limited'));
+
+    expect(
+      (await codeChangeOf(pullRequestBody(), 'a-token'))?.changedPaths,
+    ).toHaveLength(100);
   });
 
   it('[KG-6.1] carries the merge SHA beside the keys of a keyed pull request, which routes as before', () => {
@@ -247,7 +292,6 @@ describe('landed changes', () => {
 
   it.each([
     ['closed without merging', { merged: false }],
-    ['merged into another branch', { base: { ref: 'release/1.2' } }],
     ['merged with no commit id', { merge_commit_sha: null }],
   ])('[KG-6.1] lands nothing for a pull request %s', (_, pullRequest) => {
     const body = mergedBody();
@@ -261,6 +305,7 @@ describe('landed changes', () => {
     expect(parsePushEvent(pushBody())).toEqual({
       externalRepoId: '123456',
       mergeSha: MERGE_SHA,
+      onDefaultBranch: true,
       changedPaths: [
         'apps/server/src/new.ts',
         'apps/server/src/main.ts',
@@ -272,6 +317,7 @@ describe('landed changes', () => {
     expect(await codeChangeOf(pushBody(), 'a-token')).toEqual({
       externalRepoId: '123456',
       mergeSha: MERGE_SHA,
+      onDefaultBranch: true,
       changedPaths: [
         'apps/server/src/new.ts',
         'apps/server/src/main.ts',

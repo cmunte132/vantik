@@ -54,6 +54,13 @@ describe('ModulesService and knowledge scopes', () => {
     expect(queueAdd.mock.calls.map(([name, data]) => [name, data])).toEqual(
       Array(4).fill([RECOMPUTE_MODULES_JOB, { workspaceId: 'workspace-1' }]),
     );
+    // Folded per workspace: the id names the workspace, so a burst of edits
+    // queues one pass for it and never swallows another workspace's.
+    for (const [, , options] of queueAdd.mock.calls) {
+      expect(options.jobId).toMatch(
+        new RegExp(`^${RECOMPUTE_MODULES_JOB}:workspace-1:\\d+$`),
+      );
+    }
   });
 
   it('[KG-1.2] never fails the edit when the queue is down', async () => {

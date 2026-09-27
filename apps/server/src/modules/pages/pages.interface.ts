@@ -1,4 +1,5 @@
 import { PageEntryStatusEnum } from '@vantikhq/types';
+import type { JobOptions } from 'bull';
 
 /**
  * The mechanical limits on writing to the knowledge bank.
@@ -74,6 +75,35 @@ export const DECAY_JOB_ID = 'page-entry-decay';
  * workspace and fills in entries written before modules were resolved.
  */
 export const RECOMPUTE_MODULES_JOB = 'recomputeEntryModules';
+
+/** How long requests to re-resolve one workspace are gathered into one pass. */
+export const RECOMPUTE_MODULES_WINDOW_MS = 5_000;
+
+/**
+ * Queue options that fold a burst of recompute requests into one pass.
+ *
+ * Every request in the same window gets the same job id, and Bull ignores a
+ * job whose id is already queued, so a run of repository edits, or replicas
+ * booting together, queue one pass. The job waits until its window closes,
+ * which is what makes the folding safe: a request can never find its pass
+ * already running and be dropped. A request that comes later falls in a later
+ * window and gets a pass of its own, which reads the state after its edit. A
+ * fixed id would not do that; it would swallow every request made while the
+ * pass ran, and every one after a failed pass kept for inspection.
+ */
+export function recomputeModulesJobOptions(
+  workspaceId: string | undefined,
+  now: number = Date.now(),
+): JobOptions {
+  const window = Math.floor(now / RECOMPUTE_MODULES_WINDOW_MS);
+
+  return {
+    jobId: `${RECOMPUTE_MODULES_JOB}:${workspaceId ?? 'all'}:${window}`,
+    delay: (window + 1) * RECOMPUTE_MODULES_WINDOW_MS - now,
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
 
 /**
  * Transitions a client may ask for.

@@ -269,14 +269,15 @@ describe('KnowledgeService.knowledgeGaps', () => {
 describe('KnowledgeService.seedsFor', () => {
   const id = (n: number) =>
     `22222222-2222-4222-8222-${String(n).padStart(12, '0')}`;
-  const [M1, M2, M3, M4, M5, FOREIGN, P, C1, C2, ISSUE] = [
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+  const [M1, M2, M3, M4, M5, FOREIGN, P, C1, C2, ISSUE, GONE] = [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
   ].map(id);
 
   /**
    * A small product graph: product P owns M1 and M3 and is linked from M4;
-   * capability C1 spans M1 and M2; capability C2 spans M5; FOREIGN belongs to
-   * another workspace. The double answers the filters the service sends.
+   * capability C1 spans M1 and M2, and still lists FOREIGN, which belongs to
+   * another workspace, and GONE, which was deleted; capability C2 spans M5.
+   * The double answers the filters the service sends.
    */
   function graph() {
     const modules: Array<{
@@ -284,6 +285,7 @@ describe('KnowledgeService.seedsFor', () => {
       workspaceId: string;
       ownerProductId: string | null;
       linkedProductIds: string[];
+      deleted?: boolean;
     }> = [
       {
         id: M1,
@@ -321,22 +323,30 @@ describe('KnowledgeService.seedsFor', () => {
         ownerProductId: P,
         linkedProductIds: [],
       },
+      {
+        id: GONE,
+        workspaceId: WORKSPACE,
+        ownerProductId: null,
+        linkedProductIds: [],
+        deleted: true,
+      },
     ];
     const capabilities = [
-      { id: C1, workspaceId: WORKSPACE, moduleIds: [M1, M2] },
+      { id: C1, workspaceId: WORKSPACE, moduleIds: [M1, M2, FOREIGN, GONE] },
       { id: C2, workspaceId: WORKSPACE, moduleIds: [M5] },
     ];
     const issues = [
       { id: ISSUE, workspaceId: WORKSPACE, moduleIds: [M1], capabilityId: C2 },
     ];
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const moduleMatches = (
       m: (typeof modules)[number],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       where: any,
     ): boolean => {
       if (where.workspaceId && m.workspaceId !== where.workspaceId)
         return false;
+      if (where.deleted === null && m.deleted) return false;
       if (where.id?.in && !where.id.in.includes(m.id)) return false;
       if (where.OR) {
         return where.OR.some(
@@ -400,7 +410,8 @@ describe('KnowledgeService.seedsFor', () => {
 
     expect(seeds?.modules).toEqual([M1]);
     // M2 shares capability C1; M3 is owned by M1's product; M4 is linked to
-    // it. M5 is unrelated, and FOREIGN is another workspace's.
+    // it. M5 is unrelated. C1 still lists FOREIGN, another workspace's, and
+    // GONE, deleted; neither is a neighbour.
     expect(seeds?.neighbours.sort()).toEqual([M2, M3, M4].sort());
   });
 
@@ -422,6 +433,28 @@ describe('KnowledgeService.seedsFor', () => {
     await expect(
       service.seedsFor('other-workspace', { issueId: ISSUE }),
     ).resolves.toBeUndefined();
+  });
+
+  it('[KG-1.4] [KG-1.5] hands kinds and seeds to the search when recalling', async () => {
+    const { service, typesense, prisma } = buildService();
+    Object.assign(prisma, {
+      module: {
+        findMany: jest.fn(async ({ where }) =>
+          where.id ? [{ id: M1, ownerProductId: null as string | null }] : [],
+        ),
+      },
+      capability: { findMany: jest.fn(async (): Promise<unknown[]> => []) },
+    });
+
+    await service.search(WORKSPACE, 'redis', {
+      kinds: ['GOTCHA'],
+      moduleIds: [M1],
+    });
+
+    expect(searchParams(typesense).filter_by).toContain(
+      'entryKind:=[`GOTCHA`]',
+    );
+    expect(searchParams(typesense).sort_by).toContain(`moduleIds:=[\`${M1}\`]`);
   });
 
   it('[KG-1.5] hands the seeds to the search when context is loaded for an issue', async () => {

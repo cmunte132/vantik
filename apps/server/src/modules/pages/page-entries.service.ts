@@ -55,6 +55,8 @@ export default class PageEntriesService {
       status?: PageEntryStatusEnum[];
       /** Entries resolved to any of these modules. */
       moduleIds?: string[];
+      /** At most this many, newest first. */
+      limit?: number;
     } = {},
   ): Promise<PageEntry[]> {
     return this.prisma.pageEntry.findMany({
@@ -68,6 +70,7 @@ export default class PageEntriesService {
           : {}),
       },
       orderBy: { createdAt: 'desc' },
+      ...(filters.limit ? { take: filters.limit } : {}),
     }) as unknown as Promise<PageEntry[]>;
   }
 

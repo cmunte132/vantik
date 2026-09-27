@@ -166,16 +166,35 @@ function fakeIndex() {
       }) => {
         searches.push(search);
         const matches = parseFilter(search.filter_by as string);
-        const keys = splitTop(search.sort_by as string).map((key) =>
-          sortKey(key, search.q as string),
-        );
-        const ranked = [...docs.values()].filter(matches).sort((a, b) => {
+        const sortBy = splitTop(search.sort_by as string);
+        const keys = sortBy.map((key) => sortKey(key, search.q as string));
+        const order = (a: Doc, b: Doc) => {
           for (const key of keys) {
             const difference = key(b) - key(a);
             if (difference !== 0) return difference;
           }
           return 0;
-        });
+        };
+        const ranked = [...docs.values()].filter(matches).sort(order);
+
+        // `_text_match(buckets: N)` as Typesense applies it: rank on the raw
+        // score, cut the ranking into blocks of floor(results / N), give every
+        // document in a block its first document's score, and rank again. With
+        // fewer than N results nothing is bucketed.
+        const bucketed = sortBy.findIndex((key) =>
+          /^_text_match\(buckets: \d+\)/.test(key),
+        );
+        const buckets = Number(/buckets: (\d+)/.exec(sortBy[bucketed])?.[1]);
+        if (bucketed >= 0 && ranked.length >= buckets) {
+          const raw = keys[bucketed];
+          const block = Math.floor(ranked.length / buckets);
+          const anchored = new Map<Doc, number>();
+          ranked.forEach((doc, i) =>
+            anchored.set(doc, raw(ranked[i - (i % block)])),
+          );
+          keys[bucketed] = (doc) => anchored.get(doc) ?? 0;
+          ranked.sort(order);
+        }
 
         const groups = new Map<unknown, Doc[]>();
         for (const doc of ranked) {
@@ -408,17 +427,41 @@ describe('retrieval seeded from the product graph', () => {
 
   it('[KG-1.5] lets a boost reorder near-equal answers without burying a far better one', async () => {
     const { searches, service } = fakeIndex();
-    await seed(service);
 
-    await service.searchKnowledge(WORKSPACE, 'redis', {
+    // Twenty answers to "cache", entry `cN` mentioning it N times, so each is
+    // a little more relevant than the last. Two of them are about the seed
+    // module: c17, next to c18 in relevance, and c1, far behind everything.
+    for (let n = 1; n <= 20; n++) {
+      await service.indexEntry({
+        id: `c${n}`,
+        content: Array(n).fill('cache').join(' '),
+        scope: null,
+        status: PageEntryStatusEnum.STANDING,
+        sourceUserId: 'agent-1',
+        verifiedAt: null,
+        retrievalCount: 0,
+        updatedAt: new Date('2026-09-01'),
+        pageId: `page-c${n}`,
+        moduleIds: n === 17 || n === 1 ? [WEBAPP] : [],
+        kind: PageEntryKindEnum.FACT,
+        page: { title: 'Notes', workspaceId: WORKSPACE },
+      });
+    }
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'cache', {
+      limit: 20,
       boost: { modules: [WEBAPP], neighbours: [] },
     });
+    const order = ids(hits);
 
-    // With a question, text relevance is bucketed first and the boost breaks
-    // ties inside a bucket, rather than outranking relevance outright.
+    // Relevance is bucketed first and the boost breaks ties inside a bucket:
+    // c17 shares a bucket with c18 and overtakes it, but not c19 or c20, which
+    // are in a better bucket, and c1 stays behind every far better answer.
     expect(String(searches[0].sort_by)).toMatch(
       /^_text_match\(buckets: \d+\):desc,_eval\(/,
     );
+    expect(order.slice(0, 4)).toEqual(['c20', 'c19', 'c17', 'c18']);
+    expect(order.indexOf('c1')).toBeGreaterThan(order.indexOf('c3'));
   });
 
   it('[KG-1.5] refuses to put anything but a module id into the ranking', async () => {

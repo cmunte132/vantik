@@ -10,6 +10,10 @@ import type {
 
 import { ajaxDelete, ajaxGet, ajaxPost, mutationHook } from 'services/utils';
 
+import { moduleKnowledgeUrl } from './module-knowledge';
+
+export { MODULE_KNOWLEDGE_LIMIT } from './module-knowledge';
+
 /**
  * The page and entry API, as react-query hooks.
  *
@@ -187,7 +191,13 @@ export function usePageMarkdown(pageId?: string, enabled = true) {
 }
 
 export type PageLinkType =
-  'TEAM' | 'PROJECT' | 'ISSUE' | 'PAGE' | 'PRODUCT' | 'MODULE' | 'CAPABILITY';
+  | 'TEAM'
+  | 'PROJECT'
+  | 'ISSUE'
+  | 'PAGE'
+  | 'PRODUCT'
+  | 'MODULE'
+  | 'CAPABILITY';
 
 export interface PageLink {
   id: string;
@@ -255,15 +265,12 @@ export function useRelatedPages(entityType: PageLinkType, entityId?: string) {
  * entries one page at a time, and a module's knowledge is spread across pages.
  */
 export function useModuleKnowledge(moduleIds: string[]) {
-  const key = [...moduleIds].sort().join(',');
+  const url = moduleKnowledgeUrl(moduleIds);
 
   return useQuery<PageEntryType[]>({
-    queryKey: ['module-knowledge', key],
+    queryKey: ['module-knowledge', url],
     enabled: moduleIds.length > 0,
-    queryFn: () =>
-      ajaxGet({
-        url: `/api/v1/page_entries?status=STANDING&moduleIds=${encodeURIComponent(key)}`,
-      }) as Promise<PageEntryType[]>,
+    queryFn: () => ajaxGet({ url }) as Promise<PageEntryType[]>,
   });
 }
 

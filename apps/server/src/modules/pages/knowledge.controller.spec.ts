@@ -1,6 +1,10 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { KnowledgeSearchQueryDto, RoleEnum } from '@vantikhq/types';
+import {
+  KnowledgeSearchQueryDto,
+  ListPageEntriesQueryDto,
+  RoleEnum,
+} from '@vantikhq/types';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { PrismaService } from 'nestjs-prisma';
@@ -10,6 +14,7 @@ import { AgentScopeGuard } from 'modules/auth/agent-scope.guard';
 import { KnowledgeController } from './knowledge.controller';
 import { PageEntriesController } from './page-entries.controller';
 import type KnowledgeService from './knowledge.service';
+import type PageEntriesService from './page-entries.service';
 
 describe('KnowledgeController', () => {
   it('trims and rejects empty or wildcard search queries', async () => {
@@ -189,5 +194,36 @@ describe('KnowledgeController.search', () => {
     await expect(validate(query)).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ property: 'kind' })]),
     );
+  });
+});
+
+describe('PageEntriesController.getEntries', () => {
+  it('[KG-1.6] hands the modules, statuses and limit asked for to the list', async () => {
+    const pageEntriesService = {
+      getEntries: jest.fn().mockResolvedValue([]),
+    } as unknown as PageEntriesService;
+    const prisma = {
+      usersOnWorkspaces: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE' }),
+      },
+    } as unknown as PrismaService;
+    const controller = new PageEntriesController(pageEntriesService, prisma);
+
+    // The query string as a product-axis screen sends it.
+    const query = plainToInstance(ListPageEntriesQueryDto, {
+      status: 'STANDING',
+      moduleIds: '22222222-2222-4222-8222-000000000001',
+      limit: '50',
+    });
+    await expect(validate(query)).resolves.toEqual([]);
+
+    await controller.getEntries('workspace-1', 'user-1', query);
+
+    expect(pageEntriesService.getEntries).toHaveBeenCalledWith('workspace-1', {
+      pageId: undefined,
+      status: ['STANDING'],
+      moduleIds: ['22222222-2222-4222-8222-000000000001'],
+      limit: 50,
+    });
   });
 });

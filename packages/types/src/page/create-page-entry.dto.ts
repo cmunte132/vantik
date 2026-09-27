@@ -175,6 +175,12 @@ export class ListPageEntriesQueryDto {
   @IsArray()
   @IsUUID(undefined, { each: true })
   moduleIds?: string[];
+
+  /** At most this many entries, newest first. */
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  limit?: string;
 }
 
 /**

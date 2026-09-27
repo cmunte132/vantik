@@ -1262,4 +1262,17 @@ describe('entries about modules', () => {
       moduleIds: { hasSome: ['server', 'webapp'] },
     });
   });
+
+  it('[KG-1.6] returns at most the number asked for, newest first', async () => {
+    const { service, prisma } = buildService();
+
+    await service.getEntries('workspace-1', {
+      moduleIds: ['server'],
+      limit: 50,
+    });
+
+    expect(
+      (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0],
+    ).toMatchObject({ orderBy: { createdAt: 'desc' }, take: 50 });
+  });
 });

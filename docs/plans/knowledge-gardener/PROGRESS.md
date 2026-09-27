@@ -5,7 +5,8 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 1 (implementation done; independent review in progress)
+- Current phase: 1 (implementation merged in PR #43; review round 1 fixes
+  with the reviewer)
 - Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phases 0-1 spec-hash 069a84bf6612`
   (KG-1.1 to KG-1.6 pass; KG-1.R waits on the review)
 
@@ -100,6 +101,11 @@ next session starts by reading it.
   `ModulesModule` now registers), and once at boot for every workspace
   (`EntryModulesScheduler`, kept apart from the decay scheduler so its tests
   stand). The boot pass also fills in entries written before this phase.
+  Requests are folded per workspace in five-second windows
+  (`recomputeModulesJobOptions`): one job id per window, run once the window
+  closes. A burst of edits, or replicas booting together, queue one pass, and
+  no request can land while its own pass is already running and be dropped,
+  which a fixed job id would allow.
 - **Typesense:** four new faceted fields: `scopePath`, `scopeAncestors`,
   `moduleIds`, and `entryKind` (not `kind`, which already means page or
   entry). They are in `requiredPageFields`, so an existing collection is
@@ -123,7 +129,9 @@ next session starts by reading it.
   - The neighbours are the modules of any capability that lists a seed (or is
     the issue's capability), and the modules owned by or linked to a seed's
     product.
-  - Every id is checked against the workspace.
+  - Every id is checked against the workspace and against deletion,
+    including the module lists on capabilities, which are plain ids rather
+    than a relation.
   - Page bodies are not boosted, because page documents carry no modules.
     Indexing the modules a page is linked to would do it, and is left for a
     later phase.
@@ -131,15 +139,16 @@ next session starts by reading it.
   the default. Agents may change the kind of their own untriaged entries.
   `recall_knowledge` takes `kinds`; the CLI has `--kind` on `append` and
   `search`, plus `--module` and `--issue` on `search` and `context`. The CLI
-  package has no working test setup (plain `jest` with no TypeScript
-  transform), so its flags are covered through agent-core, which they pass
+  package's jest setup cannot load `commands/knowledge.ts` (chalk is
+  ESM-only), so its flags are covered through agent-core, which they pass
   straight to.
 - **Webapp (KG-1.6):**
   - A product's screen shows the knowledge of the modules it owns, not those
     merely linked to it; a design system linked to three products would
     otherwise fill all three.
-  - Entries come from `GET /page_entries?moduleIds=…`, because the synced
-    store loads entries a page at a time.
+  - Entries come from `GET /page_entries?status=STANDING&moduleIds=…&limit=50`,
+    because the synced store loads entries a page at a time. The list endpoint
+    gained an optional `limit`; the screen says when it has hit it.
   - The page view's Related section can link to products, modules and
     capabilities and routes to them, through one `linkRoute` function.
   - The synced store keeps `kind` and `moduleIds`, as the sync contract
@@ -147,8 +156,11 @@ next session starts by reading it.
 - **Test method:** `vector/knowledge-search.spec.ts` builds documents and
   requests with the real service and applies them with a small evaluator of
   the filter subset the service writes. That lets it assert which entries
-  come back, and in what order, without a running Typesense. Each behaviour
-  was mutation-checked: the test fails when the behaviour is broken.
+  come back, and in what order, without a running Typesense. It models
+  `_text_match(buckets: N)` the way Typesense applies it (blocks of
+  floor(results / N) take their first document's score; nothing is bucketed
+  below N results). Each behaviour was mutation-checked: the test fails when
+  the behaviour is broken.
 - **Formatting:** running Prettier on files this phase changed also
   normalised a few pre-existing lines in them (`page-links.service.ts`,
   `agent.spec.ts`).
@@ -250,6 +262,32 @@ When a phase's independent review ends with no unresolved findings, add a line
 in the form `Phase <number> review: PASS - <what the reviewer checked>`, for
 example with the number 0 for phase 0. `verify.mjs` looks for that line.
 
+### Phase 1, round 1 (fresh reviewer subagent)
+
+`VERDICT: NO UNRESOLVED FINDINGS`, with six non-blocking findings. All six
+were fixed rather than left, and the fixes went back to the same reviewer:
+
+1. `KnowledgeService.search` passing `kinds` and seeds on was untested.
+   Tested now (`knowledge.service.spec.ts`); dropping either fails it.
+2. A doc comment sat on the wrong handler in `pages.processor.ts`. Moved.
+3. The product-axis "standing only" filter was an untested inline URL, and
+   the list had no limit. Now built by `moduleKnowledgeUrl` (tested), capped
+   at 50 through a new optional `limit` on `GET /page_entries` (tested at the
+   controller and the service).
+4. The "boost with a question" test matched a string. The evaluator now
+   models bucketing, and the test asserts the order: a boosted answer
+   overtakes its bucket-mate but not a better bucket. Mutation-checked with
+   the string assertion removed.
+5. Neighbours from `capability.moduleIds` were not checked against the
+   workspace, though this log said every id was. They are now, with a
+   foreign and a deleted module in the fixture.
+6. Recompute jobs were never deduplicated. Folded per workspace in
+   five-second windows (see Decisions); tested.
+
+The reviewer also corrected the recorded reason the CLI has no tests (its
+jest cannot load chalk's ESM, not a missing TypeScript transform). Fixed
+above.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -299,3 +337,6 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-26: PR #43 opened for the plan and phase 0. Phase 1 implemented
   (KG-1.1 to KG-1.6) with tagged tests. Verify through phase 1: 13/14, all
   suites and typecheck green.
+- 2026-09-27: PR #43 merged with phase 1's implementation; the branch was
+  restarted from `main` (a fast-forward). Review round 1: no unresolved
+  findings; all six non-blocking findings fixed and sent back to the reviewer.

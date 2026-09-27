@@ -230,9 +230,22 @@ export default class KnowledgeService {
         : [],
     ]);
 
+    // A capability's module list is plain ids, not a relation, so it can name
+    // a module since deleted, or one no longer in this workspace. Checked like
+    // every other seed rather than trusted.
+    const listed = [
+      ...new Set(capabilities.flatMap((capability) => capability.moduleIds)),
+    ];
+    const capabilityModules = listed.length
+      ? await this.prisma.module.findMany({
+          where: { id: { in: listed }, workspaceId, deleted: null },
+          select: { id: true },
+        })
+      : [];
+
     const neighbours = [
       ...new Set([
-        ...capabilities.flatMap((capability) => capability.moduleIds),
+        ...capabilityModules.map((productModule) => productModule.id),
         ...productModules.map((productModule) => productModule.id),
       ]),
     ].filter((id) => !moduleIds.includes(id));

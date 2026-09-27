@@ -14,6 +14,8 @@ import {
   DECAY_JOB,
   DECAY_JOB_ID,
   RECOMPUTE_MODULES_JOB,
+  RECOMPUTE_MODULES_WINDOW_MS,
+  recomputeModulesJobOptions,
 } from './pages.interface';
 import {
   EntryModulesScheduler,
@@ -99,8 +101,36 @@ describe('re-resolving entry modules', () => {
     expect(queue.add).toHaveBeenCalledWith(
       RECOMPUTE_MODULES_JOB,
       {},
-      expect.any(Object),
+      expect.objectContaining({
+        jobId: expect.stringMatching(`^${RECOMPUTE_MODULES_JOB}:all:`),
+      }),
     );
+  });
+
+  it('[KG-1.2] folds requests in one window into one pass that starts after the window closes', () => {
+    const W = RECOMPUTE_MODULES_WINDOW_MS;
+    const start = 1_000 * W;
+
+    const first = recomputeModulesJobOptions('ws-1', start + 1);
+    const last = recomputeModulesJobOptions('ws-1', start + W - 1);
+
+    // Same window, same id: Bull ignores the second add.
+    expect(last.jobId).toBe(first.jobId);
+    // Neither starts before the window has closed, so no request in it can
+    // arrive after its pass has already read the repositories.
+    expect(start + 1 + (first.delay as number)).toBe(start + W);
+    expect(start + W - 1 + (last.delay as number)).toBe(start + W);
+  });
+
+  it('[KG-1.2] gives a later request, or another workspace, a pass of its own', () => {
+    const W = RECOMPUTE_MODULES_WINDOW_MS;
+    const start = 1_000 * W;
+    const pass = recomputeModulesJobOptions('ws-1', start).jobId;
+
+    // Made while the first pass may be running: never swallowed by it.
+    expect(recomputeModulesJobOptions('ws-1', start + W).jobId).not.toBe(pass);
+    expect(recomputeModulesJobOptions('ws-2', start).jobId).not.toBe(pass);
+    expect(recomputeModulesJobOptions(undefined, start).jobId).not.toBe(pass);
   });
 
   it('[KG-1.2] runs the pass for the workspace a job names, or for all of them', async () => {

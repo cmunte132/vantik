@@ -12,6 +12,7 @@ import {
   PAGES_QUEUE,
   PROPOSED_ENTRY_EXPIRY_DAYS,
   RECOMPUTE_MODULES_JOB,
+  recomputeModulesJobOptions,
   STANDING_ENTRY_DECAY_DAYS,
 } from './pages.interface';
 
@@ -113,7 +114,7 @@ export class EntryModulesScheduler implements OnModuleInit {
       await this.pagesQueue.add(
         RECOMPUTE_MODULES_JOB,
         {},
-        { removeOnComplete: true, removeOnFail: 20 },
+        recomputeModulesJobOptions(undefined),
       );
     } catch (error) {
       this.logger.error({
@@ -132,14 +133,6 @@ export class PagesProcessor {
   constructor(private pageEntriesService: PageEntriesService) {}
 
   /**
-   * Runs decay across every workspace.
-   *
-   * Deliberately unscoped: the windows are a property of the deployment, not of
-   * a workspace, and a per-workspace fan-out would need a job per workspace to
-   * express the same thing. `runDecay` is idempotent, so a retry after a
-   * partial failure re-archives what it already archived and changes nothing.
-   */
-  /**
    * Re-resolves entries' scopes to modules, for one workspace or, with none
    * given, for every workspace.
    */
@@ -157,6 +150,14 @@ export class PagesProcessor {
     });
   }
 
+  /**
+   * Runs decay across every workspace.
+   *
+   * Deliberately unscoped: the windows are a property of the deployment, not of
+   * a workspace, and a per-workspace fan-out would need a job per workspace to
+   * express the same thing. `runDecay` is idempotent, so a retry after a
+   * partial failure re-archives what it already archived and changes nothing.
+   */
   @Process(DECAY_JOB)
   async handleDecay() {
     let expiredProposed: number;

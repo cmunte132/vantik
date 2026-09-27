@@ -1,14 +1,17 @@
 import { CodeChangeEvent } from '@vantikhq/types';
 import axios from 'axios';
+import { COMMIT_SHA } from 'integrations/repo-files';
 
 import { getGithubHeaders } from './utils';
 
 /**
- * How a GitHub pull request becomes a `CodeChangeEvent`.
+ * How a GitHub pull request, or a push, becomes a `CodeChangeEvent`.
  *
- * The server routes a change to modules by the paths that it touches. GitHub
- * does not put those paths in the webhook, so this file reads the webhook for
- * the repository and the issue, and then asks the API for the files.
+ * The server routes a change to modules by the paths that it touches, and
+ * checks the knowledge that cites those paths once the change has landed.
+ * GitHub does not put a pull request's paths in the webhook, so this file
+ * reads the webhook for the repository and the issue, and then asks the API
+ * for the files. A push lists its files itself.
  */
 
 /** The events that carry a set of changed files worth a look. */
@@ -31,6 +34,11 @@ export interface PullRequestRef {
   fullName: string;
   pullNumber: number;
   issueKeys: string[];
+  /**
+   * The merge commit, for a pull request merged into the default branch.
+   * Absent otherwise.
+   */
+  mergeSha?: string;
 }
 
 /**
@@ -69,8 +77,10 @@ export function issueKeysIn(text: string | null | undefined): string[] {
  * request.
  *
  * It returns null when the payload describes something other than a pull
- * request, and when the payload names no issue. The server then does no work
- * and asks GitHub for nothing.
+ * request, and when the payload neither names an issue nor lands a merge on
+ * the default branch. The server then does no work and asks GitHub for
+ * nothing. A merge needs no issue key: the knowledge that cites the files it
+ * changed is checked whether or not anyone named an issue.
  */
 export function parsePullRequestEvent(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -95,7 +105,9 @@ export function parsePullRequestEvent(
     ]),
   ];
 
-  if (issueKeys.length === 0) {
+  const mergeSha = mergeShaOf(eventBody);
+
+  if (issueKeys.length === 0 && !mergeSha) {
     return null;
   }
 
@@ -104,7 +116,106 @@ export function parsePullRequestEvent(
     fullName: repository.full_name,
     pullNumber: pullRequest.number,
     issueKeys,
+    ...(mergeSha ? { mergeSha } : {}),
   };
+}
+
+/**
+ * The merge commit of a pull request that was just merged into the default
+ * branch, or null.
+ *
+ * Only the default branch: knowledge is checked against the code there, and a
+ * pull request merged into another branch (a release branch, or the branch of
+ * a stacked pull request) has not changed it yet. That change arrives when the
+ * branch is itself merged.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mergeShaOf(eventBody: any): string | null {
+  const pullRequest = eventBody?.pull_request;
+  const sha = pullRequest?.merge_commit_sha;
+  const defaultBranch = eventBody?.repository?.default_branch;
+
+  return eventBody?.action === 'closed' &&
+    pullRequest?.merged === true &&
+    typeof sha === 'string' &&
+    COMMIT_SHA.test(sha) &&
+    typeof defaultBranch === 'string' &&
+    pullRequest.base?.ref === defaultBranch
+    ? sha
+    : null;
+}
+
+/** What a push to the default branch says about the change it lands. */
+export interface PushRef {
+  externalRepoId: string;
+  /** The new head of the default branch. */
+  mergeSha: string;
+  changedPaths: string[];
+}
+
+/** The commit id GitHub gives a branch that a push deleted. */
+const DELETED_SHA = /^0+$/;
+
+/**
+ * This function reads a push to a repository's default branch, or returns
+ * null for anything else.
+ *
+ * The webhook handler hands every payload here without its event name, so a
+ * push is known by its shape: a branch, the commit it now points to, and the
+ * commits it added. A push to another branch changes nothing that knowledge
+ * is checked against, and a push that deleted the branch lands nothing.
+ *
+ * The paths come from the payload, which lists what each pushed commit added,
+ * changed and removed. A removed file counts: knowledge citing it is what most
+ * needs checking.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function parsePushEvent(eventBody: any): PushRef | null {
+  const repository = eventBody?.repository;
+  const after = eventBody?.after;
+
+  if (
+    !repository?.id ||
+    typeof eventBody?.ref !== 'string' ||
+    typeof after !== 'string' ||
+    !Array.isArray(eventBody?.commits) ||
+    eventBody.pull_request
+  ) {
+    return null;
+  }
+
+  if (
+    typeof repository.default_branch !== 'string' ||
+    eventBody.ref !== `refs/heads/${repository.default_branch}` ||
+    eventBody.deleted === true ||
+    DELETED_SHA.test(after) ||
+    !COMMIT_SHA.test(after)
+  ) {
+    return null;
+  }
+
+  const paths = new Set<string>();
+  const commits = eventBody.commits.length
+    ? eventBody.commits
+    : [eventBody.head_commit].filter(Boolean);
+
+  for (const commit of commits) {
+    for (const list of [commit?.added, commit?.modified, commit?.removed]) {
+      for (const path of Array.isArray(list) ? list : []) {
+        if (typeof path === 'string' && path) {
+          paths.add(path);
+        }
+      }
+    }
+  }
+
+  return paths.size
+    ? {
+        externalRepoId: repository.id.toString(),
+        mergeSha: after,
+        changedPaths: [...paths],
+      }
+    : null;
 }
 
 /**
@@ -177,16 +288,26 @@ async function pageOrNull(url: string, accessToken: string): Promise<any> {
 /**
  * This function turns a GitHub webhook into a `CodeChangeEvent`.
  *
- * It returns null when the webhook is not a pull request, when the pull request
- * names no issue, and when GitHub refuses the request for the files. A webhook
- * that this function cannot read is not a fault, and it must not stop the rest
- * of the webhook handler.
+ * It returns null when the webhook is neither a pull request nor a push to the
+ * default branch, when the pull request neither names an issue nor was merged
+ * into the default branch, and when GitHub refuses the request for the files.
+ * A webhook that this function cannot read is not a fault, and it must not
+ * stop the rest of the webhook handler.
+ *
+ * A push names no issue, so it routes no modules to issues; it carries the
+ * commit it landed, which is what knowledge is checked against.
  */
 export async function codeChangeOf(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   eventBody: any,
   accessToken: string | undefined,
 ): Promise<CodeChangeEvent | null> {
+  const push = parsePushEvent(eventBody);
+
+  if (push) {
+    return { ...push, issueKeys: [] };
+  }
+
   const ref = parsePullRequestEvent(eventBody);
 
   if (!ref || !accessToken) {
@@ -203,5 +324,6 @@ export async function codeChangeOf(
     externalRepoId: ref.externalRepoId,
     changedPaths,
     issueKeys: ref.issueKeys,
+    ...(ref.mergeSha ? { mergeSha: ref.mergeSha } : {}),
   };
 }

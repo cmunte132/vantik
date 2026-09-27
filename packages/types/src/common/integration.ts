@@ -77,6 +77,13 @@ export interface CodeChangeEvent {
    * matches no issue.
    */
   issueKeys: string[];
+  /**
+   * The commit the change landed as on the repository's default branch: the
+   * merge commit of a merged pull request, or the new head of a push to that
+   * branch. Absent for a change that has not landed, such as an open pull
+   * request. Knowledge that cites the changed files is checked against it.
+   */
+  mergeSha?: string;
 }
 
 export interface IntegrationEventPayload {

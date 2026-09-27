@@ -171,6 +171,38 @@ export function recheckEntryJobOptions(entryId: string): JobOptions {
 }
 
 /**
+ * Checks the knowledge citing the files a change touched, once the change has
+ * landed on a repository's default branch: see `upkeep/knowledge-upkeep.service.ts`.
+ */
+export const CODE_LANDED_JOB = 'recheckLandedChange';
+
+/** A change that landed, as the job that checks its knowledge is given it. */
+export interface CodeLandedJob {
+  workspaceId: string;
+  externalRepoId: string;
+  /** The commit it landed as, which the citations are read at. */
+  sha: string;
+  changedPaths: string[];
+}
+
+/**
+ * One check per commit. A merged pull request and the push that lands its
+ * merge commit both report the same commit, and need it checked once; a
+ * citation already checked at that commit is not read again either. Tried
+ * again when a repository could not be read, as a rate limit or an outage
+ * clears on its own.
+ */
+export function codeLandedJobOptions(job: CodeLandedJob): JobOptions {
+  return {
+    jobId: `${CODE_LANDED_JOB}:${job.workspaceId}:${job.externalRepoId}:${job.sha}`,
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
+
+/**
  * Decides what becomes of a new entry before a person looks at it: see
  * `triage/knowledge-triage.service.ts`.
  */

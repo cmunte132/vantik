@@ -1998,8 +1998,12 @@ enum KnowledgeEscalationReason {
   JUDGES_DISAGREE
   /// A model was needed and none is configured.
   NO_LLM
-  /// The run that wrote it worked on an issue from outside the workspace.
+  /// The run that wrote it worked on an issue from outside the workspace, or
+  /// it rests on an issue or comment that came from outside.
   EXTERNAL_INPUT
+  /// An agent wrote it outside any run the server knows of, so what it had
+  /// read cannot be checked for outside input.
+  UNKNOWN_SOURCE
   /// Runs it was served to went wrong where it speaks.
   HARMFUL_SIGNAL
   /// A sample of what was accepted, for a person to check.

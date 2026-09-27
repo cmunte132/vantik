@@ -15,7 +15,7 @@
 CREATE TYPE "KnowledgeTriageDecisionType" AS ENUM ('AUTO_ACCEPT', 'CORROBORATE', 'ESCALATE', 'REJECT');
 
 -- CreateEnum
-CREATE TYPE "KnowledgeEscalationReason" AS ENUM ('CONTRADICTS_VERIFIED', 'CONTRADICTS_LOCKED', 'UNGROUNDED', 'CITATION_FAILED', 'PIN_REQUEST', 'SUPERSEDE_REQUEST', 'BROAD_SCOPE', 'JUDGES_DISAGREE', 'NO_LLM', 'EXTERNAL_INPUT', 'HARMFUL_SIGNAL', 'AUDIT');
+CREATE TYPE "KnowledgeEscalationReason" AS ENUM ('CONTRADICTS_VERIFIED', 'CONTRADICTS_LOCKED', 'UNGROUNDED', 'CITATION_FAILED', 'PIN_REQUEST', 'SUPERSEDE_REQUEST', 'BROAD_SCOPE', 'JUDGES_DISAGREE', 'NO_LLM', 'EXTERNAL_INPUT', 'UNKNOWN_SOURCE', 'HARMFUL_SIGNAL', 'AUDIT');
 
 -- CreateEnum
 CREATE TYPE "KnowledgeTriagePolicy" AS ENUM ('SECRET', 'ONE_FACT');
@@ -97,13 +97,30 @@ ALTER TABLE "PageEntryRelation" ADD CONSTRAINT "PageEntryRelation_toId_fkey" FOR
 
 -- Backfill: existing entries get their hash, so a new entry that repeats one
 -- written before this migration is found. The form is `normaliseContent`'s:
--- trimmed, runs of whitespace folded to one space, lower-cased. Postgres and
--- JavaScript agree on this for ASCII; an entry where they differ (unusual
--- Unicode whitespace or case) is not found by its hash, and the near-match
--- stage, which compares meaning rather than bytes, still finds it.
+-- whitespace trimmed from both ends, runs of it folded to one space,
+-- lower-cased. Whitespace is JavaScript's `\s`, spelled out: Postgres's own
+-- `\s` follows the locale and leaves out the no-break spaces and the byte
+-- order mark, and btrim's character list has no escape for a vertical tab at
+-- all. The class matches `\s` on every code point from 1 to 65535. Checked
+-- against `contentHashOf` on sample text: tabs, newlines, vertical tabs and
+-- form feeds at the ends and inside, text starting or ending in "v", no-break
+-- and ideographic spaces, accented and non-Latin text. Lower-casing outside
+-- ASCII follows the database's locale; where it differs from JavaScript's,
+-- the entry is not found by its hash, and the near-match stage, which
+-- compares meaning rather than bytes, still finds it.
 UPDATE "PageEntry"
 SET "contentHash" = encode(
-  sha256(convert_to(lower(regexp_replace(btrim("content", E' \t\n\r\f\v'), '\s+', ' ', 'g')), 'UTF8')),
+  sha256(convert_to(lower(regexp_replace(
+    regexp_replace(
+      "content",
+      '^[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$',
+      '',
+      'g'
+    ),
+    '[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+',
+    ' ',
+    'g'
+  )), 'UTF8')),
   'hex'
 )
 WHERE "contentHash" IS NULL;

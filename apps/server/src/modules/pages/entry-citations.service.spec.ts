@@ -248,17 +248,24 @@ function world() {
         Object.assign(row, data);
         return row;
       }),
-      // Stored only over an older reading, as a re-check stores.
+      // Stored only over an older reading, as a re-check stores a reading
+      // of a head, or only over no reading, as a reading of the commit a
+      // citation cites is stored.
       updateMany: jest.fn(async ({ where, data }: Row) => {
         const row = citations.find((c) => c.id === where.id);
-        const older = (where.OR as Row[]).some((part) =>
-          part.checkedAt === null
-            ? row?.checkedAt == null
-            : row?.checkedAt instanceof Date &&
-              row.checkedAt < (part.checkedAt as { lt: Date }).lt,
-        );
+        const older =
+          where.OR === undefined ||
+          (where.OR as Row[]).some((part) =>
+            part.checkedAt === null
+              ? row?.checkedAt == null
+              : row?.checkedAt instanceof Date &&
+                row.checkedAt < (part.checkedAt as { lt: Date }).lt,
+          );
+        const unread =
+          where.checkResult === undefined ||
+          row?.checkResult === where.checkResult;
 
-        if (!row || !older) {
+        if (!row || !older || !unread) {
           return { count: 0 };
         }
 

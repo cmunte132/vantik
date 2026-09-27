@@ -130,7 +130,8 @@ class RepoReads {
 /**
  * Holds an entry's lock until the transaction ends. Whatever stores a
  * reading of its code citations after writing, or acts on those readings,
- * holds it, so what is acted on is what is stored.
+ * holds it, and acts on the readings stored when it holds it, so what is
+ * acted on is what is stored.
  */
 export async function lockEntry(
   tx: Prisma.TransactionClient,
@@ -142,6 +143,11 @@ export async function lockEntry(
 /**
  * A citation with no stored reading, or one older than a reading stamped
  * `checkedAt`: the newer reading wins, whichever is stored first.
+ *
+ * Stamps come from the clocks of the servers that read, which keep time
+ * with each other to within milliseconds. Two readings could be put in the
+ * wrong order only if their heads were asked for within that time of each
+ * other and a change landed between the two.
  */
 export function readBefore(
   checkedAt: Date,
@@ -184,6 +190,8 @@ export interface LandedCheck {
   judgment: PageEntryCitationJudgmentEnum | null;
   judgeModel: string | null;
   judgeReason: string | null;
+  /** The entry's content hash the judge read; null when none judged. */
+  judgedContentHash: string | null;
   /** When the head it read was asked for, as stored on the citation. */
   checkedAt: Date;
   /**
@@ -207,6 +215,7 @@ export const STORED_READING_SELECT = {
   judgment: true,
   judgeModel: true,
   judgeReason: true,
+  judgedContentHash: true,
 } as const;
 
 type StoredReading = Prisma.PageEntryCitationGetPayload<{
@@ -249,14 +258,66 @@ export function storedCheck(
     judgment: row.judgment as PageEntryCitationJudgmentEnum | null,
     judgeModel: row.judgeModel,
     judgeReason: row.judgeReason,
+    judgedContentHash: row.judgedContentHash,
     checkedAt: row.checkedAt,
     update: null,
   };
 }
 
+/**
+ * Whether a person has acted on an entry since one of its citations was
+ * read: put it back after the gardener took it out of use, or reworded it,
+ * so a judgment read words it no longer has. Nothing acts on such a
+ * reading. The person decided with more than it knew, and the citation is
+ * read again instead.
+ */
+export function readBeforeActedOn(
+  reading: {
+    checkedAt: Date;
+    judgment: PageEntryCitationJudgmentEnum | null;
+    judgedContentHash: string | null;
+  },
+  entry: { contentHash: string | null },
+  putBack: Date | null,
+): boolean {
+  return (
+    (putBack !== null && reading.checkedAt < putBack) ||
+    (reading.judgment !== null &&
+      reading.judgedContentHash !== entry.contentHash)
+  );
+}
+
+/**
+ * When a person last put each entry back after the gardener took it out of
+ * use: the newest undoing of its maintenance rows.
+ */
+export async function putBackAt(
+  client: Prisma.TransactionClient,
+  entryIds: string[],
+): Promise<Map<string, Date>> {
+  const undone = entryIds.length
+    ? await client.pageEntryMaintenance.findMany({
+        where: { entryId: { in: entryIds }, reversedAt: { not: null } },
+        select: { entryId: true, reversedAt: true },
+      })
+    : [];
+  const latest = new Map<string, Date>();
+
+  for (const { entryId, reversedAt } of undone) {
+    const known = latest.get(entryId);
+
+    if (reversedAt && (!known || reversedAt > known)) {
+      latest.set(entryId, reversedAt);
+    }
+  }
+
+  return latest;
+}
+
 /** An entry's content and origin, as checking one of its citations needs. */
 interface CheckedEntry {
   content: string;
+  contentHash: string | null;
   sourceSession: string | null;
   page: { workspaceId: string };
 }
@@ -682,7 +743,9 @@ export default class EntryCitationsService {
    * What it finds is stored, not acted on. A reading is stored only over an
    * older one, under the entry's lock: a landed change's check may have read
    * a newer head meanwhile, and acts on what is stored while it holds the
-   * same lock, so a reading this stores in time is acted on there.
+   * same lock, so a reading this stores in time is acted on there. A
+   * citation never read is read at the commit it cites, as the retry reads
+   * it, and stored only while it is still unread.
    */
   async recheck(entryId: string): Promise<{ checked: number }> {
     const entry = await this.entryWithCitations(entryId);
@@ -694,23 +757,41 @@ export default class EntryCitationsService {
     const reads = new RepoReads(this.files);
     const found: Array<{
       id: string;
-      update: Prisma.PageEntryCitationUncheckedUpdateInput & {
-        checkedAt: Date;
-      };
+      where: Prisma.PageEntryCitationWhereInput;
+      update: Prisma.PageEntryCitationUncheckedUpdateInput;
     }> = [];
 
     for (const citation of entry.citations) {
+      if (
+        citation.kind === PageEntryCitationKindEnum.CODE &&
+        citation.checkResult === PageEntryCitationCheckEnum.UNKNOWN
+      ) {
+        // Never read, and the retries may have run out: read it now, at the
+        // commit it cites, as the retry would have.
+        const update = await this.readUnread(
+          entry.page.workspaceId,
+          citation,
+          reads,
+        );
+
+        if (update) {
+          found.push({ id: citation.id, where: STILL_UNREAD, update });
+        }
+
+        continue;
+      }
+
       const update =
         citation.kind !== PageEntryCitationKindEnum.CODE
           ? await this.recheckTarget(entry.page.workspaceId, citation)
-          : citation.checkResult === PageEntryCitationCheckEnum.UNKNOWN
-            ? // Never read, and the retries may have run out: read it now,
-              // at the commit it cites, as the retry would have.
-              await this.readUnread(entry.page.workspaceId, citation, reads)
-            : await this.recheckCode(entry, citation, reads);
+          : await this.recheckCode(entry, citation, reads);
 
       if (update) {
-        found.push({ id: citation.id, update });
+        found.push({
+          id: citation.id,
+          where: readBefore(update.checkedAt),
+          update,
+        });
       }
     }
 
@@ -719,9 +800,9 @@ export default class EntryCitationsService {
           await lockEntry(tx, entryId);
           let stored = 0;
 
-          for (const { id, update } of found) {
+          for (const { id, where, update } of found) {
             const { count } = await tx.pageEntryCitation.updateMany({
-              where: { id, ...readBefore(update.checkedAt) },
+              where: { id, ...where },
               data: update,
             });
             stored += count;
@@ -752,13 +833,15 @@ export default class EntryCitationsService {
    *
    * A citation already read at the change's own commit is not read again:
    * that reading is what reading it again would find, and it comes back as
-   * it is stored, to be acted on like any other. So the same commit
-   * reported twice (a merged pull request and the push of its merge commit)
-   * is read and judged once, and a retry reads only what could not be read
-   * before; while a reading stored by something that does not act on it,
-   * such as a re-check after a harmful signal, is still acted on. A citation
-   * never read, or one that never held, says nothing about this change and
-   * is left to its retry.
+   * it is stored, to be acted on like any other. So while the change is
+   * still the head, the same commit reported twice (a merged pull request
+   * and the push of its merge commit) is read and judged once; once more
+   * has landed, the second report reads the newer head. A retry reads only
+   * what it could not read before, and a reading stored by something that
+   * does not act on it, such as a re-check after a harmful signal, is still
+   * acted on. A reading taken before a person last acted on the entry is
+   * read again, as nothing acts on it. A citation never read, or one that
+   * never held, says nothing about this change and is left to its retry.
    *
    * Nothing is written: each check comes back with what to store, for the
    * caller to store with whatever it does about the result, so a failure
@@ -816,6 +899,7 @@ export default class EntryCitationsService {
             id: true,
             status: true,
             content: true,
+            contentHash: true,
             sourceSession: true,
             page: { select: { workspaceId: true } },
           },
@@ -825,6 +909,13 @@ export default class EntryCitationsService {
 
     const checks: LandedCheck[] = [];
     const reads = new RepoReads(this.files);
+    const putBack = citations.some(
+      (citation) => citation.checkedSha === change.sha,
+    )
+      ? await putBackAt(this.prisma, [
+          ...new Set(citations.map((citation) => citation.entry.id)),
+        ])
+      : new Map<string, Date>();
     let unread = 0;
 
     for (const citation of citations) {
@@ -839,7 +930,14 @@ export default class EntryCitationsService {
           ? storedCheck(citation, citation.entry)
           : null;
 
-      if (stored) {
+      if (
+        stored &&
+        !readBeforeActedOn(
+          stored,
+          citation.entry,
+          putBack.get(citation.entry.id) ?? null,
+        )
+      ) {
         checks.push(stored);
         continue;
       }
@@ -865,6 +963,7 @@ export default class EntryCitationsService {
         judgment: update.judgment,
         judgeModel: update.judgeModel,
         judgeReason: update.judgeReason,
+        judgedContentHash: update.judgedContentHash,
         checkedAt: update.checkedAt,
         update,
       });
@@ -877,6 +976,11 @@ export default class EntryCitationsService {
    * Reads again the code citations that could not be read when they were
    * written. The write checked everything it could; this finishes the job.
    * Returns how many are still unread, so the caller can try again later.
+   *
+   * A reading is stored only while the citation is still unread, under the
+   * entry's lock. It is of the commit the citation cites, older than any
+   * head a landed change's check or a re-check has read since, and must not
+   * replace what they found.
    */
   async retryUnknown(entryId: string): Promise<{ stillUnknown: number }> {
     const entry = await this.entryWithCitations(entryId);
@@ -886,7 +990,10 @@ export default class EntryCitationsService {
     }
 
     let stillUnknown = 0;
-    let settled = 0;
+    const found: Array<{
+      id: string;
+      update: Prisma.PageEntryCitationUncheckedUpdateInput;
+    }> = [];
     const reads = new RepoReads(this.files);
 
     for (const citation of entry.citations) {
@@ -908,12 +1015,25 @@ export default class EntryCitationsService {
         continue;
       }
 
-      await this.prisma.pageEntryCitation.update({
-        where: { id: citation.id },
-        data: update,
-      });
-      settled++;
+      found.push({ id: citation.id, update });
     }
+
+    const settled = found.length
+      ? await this.prisma.$transaction(async (tx) => {
+          await lockEntry(tx, entryId);
+          let stored = 0;
+
+          for (const { id, update } of found) {
+            const { count } = await tx.pageEntryCitation.updateMany({
+              where: { id, ...STILL_UNREAD },
+              data: update,
+            });
+            stored += count;
+          }
+
+          return stored;
+        })
+      : 0;
 
     if (settled > 0) {
       await this.indexer?.entryChanged(entryId);
@@ -1074,6 +1194,7 @@ export default class EntryCitationsService {
       judgeModel: verdict.model,
       judgeLines: verdict.lines,
       judgeReason: verdict.reason,
+      judgedContentHash: entry.contentHash,
     };
   }
 
@@ -1125,6 +1246,7 @@ export default class EntryCitationsService {
       select: {
         id: true,
         content: true,
+        contentHash: true,
         sourceSession: true,
         page: { select: { workspaceId: true } },
         citations: { select: CITATION_SELECT },
@@ -1212,6 +1334,15 @@ const NO_JUDGMENT = {
   judgeModel: null as string | null,
   judgeLines: null as string | null,
   judgeReason: null as string | null,
+  judgedContentHash: null as string | null,
+};
+
+/**
+ * A citation never read. A reading of the commit it cites is stored only
+ * over this: any other reading is of a head, which is newer.
+ */
+const STILL_UNREAD: Prisma.PageEntryCitationWhereInput = {
+  checkResult: PageEntryCitationCheckEnum.UNKNOWN,
 };
 
 function removedRepo() {

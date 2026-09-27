@@ -982,6 +982,10 @@ model PageEntryCitation {
   judgeModel  String?
   judgeLines  String?
   judgeReason String?
+  /// The entry's `contentHash` when the judge read it. A person may reword
+  /// the entry afterwards, and a judgment of the old words says nothing
+  /// about the new ones, so the gardener never acts on it for them.
+  judgedContentHash String?
 
   @@index([entryId])
   @@index([moduleRepoId, path])

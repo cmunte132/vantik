@@ -37,7 +37,11 @@ export enum KnowledgeReviewReasonEnum {
   HARMFUL_SIGNAL = 'HARMFUL_SIGNAL',
   AUDIT = 'AUDIT',
   LOW_AGREEMENT = 'LOW_AGREEMENT',
-  /** The code now contradicts a verified entry, or one on a locked page. */
+  /**
+   * The code now contradicts an entry the gardener asks about rather than
+   * disputing: a person verified it, its page is locked, or a person put it
+   * back after it was last disputed.
+   */
   CITATION_CONTRADICTED = 'CITATION_CONTRADICTED',
   /** A change to the code removed a file the entry cites. */
   CITATION_MISSING = 'CITATION_MISSING',

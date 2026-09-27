@@ -18,7 +18,9 @@ import { LoggerService } from 'modules/logger/logger.service';
 import EntryCitationsService, {
   type LandedCheck,
   lockEntry,
+  putBackAt,
   readBefore,
+  readBeforeActedOn,
   STORED_READING_SELECT,
   storedCheck,
 } from '../entry-citations.service';
@@ -52,13 +54,23 @@ export interface LandedSummary {
   disputed: number;
   proposed: number;
   unread: number;
+  /** Read before a person last acted on their entry, so read again. */
+  stale: number;
 }
 
-/** Raised when citations a change touches could not be read, so it is retried. */
+/**
+ * Raised when citations a change touches could not be read, or were read
+ * before a person last acted on their entry, so the check is retried.
+ */
 export class UnreadCitations extends Error {
-  constructor(readonly unread: number) {
+  constructor(
+    readonly unread: number,
+    readonly stale = 0,
+  ) {
     super(
-      `${unread} citation(s) touched by the change could not be read; the check is retried`,
+      `${unread} citation(s) touched by the change could not be read and ` +
+        `${stale} were read before a person last acted on their entry; the ` +
+        'check is retried',
     );
   }
 }
@@ -76,7 +88,8 @@ export class UnreadCitations extends Error {
  *   it and a person can put it back.
  * - A person verified the entry, its page is locked, or a person already put
  *   it back after the gardener disputed it: the gardener asks instead, with
- *   an archive proposal and the same issue.
+ *   an archive proposal and the same issue. A contradiction a person put
+ *   back, for the same words, citation and commit, is not raised again.
  * - A cited file is gone, or no judge could say whether the changed code
  *   still supports the claim: an archive proposal waits in the review queue.
  *   Neither is evidence the claim is false, only that nothing now shows it
@@ -100,7 +113,7 @@ export default class KnowledgeUpkeepService {
   /**
    * Checks and acts on the knowledge one landed change touches. Throws
    * `UnreadCitations` after acting on everything it could read, so the queue
-   * tries the rest again.
+   * tries the rest again, and the readings a person acted on the entry after.
    */
   async codeLanded(change: CodeLandedJob): Promise<LandedSummary> {
     await this.openOwedIssues(change.workspaceId);
@@ -131,15 +144,17 @@ export default class KnowledgeUpkeepService {
       disputed: 0,
       proposed: 0,
       unread,
+      stale: 0,
     };
 
     for (const [entryId, entryChecks] of byEntry) {
-      const done = await this.settle(entryId, entryChecks, {
+      const { done, stale } = await this.settle(entryId, entryChecks, {
         sha: change.sha,
         externalRepoId: change.externalRepoId,
         repo: repo?.fullName ?? null,
       });
 
+      summary.stale += stale;
       await this.indexer?.entryChanged(entryId);
 
       if (done?.action === PageEntryMaintenanceAction.DISPUTED) {
@@ -157,12 +172,12 @@ export default class KnowledgeUpkeepService {
       message:
         `Checked ${summary.checked} citation(s) touched by ${change.sha.slice(0, 7)}: ` +
         `${summary.disputed} disputed, ${summary.proposed} proposed for archive, ` +
-        `${summary.unread} unread`,
+        `${summary.unread} unread, ${summary.stale} to read again`,
       where: 'KnowledgeUpkeepService.codeLanded',
     });
 
-    if (unread > 0) {
-      throw new UnreadCitations(unread);
+    if (unread > 0 || summary.stale > 0) {
+      throw new UnreadCitations(unread, summary.stale);
     }
 
     return summary;
@@ -171,59 +186,63 @@ export default class KnowledgeUpkeepService {
   /**
    * Stores one entry's check results and does what they call for, in one
    * transaction, under the entry's lock. The maintenance row written, or
-   * null when nothing was.
+   * null when nothing was; and how many readings were taken before a person
+   * last acted on the entry, which the caller reads again.
    *
-   * A reading is stored only over an older one. Where a newer one is stored
-   * already, by another change's check or a re-check, that one is acted on
-   * instead: its head was asked for later than this check's, so it contains
-   * this change too, and a re-check stores what it finds without acting on
-   * it.
+   * A reading is stored only over an older one. What is acted on is what is
+   * stored once the lock is held: this check's reading, or a newer one that
+   * another change's check or a re-check stored first, whose head was asked
+   * for later and so contains this change too. A re-check stores what it
+   * finds without acting on it, so it is acted on here.
+   *
+   * A reading taken before a person last acted on the entry is not acted
+   * on, and neither is a contradiction a person has already overruled: the
+   * same citation, read at the same commit, disputed for the same words and
+   * put back.
    */
   private async settle(
     entryId: string,
     checks: LandedCheck[],
     change: NonNullable<MaintenanceEvidence['change']>,
   ): Promise<{
-    id: string;
-    action: PageEntryMaintenanceAction;
-    reason: PageEntryMaintenanceReason;
-  } | null> {
+    done: {
+      id: string;
+      action: PageEntryMaintenanceAction;
+      reason: PageEntryMaintenanceReason;
+    } | null;
+    stale: number;
+  }> {
     return this.prisma.$transaction(async (tx) => {
       await lockEntry(tx, entryId);
       const readings: LandedCheck[] = [];
 
       for (const check of checks) {
-        if (!check.update) {
-          readings.push(check);
-          continue;
+        if (check.update) {
+          const { count } = await tx.pageEntryCitation.updateMany({
+            where: { id: check.citationId, ...readBefore(check.checkedAt) },
+            data: check.update,
+          });
+
+          if (count > 0) {
+            readings.push(check);
+            continue;
+          }
         }
 
-        const { count } = await tx.pageEntryCitation.updateMany({
-          where: { id: check.citationId, ...readBefore(check.checkedAt) },
-          data: check.update,
-        });
-
-        if (count > 0) {
-          readings.push(check);
-          continue;
-        }
-
+        // Stored before this held the lock: by this job before it was
+        // retried, by another change's check or by a re-check. Read again
+        // under the lock, since a newer reading may have been stored after
+        // the citation was first read.
         const row = await tx.pageEntryCitation.findFirst({
           where: { id: check.citationId },
           select: STORED_READING_SELECT,
         });
-        const newer =
+        const stored =
           row && storedCheck(row, { id: entryId, status: check.entryStatus });
 
-        if (newer) {
-          readings.push(newer);
+        if (stored) {
+          readings.push(stored);
         }
-      }
-
-      const [reason, found] = actionable(readings);
-
-      if (!reason) {
-        return null;
       }
 
       // As it is now, not as it was when the citations were read: a person
@@ -238,7 +257,21 @@ export default class KnowledgeUpkeepService {
       });
 
       if (!entry) {
-        return null;
+        return { done: null, stale: 0 };
+      }
+
+      const putBack = (await putBackAt(tx, [entryId])).get(entryId) ?? null;
+      const current = readings.filter(
+        (reading) => !readBeforeActedOn(reading, entry, putBack),
+      );
+      const stale = readings.length - current.length;
+      const overruled = await this.overruled(tx, entryId, entry.contentHash);
+      const [reason, found] = actionable(
+        current.filter((reading) => !overruled.ruledOn(reading)),
+      );
+
+      if (!reason) {
+        return { done: null, stale };
       }
 
       const evidence: MaintenanceEvidence = {
@@ -248,24 +281,35 @@ export default class KnowledgeUpkeepService {
       const workspaceId = entry.page.workspaceId;
 
       if (reason !== PageEntryMaintenanceReason.CITATION_CONTRADICTED) {
-        return this.propose(tx, { workspaceId, entryId, reason, evidence });
+        return {
+          done: await this.propose(tx, {
+            workspaceId,
+            entryId,
+            reason,
+            evidence,
+          }),
+          stale,
+        };
       }
 
       const askedBecause: MaintenanceEvidence['askedBecause'] = entry.verifiedAt
         ? 'VERIFIED'
         : entry.page.entryPolicy === PageEntryPolicy.LOCKED
           ? 'LOCKED'
-          : (await this.overruled(tx, entryId, entry.contentHash))
+          : overruled.restored
             ? 'RESTORED'
             : null;
 
       if (askedBecause) {
-        return this.propose(tx, {
-          workspaceId,
-          entryId,
-          reason,
-          evidence: { ...evidence, askedBecause },
-        });
+        return {
+          done: await this.propose(tx, {
+            workspaceId,
+            entryId,
+            reason,
+            evidence: { ...evidence, askedBecause },
+          }),
+          stale,
+        };
       }
 
       const { count } = await tx.pageEntry.updateMany({
@@ -279,7 +323,7 @@ export default class KnowledgeUpkeepService {
       });
 
       if (count === 0) {
-        return null;
+        return { done: null, stale };
       }
 
       // The claim disputed, so a person correcting it is told from a
@@ -289,33 +333,38 @@ export default class KnowledgeUpkeepService {
         claim: entry.contentHash,
       };
 
-      return tx.pageEntryMaintenance.create({
-        data: {
-          workspaceId,
-          entryId,
-          action: PageEntryMaintenanceAction.DISPUTED,
-          reason,
-          evidence: disputed as Prisma.InputJsonValue,
-        },
-        select: { id: true, action: true, reason: true },
-      });
+      return {
+        done: await tx.pageEntryMaintenance.create({
+          data: {
+            workspaceId,
+            entryId,
+            action: PageEntryMaintenanceAction.DISPUTED,
+            reason,
+            evidence: disputed as Prisma.InputJsonValue,
+          },
+          select: { id: true, action: true, reason: true },
+        }),
+        stale,
+      };
     });
   }
 
   /**
-   * Whether a person put this entry back, saying the same thing, after the
-   * gardener disputed it, within the decay window. The gardener then asks
-   * instead of disputing it again on every change to the file: the person
-   * has read the code, and the judge is a model. An entry a person corrected
-   * before putting it back makes a new claim, which the gardener disputes
-   * like any other. A dispute that did not record its claim counts, so the
-   * gardener asks when it cannot tell.
+   * What people have said about the gardener disputing this entry within
+   * the decay window, for the words it has now. `restored`: a person put
+   * these words back after a dispute, so a new contradiction is asked about
+   * rather than acted on. `ruledOn`: a reading a person has overruled
+   * already, the same citation read at the same commit, which is not raised
+   * again. A dispute that recorded no words counts for any.
    */
   private async overruled(
     tx: Prisma.TransactionClient,
     entryId: string,
     contentHash: string | null,
-  ): Promise<boolean> {
+  ): Promise<{
+    restored: boolean;
+    ruledOn: (reading: LandedCheck) => boolean;
+  }> {
     const undone = await tx.pageEntryMaintenance.findMany({
       where: {
         entryId,
@@ -324,12 +373,21 @@ export default class KnowledgeUpkeepService {
       },
       select: { evidence: true },
     });
+    const forTheseWords = undone
+      .map((row) => row.evidence as MaintenanceEvidence | null)
+      .filter((evidence) => !evidence?.claim || evidence.claim === contentHash);
 
-    return undone.some((row) => {
-      const claim = (row.evidence as MaintenanceEvidence | null)?.claim;
-
-      return !claim || claim === contentHash;
-    });
+    return {
+      restored: forTheseWords.length > 0,
+      ruledOn: (reading) =>
+        forTheseWords.some((evidence) =>
+          (evidence?.citations ?? []).some(
+            (citation) =>
+              citation.citationId === reading.citationId &&
+              citation.readSha === reading.readSha,
+          ),
+        ),
+    };
   }
 
   /**

@@ -881,7 +881,7 @@ describe('a change that landed re-checks the citations it touches', () => {
     expect(t.reads).toEqual([]);
   });
 
-  it('[KG-6.2] reads and judges one commit once, however often it is reported', async () => {
+  it('[KG-6.2] reads and judges one commit once while it is the head, however often it is reported', async () => {
     // Verified, so the first report asks rather than disputes and the entry
     // is still in use when the second arrives.
     const t = harness({
@@ -898,6 +898,23 @@ describe('a change that landed re-checks the citations it touches', () => {
     expect(t.judge.judge).toHaveBeenCalledTimes(1);
     expect(t.maintenance).toHaveLength(1);
     expect(t.issues).toHaveLength(1);
+
+    // Once more has landed, the second report reads the newer head, as the
+    // first stored a reading of that and not of the change's commit.
+    const moved = harness({
+      entries: [entry('e1', { verifiedAt: new Date() })],
+      citations: [citation('c1', 'e1')],
+    });
+    moved.repo.code['src/retry.ts'] = CHANGED;
+    moved.repo.head = { sha: NEWER };
+
+    await moved.upkeep.codeLanded(landed());
+    await moved.upkeep.codeLanded(landed());
+
+    expect(moved.reads).toEqual([
+      { path: 'src/retry.ts', ref: NEWER },
+      { path: 'src/retry.ts', ref: NEWER },
+    ]);
 
     // Read at the change's commit before, by anything: not read again.
     const before = harness({
@@ -997,6 +1014,7 @@ describe('a change that landed re-checks the citations it touches', () => {
         judgment: Judgment.CONTRADICTED,
         judgeModel: 'judge-model',
         judgeReason: 'The code now makes five attempts, not three.',
+        judgedContentHash: 'hash-e1',
       });
 
       return read(...args);
@@ -1123,6 +1141,341 @@ describe('a change that landed re-checks the citations it touches', () => {
 
     expect(t.ops.slice(0, 2)).toEqual(['lock:knowledge-entry:e1', 'store:c1']);
     expect(t.maintenance).toHaveLength(1);
+  });
+
+  it('[KG-6.2] acts on what is stored once it holds the lock, not on a stored reading it found before', async () => {
+    // A re-check read c1 at this change's commit, found a contradiction and
+    // stored it; c2 has still to be read.
+    const t = harness({
+      entries: [entry('e1')],
+      citations: [
+        citation('c1', 'e1', {
+          checkedSha: SHA,
+          checkedAt: new Date(Date.now() - MINUTE),
+          checkResult: Check.CHANGED,
+          judgment: Judgment.CONTRADICTED,
+          judgedContentHash: 'hash-e1',
+        }),
+        citation('c2', 'e1', { path: 'src/other.ts' }),
+      ],
+    });
+    t.repo.code['src/other.ts'] = ORIGINAL;
+    const read = t.files.read.getMockImplementation() as NonNullable<
+      ReturnType<typeof t.files.read.getMockImplementation>
+    >;
+    // While c2 is read, a fix lands, and its job finds c1 holds again.
+    t.files.read.mockImplementation(async (...args) => {
+      Object.assign(t.citations[0], {
+        checkedAt: new Date(Date.now() + MINUTE),
+        checkedSha: NEWER,
+        checkResult: Check.HOLDS,
+        judgment: null,
+        judgedContentHash: null,
+      });
+
+      return read(...args);
+    });
+
+    await t.upkeep.codeLanded(landed(['src/retry.ts', 'src/other.ts']));
+
+    expect(t.reads).toEqual([{ path: 'src/other.ts', ref: SHA }]);
+    expect(t.entries.get('e1')?.status).toBe(Status.STANDING);
+    expect(t.maintenance).toEqual([]);
+    expect(t.issues).toEqual([]);
+  });
+
+  it('[KG-6.2] never lets a reading of the commit a citation cites replace a reading of a head', async () => {
+    for (const run of ['retry', 'recheck'] as const) {
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [
+          citation('c1', 'e1', {
+            checkResult: Check.UNKNOWN,
+            checkedAt: null,
+            checkedSha: null,
+          }),
+        ],
+      });
+      const read = t.files.read.getMockImplementation() as NonNullable<
+        ReturnType<typeof t.files.read.getMockImplementation>
+      >;
+      // While this reads the commit c1 cites, where the claim holds, another
+      // retry reads it first, and a landed change's check then reads the
+      // head, asked for before this finishes, and stores a contradiction.
+      t.files.read.mockImplementation(async (...args) => {
+        Object.assign(t.citations[0], {
+          checkedAt: new Date(Date.now() - 1000),
+          checkedSha: SHA,
+          checkResult: Check.CHANGED,
+          judgment: Judgment.CONTRADICTED,
+          judgedContentHash: 'hash-e1',
+        });
+
+        return read(...args);
+      });
+      const citations = new EntryCitationsService(
+        t.prisma as never,
+        t.files as never,
+        t.judge as never,
+      );
+
+      await (run === 'retry'
+        ? citations.retryUnknown('e1')
+        : citations.recheck('e1'));
+
+      expect(t.citations[0]).toMatchObject({
+        checkedSha: SHA,
+        checkResult: Check.CHANGED,
+        judgment: Judgment.CONTRADICTED,
+      });
+      expect(t.ops).toEqual(['lock:knowledge-entry:e1']);
+    }
+  });
+
+  describe('a person acting on an entry after its citations were read', () => {
+    beforeEach(() =>
+      jest.useFakeTimers({
+        now: new Date('2026-01-01T00:00:00Z'),
+        doNotFake: [
+          'nextTick',
+          'queueMicrotask',
+          'setImmediate',
+          'clearImmediate',
+          'setTimeout',
+          'clearTimeout',
+          'setInterval',
+          'clearInterval',
+        ],
+      }),
+    );
+    afterEach(() => jest.useRealTimers());
+
+    const later = () => jest.setSystemTime(Date.now() + MINUTE);
+
+    /** The first run disputes e1 over c1, and cannot read c2. */
+    const disputedWithOneUnread = async () => {
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [
+          citation('c1', 'e1'),
+          citation('c2', 'e1', { path: 'src/big.ts' }),
+        ],
+      });
+      t.repo.code['src/retry.ts'] = CHANGED;
+      t.repo.code['src/big.ts'] = ORIGINAL;
+      t.repo.tooLarge.add('src/big.ts');
+      const change = landed(['src/retry.ts', 'src/big.ts']);
+
+      await expect(t.upkeep.codeLanded(change)).rejects.toThrow(
+        UnreadCitations,
+      );
+      expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
+      expect(t.issues).toHaveLength(1);
+      t.repo.tooLarge.delete('src/big.ts');
+      later();
+
+      return { t, change };
+    };
+
+    const putBack = (t: ReturnType<typeof harness>, words?: string) => {
+      Object.assign(t.entries.get('e1') as Row, {
+        status: Status.STANDING,
+        ...(words && { content: words, contentHash: `hash-${words}` }),
+      });
+      Object.assign(t.maintenance[0], {
+        reversedAt: new Date(),
+        reversedById: 'person-1',
+      });
+      later();
+    };
+
+    it('[KG-6.2] reads again on its retry, and does not raise again, a contradiction a person overruled', async () => {
+      const { t, change } = await disputedWithOneUnread();
+
+      // The person reads the code and puts the entry back as it was.
+      putBack(t);
+      await t.upkeep.codeLanded(change);
+
+      // Read and judged again, as the person acted after the first reading,
+      // and found as they overruled it: nothing is raised.
+      expect(t.judge.judge).toHaveBeenCalledTimes(2);
+      expect(t.entries.get('e1')?.status).toBe(Status.STANDING);
+      expect(t.maintenance).toHaveLength(1);
+      expect(t.issues).toHaveLength(1);
+    });
+
+    it('[KG-6.2] judges the words a person corrected an entry to on its retry, not the words disputed', async () => {
+      const { t, change } = await disputedWithOneUnread();
+
+      putBack(t, 'Retries make five attempts.');
+      t.judge.judge.mockResolvedValueOnce({
+        verdict: Judgment.HOLDS,
+        model: 'judge-model',
+        lines: '2-2',
+        reason: 'Five attempts, as it says.',
+      });
+      await t.upkeep.codeLanded(change);
+
+      expect(t.judge.judge).toHaveBeenLastCalledWith(
+        expect.objectContaining({ claim: 'Retries make five attempts.' }),
+      );
+      expect(t.citations[0]).toMatchObject({
+        judgment: Judgment.HOLDS,
+        judgedContentHash: 'hash-Retries make five attempts.',
+      });
+      expect(t.entries.get('e1')?.status).toBe(Status.STANDING);
+      expect(t.maintenance).toHaveLength(1);
+      expect(t.issues).toHaveLength(1);
+    });
+
+    it('[KG-6.2] judges again, rather than acting on, a stored judgment of words the entry no longer has', async () => {
+      // A re-check judged c1 at this change's commit; a person has reworded
+      // the entry since.
+      const t = harness({
+        entries: [
+          entry('e1', {
+            content: 'Retries make five attempts.',
+            contentHash: 'hash-reworded',
+          }),
+        ],
+        citations: [
+          citation('c1', 'e1', {
+            checkedSha: SHA,
+            checkedAt: new Date(Date.now() - MINUTE),
+            checkResult: Check.CHANGED,
+            judgment: Judgment.CONTRADICTED,
+            judgedContentHash: 'hash-e1',
+          }),
+        ],
+      });
+      t.repo.code['src/retry.ts'] = CHANGED;
+      t.judge.judge.mockResolvedValueOnce({
+        verdict: Judgment.HOLDS,
+        model: 'judge-model',
+        lines: '2-2',
+        reason: 'Five attempts, as it says.',
+      });
+
+      await t.upkeep.codeLanded(landed());
+
+      expect(t.judge.judge).toHaveBeenCalledWith(
+        expect.objectContaining({ claim: 'Retries make five attempts.' }),
+      );
+      expect(t.entries.get('e1')?.status).toBe(Status.STANDING);
+      expect(t.maintenance).toEqual([]);
+    });
+
+    it('[KG-6.2] acts on no judgment of words a person changed while it was made, and reads it again', async () => {
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [citation('c1', 'e1')],
+      });
+      t.repo.code['src/retry.ts'] = CHANGED;
+      t.judge.judge.mockImplementationOnce(async () => {
+        Object.assign(t.entries.get('e1') as Row, {
+          content: 'Retries make five attempts.',
+          contentHash: 'hash-reworded',
+        });
+
+        return {
+          verdict: Judgment.CONTRADICTED,
+          model: 'judge-model',
+          lines: '2-2',
+          reason: 'The code now makes five attempts, not three.',
+        };
+      });
+
+      await expect(t.upkeep.codeLanded(landed())).rejects.toMatchObject({
+        unread: 0,
+        stale: 1,
+      });
+      expect(t.citations[0]).toMatchObject({ judgedContentHash: 'hash-e1' });
+      expect(t.entries.get('e1')?.status).toBe(Status.STANDING);
+      expect(t.maintenance).toEqual([]);
+
+      later();
+      t.judge.judge.mockResolvedValueOnce({
+        verdict: Judgment.HOLDS,
+        model: 'judge-model',
+        lines: '2-2',
+        reason: 'Five attempts, as it says.',
+      });
+      await t.upkeep.codeLanded(landed());
+
+      expect(t.judge.judge).toHaveBeenLastCalledWith(
+        expect.objectContaining({ claim: 'Retries make five attempts.' }),
+      );
+      expect(t.citations[0]).toMatchObject({
+        judgment: Judgment.HOLDS,
+        judgedContentHash: 'hash-reworded',
+      });
+      expect(t.maintenance).toEqual([]);
+    });
+
+    it('[KG-6.2] acts on no stored reading taken before a person put the entry back, and reads it again', async () => {
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [citation('c1', 'e1')],
+        maintenance: [
+          {
+            id: 'earlier',
+            workspaceId: WORKSPACE,
+            entryId: 'e1',
+            action: Action.DISPUTED,
+            reason: Reason.CITATION_CONTRADICTED,
+            proposalState: null,
+            issueId: 'issue-old',
+            evidence: {
+              claim: 'hash-e1',
+              citations: [{ citationId: 'c1', readSha: 'b'.repeat(40) }],
+            },
+            reversedAt: null,
+            updatedAt: new Date(),
+          },
+          // Put back long before: the latest putting back is what counts.
+          {
+            id: 'long-ago',
+            workspaceId: WORKSPACE,
+            entryId: 'e1',
+            action: Action.DISPUTED,
+            reason: Reason.CITATION_CONTRADICTED,
+            proposalState: null,
+            issueId: 'issue-older',
+            evidence: { claim: 'hash-e1' },
+            reversedAt: new Date(Date.now() - 10 * DAY),
+            reversedById: 'person-1',
+            updatedAt: new Date(Date.now() - 10 * DAY),
+          },
+        ],
+      });
+      t.repo.code['src/retry.ts'] = CHANGED;
+      const read = t.files.read.getMockImplementation() as NonNullable<
+        ReturnType<typeof t.files.read.getMockImplementation>
+      >;
+      // While this reads, a later change's check stores a newer reading,
+      // and after it a person puts the entry back.
+      t.files.read.mockImplementation(async (...args) => {
+        Object.assign(t.citations[0], {
+          checkedAt: new Date(Date.now() + MINUTE),
+          checkedSha: NEWER,
+          checkResult: Check.CHANGED,
+          judgment: Judgment.CONTRADICTED,
+          judgedContentHash: 'hash-e1',
+        });
+        Object.assign(t.maintenance[0], {
+          reversedAt: new Date(Date.now() + 2 * MINUTE),
+          reversedById: 'person-1',
+        });
+
+        return read(...args);
+      });
+
+      await expect(t.upkeep.codeLanded(landed())).rejects.toMatchObject({
+        stale: 1,
+      });
+      expect(t.maintenance).toHaveLength(2);
+      expect(t.issues).toEqual([]);
+    });
   });
 
   it('[KG-6.2] acts on what it could read, and retries only what it could not', async () => {
@@ -1295,7 +1648,15 @@ describe('a change that landed re-checks the citations it touches', () => {
             reason: Reason.CITATION_CONTRADICTED,
             proposalState: null,
             issueId: 'issue-old',
-            evidence: { claim },
+            // Overruled for c1 at another commit, and for c2 at this one:
+            // neither is the reading this change gives.
+            evidence: {
+              claim,
+              citations: [
+                { citationId: 'c1', readSha: 'b'.repeat(40) },
+                { citationId: 'c2', readSha: SHA },
+              ],
+            },
             reversedAt: new Date(Date.now() - 5 * DAY),
             reversedById: 'person-1',
             updatedAt: new Date(Date.now() - 5 * DAY),

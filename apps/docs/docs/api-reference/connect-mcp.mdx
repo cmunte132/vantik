@@ -90,9 +90,10 @@ agent names its session in one of two ways:
 - Pass `session` to `recall_knowledge` or to `load_context`. This is the same
   argument that `remember` takes.
 - Send an `X-Vantik-Session` header with each request. Use this for a client
-  that serves one session and can set a header for it. The header holds
-  printable ASCII characters, at most 200 of them. The server ignores any other
-  value.
+  that serves one session and can set a header for it.
+
+Either way, a session is printable ASCII characters with no spaces, at most 200
+of them. Vantik ignores any other value and still serves the knowledge.
 
 If the agent names no session, the record holds only the token.
 

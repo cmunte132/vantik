@@ -34,6 +34,25 @@ interface RequestOptions {
 
 const DEFAULT_BASE_URL = 'http://localhost:3001';
 const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_SESSION_LENGTH = 200;
+
+/**
+ * A session as the `X-Vantik-Session` header can carry it, or nothing.
+ *
+ * The server drops a session it cannot use rather than failing the read, and
+ * so does this: `fetch` refuses a header with a newline or a character past
+ * Latin-1 outright, and a session a model typed is not worth losing a read
+ * over. Held to what the server keeps: printable ASCII, at most 200.
+ */
+function headerSession(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+
+  return trimmed &&
+    trimmed.length <= MAX_SESSION_LENGTH &&
+    /^[\x21-\x7e]+$/.test(trimmed)
+    ? trimmed
+    : undefined;
+}
 
 /**
  * Thin authenticated HTTP client over the Vantik REST API.
@@ -68,7 +87,7 @@ export class VantikClient {
     this.baseUrl = normalizedUrl;
     this.token = token;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.sessionId = config.sessionId?.trim() || undefined;
+    this.sessionId = headerSession(config.sessionId);
     this.fetchImpl = config.fetch ?? globalThis.fetch;
   }
 
@@ -85,7 +104,7 @@ export class VantikClient {
     path: string,
     { query, body, sessionId }: RequestOptions,
   ): Promise<T> {
-    const session = sessionId?.trim() || this.sessionId;
+    const session = headerSession(sessionId) ?? this.sessionId;
     const url = new URL(`${this.baseUrl}/v1${path}`);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value !== undefined && value !== null && value !== '') {

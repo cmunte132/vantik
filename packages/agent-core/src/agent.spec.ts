@@ -1074,6 +1074,29 @@ describe('the harness session', () => {
     ]);
   });
 
+  it('[KG-3.1] drops a session it cannot send, rather than failing the read', async () => {
+    // Real fetch refuses these as header values; the double checks the same
+    // way, so a session sent as given fails the call.
+    const sent: Array<string | null> = [];
+    const client = new VantikClient({
+      baseUrl: 'http://vantik.test',
+      token: 'tg_pat_test',
+      sessionId: 'line\nbreak',
+      fetch: (async (_url: string, init: RequestInit = {}) => {
+        sent.push(new Headers(init.headers).get('x-vantik-session'));
+        return new Response('{}', { status: 200 });
+      }) as unknown as typeof globalThis.fetch,
+    });
+    const agent = new VantikAgent(client);
+
+    await agent.recallKnowledge({ query: 'redis', session: '会话-1' });
+    await agent.loadContext({ scope: 'apps', session: 'x'.repeat(201) });
+    await agent.recallKnowledge({ query: 'redis', session: 'two words' });
+    await agent.recallKnowledge({ query: 'redis', session: ' codex-7 ' });
+
+    expect(sent).toEqual([null, null, null, 'codex-7']);
+  });
+
   it('[KG-3.1] sends no session header when it has none', async () => {
     const { client, headers } = recording('   ');
 

@@ -5,14 +5,14 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 3 in review; round 1's findings are fixed and back with the
+- Current phase: 3 in review; round 2's finding is fixed and back with the
   reviewer. Phase 1's review fixes, phase 2 and phase 3 ride PR #44.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
 - Last verify: phases 0-2 PASS; phase 3 6/7, KG-3.R waiting on the review
-  (server 1519 with the 15 database-only skipped, agent-core 66, cli 10,
+  (server 1519 with the 15 database-only skipped, agent-core 67, cli 10,
   webapp 621 with its 2 expected failures; typecheck and lint ok).
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
@@ -310,7 +310,10 @@ next session starts by reading it.
   dropped, not stored. Since round 1, `recall_knowledge` and `load_context`
   also take a `session` argument, as `remember` does, which agent-core sends
   as that call's header; MCP clients that cannot set headers name the session
-  that way. Both routes are documented in `connect-mcp.mdx`.
+  that way. Both routes are documented in `connect-mcp.mdx`. agent-core
+  holds a session to the server's rule before sending it, and drops one that
+  breaks it (round 2): `fetch` refuses some header values outright, and a
+  session is never worth losing a read over.
 - **Run knowledge (KG-3.2).** `KnowledgeService.knowledgeForRun` packs, in
   order: the STANDING CONVENTION entries whose modules overlap the issue's
   (verified first, then newest; at most 25 read), which are not held to a
@@ -692,6 +695,22 @@ finding and six non-blocking, all fixed:
 
 Every new test fails with its fix reverted (14 mutations, all caught).
 
+### Phase 3, round 2 (same reviewer, on the round 1 fixes)
+
+All seven fixes confirmed, including three mutations of the branch matching
+(the opening-time bound, the repository check, a run's own pull request),
+all caught. One new non-blocking finding in fix 6, fixed: a `session`
+argument with a newline or a character past Latin-1 went out unchanged as a
+header, `fetch` refused it, and the agent was served nothing and told Vantik
+could not be reached. The server drops a session it cannot use rather than
+failing the read; agent-core now does the same (`headerSession` in
+`client.ts`), for a client's session and a call's, to the server's rule
+(printable ASCII with no spaces, at most 200). Test: `agent.spec.ts`
+"[KG-3.1] drops a session it cannot send, rather than failing the read",
+whose fetch double checks headers as real fetch does; four mutations (each
+call site, the length, the character rule), all caught. `connect-mcp.mdx`
+states the rule for both routes.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -786,3 +805,5 @@ Give the evidence, and stop until the maintainer answers.
   migration replay. Review round 1: one blocking finding (the workspace
   override could not be saved) and six non-blocking; all fixed with tagged,
   mutation-checked tests.
+- 2026-09-27: Review round 2 (6a0ed75): all round 1 fixes confirmed; one new
+  non-blocking finding (a session `fetch` cannot send failed the read) fixed.

@@ -62,7 +62,11 @@ export async function readLocalFile(
   const clean = cleanRepoPath(path);
 
   if (!clean || !COMMIT_SHA.test(ref)) {
-    return { unknown: true, reason: 'not a readable path or commit' };
+    return {
+      unknown: true,
+      reason: 'not a readable path or commit',
+      thisFileOnly: true,
+    };
   }
 
   if (!root) {
@@ -86,6 +90,14 @@ export async function readLocalFile(
 
   if (NOT_THERE.test(stderr)) {
     return { missing: true };
+  }
+
+  if (/maxBuffer/i.test(error.message)) {
+    return {
+      unknown: true,
+      reason: 'the file is too large to check',
+      thisFileOnly: true,
+    };
   }
 
   return { unknown: true, reason: gitReason(error, stderr) };
@@ -136,10 +148,6 @@ function gitReason(
 
   if (error.killed) {
     return 'git took too long to answer';
-  }
-
-  if (/maxBuffer/i.test(error.message)) {
-    return 'the file is too large to check';
   }
 
   return stderr.trim().split('\n')[0] || error.message;

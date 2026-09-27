@@ -97,6 +97,8 @@ describe('readGithubFile', () => {
     ).resolves.toEqual({
       unknown: true,
       reason: 'the file is too large to check',
+      // The file's own reason: the repository may still answer for others.
+      thisFileOnly: true,
     });
 
     mockedAxios.get.mockResolvedValueOnce({ data: '<html>proxy</html>' });

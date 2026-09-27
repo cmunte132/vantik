@@ -14,6 +14,7 @@ import { Queue } from 'bull';
 import {
   cleanRepoPath,
   COMMIT_SHA,
+  type RepoFileRead,
   type RepoHead,
 } from 'integrations/repo-files';
 import { PrismaService } from 'nestjs-prisma';
@@ -38,6 +39,7 @@ import {
 } from './pages.interface';
 import RepoFileSourceService, {
   type CitedRepo,
+  type RepoFileSource,
 } from './repo-file-source.service';
 
 /** A citation ready to be created with its entry. */
@@ -60,10 +62,64 @@ export interface CitationDraft {
 }
 
 /**
- * The head of each repository, resolved once per write or check however many
- * of its files are cited, since every resolution is a call to the source.
+ * The repository reads of one write or check.
+ *
+ * Each repository's head is resolved once, however many of its files are
+ * cited. A repository that does not answer is not asked again in the same
+ * operation: the rest of its citations are unread too, rather than each
+ * waiting out a timeout of its own, since a write waits on every one. A file
+ * unread for a reason of its own (too large to check) says nothing about the
+ * repository and stops nothing.
  */
-type HeadCache = Map<string, Promise<RepoHead>>;
+class RepoReads {
+  private heads = new Map<string, Promise<RepoHead>>();
+  private down = new Map<string, string>();
+
+  constructor(private files: RepoFileSource) {}
+
+  head(repo: CitedRepo): Promise<RepoHead> {
+    const key = repoKey(repo);
+    let head = this.heads.get(key);
+
+    if (!head) {
+      head = this.ask(key, () => this.files.head(repo));
+      this.heads.set(key, head);
+    }
+
+    return head;
+  }
+
+  read(repo: CitedRepo, path: string, ref: string): Promise<RepoFileRead> {
+    return this.ask(repoKey(repo), () => this.files.read(repo, path, ref));
+  }
+
+  private async ask<T extends RepoFileRead | RepoHead>(
+    key: string,
+    call: () => Promise<T>,
+  ): Promise<T | { unknown: true; reason: string }> {
+    const reason = this.down.get(key);
+
+    if (reason !== undefined) {
+      return { unknown: true, reason };
+    }
+
+    const answer = await call();
+
+    if ('unknown' in answer && !('thisFileOnly' in answer)) {
+      this.down.set(key, answer.reason);
+    }
+
+    return answer;
+  }
+}
+
+/** One repository, however many modules list it. */
+function repoKey(repo: {
+  integrationAccountId: string | null;
+  externalRepoId: string;
+}): string {
+  return `${repo.integrationAccountId ?? ''}|${repo.externalRepoId}`;
+}
 
 /** Lines of context either side of a changed citation, shown to the judge. */
 const JUDGE_CONTEXT_LINES = 20;
@@ -126,10 +182,10 @@ export default class EntryCitationsService {
     inputs: PageEntryCitationInputDto[],
   ): Promise<CitationDraft[]> {
     const drafts: CitationDraft[] = [];
-    const heads: HeadCache = new Map();
+    const reads = new RepoReads(this.files);
 
     for (const [index, input] of inputs.entries()) {
-      drafts.push(await this.checkOne(workspaceId, input, index, heads));
+      drafts.push(await this.checkOne(workspaceId, input, index, reads));
     }
 
     return drafts;
@@ -161,7 +217,7 @@ export default class EntryCitationsService {
     workspaceId: string,
     input: PageEntryCitationInputDto,
     index: number,
-    heads: HeadCache,
+    reads: RepoReads,
   ): Promise<CitationDraft> {
     const targets = [
       input.path !== undefined && 'path',
@@ -181,7 +237,7 @@ export default class EntryCitationsService {
     }
 
     if (input.path !== undefined) {
-      return this.checkCode(workspaceId, input, index, heads);
+      return this.checkCode(workspaceId, input, index, reads);
     }
 
     const target = await this.findTarget(workspaceId, input);
@@ -203,7 +259,7 @@ export default class EntryCitationsService {
     workspaceId: string,
     input: PageEntryCitationInputDto,
     index: number,
-    heads: HeadCache,
+    reads: RepoReads,
   ): Promise<CitationDraft> {
     const path = cleanRepoPath(input.path);
     const range = parseLineRange(input.lines);
@@ -250,7 +306,7 @@ export default class EntryCitationsService {
     let ref = input.sha ?? null;
 
     if (!ref) {
-      const head = await this.headOf(repo, heads);
+      const head = await reads.head(repo);
 
       if ('unknown' in head) {
         return unread(null);
@@ -259,7 +315,7 @@ export default class EntryCitationsService {
       ref = head.sha;
     }
 
-    const read = await this.files.read(repo, path, ref);
+    const read = await reads.read(repo, path, ref);
     const at = `${repo.fullName}:${path} at ${ref.slice(0, 12)}`;
 
     if ('unknown' in read) {
@@ -324,8 +380,6 @@ export default class EntryCitationsService {
         pathPrefixes: true,
       },
     });
-    const repoKey = (row: (typeof rows)[number]) =>
-      `${row.integrationAccountId ?? ''}|${row.externalRepoId}`;
     const pick = (candidates: typeof rows) => {
       const distinct = new Map(candidates.map((row) => [repoKey(row), row]));
       return [...distinct.values()];
@@ -500,7 +554,7 @@ export default class EntryCitationsService {
     }
 
     let checked = 0;
-    const heads: HeadCache = new Map();
+    const reads = new RepoReads(this.files);
 
     for (const citation of entry.citations) {
       const update =
@@ -509,8 +563,8 @@ export default class EntryCitationsService {
           : citation.checkResult === PageEntryCitationCheckEnum.UNKNOWN
             ? // Never read, and the retries may have run out: read it now,
               // at the commit it cites, as the retry would have.
-              await this.readUnread(entry.page.workspaceId, citation, heads)
-            : await this.recheckCode(entry, citation, heads);
+              await this.readUnread(entry.page.workspaceId, citation, reads)
+            : await this.recheckCode(entry, citation, reads);
 
       if (update) {
         await this.prisma.pageEntryCitation.update({
@@ -542,7 +596,7 @@ export default class EntryCitationsService {
 
     let stillUnknown = 0;
     let settled = 0;
-    const heads: HeadCache = new Map();
+    const reads = new RepoReads(this.files);
 
     for (const citation of entry.citations) {
       if (
@@ -555,7 +609,7 @@ export default class EntryCitationsService {
       const update = await this.readUnread(
         entry.page.workspaceId,
         citation,
-        heads,
+        reads,
       );
 
       if (!update) {
@@ -590,7 +644,7 @@ export default class EntryCitationsService {
   private async readUnread(
     workspaceId: string,
     citation: CitationRow,
-    heads: HeadCache,
+    reads: RepoReads,
   ) {
     const repo = await this.citedRepo(citation.moduleRepoId, workspaceId);
 
@@ -603,7 +657,7 @@ export default class EntryCitationsService {
     let ref = citation.commitSha;
 
     if (!ref) {
-      const head = await this.headOf(repo, heads);
+      const head = await reads.head(repo);
 
       if ('unknown' in head) {
         return null;
@@ -614,7 +668,7 @@ export default class EntryCitationsService {
 
     const range = rangeOf(citation);
     const read = citation.path
-      ? await this.files.read(repo, citation.path, ref)
+      ? await reads.read(repo, citation.path, ref)
       : ({ missing: true } as const);
 
     if ('unknown' in read) {
@@ -622,6 +676,7 @@ export default class EntryCitationsService {
     }
 
     const checked = {
+      moduleRepoId: repo.id,
       commitSha: ref,
       checkedAt: new Date(),
       checkedSha: ref,
@@ -647,24 +702,12 @@ export default class EntryCitationsService {
     };
   }
 
-  private headOf(repo: CitedRepo, heads: HeadCache): Promise<RepoHead> {
-    const key = `${repo.integrationAccountId ?? ''}|${repo.externalRepoId}`;
-    let head = heads.get(key);
-
-    if (!head) {
-      head = this.files.head(repo);
-      heads.set(key, head);
-    }
-
-    return head;
-  }
-
   private async recheckCode(
     entry: NonNullable<
       Awaited<ReturnType<EntryCitationsService['entryWithCitations']>>
     >,
     citation: CitationRow,
-    heads: HeadCache,
+    reads: RepoReads,
   ) {
     const range = rangeOf(citation);
     const repo = await this.citedRepo(
@@ -684,19 +727,23 @@ export default class EntryCitationsService {
       return null;
     }
 
-    const head = await this.headOf(repo, heads);
+    const head = await reads.head(repo);
 
     if ('unknown' in head) {
       return null;
     }
 
-    const read = await this.files.read(repo, citation.path, head.sha);
+    const read = await reads.read(repo, citation.path, head.sha);
 
     if ('unknown' in read) {
       return null;
     }
 
-    const checked = { checkedAt: new Date(), checkedSha: head.sha };
+    const checked = {
+      moduleRepoId: repo.id,
+      checkedAt: new Date(),
+      checkedSha: head.sha,
+    };
 
     if ('missing' in read) {
       return {
@@ -810,6 +857,15 @@ export default class EntryCitationsService {
     });
   }
 
+  /**
+   * The repository a code citation is read from.
+   *
+   * The row it was written against, while that is live. A row goes when its
+   * module is deleted or the repository moves to another module, and the
+   * repository itself is then often still in the workspace under another
+   * row: that one is used, and the citation is moved to it. Only a
+   * repository no module in the workspace lists any more has nothing to read.
+   */
   private async citedRepo(
     moduleRepoId: string | null,
     workspaceId: string,
@@ -818,21 +874,46 @@ export default class EntryCitationsService {
       return null;
     }
 
+    const select = {
+      id: true,
+      fullName: true,
+      externalRepoId: true,
+      integrationAccountId: true,
+    } as const;
     const row = await this.prisma.moduleRepo.findFirst({
-      where: {
-        id: moduleRepoId,
-        deleted: null,
-        module: { workspaceId, deleted: null },
-      },
+      where: { id: moduleRepoId, module: { workspaceId } },
       select: {
-        id: true,
-        fullName: true,
-        externalRepoId: true,
-        integrationAccountId: true,
+        ...select,
+        deleted: true,
+        module: { select: { deleted: true } },
       },
     });
 
-    return row ? { ...row, workspaceId } : null;
+    if (!row) {
+      return null;
+    }
+
+    if (!row.deleted && !row.module.deleted) {
+      return {
+        id: row.id,
+        fullName: row.fullName,
+        externalRepoId: row.externalRepoId,
+        integrationAccountId: row.integrationAccountId,
+        workspaceId,
+      };
+    }
+
+    const live = await this.prisma.moduleRepo.findFirst({
+      where: {
+        deleted: null,
+        externalRepoId: row.externalRepoId,
+        integrationAccountId: row.integrationAccountId,
+        module: { workspaceId, deleted: null },
+      },
+      select,
+    });
+
+    return live ? { ...live, workspaceId } : null;
   }
 }
 

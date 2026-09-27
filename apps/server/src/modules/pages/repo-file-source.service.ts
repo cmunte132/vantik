@@ -4,6 +4,7 @@ import { localHead, readLocalFile } from 'integrations/local-repo/git-files';
 import { LOCAL_REPO_SLUG } from 'integrations/local-repo/repositories';
 import {
   COMMIT_SHA,
+  REPO_SOURCE_TIMEOUT_MS,
   type RepoFileRead,
   type RepoHead,
 } from 'integrations/repo-files';
@@ -46,7 +47,15 @@ export default class RepoFileSourceService implements RepoFileSource {
     private localRepo: LocalRepoService,
   ) {}
 
-  async read(
+  read(repo: CitedRepo, path: string, ref: string): Promise<RepoFileRead> {
+    return bounded(this.readFrom(repo, path, ref));
+  }
+
+  head(repo: CitedRepo): Promise<RepoHead> {
+    return bounded(this.headOf(repo));
+  }
+
+  private async readFrom(
     repo: CitedRepo,
     path: string,
     ref: string,
@@ -75,7 +84,7 @@ export default class RepoFileSourceService implements RepoFileSource {
     }
   }
 
-  async head(repo: CitedRepo): Promise<RepoHead> {
+  private async headOf(repo: CitedRepo): Promise<RepoHead> {
     try {
       const slug = await this.sourceOf(repo);
 
@@ -127,6 +136,33 @@ export default class RepoFileSourceService implements RepoFileSource {
   }
 }
 
+/**
+ * A read that has not answered in time is unread. Each call inside a source
+ * has its own timeout, but a read makes several (a token, the file, the check
+ * that a 404 came from the repository), and a write waits on every citation.
+ */
+async function bounded<T>(
+  work: Promise<T>,
+): Promise<T | { unknown: true; reason: string }> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<{ unknown: true; reason: string }>((resolve) => {
+    timer = setTimeout(
+      () =>
+        resolve({
+          unknown: true,
+          reason: `the repository did not answer within ${REPO_SOURCE_TIMEOUT_MS / 1000} seconds`,
+        }),
+      REPO_SOURCE_TIMEOUT_MS,
+    );
+  });
+
+  try {
+    return await Promise.race([work, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function noSource(repo: CitedRepo): { unknown: true; reason: string } {
   return {
     unknown: true,
@@ -156,6 +192,7 @@ function asFileRead(answer: unknown): RepoFileRead {
     content: unknown;
     missing: unknown;
     reason: unknown;
+    thisFileOnly: unknown;
   }>;
 
   if (typeof value?.content === 'string') {
@@ -172,6 +209,7 @@ function asFileRead(answer: unknown): RepoFileRead {
       typeof value?.reason === 'string'
         ? value.reason
         : 'the integration did not answer',
+    ...(value?.thisFileOnly === true && { thisFileOnly: true as const }),
   };
 }
 

@@ -12,7 +12,7 @@ next session starts by reading it.
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
 - Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phases 0-2 spec-hash 069a84bf6612`
-  (21/23; server 1415, agent-core 63, cli 10, webapp 616 tests; typecheck ok).
+  (21/23; server 1421, agent-core 63, cli 10, webapp 616 tests; typecheck ok).
   KG-2.1 fails on a checklist path that no longer exists (see Needs a
   decision); KG-2.R waits on the review.
 
@@ -217,8 +217,11 @@ next session starts by reading it.
   snippet, so no later check can turn it into a citation that holds. A
   citation still unread when the retries run out is read by the next
   re-check. A re-check that cannot reach the source keeps the last result
-  instead of replacing it with UNKNOWN. A repository removed from the
-  workspace makes its citations MISSING, in the retry and the re-check alike.
+  instead of replacing it with UNKNOWN. A citation whose repository row is
+  gone (its module deleted, or the repository moved to another module) is
+  moved to a live row for the same repository in the workspace and checked
+  there; only a repository no module lists any more makes its citations
+  MISSING, in the retry and the re-check alike.
 - **Sources.** `RepoFileSourceService` chooses by the integration behind
   `ModuleRepo.integrationAccountId`, checked against the workspace:
   - GitHub: the JSON contents API with the installation token alone
@@ -231,9 +234,13 @@ next session starts by reading it.
     refuses a folder) and `git rev-parse` in the configured checkout, with
     the path normalised and refused if it leaves the repository or has a `.`
     segment, and only hexadecimal commit ids passed to git.
-  - Every read has a 10-second timeout, since a write waits on it.
-  - Each repository's head is resolved once per write or check, however
-    many of its files are cited.
+  - Every call to a source has a 10-second timeout, and a whole read (token,
+    file, and the check that a 404 came from the repository) is unread after
+    15 seconds, since a write waits on it.
+  - Within one write or check, each repository's head is resolved once, and
+    a repository that does not answer is not asked again: the rest of its
+    citations are unread at once. A file unread for its own reason (too
+    large) does not stop the others.
   - An integration that throws, rejects or answers something malformed gives
     UNKNOWN, never MISSING, and never fails the write.
     `IntegrationsService.loadIntegration` does not catch an async plugin's
@@ -479,6 +486,31 @@ was mutation-checked:
     holding, in both guides and the `remember` description; the unreachable
     case says the citation is UNKNOWN until read.
 
+### Phase 2, round 2 (same reviewer, on the round 1 fixes)
+
+`VERDICT: NO UNRESOLVED FINDINGS`. Every round 1 fix confirmed by
+mutation, the new migration matched with `prisma migrate diff`, and
+`pendingQuote` confirmed never served. Three non-blocking findings, all
+fixed, each new test mutation-checked:
+
+1. **The installation-token request had no timeout**, so a GitHub that
+   swallowed connections held a read for minutes before the 10-second
+   timeouts were reached. Each read and head in the file source is now
+   bounded as a whole (15 seconds), which covers the token, the file, the
+   404 check and any plugin.
+2. **A slow repository was asked once per citation.** Within a write or
+   check, a repository that does not answer is not asked again; a file
+   unread for its own reason (`thisFileOnly`: too large, or not a path a
+   source may be asked for) does not count against it.
+3. **A deleted repository row made citations MISSING although the repository
+   was still in the workspace** (a module deleted, or the repository moved
+   between modules). The citation moves to the live row for the same
+   repository and is checked there.
+
+The reviewer's minor note (a re-check rewrites `checkedAt` and re-indexes
+when nothing changed) is left: `checkedAt` records that a check happened,
+and the index write is idempotent.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -561,3 +593,6 @@ Give the evidence, and stop until the maintainer answers.
   two blocking findings (a 500 on an unreachable GitHub, no proof on a
   written entry) and eleven non-blocking; all fixed with tagged,
   mutation-checked tests.
+- 2026-09-27: Review round 2: no unresolved findings; three non-blocking
+  findings (a read bounded as a whole, a repository that stops answering
+  asked once, citations following a moved repository) fixed.

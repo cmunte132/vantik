@@ -165,15 +165,24 @@ function world() {
             moduleOf(row)?.workspaceId === where.module.workspaceId &&
             moduleOf(row)?.deleted === null,
         ),
-      findFirst: async ({ where }: Row) =>
-        select(
-          moduleRepos.find(
-            (row) =>
-              row.id === where.id &&
-              row.deleted === null &&
-              moduleOf(row)?.workspaceId === where.module.workspaceId,
-          ),
-        ),
+      findFirst: async ({ where }: Row) => {
+        const row = moduleRepos.find(
+          (candidate) =>
+            (where.id === undefined || candidate.id === where.id) &&
+            (where.deleted === undefined ||
+              candidate.deleted === where.deleted) &&
+            (where.externalRepoId === undefined ||
+              candidate.externalRepoId === where.externalRepoId) &&
+            (where.integrationAccountId === undefined ||
+              candidate.integrationAccountId === where.integrationAccountId) &&
+            moduleOf(candidate)?.workspaceId === where.module.workspaceId &&
+            (where.module.deleted === undefined ||
+              moduleOf(candidate)?.deleted === where.module.deleted),
+        );
+        return row
+          ? { ...row, module: { deleted: moduleOf(row)?.deleted ?? null } }
+          : null;
+      },
     },
     issue: {
       findFirst: async ({ where }: Row) => {
@@ -717,6 +726,111 @@ describe('a citation still unread when the retries have run out', () => {
     await expect(service.recheck(entryId)).resolves.toEqual({ checked: 0 });
     expect(db.citations[0].checkResult).toBe('UNKNOWN');
     expect(indexer.entryChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe('a repository that stops answering during a write', () => {
+  it('[KG-2.3] is asked once: the rest of its citations are unread without waiting on it again', async () => {
+    const { service, files } = setup();
+    files.put('acme/api', SHA1, 'src/pages.ts', {
+      unknown: true,
+      reason: 'the repository did not answer within 15 seconds',
+    });
+
+    const drafts = await service.checkForWrite(WS, [
+      code(),
+      code({ lines: '1' }),
+      code({ lines: '4' }),
+    ]);
+
+    expect(drafts.map((draft) => draft.checkResult)).toEqual([
+      'UNKNOWN',
+      'UNKNOWN',
+      'UNKNOWN',
+    ]);
+    expect(files.source.read).toHaveBeenCalledTimes(1);
+  });
+
+  it('[KG-2.3] is still asked after a file it could not read for a reason of its own', async () => {
+    const { service, files } = setup();
+    files.put('acme/api', SHA1, 'src/big.json', {
+      unknown: true,
+      reason: 'the file is too large to check',
+      thisFileOnly: true,
+    });
+
+    const drafts = await service.checkForWrite(WS, [
+      code({ path: 'src/big.json', lines: '1' }),
+      code(),
+    ]);
+
+    expect(drafts.map((draft) => draft.checkResult)).toEqual([
+      'UNKNOWN',
+      'HOLDS',
+    ]);
+  });
+});
+
+describe('a repository that moved to another module', () => {
+  function moved(context: ReturnType<typeof setup>) {
+    // Moving a repository between modules deletes its row and creates one.
+    context.db.moduleRepos[0].deleted = new Date();
+    context.db.moduleRepos.push({
+      ...context.db.moduleRepos[0],
+      id: 'r-api-moved',
+      moduleId: 'm-web',
+      deleted: null,
+    });
+  }
+
+  it('[KG-2.4] is still read, and its citations move to the live row', async () => {
+    const context = setup();
+    const entryId = store(context.db, [
+      {
+        kind: 'CODE',
+        moduleRepoId: 'r-api',
+        path: 'src/pages.ts',
+        commitSha: SHA1,
+        startLine: 3,
+        endLine: 5,
+        snippet:
+          'export function removePage(page) {\narchive(page.entries);\n}',
+        checkResult: 'HOLDS',
+      },
+    ]);
+    moved(context);
+
+    await context.service.recheck(entryId);
+
+    expect(context.db.citations[0]).toMatchObject({
+      moduleRepoId: 'r-api-moved',
+      checkResult: 'HOLDS',
+      checkedSha: SHA1,
+    });
+  });
+
+  it('[KG-2.3] is read by the retry through the live row', async () => {
+    const context = setup();
+    const entryId = store(context.db, [
+      {
+        kind: 'CODE',
+        moduleRepoId: 'r-api',
+        path: 'src/pages.ts',
+        commitSha: SHA1,
+        startLine: 3,
+        endLine: 5,
+        checkResult: 'UNKNOWN',
+      },
+    ]);
+    moved(context);
+
+    await expect(context.service.retryUnknown(entryId)).resolves.toEqual({
+      stillUnknown: 0,
+    });
+    expect(context.db.citations[0]).toMatchObject({
+      moduleRepoId: 'r-api-moved',
+      checkResult: 'HOLDS',
+    });
   });
 });
 

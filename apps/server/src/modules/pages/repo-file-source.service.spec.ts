@@ -3,6 +3,7 @@
  * repository: chosen by the integration account the repository came from.
  */
 import { IntegrationPayloadEventType } from '@vantikhq/types';
+import { REPO_SOURCE_TIMEOUT_MS } from 'integrations/repo-files';
 import { PrismaService } from 'nestjs-prisma';
 
 import { IntegrationsService } from 'modules/integrations/integrations.service';
@@ -146,6 +147,47 @@ describe('RepoFileSourceService', () => {
     });
     await expect(source.head(repo())).resolves.toMatchObject({
       unknown: true,
+    });
+  });
+
+  it('[KG-2.3] answers unknown when a read does not finish in time, however many calls it is waiting on', async () => {
+    jest.useFakeTimers();
+
+    try {
+      const { source, loadIntegration } = build({
+        'account-1': { workspaceId: WORKSPACE, slug: 'github' },
+      });
+      // A token request to a GitHub that never answers.
+      loadIntegration.mockReturnValue(new Promise(() => undefined));
+
+      const read = source.read(repo(), 'a.ts', SHA);
+      const head = source.head(repo());
+      await jest.advanceTimersByTimeAsync(REPO_SOURCE_TIMEOUT_MS);
+
+      await expect(read).resolves.toEqual({
+        unknown: true,
+        reason: 'the repository did not answer within 15 seconds',
+      });
+      await expect(head).resolves.toMatchObject({ unknown: true });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('[KG-2.3] passes on that a file was unread for a reason of its own', async () => {
+    const { source, loadIntegration } = build({
+      'account-1': { workspaceId: WORKSPACE, slug: 'github' },
+    });
+    loadIntegration.mockResolvedValueOnce({
+      unknown: true,
+      reason: 'the file is too large to check',
+      thisFileOnly: true,
+    });
+
+    await expect(source.read(repo(), 'big.json', SHA)).resolves.toEqual({
+      unknown: true,
+      reason: 'the file is too large to check',
+      thisFileOnly: true,
     });
   });
 

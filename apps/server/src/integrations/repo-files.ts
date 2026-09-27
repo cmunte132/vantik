@@ -8,7 +8,18 @@
  * the code, so it must never count against a claim. It is retried instead.
  */
 export type RepoFileRead =
-  { content: string } | { missing: true } | { unknown: true; reason: string };
+  | { content: string }
+  | { missing: true }
+  | {
+      unknown: true;
+      reason: string;
+      /**
+       * Set when the reason is this file (too large, or not a path a source
+       * may be asked for) rather than the source, so a caller reading many
+       * files knows the repository itself may still answer.
+       */
+      thisFileOnly?: true;
+    };
 
 export type RepoHead = { sha: string } | { unknown: true; reason: string };
 
@@ -23,6 +34,12 @@ export const MAX_REPO_FILE_BYTES = 1_000_000;
  * that hangs gives an unread citation, retried later, not a stuck request.
  */
 export const REPO_READ_TIMEOUT_MS = 10_000;
+
+/**
+ * How long one read may take in all: a token, the file, and the check that a
+ * 404 came from the repository. It bounds the calls no single timeout covers.
+ */
+export const REPO_SOURCE_TIMEOUT_MS = 15_000;
 
 /**
  * A repository-relative path, cleaned, or null if it could reach outside the

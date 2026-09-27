@@ -56,6 +56,7 @@ export async function readGithubFile(
     return {
       unknown: true,
       reason: 'not a readable repository, path or commit',
+      thisFileOnly: true,
     };
   }
 
@@ -113,7 +114,11 @@ function fileOf(data: unknown): RepoFileRead {
   }
 
   if (typeof entry?.size === 'number' && entry.size > MAX_REPO_FILE_BYTES) {
-    return { unknown: true, reason: 'the file is too large to check' };
+    return {
+      unknown: true,
+      reason: 'the file is too large to check',
+      thisFileOnly: true,
+    };
   }
 
   if (

@@ -45,17 +45,17 @@ import {
  *
  * One pass per entry, in a fixed order, cheapest and most certain first:
  *
- * 1. policy: a credential or several claims in one entry is refused outright;
- *    an entry that rests on text from outside the workspace, through the run
- *    that wrote it or what it cites, and an agent's entry written outside any
- *    run the server knows of, are marked for a person before any model sees
- *    them;
+ * 1. policy: a credential or several claims in one entry is refused outright,
+ *    and an entry that rests on text from outside the workspace, through a
+ *    run its writer was in or what it cites, is marked for a person before
+ *    any model sees it;
  * 2. an exact repeat, found by hash, corroborates the entry it repeats;
  * 3. the nearest entries in the same modules are related to it, by a rule in
  *    code where the two differ in a number, date, negation or condition, and
  *    otherwise by two model judgments that must agree;
- * 4. grounding: every citation must hold, and an entry that cites nothing is
- *    not grounded;
+ * 4. acceptance: an agent's entry is not accepted without a person (see
+ *    `writerOf`); every citation must hold, and an entry that cites nothing
+ *    is not grounded;
  * 5. the decision, and in `on` mode, acting on it.
  *
  * Anything the pass cannot settle escalates with every reason that applied,
@@ -248,19 +248,13 @@ export default class KnowledgeTriageService {
     const writer = await this.writerOf(entry, workspaceId);
     const cited = await this.citedTexts(entry, workspaceId);
 
-    // Where the entry's text came from, established by the server: the runs
-    // its writer was in when it was written, and the issues and comments it
+    // Text from outside the workspace, as far as the server can tell: a run
+    // its writer was in when it was written, or an issue or comment it
     // cites. Never the session the writer names, which is whatever the
-    // client sent. A repeat is held to this too: text from outside should
-    // not add weight to what is already accepted.
+    // client sent. A repeat is held to this too: text known to come from
+    // outside should not add weight to what is already there.
     if (writer.externalSource || cited.externalSource) {
       reasons.add(KnowledgeEscalationReason.EXTERNAL_INPUT);
-    }
-
-    // An agent that wrote outside any run could have read anything, so
-    // "nothing from outside" is a check that could not run.
-    if (writer.unknownSource) {
-      reasons.add(KnowledgeEscalationReason.UNKNOWN_SOURCE);
     }
 
     // Only a person's acceptance retires what a correction replaces: an
@@ -423,6 +417,13 @@ export default class KnowledgeTriageService {
     // A repeat is folded into what it repeats rather than accepted, so what
     // acceptance asks of an entry does not apply to it.
     if (!corroborates) {
+      // What an agent read cannot be told yet, so "nothing from outside" is
+      // a check that could not run. Not a bar to folding a repeat in, which
+      // puts no new claim in front of anyone.
+      if (writer.unknownSource) {
+        reasons.add(KnowledgeEscalationReason.UNKNOWN_SOURCE);
+      }
+
       // ---------------------------------------------------- 4. grounding
       if (entry.citations.length === 0) {
         reasons.add(KnowledgeEscalationReason.UNGROUNDED);
@@ -629,15 +630,17 @@ export default class KnowledgeTriageService {
   }
 
   /**
-   * Who wrote the entry, the runs it was written in, and whether any of them
-   * read text from outside the workspace.
+   * Who wrote the entry, and what the server can tell about what they read.
    *
-   * The runs are the server's own record: those its writer, as an agent, was
-   * working in when the entry was written. Hosted runs cannot write yet
-   * (ENG-84), so every agent writes through a client that names its own
-   * session; the session is kept as the writer gave it, and trusted for
-   * nothing. A run that has not finished counts whether or not it has
-   * started, so of two runs at once, the one with outside input decides.
+   * Nothing that clears an agent. Runs do not write with a credential of
+   * their own (ENG-84), so every agent writes through a client that names
+   * its own session, and a run of the same agent open at the time may have
+   * nothing to do with the entry. Until a run's writes carry the run, every
+   * entry not written by a person has an unknown source. The runs are still
+   * read, from the server's own record: one on an issue from outside marks
+   * the entry, which can only make the decision stricter. A run that has not
+   * finished counts whether or not it has started. The session is kept as
+   * the writer gave it, for tracing, and trusted for nothing.
    */
   private async writerOf(entry: TriagedEntry, workspaceId: string) {
     const user = entry.sourceUserId
@@ -703,7 +706,7 @@ export default class KnowledgeTriageService {
       runs: read,
       externalSource:
         read.find((run) => run.externalSource)?.externalSource ?? null,
-      unknownSource: !person && read.length === 0,
+      unknownSource: !person,
     };
   }
 
@@ -744,6 +747,12 @@ export default class KnowledgeTriageService {
               linkedIssue: {
                 where: { deleted: null },
                 select: { sourceData: true, sync: true },
+              },
+              // Its thread is part of what the entry could rest on, though
+              // only the description is shown to the judges.
+              comments: {
+                where: { createdAt: { lte: entry.createdAt } },
+                select: { sourceMetadata: true },
               },
             },
           })

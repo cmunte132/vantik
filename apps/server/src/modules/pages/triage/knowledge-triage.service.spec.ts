@@ -170,6 +170,7 @@ interface Target {
   support?: { id: string } | null;
   team?: { workspaceId: string; deleted: Date | null; preferences: unknown };
   linkedIssue?: Array<{ sourceData: unknown; sync: boolean }>;
+  comments?: Array<{ createdAt: Date; sourceMetadata: unknown }>;
   /** A comment's. */
   body?: string;
   issue?: {
@@ -178,11 +179,12 @@ interface Target {
   };
 }
 
-/** Who wrote what: agents, and one person. */
+/** Who wrote what: agents, a person, and an account that is neither. */
 const USERS: Record<string, string> = {
   'agent-1': 'Agent',
   'agent-2': 'Agent',
   'person-1': 'User',
+  'system-1': 'System',
 };
 
 function store(
@@ -328,10 +330,22 @@ function store(
       ),
     },
     issue: {
-      findMany: jest.fn(async ({ where }: { where: Where }) =>
-        (options.issues ?? []).filter((issue) =>
-          matches(issue as never, where),
-        ),
+      findMany: jest.fn(
+        async ({
+          where,
+          select,
+        }: {
+          where: Where;
+          select: { comments: { where: Where } };
+        }) =>
+          (options.issues ?? [])
+            .filter((issue) => matches(issue as never, where))
+            .map((issue) => ({
+              ...issue,
+              comments: (issue.comments ?? []).filter((comment) =>
+                matches(comment, select.comments.where),
+              ),
+            })),
       ),
     },
     issueComment: {
@@ -415,16 +429,26 @@ function existing(id: string, overrides: Partial<Row> = {}): Row {
 
 const NEW_CONTENT = 'Webhook deliveries are retried by the queue worker.';
 
-/** The entry being triaged: newer, proposed, grounded, one fact. */
+/**
+ * The entry being triaged: newer, proposed, grounded, one fact, and written
+ * by a person. What an agent writes is never accepted without a person yet
+ * (see "secrets and outside input"), so the rest of the pipeline is
+ * exercised on a person's entry.
+ */
 function fresh(overrides: Partial<Row> = {}): Row {
   return existing('new', {
     content: NEW_CONTENT,
     status: 'PROPOSED',
     createdAt: at(10),
     updatedAt: at(10),
-    sourceUserId: 'agent-1',
+    sourceUserId: 'person-1',
     ...overrides,
   });
+}
+
+/** The same, written by an agent. */
+function agentEntry(overrides: Partial<Row> = {}): Row {
+  return fresh({ sourceUserId: 'agent-1', ...overrides });
 }
 
 /**
@@ -520,7 +544,7 @@ type Answer = string | [string, string];
 
 interface Setup {
   rows: Row[];
-  /** The writers' runs; by default one open run on an issue from inside. */
+  /** The writing agent's runs, as the server records them. */
   runs?: Run[];
   issues?: Target[];
   comments?: Target[];
@@ -539,7 +563,7 @@ interface Setup {
 
 function triage(setup: Setup) {
   const { prisma, entries, decisions, relations, pages } = store(setup.rows, {
-    runs: setup.runs ?? [run()],
+    runs: setup.runs ?? [],
     issues: setup.issues,
     comments: setup.comments,
     preferences: setup.preferences,
@@ -1105,8 +1129,9 @@ describe('the triage job and its record', () => {
       citations: [{ kind: 'CODE', result: 'HOLDS' }],
       similarityThreshold: 0.25,
       writer: {
-        userId: 'agent-1',
-        runs: [expect.objectContaining({ id: RUN, externalSource: null })],
+        userId: 'person-1',
+        userType: 'User',
+        runs: [],
         externalSource: null,
         unknownSource: false,
       },
@@ -1821,7 +1846,7 @@ describe('secrets and outside input', () => {
     '[KG-4.8] never accepts an entry from a run whose issue came from %s',
     async (_source, sourceMetadata) => {
       const t = triage({
-        rows: [fresh()],
+        rows: [agentEntry()],
         runs: [externalRun(sourceMetadata)],
       });
 
@@ -1829,7 +1854,7 @@ describe('secrets and outside input', () => {
 
       expect(outcome).toMatchObject({
         decision: Decision.ESCALATE,
-        reasons: [Reason.EXTERNAL_INPUT],
+        reasons: [Reason.EXTERNAL_INPUT, Reason.UNKNOWN_SOURCE],
         applied: false,
       });
       // Found from the server's record of the writer's runs; the entry
@@ -1848,7 +1873,7 @@ describe('secrets and outside input', () => {
             },
           ],
           externalSource: sourceMetadata.type,
-          unknownSource: false,
+          unknownSource: true,
         },
       });
       expect(t.entries.get('new')?.status).toBe('PROPOSED');
@@ -1862,17 +1887,18 @@ describe('secrets and outside input', () => {
     synced.issue.linkedIssue = [{ sourceData: { type: 'slack' }, sync: true }];
 
     for (const run of [support, synced]) {
-      const t = triage({ rows: [fresh()], runs: [run] });
+      const t = triage({ rows: [agentEntry()], runs: [run] });
 
       expect((await t.service.triage('new', ON))?.reasons).toEqual([
         Reason.EXTERNAL_INPUT,
+        Reason.UNKNOWN_SOURCE,
       ]);
     }
   });
 
-  it('[KG-4.8] does not fold a repeat from outside input into accepted knowledge', async () => {
+  it('[KG-4.8] does not fold a repeat from outside input into what it repeats', async () => {
     const t = triage({
-      rows: [existing('original', { content: NEW_CONTENT }), fresh()],
+      rows: [existing('original', { content: NEW_CONTENT }), agentEntry()],
       runs: [externalRun({ type: 'github' })],
     });
 
@@ -1885,20 +1911,82 @@ describe('secrets and outside input', () => {
     expect(t.entries.get('original')?.corroborationCount).toBe(0);
   });
 
-  it('[KG-4.8] accepts from a run whose issue was written in the workspace', async () => {
-    const t = triage({
-      rows: [fresh()],
-      // A run handing work back records where it came from; that is not
-      // outside the workspace.
-      runs: [externalRun({ source: 'agent-run' })],
-    });
+  it("[KG-4.8] never accepts an agent's entry, whatever run it had open, since what it read cannot be told", async () => {
+    // A run of the same agent open when the entry was written may have
+    // nothing to do with it: runs do not write with their own credential.
+    const cases: Run[][] = [
+      [run()],
+      // A run handing work back is inside the workspace, and still no proof.
+      [externalRun({ source: 'agent-run' })],
+      [],
+    ];
 
-    const outcome = await t.service.triage('new', ON);
+    for (const runs of cases) {
+      const t = triage({ rows: [agentEntry()], runs });
 
-    expect(outcome?.decision).toBe(Decision.AUTO_ACCEPT);
+      expect(await t.service.triage('new', ON)).toMatchObject({
+        decision: Decision.ESCALATE,
+        reasons: [Reason.UNKNOWN_SOURCE],
+        applied: false,
+      });
+      expect(t.decisions[0].inputs).toMatchObject({
+        writer: {
+          userType: 'Agent',
+          runs: runs.map((open) => expect.objectContaining({ id: open.id })),
+          externalSource: null,
+          unknownSource: true,
+        },
+      });
+      // No model is asked to accept what a person has to look at anyway.
+      expect(
+        t.calls.filter((call) => call.system.includes('knowledge')),
+      ).toEqual([]);
+      expect(t.entries.get('new')?.status).toBe('PROPOSED');
+    }
+
+    // Nor an entry the server has no user record of, or one by an account
+    // that is not a person.
+    for (const sourceUserId of [null, 'unknown-user', 'system-1']) {
+      const t = triage({ rows: [fresh({ sourceUserId })] });
+
+      expect((await t.service.triage('new', ON))?.reasons).toEqual([
+        Reason.UNKNOWN_SOURCE,
+      ]);
+    }
   });
 
-  it('[KG-4.8] finds the runs the writer was in from its own record, never from the session it names', async () => {
+  it("[KG-4.1] still folds an agent's repeat into the entry it repeats", async () => {
+    // Folding a repeat in puts no new claim in front of anyone, so an unknown
+    // source does not stop it; outside input does (above).
+    const exact = triage({
+      rows: [existing('original', { content: NEW_CONTENT }), agentEntry()],
+    });
+    const near = triage({
+      rows: [
+        existing('neighbour', {
+          content: 'The queue worker retries webhook deliveries.',
+        }),
+        agentEntry(),
+      ],
+      near: [{ entryId: 'neighbour', similarity: 0.93 }],
+      pair: () => agreed('duplicate'),
+    });
+
+    expect(await exact.service.triage('new', ON)).toMatchObject({
+      decision: Decision.CORROBORATE,
+      reasons: [],
+      applied: true,
+    });
+    expect(exact.entries.get('original')?.corroborationCount).toBe(1);
+    expect(exact.entries.get('new')?.status).toBe('ARCHIVED');
+    expect(await near.service.triage('new', ON)).toMatchObject({
+      decision: Decision.CORROBORATE,
+      applied: true,
+    });
+    expect(near.entries.get('neighbour')?.corroborationCount).toBe(1);
+  });
+
+  it('[KG-4.8] reads the runs for outside input from its own record, never from the session the writer names', async () => {
     const OTHER_RUN = '99999999-2222-4333-8444-555555555555';
     // The session names an internal run, of another agent; the writer's own
     // open run is on an issue synced from GitHub.
@@ -1906,14 +1994,14 @@ describe('secrets and outside input', () => {
 
     for (const sourceSession of [OTHER_RUN, 'my-harness-session', null]) {
       const t = triage({
-        rows: [fresh({ sourceSession })],
+        rows: [agentEntry({ sourceSession })],
         runs: [externalRun({ type: 'github' }), named],
       });
 
-      expect(await t.service.triage('new', ON)).toMatchObject({
-        decision: Decision.ESCALATE,
-        reasons: [Reason.EXTERNAL_INPUT],
-      });
+      expect((await t.service.triage('new', ON))?.reasons).toEqual([
+        Reason.EXTERNAL_INPUT,
+        Reason.UNKNOWN_SOURCE,
+      ]);
       expect(t.decisions[0].inputs).toMatchObject({
         writer: {
           session: sourceSession,
@@ -1926,12 +2014,12 @@ describe('secrets and outside input', () => {
     }
   });
 
-  it('[KG-4.8] counts the runs of the writer that were open when the entry was written, and no others', async () => {
+  it('[KG-4.8] reads the runs of the writer that were open when the entry was written, and no others', async () => {
     const outside = (overrides: Partial<Omit<Run, 'issue'>>) =>
       run({ ...overrides, issue: { sourceMetadata: { type: 'github' } } });
     // The entry was written at minute 10.
     const t = triage({
-      rows: [fresh()],
+      rows: [agentEntry()],
       runs: [
         run(),
         outside({ id: 'finished-before', finishedAt: at(9) }),
@@ -1942,12 +2030,14 @@ describe('secrets and outside input', () => {
       ],
     });
 
-    expect(await t.service.triage('new', ON)).toMatchObject({
-      decision: Decision.AUTO_ACCEPT,
-      reasons: [],
-    });
+    expect((await t.service.triage('new', ON))?.reasons).toEqual([
+      Reason.UNKNOWN_SOURCE,
+    ]);
     expect(t.decisions[0].inputs).toMatchObject({
-      writer: { runs: [expect.objectContaining({ id: RUN })] },
+      writer: {
+        runs: [expect.objectContaining({ id: RUN })],
+        externalSource: null,
+      },
     });
 
     // Open until the moment it was written, and one started that moment,
@@ -1956,53 +2046,17 @@ describe('secrets and outside input', () => {
       outside({ finishedAt: at(10) }),
       outside({ createdAt: at(10) }),
     ]) {
-      const atEdge = triage({ rows: [fresh()], runs: [run(), edge] });
+      const atEdge = triage({ rows: [agentEntry()], runs: [run(), edge] });
 
       expect((await atEdge.service.triage('new', ON))?.reasons).toEqual([
         Reason.EXTERNAL_INPUT,
+        Reason.UNKNOWN_SOURCE,
       ]);
     }
   });
 
-  it("[KG-4.8] escalates an agent's entry written outside any run the server knows of", async () => {
-    const t = triage({ rows: [fresh()], runs: [] });
-
-    expect(await t.service.triage('new', ON)).toMatchObject({
-      decision: Decision.ESCALATE,
-      reasons: [Reason.UNKNOWN_SOURCE],
-      applied: false,
-    });
-    expect(t.decisions[0].inputs).toMatchObject({
-      writer: { userType: 'Agent', runs: [], unknownSource: true },
-    });
-    // No model is asked to accept what a person has to look at anyway.
-    expect(t.calls.filter((call) => call.system.includes('knowledge'))).toEqual(
-      [],
-    );
-    expect(t.entries.get('new')?.status).toBe('PROPOSED');
-
-    // Nor is its repeat folded into accepted knowledge, and a writer the
-    // server has no record of is held the same way.
-    const repeat = triage({
-      rows: [existing('original', { content: NEW_CONTENT }), fresh()],
-      runs: [],
-    });
-    const unrecorded = triage({
-      rows: [fresh({ sourceUserId: null })],
-      runs: [],
-    });
-
-    expect((await repeat.service.triage('new', ON))?.reasons).toEqual([
-      Reason.UNKNOWN_SOURCE,
-    ]);
-    expect(repeat.entries.get('original')?.corroborationCount).toBe(0);
-    expect((await unrecorded.service.triage('new', ON))?.reasons).toEqual([
-      Reason.UNKNOWN_SOURCE,
-    ]);
-  });
-
   it('[KG-4.8] holds a person to what they wrote, not to a run', async () => {
-    const t = triage({ rows: [fresh({ sourceUserId: 'person-1' })], runs: [] });
+    const t = triage({ rows: [fresh({ sourceUserId: 'person-1' })] });
 
     expect(await t.service.triage('new', ON)).toMatchObject({
       decision: Decision.AUTO_ACCEPT,
@@ -2018,46 +2072,35 @@ describe('secrets and outside input', () => {
       createdAt: Date;
       sourceMetadata: unknown;
     }) => run({ issue: { comments: [comment], linkedIssue: [] } });
+    const reasonsWith = async (comment: {
+      createdAt: Date;
+      sourceMetadata: unknown;
+    }) => {
+      const t = triage({ rows: [agentEntry()], runs: [withComment(comment)] });
 
-    const mirrored = triage({
-      rows: [fresh()],
-      runs: [
-        withComment({
-          createdAt: at(1),
-          sourceMetadata: { type: 'github', id: 'account-1' },
-        }),
-      ],
-    });
+      return (await t.service.triage('new', ON))?.reasons;
+    };
+
+    expect(
+      await reasonsWith({
+        createdAt: at(1),
+        sourceMetadata: { type: 'github', id: 'account-1' },
+      }),
+    ).toEqual([Reason.EXTERNAL_INPUT, Reason.UNKNOWN_SOURCE]);
     // Written after the entry, so not read before it.
-    const later = triage({
-      rows: [fresh()],
-      runs: [
-        withComment({ createdAt: at(11), sourceMetadata: { type: 'github' } }),
-      ],
-    });
+    expect(
+      await reasonsWith({
+        createdAt: at(11),
+        sourceMetadata: { type: 'github' },
+      }),
+    ).toEqual([Reason.UNKNOWN_SOURCE]);
     // A run handing its work back is inside the workspace.
-    const handback = triage({
-      rows: [fresh()],
-      runs: [
-        withComment({
-          createdAt: at(1),
-          sourceMetadata: { source: 'agent-run', agentRunId: RUN },
-        }),
-      ],
-    });
-
-    expect((await mirrored.service.triage('new', ON))?.reasons).toEqual([
-      Reason.EXTERNAL_INPUT,
-    ]);
-    expect(mirrored.decisions[0].inputs).toMatchObject({
-      writer: { externalSource: 'github' },
-    });
-    expect((await later.service.triage('new', ON))?.decision).toBe(
-      Decision.AUTO_ACCEPT,
-    );
-    expect((await handback.service.triage('new', ON))?.decision).toBe(
-      Decision.AUTO_ACCEPT,
-    );
+    expect(
+      await reasonsWith({
+        createdAt: at(1),
+        sourceMetadata: { source: 'agent-run', agentRunId: RUN },
+      }),
+    ).toEqual([Reason.UNKNOWN_SOURCE]);
   });
 
   it('[KG-4.8] never accepts an entry that rests on an issue or comment from outside', async () => {
@@ -2074,6 +2117,22 @@ describe('secrets and outside input', () => {
         { rows: [], issues: [issueTarget({ support: { id: 'ticket-1' } })] },
         cites('ISSUE', ISSUE_ID, 'ENG-4'),
         'support',
+      ],
+      // An issue from inside whose thread holds a comment mirrored from
+      // outside before the entry was written.
+      [
+        {
+          rows: [],
+          issues: [
+            issueTarget({
+              comments: [
+                { createdAt: at(1), sourceMetadata: { type: 'github' } },
+              ],
+            }),
+          ],
+        },
+        cites('ISSUE', ISSUE_ID, 'ENG-4'),
+        'github',
       ],
       [
         {
@@ -2101,6 +2160,22 @@ describe('secrets and outside input', () => {
       // Its text never reached a judge.
       expect(t.calls).toEqual([]);
     }
+
+    // A comment mirrored after the entry was written is not what it rests on.
+    const later = triage({
+      rows: [
+        fresh({ citations: [holds(), cites('ISSUE', ISSUE_ID, 'ENG-4')] }),
+      ],
+      issues: [
+        issueTarget({
+          comments: [{ createdAt: at(11), sourceMetadata: { type: 'github' } }],
+        }),
+      ],
+    });
+
+    expect((await later.service.triage('new', ON))?.decision).toBe(
+      Decision.AUTO_ACCEPT,
+    );
   });
 
   it('[KG-4.8] withholds a credential in anything it shows a model', async () => {

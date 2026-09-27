@@ -81,11 +81,9 @@ separately, so one fact is not returned twice.
 per token (the error names the ones in your way — consolidate or supersede them,
 do not find another page to dump into); `LOCKED` pages are readable but not
 appendable by agents. Everything you write lands as proposed and is served to
-nobody until it is accepted: by a person, or, where the workspace has switched
-triage on, by a check that it cites code that holds, says one thing, repeats and
-contradicts nothing it should not, and that two separate judgments accept. Text
-from outside the workspace, or an agent writing outside any run, always means a
-person.
+nobody until a person accepts it. Where the workspace has switched triage on,
+the server folds your repeats into what they repeat and rejects what
+breaks policy first; it accepts nothing an agent wrote on its own.
 Write for the reviewer and for the stranger after them. Triage is for people: you cannot accept, dispute or verify entries.
 You can reword or archive your own while they are still proposed; correct an
 accepted one by superseding it, and it stays in use until your correction is

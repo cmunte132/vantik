@@ -257,14 +257,16 @@ it has a scope of three modules or fewer (an unscoped entry is served to every
 query), and two separate judgments accept it, shown the lines, issue or comment
 it cites. An entry that says exactly what an existing one says is folded into
 it as a corroboration rather than kept beside it. Anything else waits for a
-person, with the reasons attached. So does anything that rests on text from
-outside the workspace: written while you were in a run on an issue that came
-from outside, or that carries comments mirrored from outside, or citing such
-an issue or comment. So does anything an agent writes outside a run the server
-knows of, because the server cannot see what that agent read. The runs are
-the server's own record; the session you name is kept for tracing and decides
-nothing. Triage is off or only recording by default, so do not count on it:
-cite what you claim, and it helps the person and the check alike.
+person, with the reasons attached. For now that includes every new claim an
+agent writes: the server cannot yet tell what an agent read, so it accepts
+nothing of yours on its own, though it still folds your repeats into what
+they repeat and rejects what breaks policy. Anything that rests on text from
+outside the workspace also waits for a person, and is not even folded in:
+written while you had a run open on an issue that came from outside, or one
+carrying comments mirrored from outside, or citing such an issue or comment.
+The session you name is kept for tracing and decides nothing. Triage is off
+or only recording by default, so do not count on it: cite what you claim,
+and it helps the person and the check alike.
 
 Write for the reviewer, and for the stranger after them. A claim they cannot
 evaluate is a claim they will archive.

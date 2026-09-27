@@ -2001,8 +2001,8 @@ enum KnowledgeEscalationReason {
   /// The run that wrote it worked on an issue from outside the workspace, or
   /// it rests on an issue or comment that came from outside.
   EXTERNAL_INPUT
-  /// An agent wrote it outside any run the server knows of, so what it had
-  /// read cannot be checked for outside input.
+  /// Not written by a person. Runs do not write with a credential of their
+  /// own yet, so what an agent had read cannot be checked for outside input.
   UNKNOWN_SOURCE
   /// Runs it was served to went wrong where it speaks.
   HARMFUL_SIGNAL

@@ -112,6 +112,23 @@ describe('local repository files', () => {
     });
   });
 
+  it('[KG-2.3] answers that a file too large to check is unread for its own reason, not the checkout', async () => {
+    // What execFile reports when the file is larger than it will buffer.
+    const large: RunGit = async () => ({
+      stdout: '',
+      stderr: '',
+      error: Object.assign(new Error('stdout maxBuffer length exceeded'), {
+        code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+      }),
+    });
+
+    await expect(readLocalFile(root, 'a.ts', first, large)).resolves.toEqual({
+      unknown: true,
+      reason: 'the file is too large to check',
+      thisFileOnly: true,
+    });
+  });
+
   it('[KG-2.3] never hands git a path outside the repository or a ref that is not a commit', async () => {
     const run = jest.fn<ReturnType<RunGit>, Parameters<RunGit>>();
 

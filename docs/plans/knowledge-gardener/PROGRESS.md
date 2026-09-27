@@ -5,16 +5,17 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 2, implemented and under review. Phase 1's review fixes and
-  phase 2 ride PR #44; phase 3 joins it next.
+- Current phase: 2, implemented and reviewed (PASS). Its verdict waits only
+  on KG-2.1's stale checklist path (see Needs a decision). Phase 1's review
+  fixes and phase 2 ride PR #44; phase 3 joins it once that is answered.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
 - Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phases 0-2 spec-hash 069a84bf6612`
-  (21/23; server 1421, agent-core 63, cli 10, webapp 616 tests; typecheck ok).
-  KG-2.1 fails on a checklist path that no longer exists (see Needs a
-  decision); KG-2.R waits on the review.
+  (22/23; server 1422, agent-core 63, cli 10, webapp 616 tests; typecheck ok).
+  KG-2.1 fails only on a checklist path that no longer exists (see Needs a
+  decision).
 
 ## Decisions
 
@@ -511,6 +512,30 @@ The reviewer's minor note (a re-check rewrites `checkedAt` and re-indexes
 when nothing changed) is left: `checkedAt` records that a check happened,
 and the index write is idempotent.
 
+### Phase 2, round 3 (same reviewer, on the round 2 fixes)
+
+`VERDICT: NO UNRESOLVED FINDINGS`. All three round 2 fixes confirmed by
+mutation, including the workspace filter on the moved-repository fallback
+and the retry still counting skipped citations as unread. One non-blocking
+test gap, fixed: the local reader's "too large" answer carried
+`thisFileOnly` untested; a test now answers git's maxBuffer error and
+asserts the flag, and fails with it removed. The reviewer also noted, as
+intended, that a 404 on a very slow GitHub can come back UNKNOWN within the
+15-second bound instead of refusing the write: it errs toward unread.
+
+Phase 2 review: PASS - three rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-2 criteria: the citation model and
+hand-written migrations matched against `prisma migrate diff`; checks at
+write refusing with the citation named and writing nothing; one file
+source for GitHub and local git with workspace isolation, no path or
+argument injection, folders refused, bounded reads, and unreachable sources
+unread (never failed) and retried; text-only relocation; a judge on another
+role, stored, UNCLEAR with no model; non-code existence checks scoped to the
+workspace; trust tiers and Typesense ranking; proof from postgres on every
+served path, a written entry included; mutation checks on each; no skipped
+or loosened tests, checklist and verifier untouched. KG-2.1's file check
+still names a path `main` moved (see Needs a decision).
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -596,3 +621,6 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-27: Review round 2: no unresolved findings; three non-blocking
   findings (a read bounded as a whole, a repository that stops answering
   asked once, citations following a moved repository) fixed.
+- 2026-09-27: Review round 3: no unresolved findings; the one test gap
+  fixed. Phase 2 review: PASS. Stopped for the maintainer's answer on
+  KG-2.1's checklist path before phase 3.

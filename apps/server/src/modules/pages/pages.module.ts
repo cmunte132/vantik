@@ -21,6 +21,7 @@ import { PagesController } from './pages.controller';
 import { PAGES_QUEUE } from './pages.interface';
 import {
   EntryModulesScheduler,
+  KnowledgeGapsScheduler,
   PagesProcessor,
   PagesScheduler,
 } from './pages.processor';
@@ -30,6 +31,7 @@ import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
 import TriageJudges from './triage/triage-judges';
 import KnowledgeConventionsService from './upkeep/knowledge-conventions.service';
+import KnowledgeGapsService from './upkeep/knowledge-gaps.service';
 import KnowledgeIssues from './upkeep/knowledge-issues';
 import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
 
@@ -65,7 +67,9 @@ import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
     KnowledgeIssues,
     KnowledgeUpkeepService,
     KnowledgeConventionsService,
+    KnowledgeGapsService,
     PagesScheduler,
+    KnowledgeGapsScheduler,
     EntryModulesScheduler,
     PagesProcessor,
     UsersService,

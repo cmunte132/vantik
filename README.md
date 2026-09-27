@@ -126,6 +126,7 @@ To see if a job runs, read `docker compose logs server`.
 | --- | --- | --- | --- |
 | Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
 | Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives each knowledge entry that no person triaged and that the server never served. |
+| Knowledge gap issues | `0 4 * * 1` | `KNOWLEDGE_GAP_ISSUES_CRON` | This job opens one issue for each question that agents asked the knowledge often and that it could not answer. It opens the issue on the team that owns the module of the question. It never opens a second issue for the same question. |
 
 To stop a job, set its variable to `off`.
 

@@ -12,6 +12,9 @@ import {
   DECAY_CRON,
   DECAY_JOB,
   DECAY_JOB_ID,
+  GAP_ISSUES_CRON,
+  GAP_ISSUES_JOB,
+  GAP_ISSUES_JOB_ID,
   PAGES_QUEUE,
   PROPOSED_ENTRY_EXPIRY_DAYS,
   RECHECK_ENTRY_JOB,
@@ -24,6 +27,7 @@ import {
 } from './pages.interface';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
 import KnowledgeConventionsService from './upkeep/knowledge-conventions.service';
+import KnowledgeGapsService from './upkeep/knowledge-gaps.service';
 import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
 
 /**
@@ -56,19 +60,14 @@ export class PagesScheduler implements OnModuleInit {
   }
 
   private async scheduleDecay() {
-    // Clearing first is what makes the cron *configurable* rather than merely
-    // set once. Bull keys a repeatable job by its cron expression, so changing
-    // PAGE_DECAY_CRON without this leaves the old schedule registered and the
-    // pass quietly runs on both.
-    const existing = await this.pagesQueue.getRepeatableJobs();
-    await Promise.all(
-      existing
-        .filter((job) => job.name === DECAY_JOB)
-        .map((job) => this.pagesQueue.removeRepeatableByKey(job.key)),
+    const cron = await scheduleRepeatable(
+      this.pagesQueue,
+      DECAY_JOB,
+      DECAY_JOB_ID,
+      DECAY_CRON,
     );
 
-    const cron = DECAY_CRON.trim();
-    if (!cron || cron.toLowerCase() === 'off') {
+    if (!cron) {
       this.logger.info({
         message:
           'Knowledge decay is disabled (PAGE_DECAY_CRON is off); untriaged ' +
@@ -78,21 +77,6 @@ export class PagesScheduler implements OnModuleInit {
       return;
     }
 
-    await this.pagesQueue.add(
-      DECAY_JOB,
-      {},
-      {
-        jobId: DECAY_JOB_ID,
-        repeat: { cron },
-        removeOnComplete: true,
-        // Failures are kept, successes are not. Discarding a failed run left
-        // the queue looking idle and healthy while decay had in fact stopped —
-        // the same symptom as no scheduler at all. Bounded so a pass that fails
-        // every night cannot fill Redis.
-        removeOnFail: 20,
-      },
-    );
-
     this.logger.info({
       message:
         `Knowledge decay scheduled (${cron}): untriaged entries archive after ` +
@@ -101,6 +85,89 @@ export class PagesScheduler implements OnModuleInit {
       where: 'PagesScheduler.scheduleDecay',
     });
   }
+}
+
+/**
+ * The scheduler for the job that opens issues for knowledge gaps, registered
+ * the way the decay pass is and for the same reasons.
+ */
+@Injectable()
+export class KnowledgeGapsScheduler implements OnModuleInit {
+  private readonly logger: LoggerService = new LoggerService(
+    'KnowledgeGapsScheduler',
+  );
+
+  constructor(@InjectQueue(PAGES_QUEUE) private pagesQueue: Queue) {}
+
+  async onModuleInit() {
+    try {
+      const cron = await scheduleRepeatable(
+        this.pagesQueue,
+        GAP_ISSUES_JOB,
+        GAP_ISSUES_JOB_ID,
+        GAP_ISSUES_CRON,
+      );
+
+      this.logger.info({
+        message: cron
+          ? `Knowledge gap issues scheduled (${cron})`
+          : 'Knowledge gap issues are disabled (KNOWLEDGE_GAP_ISSUES_CRON is ' +
+            'off); unanswered questions are listed, and no issue is opened',
+        where: 'KnowledgeGapsScheduler.onModuleInit',
+      });
+    } catch (error) {
+      this.logger.error({
+        message: `Could not schedule knowledge gap issues: ${error}`,
+        where: 'KnowledgeGapsScheduler.onModuleInit',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
+  }
+}
+
+/**
+ * Registers a repeatable job on its cron, and returns the cron, or null when
+ * it is empty or `off` and the job is left unscheduled.
+ *
+ * Clearing first is what makes the cron *configurable* rather than merely set
+ * once. Bull keys a repeatable job by its cron expression, so changing the
+ * variable without this leaves the old schedule registered and the job quietly
+ * runs on both.
+ */
+async function scheduleRepeatable(
+  queue: Queue,
+  name: string,
+  jobId: string,
+  configured: string,
+): Promise<string | null> {
+  const existing = await queue.getRepeatableJobs();
+  await Promise.all(
+    existing
+      .filter((job) => job.name === name)
+      .map((job) => queue.removeRepeatableByKey(job.key)),
+  );
+
+  const cron = configured.trim();
+  if (!cron || cron.toLowerCase() === 'off') {
+    return null;
+  }
+
+  await queue.add(
+    name,
+    {},
+    {
+      jobId,
+      repeat: { cron },
+      removeOnComplete: true,
+      // Failures are kept, successes are not. Discarding a failed run left
+      // the queue looking idle and healthy while the job had in fact stopped,
+      // the same symptom as no scheduler at all. Bounded so a job that fails
+      // every time cannot fill Redis.
+      removeOnFail: 20,
+    },
+  );
+
+  return cron;
 }
 
 /**
@@ -146,6 +213,7 @@ export class PagesProcessor {
     private triage: KnowledgeTriageService,
     private upkeep: KnowledgeUpkeepService,
     private conventions: KnowledgeConventionsService,
+    private gaps: KnowledgeGapsService,
   ) {}
 
   /**
@@ -231,6 +299,22 @@ export class PagesProcessor {
   @Process(CODE_LANDED_JOB)
   async handleCodeLanded(job: { data: CodeLandedJob; timestamp: number }) {
     await this.upkeep.codeLanded(job.data, new Date(job.timestamp));
+  }
+
+  /**
+   * Opens issues for the questions the knowledge keeps failing to answer, in
+   * every workspace, and marks answered those whose issue now has an accepted
+   * answer. A run that fails part way is tried again whole; the gaps it had
+   * opened issues for are not opened again.
+   */
+  @Process(GAP_ISSUES_JOB)
+  async handleGapIssues() {
+    const { opened, answered } = await this.gaps.openIssues();
+
+    this.logger.info({
+      message: `Opened ${opened} knowledge gap issue(s), and marked ${answered} gap(s) answered`,
+      where: 'PagesProcessor.handleGapIssues',
+    });
   }
 
   /**

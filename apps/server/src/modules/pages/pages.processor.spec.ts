@@ -14,6 +14,8 @@ import PageEntriesService from './page-entries.service';
 import {
   DECAY_JOB,
   DECAY_JOB_ID,
+  GAP_ISSUES_JOB,
+  GAP_ISSUES_JOB_ID,
   RECHECK_ENTRY_JOB,
   recheckEntryJobOptions,
   RECOMPUTE_MODULES_GRACE_MS,
@@ -29,11 +31,13 @@ import {
 } from './pages.interface';
 import {
   EntryModulesScheduler,
+  KnowledgeGapsScheduler,
   PagesProcessor,
   PagesScheduler,
 } from './pages.processor';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
 import KnowledgeConventionsService from './upkeep/knowledge-conventions.service';
+import KnowledgeGapsService from './upkeep/knowledge-gaps.service';
 import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
 
 function buildQueue(existing: Array<{ name: string; key: string }> = []) {
@@ -103,6 +107,7 @@ describe('PagesProcessor', () => {
       {} as KnowledgeTriageService,
       { proposeUnused: async () => 0 } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
     ).handleDecay();
 
     // Unscoped deliberately: the windows are a property of the deployment, not
@@ -162,6 +167,7 @@ describe('re-resolving entry modules', () => {
       {} as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
     );
 
     await processor.handleRecomputeModules({ data: { workspaceId: 'ws-1' } });
@@ -180,6 +186,7 @@ describe('retrying citations that could not be read', () => {
       {} as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
     );
 
     return { processor, retryUnknown };
@@ -226,6 +233,7 @@ describe('checking an entry again after a harmful signal', () => {
       {
         weigh: async (): Promise<null> => null,
       } as unknown as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
     );
 
     await expect(
@@ -264,6 +272,7 @@ describe('triaging a new entry', () => {
       { triage } as unknown as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
     );
 
     await expect(
@@ -283,11 +292,116 @@ describe('triaging a new entry', () => {
       } as unknown as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
     );
 
     await expect(
       processor.handleTriageEntry({ data: { entryId: 'entry-1' } }),
     ).rejects.toThrow('typesense is down');
+  });
+});
+
+describe('knowledge gap issues', () => {
+  const gapScheduler = (cron: string | undefined) => {
+    let scheduler: typeof KnowledgeGapsScheduler = KnowledgeGapsScheduler;
+    let interfaceCron = '';
+    const saved = process.env.KNOWLEDGE_GAP_ISSUES_CRON;
+
+    if (cron === undefined) {
+      delete process.env.KNOWLEDGE_GAP_ISSUES_CRON;
+    } else {
+      process.env.KNOWLEDGE_GAP_ISSUES_CRON = cron;
+    }
+
+    // Read at import, as every schedule is, so imported afresh here.
+    jest.isolateModules(() => {
+      scheduler =
+        jest.requireActual('./pages.processor').KnowledgeGapsScheduler;
+      interfaceCron = jest.requireActual('./pages.interface').GAP_ISSUES_CRON;
+    });
+
+    if (saved === undefined) {
+      delete process.env.KNOWLEDGE_GAP_ISSUES_CRON;
+    } else {
+      process.env.KNOWLEDGE_GAP_ISSUES_CRON = saved;
+    }
+
+    return { scheduler, interfaceCron };
+  };
+
+  it('[KG-6.4] registers the gap job weekly under a fixed id, replacing its earlier schedule', async () => {
+    const { scheduler, interfaceCron } = gapScheduler(undefined);
+    const queue = buildQueue([
+      { name: GAP_ISSUES_JOB, key: 'old-gap-key' },
+      { name: DECAY_JOB, key: 'decay-key' },
+    ]);
+
+    await new scheduler(queue).onModuleInit();
+
+    expect(interfaceCron).toBe('0 4 * * 1');
+    expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('old-gap-key');
+    expect(queue.removeRepeatableByKey).not.toHaveBeenCalledWith('decay-key');
+    expect(queue.add).toHaveBeenCalledTimes(1);
+    expect(queue.add).toHaveBeenCalledWith(
+      GAP_ISSUES_JOB,
+      {},
+      expect.objectContaining({
+        jobId: GAP_ISSUES_JOB_ID,
+        repeat: { cron: '0 4 * * 1' },
+        removeOnComplete: true,
+        removeOnFail: 20,
+      }),
+    );
+  });
+
+  it('[KG-6.4] runs on the cron KNOWLEDGE_GAP_ISSUES_CRON gives, and not at all when it is off', async () => {
+    const daily = gapScheduler('0 6 * * *');
+    const queue = buildQueue();
+
+    await new daily.scheduler(queue).onModuleInit();
+
+    expect(queue.add.mock.calls[0][2].repeat).toEqual({ cron: '0 6 * * *' });
+
+    for (const off of ['off', ' OFF ', '']) {
+      const { scheduler } = gapScheduler(off);
+      const stale = buildQueue([{ name: GAP_ISSUES_JOB, key: 'stale-key' }]);
+
+      await new scheduler(stale).onModuleInit();
+
+      // Turned off, the old schedule is cleared, not left running.
+      expect(stale.removeRepeatableByKey).toHaveBeenCalledWith('stale-key');
+      expect(stale.add).not.toHaveBeenCalled();
+    }
+  });
+
+  it('[KG-6.4] does not stop the server coming up when the queue is unreachable', async () => {
+    const queue = buildQueue();
+    queue.getRepeatableJobs.mockRejectedValue(new Error('redis is down'));
+
+    await expect(
+      new KnowledgeGapsScheduler(queue).onModuleInit(),
+    ).resolves.toBeUndefined();
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('[KG-6.4] opens the gap issues when the job runs, and fails the run when opening them fails', async () => {
+    const openIssues = jest.fn(async () => ({ opened: 2, answered: 1 }));
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      {} as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
+      { openIssues } as unknown as KnowledgeGapsService,
+    );
+
+    await processor.handleGapIssues();
+    expect(openIssues).toHaveBeenCalledWith();
+
+    openIssues.mockRejectedValueOnce(new Error('connection reset'));
+    await expect(processor.handleGapIssues()).rejects.toThrow(
+      'connection reset',
+    );
   });
 });
 
@@ -308,6 +422,7 @@ describe('conventions from review', () => {
       {} as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
       { weigh } as unknown as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
     );
 
     await processor.handleRecheckEntry({ data: { entryId: 'entry-1' } });
@@ -328,6 +443,7 @@ describe('conventions from review', () => {
       {} as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
       { runFinished } as unknown as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
     );
 
     await processor.handleRunFindings({ data: { runId: 'run-1' } });
@@ -360,6 +476,7 @@ describe('a change that landed', () => {
       {} as KnowledgeTriageService,
       { codeLanded } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
     );
     const data = {
       workspaceId: 'workspace-1',
@@ -397,6 +514,7 @@ describe('the decay pass', () => {
       {} as KnowledgeTriageService,
       { proposeUnused } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
     ).handleDecay();
 
     expect(order).toEqual(['archive', 'ask']);

@@ -20,6 +20,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
 
+import { LoggerService } from 'modules/logger/logger.service';
 import { VectorService } from 'modules/vector/vector.service';
 
 import KnowledgeIndexService from '../knowledge-index.service';
@@ -41,6 +42,7 @@ import {
   secretIn,
   severalClaimsIn,
 } from './triage-policy';
+import { answerGaps } from '../upkeep/gap-answers';
 
 /**
  * Decides what becomes of a new entry before a person looks at it.
@@ -177,6 +179,8 @@ export default class KnowledgeTriageService {
    * cannot look for the entry's neighbours cannot say it contradicts none of
    * them, so it fails and Bull tries it again rather than deciding blind.
    */
+  private readonly logger = new LoggerService('KnowledgeTriageService');
+
   constructor(
     private prisma: PrismaService,
     private judges: TriageJudges,
@@ -922,6 +926,13 @@ export default class KnowledgeTriageService {
       await this.indexer?.entriesChanged(changed);
     }
 
+    if (
+      result.applied &&
+      found.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT
+    ) {
+      await this.answerGapsQuietly(entry.id);
+    }
+
     return {
       decisionId: result.id,
       decision: found.decision,
@@ -932,6 +943,22 @@ export default class KnowledgeTriageService {
       backedOffFrom: found.backedOffFrom ?? null,
       audit: result.audit,
     };
+  }
+
+  /**
+   * Marks answered the knowledge gaps an entry triage accepted answers, by
+   * citing the issue opened for them. After the decision is written, and best
+   * effort, as when a person accepts one: the gap job marks any this misses.
+   */
+  private async answerGapsQuietly(entryId: string): Promise<void> {
+    try {
+      await answerGaps(this.prisma, [entryId]);
+    } catch (error) {
+      this.logger.warn({
+        message: `Could not mark the knowledge gaps entry ${entryId} answers: ${error}; the gap job will`,
+        where: 'KnowledgeTriageService.answerGapsQuietly',
+      });
+    }
   }
 
   /**

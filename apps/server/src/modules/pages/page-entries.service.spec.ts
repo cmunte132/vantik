@@ -11,6 +11,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
@@ -148,6 +149,12 @@ function buildService({
       createMany: jest.fn(({ data }) =>
         Promise.resolve({ count: data.length }),
       ),
+    },
+    // What an accepted entry cites, read to answer the knowledge gaps it
+    // answers: nothing, unless a test says otherwise.
+    pageEntryCitation: { findMany: jest.fn(() => Promise.resolve([])) },
+    pageKnowledgeGap: {
+      updateMany: jest.fn(() => Promise.resolve({ count: 0 })),
     },
     // The transaction double runs whatever the service handed it, so a create
     // that was never reached stays absent from `created`.
@@ -1877,5 +1884,196 @@ describe('entries as they are read', () => {
     expect(
       (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0].include,
     ).toEqual({ citations: { select: expect.any(Object) } });
+  });
+});
+
+describe('answering a knowledge gap', () => {
+  const issueDraft = {
+    kind: PageEntryCitationKindEnum.ISSUE,
+    targetId: 'issue-1',
+    targetLabel: 'ENG-12',
+    checkedAt: new Date(),
+    checkResult: PageEntryCitationCheckEnum.HOLDS,
+  };
+  const citing = (entryId: string) => [
+    {
+      entryId,
+      targetId: 'issue-1',
+      entry: { page: { workspaceId: 'workspace-1' } },
+    },
+  ];
+
+  function withGaps(
+    options: Options = {},
+    drafts: Array<Record<string, unknown>> = [issueDraft],
+  ) {
+    const built = buildService(options);
+    const citations = {
+      checkForWrite: jest.fn(async () => drafts),
+      retryLater: jest.fn(async (): Promise<void> => undefined),
+    };
+    const service = new PageEntriesService(
+      built.prisma,
+      undefined,
+      built.vectorService,
+      citations as unknown as EntryCitationsService,
+    );
+    const prisma = built.prisma as unknown as {
+      pageEntryCitation: { findMany: jest.Mock };
+      pageKnowledgeGap: { updateMany: jest.Mock };
+    };
+
+    return {
+      ...built,
+      service,
+      cited: prisma.pageEntryCitation.findMany,
+      answered: prisma.pageKnowledgeGap.updateMany,
+    };
+  }
+
+  const ACCEPTED_FILTER = {
+    kind: 'ISSUE',
+    entry: expect.objectContaining({
+      deleted: null,
+      status: { in: ['STANDING', 'CONSOLIDATED'] },
+    }),
+  };
+
+  it('[KG-6.4] answers the gap whose issue a person’s standing entry cites', async () => {
+    const { service, cited, answered } = withGaps({ userType: 'User' });
+    cited.mockResolvedValueOnce(citing('entry-new'));
+
+    await service.createEntry('page-1', HUMAN, {
+      content: 'Refunds round half to even, to the cent.',
+      standing: true,
+      citations: [{ issue: 'ENG-12' }],
+    });
+
+    expect(cited).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          entryId: { in: ['entry-new'] },
+          ...ACCEPTED_FILTER,
+        }),
+      }),
+    );
+    expect(answered).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace-1',
+        issueId: 'issue-1',
+        answeredAt: null,
+      },
+      data: { answeredAt: expect.any(Date), answeredByEntryId: 'entry-new' },
+    });
+  });
+
+  it('[KG-6.4] answers nothing for an entry waiting in the inbox, or one citing no issue', async () => {
+    const agent = withGaps({ userType: 'Agent' });
+
+    await agent.service.createEntry('page-1', AGENT, {
+      content: 'Refunds round half to even, to the cent.',
+      citations: [{ issue: 'ENG-12' }],
+    });
+
+    const person = withGaps({ userType: 'User' }, [
+      { ...issueDraft, kind: PageEntryCitationKindEnum.PULL_REQUEST },
+    ]);
+
+    await person.service.createEntry('page-1', HUMAN, {
+      content: 'Refunds round half to even, to the cent.',
+      standing: true,
+      citations: [{ pullRequest: 'https://github.com/acme/app/pull/1' }],
+    });
+
+    expect(agent.cited).not.toHaveBeenCalled();
+    expect(person.cited).not.toHaveBeenCalled();
+  });
+
+  it('[KG-6.4] answers the gap when a person accepts an entry citing its issue, and not when they archive it', async () => {
+    const accept = withGaps({ userType: 'User' });
+    accept.cited.mockResolvedValueOnce(citing('entry-1'));
+
+    await accept.service.updateEntry('entry-1', 'human-1', {
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    expect(accept.cited).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ entryId: { in: ['entry-1'] } }),
+      }),
+    );
+    expect(accept.answered).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ answeredByEntryId: 'entry-1' }),
+      }),
+    );
+
+    const archive = withGaps({ userType: 'User' });
+
+    await archive.service.updateEntry('entry-1', 'human-1', {
+      status: PageEntryStatusEnum.ARCHIVED,
+    });
+    // A reword leaves the status as it is, and answers nothing new.
+    await archive.service.updateEntry('entry-1', 'human-1', {
+      content: 'Refunds round half to even.',
+    });
+
+    expect(archive.cited).not.toHaveBeenCalled();
+  });
+
+  it('[KG-6.4] answers the gaps of entries accepted in bulk', async () => {
+    const { service, prisma, cited, answered } = withGaps({
+      userType: 'User',
+    });
+    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValue([
+      { id: 'entry-1', status: PageEntryStatusEnum.PROPOSED },
+      { id: 'entry-2', status: PageEntryStatusEnum.PROPOSED },
+    ]);
+    cited.mockResolvedValueOnce(citing('entry-2'));
+
+    await service.bulkUpdate('workspace-1', 'human-1', {
+      entryIds: ['entry-1', 'entry-2'],
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    expect(cited).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          entryId: { in: ['entry-1', 'entry-2'] },
+        }),
+      }),
+    );
+    expect(answered).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ answeredByEntryId: 'entry-2' }),
+      }),
+    );
+
+    cited.mockClear();
+    await service.bulkUpdate('workspace-1', 'human-1', {
+      entryIds: ['entry-1', 'entry-2'],
+      status: PageEntryStatusEnum.DISPUTED,
+    });
+
+    expect(cited).not.toHaveBeenCalled();
+  });
+
+  it('[KG-6.4] accepts the entry even when its gap cannot be marked, which the gap job does later', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const { service, cited } = withGaps({ userType: 'User' });
+    cited.mockRejectedValueOnce(new Error('connection reset'));
+
+    await expect(
+      service.updateEntry('entry-1', 'human-1', {
+        status: PageEntryStatusEnum.STANDING,
+      }),
+    ).resolves.toMatchObject({ status: PageEntryStatusEnum.STANDING });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('connection reset'),
+    );
+
+    warn.mockRestore();
   });
 });

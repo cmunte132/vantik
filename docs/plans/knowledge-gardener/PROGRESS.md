@@ -5,8 +5,8 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 6, in progress: KG-6.1, KG-6.2, KG-6.3 and KG-6.5
-  implemented and mutation-checked; KG-6.4 next, then the review. PR #45
+- Current phase: 6, in progress: KG-6.1 to KG-6.5 implemented and
+  mutation-checked; the phase review next. PR #45
   is open from this branch, so the phase 6 commits are in it too; its
   description says so.
   Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
@@ -867,6 +867,51 @@ next session starts by reading it.
     conventions service (the harmful-signal test's with a `weigh` that
     does nothing); the agent-runs suite's construction gained it. No
     assertion changed.
+- **Knowledge gaps become issues (KG-6.4).**
+  - **The job.** `openKnowledgeGapIssues`, a repeatable job on
+    `KNOWLEDGE_GAP_ISSUES_CRON` (default `0 4 * * 1`, Monday 04:00; empty
+    or `off` disables it), registered at boot by `KnowledgeGapsScheduler`
+    under the fixed id `knowledge-gap-issues`, after clearing the job's
+    earlier schedules. The clearing and registering are the decay pass's,
+    moved into one helper both schedulers call, so the decay schedule is
+    registered exactly as before.
+  - **Which gaps.** In each workspace with an unanswered gap: those with no
+    issue yet, asked at least `gapIssueMinCount` times
+    (`KNOWLEDGE_GAP_ISSUE_MIN_COUNT`, default 5, workspace
+    `gapIssueMinCount`), the most asked first, at most ten a run; the rest
+    wait for the next run. One workspace failing does not stop the others,
+    and the run fails at the end so Bull records it.
+  - **The module.** A question names a module by a path in it, held by the
+    deepest module whose folder holds it (a path starting with a
+    repository's full name is read in that repository; a whole-repository
+    module holds a bare path only when the workspace has one repository),
+    or by a module's name or short name written as whole words, paths
+    aside. Exactly one module named puts the issue on it, through
+    `KnowledgeIssues.open` (the owning team, labelled `knowledge`, no
+    assignee), and stores it on the gap; none or several, and the issue has
+    no module and goes where `owningTeam` sends it.
+  - **Never twice.** The issue is opened, and its id stored on the gap,
+    while the gap's advisory lock is held, with the gap read again once the
+    lock is held, so a second run waiting on it finds the id; a gap with an
+    issue is never picked again, even if a person deletes the issue. The title is fixed by the
+    question ("Knowledge gap: <question>", secrets withheld, cut at 100
+    characters) and the body carries the gap's id, so an issue a run opened
+    and could not store is found by both before another is opened. A gap
+    already answered is never given an issue however often it is asked.
+  - **Answered.** An entry citing the gap's issue (an ISSUE citation) that
+    is accepted, STANDING or CONSOLIDATED, on a live page in the gap's
+    workspace, answers it: `answeredAt` and `answeredByEntryId`, the first
+    citation's entry winning and an answered gap kept as it is. Marked as
+    soon as the entry is accepted, from each place that happens: a
+    person's standing write citing an issue, `updateEntry` and `bulkUpdate`
+    to an accepted status, and triage acting on AUTO_ACCEPT. Best effort
+    there, after the acceptance is written, and again by the job at the
+    start of each run, which marks any that were missed.
+  - **Tests.** The settings suite's full-object expectations gained the new
+    setting; the processor suite's constructions gained the gap service;
+    the entry service suite's database double gained the two tables
+    answering reads (empty); the triage suite's store gained them too. No
+    assertion changed.
 - **Migration** `20260927060000_knowledge_upkeep`: `prisma migrate diff`'s
   output for all of phase 6 (three enums, `PageEntryMaintenance`,
   `KnowledgeFinding`, and four nullable columns on `PageKnowledgeGap`).
@@ -1697,3 +1742,18 @@ Give the evidence, and stop until the maintainer answers.
   queue's quiet period masked); new tests killed them. The scope was found to count a whole-repository
   module of another repository; fixed by scoping on each finding's run's
   repository.
+- 2026-09-27: KG-6.4 (gaps asked five times get one issue each, weekly, on
+  the module the question names; answered when an entry citing the issue
+  is accepted) implemented with tagged tests. Mutation-checked: 57 mutants
+  over the gap service, the answer helper, the acceptance hooks and the
+  scheduler's inputs. 44 were killed at once; four did not compile and
+  were reworded and killed; six survived (answered gaps taking the run's
+  places, the workspace of an issue left behind, a deleted workspace, the
+  title's cut, part of a word read as a module's name, a short name alone)
+  and new tests killed them. Of three more, one showed a check the
+  answered guard already made, now removed; two are equivalent (a status
+  set to what it was, and a decision triage records without acting on:
+  neither entry is newly accepted, so neither answers a gap). Found while
+  testing: a path's folders were read as module names too (`apps/api/...`
+  naming the API); paths are now read only as paths. Full server suite:
+  1800 passed, 15 skipped.

@@ -23,6 +23,7 @@ describe('the knowledge settings of a workspace', () => {
       kappaWindowDays: 30,
       conventionMinRuns: 3,
       conventionHarmMargin: 3,
+      gapIssueMinCount: 5,
     });
     expect(DEFAULT_KNOWLEDGE_SETTINGS).toEqual(knowledgeSettings({}, {}));
   });
@@ -46,6 +47,7 @@ describe('the knowledge settings of a workspace', () => {
       kappaWindowDays: 30,
       conventionMinRuns: 3,
       conventionHarmMargin: 3,
+      gapIssueMinCount: 5,
     });
     // The ends of a share are shares.
     expect(
@@ -86,6 +88,7 @@ describe('the knowledge settings of a workspace', () => {
       kappaWindowDays: 30,
       conventionMinRuns: 3,
       conventionHarmMargin: 3,
+      gapIssueMinCount: 5,
     });
     // One setting stored leaves the others to the deployment.
     expect(knowledgeSettings({ knowledge: { contextTopK: 3 } }, env)).toEqual({
@@ -100,6 +103,7 @@ describe('the knowledge settings of a workspace', () => {
       kappaWindowDays: 30,
       conventionMinRuns: 3,
       conventionHarmMargin: 3,
+      gapIssueMinCount: 5,
     });
     // Other preferences are not knowledge settings.
     expect(
@@ -152,6 +156,7 @@ describe('the knowledge settings of a workspace', () => {
       kappaWindowDays: 30,
       conventionMinRuns: 3,
       conventionHarmMargin: 3,
+      gapIssueMinCount: 5,
     });
     expect(
       knowledgeSettings({ knowledge: { holdoutRate: 1.5 } }, {}).holdoutRate,
@@ -326,6 +331,29 @@ describe('the knowledge settings of a workspace', () => {
         },
       ),
     ).toMatchObject({ conventionMinRuns: 3, conventionHarmMargin: 3 });
+  });
+
+  it('[KG-6.4] opens an issue for a gap asked 5 times, unless told otherwise', () => {
+    expect(knowledgeSettings(null, {}).gapIssueMinCount).toBe(5);
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_GAP_ISSUE_MIN_COUNT: '12' })
+        .gapIssueMinCount,
+    ).toBe(12);
+    // The workspace's own over the deployment's.
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssueMinCount: 2 } },
+        { KNOWLEDGE_GAP_ISSUE_MIN_COUNT: '12' },
+      ).gapIssueMinCount,
+    ).toBe(2);
+    // A count that cannot be read falls to the layer beneath: never none,
+    // which would open an issue for every question asked once.
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssueMinCount: 0 } },
+        { KNOWLEDGE_GAP_ISSUE_MIN_COUNT: '1.5' },
+      ).gapIssueMinCount,
+    ).toBe(5);
   });
 
   it('[KG-3.2] caps the budget, so a budget cannot mean everything', () => {

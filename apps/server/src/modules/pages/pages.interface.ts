@@ -71,6 +71,19 @@ export const DECAY_JOB = 'runDecay';
 export const DECAY_JOB_ID = 'page-entry-decay';
 
 /**
+ * When the gardener opens issues for the questions the knowledge keeps
+ * failing to answer. Empty or `off` disables it. Weekly, because a gap is
+ * demand counted over weeks, and an issue a week per question is as fast as
+ * a team can be asked to answer them.
+ */
+export const GAP_ISSUES_CRON =
+  process.env.KNOWLEDGE_GAP_ISSUES_CRON ?? '0 4 * * 1';
+
+/** The job that opens them, with a fixed id for the reason decay has one. */
+export const GAP_ISSUES_JOB = 'openKnowledgeGapIssues';
+export const GAP_ISSUES_JOB_ID = 'knowledge-gap-issues';
+
+/**
  * Re-resolves entries' scopes to modules. Queued with a workspace id when a
  * module's repositories change, and once at boot with none, which covers every
  * workspace and fills in entries written before modules were resolved.

@@ -204,6 +204,7 @@ function store(
     comments?: Target[];
     preferences?: unknown;
     backoff?: Backoff[];
+    gaps?: Array<Record<string, unknown>>;
   } = {},
 ) {
   const page = (id: string, entryPolicy = 'CURATED'): PageRow => ({
@@ -375,8 +376,35 @@ function store(
       ),
     },
   };
+  const gaps = options.gaps ?? [];
   const prisma = {
     ...client,
+    // Read after a decision is written, to answer the knowledge gaps an
+    // accepted entry answers.
+    pageEntryCitation: {
+      findMany: jest.fn(async ({ where }: { where: Where }) =>
+        [...entries.values()]
+          .flatMap((row) =>
+            row.citations.map((citation) => ({
+              ...citation,
+              entryId: row.id,
+              entry: view(row),
+            })),
+          )
+          .filter((citation) => matches(citation, where)),
+      ),
+    },
+    pageKnowledgeGap: {
+      updateMany: jest.fn(
+        async ({ where, data }: { where: Where; data: Where }) => {
+          const found = gaps.filter((gap) => matches(gap, where));
+
+          found.forEach((gap) => Object.assign(gap, data));
+
+          return { count: found.length };
+        },
+      ),
+    },
     // Interactive, as postgres runs it: whatever the work changed is undone
     // when it throws.
     $transaction: jest.fn(
@@ -399,7 +427,7 @@ function store(
     ),
   };
 
-  return { prisma, entries, decisions, relations, pages };
+  return { prisma, entries, decisions, relations, pages, gaps };
 }
 
 // ------------------------------------------------------------------ fixtures
@@ -580,16 +608,22 @@ interface Setup {
   sameModel?: boolean;
   /** Decision types stopped or resumed in the workspace. */
   backoff?: Backoff[];
+  /** Knowledge gaps, with the issues opened for them. */
+  gaps?: Array<Record<string, unknown>>;
 }
 
 function triage(setup: Setup) {
-  const { prisma, entries, decisions, relations, pages } = store(setup.rows, {
-    runs: setup.runs ?? [],
-    issues: setup.issues,
-    comments: setup.comments,
-    preferences: setup.preferences,
-    backoff: setup.backoff,
-  });
+  const { prisma, entries, decisions, relations, pages, gaps } = store(
+    setup.rows,
+    {
+      runs: setup.runs ?? [],
+      issues: setup.issues,
+      comments: setup.comments,
+      preferences: setup.preferences,
+      backoff: setup.backoff,
+      gaps: setup.gaps,
+    },
+  );
   const calls: Array<{
     role: string;
     system: string;
@@ -662,6 +696,7 @@ function triage(setup: Setup) {
     decisions,
     relations,
     pages,
+    gaps,
     calls,
     findNearEntries,
     indexer,
@@ -2617,5 +2652,64 @@ describe('backing off', () => {
       mode: KnowledgeTriageMode.SHADOW,
       applied: false,
     });
+  });
+});
+
+describe('a knowledge gap answered by an entry triage accepts', () => {
+  const gap = () => ({
+    id: 'gap-1',
+    workspaceId: WORKSPACE,
+    query: 'how are webhook deliveries retried',
+    issueId: ISSUE_ID,
+    answeredAt: null as Date | null,
+    answeredByEntryId: null as string | null,
+  });
+  const answering = () =>
+    fresh({ citations: [holds(), cites('ISSUE', ISSUE_ID, 'ENG-4')] });
+
+  it('[KG-6.4] marks the gap answered when triage accepts an entry citing its issue', async () => {
+    const t = triage({
+      rows: [answering()],
+      issues: [issueTarget()],
+      gaps: [gap()],
+    });
+
+    expect(await t.service.triage('new', ON)).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: true,
+    });
+    expect(t.gaps[0]).toMatchObject({ answeredByEntryId: 'new' });
+    expect(t.gaps[0].answeredAt).toBeInstanceOf(Date);
+  });
+
+  it('[KG-6.4] leaves the gap open when triage only records its decision, or rejects the entry', async () => {
+    const shadow = triage({
+      rows: [answering()],
+      issues: [issueTarget()],
+      gaps: [gap()],
+    });
+
+    expect(await shadow.service.triage('new', SHADOW)).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: false,
+    });
+
+    const rejected = triage({
+      rows: [answering()],
+      issues: [issueTarget()],
+      gaps: [gap()],
+      accept: '{"verdict": "reject", "reason": "the lines say otherwise"}',
+    });
+
+    expect((await rejected.service.triage('new', ON))?.decision).not.toBe(
+      Decision.AUTO_ACCEPT,
+    );
+
+    for (const t of [shadow, rejected]) {
+      expect(t.gaps[0]).toMatchObject({
+        answeredAt: null,
+        answeredByEntryId: null,
+      });
+    }
   });
 });

@@ -13,6 +13,7 @@ import {
   BulkUpdatePageEntriesDto,
   CreatePageEntryDto,
   PageEntry,
+  PageEntryCitationKindEnum,
   PageEntryPolicyEnum,
   PageEntryStatusEnum,
   UpdatePageEntryDto,
@@ -49,6 +50,7 @@ import {
 } from './pages.interface';
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 import { secretIn } from './triage/triage-policy';
+import { answerGaps, isAccepted } from './upkeep/gap-answers';
 import { heldSince, reversalsFor, unusedSince } from './upkeep/maintenance';
 
 @Injectable()
@@ -264,6 +266,12 @@ export default class PageEntriesService {
 
     if (status === PageEntryStatusEnum.PROPOSED) {
       await this.triageLater(entry.id);
+    } else if (
+      citations.some(
+        (citation) => citation.kind === PageEntryCitationKindEnum.ISSUE,
+      )
+    ) {
+      await this.answerGapsQuietly([entry.id]);
     }
 
     return { ...entry, ...entryProof(entry) } as unknown as PageEntry;
@@ -284,6 +292,21 @@ export default class PageEntriesService {
     } catch (error) {
       this.logger.warn(
         `Could not queue triage for entry ${entryId}: ${error}; it waits for a person`,
+      );
+    }
+  }
+
+  /**
+   * Marks answered the knowledge gaps these newly accepted entries answer, by
+   * citing the issue opened for them. Best effort: the acceptance stands
+   * either way, and the gap job marks any this misses on its next run.
+   */
+  private async answerGapsQuietly(entryIds: string[]): Promise<void> {
+    try {
+      await answerGaps(this.prisma, entryIds);
+    } catch (error) {
+      this.logger.warn(
+        `Could not mark the knowledge gaps answered by ${entryIds.join(', ')}: ${error}; the gap job will`,
       );
     }
   }
@@ -454,6 +477,14 @@ export default class PageEntriesService {
     await this.indexer?.entriesChanged(settled.retired);
     await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
 
+    if (
+      entryData.status !== undefined &&
+      entryData.status !== current.status &&
+      isAccepted(entryData.status)
+    ) {
+      await this.answerGapsQuietly([entryId]);
+    }
+
     return {
       ...entry,
       ...entryProof(entry as unknown as ProofRow),
@@ -529,6 +560,10 @@ export default class PageEntriesService {
       ]);
       await this.indexer?.entriesChanged([...eligible, ...settled.retired]);
       await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
+
+      if (isAccepted(input.status)) {
+        await this.answerGapsQuietly(eligible);
+      }
     }
 
     return {

@@ -71,6 +71,12 @@ export interface KnowledgeSettings {
    * `KNOWLEDGE_CONVENTION_HARM_MARGIN`.
    */
   conventionHarmMargin: number;
+  /**
+   * How many times a question the knowledge could not answer must have been
+   * asked before the gardener opens an issue asking a person to answer it.
+   * `KNOWLEDGE_GAP_ISSUE_MIN_COUNT`.
+   */
+  gapIssueMinCount: number;
 }
 
 export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
@@ -85,6 +91,7 @@ export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
   kappaWindowDays: 30,
   conventionMinRuns: 3,
   conventionHarmMargin: 3,
+  gapIssueMinCount: 5,
 };
 
 /** The most tokens any knowledge budget allows, whatever is configured. */
@@ -144,6 +151,10 @@ export function knowledgeSettings(
       countOf(stored.conventionHarmMargin) ??
       countOf(fromEnv(env.KNOWLEDGE_CONVENTION_HARM_MARGIN)) ??
       DEFAULT_KNOWLEDGE_SETTINGS.conventionHarmMargin,
+    gapIssueMinCount:
+      countOf(stored.gapIssueMinCount) ??
+      countOf(fromEnv(env.KNOWLEDGE_GAP_ISSUE_MIN_COUNT)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.gapIssueMinCount,
   };
 }
 

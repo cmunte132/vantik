@@ -9,6 +9,8 @@ import { VectorModule } from 'modules/vector/vector.module';
 import CitationJudge from './citation-judge';
 import EntryCitationsService from './entry-citations.service';
 import KnowledgeIndexService from './knowledge-index.service';
+import { KnowledgeReviewController } from './knowledge-review.controller';
+import KnowledgeReviewService from './knowledge-review.service';
 import { KnowledgeController } from './knowledge.controller';
 import KnowledgeService from './knowledge.service';
 import PageLinksService from './page-links.service';
@@ -23,6 +25,7 @@ import {
 } from './pages.processor';
 import PagesService from './pages.service';
 import RepoFileSourceService from './repo-file-source.service';
+import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
 import TriageJudges from './triage/triage-judges';
 
@@ -34,7 +37,12 @@ import TriageJudges from './triage/triage-judges';
     LocalRepoModule,
     BullModule.registerQueue({ name: PAGES_QUEUE }),
   ],
-  controllers: [PagesController, PageEntriesController, KnowledgeController],
+  controllers: [
+    PagesController,
+    PageEntriesController,
+    KnowledgeController,
+    KnowledgeReviewController,
+  ],
   providers: [
     PagesService,
     PageEntriesService,
@@ -46,6 +54,8 @@ import TriageJudges from './triage/triage-judges';
     EntryCitationsService,
     TriageJudges,
     KnowledgeTriageService,
+    KnowledgeAgreementService,
+    KnowledgeReviewService,
     PagesScheduler,
     EntryModulesScheduler,
     PagesProcessor,

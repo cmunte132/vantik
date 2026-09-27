@@ -290,8 +290,8 @@ describe('what triage and the person each said', () => {
 });
 
 describe('agreement per decision type', () => {
-  it('[KG-5.3] measures each acting type against the rest, with the counts', () => {
-    const [accept, corroborate, reject] = agreementByType([
+  it('[KG-5.3] measures each type against the rest, with the counts', () => {
+    const [accept, corroborate, reject, escalate] = agreementByType([
       ...Array.from({ length: 3 }, () =>
         rated(Decision.AUTO_ACCEPT, Verdict.ACCEPTED),
       ),
@@ -314,14 +314,14 @@ describe('agreement per decision type', () => {
       rated(Decision.REJECT, Verdict.ACCEPTED, { policy: Policy.SECRET }),
     ]);
 
-    // AUTO_ACCEPT: 12 rated. Both 4 (three accepted, one held back and
-    // accepted), triage only 1, person only 2 (an escalation and a folded
-    // repeat, each accepted), neither 5. alike 9; chance = 5×6 + 7×6 = 72;
-    // (108 - 72) / (144 - 72) = 0.5.
+    // AUTO_ACCEPT: 12 rated, 7 about acceptance. Both 4 (three accepted,
+    // one held back and accepted), triage only 1, person only 2 (an
+    // escalation and a folded repeat, each accepted), neither 5. alike 9;
+    // chance = 5×6 + 7×6 = 72; (108 - 72) / (144 - 72) = 0.5.
     expect(accept).toMatchObject({
       decision: Decision.AUTO_ACCEPT,
       kappa: 0.5,
-      samples: 12,
+      samples: 7,
       observed: 0.75,
       expected: 0.5,
       counts: { both: 4, triageOnly: 1, personOnly: 2, neither: 5 },
@@ -332,7 +332,7 @@ describe('agreement per decision type', () => {
     expect(corroborate).toMatchObject({
       decision: Decision.CORROBORATE,
       kappa: 0.75,
-      samples: 12,
+      samples: 3,
       counts: { both: 2, triageOnly: 1, personOnly: 0, neither: 9 },
     });
 
@@ -341,9 +341,34 @@ describe('agreement per decision type', () => {
     expect(reject).toMatchObject({
       decision: Decision.REJECT,
       kappa: 1,
-      samples: 12,
+      samples: 1,
       counts: { both: 1, triageOnly: 0, personOnly: 0, neither: 11 },
     });
+
+    // ESCALATE, reported though it never backs off: both 2 (set aside and
+    // edited), triage only 1 (accepted), person only 1 (an acceptance set
+    // aside), neither 8. alike 10; chance = 3×3 + 9×9 = 90; (120 - 90) /
+    // (144 - 90) = 5/9.
+    expect(escalate).toMatchObject({
+      decision: Decision.ESCALATE,
+      samples: 4,
+      counts: { both: 2, triageOnly: 1, personOnly: 1, neither: 8 },
+    });
+    expect(escalate.kappa).toBeCloseTo(5 / 9, 12);
+  });
+
+  it('[KG-5.4] counts as evidence about a type only the verdicts where it was said', () => {
+    const [accept, corroborate, reject] = agreementByType(
+      Array.from({ length: 25 }, () =>
+        rated(Decision.AUTO_ACCEPT, Verdict.ACCEPTED),
+      ),
+    );
+
+    // Twenty-five verdicts, every one about acceptance and none about
+    // folding in or refusing, so those two have nothing to go on.
+    expect(accept).toMatchObject({ samples: 25, kappa: null });
+    expect(corroborate).toMatchObject({ samples: 0, kappa: null });
+    expect(reject).toMatchObject({ samples: 0, kappa: null });
   });
 
   it('[KG-5.3] lets an audited decision stand for those it was drawn from', () => {
@@ -364,7 +389,7 @@ describe('agreement per decision type', () => {
     // 116) = 40/53. Counted once each it would be (12 - 8) / (16 - 8) = 0.5.
     expect(accept.kappa).toBeCloseTo(40 / 53, 12);
     expect(accept).toMatchObject({
-      samples: 4,
+      samples: 2,
       counts: { both: 1, triageOnly: 0, personOnly: 1, neither: 2 },
       weighted: { both: 10, triageOnly: 0, personOnly: 1, neither: 2 },
     });
@@ -389,10 +414,19 @@ describe('backing off', () => {
     expect(shouldBackOff({ kappa: 0.6, samples: 20 }, settings, false)).toBe(
       false,
     );
-    // Undefined only when both said one same thing throughout.
+    // With verdicts about the type, undefined only when both said it on
+    // every one.
     expect(shouldBackOff({ kappa: null, samples: 25 }, settings, false)).toBe(
       false,
     );
+  });
+
+  it('[KG-5.4] changes nothing on no verdicts about the type, whatever the minimum', () => {
+    const none = { kappaFloor: 0.6, kappaMinSamples: 0 };
+
+    expect(shouldBackOff({ kappa: null, samples: 0 }, none, true)).toBe(true);
+    expect(shouldBackOff({ kappa: null, samples: 0 }, none, false)).toBe(false);
+    expect(shouldBackOff({ kappa: 0.2, samples: 1 }, none, false)).toBe(true);
   });
 
   it('[KG-5.4] resumes only on enough verdicts at the floor or above', () => {

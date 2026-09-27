@@ -100,6 +100,16 @@ export function isActing(
 }
 
 /**
+ * Every decision type agreement is reported for: the acting ones, which can
+ * back off, and escalation, which cannot (it already waits on a person) but
+ * says whether what triage sent to people needed them.
+ */
+export const MEASURED_DECISIONS = [
+  ...ACTING_DECISIONS,
+  KnowledgeTriageDecisionType.ESCALATE,
+] as const;
+
+/**
  * Escalation reasons that are triage's judgment of the entry: the two
  * acceptance judgments did not both accept it, or two judgments of how it
  * relates to a neighbour differed. Every other reason is a rule that sends an
@@ -211,7 +221,16 @@ export interface AgreementCells {
 
 /** Agreement on one decision type. */
 export interface TypeAgreement extends Kappa {
-  decision: ActingDecision;
+  decision: KnowledgeTriageDecisionType;
+  /**
+   * The verdicts about this type: those where triage decided it, or the
+   * verdict says it should have. Verdicts on which neither said it still
+   * enter kappa, as the other class, but are no evidence about the type, so
+   * the minimum is counted over these alone. Otherwise a type triage has not
+   * decided in the window would pass the minimum on verdicts about the
+   * others, with nothing to say about itself.
+   */
+  samples: number;
   /** Verdicts in each cell. */
   counts: AgreementCells;
   /**
@@ -225,10 +244,10 @@ export interface TypeAgreement extends Kappa {
 }
 
 /**
- * Kappa for each acting decision type, that type against the rest, over the
- * decisions people gave verdicts on: for type T, triage's decision and the
- * one the verdict says it should have made are each rated "T" or "not T".
- * Decisions triage judged nothing on are left out.
+ * Kappa for each measured decision type, that type against the rest, over
+ * the decisions people gave verdicts on: for type T, triage's decision and
+ * the one the verdict says it should have made are each rated "T" or "not
+ * T". Decisions triage judged nothing on are left out.
  */
 export function agreementByType(
   rows: ReadonlyArray<
@@ -249,7 +268,7 @@ export function agreementByType(
         ];
   });
 
-  return ACTING_DECISIONS.map((decision) => {
+  return MEASURED_DECISIONS.map((decision) => {
     const pairs = rated.map(
       ({ label, person }) => [label === decision, person === decision] as const,
     );
@@ -270,10 +289,13 @@ export function agreementByType(
       };
     };
 
+    const counts = cells(() => 1);
+
     return {
       decision,
       ...cohensKappa(pairs, weights),
-      counts: cells(() => 1),
+      samples: counts.both + counts.triageOnly + counts.personOnly,
+      counts,
       weighted: cells((index) => weights[index]),
     };
   });
@@ -281,18 +303,19 @@ export function agreementByType(
 
 /**
  * Whether a decision type should stop acting. It backs off once it has
- * enough verdicts and its kappa is under the floor; once backed off it stays
- * so until it has enough verdicts and a kappa at the floor or above, so a
+ * enough verdicts about it and its kappa is under the floor; once backed off
+ * it stays so until it has enough and a kappa at the floor or above, so a
  * type that went wrong resumes on evidence, not on its verdicts ageing out of
- * the window. Kappa is undefined only when both sides said one same thing
- * throughout, which is complete agreement.
+ * the window. With no verdicts about it there is no evidence at all, whatever
+ * the minimum is set to. With some, kappa is undefined only when every one
+ * has both sides saying it, which is complete agreement.
  */
 export function shouldBackOff(
-  agreement: Pick<Kappa, 'kappa' | 'samples'>,
+  agreement: Pick<TypeAgreement, 'kappa' | 'samples'>,
   settings: { kappaFloor: number; kappaMinSamples: number },
   backedOff: boolean,
 ): boolean {
-  if (agreement.samples < settings.kappaMinSamples) {
+  if (agreement.samples === 0 || agreement.samples < settings.kappaMinSamples) {
     return backedOff;
   }
 

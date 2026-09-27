@@ -140,7 +140,10 @@ export interface KnowledgeTypeAgreement {
   decision: KnowledgeTriageDecisionEnum;
   /** Null when undefined: no verdicts, or one same answer throughout. */
   kappa: number | null;
-  /** Verdicts it was measured over. */
+  /**
+   * Verdicts about this type: where triage decided it, or the verdict says
+   * it should have. The minimum is counted over these.
+   */
   samples: number;
   observed: number | null;
   expected: number | null;
@@ -148,7 +151,10 @@ export interface KnowledgeTypeAgreement {
   counts: KnowledgeAgreementCells;
   /** The same, each audited decision standing for those it was drawn from. */
   weighted: KnowledgeAgreementCells;
-  /** Whether a person decides these instead of triage, for now. */
+  /**
+   * Whether a person decides these instead of triage, for now. Always false
+   * for ESCALATE, which is measured but already waits on a person.
+   */
   backedOff: boolean;
   changedAt: string | Date | null;
 }

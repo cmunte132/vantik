@@ -93,6 +93,26 @@ describe('the agreement panel', () => {
     expect(alike.label).toBe('Refusing on a policy');
   });
 
+  it('[KG-5.3] reports sending to a person beside the rest, never as held back', () => {
+    const [row] = agreementRows(
+      report([
+        type({
+          decision: KnowledgeTriageDecisionEnum.ESCALATE,
+          kappa: 0.25,
+          samples: 3,
+        }),
+      ]),
+    );
+
+    expect(row).toMatchObject({
+      label: 'Sending to a person',
+      kappa: '0.25',
+      verdicts: '3',
+      state: 'Always a person',
+      heldBack: false,
+    });
+  });
+
   it('[KG-5.4] shows a backed-off type as decided by a person', () => {
     const [row] = agreementRows(
       report([

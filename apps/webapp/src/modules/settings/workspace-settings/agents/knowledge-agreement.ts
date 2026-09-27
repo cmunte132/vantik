@@ -19,12 +19,14 @@ const LABELS: Record<string, string> = {
   [KnowledgeTriageDecisionEnum.AUTO_ACCEPT]: 'Putting facts into use',
   [KnowledgeTriageDecisionEnum.CORROBORATE]: 'Folding in repeats',
   [KnowledgeTriageDecisionEnum.REJECT]: 'Refusing on a policy',
+  [KnowledgeTriageDecisionEnum.ESCALATE]: 'Sending to a person',
 };
 
 /**
- * One row per thing triage does alone, kappa beside the verdicts it rests on
- * and how they fell, so a figure off three verdicts cannot pass for one off
- * three hundred.
+ * One row per kind of decision, kappa beside the verdicts about it and how
+ * they fell, so a figure off three verdicts cannot pass for one off three
+ * hundred. Sending to a person is measured too, for whether what triage
+ * sent people needed them, though it never backs off.
  */
 export function agreementRows(
   report: KnowledgeAgreementReport,
@@ -34,6 +36,7 @@ export function agreementRows(
     label: LABELS[type.decision] ?? type.decision,
     kappa: kappaOf(type),
     verdicts:
+      type.decision !== KnowledgeTriageDecisionEnum.ESCALATE &&
       type.samples < report.kappaMinSamples
         ? `${type.samples} of the ${report.kappaMinSamples} needed`
         : String(type.samples),
@@ -55,7 +58,7 @@ export function agreementNote(report: KnowledgeAgreementReport): string {
   const measure =
     `Over the last ${report.windowDays} days, each verdict a person gave on ` +
     'something triage decided is set against what triage did. ' +
-    `Below a kappa of ${floor} on at least ${report.kappaMinSamples} verdicts, ` +
+    `Below a kappa of ${floor} on at least ${report.kappaMinSamples} verdicts about it, ` +
     'that kind of decision goes to a person instead until it recovers.';
 
   return report.autoTriage === 'shadow'
@@ -70,8 +73,8 @@ function kappaOf(type: KnowledgeTypeAgreement): string {
     return '—';
   }
 
-  // Undefined only when triage and people gave one same answer to every
-  // verdict, which is agreement throughout; back-off reads it that way too.
+  // With verdicts about the type, undefined only when both said it on every
+  // one, which is agreement throughout; back-off reads it that way too.
   return type.kappa === null ? 'all alike' : type.kappa.toFixed(2);
 }
 
@@ -79,6 +82,10 @@ function stateOf(
   type: KnowledgeTypeAgreement,
   report: KnowledgeAgreementReport,
 ): string {
+  if (type.decision === KnowledgeTriageDecisionEnum.ESCALATE) {
+    return 'Always a person';
+  }
+
   if (type.backedOff) {
     return type.changedAt
       ? `A person decides, since ${new Date(type.changedAt).toLocaleDateString()}`

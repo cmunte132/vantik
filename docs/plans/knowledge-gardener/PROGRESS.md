@@ -570,6 +570,8 @@ next session starts by reading it.
   ACCEPTED; ARCHIVED or DISPUTED is REJECTED; changing the content, scope or
   kind (compared with what they were) is EDITED, whatever the status. Confirming
   alone gives no verdict: it says nothing about whether the entry stays.
+  A person consolidating a page gives ACCEPTED on each audited entry folded
+  into it, in the same transaction; an agent consolidating gives none.
   `updateEntry` and `bulkUpdate` put a conditional `updateMany` (`verdict:
   null`) in the same transaction as the change, so the verdict and the
   change commit together and of two people acting at once only the first
@@ -587,18 +589,23 @@ next session starts by reading it.
   CORROBORATE or REJECT (taking it out of use is what those did), and is
   otherwise ESCALATE (triage has no way to drop an entry for being wrong);
   EDITED is ESCALATE (as written it was neither to keep nor to drop).
-- **Kappa (KG-5.3).** Cohen's kappa per acting type (AUTO_ACCEPT,
-  CORROBORATE, REJECT), that type against the rest, over verdicts whose
-  `verdictAt` is inside `KNOWLEDGE_KAPPA_WINDOW_DAYS` (30). Audited
+- **Kappa (KG-5.3).** Cohen's kappa per decision type, that type against
+  the rest, over verdicts whose `verdictAt` is inside
+  `KNOWLEDGE_KAPPA_WINDOW_DAYS` (30): the three acting types (AUTO_ACCEPT,
+  CORROBORATE, REJECT), and ESCALATE, which is reported (whether what triage
+  sent people needed them) but never backs off. Audited
   decisions are weighted by `1 / auditRate`, the rate recorded on the
   decision: audits are a sample of what triage did alone while every
   escalation reaches a person, so unweighted they would make acting look
-  rarer, and chance agreement different, than it is. `samples` is the count
-  of verdicts, not the weighted total, and is what the minimum is checked
-  against. Kappa is null when both sides gave one same label throughout
-  (chance agreement is already complete), which back-off reads as complete
-  agreement. Tested against hand-worked values (1, 0, 0.4, -1, a weighted
-  0.625, a per-type table).
+  rarer, and chance agreement different, than it is. A type's `samples` is
+  the count of verdicts about it (triage decided it, or the verdict says it
+  should have), unweighted, and is what the minimum is checked against.
+  Verdicts on which neither side said it still enter its kappa, as the
+  other class, but are no evidence about it: counted, they let a type pass
+  the minimum on verdicts about the others (review round 1). With verdicts
+  about the type, kappa is null only when both sides said it on every one,
+  which back-off reads as complete agreement. Tested against hand-worked
+  values (1, 0, 0.4, -1, a weighted 0.625, a per-type table).
 - **Audits (KG-5.2).** `KNOWLEDGE_AUDIT_RATE` (0.1, per workspace
   `auditRate`). The decision id is generated before the row is written, and
   the draw is the first 52 bits of sha256(id) over 2^52: seeded by the id,
@@ -616,14 +623,21 @@ next session starts by reading it.
   the ordinary `updateEntry` (an acceptance is archived; a repeat or a
   refusal is put into use), and that change records the verdict like any
   other. 404 outside the workspace, 400 for a decision not drawn for audit,
-  409 once it has a verdict. Any other action on an audited entry (setting
-  it aside from the rail, editing it) gives the verdict too.
+  409 once it has a verdict. The answer's verdict write is strict (an
+  `update` filtered on `verdict: null`, which fails when another verdict
+  landed first and rolls back the answer's change with it), so two people
+  answering at once cannot leave the entry as the second left it and the
+  verdict as the first gave it; the second gets 409. Disagreeing with a
+  folded repeat takes its corroboration back off the entry it repeated.
+  Any other action on an audited entry (setting it aside from the rail,
+  editing it, folding it into the page) gives the verdict too.
 - **Back-off (KG-5.4).** `KNOWLEDGE_KAPPA_FLOOR` (0.6) and
   `KNOWLEDGE_KAPPA_MIN_SAMPLES` (20), per workspace. A type with at least
-  the minimum verdicts and a kappa under the floor backs off; a backed-off
-  type resumes only with at least the minimum and a kappa at the floor or
-  above. Under the minimum the state holds either way, so a type resumes on
-  evidence, not on its verdicts ageing out of the window. State is the
+  the minimum verdicts about it and a kappa under the floor backs off; a
+  backed-off type resumes only with at least the minimum and a kappa at the
+  floor or above. Under the minimum, or with none about it whatever the
+  minimum, the state holds either way, so a type resumes on evidence, not
+  on its verdicts ageing out of the window. State is the
   append-only `KnowledgeBackoffChange` table (the latest row per type),
   which is also the record of each change with the kappa, samples, floor,
   minimum and window it was made on, and each change is logged once
@@ -1135,6 +1149,62 @@ admin can change; a hand-written migration matching `prisma migrate diff`;
 mutation checks on every fix; no skipped or loosened tests, checklist and
 verifier untouched.
 
+### Phase 5, round 1 (fresh reviewer subagent)
+
+The reviewer read the phase diff (52eef46..HEAD) against PLAN.md and the
+KG-5 criteria, ran the affected server suites (238 tests) and the two webapp
+specs, ran `pnpm typecheck`, replayed `prisma migrate diff` against the
+migration (it matches) and ran the advisory lock on postgres in a
+rolled-back transaction. One blocking finding and five non-blocking, all
+fixed or answered:
+
+1. **Blocking: a backed-off type resumed on no evidence about itself.**
+   Each type's `samples` was every rated verdict in the window, and for
+   CORROBORATE and REJECT a window with none about them is all "neither",
+   whose kappa is null and read as agreement: REJECT backed off 31 days ago
+   resumed on the twentieth AUTO_ACCEPT verdict. Now a type's samples are
+   the verdicts about it (`agreement.ts`, `agreementByType`), and no
+   verdicts about a type changes nothing whatever the minimum
+   (`shouldBackOff`). Tests: "[KG-5.4] resumes or backs off a type only on
+   verdicts about that type" (the reviewer's case end to end, and the next
+   finding's), "[KG-5.4] counts as evidence about a type only the verdicts
+   where it was said", "[KG-5.4] changes nothing on no verdicts about the
+   type, whatever the minimum". The settings panel counts the same way.
+2. **The minimum was not per type,** so one audited repeat answered "not a
+   repeat" among nineteen other verdicts backed CORROBORATE off. Fixed by
+   the same change; covered by the first test above.
+3. **ESCALATE was not measured.** Now reported beside the acting types, in
+   the endpoint and on Settings, and never backed off (`MEASURED_DECISIONS`;
+   `reevaluate` skips it). Tests: "[KG-5.3] measures each type against the
+   rest, with the counts" (ESCALATE at 5/9 by hand), the endpoint test, and
+   "[KG-5.3] reports sending to a person beside the rest, never as held
+   back" in the webapp.
+4. **Disagreeing with an audit only partly undid it,** though the button's
+   hint said "Undoes what it did". A folded repeat's corroboration is now
+   taken back ("[KG-5.2] disagreeing with a folded repeat takes back the
+   corroboration it counted"), and the hint says what it does: "Reverses
+   what it did to this fact". What an audited acceptance displaced stays
+   DISPUTED: setting the acceptance aside does not say the neighbour was
+   right (it may have been set aside as not worth serving, not as false),
+   so restoring it would be a second decision nobody made. Recorded under
+   Observed.
+5. **Two people answering one audit at once** left the verdict as the first
+   gave it and the entry as the second left it. The answer's verdict write
+   is now strict and rolls the answer back when another landed first, and
+   an answer that finds the audit already answered changes nothing (409).
+   Test: "[KG-5.2] of two answers at once, keeps the first and refuses the
+   second with its change" (a verdict landing before the change commits,
+   and before the verdict is read).
+6. **Folding an audited entry into its page dropped the audit.**
+   `PagesService.consolidate` now records ACCEPTED on audited entries when
+   a person consolidates, in its transaction, and re-evaluates. Test:
+   "[KG-5.5] a person folding an audited entry into its page keeps it; an
+   agent decides nothing".
+
+Mutation-checked: 16 mutants over the fixes, all killed (two reworded to
+compile; one survived at first because a test's two scenarios shared
+fixture rows, now separate).
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -1192,10 +1262,17 @@ Give the evidence, and stop until the maintainer answers.
   round 3). Nothing reads the count yet; a phase that starts using it as a
   signal should tell those increments apart, from the decision rows (writer
   and `corroboratedEntryId`).
-- **Undoing a folded repeat leaves the count.** A person who puts a
-  corroboration back into use (by hand, or by disagreeing with its audit)
-  does not take one off the target's `corroborationCount`. Nothing reads
-  the count yet; the decision row and its verdict say what happened.
+- **Undoing a folded repeat that was not audited leaves the count.** A
+  verdict on an audited repeat that puts it back into use takes the
+  corroboration back; a repeat that was not audited, put back into use by
+  hand, gives no verdict (it is not a sample) and nothing takes its
+  corroboration back. Nothing reads the count yet.
+- **Kappa's prevalence paradox.** In a window where people agreed with
+  every verdict about a type but one, and never said anything else, kappa
+  is 0 (one rater used one class throughout) and the type backs off once
+  it has the minimum. Escalations people set aside and shadow decisions
+  usually give it both classes; where they do not, it fails safe, towards a
+  person deciding.
 - **An audited acceptance that is undone leaves what it displaced
   DISPUTED.** When an accepted entry won against a STANDING neighbour,
   that neighbour was disputed in the same transaction; a person setting
@@ -1292,3 +1369,8 @@ Give the evidence, and stop until the maintainer answers.
   was removed by simplifying the code. 13 webapp mutants, all killed after
   two tests were tightened. Verify through phase 5: 44/45, only
   KG-5.R left. Review round 1 started.
+- 2026-09-27: Phase 5 review round 1: one blocking finding (a backed-off
+  type resumed on verdicts about other types) and five non-blocking (the
+  minimum not per type, ESCALATE not measured, an audit only partly undone,
+  two answers to one audit at once, consolidation dropping an audit). All
+  fixed or answered, with tagged tests; round 2 started.

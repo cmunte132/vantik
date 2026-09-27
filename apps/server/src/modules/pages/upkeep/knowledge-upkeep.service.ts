@@ -17,6 +17,10 @@ import { LoggerService } from 'modules/logger/logger.service';
 
 import EntryCitationsService, {
   type LandedCheck,
+  lockEntry,
+  readBefore,
+  STORED_READING_SELECT,
+  storedCheck,
 } from '../entry-citations.service';
 import KnowledgeIndexService from '../knowledge-index.service';
 import {
@@ -25,6 +29,7 @@ import {
 } from '../pages.interface';
 import KnowledgeIssues from './knowledge-issues';
 import {
+  askedBecauseText,
   type CitationEvidence,
   type MaintenanceEvidence,
   unusedSince,
@@ -93,17 +98,14 @@ export default class KnowledgeUpkeepService {
   ) {}
 
   /**
-   * Checks and acts on the knowledge one landed change touches. `since` is
-   * when the job for it was queued. Throws `UnreadCitations` after acting on
-   * everything it could read, so the queue tries the rest again.
+   * Checks and acts on the knowledge one landed change touches. Throws
+   * `UnreadCitations` after acting on everything it could read, so the queue
+   * tries the rest again.
    */
-  async codeLanded(change: CodeLandedJob, since: Date): Promise<LandedSummary> {
+  async codeLanded(change: CodeLandedJob): Promise<LandedSummary> {
     await this.openOwedIssues(change.workspaceId);
 
-    const { checks, unread } = await this.citations.recheckLanded(
-      change,
-      since,
-    );
+    const { checks, unread } = await this.citations.recheckLanded(change);
     const repo = checks.length
       ? await this.prisma.moduleRepo.findFirst({
           where: {
@@ -168,7 +170,14 @@ export default class KnowledgeUpkeepService {
 
   /**
    * Stores one entry's check results and does what they call for, in one
-   * transaction. The maintenance row written, or null when nothing was.
+   * transaction, under the entry's lock. The maintenance row written, or
+   * null when nothing was.
+   *
+   * A reading is stored only over an older one. Where a newer one is stored
+   * already, by another change's check or a re-check, that one is acted on
+   * instead: its head was asked for later than this check's, so it contains
+   * this change too, and a re-check stores what it finds without acting on
+   * it.
    */
   private async settle(
     entryId: string,
@@ -179,36 +188,39 @@ export default class KnowledgeUpkeepService {
     action: PageEntryMaintenanceAction;
     reason: PageEntryMaintenanceReason;
   } | null> {
-    const contradicted = checks.filter(
-      (check) =>
-        check.result === PageEntryCitationCheckEnum.CHANGED &&
-        check.judgment === PageEntryCitationJudgmentEnum.CONTRADICTED,
-    );
-    const missing = checks.filter(
-      (check) => check.result === PageEntryCitationCheckEnum.MISSING,
-    );
-    const unjudged = checks.filter(
-      (check) =>
-        check.result === PageEntryCitationCheckEnum.CHANGED &&
-        check.judgment !== PageEntryCitationJudgmentEnum.HOLDS &&
-        check.judgment !== PageEntryCitationJudgmentEnum.CONTRADICTED,
-    );
-    const [reason, found]: [PageEntryMaintenanceReason | null, LandedCheck[]] =
-      contradicted.length
-        ? [PageEntryMaintenanceReason.CITATION_CONTRADICTED, contradicted]
-        : missing.length
-          ? [PageEntryMaintenanceReason.CITATION_MISSING, missing]
-          : unjudged.length
-            ? [PageEntryMaintenanceReason.CITATION_UNJUDGED, unjudged]
-            : [null, []];
-
     return this.prisma.$transaction(async (tx) => {
+      await lockEntry(tx, entryId);
+      const readings: LandedCheck[] = [];
+
       for (const check of checks) {
-        await tx.pageEntryCitation.update({
-          where: { id: check.citationId },
+        if (!check.update) {
+          readings.push(check);
+          continue;
+        }
+
+        const { count } = await tx.pageEntryCitation.updateMany({
+          where: { id: check.citationId, ...readBefore(check.checkedAt) },
           data: check.update,
         });
+
+        if (count > 0) {
+          readings.push(check);
+          continue;
+        }
+
+        const row = await tx.pageEntryCitation.findFirst({
+          where: { id: check.citationId },
+          select: STORED_READING_SELECT,
+        });
+        const newer =
+          row && storedCheck(row, { id: entryId, status: check.entryStatus });
+
+        if (newer) {
+          readings.push(newer);
+        }
       }
+
+      const [reason, found] = actionable(readings);
 
       if (!reason) {
         return null;
@@ -220,6 +232,7 @@ export default class KnowledgeUpkeepService {
         where: { id: entryId, deleted: null, status: PageEntryStatus.STANDING },
         select: {
           verifiedAt: true,
+          contentHash: true,
           page: { select: { workspaceId: true, entryPolicy: true } },
         },
       });
@@ -234,68 +247,100 @@ export default class KnowledgeUpkeepService {
       };
       const workspaceId = entry.page.workspaceId;
 
-      if (
-        reason === PageEntryMaintenanceReason.CITATION_CONTRADICTED &&
-        !entry.verifiedAt &&
-        entry.page.entryPolicy !== PageEntryPolicy.LOCKED &&
-        !(await this.overruled(tx, entryId))
-      ) {
-        const { count } = await tx.pageEntry.updateMany({
-          where: {
-            id: entryId,
-            deleted: null,
-            status: PageEntryStatus.STANDING,
-            verifiedAt: null,
-          },
-          data: { status: PageEntryStatus.DISPUTED },
-        });
+      if (reason !== PageEntryMaintenanceReason.CITATION_CONTRADICTED) {
+        return this.propose(tx, { workspaceId, entryId, reason, evidence });
+      }
 
-        if (count === 0) {
-          return null;
-        }
+      const askedBecause: MaintenanceEvidence['askedBecause'] = entry.verifiedAt
+        ? 'VERIFIED'
+        : entry.page.entryPolicy === PageEntryPolicy.LOCKED
+          ? 'LOCKED'
+          : (await this.overruled(tx, entryId, entry.contentHash))
+            ? 'RESTORED'
+            : null;
 
-        return tx.pageEntryMaintenance.create({
-          data: {
-            workspaceId,
-            entryId,
-            action: PageEntryMaintenanceAction.DISPUTED,
-            reason,
-            evidence: evidence as Prisma.InputJsonValue,
-          },
-          select: { id: true, action: true, reason: true },
+      if (askedBecause) {
+        return this.propose(tx, {
+          workspaceId,
+          entryId,
+          reason,
+          evidence: { ...evidence, askedBecause },
         });
       }
 
-      return this.propose(tx, { workspaceId, entryId, reason, evidence });
+      const { count } = await tx.pageEntry.updateMany({
+        where: {
+          id: entryId,
+          deleted: null,
+          status: PageEntryStatus.STANDING,
+          verifiedAt: null,
+        },
+        data: { status: PageEntryStatus.DISPUTED },
+      });
+
+      if (count === 0) {
+        return null;
+      }
+
+      // The claim disputed, so a person correcting it is told from a
+      // person putting the same claim back.
+      const disputed: MaintenanceEvidence = {
+        ...evidence,
+        claim: entry.contentHash,
+      };
+
+      return tx.pageEntryMaintenance.create({
+        data: {
+          workspaceId,
+          entryId,
+          action: PageEntryMaintenanceAction.DISPUTED,
+          reason,
+          evidence: disputed as Prisma.InputJsonValue,
+        },
+        select: { id: true, action: true, reason: true },
+      });
     });
   }
 
   /**
-   * Whether a person put this entry back after the gardener disputed it,
-   * within the decay window. The gardener then asks instead of disputing it
-   * again on every change to the file: the person has read the code, and
-   * the judge is a model.
+   * Whether a person put this entry back, saying the same thing, after the
+   * gardener disputed it, within the decay window. The gardener then asks
+   * instead of disputing it again on every change to the file: the person
+   * has read the code, and the judge is a model. An entry a person corrected
+   * before putting it back makes a new claim, which the gardener disputes
+   * like any other. A dispute that did not record its claim counts, so the
+   * gardener asks when it cannot tell.
    */
   private async overruled(
     tx: Prisma.TransactionClient,
     entryId: string,
+    contentHash: string | null,
   ): Promise<boolean> {
-    return (
-      (await tx.pageEntryMaintenance.count({
-        where: {
-          entryId,
-          action: PageEntryMaintenanceAction.DISPUTED,
-          reversedAt: { gte: daysAgo(STANDING_ENTRY_DECAY_DAYS) },
-        },
-      })) > 0
-    );
+    const undone = await tx.pageEntryMaintenance.findMany({
+      where: {
+        entryId,
+        action: PageEntryMaintenanceAction.DISPUTED,
+        reversedAt: { gte: daysAgo(STANDING_ENTRY_DECAY_DAYS) },
+      },
+      select: { evidence: true },
+    });
+
+    return undone.some((row) => {
+      const claim = (row.evidence as MaintenanceEvidence | null)?.claim;
+
+      return !claim || claim === contentHash;
+    });
   }
 
   /**
-   * Asks a person to archive an entry, unless the queue already asks, or a
-   * person declined the same request about it within the decay window: they
-   * have looked, and asking again on every change to the file would teach
-   * them to ignore the queue. The proposal, or null.
+   * Asks a person to archive an entry, unless the queue already asks for the
+   * same reason, or a person declined the same request about it within the
+   * decay window: they have looked, and asking again on every change to the
+   * file would teach them to ignore the queue. A request for another reason
+   * does not stand in for it: a contradiction found while the entry is asked
+   * about for going unused is still asked about, with its correction issue.
+   * Under the entry's lock, so two callers never both ask. The proposal, or
+   * null.
    */
   async propose(
     tx: Prisma.TransactionClient,
@@ -310,15 +355,17 @@ export default class KnowledgeUpkeepService {
     action: PageEntryMaintenanceAction;
     reason: PageEntryMaintenanceReason;
   } | null> {
+    await lockEntry(tx, proposal.entryId);
+
     const asked = await tx.pageEntryMaintenance.count({
       where: {
         entryId: proposal.entryId,
         action: PageEntryMaintenanceAction.ARCHIVE_PROPOSED,
+        reason: proposal.reason,
         OR: [
           { proposalState: PageEntryProposalState.OPEN },
           {
             proposalState: PageEntryProposalState.DECLINED,
-            reason: proposal.reason,
             resolvedAt: { gte: daysAgo(STANDING_ENTRY_DECAY_DAYS) },
           },
         ],
@@ -389,15 +436,16 @@ export default class KnowledgeUpkeepService {
   }
 
   /**
-   * Opens the correction issues earlier runs owed and did not open: the
-   * issue is opened after the change it reports is committed, and a run can
-   * fail in between. Each row is claimed before its issue is opened, so two
-   * runs never open two issues for one row.
+   * Opens the correction issues earlier runs owed and did not open, in one
+   * workspace or, with none given, in every one: the issue is opened after
+   * the change it reports is committed, and a run can fail in between. Each
+   * row is claimed before its issue is opened, so two runs never open two
+   * issues for one row.
    */
-  async openOwedIssues(workspaceId: string): Promise<number> {
+  async openOwedIssues(workspaceId?: string): Promise<number> {
     const owed = await this.prisma.pageEntryMaintenance.findMany({
       where: {
-        workspaceId,
+        ...(workspaceId && { workspaceId }),
         reason: PageEntryMaintenanceReason.CITATION_CONTRADICTED,
         issueId: null,
         reversedAt: null,
@@ -512,6 +560,38 @@ export default class KnowledgeUpkeepService {
   }
 }
 
+/**
+ * What an entry's readings call for, and the readings that call for it: a
+ * contradiction first, then a file gone, then changed code no judge could
+ * read. Nothing, when every cited line still holds or has only moved.
+ */
+function actionable(
+  readings: LandedCheck[],
+): [PageEntryMaintenanceReason | null, LandedCheck[]] {
+  const contradicted = readings.filter(
+    (check) =>
+      check.result === PageEntryCitationCheckEnum.CHANGED &&
+      check.judgment === PageEntryCitationJudgmentEnum.CONTRADICTED,
+  );
+  const missing = readings.filter(
+    (check) => check.result === PageEntryCitationCheckEnum.MISSING,
+  );
+  const unjudged = readings.filter(
+    (check) =>
+      check.result === PageEntryCitationCheckEnum.CHANGED &&
+      check.judgment !== PageEntryCitationJudgmentEnum.HOLDS &&
+      check.judgment !== PageEntryCitationJudgmentEnum.CONTRADICTED,
+  );
+
+  return contradicted.length
+    ? [PageEntryMaintenanceReason.CITATION_CONTRADICTED, contradicted]
+    : missing.length
+      ? [PageEntryMaintenanceReason.CITATION_MISSING, missing]
+      : unjudged.length
+        ? [PageEntryMaintenanceReason.CITATION_UNJUDGED, unjudged]
+        : [null, []];
+}
+
 function citationEvidence(check: LandedCheck): CitationEvidence {
   return {
     citationId: check.citationId,
@@ -548,7 +628,7 @@ function correctionMarkdown(
   const what =
     row.action === PageEntryMaintenanceAction.DISPUTED
       ? 'It was taken out of use (disputed), so agents are no longer given it.'
-      : 'A person verified it, or its page is locked, so it is still in use ' +
+      : `${askedBecauseText(evidence.askedBecause)}, so it is still in use ` +
         'and an archive proposal waits in the knowledge review queue.';
   const citations = (evidence.citations ?? []).map((citation) => {
     const snippet = cited.find((c) => c.id === citation.citationId)?.snippet;

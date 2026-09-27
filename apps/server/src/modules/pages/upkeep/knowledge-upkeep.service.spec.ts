@@ -30,6 +30,7 @@ import KnowledgeIssues, {
 import KnowledgeUpkeepService, {
   UnreadCitations,
 } from './knowledge-upkeep.service';
+import { type MaintenanceEvidence, proposalSummary } from './maintenance';
 
 const WORKSPACE = 'workspace-1';
 const SHA = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
@@ -194,6 +195,8 @@ function harness(seed: Seed = {}) {
   const users: Row[] = [];
   const members: Row[] = [];
   const issues: Row[] = [];
+  // Locks taken and citations stored, in order.
+  const ops: string[] = [];
   let next = 0;
 
   const moduleView = (id: unknown) => modules.find((row) => row.id === id);
@@ -221,6 +224,13 @@ function harness(seed: Seed = {}) {
   });
 
   const client = {
+    $executeRaw: jest.fn(
+      async (_sql: TemplateStringsArray, ...values: unknown[]) => {
+        ops.push(`lock:${String(values[0])}`);
+
+        return 1;
+      },
+    ),
     moduleRepo: {
       findMany: jest.fn(async ({ where }: { where: Where }) =>
         repos.map(repoView).filter((row) => matches(row, where)),
@@ -234,12 +244,19 @@ function harness(seed: Seed = {}) {
       findMany: jest.fn(async ({ where }: { where: Where }) =>
         citations.map(citationView).filter((row) => matches(row, where)),
       ),
-      update: jest.fn(
-        async ({ where, data }: { where: { id: string }; data: Row }) => {
-          const row = citations.find((c) => c.id === where.id) as Row;
-          Object.assign(row, data);
+      findFirst: jest.fn(
+        async ({ where }: { where: Where }) =>
+          citations.find((row) => matches(row, where)) ?? null,
+      ),
+      updateMany: jest.fn(
+        async ({ where, data }: { where: Where; data: Row }) => {
+          const hit = citations.filter((row) => matches(row, where));
+          hit.forEach((row) => {
+            ops.push(`store:${row.id}`);
+            Object.assign(row, data);
+          });
 
-          return row;
+          return { count: hit.length };
         },
       ),
     },
@@ -485,6 +502,7 @@ function harness(seed: Seed = {}) {
     files,
     judge,
     issueService,
+    ops,
     upkeep: build(),
     build,
   };
@@ -497,6 +515,7 @@ function entry(id: string, overrides: Row = {}): Row {
     id,
     pageId: 'page-1',
     content: `Retries make three attempts (${id}).`,
+    contentHash: `hash-${id}`,
     status: Status.STANDING,
     deleted: null,
     verifiedAt: null,
@@ -536,9 +555,6 @@ function landed(changedPaths = ['src/retry.ts']): CodeLandedJob {
   };
 }
 
-/** When the job for a change was queued: just now, before it runs. */
-const queued = () => new Date(Date.now() - MINUTE);
-
 // --------------------------------------------------------------------- tests
 
 describe('a change that landed re-checks the citations it touches', () => {
@@ -555,7 +571,6 @@ describe('a change that landed re-checks the citations it touches', () => {
 
     const summary = await t.upkeep.codeLanded(
       landed(['src/retry.ts', 'README.md']),
-      queued(),
     );
 
     expect(t.reads).toEqual([{ path: 'src/retry.ts', ref: SHA }]);
@@ -585,7 +600,7 @@ describe('a change that landed re-checks the citations it touches', () => {
     });
     t.repo.head = { sha: NEWER };
 
-    await t.upkeep.codeLanded(landed(), queued());
+    await t.upkeep.codeLanded(landed());
 
     expect(t.reads).toEqual([{ path: 'src/retry.ts', ref: NEWER }]);
     expect(t.citations[0].checkedSha).toBe(NEWER);
@@ -598,7 +613,7 @@ describe('a change that landed re-checks the citations it touches', () => {
     });
     t.repo.code['src/retry.ts'] = MOVED;
 
-    await t.upkeep.codeLanded(landed(), queued());
+    await t.upkeep.codeLanded(landed());
 
     expect(t.citations[0]).toMatchObject({
       checkResult: Check.MOVED,
@@ -617,7 +632,7 @@ describe('a change that landed re-checks the citations it touches', () => {
     });
     t.repo.code['src/retry.ts'] = CHANGED;
 
-    const summary = await t.upkeep.codeLanded(landed(), queued());
+    const summary = await t.upkeep.codeLanded(landed());
 
     expect(t.citations[0]).toMatchObject({
       checkResult: Check.CHANGED,
@@ -635,6 +650,8 @@ describe('a change that landed re-checks the citations it touches', () => {
       reason: Reason.CITATION_CONTRADICTED,
       proposalState: null,
       evidence: {
+        // The claim disputed, to tell a correction from the same claim put back.
+        claim: 'hash-e1',
         change: { sha: SHA, externalRepoId: 'gh-1', repo: 'acme/api' },
         citations: [
           expect.objectContaining({
@@ -685,7 +702,7 @@ describe('a change that landed re-checks the citations it touches', () => {
     });
     t.repo.code['src/retry.ts'] = null;
 
-    const summary = await t.upkeep.codeLanded(landed(), queued());
+    const summary = await t.upkeep.codeLanded(landed());
 
     expect(t.citations[0]).toMatchObject({
       checkResult: Check.MISSING,
@@ -719,7 +736,7 @@ describe('a change that landed re-checks the citations it touches', () => {
       ),
     );
 
-    await upkeep.codeLanded(landed(), queued());
+    await upkeep.codeLanded(landed());
 
     expect(t.citations[0]).toMatchObject({
       checkResult: Check.CHANGED,
@@ -755,7 +772,7 @@ describe('a change that landed re-checks the citations it touches', () => {
     });
     t.repo.code['src/retry.ts'] = CHANGED;
 
-    await t.upkeep.codeLanded(landed(), queued());
+    await t.upkeep.codeLanded(landed());
 
     expect(t.entries.get('verified')?.status).toBe(Status.STANDING);
     expect(t.entries.get('locked')?.status).toBe(Status.STANDING);
@@ -769,7 +786,28 @@ describe('a change that landed re-checks the citations it touches', () => {
     expect(t.maintenance.map((row) => row.issueId)).toEqual(
       t.issues.map((issue) => issue.id),
     );
-    expect(t.issues[0].descriptionMarkdown).toContain('still in use');
+    // Each says why it was asked about rather than disputed.
+    expect(
+      t.maintenance.map(
+        (row) => (row.evidence as { askedBecause: string }).askedBecause,
+      ),
+    ).toEqual(['VERIFIED', 'LOCKED']);
+    expect(t.issues[0].descriptionMarkdown).toContain(
+      'A person verified it, so it is still in use',
+    );
+    expect(t.issues[1].descriptionMarkdown).toContain(
+      'Its page is locked, so it is still in use',
+    );
+    expect(
+      proposalSummary(
+        Reason.CITATION_CONTRADICTED,
+        t.maintenance[1].evidence as MaintenanceEvidence,
+      ),
+    ).toContain('Its page is locked, so it stays in use');
+    // A row that did not record why says each way it could have been.
+    expect(proposalSummary(Reason.CITATION_CONTRADICTED, {})).toContain(
+      'A person verified it, its page is locked, or a person put it back, so',
+    );
   });
 
   it('[KG-6.2] only checks an entry still waiting on triage, which reads the fresh result when it decides', async () => {
@@ -786,10 +824,7 @@ describe('a change that landed re-checks the citations it touches', () => {
     t.repo.code['src/retry.ts'] = CHANGED;
     t.repo.code['src/gone.ts'] = null;
 
-    await t.upkeep.codeLanded(
-      landed(['src/retry.ts', 'src/gone.ts']),
-      queued(),
-    );
+    await t.upkeep.codeLanded(landed(['src/retry.ts', 'src/gone.ts']));
 
     expect(t.citations[0]).toMatchObject({
       checkResult: Check.CHANGED,
@@ -815,7 +850,7 @@ describe('a change that landed re-checks the citations it touches', () => {
       reason: 'Still retries; the count is not the claim.',
     });
 
-    await t.upkeep.codeLanded(landed(), queued());
+    await t.upkeep.codeLanded(landed());
 
     expect(t.citations[0]).toMatchObject({
       checkResult: Check.CHANGED,
@@ -841,29 +876,31 @@ describe('a change that landed re-checks the citations it touches', () => {
       ],
     });
 
-    await t.upkeep.codeLanded(landed(), queued());
+    await t.upkeep.codeLanded(landed());
 
     expect(t.reads).toEqual([]);
   });
 
-  it('[KG-6.2] checks one commit once, however often it is reported', async () => {
+  it('[KG-6.2] reads and judges one commit once, however often it is reported', async () => {
+    // Verified, so the first report asks rather than disputes and the entry
+    // is still in use when the second arrives.
     const t = harness({
-      entries: [entry('e1')],
+      entries: [entry('e1', { verifiedAt: new Date() })],
       citations: [citation('c1', 'e1')],
     });
     t.repo.code['src/retry.ts'] = CHANGED;
-    const first = queued();
 
     // The merged pull request and the push of its merge commit.
-    await t.upkeep.codeLanded(landed(), first);
-    await t.upkeep.codeLanded(landed(), new Date(first.getTime() + 1000));
+    await t.upkeep.codeLanded(landed());
+    await t.upkeep.codeLanded(landed());
 
     expect(t.reads).toHaveLength(1);
     expect(t.judge.judge).toHaveBeenCalledTimes(1);
+    expect(t.maintenance).toHaveLength(1);
     expect(t.issues).toHaveLength(1);
 
-    // The first finished before the second was queued.
-    const finished = harness({
+    // Read at the change's commit before, by anything: not read again.
+    const before = harness({
       entries: [entry('e1')],
       citations: [
         citation('c1', 'e1', {
@@ -873,23 +910,219 @@ describe('a change that landed re-checks the citations it touches', () => {
       ],
     });
 
-    await finished.upkeep.codeLanded(landed(), queued());
+    await before.upkeep.codeLanded(landed());
 
-    expect(finished.reads).toEqual([]);
+    expect(before.reads).toEqual([]);
+  });
 
-    // The head moved on before the first ran, so it was checked at the head,
-    // after the second report was queued: that one has nothing left to read.
-    const moved = harness({
+  it('[KG-6.2] reads again a citation last read at another commit, however recently', async () => {
+    // Read after this change was reported, by a job that had asked for the
+    // head before the change landed: its reading says nothing about it.
+    const t = harness({
+      entries: [entry('e1')],
+      citations: [
+        citation('c1', 'e1', {
+          checkedSha: 'b'.repeat(40),
+          checkedAt: new Date(Date.now() - 1000),
+        }),
+      ],
+    });
+    t.repo.code['src/retry.ts'] = CHANGED;
+
+    await t.upkeep.codeLanded(landed());
+
+    expect(t.reads).toEqual([{ path: 'src/retry.ts', ref: SHA }]);
+    expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
+    expect(t.issues).toHaveLength(1);
+  });
+
+  it('[KG-6.2] stamps a reading with when the head was asked for, not when the file was read', async () => {
+    const asked = new Date('2026-01-01T00:00:00Z');
+    jest.useFakeTimers({
+      now: asked,
+      doNotFake: [
+        'nextTick',
+        'queueMicrotask',
+        'setImmediate',
+        'clearImmediate',
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+      ],
+    });
+
+    try {
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [citation('c1', 'e1', { checkedAt: new Date(0) })],
+      });
+      const read = t.files.read.getMockImplementation() as NonNullable<
+        ReturnType<typeof t.files.read.getMockImplementation>
+      >;
+      // Reading the file takes a while: more may land meanwhile, and it is
+      // not in the head already asked for.
+      t.files.read.mockImplementation(async (...args) => {
+        jest.setSystemTime(asked.getTime() + 5 * MINUTE);
+
+        return read(...args);
+      });
+
+      await t.upkeep.codeLanded(landed());
+
+      expect(t.citations[0]).toMatchObject({
+        checkResult: Check.HOLDS,
+        checkedAt: asked,
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('[KG-6.2] never stores an older reading over a newer one, and acts on the newer one instead', async () => {
+    const t = harness({
       entries: [entry('e1')],
       citations: [citation('c1', 'e1')],
     });
-    moved.repo.head = { sha: NEWER };
-    const reported = queued();
+    const read = t.files.read.getMockImplementation() as NonNullable<
+      ReturnType<typeof t.files.read.getMockImplementation>
+    >;
+    // While this job reads the old head, where the claim holds, a re-check
+    // reads a newer one, which contradicts it, and stores that.
+    t.files.read.mockImplementation(async (...args) => {
+      Object.assign(t.citations[0], {
+        checkedAt: new Date(Date.now() + MINUTE),
+        checkedSha: NEWER,
+        checkResult: Check.CHANGED,
+        judgment: Judgment.CONTRADICTED,
+        judgeModel: 'judge-model',
+        judgeReason: 'The code now makes five attempts, not three.',
+      });
 
-    await moved.upkeep.codeLanded(landed(), reported);
-    await moved.upkeep.codeLanded(landed(), reported);
+      return read(...args);
+    });
 
-    expect(moved.reads).toHaveLength(1);
+    await t.upkeep.codeLanded(landed());
+
+    expect(t.citations[0]).toMatchObject({
+      checkedSha: NEWER,
+      checkResult: Check.CHANGED,
+      judgment: Judgment.CONTRADICTED,
+    });
+    expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
+    expect(t.maintenance[0]).toMatchObject({
+      action: Action.DISPUTED,
+      reason: Reason.CITATION_CONTRADICTED,
+      evidence: {
+        change: expect.objectContaining({ sha: SHA }),
+        citations: [
+          expect.objectContaining({ citationId: 'c1', readSha: NEWER }),
+        ],
+      },
+    });
+    expect(t.issues).toHaveLength(1);
+  });
+
+  it('[KG-6.2] leaves a newer reading in place when a later change already acted on it', async () => {
+    const t = harness({
+      entries: [entry('e1')],
+      citations: [citation('c1', 'e1')],
+    });
+    const read = t.files.read.getMockImplementation() as NonNullable<
+      ReturnType<typeof t.files.read.getMockImplementation>
+    >;
+    // The job for a later change disputes the entry while this one reads.
+    t.files.read.mockImplementation(async (...args) => {
+      Object.assign(t.citations[0], {
+        checkedAt: new Date(Date.now() + MINUTE),
+        checkedSha: NEWER,
+        checkResult: Check.CHANGED,
+        judgment: Judgment.CONTRADICTED,
+      });
+      Object.assign(t.entries.get('e1') as Row, { status: Status.DISPUTED });
+
+      return read(...args);
+    });
+
+    await t.upkeep.codeLanded(landed());
+
+    expect(t.citations[0]).toMatchObject({
+      checkedSha: NEWER,
+      checkResult: Check.CHANGED,
+    });
+    expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
+    expect(t.maintenance).toEqual([]);
+  });
+
+  it('[KG-6.2] acts on a contradiction a re-check found at the change’s commit and only stored', async () => {
+    const t = harness({
+      entries: [entry('e1')],
+      citations: [citation('c1', 'e1')],
+    });
+    t.repo.code['src/retry.ts'] = CHANGED;
+    const citations = new EntryCitationsService(
+      t.prisma as never,
+      t.files as never,
+      t.judge as never,
+    );
+
+    // A harmful signal: the re-check stores what it finds and acts on none.
+    await citations.recheck('e1');
+
+    expect(t.citations[0]).toMatchObject({
+      checkedSha: SHA,
+      judgment: Judgment.CONTRADICTED,
+    });
+    expect(t.entries.get('e1')?.status).toBe(Status.STANDING);
+
+    await t.upkeep.codeLanded(landed());
+
+    // Not read or judged again, and acted on.
+    expect(t.reads).toHaveLength(1);
+    expect(t.judge.judge).toHaveBeenCalledTimes(1);
+    expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
+    expect(t.issues).toHaveLength(1);
+  });
+
+  it('[KG-6.2] a re-check never stores an older reading over a newer one', async () => {
+    const t = harness({
+      entries: [entry('e1')],
+      citations: [citation('c1', 'e1')],
+    });
+    const read = t.files.read.getMockImplementation() as NonNullable<
+      ReturnType<typeof t.files.read.getMockImplementation>
+    >;
+    t.files.read.mockImplementation(async (...args) => {
+      Object.assign(t.citations[0], {
+        checkedAt: new Date(Date.now() + MINUTE),
+        checkedSha: NEWER,
+      });
+
+      return read(...args);
+    });
+
+    const { checked } = await new EntryCitationsService(
+      t.prisma as never,
+      t.files as never,
+      t.judge as never,
+    ).recheck('e1');
+
+    expect(checked).toBe(0);
+    expect(t.citations[0].checkedSha).toBe(NEWER);
+    expect(t.ops).toEqual(['lock:knowledge-entry:e1']);
+  });
+
+  it('[KG-6.2] stores and acts on an entry’s readings under its lock', async () => {
+    const t = harness({
+      entries: [entry('e1')],
+      citations: [citation('c1', 'e1')],
+    });
+    t.repo.code['src/retry.ts'] = null;
+
+    await t.upkeep.codeLanded(landed());
+
+    expect(t.ops.slice(0, 2)).toEqual(['lock:knowledge-entry:e1', 'store:c1']);
+    expect(t.maintenance).toHaveLength(1);
   });
 
   it('[KG-6.2] acts on what it could read, and retries only what it could not', async () => {
@@ -903,10 +1136,9 @@ describe('a change that landed re-checks the citations it touches', () => {
     t.repo.code['src/retry.ts'] = CHANGED;
     t.repo.code['src/big.ts'] = ORIGINAL;
     t.repo.tooLarge.add('src/big.ts');
-    const since = queued();
     const change = landed(['src/retry.ts', 'src/big.ts']);
 
-    await expect(t.upkeep.codeLanded(change, since)).rejects.toBeInstanceOf(
+    await expect(t.upkeep.codeLanded(change)).rejects.toBeInstanceOf(
       UnreadCitations,
     );
 
@@ -916,7 +1148,7 @@ describe('a change that landed re-checks the citations it touches', () => {
 
     t.repo.tooLarge.clear();
     t.reads.length = 0;
-    await t.upkeep.codeLanded(change, since);
+    await t.upkeep.codeLanded(change);
 
     expect(t.reads).toEqual([{ path: 'src/big.ts', ref: SHA }]);
     expect(t.citations[1]).toMatchObject({
@@ -938,7 +1170,7 @@ describe('a change that landed re-checks the citations it touches', () => {
     });
     t.repo.code['src/retry.ts'] = CHANGED;
 
-    await t.upkeep.codeLanded(landed(), queued());
+    await t.upkeep.codeLanded(landed());
 
     expect(t.issues).toHaveLength(1);
     expect(t.issues[0].descriptionMarkdown).not.toContain(token);
@@ -958,24 +1190,58 @@ describe('a change that landed re-checks the citations it touches', () => {
       .spyOn(LoggerService.prototype, 'error')
       .mockImplementation(() => undefined);
 
-    await t.upkeep.codeLanded(landed(), queued());
+    await t.upkeep.codeLanded(landed());
 
     // The dispute stands; its issue is owed.
     expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
     expect(t.maintenance[0].issueId).toBeNull();
 
     // Too recent: the run that wrote it may still be opening it.
-    await t.upkeep.codeLanded(landed(['docs/unrelated.md']), queued());
+    await t.upkeep.codeLanded(landed(['docs/unrelated.md']));
     expect(t.issues).toHaveLength(0);
 
     t.maintenance[0].updatedAt = new Date(Date.now() - 11 * MINUTE);
-    await t.upkeep.codeLanded(landed(['docs/unrelated.md']), queued());
-    await t.upkeep.codeLanded(landed(['docs/unrelated.md']), queued());
+    await t.upkeep.codeLanded(landed(['docs/unrelated.md']));
+    await t.upkeep.codeLanded(landed(['docs/unrelated.md']));
 
     expect(t.issues).toHaveLength(1);
     expect(t.maintenance[0].issueId).toBe(t.issues[0].id);
     expect(logged).toHaveBeenCalledTimes(1);
     logged.mockRestore();
+  });
+
+  it('[KG-6.2] opens owed correction issues in the workspace a change landed in, or in every one from the nightly pass', async () => {
+    const owed = (id: string, workspaceId: string): Row => ({
+      id,
+      workspaceId,
+      entryId: 'e1',
+      action: Action.DISPUTED,
+      reason: Reason.CITATION_CONTRADICTED,
+      proposalState: null,
+      issueId: null,
+      reversedAt: null,
+      evidence: {},
+      updatedAt: new Date(Date.now() - 11 * MINUTE),
+    });
+    const t = harness({
+      entries: [entry('e1')],
+      maintenance: [owed('here', WORKSPACE), owed('there', 'workspace-2')],
+      teams: [WORKSPACE, 'workspace-2'].map((workspaceId, index): Row => ({
+        id: `team-${index}`,
+        workspaceId,
+        deleted: null,
+        createdAt: new Date(index + 1),
+      })),
+    });
+
+    expect(await t.upkeep.openOwedIssues(WORKSPACE)).toBe(1);
+    expect(t.maintenance.map((row) => row.issueId !== null)).toEqual([
+      true,
+      false,
+    ]);
+
+    expect(await t.upkeep.openOwedIssues()).toBe(1);
+    expect(t.maintenance.every((row) => row.issueId !== null)).toBe(true);
   });
 
   it('[KG-6.2] asks rather than disputing again once a person has put the entry back', async () => {
@@ -999,15 +1265,60 @@ describe('a change that landed re-checks the citations it touches', () => {
     });
     t.repo.code['src/retry.ts'] = CHANGED;
 
-    await t.upkeep.codeLanded(landed(), queued());
+    await t.upkeep.codeLanded(landed());
 
     expect(t.entries.get('e1')?.status).toBe(Status.STANDING);
     expect(t.maintenance[1]).toMatchObject({
       action: Action.ARCHIVE_PROPOSED,
       reason: Reason.CITATION_CONTRADICTED,
       proposalState: ProposalState.OPEN,
+      evidence: expect.objectContaining({ askedBecause: 'RESTORED' }),
     });
     expect(t.issues).toHaveLength(1);
+    expect(t.issues[0].descriptionMarkdown).toContain(
+      'A person put it back after it was last disputed',
+    );
+    expect(t.issues[0].descriptionMarkdown).not.toContain('verified');
+  });
+
+  it('[KG-6.2] disputes again an entry a person corrected before putting it back, and asks about one put back unchanged', async () => {
+    const run = async (claim: string) => {
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [citation('c1', 'e1')],
+        maintenance: [
+          {
+            id: 'undone',
+            workspaceId: WORKSPACE,
+            entryId: 'e1',
+            action: Action.DISPUTED,
+            reason: Reason.CITATION_CONTRADICTED,
+            proposalState: null,
+            issueId: 'issue-old',
+            evidence: { claim },
+            reversedAt: new Date(Date.now() - 5 * DAY),
+            reversedById: 'person-1',
+            updatedAt: new Date(Date.now() - 5 * DAY),
+          },
+        ],
+      });
+      t.repo.code['src/retry.ts'] = CHANGED;
+
+      await t.upkeep.codeLanded(landed());
+
+      return [t.entries.get('e1')?.status, t.maintenance[1]?.action];
+    };
+
+    // Corrected: a new claim, which the changed code contradicts in turn.
+    expect(await run('hash-before-the-correction')).toEqual([
+      Status.DISPUTED,
+      Action.DISPUTED,
+    ]);
+    // The same claim put back: the person has read the code.
+    expect(await run('hash-e1')).toEqual([
+      Status.STANDING,
+      Action.ARCHIVE_PROPOSED,
+    ]);
   });
 
   it('[KG-6.2] does not ask twice: not while a proposal is open, nor soon after a person declined', async () => {
@@ -1029,12 +1340,18 @@ describe('a change that landed re-checks the citations it touches', () => {
         maintenance: [existing],
       });
       t.repo.code['src/retry.ts'] = null;
-      await t.upkeep.codeLanded(landed(), queued());
+      await t.upkeep.codeLanded(landed());
 
       return t.maintenance.length - 1;
     };
 
     expect(await run(proposal({ proposalState: ProposalState.OPEN }))).toBe(0);
+    // Open for another reason: asked about this one too.
+    expect(
+      await run(
+        proposal({ proposalState: ProposalState.OPEN, reason: Reason.UNUSED }),
+      ),
+    ).toBe(1);
     expect(
       await run(
         proposal({
@@ -1061,6 +1378,40 @@ describe('a change that landed re-checks the citations it touches', () => {
         }),
       ),
     ).toBe(1);
+  });
+});
+
+describe('a contradiction found while the entry is asked about for something else', () => {
+  it('[KG-6.2] is still asked about, with its correction issue', async () => {
+    const t = harness({
+      entries: [entry('e1', { verifiedAt: new Date() })],
+      citations: [citation('c1', 'e1')],
+      maintenance: [
+        {
+          id: 'unused',
+          workspaceId: WORKSPACE,
+          entryId: 'e1',
+          action: Action.ARCHIVE_PROPOSED,
+          reason: Reason.UNUSED,
+          proposalState: ProposalState.OPEN,
+          issueId: null,
+          reversedAt: null,
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    t.repo.code['src/retry.ts'] = CHANGED;
+
+    const summary = await t.upkeep.codeLanded(landed());
+
+    expect(summary.proposed).toBe(1);
+    expect(t.maintenance[1]).toMatchObject({
+      action: Action.ARCHIVE_PROPOSED,
+      reason: Reason.CITATION_CONTRADICTED,
+      proposalState: ProposalState.OPEN,
+    });
+    expect(t.issues).toHaveLength(1);
+    expect(t.maintenance[1].issueId).toBe(t.issues[0].id);
   });
 });
 
@@ -1144,6 +1495,8 @@ describe('decay asks rather than archives what a person verified', () => {
 
     expect(await t.upkeep.proposeUnused()).toBe(1);
     expect(await t.upkeep.proposeUnused()).toBe(0);
+    // Under the entry's lock, so two passes never both ask.
+    expect(t.ops).toContain('lock:knowledge-entry:unused');
 
     expect(t.maintenance).toEqual([
       expect.objectContaining({

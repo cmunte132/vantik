@@ -38,6 +38,33 @@ export interface MaintenanceEvidence {
   margin?: number;
   /** Counted from here: the last time a person put the entry back. */
   since?: string | null;
+  /**
+   * For a dispute: the disputed entry's content hash, so a person correcting
+   * the entry is told from a person putting the same claim back.
+   */
+  claim?: string | null;
+  /**
+   * For a contradiction asked about rather than acted on, why: a person
+   * verified the entry, its page is locked, or a person put it back, saying
+   * the same thing, after an earlier dispute.
+   */
+  askedBecause?: 'VERIFIED' | 'LOCKED' | 'RESTORED' | null;
+}
+
+/** Why the gardener asked about a contradiction instead of disputing it. */
+export function askedBecauseText(
+  why: MaintenanceEvidence['askedBecause'],
+): string {
+  switch (why) {
+    case 'VERIFIED':
+      return 'A person verified it';
+    case 'LOCKED':
+      return 'Its page is locked';
+    case 'RESTORED':
+      return 'A person put it back after it was last disputed';
+    default:
+      return 'A person verified it, its page is locked, or a person put it back';
+  }
 }
 
 /** The review queue's name for why the gardener asks. */
@@ -92,7 +119,7 @@ export function proposalSummary(
     case PageEntryMaintenanceReason.CITATION_CONTRADICTED:
       return (
         `${where}${more} changed${at}${repo}, and a judge found the code now ` +
-        `contradicts this. A person verified it, or its page is locked, so ` +
+        `contradicts this. ${askedBecauseText(evidence?.askedBecause)}, so ` +
         `it stays in use until you say.${judge}`
       );
     case PageEntryMaintenanceReason.UNUSED:

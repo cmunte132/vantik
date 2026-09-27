@@ -105,7 +105,10 @@ describe('PagesProcessor', () => {
       service,
       {} as EntryCitationsService,
       {} as KnowledgeTriageService,
-      { proposeUnused: async () => 0 } as unknown as KnowledgeUpkeepService,
+      {
+        proposeUnused: async () => 0,
+        openOwedIssues: async () => 0,
+      } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
     ).handleDecay();
@@ -432,6 +435,26 @@ describe('conventions from review', () => {
     expect(order).toEqual(['weigh', 'recheck']);
   });
 
+  it('[KG-6.5] still checks the citations when weighing fails, and fails the job after', async () => {
+    const weigh = jest.fn(async () => {
+      throw new Error('connection reset');
+    });
+    const recheck = jest.fn(async () => ({ checked: 1 }));
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      { recheck } as unknown as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
+      { weigh } as unknown as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
+    );
+
+    await expect(
+      processor.handleRecheckEntry({ data: { entryId: 'entry-1' } }),
+    ).rejects.toThrow('connection reset');
+    expect(recheck).toHaveBeenCalledWith('entry-1');
+  });
+
   it('[KG-6.3] hands a finished run to be read for findings, once per run, tried again when it fails', async () => {
     const runFinished = jest.fn(async () => ({
       recorded: 2,
@@ -463,7 +486,7 @@ describe('conventions from review', () => {
 });
 
 describe('a change that landed', () => {
-  it('[KG-6.2] is handed to the upkeep with the time its job was queued, and fails the job while citations are unread', async () => {
+  it('[KG-6.2] is handed to the upkeep, and fails the job while citations are unread', async () => {
     const codeLanded = jest.fn(async () => ({
       checked: 1,
       disputed: 0,
@@ -485,14 +508,14 @@ describe('a change that landed', () => {
       changedPaths: ['src/main.ts'],
     };
 
-    await processor.handleCodeLanded({ data, timestamp: 1_700_000_000_000 });
+    await processor.handleCodeLanded({ data });
 
-    expect(codeLanded).toHaveBeenCalledWith(data, new Date(1_700_000_000_000));
+    expect(codeLanded).toHaveBeenCalledWith(data);
 
     codeLanded.mockRejectedValueOnce(new Error('1 citation(s) unread'));
-    await expect(
-      processor.handleCodeLanded({ data, timestamp: 1_700_000_000_000 }),
-    ).rejects.toThrow('unread');
+    await expect(processor.handleCodeLanded({ data })).rejects.toThrow(
+      'unread',
+    );
   });
 });
 
@@ -507,17 +530,41 @@ describe('the decay pass', () => {
       order.push('ask');
       return 1;
     });
+    const openOwedIssues = jest.fn(async () => {
+      order.push('owed');
+      return 0;
+    });
 
     await new PagesProcessor(
       { runDecay } as unknown as PageEntriesService,
       {} as EntryCitationsService,
       {} as KnowledgeTriageService,
-      { proposeUnused } as unknown as KnowledgeUpkeepService,
+      { proposeUnused, openOwedIssues } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
     ).handleDecay();
 
-    expect(order).toEqual(['archive', 'ask']);
+    expect(order).toEqual(['archive', 'ask', 'owed']);
     expect(proposeUnused).toHaveBeenCalledWith();
+  });
+
+  it('[KG-6.2] opens the correction issues failed runs owed, in every workspace', async () => {
+    const openOwedIssues = jest.fn(async () => 2);
+
+    await new PagesProcessor(
+      {
+        runDecay: async () => ({ expiredProposed: 0, archivedStanding: 0 }),
+      } as unknown as PageEntriesService,
+      {} as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      {
+        proposeUnused: async () => 0,
+        openOwedIssues,
+      } as unknown as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
+    ).handleDecay();
+
+    expect(openOwedIssues).toHaveBeenCalledWith();
   });
 });

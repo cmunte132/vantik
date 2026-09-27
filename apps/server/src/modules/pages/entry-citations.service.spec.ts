@@ -248,8 +248,29 @@ function world() {
         Object.assign(row, data);
         return row;
       }),
+      // Stored only over an older reading, as a re-check stores.
+      updateMany: jest.fn(async ({ where, data }: Row) => {
+        const row = citations.find((c) => c.id === where.id);
+        const older = (where.OR as Row[]).some((part) =>
+          part.checkedAt === null
+            ? row?.checkedAt == null
+            : row?.checkedAt instanceof Date &&
+              row.checkedAt < (part.checkedAt as { lt: Date }).lt,
+        );
+
+        if (!row || !older) {
+          return { count: 0 };
+        }
+
+        Object.assign(row, data);
+        return { count: 1 };
+      }),
     },
+    $executeRaw: jest.fn(async () => 1),
   } as unknown as PrismaService;
+  (prisma as unknown as Row).$transaction = async (
+    work: (tx: PrismaService) => unknown,
+  ) => work(prisma);
 
   return { prisma, issues, citations, entries, moduleRepos };
 }

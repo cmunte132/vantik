@@ -271,7 +271,18 @@ export class PagesProcessor {
    */
   @Process(RECHECK_ENTRY_JOB)
   async handleRecheckEntry(job: { data: { entryId: string } }) {
-    await this.conventions.weigh(job.data.entryId);
+    // Weighing failing does not cost the re-check: the job is not retried,
+    // and the citations are worth checking either way. The failure is
+    // raised once they are, so the job is still recorded as failed.
+    let failed = false;
+    let failure: unknown;
+
+    try {
+      await this.conventions.weigh(job.data.entryId);
+    } catch (error) {
+      failed = true;
+      failure = error;
+    }
 
     const { checked } = await this.entryCitations.recheck(job.data.entryId);
 
@@ -279,6 +290,10 @@ export class PagesProcessor {
       message: `Checked ${checked} citation(s) of entry ${job.data.entryId} after a harmful signal`,
       where: 'PagesProcessor.handleRecheckEntry',
     });
+
+    if (failed) {
+      throw failure;
+    }
   }
 
   /**
@@ -294,11 +309,12 @@ export class PagesProcessor {
    * Checks the knowledge a change that landed on a default branch touches,
    * and acts on what no longer holds. Throws while citations it touches are
    * still unread, so Bull tries again after its backoff; a retry reads only
-   * those, since the job's creation time marks what was checked since.
+   * those, while the head is still the change's commit, as the rest are
+   * stored as read at it.
    */
   @Process(CODE_LANDED_JOB)
-  async handleCodeLanded(job: { data: CodeLandedJob; timestamp: number }) {
-    await this.upkeep.codeLanded(job.data, new Date(job.timestamp));
+  async handleCodeLanded(job: { data: CodeLandedJob }) {
+    await this.upkeep.codeLanded(job.data);
   }
 
   /**
@@ -348,12 +364,16 @@ export class PagesProcessor {
     let expiredProposed: number;
     let archivedStanding: number;
     let proposedVerified: number;
+    let owedIssues: number;
 
     try {
       ({ expiredProposed, archivedStanding } =
         await this.pageEntriesService.runDecay());
       // What decay may not archive alone, it asks a person about.
       proposedVerified = await this.upkeep.proposeUnused();
+      // Correction issues a failed run owed, in workspaces no change has
+      // landed in since, whose own runs would otherwise open them.
+      owedIssues = await this.upkeep.openOwedIssues();
     } catch (error) {
       // Said out loud, because the alternative is silence. The only other
       // signal this pass gives is the line below, and "no line" reads exactly
@@ -371,8 +391,9 @@ export class PagesProcessor {
     this.logger.info({
       message:
         `Knowledge decay archived ${expiredProposed} untriaged and ` +
-        `${archivedStanding} unused standing entr(ies), and asked a person ` +
-        `about ${proposedVerified} unused verified entr(ies)`,
+        `${archivedStanding} unused standing entr(ies), asked a person ` +
+        `about ${proposedVerified} unused verified entr(ies), and opened ` +
+        `${owedIssues} owed correction issue(s)`,
       where: 'PagesProcessor.handleDecay',
     });
   }

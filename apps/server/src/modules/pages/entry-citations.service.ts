@@ -35,7 +35,9 @@ import {
 } from './citation-matching';
 import KnowledgeIndexService from './knowledge-index.service';
 import {
+  CODE_LANDED_JOB,
   type CodeLandedJob,
+  codeLandedJobOptions,
   PAGES_QUEUE,
   RETRY_CITATIONS_JOB,
   retryCitationsJobOptions,
@@ -343,6 +345,14 @@ interface CheckedEntry {
   contentHash: string | null;
   sourceSession: string | null;
   page: { workspaceId: string };
+}
+
+/** A citation read for the first time: what was read, and what was found. */
+interface FirstReading {
+  citation: CitationRow;
+  result: PageEntryCitationCheckEnum;
+  /** The commit read, when there was one to read. */
+  sha: string | null;
 }
 
 interface CitationRow {
@@ -783,6 +793,8 @@ export default class EntryCitationsService {
       id: string;
       where: Prisma.PageEntryCitationWhereInput;
       update: Prisma.PageEntryCitationUncheckedUpdateInput;
+      /** Read for the first time, at the commit it cites. */
+      firstRead?: FirstReading;
     }> = [];
 
     for (const citation of entry.citations) {
@@ -799,7 +811,12 @@ export default class EntryCitationsService {
         );
 
         if (update) {
-          found.push({ id: citation.id, where: STILL_UNREAD, update });
+          found.push({
+            id: citation.id,
+            where: STILL_UNREAD,
+            update,
+            firstRead: firstReading(citation, update),
+          });
         }
 
         continue;
@@ -819,17 +836,22 @@ export default class EntryCitationsService {
       }
     }
 
+    const firstReads: FirstReading[] = [];
     const checked = found.length
       ? await this.prisma.$transaction(async (tx) => {
           await lockEntry(tx, entryId);
           let stored = 0;
 
-          for (const { id, where, update } of found) {
+          for (const { id, where, update, firstRead } of found) {
             const { count } = await tx.pageEntryCitation.updateMany({
               where: { id, ...where },
               data: update,
             });
             stored += count;
+
+            if (count > 0 && firstRead) {
+              firstReads.push(firstRead);
+            }
           }
 
           return stored;
@@ -839,6 +861,8 @@ export default class EntryCitationsService {
     if (checked > 0) {
       await this.indexer?.entryChanged(entryId);
     }
+
+    await this.checkSinceCited(entry.page.workspaceId, firstReads, reads);
 
     return { checked };
   }
@@ -865,7 +889,8 @@ export default class EntryCitationsService {
    * does not act on it, such as a re-check after a harmful signal, is still
    * acted on. A reading taken before a person last acted on the entry is
    * read again, as nothing acts on it. A citation never read, or one that
-   * never held, says nothing about this change and is left to its retry.
+   * never held, says nothing about this change and is left to its retry,
+   * which hands a citation found to hold at an older commit back here.
    *
    * Nothing is written: each check comes back with what to store, for the
    * caller to store with whatever it does about the result, so a failure
@@ -1005,7 +1030,9 @@ export default class EntryCitationsService {
    * A reading is stored only while the citation is still unread, under the
    * entry's lock. It is of the commit the citation cites, older than any
    * head a landed change's check or a re-check has read since, and must not
-   * replace what they found.
+   * replace what they found. The changes that landed since that commit
+   * passed the citation over while it was unread, so a citation found to
+   * hold there is handed to the landed-change check, at the head.
    */
   async retryUnknown(entryId: string): Promise<{ stillUnknown: number }> {
     const entry = await this.entryWithCitations(entryId);
@@ -1016,8 +1043,8 @@ export default class EntryCitationsService {
 
     let stillUnknown = 0;
     const found: Array<{
-      id: string;
       update: Prisma.PageEntryCitationUncheckedUpdateInput;
+      firstRead: FirstReading;
     }> = [];
     const reads = new RepoReads(this.files);
 
@@ -1040,31 +1067,88 @@ export default class EntryCitationsService {
         continue;
       }
 
-      found.push({ id: citation.id, update });
+      found.push({ update, firstRead: firstReading(citation, update) });
     }
 
-    const settled = found.length
+    const firstReads: FirstReading[] = found.length
       ? await this.prisma.$transaction(async (tx) => {
           await lockEntry(tx, entryId);
-          let stored = 0;
+          const stored: FirstReading[] = [];
 
-          for (const { id, update } of found) {
+          for (const { update, firstRead } of found) {
             const { count } = await tx.pageEntryCitation.updateMany({
-              where: { id, ...STILL_UNREAD },
+              where: { id: firstRead.citation.id, ...STILL_UNREAD },
               data: update,
             });
-            stored += count;
+
+            if (count > 0) {
+              stored.push(firstRead);
+            }
           }
 
           return stored;
         })
-      : 0;
+      : [];
 
-    if (settled > 0) {
+    if (firstReads.length > 0) {
       await this.indexer?.entryChanged(entryId);
     }
 
+    await this.checkSinceCited(entry.page.workspaceId, firstReads, reads);
+
     return { stillUnknown };
+  }
+
+  /**
+   * Hands the landed-change check each citation just read for the first
+   * time, and found to hold, at a commit the default branch has since moved
+   * past: the commit it cites. The checks of the changes that landed since
+   * passed it over while it was unread, so none of them was checked against
+   * it: the check reads it at the head, as they would have, and acts on what
+   * it finds as they would have. A citation that named no commit was read
+   * at the head, and has nothing to hand on. Queued under a job id of its
+   * own, so a check of the same commit waiting with other files does not
+   * stand in for it.
+   */
+  private async checkSinceCited(
+    workspaceId: string,
+    firstReads: FirstReading[],
+    reads: RepoReads,
+  ): Promise<void> {
+    for (const { citation, result, sha } of firstReads) {
+      if (!citation.path || result !== PageEntryCitationCheckEnum.HOLDS) {
+        continue;
+      }
+
+      const repo = await this.citedRepo(citation.moduleRepoId, workspaceId);
+
+      if (!repo) {
+        continue;
+      }
+
+      const head = await reads.head(repo);
+
+      if ('unknown' in head || head.sha === sha) {
+        continue;
+      }
+
+      const job: CodeLandedJob = {
+        workspaceId,
+        externalRepoId: repo.externalRepoId,
+        sha: head.sha,
+        changedPaths: [citation.path],
+      };
+
+      try {
+        await this.pagesQueue?.add(CODE_LANDED_JOB, job, {
+          ...codeLandedJobOptions(job),
+          jobId: `${CODE_LANDED_JOB}:citation:${citation.id}:${head.sha}`,
+        });
+      } catch {
+        // The citation holds at the commit it cites; the next change to its
+        // file checks it at the head.
+      }
+    }
   }
 
   /**
@@ -1382,6 +1466,21 @@ const NO_JUDGMENT = {
 const STILL_UNREAD: Prisma.PageEntryCitationWhereInput = {
   checkResult: PageEntryCitationCheckEnum.UNKNOWN,
 };
+
+/**
+ * What a first reading read and found, from what it stores. A removed
+ * repository stores no commit, as there is none left to read.
+ */
+function firstReading(
+  citation: CitationRow,
+  update: { checkResult: PageEntryCitationCheckEnum; checkedSha?: string },
+): FirstReading {
+  return {
+    citation,
+    result: update.checkResult,
+    sha: update.checkedSha ?? null,
+  };
+}
 
 function removedRepo() {
   return {

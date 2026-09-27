@@ -9,7 +9,8 @@ next session starts by reading it.
   mutation-checked; review round 1 (FAIL, two blocking findings) fixed and
   answered; round 2 PASS with five non-blocking findings, all fixed; round
   3 PASS with four non-blocking findings, all fixed; round 4 PASS with
-  two low findings, both fixed; round 5 next, to confirm them. PR #45
+  two low findings, both fixed; round 5 PASS with one non-blocking
+  finding, fixed; round 6 next, to confirm it. PR #45
   is open from this branch, so the phase 6 commits are in it too; its
   description says so.
   Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
@@ -733,14 +734,14 @@ next session starts by reading it.
     still unread, under the lock, and is stamped with when the citation was
     written: it is older than any head read since, and never outranks one,
     however close the two finish. An unread citation that names no commit
-    is read at the head, and stamped with when that was asked for. Stamps come from the servers' clocks; two
-    readings of heads could be misordered only if the heads were asked for
-    within the servers' skew of each other with a change landing between,
-    which is noted at `readBefore`. Before acting, `settle` also holds the
-    entry's row (`SELECT ... FOR NO KEY UPDATE`), so a person's change to
-    it waits rather than landing between reading the entry and acting on
-    it, while rows referring to it (its uses as it is served) are still
-    written.
+    is read at the head, and stamped with when that was asked for. Stamps
+    come from the servers' clocks; two readings of heads could be misordered
+    only if the heads were asked for within the servers' skew of each other
+    with a change landing between, which is noted at `readBefore`. Before
+    acting, `settle` also holds the entry's row (`SELECT ... FOR NO KEY
+    UPDATE`), so a person's change to it waits rather than landing between
+    reading the entry and acting on it, while rows referring to it (its uses
+    as it is served) are still written.
   - **Read once.** A citation already read at the change's own commit is
     not read or judged again: that reading comes back as stored and is
     acted on like any other. So while the change is still the head, the
@@ -750,6 +751,16 @@ next session starts by reading it.
     contradiction a re-check stored at that commit is acted on here. The
     first version also skipped anything checked since the job was queued;
     round 1 of the review found that unsound (below), and it is gone.
+  - **Passed over while unread.** A landed change's check leaves an unread
+    citation to its retry, which reads the commit the citation cites. When
+    that first reading finds the claim held there and the default branch
+    has since moved past that commit, the citation is handed to the
+    landed-change check at the head (`checkSinceCited`: a
+    `CODE_LANDED_JOB` for the head and the cited path, under a job id of
+    its own), so the changes that landed meanwhile are checked against it
+    after all. A citation that named no commit was read at the head, and a
+    reading that lost to a newer one has already been acted on; neither is
+    handed on.
   - **A person's word is newer.** A reading taken before a person last put
     the entry back (the newest `reversedAt` of its maintenance rows), or a
     judgment of words the entry no longer has (`judgedContentHash`, a new
@@ -1827,6 +1838,36 @@ Verdict PASS, with two low findings, both fixed:
 Mutation-checked: 3 mutants over these fixes, all killed. Full server
 suite: 1830 passed, 15 skipped.
 
+### Phase 6, round 5 (same reviewer, on the round 4 fixes, and a final pass)
+
+The reviewer confirmed S1 and S2 resolved and made a final pass over the
+phase. Verdict PASS, with one non-blocking finding, fixed:
+
+- **F1. A citation unread when changes landed was never checked against
+  them.** A landed change's check leaves an unread citation to its retry,
+  and the retry reads the commit the citation cites, not the head; a
+  citation found to hold there was then checked only by the next change
+  to its file. Now a first reading that finds the claim held at the
+  commit it cites, once the default branch has moved past that commit,
+  queues the landed-change check for the head and the cited path
+  (`checkSinceCited`, from the retry and from the re-check's unread path),
+  under a job id of its own. The skip is keyed on the commit read, so a
+  citation that named no commit (read at the head) is not handed on.
+  Tests: "[KG-6.2] hands a citation first found to hold at the commit it
+  cites to the landed check, once the default branch has moved past that
+  commit" (retry and re-check, then the queued check disputes the entry),
+  "[KG-6.2] hands the landed check nothing for a first reading that no
+  change since could have been checked against" (head at the cited
+  commit, never held, no commit named, head unreadable), "[KG-6.2] keeps a
+  first reading when the landed check cannot be queued", and "never lets
+  a reading of the commit a citation cites replace a reading of a head"
+  now asserts nothing is queued for a reading that lost.
+
+Mutation-checked: 14 mutants over the fix, all killed (a first version
+keyed the skip on the citation's `commitSha`; its mutant survived because
+the test store updates rows in place, so the skip now uses the commit the
+reading read). Full server suite: 1833 passed, 15 skipped.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -2082,3 +2123,7 @@ Give the evidence, and stop until the maintainer answers.
   fixed with tests: the entry row is held `FOR NO KEY UPDATE`, so serving
   it never waits; an unread citation read at the head is stamped as a head
   reading.
+- 2026-09-27: Phase 6 review round 5: PASS, with one non-blocking finding,
+  fixed with tagged tests: a citation first found to hold at the commit it
+  cites, once the default branch has moved past it, is handed to the
+  landed-change check at the head. 14 mutants, all killed.

@@ -22,7 +22,7 @@ import { LoggerService } from 'modules/logger/logger.service';
 
 import CitationJudge from '../citation-judge';
 import EntryCitationsService from '../entry-citations.service';
-import { type CodeLandedJob } from '../pages.interface';
+import { CODE_LANDED_JOB, type CodeLandedJob } from '../pages.interface';
 import KnowledgeIssues, {
   KNOWLEDGE_BOT,
   KNOWLEDGE_LABEL,
@@ -1359,10 +1359,13 @@ describe('a change that landed re-checks the citations it touches', () => {
 
         return read(...args);
       });
+      const queue = { add: jest.fn(async (): Promise<void> => undefined) };
       const citations = new EntryCitationsService(
         t.prisma as never,
         t.files as never,
         t.judge as never,
+        undefined,
+        queue as never,
       );
 
       await (run === 'retry'
@@ -1375,7 +1378,162 @@ describe('a change that landed re-checks the citations it touches', () => {
         judgment: Judgment.CONTRADICTED,
       });
       expect(t.ops).toEqual(['lock:knowledge-entry:e1']);
+      // What found it has already acted on it, at a newer commit.
+      expect(queue.add).not.toHaveBeenCalled();
     }
+  });
+
+  it('[KG-6.2] hands a citation first found to hold at the commit it cites to the landed check, once the default branch has moved past that commit', async () => {
+    const cited = 'c'.repeat(40);
+
+    for (const run of ['retry', 'recheck'] as const) {
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [
+          citation('c1', 'e1', {
+            checkResult: Check.UNKNOWN,
+            checkedAt: null,
+            checkedSha: null,
+          }),
+        ],
+      });
+      // The claim held at the commit c1 cites. A change that landed while c1
+      // was unread, and whose check passed it over, contradicts it at the
+      // head.
+      t.repo.code['src/retry.ts'] = CHANGED;
+      const read = t.files.read.getMockImplementation() as NonNullable<
+        ReturnType<typeof t.files.read.getMockImplementation>
+      >;
+      t.files.read.mockImplementation(async (repo, path, ref) =>
+        ref === cited ? { content: ORIGINAL } : read(repo, path, ref),
+      );
+      const queue = { add: jest.fn(async (): Promise<void> => undefined) };
+      const citations = new EntryCitationsService(
+        t.prisma as never,
+        t.files as never,
+        t.judge as never,
+        undefined,
+        queue as never,
+      );
+
+      await (run === 'retry'
+        ? citations.retryUnknown('e1')
+        : citations.recheck('e1'));
+
+      expect(t.citations[0]).toMatchObject({
+        checkResult: Check.HOLDS,
+        checkedSha: cited,
+      });
+      const job = landed();
+      expect(queue.add).toHaveBeenCalledTimes(1);
+      expect(queue.add).toHaveBeenCalledWith(
+        CODE_LANDED_JOB,
+        job,
+        expect.objectContaining({
+          jobId: `${CODE_LANDED_JOB}:citation:c1:${SHA}`,
+          attempts: 3,
+        }),
+      );
+
+      // The check it queued reads the head, as the passed-over one would
+      // have, and disputes the entry.
+      await t.upkeep.codeLanded(job);
+
+      expect(t.citations[0]).toMatchObject({
+        checkedSha: SHA,
+        judgment: Judgment.CONTRADICTED,
+      });
+      expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
+    }
+  });
+
+  it('[KG-6.2] hands the landed check nothing for a first reading that no change since could have been checked against', async () => {
+    const cited = 'c'.repeat(40);
+    const cases: Array<{
+      name: string;
+      citation?: Row;
+      head?: { sha: string } | { unknown: true; reason: string };
+      atCited?: string | null;
+    }> = [
+      { name: 'the head is the commit it cites', head: { sha: cited } },
+      { name: 'it never held there', atCited: null },
+      { name: 'it names no commit', citation: { commitSha: null } },
+      {
+        name: 'the head cannot be read',
+        head: { unknown: true, reason: 'rate limited' },
+      },
+    ];
+
+    for (const c of cases) {
+      for (const run of ['retry', 'recheck'] as const) {
+        const t = harness({
+          entries: [entry('e1')],
+          citations: [
+            citation('c1', 'e1', {
+              checkResult: Check.UNKNOWN,
+              checkedAt: null,
+              checkedSha: null,
+              ...c.citation,
+            }),
+          ],
+        });
+        t.repo.head = c.head ?? t.repo.head;
+        const read = t.files.read.getMockImplementation() as NonNullable<
+          ReturnType<typeof t.files.read.getMockImplementation>
+        >;
+        t.files.read.mockImplementation(async (repo, path, ref) =>
+          ref === cited && c.atCited === null
+            ? { missing: true }
+            : read(repo, path, ref),
+        );
+        const queue = { add: jest.fn(async (): Promise<void> => undefined) };
+
+        await new EntryCitationsService(
+          t.prisma as never,
+          t.files as never,
+          t.judge as never,
+          undefined,
+          queue as never,
+        )[run === 'retry' ? 'retryUnknown' : 'recheck']('e1');
+
+        expect({ case: c.name, run, queued: queue.add.mock.calls }).toEqual({
+          case: c.name,
+          run,
+          queued: [],
+        });
+      }
+    }
+  });
+
+  it('[KG-6.2] keeps a first reading when the landed check cannot be queued', async () => {
+    const t = harness({
+      entries: [entry('e1')],
+      citations: [
+        citation('c1', 'e1', {
+          checkResult: Check.UNKNOWN,
+          checkedAt: null,
+          checkedSha: null,
+        }),
+      ],
+    });
+    const queue = {
+      add: jest.fn(async () => {
+        throw new Error('queue down');
+      }),
+    };
+
+    await expect(
+      new EntryCitationsService(
+        t.prisma as never,
+        t.files as never,
+        t.judge as never,
+        undefined,
+        queue as never,
+      ).retryUnknown('e1'),
+    ).resolves.toEqual({ stillUnknown: 0 });
+
+    expect(queue.add).toHaveBeenCalledTimes(1);
+    expect(t.citations[0]).toMatchObject({ checkResult: Check.HOLDS });
   });
 
   describe('a person acting on an entry after its citations were read', () => {

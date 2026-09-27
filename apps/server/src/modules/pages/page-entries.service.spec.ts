@@ -21,6 +21,7 @@ import {
   PageEntryPolicyEnum,
   PageEntryStatusEnum,
 } from '@vantikhq/types';
+import type { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
 import type { VectorService } from 'modules/vector/vector.service';
@@ -28,7 +29,12 @@ import type { VectorService } from 'modules/vector/vector.service';
 import type EntryCitationsService from './entry-citations.service';
 import type KnowledgeIndexService from './knowledge-index.service';
 import PageEntriesService, { contentHashOf } from './page-entries.service';
-import { PROPOSED_ENTRY_BUDGET, WriterIdentity } from './pages.interface';
+import {
+  PROPOSED_ENTRY_BUDGET,
+  TRIAGE_ENTRY_JOB,
+  triageEntryJobOptions,
+  WriterIdentity,
+} from './pages.interface';
 
 const AGENT: WriterIdentity = { userId: 'agent-1', tokenId: 'token-1' };
 const HUMAN: WriterIdentity = { userId: 'human-1', tokenId: null };
@@ -47,6 +53,8 @@ interface Options {
   existing?: Array<{ id: string; content: string; status?: string }>;
   /** What the near-match search returns, or an error it throws. */
   nearMatches?: Array<{ entryId: string; content: string }> | Error;
+  /** The pages queue, when the test wants to see what is queued on it. */
+  queue?: { add: jest.Mock };
 }
 
 function buildService({
@@ -59,6 +67,7 @@ function buildService({
   supersededBy = null,
   existing = [],
   nearMatches = [],
+  queue,
 }: Options = {}) {
   const created: unknown[] = [];
 
@@ -170,7 +179,13 @@ function buildService({
   } as unknown as VectorService;
 
   return {
-    service: new PageEntriesService(prisma, undefined, vectorService),
+    service: new PageEntriesService(
+      prisma,
+      undefined,
+      vectorService,
+      undefined,
+      queue as unknown as Queue | undefined,
+    ),
     prisma,
     created,
     vectorService,
@@ -210,6 +225,110 @@ describe('entry policy', () => {
     await expect(
       service.createEntry('page-1', AGENT, { content: 'a fact' }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('triage of a new entry', () => {
+  it('[KG-4.3] queues one triage job on the pages queue for an entry that lands in the inbox', async () => {
+    const queue = { add: jest.fn(async () => ({})) };
+    const { service } = buildService({ queue });
+
+    await service.createEntry('page-1', AGENT, { content: 'a fact' });
+
+    expect(queue.add).toHaveBeenCalledTimes(1);
+    expect(queue.add).toHaveBeenCalledWith(
+      TRIAGE_ENTRY_JOB,
+      { entryId: 'entry-new' },
+      triageEntryJobOptions('entry-new'),
+    );
+    // One job per entry, whoever queues it, tried again when it fails.
+    expect(triageEntryJobOptions('entry-new')).toMatchObject({
+      jobId: `${TRIAGE_ENTRY_JOB}:entry-new`,
+      attempts: 3,
+    });
+  });
+
+  it('[KG-4.3] queues nothing for a person writing standing knowledge, which is already triaged', async () => {
+    const queue = { add: jest.fn(async () => ({})) };
+    const { service } = buildService({ queue, userType: 'User' });
+
+    await service.createEntry('page-1', HUMAN, {
+      content: 'a fact',
+      standing: true,
+    });
+
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('[KG-4.3] keeps the entry when the queue cannot take the job', async () => {
+    const queue = {
+      add: jest.fn(async () => {
+        throw new Error('redis is down');
+      }),
+    };
+    const { service, created } = buildService({ queue });
+
+    await expect(
+      service.createEntry('page-1', AGENT, { content: 'a fact' }),
+    ).resolves.toMatchObject({ id: 'entry-new' });
+    expect(created).toHaveLength(1);
+  });
+
+  it('[KG-4.1] stores the hash an exact repeat is found by', async () => {
+    const { service, created } = buildService();
+
+    await service.createEntry('page-1', AGENT, {
+      content: '  Webhooks   retry THREE times. ',
+    });
+
+    expect(created[0]).toMatchObject({
+      contentHash: contentHashOf('webhooks retry three times.'),
+    });
+  });
+});
+
+describe('a credential in an entry', () => {
+  // Built at run time and plainly fake, so no scanner mistakes this file for
+  // a leak.
+  const fakeKey = ['AK', 'IA', 'X'.repeat(16)].join('');
+
+  it('[KG-4.8] refuses to store it, from an agent or a person, and does not repeat it back', async () => {
+    for (const [userType, writer] of [
+      ['Agent', AGENT],
+      ['User', HUMAN],
+    ] as const) {
+      const queue = { add: jest.fn(async () => ({})) };
+      const { service, prisma } = buildService({ userType, queue });
+
+      const refusal = await service
+        .createEntry('page-1', writer, {
+          content: `The deploy role uses ${fakeKey}.`,
+          standing: true,
+        })
+        .catch((error: unknown) => error);
+
+      expect(refusal).toBeInstanceOf(UnprocessableEntityException);
+      expect(
+        (refusal as UnprocessableEntityException).getResponse(),
+      ).toMatchObject({ status: 'secret-refused' });
+      expect(JSON.stringify((refusal as Error).message)).not.toContain(fakeKey);
+      expect(
+        JSON.stringify((refusal as UnprocessableEntityException).getResponse()),
+      ).not.toContain(fakeKey);
+      expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+      expect(queue.add).not.toHaveBeenCalled();
+    }
+  });
+
+  it('[KG-4.8] refuses an edit that would put one in', async () => {
+    const { service, prisma } = buildService({ userType: 'User' });
+
+    await expect(
+      service.updateEntry('entry-1', 'human-1', {
+        content: `The deploy role uses ${fakeKey}.`,
+      }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(prisma.pageEntry.update).not.toHaveBeenCalled();
   });
 });
 

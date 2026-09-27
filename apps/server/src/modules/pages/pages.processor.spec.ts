@@ -233,3 +233,42 @@ describe('checking an entry again after a harmful signal', () => {
     );
   });
 });
+
+describe('triaging a new entry', () => {
+  it('[KG-4.3] triages the entry the job names', async () => {
+    const triage = jest.fn(async () => ({
+      decisionId: 'decision-1',
+      decision: 'ESCALATE',
+      reasons: ['UNGROUNDED'],
+      policy: null as string | null,
+      mode: 'SHADOW',
+      applied: false,
+    }));
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      {} as EntryCitationsService,
+      { triage } as unknown as KnowledgeTriageService,
+    );
+
+    await expect(
+      processor.handleTriageEntry({ data: { entryId: 'entry-1' } }),
+    ).resolves.toBeUndefined();
+    expect(triage).toHaveBeenCalledWith('entry-1');
+  });
+
+  it('[KG-4.3] fails when the pass fails, so the queue tries it again', async () => {
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      {} as EntryCitationsService,
+      {
+        triage: jest.fn(async () => {
+          throw new Error('typesense is down');
+        }),
+      } as unknown as KnowledgeTriageService,
+    );
+
+    await expect(
+      processor.handleTriageEntry({ data: { entryId: 'entry-1' } }),
+    ).rejects.toThrow('typesense is down');
+  });
+});

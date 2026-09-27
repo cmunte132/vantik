@@ -230,6 +230,9 @@ you call the API.
   genuinely does not matter.
 - **Citations are checked on write.** Up to ten per entry. One that does not
   hold refuses the write with its number and the reason.
+- **No credentials.** A write whose content looks like a key, a token, a
+  private key or a password in a URL is refused with `secret-refused`, and the
+  refusal does not repeat it. Say where the secret is kept instead.
 
 ## Improving the bank
 
@@ -241,9 +244,21 @@ those questions, that hour is worth an entry.
 
 ## Your entries are reviewed
 
-Everything you write lands as `PROPOSED` and is served to nobody until a human
-accepts it. That is not a formality — it is what makes the bank trustworthy
+Everything you write lands as `PROPOSED` and is served to nobody until it is
+accepted. That is not a formality — it is what makes the bank trustworthy
 enough to be worth reading.
+
+Each new entry is triaged by the server first. Where a workspace has switched
+triage on, an entry is accepted without a person only when every check holds:
+it says one thing, every citation holds (an entry citing nothing is not
+grounded), it contradicts nothing a person verified or keeps on a locked page,
+it is not a convention (those are handed to every run, so a person decides),
+and two separate judgments accept it. An entry that says exactly what an
+existing one says is folded into it as a corroboration rather than kept beside
+it. Anything else waits for a person, with the reasons attached, and so does
+everything written during a run whose issue came from outside the workspace.
+Triage is off or only recording by default, so do not count on it: cite what
+you claim, and it helps the person and the check alike.
 
 Write for the reviewer, and for the stranger after them. A claim they cannot
 evaluate is a claim they will archive.

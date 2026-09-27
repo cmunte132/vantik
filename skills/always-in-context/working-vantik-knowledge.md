@@ -49,7 +49,8 @@ stated that is written down nowhere — say which with `kind` (`DECISION`,
 `GOTCHA`, `CONVENTION`, or the default `FACT`). **Not worth remembering:** what you did
 this session (that is a note on the issue), anything already in the page body,
 anything the code says plainly. Never secrets or credentials — the bank is
-readable by every agent in the workspace.
+readable by every agent in the workspace, and a write that looks like it holds
+one is refused.
 
 **Handed an issue or a project, call `pages_for` with it first** — a direct
 lookup of the pages attached to that work, for when you do not yet know what to
@@ -80,8 +81,10 @@ separately, so one fact is not returned twice.
 per token (the error names the ones in your way — consolidate or supersede them,
 do not find another page to dump into); `LOCKED` pages are readable but not
 appendable by agents. Everything you write lands as proposed and is served to
-nobody until a human accepts it, so write for the reviewer and for the stranger
-after them. Triage is for people: you cannot accept, dispute or verify entries.
+nobody until it is accepted: by a person, or, where the workspace has switched
+triage on, by a check that it cites code that holds, says one thing, repeats and
+contradicts nothing it should not, and that two separate judgments accept.
+Write for the reviewer and for the stranger after them. Triage is for people: you cannot accept, dispute or verify entries.
 You can reword or archive your own while they are still proposed; correct an
 accepted one by superseding it, and it stays in use until your correction is
 accepted.

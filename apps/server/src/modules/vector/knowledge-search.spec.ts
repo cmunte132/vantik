@@ -652,3 +652,125 @@ describe('served proof', () => {
     });
   });
 });
+
+describe('near entries, for triage', () => {
+  const PAGE_ID = '00000000-0000-0000-0000-0000000000aa';
+
+  /**
+   * An index holding documents with a vector distance each. The search's own
+   * filter is applied to them, so what comes back is what that filter lets
+   * through.
+   */
+  function indexWith(docs: Array<Doc & { distance?: number }>) {
+    const searches: Array<Record<string, string | number>> = [];
+    const typesense = {
+      multiSearch: {
+        perform: async ({
+          searches: [search],
+        }: {
+          searches: Array<Record<string, string | number>>;
+        }) => {
+          searches.push(search);
+          const matches = parseFilter(search.filter_by as string);
+
+          return {
+            results: [
+              {
+                grouped_hits: [
+                  {
+                    hits: docs
+                      .filter(({ distance: _distance, ...doc }) => matches(doc))
+                      .map(({ distance, ...document }) => ({
+                        document,
+                        ...(distance !== undefined && {
+                          vector_distance: distance,
+                        }),
+                      })),
+                  },
+                ],
+                found: docs.length,
+              },
+            ],
+          };
+        },
+      },
+    } as unknown as TypesenseClient;
+    const alive = async ({ where }: { where: { id: { in: string[] } } }) =>
+      where.id.in.map((id) => ({ id }));
+    const prisma = {
+      page: { findMany: alive },
+      pageEntry: {
+        findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+          where.id.in.map((id) => ({
+            id,
+            status: 'STANDING',
+            verifiedAt: null as Date | null,
+            citations: [] as unknown[],
+          })),
+      },
+    } as unknown as PrismaService;
+
+    return { service: new VectorService(prisma, typesense), searches };
+  }
+
+  const doc = (
+    entryId: string,
+    extra: Partial<Doc> & { distance?: number },
+  ): Doc & { distance?: number } => ({
+    id: `entry:${entryId}`,
+    kind: 'entry',
+    entryId,
+    pageId: `page-${entryId}`,
+    workspaceId: WORKSPACE,
+    status: 'STANDING',
+    moduleIds: [SERVER],
+    ...extra,
+  });
+
+  it('[KG-4.2] finds proposed and standing entries of the same modules, above the threshold only', async () => {
+    const { service, searches } = indexWith([
+      doc('close', { distance: 0.15 }),
+      doc('proposed', { distance: 0.3, status: 'PROPOSED' }),
+      doc('far', { distance: 0.55 }),
+      doc('words-only', {}),
+      doc('archived', { distance: 0.1, status: 'ARCHIVED' }),
+      doc('webapp', { distance: 0.1, moduleIds: [WEBAPP] }),
+      doc('other-workspace', {
+        distance: 0.1,
+        workspaceId: '00000000-0000-0000-0000-000000000009',
+      }),
+    ]);
+
+    const near = await service.findNearEntries(WORKSPACE, 'webhook retries', {
+      moduleIds: [SERVER],
+      pageId: PAGE_ID,
+      minSimilarity: 0.6,
+    });
+
+    expect(near).toEqual([
+      { entryId: 'close', similarity: 0.85 },
+      { entryId: 'proposed', similarity: 0.7 },
+    ]);
+    // The threshold is the index's distance ceiling too, so a far entry is
+    // not even a candidate there.
+    expect(searches[0].vector_query).toContain('distance_threshold:0.4');
+    // With modules to look in, the page does not narrow it further.
+    expect(searches[0].filter_by).not.toContain('pageId');
+  });
+
+  it('[KG-4.2] looks on the page instead, for an entry in no module', async () => {
+    const { service, searches } = indexWith([
+      doc('same-page', { distance: 0.2, pageId: PAGE_ID, moduleIds: [] }),
+      doc('other-page', { distance: 0.2, moduleIds: [] }),
+    ]);
+
+    const near = await service.findNearEntries(WORKSPACE, 'webhook retries', {
+      moduleIds: [],
+      pageId: PAGE_ID,
+      minSimilarity: 0.25,
+    });
+
+    expect(near.map((hit) => hit.entryId)).toEqual(['same-page']);
+    expect(searches[0].filter_by).not.toContain('moduleIds');
+  });
+});

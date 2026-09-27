@@ -20,6 +20,7 @@ import {
 import { PrismaService } from 'nestjs-prisma';
 
 import type { KnowledgeSignalsService } from 'modules/knowledge-signals/knowledge-signals.service';
+import type KnowledgeConventionsService from 'modules/pages/upkeep/knowledge-conventions.service';
 
 import { AgentRunsService } from './agent-runs.service';
 
@@ -178,12 +179,17 @@ function buildService(initial: FakeRun[] = [makeRun()]) {
     runFinished: jest.fn(async () => ({ helpful: 0, harmful: 0 })),
   } as unknown as KnowledgeSignalsService;
 
+  const conventions = {
+    findingsLater: jest.fn(async (): Promise<void> => undefined),
+  } as unknown as KnowledgeConventionsService;
+
   return {
-    service: new AgentRunsService(prisma, knowledgeSignals),
+    service: new AgentRunsService(prisma, knowledgeSignals, conventions),
     rows,
     events,
     prisma,
     knowledgeSignals,
+    conventions,
   };
 }
 
@@ -313,6 +319,29 @@ describe('AgentRunsService outcomes', () => {
       service.transition(RUN, 'NEEDS_REVIEW'),
     ).resolves.toMatchObject({ status: 'NEEDS_REVIEW' });
     expect(rows.get(RUN)?.status).toBe('NEEDS_REVIEW');
+  });
+
+  it('[KG-6.3] hands a run’s review findings on once, when it ends, and ends it whatever becomes of them', async () => {
+    const { service, rows, knowledgeSignals, conventions } = buildService();
+
+    await service.transition(RUN, 'CLAIMED');
+    await service.transition(RUN, 'RUNNING');
+    expect(conventions.findingsLater).not.toHaveBeenCalled();
+
+    // Queued even when the outcome could not be attributed: what the
+    // reviewer found does not depend on what the run was served.
+    (knowledgeSignals.runFinished as jest.Mock).mockRejectedValueOnce(
+      new Error('connection reset'),
+    );
+    await service.transition(RUN, 'FAILED');
+
+    expect(conventions.findingsLater).toHaveBeenCalledTimes(1);
+    expect(conventions.findingsLater).toHaveBeenCalledWith(RUN);
+    expect(rows.get(RUN)?.status).toBe('FAILED');
+
+    // A repeat of the end hands nothing on again.
+    await service.transition(RUN, 'FAILED');
+    expect(conventions.findingsLater).toHaveBeenCalledTimes(1);
   });
 
   it('[KG-3.4] records the reviewer’s verdict and where the failing checks failed', async () => {

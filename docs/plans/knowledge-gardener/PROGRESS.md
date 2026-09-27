@@ -5,8 +5,8 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 6, in progress: KG-6.1, KG-6.2 and KG-6.5 implemented
-  and mutation-checked; KG-6.3 and KG-6.4 next, then the review. PR #45
+- Current phase: 6, in progress: KG-6.1, KG-6.2, KG-6.3 and KG-6.5
+  implemented and mutation-checked; KG-6.4 next, then the review. PR #45
   is open from this branch, so the phase 6 commits are in it too; its
   description says so.
   Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
@@ -791,6 +791,82 @@ next session starts by reading it.
   taught `none`, `in` and `gte`, and rows got an empty citation list; their
   assertions are unchanged (and now also require the row's status to match
   the pass's).
+- **Conventions from review (KG-6.3).**
+  - **Recording findings.** When a run ends, `AgentRunsService` queues
+    `recordRunFindings` (one job per run, retried), after attributing its
+    outcome and whether or not that worked. The job reads every pass's
+    findings of a run that ended SUCCEEDED, NEEDS_REVIEW or FAILED, not
+    only the last pass's as signals do: a finding fixed on the next pass is
+    still something the reviewer had to say. Each is placed in a module by
+    the first path its evidence names (`evidencePaths`), among the modules
+    of the repository the run worked in (a checkout's only when the
+    workspace has one repository), the deepest module holding the file
+    winning. A finding with no module, or no words left to compare, is not
+    recorded. Stored in `KnowledgeFinding`: the message through
+    `redactSecrets` (600 characters), its words, the evidence (redacted,
+    500 characters), the file and line. The key, sha256 of the module and
+    the sorted words, is unique per run, so a run gives a finding once
+    however many passes or findings repeat it.
+  - **Grouping, with no model.** Words are the message lower-cased, split
+    on anything not a letter, digit or underscore, without common words,
+    numbers and words under three letters. Two findings are the same when
+    they share at least half of all their words (Jaccard 0.5, a constant in
+    `upkeep/findings.ts`, not a setting: it compares a reviewer's words,
+    not the index's vectors). Findings join the first group whose first
+    finding they are like, oldest first, so a group cannot drift. Only a
+    module's findings not yet written up are grouped, the newest 500, and
+    only of runs not deleted.
+  - **Writing a candidate.** A group spanning `conventionMinRuns`
+    separate runs (`KNOWLEDGE_CONVENTION_MIN_RUNS`, default 3, workspace
+    `conventionMinRuns`) is written through `createEntry` as the
+    gardener's System bot, kind CONVENTION, never `standing`, so it lands
+    PROPOSED and is queued for triage like an agent's entry. Content:
+    "Review found this in N separate agent runs on <module>: <the finding
+    most like the rest>", deterministic, one line. Scope: the repository
+    and module folder most of the findings are in (the repository alone
+    for a whole-repository module), which resolves to the module.
+    Citations: the six newest runs, and up to four distinct `file:line`s
+    from the findings, each read at its run's `headCommit` (omitted when
+    that is not a commit id), each checked alone first so one that does
+    not hold there is left out rather than refusing the candidate. The
+    page: the oldest unlocked page linked to the module, else one
+    "Conventions from review" page the bot makes through `createPage`.
+    The group's findings are then linked to it (`candidateId`) and never
+    counted again.
+  - **Never twice.** Written under a workspace advisory lock
+    (`pg_advisory_xact_lock`, as back-off does), after a lock-free look
+    that finds most runs have nothing to write, with the groups read again
+    once the lock is held. A group like (Jaccard 0.5) a finding already
+    linked to a candidate that is waiting, standing, or was taken out of
+    use within the decay window joins that candidate instead: a person has
+    it or has said no. A write refused as a repeat links the group to the
+    entry the page already holds. Any other refusal (the bot's inbox
+    budget on the page) leaves the findings for the next run in the
+    module; any other error fails the job.
+  - **Pinning.** A standing CONVENTION is handed to every run in its
+    modules (KG-3.2), so accepting one is pinning it; triage escalates
+    every convention with PIN_REQUEST, and the bot's entries also with
+    UNKNOWN_SOURCE, so nothing proposed from review is accepted without a
+    person. Once accepted it is served to its modules' runs and, as any
+    grounded entry, to searches it matches.
+  - **Switching one off.** Only a standing CONVENTION the gardener's bot
+    wrote. The harmful-signal re-check job (`recheckEntryCitations`) first
+    calls `weigh`: harmful minus helpful signal weight (a closed pull
+    request counts half), counted from the last time a person put the
+    entry back or declined to archive it for its outcomes, reaching
+    `conventionHarmMargin` (`KNOWLEDGE_CONVENTION_HARM_MARGIN`, default 3)
+    archives it with a maintenance row (ARCHIVED, HARMFUL_SIGNALS, the
+    counts, margin and start) and reindexes it. An issue labelled
+    `knowledge` tells the module's team, with the counts and what the
+    harmful outcomes pointed at, best effort. A verified entry, or one on a
+    locked page, gets an archive proposal instead (KG-6.5's rule). A person
+    setting it back to STANDING marks the row reversed (KG-6.2's undo), and
+    counting starts again from then.
+  - **Tests.** The settings suite's full-object expectations gained the
+    two new settings; the processor suite's constructions gained the
+    conventions service (the harmful-signal test's with a `weigh` that
+    does nothing); the agent-runs suite's construction gained it. No
+    assertion changed.
 - **Migration** `20260927060000_knowledge_upkeep`: `prisma migrate diff`'s
   output for all of phase 6 (three enums, `PageEntryMaintenance`,
   `KnowledgeFinding`, and four nullable columns on `PageKnowledgeGap`).
@@ -1611,3 +1687,13 @@ Give the evidence, and stop until the maintainer answers.
   entries are proposed, never archived; outcomes archive nothing)
   implemented with tagged tests. Mutation-checked: nine mutants, eight
   killed at once, one that did not compile reworded and killed.
+- 2026-09-27: KG-6.3 (review findings recorded per module at each run's
+  end; a candidate CONVENTION at three runs, through triage; a gardener
+  convention switched off on its outcomes) implemented with tagged tests.
+  Mutation-checked: 44 mutants over the service, the grouping helpers and
+  the wiring. 34 were killed at once, and six did not compile and were
+  reworded and killed. Four survived (the likeness formula, a zero line,
+  numbers among a finding's words, and counting from a decline, which the
+  queue's quiet period masked); new tests killed them. The scope was found to count a whole-repository
+  module of another repository; fixed by scoping on each finding's run's
+  repository.

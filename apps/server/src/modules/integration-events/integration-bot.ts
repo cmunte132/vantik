@@ -8,6 +8,14 @@ interface BotDefinition {
 }
 
 /**
+ * The address of a bot member: the one a deployed Action used for the same
+ * slug, and what tells one workspace's bot from another's.
+ */
+export function integrationBotEmail(slug: string, workspaceId: string): string {
+  return `${slug}_${workspaceId}@vantik.dev`;
+}
+
+/**
  * The member a connected integration writes as, made on its first event.
  *
  * A plugin has no session, so whatever it writes — the issue an email became,
@@ -26,7 +34,7 @@ export async function ensureIntegrationBot(
   workspaceId: string,
   definition: BotDefinition,
 ): Promise<string> {
-  const email = `${definition.slug}_${workspaceId}@vantik.dev`;
+  const email = integrationBotEmail(definition.slug, workspaceId);
 
   const user = await prisma.user.upsert({
     where: { email },

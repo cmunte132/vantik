@@ -773,6 +773,60 @@ describe('the knowledge a run is handed', () => {
     ).toMatchObject({ status: PageEntryStatusEnum.STANDING, deleted: null });
   });
 
+  it('[KG-6.3] hands an accepted convention from review to every run in its modules, and to others a search finds it relevant to', async () => {
+    const fromReview = row('from-review', {
+      kind: 'CONVENTION',
+      content:
+        'Review found this in 3 separate agent runs on Server: use the logger, not console.log',
+      citations: [
+        {
+          ...holding,
+          kind: 'RUN',
+          path: null,
+          startLine: null,
+          endLine: null,
+          targetLabel: 'run run-a',
+        },
+        holding,
+      ],
+    });
+
+    // A run in its module is handed it whatever the issue is about.
+    const inModule = forRun({ conventions: [fromReview], ranked: [] });
+    expect(
+      (await inModule.service.knowledgeForRun(WORKSPACE, ask, LIMITS)).map(
+        (entry) => entry.entryId,
+      ),
+    ).toEqual(['from-review']);
+
+    // A run elsewhere is handed it when the search ranks it, as any
+    // grounded entry is.
+    const elsewhere = forRun({
+      issue: { moduleIds: ['module-other'] },
+      conventions: [],
+      entries: [fromReview],
+      ranked: ['from-review'],
+    });
+    const packed = await elsewhere.service.knowledgeForRun(
+      WORKSPACE,
+      ask,
+      LIMITS,
+    );
+    expect(packed.map((entry) => entry.entryId)).toEqual(['from-review']);
+    expect(packed[0]).toMatchObject({
+      kind: 'CONVENTION',
+      trust: KnowledgeTrustEnum.GROUNDED,
+    });
+
+    // Only once accepted: both reads ask for standing entries.
+    for (const t of [inModule, elsewhere]) {
+      for (const [query] of (t.prisma.pageEntry.findMany as jest.Mock).mock
+        .calls) {
+        expect(query.where.status).toBe(PageEntryStatusEnum.STANDING);
+      }
+    }
+  });
+
   it('[KG-3.2] packs each entry with its citations, its age and what it is', async () => {
     const { service } = forRun({
       entries: [row('grounded-1', { scope: 'apps/server', kind: 'GOTCHA' })],

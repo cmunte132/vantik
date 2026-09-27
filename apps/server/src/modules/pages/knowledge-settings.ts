@@ -59,6 +59,18 @@ export interface KnowledgeSettings {
   kappaMinSamples: number;
   /** How many days of verdicts agreement is measured over. `KNOWLEDGE_KAPPA_WINDOW_DAYS`. */
   kappaWindowDays: number;
+  /**
+   * How many separate runs must be given the same review finding in a module
+   * before the gardener proposes it as a convention there.
+   * `KNOWLEDGE_CONVENTION_MIN_RUNS`.
+   */
+  conventionMinRuns: number;
+  /**
+   * How far a convention the gardener wrote may be behind, harmful outcomes
+   * over helpful ones, before it is taken out of use.
+   * `KNOWLEDGE_CONVENTION_HARM_MARGIN`.
+   */
+  conventionHarmMargin: number;
 }
 
 export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
@@ -71,6 +83,8 @@ export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
   kappaFloor: 0.6,
   kappaMinSamples: 20,
   kappaWindowDays: 30,
+  conventionMinRuns: 3,
+  conventionHarmMargin: 3,
 };
 
 /** The most tokens any knowledge budget allows, whatever is configured. */
@@ -122,6 +136,14 @@ export function knowledgeSettings(
       countOf(stored.kappaWindowDays) ??
       countOf(fromEnv(env.KNOWLEDGE_KAPPA_WINDOW_DAYS)) ??
       DEFAULT_KNOWLEDGE_SETTINGS.kappaWindowDays,
+    conventionMinRuns:
+      countOf(stored.conventionMinRuns) ??
+      countOf(fromEnv(env.KNOWLEDGE_CONVENTION_MIN_RUNS)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.conventionMinRuns,
+    conventionHarmMargin:
+      countOf(stored.conventionHarmMargin) ??
+      countOf(fromEnv(env.KNOWLEDGE_CONVENTION_HARM_MARGIN)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.conventionHarmMargin,
   };
 }
 

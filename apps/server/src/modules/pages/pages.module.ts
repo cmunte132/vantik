@@ -29,6 +29,7 @@ import RepoFileSourceService from './repo-file-source.service';
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
 import TriageJudges from './triage/triage-judges';
+import KnowledgeConventionsService from './upkeep/knowledge-conventions.service';
 import KnowledgeIssues from './upkeep/knowledge-issues';
 import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
 
@@ -63,6 +64,7 @@ import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
     KnowledgeReviewService,
     KnowledgeIssues,
     KnowledgeUpkeepService,
+    KnowledgeConventionsService,
     PagesScheduler,
     EntryModulesScheduler,
     PagesProcessor,
@@ -73,6 +75,8 @@ import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
     PageEntriesService,
     PageLinksService,
     KnowledgeService,
+    // A run's end reports its review findings here.
+    KnowledgeConventionsService,
   ],
 })
 export class PagesModule {}

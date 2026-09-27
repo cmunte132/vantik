@@ -24,6 +24,8 @@ import {
   RETRY_CITATIONS_BACKOFF_MS,
   RETRY_CITATIONS_JOB,
   retryCitationsJobOptions,
+  RUN_FINDINGS_JOB,
+  runFindingsJobOptions,
 } from './pages.interface';
 import {
   EntryModulesScheduler,
@@ -31,6 +33,7 @@ import {
   PagesScheduler,
 } from './pages.processor';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
+import KnowledgeConventionsService from './upkeep/knowledge-conventions.service';
 import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
 
 function buildQueue(existing: Array<{ name: string; key: string }> = []) {
@@ -99,6 +102,7 @@ describe('PagesProcessor', () => {
       {} as EntryCitationsService,
       {} as KnowledgeTriageService,
       { proposeUnused: async () => 0 } as unknown as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
     ).handleDecay();
 
     // Unscoped deliberately: the windows are a property of the deployment, not
@@ -157,6 +161,7 @@ describe('re-resolving entry modules', () => {
       {} as EntryCitationsService,
       {} as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
     );
 
     await processor.handleRecomputeModules({ data: { workspaceId: 'ws-1' } });
@@ -174,6 +179,7 @@ describe('retrying citations that could not be read', () => {
       { retryUnknown } as unknown as EntryCitationsService,
       {} as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
     );
 
     return { processor, retryUnknown };
@@ -217,6 +223,9 @@ describe('checking an entry again after a harmful signal', () => {
       { recheck } as unknown as EntryCitationsService,
       {} as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
+      {
+        weigh: async (): Promise<null> => null,
+      } as unknown as KnowledgeConventionsService,
     );
 
     await expect(
@@ -254,6 +263,7 @@ describe('triaging a new entry', () => {
       {} as EntryCitationsService,
       { triage } as unknown as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
     );
 
     await expect(
@@ -272,11 +282,67 @@ describe('triaging a new entry', () => {
         }),
       } as unknown as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
     );
 
     await expect(
       processor.handleTriageEntry({ data: { entryId: 'entry-1' } }),
     ).rejects.toThrow('typesense is down');
+  });
+});
+
+describe('conventions from review', () => {
+  it('[KG-6.3] weighs a convention’s outcomes before checking its citations, after a harmful signal', async () => {
+    const order: string[] = [];
+    const weigh = jest.fn(async () => {
+      order.push('weigh');
+      return 'ARCHIVED' as const;
+    });
+    const recheck = jest.fn(async () => {
+      order.push('recheck');
+      return { checked: 1 };
+    });
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      { recheck } as unknown as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
+      { weigh } as unknown as KnowledgeConventionsService,
+    );
+
+    await processor.handleRecheckEntry({ data: { entryId: 'entry-1' } });
+
+    expect(weigh).toHaveBeenCalledWith('entry-1');
+    expect(recheck).toHaveBeenCalledWith('entry-1');
+    expect(order).toEqual(['weigh', 'recheck']);
+  });
+
+  it('[KG-6.3] hands a finished run to be read for findings, once per run, tried again when it fails', async () => {
+    const runFinished = jest.fn(async () => ({
+      recorded: 2,
+      candidates: [] as string[],
+    }));
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      {} as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
+      { runFinished } as unknown as KnowledgeConventionsService,
+    );
+
+    await processor.handleRunFindings({ data: { runId: 'run-1' } });
+    expect(runFinished).toHaveBeenCalledWith('run-1');
+
+    runFinished.mockRejectedValueOnce(new Error('connection reset'));
+    await expect(
+      processor.handleRunFindings({ data: { runId: 'run-1' } }),
+    ).rejects.toThrow('connection reset');
+
+    expect(runFindingsJobOptions('run-1')).toMatchObject({
+      jobId: `${RUN_FINDINGS_JOB}:run-1`,
+      removeOnComplete: true,
+    });
+    expect(runFindingsJobOptions('run-1').attempts).toBeGreaterThan(1);
   });
 });
 
@@ -293,6 +359,7 @@ describe('a change that landed', () => {
       {} as EntryCitationsService,
       {} as KnowledgeTriageService,
       { codeLanded } as unknown as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
     );
     const data = {
       workspaceId: 'workspace-1',
@@ -329,6 +396,7 @@ describe('the decay pass', () => {
       {} as EntryCitationsService,
       {} as KnowledgeTriageService,
       { proposeUnused } as unknown as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
     ).handleDecay();
 
     expect(order).toEqual(['archive', 'ask']);

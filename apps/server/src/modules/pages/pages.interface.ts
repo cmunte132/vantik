@@ -153,7 +153,9 @@ export function retryCitationsJobOptions(entryId: string): JobOptions {
  * Checks an entry's citations again, because a run it was served to went
  * wrong somewhere it speaks about. A harmful signal is a reason to look, not
  * a verdict: the check decides whether the entry still holds, and nothing is
- * archived either way.
+ * archived for what it finds. The same job weighs the outcomes of a
+ * convention the gardener proposed, the one entry outcomes can take out of
+ * use: see `upkeep/knowledge-conventions.service.ts`.
  */
 export const RECHECK_ENTRY_JOB = 'recheckEntryCitations';
 
@@ -195,6 +197,28 @@ export interface CodeLandedJob {
 export function codeLandedJobOptions(job: CodeLandedJob): JobOptions {
   return {
     jobId: `${CODE_LANDED_JOB}:${job.workspaceId}:${job.externalRepoId}:${job.sha}`,
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
+
+/**
+ * Records the review findings of a finished run, and proposes a convention
+ * for any the reviewer has now given in enough runs: see
+ * `upkeep/knowledge-conventions.service.ts`.
+ */
+export const RUN_FINDINGS_JOB = 'recordRunFindings';
+
+/**
+ * One job per run, since a run ends once. Tried again when it fails: the
+ * findings are recorded once whatever the number of tries, and a proposal
+ * that could not be written is written by the next.
+ */
+export function runFindingsJobOptions(runId: string): JobOptions {
+  return {
+    jobId: `${RUN_FINDINGS_JOB}:${runId}`,
     attempts: 3,
     backoff: { type: 'exponential', delay: 60_000 },
     removeOnComplete: true,

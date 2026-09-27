@@ -18,6 +18,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { KnowledgeSignalsService } from 'modules/knowledge-signals/knowledge-signals.service';
 import { LoggerService } from 'modules/logger/logger.service';
+import KnowledgeConventionsService from 'modules/pages/upkeep/knowledge-conventions.service';
 
 import {
   AGENT_RUN_EVENT_CAP,
@@ -111,6 +112,7 @@ export class AgentRunsService {
   constructor(
     private prisma: PrismaService,
     private knowledgeSignals: KnowledgeSignalsService,
+    private conventions: KnowledgeConventionsService,
   ) {}
 
   // ------------------------------------------------------------------ reads
@@ -280,6 +282,10 @@ export class AgentRunsService {
         error: error instanceof Error ? error : undefined,
       });
     }
+
+    // What its reviewer found, which may be becoming a convention. Queued,
+    // since writing one reads the code it cites.
+    await this.conventions.findingsLater(runId);
   }
 
   /**

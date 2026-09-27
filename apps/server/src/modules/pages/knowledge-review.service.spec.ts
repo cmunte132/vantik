@@ -1952,7 +1952,7 @@ describe("the gardener's proposals", () => {
     );
   });
 
-  it('[KG-6.2] a person putting back an entry the gardener took out of use records the undo', async () => {
+  it('[KG-6.2] [KG-6.3] a person putting back an entry the gardener took out of use records the undo', async () => {
     const undone = (id: string, action: MaintenanceAction): Row => ({
       ...proposal(id),
       id: `done-${id}`,

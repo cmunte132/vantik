@@ -18,10 +18,12 @@ import {
   RECOMPUTE_MODULES_JOB,
   recomputeModulesJobOptions,
   RETRY_CITATIONS_JOB,
+  RUN_FINDINGS_JOB,
   STANDING_ENTRY_DECAY_DAYS,
   TRIAGE_ENTRY_JOB,
 } from './pages.interface';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
+import KnowledgeConventionsService from './upkeep/knowledge-conventions.service';
 import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
 
 /**
@@ -143,6 +145,7 @@ export class PagesProcessor {
     private entryCitations: EntryCitationsService,
     private triage: KnowledgeTriageService,
     private upkeep: KnowledgeUpkeepService,
+    private conventions: KnowledgeConventionsService,
   ) {}
 
   /**
@@ -195,16 +198,28 @@ export class PagesProcessor {
 
   /**
    * Checks an entry's citations again after a run it was served to went wrong
-   * in code it speaks about.
+   * in code it speaks about. A convention the gardener proposed has its
+   * outcomes weighed first, since outcomes are what take one out of use.
    */
   @Process(RECHECK_ENTRY_JOB)
   async handleRecheckEntry(job: { data: { entryId: string } }) {
+    await this.conventions.weigh(job.data.entryId);
+
     const { checked } = await this.entryCitations.recheck(job.data.entryId);
 
     this.logger.info({
       message: `Checked ${checked} citation(s) of entry ${job.data.entryId} after a harmful signal`,
       where: 'PagesProcessor.handleRecheckEntry',
     });
+  }
+
+  /**
+   * Records a finished run's review findings, and proposes a convention for
+   * any the reviewer has given in enough runs.
+   */
+  @Process(RUN_FINDINGS_JOB)
+  async handleRunFindings(job: { data: { runId: string } }) {
+    await this.conventions.runFinished(job.data.runId);
   }
 
   /**

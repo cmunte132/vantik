@@ -1977,6 +1977,46 @@ describe('secrets and outside input', () => {
     }
   });
 
+  it('[KG-6.3] never accepts a convention the gardener proposed from review: pinning it waits for a person', async () => {
+    const ranIn = (id: string): Citation => ({
+      kind: 'RUN',
+      path: null,
+      startLine: null,
+      endLine: null,
+      snippet: null,
+      targetId: id,
+      targetLabel: `run ${id}`,
+      checkResult: 'HOLDS',
+    });
+    // As the gardener writes it: its System bot, the runs and the code the
+    // findings pointed at, all holding.
+    const t = triage({
+      rows: [
+        fresh({
+          sourceUserId: 'system-1',
+          kind: 'CONVENTION',
+          content:
+            'Review found this in 3 separate agent runs on Server: use the logger, not console.log',
+          citations: [ranIn('run-a'), ranIn('run-b'), ranIn('run-c'), holds()],
+        }),
+      ],
+    });
+
+    const outcome = await t.service.triage('new', ON);
+
+    expect(outcome).toMatchObject({
+      decision: Decision.ESCALATE,
+      applied: false,
+    });
+    expect([...(outcome?.reasons ?? [])].sort()).toEqual(
+      [Reason.PIN_REQUEST, Reason.UNKNOWN_SOURCE].sort(),
+    );
+    expect(t.entries.get('new')?.status).toBe('PROPOSED');
+    expect(t.calls.filter((call) => call.system.includes('knowledge'))).toEqual(
+      [],
+    );
+  });
+
   it("[KG-4.1] still folds an agent's repeat into the entry it repeats", async () => {
     // Folding a repeat in puts no new claim in front of anyone, so an unknown
     // source does not stop it; outside input does (above).

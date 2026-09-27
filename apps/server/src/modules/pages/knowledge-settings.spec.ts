@@ -21,6 +21,8 @@ describe('the knowledge settings of a workspace', () => {
       kappaFloor: 0.6,
       kappaMinSamples: 20,
       kappaWindowDays: 30,
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
     });
     expect(DEFAULT_KNOWLEDGE_SETTINGS).toEqual(knowledgeSettings({}, {}));
   });
@@ -42,6 +44,8 @@ describe('the knowledge settings of a workspace', () => {
       kappaFloor: 0.6,
       kappaMinSamples: 20,
       kappaWindowDays: 30,
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
     });
     // The ends of a share are shares.
     expect(
@@ -80,6 +84,8 @@ describe('the knowledge settings of a workspace', () => {
       kappaFloor: 0.6,
       kappaMinSamples: 20,
       kappaWindowDays: 30,
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
     });
     // One setting stored leaves the others to the deployment.
     expect(knowledgeSettings({ knowledge: { contextTopK: 3 } }, env)).toEqual({
@@ -92,6 +98,8 @@ describe('the knowledge settings of a workspace', () => {
       kappaFloor: 0.6,
       kappaMinSamples: 20,
       kappaWindowDays: 30,
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
     });
     // Other preferences are not knowledge settings.
     expect(
@@ -142,6 +150,8 @@ describe('the knowledge settings of a workspace', () => {
       kappaFloor: 0.6,
       kappaMinSamples: 20,
       kappaWindowDays: 30,
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
     });
     expect(
       knowledgeSettings({ knowledge: { holdoutRate: 1.5 } }, {}).holdoutRate,
@@ -281,6 +291,41 @@ describe('the knowledge settings of a workspace', () => {
       kappaMinSamples: 20,
       kappaWindowDays: 30,
     });
+  });
+
+  it('[KG-6.3] proposes a convention after 3 runs, and switches one off 3 outcomes behind, unless told otherwise', () => {
+    expect(knowledgeSettings(null, {})).toMatchObject({
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
+    });
+
+    const env = {
+      KNOWLEDGE_CONVENTION_MIN_RUNS: '5',
+      KNOWLEDGE_CONVENTION_HARM_MARGIN: '4',
+    };
+
+    expect(knowledgeSettings(null, env)).toMatchObject({
+      conventionMinRuns: 5,
+      conventionHarmMargin: 4,
+    });
+    // The workspace's own over the deployment's.
+    expect(
+      knowledgeSettings(
+        { knowledge: { conventionMinRuns: 2, conventionHarmMargin: 6 } },
+        env,
+      ),
+    ).toMatchObject({ conventionMinRuns: 2, conventionHarmMargin: 6 });
+    // A count that cannot be read falls to the layer beneath: never none,
+    // which would propose every finding or switch off every convention.
+    expect(
+      knowledgeSettings(
+        { knowledge: { conventionMinRuns: 0, conventionHarmMargin: 2.5 } },
+        {
+          KNOWLEDGE_CONVENTION_MIN_RUNS: 'few',
+          KNOWLEDGE_CONVENTION_HARM_MARGIN: '-1',
+        },
+      ),
+    ).toMatchObject({ conventionMinRuns: 3, conventionHarmMargin: 3 });
   });
 
   it('[KG-3.2] caps the budget, so a budget cannot mean everything', () => {

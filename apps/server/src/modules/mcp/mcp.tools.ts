@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { VantikAgent } from '@vantikhq/agent-core';
+import { MAX_ENTRY_CITATIONS } from '@vantikhq/types';
 import { z } from 'zod';
 
 /**
@@ -41,6 +42,46 @@ const capabilityRef = z
   .describe(
     'Capability name or id. Call list_capabilities to see what exists.',
   );
+
+/** One citation for remember. The server checks it; this only shapes it. */
+const citationSchema = z.object({
+  path: z
+    .string()
+    .optional()
+    .describe('A file, relative to the repository root.'),
+  lines: z
+    .string()
+    .optional()
+    .describe('The lines the claim is about, as "40-52" or "40".'),
+  sha: z
+    .string()
+    .optional()
+    .describe(
+      'The commit you read the lines at. Omit to cite the default branch ' +
+        'as it is now.',
+    ),
+  repo: z
+    .string()
+    .optional()
+    .describe('owner/name, needed only when the workspace has several.'),
+  quote: z
+    .string()
+    .optional()
+    .describe(
+      'A few words from the cited lines, checked to be there so a wrong ' +
+        'line number is caught. Not stored.',
+    ),
+  issue: z
+    .string()
+    .optional()
+    .describe('An issue key such as ENG-42, or its id.'),
+  pullRequest: z
+    .string()
+    .optional()
+    .describe('The URL of a pull request linked to an issue.'),
+  comment: z.string().optional().describe('An issue comment id.'),
+  run: z.string().optional().describe('An agent run id.'),
+});
 
 /** Tool results travel as text; JSON keeps them parseable by the model. */
 function text(value: string) {
@@ -741,7 +782,8 @@ export function registerVantikTools(
         'knowledge another tool wrote is knowledge you get. Give it a scope ' +
         '(the repo path or area you are working in) even if you have no ' +
         'specific question, because at the start of a task you do not yet ' +
-        'know what you do not know.',
+        'know what you do not know. Each item says how far to trust it and ' +
+        'what it cites; check an ungrounded claim before relying on it.',
       inputSchema: {
         task: z
           .string()
@@ -772,7 +814,9 @@ export function registerVantikTools(
         'Ask the workspace what it knows about something — "how do we handle ' +
         'migrations", "why is redis only a cache here". Searches page bodies ' +
         'and the facts agents have asserted, newest and best-established ' +
-        'first, with who asserted each and whether a human confirmed it. Use ' +
+        'first, with who asserted each and how far to trust it: verified by ' +
+        'a person, grounded in cited code that still reads the same, or ' +
+        'ungrounded, with each citation and when it was last checked. Use ' +
         'this before investigating something from scratch; the answer may ' +
         'already be in the bank.',
       inputSchema: {
@@ -891,6 +935,12 @@ export function registerVantikTools(
         'in the bank, supersede that entry rather than leaving a second truth ' +
         'beside the first — two contradictory facts are worse than neither, ' +
         'because a reader cannot tell which one the workspace believes.\n\n' +
+        'Cite what the fact rests on. A claim about code cites the lines it ' +
+        'is about; a decision cites where it was decided (the issue, pull ' +
+        'request, comment or run). The server reads cited code itself and ' +
+        'refuses the write if a citation does not hold, telling you which ' +
+        'one and why, so fix it and call again. A cited fact whose code ' +
+        'still reads the same is served as grounded, above uncited ones.\n\n' +
         'The call searches before it writes. If near matches come back, ' +
         'nothing was written: read them, then either supersede one or say ' +
         'the fact is distinct.',
@@ -930,6 +980,15 @@ export function registerVantikTools(
           .describe(
             'Set only after reading the near matches and deciding this is a ' +
               'separate fact.',
+          ),
+        citations: z
+          .array(citationSchema)
+          .max(MAX_ENTRY_CITATIONS)
+          .optional()
+          .describe(
+            'What the fact rests on, one thing per citation: code as ' +
+              '{ path, lines, sha?, repo?, quote? }, or { issue }, ' +
+              '{ pullRequest }, { comment } or { run }.',
           ),
       },
     },

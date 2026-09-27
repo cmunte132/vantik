@@ -1,9 +1,13 @@
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
+import { IntegrationsModule } from 'modules/integrations/integrations.module';
+import { LocalRepoModule } from 'modules/local-repo/local-repo.module';
 import { UsersService } from 'modules/users/users.service';
 import { VectorModule } from 'modules/vector/vector.module';
 
+import CitationJudge from './citation-judge';
+import EntryCitationsService from './entry-citations.service';
 import KnowledgeIndexService from './knowledge-index.service';
 import { KnowledgeController } from './knowledge.controller';
 import KnowledgeService from './knowledge.service';
@@ -18,9 +22,16 @@ import {
   PagesScheduler,
 } from './pages.processor';
 import PagesService from './pages.service';
+import RepoFileSourceService from './repo-file-source.service';
 
 @Module({
-  imports: [VectorModule, BullModule.registerQueue({ name: PAGES_QUEUE })],
+  imports: [
+    VectorModule,
+    // For reading the code a citation names, from whichever source holds it.
+    IntegrationsModule,
+    LocalRepoModule,
+    BullModule.registerQueue({ name: PAGES_QUEUE }),
+  ],
   controllers: [PagesController, PageEntriesController, KnowledgeController],
   providers: [
     PagesService,
@@ -28,6 +39,9 @@ import PagesService from './pages.service';
     PageLinksService,
     KnowledgeService,
     KnowledgeIndexService,
+    RepoFileSourceService,
+    CitationJudge,
+    EntryCitationsService,
     PagesScheduler,
     EntryModulesScheduler,
     PagesProcessor,

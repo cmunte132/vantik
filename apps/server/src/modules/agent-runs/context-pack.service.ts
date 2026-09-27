@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { AgentRunConfig, AgentRunRepoConfig } from '@vantikhq/types';
+import type {
+  AgentRunConfig,
+  AgentRunRepoConfig,
+  KnowledgeProof,
+} from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import IssueContextService from 'modules/issues/issue-context.service';
@@ -71,8 +75,19 @@ export interface ContextPack {
    * not run anything" is the most common failure these systems have.
    */
   repo: AgentRunRepoConfig;
-  /** Set when a knowledge bank is wired up; empty until then. */
-  knowledge: Array<{ scope: string; body: string }>;
+  /**
+   * What the workspace knows that bears on the work, each item with its proof
+   * so the agent can weigh a person's confirmation above a claim nothing
+   * backs. Set when a knowledge bank is wired up; empty until then.
+   */
+  knowledge: RunKnowledgeItem[];
+}
+
+/** One item of knowledge in a run's pack: the claim, and what it rests on. */
+export interface RunKnowledgeItem extends KnowledgeProof {
+  /** Null for page-level knowledge. */
+  scope: string | null;
+  body: string;
 }
 
 @Injectable()

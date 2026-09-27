@@ -144,8 +144,12 @@ function sortKey(key: string, query: string): (doc: Doc) => number {
   return (doc) => Number(doc[field] ?? 0);
 }
 
-/** A stand-in for the pages collection, holding what was upserted. */
-function fakeIndex() {
+/**
+ * A stand-in for the pages collection, holding what was upserted. `entries`
+ * is what postgres holds for an entry beyond its id: its status,
+ * verification and citations, which the proof is read from.
+ */
+function fakeIndex(entries: Record<string, Doc> = {}) {
   const docs = new Map<string, Doc>();
   const searches: Array<Record<string, unknown>> = [];
 
@@ -224,7 +228,10 @@ function fakeIndex() {
     where.id.in.map((id) => ({ id }));
   const prisma = {
     page: { findMany: alive },
-    pageEntry: { findMany: alive },
+    pageEntry: {
+      findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in.map((id) => ({ id, ...entries[id] })),
+    },
   } as unknown as PrismaService;
 
   return { service: new VectorService(prisma, typesense), docs, searches };
@@ -476,5 +483,172 @@ describe('retrieval seeded from the product graph', () => {
     });
 
     expect(searches[0].sort_by).not.toContain('moduleIds');
+  });
+});
+
+describe('ranking by trust', () => {
+  /**
+   * Three entries that match a query equally, on pages of their own so the
+   * per-page cap keeps all three: one a person verified, one grounded, one
+   * with nothing checked behind it.
+   */
+  async function equals(service: VectorService, extra: Partial<Doc> = {}) {
+    const entry = (
+      id: string,
+      verifiedAt: Date | null,
+      checks: Array<string | null>,
+    ) =>
+      service.indexEntry({
+        id,
+        content: 'Deploys drain the worker pool first.',
+        scope: null,
+        status: PageEntryStatusEnum.STANDING,
+        sourceUserId: 'agent-1',
+        verifiedAt,
+        retrievalCount: 0,
+        updatedAt: new Date('2026-09-01'),
+        pageId: `page-${id}`,
+        moduleIds: [],
+        kind: PageEntryKindEnum.FACT,
+        citations: checks.map((checkResult) => ({ checkResult })),
+        page: { title: 'Deploys', workspaceId: WORKSPACE },
+        ...extra,
+      });
+
+    // Indexed worst first, so an order that merely kept insertion would fail.
+    await entry('ungrounded', null, ['CHANGED']);
+    await entry('grounded', null, ['HOLDS', 'MOVED']);
+    await entry('verified', new Date(), []);
+  }
+
+  it("[KG-2.7] indexes each entry's trust as a facet, and none for a page body", async () => {
+    const { service, docs } = fakeIndex();
+    await seed(service);
+    await equals(service);
+
+    expect(pageSchema.fields.find((f) => f.name === 'trust')).toMatchObject({
+      type: 'string',
+      facet: true,
+    });
+    expect(docs.get('entry:verified')).toMatchObject({
+      trust: 'HUMAN_VERIFIED',
+    });
+    expect(docs.get('entry:grounded')).toMatchObject({ trust: 'GROUNDED' });
+    expect(docs.get('entry:ungrounded')).toMatchObject({
+      trust: 'UNGROUNDED',
+    });
+    expect(docs.get('page:body')).toMatchObject({ trust: '' });
+  });
+
+  it('[KG-2.7] ranks human-verified above grounded above ungrounded for otherwise equal matches', async () => {
+    const { service } = fakeIndex();
+    await equals(service);
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'worker pool');
+
+    expect(ids(hits)).toEqual(['verified', 'grounded', 'ungrounded']);
+  });
+
+  it('[KG-2.7] keeps that order inside a scope and inside a module boost', async () => {
+    const scoped = fakeIndex();
+    await equals(scoped.service, { scope: 'apps/server' });
+    const { hits: inScope } = await scoped.service.searchKnowledge(
+      WORKSPACE,
+      'worker pool',
+      { scope: 'apps/server' },
+    );
+    expect(ids(inScope)).toEqual(['verified', 'grounded', 'ungrounded']);
+
+    const boosted = fakeIndex();
+    await equals(boosted.service, { moduleIds: [SERVER] });
+    const { hits: inModule } = await boosted.service.searchKnowledge(
+      WORKSPACE,
+      '*',
+      { boost: { modules: [SERVER], neighbours: [] } },
+    );
+    expect(ids(inModule)).toEqual(['verified', 'grounded', 'ungrounded']);
+  });
+
+  it('[KG-2.7] never lets trust outrank what was asked for: a boosted module beats a grounded fact elsewhere', async () => {
+    const { service } = fakeIndex();
+    await equals(service);
+    await service.indexEntry({
+      id: 'seeded',
+      content: 'Deploys drain the worker pool first.',
+      scope: null,
+      status: PageEntryStatusEnum.STANDING,
+      sourceUserId: 'agent-1',
+      verifiedAt: null,
+      retrievalCount: 0,
+      updatedAt: new Date('2026-09-01'),
+      pageId: 'page-seeded',
+      moduleIds: [SERVER],
+      kind: PageEntryKindEnum.FACT,
+      page: { title: 'Deploys', workspaceId: WORKSPACE },
+    });
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, '*', {
+      boost: { modules: [SERVER], neighbours: [] },
+    });
+
+    expect(ids(hits)[0]).toBe('seeded');
+  });
+});
+
+describe('served proof', () => {
+  it('[KG-2.8] serves every hit with its trust, citations and last check, read from postgres', async () => {
+    const checkedAt = new Date('2026-09-20T10:00:00Z');
+    const { service } = fakeIndex({
+      server: {
+        status: PageEntryStatusEnum.STANDING,
+        verifiedAt: null,
+        citations: [
+          {
+            kind: 'CODE',
+            path: 'apps/server/src/redis.ts',
+            commitSha: 'abcdef1',
+            startLine: 10,
+            endLine: 12,
+            targetLabel: null,
+            checkedAt,
+            checkedSha: 'fedcba9',
+            checkResult: 'HOLDS',
+            judgment: null,
+            judgeModel: null,
+            moduleRepo: { fullName: 'acme/api' },
+          },
+        ],
+      },
+    });
+    await seed(service);
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'redis');
+    const byId = new Map(hits.map((hit) => [ids([hit])[0], hit]));
+
+    expect(byId.get('server')).toMatchObject({
+      trust: 'GROUNDED',
+      citations: [
+        {
+          kind: 'CODE',
+          repo: 'acme/api',
+          path: 'apps/server/src/redis.ts',
+          lines: '10-12',
+          result: 'HOLDS',
+          checkedSha: 'fedcba9',
+        },
+      ],
+      lastCheckedAt: checkedAt.toISOString(),
+      lastCheckedSha: 'fedcba9',
+    });
+    // Nothing checked behind it, whatever the index last recorded.
+    expect(byId.get('webapp')).toMatchObject({
+      trust: 'UNGROUNDED',
+      citations: [],
+      lastCheckedAt: null,
+    });
+    expect(byId.get('page:body')).toMatchObject({
+      trust: null,
+      citations: [],
+    });
   });
 });

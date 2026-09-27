@@ -14,6 +14,7 @@ import { issueSync } from './issue-sync';
 import { linkIssueSync } from './link-issue-sync';
 import { prSync } from './pr-sync';
 import { codeChangeOf } from './pull-request';
+import { githubHead, readGithubFile } from './repo-files';
 import { spec } from './spec';
 
 export { githubSpec as pluginSpec } from './plugin-spec';
@@ -64,6 +65,27 @@ export default async function run(
       );
 
       return await codeChangeOf(eventPayload.eventBody, botToken);
+    }
+
+    // Knowledge citations are checked against the code. The bot token reads a
+    // private repository of the installation, as it does for pull requests.
+    case IntegrationPayloadEventType.READ_REPO_FILE: {
+      const { botToken } = await getToken(
+        ctx,
+        eventPayload.integrationAccountId,
+      );
+      const { fullName, path, ref } = eventPayload.data ?? {};
+
+      return await readGithubFile(fullName, path, ref, botToken);
+    }
+
+    case IntegrationPayloadEventType.RESOLVE_REPO_HEAD: {
+      const { botToken } = await getToken(
+        ctx,
+        eventPayload.integrationAccountId,
+      );
+
+      return await githubHead(eventPayload.data?.fullName, botToken);
     }
 
     case IntegrationPayloadEventType.IS_SUPPORTED_EVENT:

@@ -154,7 +154,7 @@ approximate.
 | LLM | `modules/ai-requests/llm-provider.ts` | Roles `fast` and `smart`. Any OpenAI-compatible endpoint. Optional. |
 | Issue origin | `Issue.sourceMetadata` | Set when an issue arrives through an integration (KG-4.8). |
 | Webapp | `apps/webapp/src/modules/pages/*` (tree, `memory-rail.tsx`, `entry-row.tsx`, `review-queue.tsx`, `knowledge-gaps.tsx`), `modules/product-axis/*`, `modules/search/search-dialog.tsx`, `services/pages/index.ts` | The product-axis screens show no knowledge today. |
-| Agent guide | `apps/docs/skills/working-vantik-knowledge/{SKILL.md,AGENTS.md}` | Served by `modules/agent-skill`. Keep it in step with every behaviour change. |
+| Agent guide | `skills/working-vantik-knowledge/SKILL.md` and `skills/always-in-context/working-vantik-knowledge.md` (moved from `apps/docs/skills/` on `main`) | Served by `modules/agent-skill`. Keep it in step with every behaviour change. |
 
 ---
 

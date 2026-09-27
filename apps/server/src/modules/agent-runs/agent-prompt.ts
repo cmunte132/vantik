@@ -1,5 +1,7 @@
 import type { ContextPack } from './context-pack.service';
 
+import { describeProof } from 'modules/pages/knowledge-proof';
+
 /**
  * What the agent is actually told.
  *
@@ -110,7 +112,15 @@ export function buildAgentPrompt(pack: ContextPack): string {
       '',
       '## What this workspace already knows',
       '',
-      ...pack.knowledge.map((entry) => `- (${entry.scope}) ${entry.body}`),
+      'Each item says how far it can be trusted: verified by a person, ' +
+        'grounded in code that still reads the same, or ungrounded. Check ' +
+        'an ungrounded claim before relying on it.',
+      '',
+      ...pack.knowledge.map(
+        (item) =>
+          `- ${item.scope ? `(${item.scope}) ` : ''}${item.body}\n` +
+          `  _${describeProof(item)}_`,
+      ),
     );
   }
 

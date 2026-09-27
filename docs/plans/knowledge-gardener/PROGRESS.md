@@ -5,10 +5,16 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 1 done (implementation merged in PR #43; review fixes on
-  the branch). Next: phase 2.
-- Last verify: `KNOWLEDGE-GARDENER VERIFY: PASS phases 0-1 spec-hash 069a84bf6612`
-  (14/14; server 1316, agent-core 57, webapp 616 tests; typecheck ok)
+- Current phase: 2, implemented and under review. Phase 1's review fixes and
+  phase 2 ride PR #44; phase 3 joins it next.
+- Pull requests: the maintainer asked for the remaining phases in two or three
+  pull requests rather than one each. PR #44 carries phase 1's review fixes,
+  phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
+  and 7.
+- Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phases 0-2 spec-hash 069a84bf6612`
+  (21/23; server 1398, agent-core 62, cli 8, webapp 616 tests; typecheck ok).
+  KG-2.1 fails on a checklist path that no longer exists (see Needs a
+  decision); KG-2.R waits on the review.
 
 ## Decisions
 
@@ -166,6 +172,101 @@ next session starts by reading it.
   normalised a few pre-existing lines in them (`page-links.service.ts`,
   `agent.spec.ts`).
 
+### Phase 2
+
+- **Model (KG-2.1).** `PageEntryCitation` follows the plan's shape, plus
+  `targetLabel` (an issue key or pull request URL, so served proof reads
+  without a second lookup) and, for CHANGED checks only, `judgment`,
+  `judgeModel`, `judgeLines` and `judgeReason`. Hand-written migration
+  `20260927010000_knowledge_citations`: a new table and three enums, no
+  existing row touched.
+- **Input.** `citations` (at most 10) on the create route, `remember`,
+  agent-core's `remember` and the CLI. One citation names exactly one of
+  `path` + `lines` (with optional `sha` and `repo`), `issue`, `pullRequest`,
+  `comment` or `run`; naming none or two refuses it.
+  - `sha` is optional and defaults to the head of the default branch, so a
+    writer that knows no commit can still cite.
+  - `quote` is optional: when given it must appear in the cited lines, or the
+    write is refused. It is compared and never stored. The stored snippet is
+    always what the server read.
+  - `repo` picks among the workspace's module repositories when the path
+    alone is ambiguous; otherwise the repository is the one whose modules
+    the path belongs to, or the only one.
+  - Citations are accepted on create only. Changing what an entry rests on is
+    a new claim, which goes through a superseding entry and review.
+  - The CLI takes `--cite path:lines[@sha]`, `issue:ENG-42`, `pr:<url or id>`,
+    `comment:<uuid>`, `run:<uuid>`, or a JSON object, repeatable.
+- **Checking at write (KG-2.2).** Every citation is checked before anything
+  is stored. One that fails answers `422 { status: 'citation-failed',
+  citation: <1-based position>, message }` and nothing is written.
+  agent-core relays that as a `citation-failed` result, the CLI prints it,
+  and `remember` returns it to the agent. A commit the repository does not
+  have counts as missing, so the write is refused rather than stored as
+  unknown.
+- **Unreachable sources (KG-2.3).** A repository that does not answer gives
+  UNKNOWN, and the write goes ahead: the server failing to read the code is
+  not evidence against the claim. A `retryUnknownCitations` job on the
+  `pages` queue retries the entry: one job per entry (fixed job id), six
+  attempts with exponential backoff from five minutes, about five hours in
+  all. A citation never read stays UNKNOWN, which never counts against the
+  entry. A later re-check that cannot reach the source keeps the last result
+  instead of replacing it with UNKNOWN.
+- **Sources.** `RepoFileSourceService` chooses by the integration behind
+  `ModuleRepo.integrationAccountId`, checked against the workspace:
+  - GitHub: the contents API with the installation token
+    (`READ_REPO_FILE` and `RESOLVE_REPO_HEAD` integration events). Files over
+    1 MB are unknown, not missing.
+  - Local-repo: `git show <sha>:<path>` and `git rev-parse` in the configured
+    checkout, with the path normalised and refused if it leaves the
+    repository, and only hexadecimal commit ids passed to git.
+  - An integration that throws or answers something malformed gives
+    UNKNOWN, never MISSING.
+- **Relocation (KG-2.4)** compares whitespace-normalised text, with a sha256
+  of the snippet stored beside it. The snippet at its lines is HOLDS; found
+  elsewhere is MOVED, taking the occurrence nearest the old lines and storing
+  the new range; not found is CHANGED; the file gone is MISSING. No model is
+  involved.
+- **Re-checks** (`EntryCitationsService.recheck`) compare against the head of
+  the default branch and update the index when a result changes. Phase 3's
+  harmful-outcome signal and phase 6's merged pull requests call it; phase 2
+  only retries UNKNOWN.
+- **Judge (KG-2.5).** Only CHANGED goes to a model, with the claim, the old
+  snippet and 20 lines either side of the old location. It answers holds,
+  contradicted or unclear, with the lines it relied on and a reason. The role
+  is `smart` unless the writer's model (from the `AgentRun` its session
+  belongs to) is the `smart` model, in which case `fast`. The model used is
+  stored. With no model configured, or an answer that does not parse, the
+  judgment is UNCLEAR. The prompt is inline in `citation-judge.ts`.
+- **Non-code citations (KG-2.6)** are found through Prisma in the writer's
+  workspace: an issue by key or id, a pull request by id or URL through the
+  issue's links, a comment and a run by id. Deleted and foreign targets fail
+  the citation.
+- **Trust (KG-2.7)** is derived, never stored: `verifiedAt` set →
+  HUMAN_VERIFIED; STANDING with at least one citation and every one HOLDS or
+  MOVED → GROUNDED; everything else UNGROUNDED. That includes a CHANGED
+  citation the judge thinks still holds: that is an opinion, not a check.
+  Page bodies carry no tier.
+- **Ranking.** `trust` is a new Typesense facet in `requiredPageFields`, so
+  an existing collection is rebuilt from Postgres on boot. The `_eval` tiers
+  are verified, then grounded, then the rest, inside the scope and module
+  tiers from phase 1 (multiplied, since `_eval` scores the best matching
+  tier). Without a scope the default sort is text match, then trust, then
+  retrieval count.
+- **Served proof (KG-2.8).** `knowledge-proof.ts` is the one serializer:
+  trust, each citation with its last result, time and commit (the judgment
+  only for CHANGED), and the latest check of all. Search hits, recall, the
+  entry list, `load_context`, MCP and agent-core use it. Proof comes from
+  Postgres after the search, not from the index, so it is never staler than
+  the last check. The run context pack's knowledge items are typed with the
+  proof and rendered with one line of prose each (`describeProof`); the pack
+  is still empty until phase 3 (KG-3.2) fills it. The context pack's token
+  budget counts the proof.
+- **Skill moved on `main`.** The guides moved from `apps/docs/skills/` to
+  `skills/` (e7b9c44). The citation guidance is in
+  `skills/working-vantik-knowledge/SKILL.md` and the always-in-context form.
+  PLAN.md's orientation row now points there. KG-2.1's file check still names
+  the old path; see Needs a decision.
+
 ## Phase reviews
 
 ### Phase 0, round 1 (fresh reviewer subagent)
@@ -317,7 +418,19 @@ Anything that blocks the plan: a criterion that is wrong or cannot be met, or
 an environment problem such as Prisma being unable to download its engines.
 Give the evidence, and stop until the maintainer answers.
 
-(Nothing blocking.)
+- **KG-2.1's file check names a path `main` removed.** The check is
+  `{ "type": "file", "path": "apps/docs/skills/working-vantik-knowledge/SKILL.md", "pattern": "[Cc]itation" }`.
+  `main`'s e7b9c44 ("Move the agent guides to skills/, so `npx skills add
+  cmunte132/vantik` works") moved the guides to
+  `skills/working-vantik-knowledge/SKILL.md`, and the server now serves them
+  from there. That file carries the citation guidance and matches the
+  pattern. Recreating the old path would pass the check without meaning
+  anything, and this session may not edit `checklist.json`.
+  **Proposed fix (maintainer):** change that path in `checklist.json` to
+  `skills/working-vantik-knowledge/SKILL.md`, and put the new spec hash that
+  `verify.mjs` prints into GOAL.md. Nothing else in phase 2 depends on it.
+  KG-7's `apps/docs/docs/fundamentals/knowledge.mdx` check is unaffected:
+  that file is created in phase 7 and the path is still valid.
 
 ## Observed, outside the current phase
 
@@ -365,3 +478,9 @@ Give the evidence, and stop until the maintainer answers.
   findings; all six non-blocking findings fixed and sent back to the reviewer.
 - 2026-09-27: Review round 2: no unresolved findings; the clock-skew note
   fixed with a grace on the recompute delay. Phase 1 done.
+- 2026-09-27: Phase 1's review fixes opened as PR #44. Phase 2 implemented
+  (KG-2.1 to KG-2.8) with tagged tests. The maintainer asked for the rest in
+  two or three pull requests: phases 1 (fixes) to 3 in #44, 4 and 5 next,
+  6 and 7 last. Verify through phase 2: 21/23, all suites and typecheck
+  green. KG-2.1's file check names a path `main` moved; under Needs a
+  decision.

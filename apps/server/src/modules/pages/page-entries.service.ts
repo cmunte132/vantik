@@ -22,7 +22,11 @@ import { modulesForScope } from 'modules/modules/module-routing';
 import { VectorService } from 'modules/vector/vector.service';
 import type { KnowledgeSearchHit } from 'modules/vector/vector.interface';
 
+import EntryCitationsService, {
+  type CitationDraft,
+} from './entry-citations.service';
 import KnowledgeIndexService from './knowledge-index.service';
+import { entryProof, PROOF_CITATION_SELECT } from './knowledge-proof';
 import {
   ALLOWED_STATUS_TRANSITIONS,
   PROPOSED_ENTRY_BUDGET,
@@ -39,11 +43,14 @@ export default class PageEntriesService {
    * The indexer and the vector service are optional for the same reason the
    * indexer is on PagesService: the index is a cache. A write that finds
    * Typesense down still gets the exact-duplicate check, which is postgres.
+   * The citation checker is not a cache, so a write that names citations is
+   * refused rather than stored unchecked when it is absent.
    */
   constructor(
     private prisma: PrismaService,
     private indexer?: KnowledgeIndexService,
     private vectorService?: VectorService,
+    private citations?: EntryCitationsService,
   ) {}
 
   // ----------------------------------------------------------------- reading
@@ -59,7 +66,7 @@ export default class PageEntriesService {
       limit?: number;
     } = {},
   ): Promise<PageEntry[]> {
-    return this.prisma.pageEntry.findMany({
+    const entries = await this.prisma.pageEntry.findMany({
       where: {
         deleted: null,
         page: { workspaceId, deleted: null },
@@ -71,7 +78,15 @@ export default class PageEntriesService {
       },
       orderBy: { createdAt: 'desc' },
       ...(filters.limit ? { take: filters.limit } : {}),
-    }) as unknown as Promise<PageEntry[]>;
+      include: { citations: { select: PROOF_CITATION_SELECT } },
+    });
+
+    // Every entry read goes out with its proof, the same as a search hit, so
+    // an agent reading a page is told what each claim rests on.
+    return entries.map((entry) => ({
+      ...entry,
+      ...entryProof(entry),
+    })) as unknown as PageEntry[];
   }
 
   // ----------------------------------------------------------------- writing
@@ -148,6 +163,14 @@ export default class PageEntriesService {
     // cannot be undone.
     const moduleIds = await this.modulesFor(page.workspaceId, entryData.scope);
 
+    // Last of the gates, because it is the only one that reads from outside
+    // the database: every citation is checked, and one that does not hold
+    // refuses the write before anything is stored.
+    const citations = await this.checkCitations(
+      page.workspaceId,
+      entryData.citations,
+    );
+
     const retiresNow =
       Boolean(entryData.supersedesId) &&
       status === PageEntryStatusEnum.STANDING;
@@ -180,6 +203,7 @@ export default class PageEntriesService {
           sourceTokenId: writer.tokenId,
           supersedesId: entryData.supersedesId ?? null,
           pageId,
+          ...(citations.length && { citations: { create: citations } }),
         },
       }),
       // The replaced row keeps its content — the audit trail is the point — but
@@ -207,7 +231,26 @@ export default class PageEntriesService {
     // way to tell which is current.
     await this.indexer?.entriesChanged(retired);
 
+    // Citations the repository did not answer for are read again later; until
+    // then the entry is written, and simply not grounded.
+    await this.citations?.retryLater(entry.id, citations);
+
     return entry as unknown as PageEntry;
+  }
+
+  private async checkCitations(
+    workspaceId: string,
+    inputs: CreatePageEntryDto['citations'],
+  ): Promise<CitationDraft[]> {
+    if (!inputs?.length) {
+      return [];
+    }
+
+    if (!this.citations) {
+      throw new Error('Citations cannot be checked: no checker is configured');
+    }
+
+    return this.citations.checkForWrite(workspaceId, inputs);
   }
 
   async updateEntry(
@@ -771,6 +814,7 @@ export default class PageEntriesService {
         sourceUserId: true,
         verifiedAt: true,
         retrievalCount: true,
+        citations: { select: PROOF_CITATION_SELECT },
       },
     });
 
@@ -789,6 +833,7 @@ export default class PageEntriesService {
         sourceUserId: entry.sourceUserId,
         verified: entry.verifiedAt !== null,
         retrievalCount: entry.retrievalCount,
+        ...entryProof(entry),
       }));
 
     if (options.nearMatches && this.vectorService) {

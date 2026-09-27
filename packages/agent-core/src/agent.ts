@@ -14,9 +14,12 @@ import {
   KnowledgeEntry,
   KnowledgeGap,
   EntryKind,
+  KnowledgeCitation,
   KnowledgeHit,
   KnowledgePage,
   KnowledgePageRef,
+  KnowledgeProof,
+  KnowledgeTrust,
   LinkPageInput,
   LoadContextInput,
   PageLink,
@@ -1188,11 +1191,18 @@ export class VantikAgent {
           ...(input.session ? { sourceSession: input.session } : {}),
           ...(input.supersedes ? { supersedesId: input.supersedes } : {}),
           ...(input.distinct ? { distinct: true } : {}),
+          ...(input.citations?.length ? { citations: input.citations } : {}),
         },
       });
 
       return { status: 'written', entry: toEntry(entry) };
     } catch (error) {
+      const failed = citationFailed(error);
+
+      if (failed) {
+        return { status: 'citation-failed', ...failed };
+      }
+
       const near = needsDecision(error);
 
       if (!near) {
@@ -1658,6 +1668,10 @@ interface RawEntry {
   supersedesId: string | null;
   pageId: string;
   createdAt: string;
+  trust?: KnowledgeTrust | null;
+  citations?: KnowledgeCitation[];
+  lastCheckedAt?: string | null;
+  lastCheckedSha?: string | null;
 }
 
 interface RawKnowledgeHit {
@@ -1671,6 +1685,25 @@ interface RawKnowledgeHit {
   verified: boolean;
   retrievalCount: number;
   relevanceScore?: number;
+  trust?: KnowledgeTrust | null;
+  citations?: KnowledgeCitation[];
+  lastCheckedAt?: string | null;
+  lastCheckedSha?: string | null;
+}
+
+/** The proof the server served with an entry or hit, passed on unchanged. */
+function toProof(raw: {
+  trust?: KnowledgeTrust | null;
+  citations?: KnowledgeCitation[];
+  lastCheckedAt?: string | null;
+  lastCheckedSha?: string | null;
+}): KnowledgeProof {
+  return {
+    trust: raw.trust ?? null,
+    citations: raw.citations ?? [],
+    lastCheckedAt: raw.lastCheckedAt ?? null,
+    lastCheckedSha: raw.lastCheckedSha ?? null,
+  };
 }
 
 interface RawKnowledgeResult {
@@ -1699,7 +1732,37 @@ function toEntry(entry: RawEntry): KnowledgeEntry {
     supersedesId: entry.supersedesId ?? null,
     pageId: entry.pageId,
     createdAt: entry.createdAt,
+    ...toProof(entry),
   };
+}
+
+/**
+ * The server's refusal of a citation that does not hold, or null for any other
+ * failure. Like a near match, it is an answer for the caller to act on — fix
+ * the citation and write again — rather than an error.
+ */
+function citationFailed(
+  error: unknown,
+): { citation: number; message: string } | null {
+  if (!(error instanceof VantikApiError) || error.status !== 422) {
+    return null;
+  }
+
+  try {
+    const body = JSON.parse(error.body) as {
+      status?: string;
+      citation?: number;
+      message?: string;
+    };
+
+    return body.status === 'citation-failed' &&
+      typeof body.citation === 'number' &&
+      typeof body.message === 'string'
+      ? { citation: body.citation, message: body.message }
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1737,5 +1800,6 @@ function toHit(hit: RawKnowledgeHit): KnowledgeHit {
     verified: Boolean(hit.verified),
     retrievalCount: hit.retrievalCount ?? 0,
     ...(hit.relevanceScore === undefined ? {} : { score: hit.relevanceScore }),
+    ...toProof(hit),
   };
 }

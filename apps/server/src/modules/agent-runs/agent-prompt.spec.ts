@@ -1,5 +1,11 @@
 import type { ContextPack } from './context-pack.service';
 
+import {
+  KnowledgeTrustEnum,
+  PageEntryCitationCheckEnum,
+  PageEntryCitationKindEnum,
+} from '@vantikhq/types';
+
 import { buildAgentPrompt } from './agent-prompt';
 
 function packWith(overrides: Partial<ContextPack> = {}): ContextPack {
@@ -143,5 +149,52 @@ describe('the prompt an agent is given', () => {
 
     expect(prompt).toContain('Do not commit');
     expect(prompt).toContain('open a pull request');
+  });
+
+  it('[KG-2.8] gives every item of knowledge its trust tier, citations and last check', () => {
+    const prompt = buildAgentPrompt(
+      packWith({
+        knowledge: [
+          {
+            scope: 'apps/server',
+            body: 'Redis holds only cache here.',
+            trust: KnowledgeTrustEnum.GROUNDED,
+            citations: [
+              {
+                kind: PageEntryCitationKindEnum.CODE,
+                repo: 'acme/api',
+                path: 'src/cache.ts',
+                lines: '12-30',
+                commitSha: 'abcdef1',
+                result: PageEntryCitationCheckEnum.MOVED,
+                checkedAt: '2026-09-20T10:00:00.000Z',
+                checkedSha: '9f8e7d6c5b4a3210',
+              },
+            ],
+            lastCheckedAt: '2026-09-20T10:00:00.000Z',
+            lastCheckedSha: '9f8e7d6c5b4a3210',
+          },
+          {
+            scope: null,
+            body: 'Deploys drain the worker pool first.',
+            trust: KnowledgeTrustEnum.UNGROUNDED,
+            citations: [],
+            lastCheckedAt: null,
+            lastCheckedSha: null,
+          },
+        ],
+      }),
+    );
+
+    expect(prompt).toContain('## What this workspace already knows');
+    expect(prompt).toContain(
+      '- (apps/server) Redis holds only cache here.\n  _grounded · cites ' +
+        'acme/api:src/cache.ts:12-30 (moved) · checked 2026-09-20 at ' +
+        '9f8e7d6c5b4a_',
+    );
+    expect(prompt).toContain(
+      '- Deploys drain the worker pool first.\n  _ungrounded · cites nothing_',
+    );
+    expect(prompt).toContain('Check an ungrounded claim before relying on it');
   });
 });

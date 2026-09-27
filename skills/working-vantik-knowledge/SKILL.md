@@ -2,8 +2,9 @@
 name: working-vantik-knowledge
 description: >-
   How to use the Vantik knowledge bank as an agent over MCP: load context
-  before starting work, remember one fact at a time, supersede rather than
-  contradict, and consolidate instead of piling up. Use before starting work
+  before starting work, remember one fact at a time with citations for what
+  it rests on, supersede rather than contradict, and consolidate instead of
+  piling up. Use before starting work
   on any unfamiliar area, and whenever recalling or recording what a workspace
   knows.
 ---
@@ -102,6 +103,52 @@ forever. If it is true of `apps/server` and not of the webapp, say so:
 remember(page: "Architecture", content: "…", scope: "apps/server")
 ```
 
+## Cite what a fact rests on
+
+**A claim about code cites the code. A decision cites where it was decided.**
+A citation is how a reader — and the server — can check the claim against the
+evidence instead of against your word.
+
+```
+remember(
+  page: "Architecture",
+  content: "Redis holds only cache here; anything that must survive a restart goes in postgres.",
+  kind: "DECISION",
+  scope: "apps/server",
+  citations: [
+    { path: "apps/server/src/cache/cache.module.ts",
+      lines: "12-30", sha: "<the commit you read>" },
+    { issue: "ENG-42" }
+  ]
+)
+```
+
+- **Code:** `path` relative to the repository root, `lines` as `"40-52"` or
+  `"40"`, and `sha` for the commit you read them at (omit it to cite the
+  default branch as it is now). Add `repo: "owner/name"` when the workspace has
+  more than one repository, and `quote` with a few words from the lines to
+  catch a wrong line number.
+- **Where something was decided:** `{ issue: "ENG-42" }`, `{ pullRequest:
+  "<url>" }`, `{ comment: "<id>" }` or `{ run: "<id>" }`. One thing per
+  citation.
+
+The server reads every cited file itself before it writes anything. **A
+citation that does not hold refuses the write** — the file is not at that
+commit, the lines run past its end, the quote is not in them — and the answer
+names the citation and the reason. Fix that citation and call again; do not
+drop it to get the write through. If the repository cannot be reached just
+then, the entry is written and its citation is checked later.
+
+Cited facts are served with their proof: a **trust** tier and the result and
+age of each citation's last check. Weigh them when you read:
+
+- `HUMAN_VERIFIED` — a person confirmed it.
+- `GROUNDED` — accepted, and every cited line still reads the same (in place,
+  or moved elsewhere in the file). Ranks above uncited knowledge.
+- `UNGROUNDED` — nothing checked backs it, or the code it cited has changed or
+  gone. Check it against the code before you rely on it; if it is wrong,
+  supersede it with a cited correction.
+
 ## Prefer appending to an existing page
 
 Check `list_pages` before you write anything down, and `read_page` the page you
@@ -176,6 +223,8 @@ you call the API.
   unless you supersede one or say the fact is `distinct`.
 - **`CURATED` is the default.** `OPEN` pages exist for scratch work where volume
   genuinely does not matter.
+- **Citations are checked on write.** Up to ten per entry. One that does not
+  hold refuses the write with its number and the reason.
 
 ## Improving the bank
 

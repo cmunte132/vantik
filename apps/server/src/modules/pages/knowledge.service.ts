@@ -347,9 +347,11 @@ export default class KnowledgeService {
 
 function estimateTokens(hit: KnowledgeSearchHit): number {
   // Provenance travels with the item, so it costs budget too — an agent
-  // weighing a claim needs to see that a human confirmed it, and pretending
-  // that metadata is free is how a budget silently overruns.
-  const text = `${hit.title}\n${hit.content}\n${hit.scope ?? ''}`;
+  // weighing a claim needs to see that a human confirmed it, and what it
+  // cites, and pretending that metadata is free is how a budget silently
+  // overruns.
+  const cited = hit.citations?.length ? JSON.stringify(hit.citations) : '';
+  const text = `${hit.title}\n${hit.content}\n${hit.scope ?? ''}\n${hit.trust ?? ''}${cited}`;
 
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }

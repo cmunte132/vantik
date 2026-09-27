@@ -6,4 +6,7 @@ module.exports = {
   rules: {
     'no-redeclare': 'off',
   },
+  // The internal preset turns on `no-undef`, which cannot see jest's globals
+  // without being told the specs run under jest.
+  overrides: [{ files: ['**/*.spec.ts'], env: { jest: true } }],
 };

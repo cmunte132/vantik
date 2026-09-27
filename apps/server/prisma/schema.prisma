@@ -870,8 +870,68 @@ model PageEntry {
   page   Page   @relation(fields: [pageId], references: [id])
   pageId String
 
+  /// What the claim rests on: code at a commit, or where it was decided.
+  citations PageEntryCitation[]
+
   @@index([pageId])
   @@index([status])
+}
+
+/// One piece of evidence for an entry, checked by the server.
+///
+/// A claim about code is only as good as the code still saying it, and a model
+/// asked whether its own claim holds is the least reliable judge there is. So
+/// a code citation records the lines at a commit, as the server read them, and
+/// each check compares that text with the file as it is now. A decision cites
+/// the issue, pull request, comment or run where it was made, and is checked
+/// for existence in the workspace.
+model PageEntryCitation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entry   PageEntry @relation(fields: [entryId], references: [id])
+  entryId String
+
+  kind PageEntryCitationKind
+
+  // CODE
+  moduleRepo   ModuleRepo? @relation(fields: [moduleRepoId], references: [id])
+  moduleRepoId String?
+  /// Relative to the repository root.
+  path         String?
+  /// The commit the lines were cited at.
+  commitSha    String?
+  /// The cited lines at the last check. A MOVED check updates them.
+  startLine    Int?
+  endLine      Int?
+  /// The cited lines as the server read them, whitespace-normalised, so a
+  /// re-check can tell a snippet that moved from one that changed. Never text
+  /// the writer supplied.
+  snippet      String?
+  snippetHash  String?
+
+  // ISSUE, PULL_REQUEST, COMMENT, RUN
+  /// The issue, linked pull request, comment or run, by id.
+  targetId    String?
+  /// What a reader recognises it by: an issue key or a pull request URL.
+  targetLabel String?
+
+  // The last check
+  checkedAt   DateTime?
+  checkedSha  String?
+  checkResult PageEntryCitationCheck?
+
+  /// For a CHANGED check only: whether the current code still supports the
+  /// claim, as a model other than the writer's judged it, and which model.
+  judgment    PageEntryCitationJudgment?
+  judgeModel  String?
+  judgeLines  String?
+  judgeReason String?
+
+  @@index([entryId])
+  @@index([moduleRepoId, path])
+  @@index([checkResult])
 }
 
 /// A question an agent asked that the bank could not answer.
@@ -1053,6 +1113,9 @@ model ModuleRepo {
   pathPrefixes  String[]
   bidirectional Boolean  @default(false)
   isDefault     Boolean  @default(false)
+
+  /// Knowledge citing code in this repository.
+  citations PageEntryCitation[]
 
   @@index([moduleId])
   @@index([externalRepoId])
@@ -1683,6 +1746,34 @@ enum PageEntryKind {
   CONVENTION
   /// Something that cost somebody time, so it should not cost the next one.
   GOTCHA
+}
+
+enum PageEntryCitationKind {
+  /// Lines of a file in a module's repository, at a commit.
+  CODE
+  ISSUE
+  PULL_REQUEST
+  COMMENT
+  RUN
+}
+
+enum PageEntryCitationCheck {
+  /// The cited lines read the same. For a non-code citation: it exists.
+  HOLDS
+  /// The cited lines read the same elsewhere in the file.
+  MOVED
+  /// The cited lines are no longer in the file.
+  CHANGED
+  /// The file, or the non-code target, is gone.
+  MISSING
+  /// The source could not be reached. Retried; never counts as a failure.
+  UNKNOWN
+}
+
+enum PageEntryCitationJudgment {
+  HOLDS
+  CONTRADICTED
+  UNCLEAR
 }
 
 enum PageEntryStatus {

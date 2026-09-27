@@ -4,6 +4,7 @@ import { Queue } from 'bull';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
+import EntryCitationsService from './entry-citations.service';
 import PageEntriesService from './page-entries.service';
 import {
   DECAY_CRON,
@@ -13,6 +14,7 @@ import {
   PROPOSED_ENTRY_EXPIRY_DAYS,
   RECOMPUTE_MODULES_JOB,
   recomputeModulesJobOptions,
+  RETRY_CITATIONS_JOB,
   STANDING_ENTRY_DECAY_DAYS,
 } from './pages.interface';
 
@@ -130,7 +132,29 @@ export class EntryModulesScheduler implements OnModuleInit {
 export class PagesProcessor {
   private readonly logger: LoggerService = new LoggerService('PagesProcessor');
 
-  constructor(private pageEntriesService: PageEntriesService) {}
+  constructor(
+    private pageEntriesService: PageEntriesService,
+    private entryCitations: EntryCitationsService,
+  ) {}
+
+  /**
+   * Reads again an entry's citations that the server could not read when the
+   * entry was written. Throws while any is still unread, so Bull tries again
+   * after its backoff; once the attempts are spent the citations stay
+   * UNKNOWN, which never counts against the entry.
+   */
+  @Process(RETRY_CITATIONS_JOB)
+  async handleRetryCitations(job: { data: { entryId: string } }) {
+    const { stillUnknown } = await this.entryCitations.retryUnknown(
+      job.data.entryId,
+    );
+
+    if (stillUnknown > 0) {
+      throw new Error(
+        `${stillUnknown} citation(s) of entry ${job.data.entryId} could not be read yet`,
+      );
+    }
+  }
 
   /**
    * Re-resolves entries' scopes to modules, for one workspace or, with none

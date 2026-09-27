@@ -118,6 +118,37 @@ export function recomputeModulesJobOptions(
 }
 
 /**
+ * Reads again the code citations an entry was written with that the server
+ * could not read at the time, because the repository did not answer.
+ */
+export const RETRY_CITATIONS_JOB = 'retryUnknownCitations';
+
+/** How many times an entry's unread citations are tried before giving up. */
+export const RETRY_CITATIONS_ATTEMPTS = 6;
+
+/** The first retry's wait; each later one waits twice as long as the last. */
+export const RETRY_CITATIONS_BACKOFF_MS = 5 * 60_000;
+
+/**
+ * One retry per entry: a second write naming the same entry cannot exist, and
+ * a job already queued for it reads every unread citation it has. Bull's own
+ * backoff spaces the attempts, so a repository down for an hour is read once
+ * it is back, and one down for good stops being asked after about five hours.
+ * A citation that is never read stays UNKNOWN, which never counts against the
+ * entry.
+ */
+export function retryCitationsJobOptions(entryId: string): JobOptions {
+  return {
+    jobId: `${RETRY_CITATIONS_JOB}:${entryId}`,
+    attempts: RETRY_CITATIONS_ATTEMPTS,
+    backoff: { type: 'exponential', delay: RETRY_CITATIONS_BACKOFF_MS },
+    delay: RETRY_CITATIONS_BACKOFF_MS,
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
+
+/**
  * Transitions a client may ask for.
  *
  * `CONSOLIDATED` and `SUPERSEDED` are absent as sources because they are

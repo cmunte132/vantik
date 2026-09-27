@@ -33,6 +33,15 @@ rather than a shared document. Learned six things? Call `remember` six times.
 Scope each one (`scope: "apps/server"`), or it is served everywhere, to
 everyone, forever.
 
+**Cite what a fact rests on.** A claim about code cites the code — `citations:
+[{ path, lines: "40-52", sha }]` with the commit you read it at — and a decision
+cites where it was decided (`{ issue: "ENG-42" }`, `{ pullRequest: "<url>" }`,
+`{ comment }` or `{ run }`). The server reads cited code itself and refuses the
+write if a citation does not hold, naming which one and why; fix it and call
+again. Served knowledge carries a trust tier: `HUMAN_VERIFIED` (a person
+confirmed it), `GROUNDED` (every cited line still reads the same), or
+`UNGROUNDED` — check an ungrounded claim against the code before relying on it.
+
 **Worth remembering:** a decision and why it went that way, a gotcha that cost
 you time, a convention that is not obvious from the code, a constraint someone
 stated that is written down nowhere — say which with `kind` (`DECISION`,

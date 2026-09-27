@@ -1211,3 +1211,153 @@ describe('knowledge by kind and by module', () => {
     expect(related).toEqual([{ id: 'page-1', title: 'Server' }]);
   });
 });
+
+describe('citations and proof', () => {
+  const pages = [{ id: 'page-1', title: 'Server' }];
+  const citation = {
+    kind: 'CODE',
+    repo: 'acme/api',
+    path: 'src/cache.ts',
+    commitSha: 'abcdef1',
+    lines: '12-30',
+    result: 'HOLDS',
+    checkedAt: '2026-09-20T10:00:00.000Z',
+    checkedSha: 'fedcba9',
+  };
+  const proof = {
+    trust: 'GROUNDED',
+    citations: [citation],
+    lastCheckedAt: '2026-09-20T10:00:00.000Z',
+    lastCheckedSha: 'fedcba9',
+  };
+  const hit = {
+    kind: 'entry',
+    pageId: 'page-1',
+    pageTitle: 'Server',
+    entryId: 'entry-1',
+    content: 'Redis holds only cache here.',
+    scope: 'apps/server',
+    verified: false,
+    retrievalCount: 2,
+    ...proof,
+  };
+
+  it('[KG-2.1] sends the citations a fact rests on', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /pages': pages,
+      'POST /page_entries': { id: 'entry-1', content: 'x', pageId: 'page-1' },
+    });
+    const citations = [
+      { path: 'src/cache.ts', lines: '12-30', sha: 'abcdef1' },
+      { issue: 'ENG-42' },
+    ];
+
+    await agent.remember({
+      page: 'Server',
+      content: 'Redis holds only cache here.',
+      citations,
+    });
+
+    expect(calls.find((call) => call.method === 'POST')?.body).toMatchObject({
+      citations,
+    });
+  });
+
+  it('[KG-2.1] relays a citation that does not hold as an answer to act on', async () => {
+    const { agent } = makeAgent({
+      'GET /pages': pages,
+      'POST /page_entries': () =>
+        new Response(
+          JSON.stringify({
+            statusCode: 422,
+            status: 'citation-failed',
+            citation: 2,
+            message:
+              'Nothing was written: citation 2 (src/cache.ts:99): the file has 40 lines at that commit.',
+          }),
+          { status: 422 },
+        ),
+    });
+
+    await expect(
+      agent.remember({
+        page: 'Server',
+        content: 'Redis holds only cache here.',
+        citations: [
+          { issue: 'ENG-42' },
+          { path: 'src/cache.ts', lines: '99', sha: 'abcdef1' },
+        ],
+      }),
+    ).resolves.toEqual({
+      status: 'citation-failed',
+      citation: 2,
+      message:
+        'Nothing was written: citation 2 (src/cache.ts:99): the file has 40 lines at that commit.',
+    });
+  });
+
+  it('[KG-2.8] passes on the proof of every recalled item and every context item', async () => {
+    const { agent } = makeAgent({
+      'GET /knowledge/search': { hits: [hit] },
+      'POST /knowledge/context': {
+        items: [hit],
+        estimatedTokens: 40,
+        tokenBudget: 2000,
+        omitted: 0,
+      },
+    });
+
+    const [recalled] = await agent.recallKnowledge({ query: 'redis' });
+    const { items } = await agent.loadContext({ scope: 'apps/server' });
+
+    expect(recalled).toMatchObject(proof);
+    expect(items[0]).toMatchObject(proof);
+  });
+
+  it('[KG-2.8] passes on the proof of every standing entry of a page it reads', async () => {
+    const { agent } = makeAgent({
+      'GET /pages': pages,
+      'GET /pages/page-1': {
+        id: 'page-1',
+        title: 'Server',
+        descriptionMarkdown: '',
+        entryPolicy: 'CURATED',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+        ancestors: [],
+      },
+      'GET /page_entries': [
+        {
+          id: 'entry-1',
+          content: 'Redis holds only cache here.',
+          scope: 'apps/server',
+          status: 'STANDING',
+          verifiedAt: null,
+          retrievalCount: 2,
+          pageId: 'page-1',
+          createdAt: '2026-09-20T10:00:00.000Z',
+          ...proof,
+        },
+      ],
+    });
+
+    const page = await agent.readPage('Server');
+
+    expect(page.standing[0]).toMatchObject(proof);
+  });
+
+  it('[KG-2.8] says plainly when the server sent no proof, rather than inventing one', async () => {
+    const { agent } = makeAgent({
+      'GET /knowledge/search': {
+        hits: [{ ...hit, trust: undefined, citations: undefined }],
+      },
+    });
+
+    const [recalled] = await agent.recallKnowledge({ query: 'redis' });
+
+    expect(recalled).toMatchObject({
+      trust: null,
+      citations: [],
+      lastCheckedAt: '2026-09-20T10:00:00.000Z',
+    });
+  });
+});

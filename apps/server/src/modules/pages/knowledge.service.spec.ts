@@ -479,3 +479,70 @@ describe('KnowledgeService.seedsFor', () => {
     expect(searchParams(typesense).sort_by).toContain(`moduleIds:=[\`${M1}\`]`);
   });
 });
+
+describe('the proof served with recall and context', () => {
+  const checkedAt = new Date('2026-09-20T10:00:00Z');
+  const grounded = {
+    id: 'entry-1',
+    status: PageEntryStatusEnum.STANDING,
+    verifiedAt: null as Date | null,
+    citations: [
+      {
+        kind: 'CODE',
+        path: 'apps/server/src/cache.ts',
+        commitSha: 'abcdef1',
+        startLine: 12,
+        endLine: 30,
+        targetLabel: null as string | null,
+        checkedAt,
+        checkedSha: 'fedcba9',
+        checkResult: 'HOLDS',
+        judgment: null as string | null,
+        judgeModel: null as string | null,
+        moduleRepo: { fullName: 'acme/api' },
+      },
+    ],
+  };
+  const proof = {
+    trust: 'GROUNDED',
+    citations: [
+      {
+        kind: 'CODE',
+        repo: 'acme/api',
+        path: 'apps/server/src/cache.ts',
+        lines: '12-30',
+        result: 'HOLDS',
+        checkedAt: checkedAt.toISOString(),
+        checkedSha: 'fedcba9',
+      },
+    ],
+    lastCheckedAt: checkedAt.toISOString(),
+    lastCheckedSha: 'fedcba9',
+  };
+
+  it('[KG-2.8] gives every recalled item its trust tier, citations and last check', async () => {
+    const { service, prisma } = buildService([
+      entryDocument({ verified: false }),
+    ]);
+    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValueOnce([grounded]);
+
+    const { hits } = await service.search(WORKSPACE, 'redis');
+
+    expect(hits[0]).toMatchObject(proof);
+  });
+
+  it('[KG-2.8] gives every item of a context pack the same, and counts it against the budget', async () => {
+    const { service, prisma } = buildService([
+      entryDocument({ verified: false }),
+    ]);
+    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValueOnce([grounded]);
+    const bare = await buildService([
+      entryDocument({ verified: false }),
+    ]).service.contextPack(WORKSPACE, { query: 'redis' });
+
+    const pack = await service.contextPack(WORKSPACE, { query: 'redis' });
+
+    expect(pack.items[0]).toMatchObject(proof);
+    expect(pack.estimatedTokens).toBeGreaterThan(bare.estimatedTokens);
+  });
+});

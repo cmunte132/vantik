@@ -15,6 +15,8 @@ describe('the knowledge settings of a workspace', () => {
       holdoutRate: 0.1,
       contextTopK: 5,
       contextTokenBudget: 1_500,
+      autoTriage: 'shadow',
+      similarityThreshold: 0.25,
     });
     expect(DEFAULT_KNOWLEDGE_SETTINGS).toEqual(knowledgeSettings({}, {}));
   });
@@ -26,7 +28,13 @@ describe('the knowledge settings of a workspace', () => {
         KNOWLEDGE_CONTEXT_TOP_K: '2',
         KNOWLEDGE_CONTEXT_TOKEN_BUDGET: '800',
       }),
-    ).toEqual({ holdoutRate: 0.25, contextTopK: 2, contextTokenBudget: 800 });
+    ).toEqual({
+      holdoutRate: 0.25,
+      contextTopK: 2,
+      contextTokenBudget: 800,
+      autoTriage: 'shadow',
+      similarityThreshold: 0.25,
+    });
     // The ends of a share are shares.
     expect(
       knowledgeSettings(null, { KNOWLEDGE_HOLDOUT_RATE: '0' }),
@@ -54,12 +62,20 @@ describe('the knowledge settings of a workspace', () => {
         },
         env,
       ),
-    ).toEqual({ holdoutRate: 0, contextTopK: 3, contextTokenBudget: 600 });
+    ).toEqual({
+      holdoutRate: 0,
+      contextTopK: 3,
+      contextTokenBudget: 600,
+      autoTriage: 'shadow',
+      similarityThreshold: 0.25,
+    });
     // One setting stored leaves the others to the deployment.
     expect(knowledgeSettings({ knowledge: { contextTopK: 3 } }, env)).toEqual({
       holdoutRate: 0.25,
       contextTopK: 3,
       contextTokenBudget: 800,
+      autoTriage: 'shadow',
+      similarityThreshold: 0.25,
     });
     // Other preferences are not knowledge settings.
     expect(
@@ -100,7 +116,13 @@ describe('the knowledge settings of a workspace', () => {
         },
         { KNOWLEDGE_HOLDOUT_RATE: '0.3' },
       ),
-    ).toEqual({ holdoutRate: 0.3, contextTopK: 5, contextTokenBudget: 1_500 });
+    ).toEqual({
+      holdoutRate: 0.3,
+      contextTopK: 5,
+      contextTokenBudget: 1_500,
+      autoTriage: 'shadow',
+      similarityThreshold: 0.25,
+    });
     expect(
       knowledgeSettings({ knowledge: { holdoutRate: 1.5 } }, {}).holdoutRate,
     ).toBe(0.1);
@@ -114,6 +136,64 @@ describe('the knowledge settings of a workspace', () => {
       expect(knowledgeSettings(preferences, {})).toEqual(
         DEFAULT_KNOWLEDGE_SETTINGS,
       );
+    }
+  });
+
+  it('[KG-4.5] starts triage in shadow mode, and reads off, shadow or on from the deployment and the workspace', () => {
+    expect(knowledgeSettings(null, {}).autoTriage).toBe('shadow');
+    expect(DEFAULT_KNOWLEDGE_SETTINGS.autoTriage).toBe('shadow');
+
+    for (const mode of ['off', 'shadow', 'on'] as const) {
+      expect(
+        knowledgeSettings(null, { KNOWLEDGE_AUTO_TRIAGE: mode }).autoTriage,
+      ).toBe(mode);
+      // The workspace's choice wins over the deployment's, both ways.
+      expect(
+        knowledgeSettings(
+          { knowledge: { autoTriage: mode } },
+          { KNOWLEDGE_AUTO_TRIAGE: mode === 'on' ? 'off' : 'on' },
+        ).autoTriage,
+      ).toBe(mode);
+    }
+
+    // An operator's casing and spacing are forgiven; a typo is not a mode,
+    // and never switches triage on.
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_AUTO_TRIAGE: ' ON ' }).autoTriage,
+    ).toBe('on');
+    for (const wrong of ['yes', 'true', '1', 'enabled', '']) {
+      expect(
+        knowledgeSettings(null, { KNOWLEDGE_AUTO_TRIAGE: wrong }).autoTriage,
+      ).toBe('shadow');
+    }
+    // A stored value that is not one of the three leaves the deployment's.
+    for (const wrong of ['ON', true, 1, null, { mode: 'on' }]) {
+      expect(
+        knowledgeSettings(
+          { knowledge: { autoTriage: wrong } },
+          { KNOWLEDGE_AUTO_TRIAGE: 'off' },
+        ).autoTriage,
+      ).toBe('off');
+    }
+  });
+
+  it('[KG-4.2] reads the similarity threshold as a share, from the deployment and the workspace', () => {
+    expect(knowledgeSettings(null, {}).similarityThreshold).toBe(0.25);
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_SIMILARITY_THRESHOLD: '0.6' })
+        .similarityThreshold,
+    ).toBe(0.6);
+    expect(
+      knowledgeSettings(
+        { knowledge: { similarityThreshold: 0.4 } },
+        { KNOWLEDGE_SIMILARITY_THRESHOLD: '0.6' },
+      ).similarityThreshold,
+    ).toBe(0.4);
+    for (const wrong of ['1.5', '-0.2', 'close', ' ']) {
+      expect(
+        knowledgeSettings(null, { KNOWLEDGE_SIMILARITY_THRESHOLD: wrong })
+          .similarityThreshold,
+      ).toBe(0.25);
     }
   });
 

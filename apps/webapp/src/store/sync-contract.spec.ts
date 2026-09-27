@@ -81,6 +81,8 @@ const NOT_KEPT: Record<string, Record<string, string>> = {
     sourceTokenId: NOT_READ,
     helpfulCount: NOT_READ,
     harmfulCount: NOT_READ,
+    contentHash: 'triage bookkeeping',
+    corroborationCount: NOT_READ,
   },
   IntegrationAccount: {
     integrationConfiguration: NOT_READ,

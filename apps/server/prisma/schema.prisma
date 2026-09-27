@@ -893,6 +893,17 @@ model PageEntry {
   helpfulCount Float @default(0)
   harmfulCount Float @default(0)
 
+  /// sha256 of the content in the form duplicates are compared in (case and
+  /// runs of whitespace folded; see `normaliseContent`). Triage finds an exact
+  /// repeat by it among the entries of the same modules, so it is stored and
+  /// indexed rather than recomputed over every candidate.
+  contentHash String?
+
+  /// How many later entries said exactly this. A repeat corroborates the
+  /// entry it repeats rather than standing beside it, and each one is kept as
+  /// a DUPLICATE relation from the repeat, which records who said it and when.
+  corroborationCount Int @default(0)
+
   page   Page   @relation(fields: [pageId], references: [id])
   pageId String
 
@@ -901,8 +912,13 @@ model PageEntry {
   uses      PageEntryUse[]
   signals   PageEntrySignal[]
 
+  triageDecisions KnowledgeTriageDecision[]
+  relationsFrom   PageEntryRelation[]       @relation("PageEntryRelationFrom")
+  relationsTo     PageEntryRelation[]       @relation("PageEntryRelationTo")
+
   @@index([pageId])
   @@index([status])
+  @@index([contentHash])
 }
 
 /// One piece of evidence for an entry, checked by the server.
@@ -1025,6 +1041,82 @@ model PageEntrySignal {
 
   @@unique([entryId, agentRunId, source])
   @@index([agentRunId])
+}
+
+/// What triage decided about a new entry, and everything it decided on.
+///
+/// The audit trail of the automation, and what phase 5 measures it by. It is
+/// written in shadow mode too, where nothing is acted on, so the decisions can
+/// be compared with what people decided before automation is switched on. The
+/// inputs are kept whole, with a digest to tell two decisions over the same
+/// inputs apart from two over different ones; the models' answers are kept as
+/// they came back, including ones that could not be read.
+model KnowledgeTriageDecision {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  entry   PageEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entryId String
+
+  workspaceId String
+
+  decision KnowledgeTriageDecisionType
+  /// Why it escalated, every reason that applied. Empty for any other decision.
+  reasons  KnowledgeEscalationReason[] @default([])
+  /// The policy a REJECT broke.
+  policy   KnowledgeTriagePolicy?
+  /// SHADOW records and leaves the entry as it is; ON acts on the decision.
+  mode     KnowledgeTriageMode
+  /// Whether the decision changed anything: always false in shadow mode, and
+  /// false for an escalation, which waits for a person.
+  applied  Boolean                     @default(false)
+
+  /// The entry an exact or near duplicate corroborated.
+  corroboratedEntryId String?
+
+  /// What it decided on: the content's hash, the citations' results, the
+  /// neighbours it compared and the relations found, the writing run's issue.
+  inputs       Json
+  inputsDigest String
+  /// Every model asked, in the order asked.
+  models       String[] @default([])
+  /// What each model answered, raw.
+  outputs      Json?
+
+  @@index([entryId, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+/// How one entry relates to another, as triage found it.
+///
+/// Relations are rows beside the entries, never edits to them: no entry's
+/// text is changed because another resembles it. A DISTINCT pair is kept too,
+/// as the record that the two were compared. A supersede a writer declares is
+/// still `PageEntry.supersedesId`; a SUPERSEDES relation is triage's finding.
+model PageEntryRelation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The newer entry, the one triage was deciding about.
+  from   PageEntry @relation("PageEntryRelationFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  fromId String
+  /// The existing entry it was compared with.
+  to     PageEntry @relation("PageEntryRelationTo", fields: [toId], references: [id], onDelete: Cascade)
+  toId   String
+
+  type        PageEntryRelationType
+  decidedBy   PageEntryRelationDecider
+  /// The models that classified the pair, when models did.
+  models      String[]                 @default([])
+  /// 1 minus the vector distance between the two, when the index was asked.
+  similarity  Float?
+  /// For a contradiction or a supersede, the entry precedence prefers.
+  preferredId String?
+  reason      String?
+
+  @@unique([fromId, toId])
+  @@index([toId])
 }
 
 /// A question an agent asked that the bank could not answer.
@@ -1871,6 +1963,85 @@ enum PageEntrySignalSource {
 enum PageEntrySignalKind {
   HELPFUL
   HARMFUL
+}
+
+/// What triage decided about an entry.
+enum KnowledgeTriageDecisionType {
+  /// Every condition held; the entry is accepted without a person.
+  AUTO_ACCEPT
+  /// It says what an existing entry already says; the existing one counts it.
+  CORROBORATE
+  /// Something only a person can settle; the reasons say what.
+  ESCALATE
+  /// It breaks a policy outright.
+  REJECT
+}
+
+/// Why an entry was left for a person.
+enum KnowledgeEscalationReason {
+  /// It contradicts an entry a person verified.
+  CONTRADICTS_VERIFIED
+  /// It contradicts an entry on a page maintained by hand.
+  CONTRADICTS_LOCKED
+  /// It cites nothing.
+  UNGROUNDED
+  /// A citation does not hold, or has not been read.
+  CITATION_FAILED
+  /// A convention, which every run in its modules is handed.
+  PIN_REQUEST
+  /// It declares it replaces an entry, which only a person's acceptance
+  /// retires.
+  SUPERSEDE_REQUEST
+  /// Its scope reaches more modules than one fact should.
+  BROAD_SCOPE
+  /// The two judgments did not both accept it, or classified a pair apart.
+  JUDGES_DISAGREE
+  /// A model was needed and none is configured.
+  NO_LLM
+  /// The run that wrote it worked on an issue from outside the workspace.
+  EXTERNAL_INPUT
+  /// Runs it was served to went wrong where it speaks.
+  HARMFUL_SIGNAL
+  /// A sample of what was accepted, for a person to check.
+  AUDIT
+}
+
+/// The policy a rejected entry broke.
+enum KnowledgeTriagePolicy {
+  /// It contains what looks like a credential.
+  SECRET
+  /// It is several claims in one entry.
+  ONE_FACT
+}
+
+/// Whether triage acted on its decisions when it made them.
+enum KnowledgeTriageMode {
+  SHADOW
+  ON
+}
+
+/// How a newer entry relates to an existing one.
+enum PageEntryRelationType {
+  /// Says the same thing.
+  DUPLICATE
+  /// Adds detail to it without disagreeing.
+  REFINES
+  /// Says it is no longer so.
+  SUPERSEDES
+  /// Says the opposite.
+  CONTRADICTS
+  /// A different fact.
+  DISTINCT
+}
+
+/// What decided a relation.
+enum PageEntryRelationDecider {
+  /// The same content hash.
+  HASH
+  /// A rule in code: the two differ in a number, date, negation or condition.
+  RULE
+  /// Two model judgments that agreed.
+  MODEL
 }
 
 /// Whether a run was handed the workspace's knowledge.

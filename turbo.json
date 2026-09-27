@@ -93,6 +93,8 @@
     "KNOWLEDGE_HOLDOUT_RATE",
     "KNOWLEDGE_CONTEXT_TOP_K",
     "KNOWLEDGE_CONTEXT_TOKEN_BUDGET",
+    "KNOWLEDGE_AUTO_TRIAGE",
+    "KNOWLEDGE_SIMILARITY_THRESHOLD",
     // The directory that holds every local repository. It is empty on a
     // machine that one person runs, and then any absolute path is allowed.
     "LOCAL_REPO_ROOT",

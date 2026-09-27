@@ -10,6 +10,14 @@
  * layer beneath it applies: a mistake in a setting is never read as "none" or
  * "all".
  */
+
+/**
+ * Whether triage decides about new entries, and whether it acts on what it
+ * decides. `shadow` decides and records, and changes nothing: the decisions
+ * can be compared with what people decided before anyone lets it act.
+ */
+export type KnowledgeAutoTriage = 'off' | 'shadow' | 'on';
+
 export interface KnowledgeSettings {
   /**
    * The share of runs held out from the workspace's knowledge, from 0 (every
@@ -25,12 +33,23 @@ export interface KnowledgeSettings {
   contextTopK: number;
   /** The tokens a run's knowledge may take. `KNOWLEDGE_CONTEXT_TOKEN_BUDGET`. */
   contextTokenBudget: number;
+  /** `KNOWLEDGE_AUTO_TRIAGE`: off, shadow or on. */
+  autoTriage: KnowledgeAutoTriage;
+  /**
+   * How alike two entries must be, from 0 to 1 (1 minus the index's vector
+   * distance), before a model is asked how they relate. Below it they are
+   * taken to be different facts without asking. The default is the distance
+   * the write-time near-match check uses. `KNOWLEDGE_SIMILARITY_THRESHOLD`.
+   */
+  similarityThreshold: number;
 }
 
 export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
   holdoutRate: 0.1,
   contextTopK: 5,
   contextTokenBudget: 1_500,
+  autoTriage: 'shadow',
+  similarityThreshold: 0.25,
 };
 
 /** The most tokens any knowledge budget allows, whatever is configured. */
@@ -58,7 +77,26 @@ export function knowledgeSettings(
         DEFAULT_KNOWLEDGE_SETTINGS.contextTokenBudget,
       MAX_KNOWLEDGE_TOKEN_BUDGET,
     ),
+    autoTriage:
+      modeOf(stored.autoTriage) ??
+      modeOf(env.KNOWLEDGE_AUTO_TRIAGE?.trim().toLowerCase()) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.autoTriage,
+    similarityThreshold:
+      shareOf(stored.similarityThreshold) ??
+      shareOf(fromEnv(env.KNOWLEDGE_SIMILARITY_THRESHOLD)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.similarityThreshold,
   };
+}
+
+const MODES: readonly KnowledgeAutoTriage[] = ['off', 'shadow', 'on'];
+
+/**
+ * A triage mode, or nothing. A stored mode is read as written, as the other
+ * stored settings are; the environment's is read case-insensitively, as an
+ * operator types it.
+ */
+function modeOf(value: unknown): KnowledgeAutoTriage | undefined {
+  return MODES.find((mode) => mode === value);
 }
 
 function storedSettings(preferences: unknown): Record<string, unknown> {

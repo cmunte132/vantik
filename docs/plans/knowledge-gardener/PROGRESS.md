@@ -5,7 +5,7 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 4 (implemented; review round 1 answered, round 2
+- Current phase: 4 (implemented; review round 2 answered, round 3
   pending); phase 5 next. Both go in
   the second pull request, after PR #44 (phase 1's review fixes, phase 2 and
   phase 3), which is merged.
@@ -422,23 +422,33 @@ next session starts by reading it.
   with ONE_FACT. Credentials are also refused at write (422
   `secret-refused`, content not echoed) on create and on edit, for a person
   too: entries are replicated to every member's browser, so triage finding
-  one afterwards is too late. External input is established by the server,
-  never from the session a writer names (hosted runs cannot write yet,
-  ENG-84, so every writer is a client that picks its own session). The runs
-  are the writer's own: `AgentRun` rows in the workspace whose `agentUserId`
-  is the writer, not deleted, created at or before the entry and not
-  finished before it. An issue is outside input when an integration filed it
-  (`sourceMetadata.type`), it is a support issue or on a support team, a
-  non-PR linked issue carries a source type or syncs, or it carries a
-  comment mirrored from outside (`sourceMetadata.type`) written before the
-  entry, deleted or not, since the comment stays after the link goes. A
-  cited issue or comment is held to the same test. Any of these escalates
-  with EXTERNAL_INPUT. An entry by an agent (or a writer with no user
-  record) that falls in no run escalates with UNKNOWN_SOURCE (a new
-  reason): what it read cannot be checked. A person's entry is not held to a
-  run. Both reasons apply even to an exact repeat, so text from outside, or
-  from an unknown source, cannot raise another entry's corroboration count
-  either. The session is recorded as given, for tracing.
+  one afterwards is too late. **An agent's entry is never accepted without
+  a person, for now.** Runs do not write with a credential of their own
+  (ENG-84): every agent writes through an MCP, CLI or REST client that names
+  its own session, and a run of the same agent open at the time may have
+  nothing to do with the entry (a self-assigned issue starts a hosted run
+  for that agent; a shared agent account has many). So nothing the server
+  holds says what an agent read, and every entry not written by a person
+  (an agent, a System account, or no user record) gets UNKNOWN_SOURCE, a
+  new reason, when it would otherwise be accepted. It does not stop a
+  repeat from being folded in: that puts no new claim in front of anyone,
+  and at worst archives a copy. Once runs write with a run-bound credential
+  the server stamps, a run can vouch for what it wrote, and this can be
+  narrowed. Outside input can still be found, and only ever makes the
+  decision stricter. The writer's runs, from the server's record (`AgentRun`
+  rows in the workspace whose `agentUserId` is the writer, not deleted,
+  created at or before the entry and not finished before it), and every
+  issue or comment the entry cites, are read for it. An issue is outside
+  input when an integration filed it (`sourceMetadata.type`), it is a
+  support issue or on a support team, a non-PR linked issue carries a
+  source type or syncs, or its thread holds a comment mirrored from outside
+  (`sourceMetadata.type`) written before the entry, deleted or not, since
+  the comment stays after the link goes. A cited comment is outside input by
+  its own `sourceMetadata.type`. Any of these escalates with EXTERNAL_INPUT,
+  which applies even to a repeat, so text known to come from outside cannot
+  raise another entry's corroboration count. The session is recorded as
+  given, for tracing, and decides nothing. A person's entry is not read for
+  runs.
 - **Exact repeats (KG-4.1).** `PageEntry.contentHash` is sha256 of
   `normaliseContent`, written on create and on every content edit, and
   backfilled by the migration in SQL. The neighbourhood is PROPOSED and
@@ -483,13 +493,14 @@ next session starts by reading it.
   token no longer matches. An answer that cannot be read, or a model that
   cannot be reached, counts as not accepting.
 - **Auto-accept conditions (KG-4.4).** Reasons are collected, every one that
-  applies: EXTERNAL_INPUT; UNKNOWN_SOURCE; SUPERSEDE_REQUEST (added to the plan's list: a
+  applies: EXTERNAL_INPUT; SUPERSEDE_REQUEST (added to the plan's list: a
   declared correction retires accepted knowledge only on a person's
   acceptance, as phase 0 decided); CONTRADICTS_VERIFIED and
   CONTRADICTS_LOCKED for an agreed CONTRADICTS or SUPERSEDES against a
   verified entry or one on a LOCKED page; JUDGES_DISAGREE; NO_LLM; and, for
   an entry that is not a repeat, UNGROUNDED (no citations), CITATION_FAILED
-  (any citation not HOLDS or MOVED, UNKNOWN included), PIN_REQUEST (every
+  (any citation not HOLDS or MOVED, UNKNOWN included), UNKNOWN_SOURCE (not
+  written by a person, as above), PIN_REQUEST (every
   CONVENTION, since standing conventions are packed into every run in their
   modules), BROAD_SCOPE (more than three modules, or no scope, since an
   unscoped entry is served to every query). The acceptance judgment
@@ -962,6 +973,42 @@ five non-blocking, all fixed:
 
 35 mutations over the fixes, each a change that compiles, all caught.
 
+### Phase 4, round 2 (same reviewer, on the round 1 fixes)
+
+Seven of the eight round 1 findings confirmed fixed (B2, B3, N1 to N5), the
+backfill re-checked on postgres. One blocking finding left, and one new
+non-blocking one, both fixed:
+
+1. **Blocking: a run that happened to be open cleared an agent's entry (B1,
+   narrower).** Round 1 took the writer's open runs as the context the entry
+   was written in, and cleared UNKNOWN_SOURCE when there was one. But runs
+   do not write (ENG-84), so a match is always a coincidence: an agent that
+   picks up an internal issue for itself starts a hosted run as itself, and
+   can then write from a GitHub-synced issue it only read, citing code, and
+   be accepted. Now every entry not written by a person gets UNKNOWN_SOURCE
+   when it would be accepted (`writerOf` returns `unknownSource: !person`),
+   as described under Decisions; open runs are still read, and can only add
+   EXTERNAL_INPUT. UNKNOWN_SOURCE is added in the acceptance stage, so an
+   agent's repeat is still folded in (a positively outside one is not).
+   The pipeline's tests now write as a person by default (`fresh()`), and
+   the agent's cases say so (`agentEntry()`). SKILL.md and the
+   always-in-context summary now say that nothing an agent writes is
+   accepted without a person. Tests: "[KG-4.8] never accepts an agent's
+   entry, whatever run it had open, since what it read cannot be told" (an
+   internal run, a handback run, none; no user record, an unknown user, a
+   System account), "[KG-4.1] still folds an agent's repeat into the entry
+   it repeats" (exact and near), and the run-reading tests now expect
+   UNKNOWN_SOURCE beside any EXTERNAL_INPUT they find.
+2. **A cited issue was not read for mirrored comments,** though these notes
+   said it was. The cited-issue query now reads its comments written before
+   the entry, as the run's does. Tests: a case in "[KG-4.8] never accepts an
+   entry that rests on an issue or comment from outside", and a comment
+   mirrored after the entry that does not count.
+
+39 mutations over rounds 1 and 2, all caught, among them clearing
+UNKNOWN_SOURCE for an agent with an open run (the finding itself) and
+adding it before the repeat stage.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -1080,3 +1127,7 @@ Give the evidence, and stop until the maintainer answers.
   input rested on the writer's session, applying acted on stale neighbours,
   the backfill trimmed the letter v) and five non-blocking; all fixed with
   tagged tests, 35 mutations caught. Server suite 1625 passed.
+- 2026-09-27: Phase 4 review round 2: B1 still open in a narrower form (an
+  open run of the same agent cleared its entry); every entry not written by
+  a person now waits for one. N6 (a cited issue's comments) fixed. 39
+  mutations caught.

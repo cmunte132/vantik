@@ -560,6 +560,99 @@ next session starts by reading it.
 - **Webapp sync contract.** `contentHash` and `corroborationCount` are
   listed as not kept; nothing on screen reads them yet.
 
+### Phase 5
+
+- **Verdicts (KG-5.5).** `KnowledgeTriageDecision` gains `verdict`
+  (ACCEPTED, REJECTED, EDITED), `agreed`, `verdictById` and `verdictAt`. A
+  verdict is recorded when a person (never an agent) acts on an entry whose
+  latest decision has none yet, and the entry was PROPOSED before the change
+  or the decision was drawn for audit. Setting STANDING or CONSOLIDATED is
+  ACCEPTED; ARCHIVED or DISPUTED is REJECTED; changing the content, scope or
+  kind (compared with what they were) is EDITED, whatever the status. Confirming
+  alone gives no verdict: it says nothing about whether the entry stays.
+  `updateEntry` and `bulkUpdate` put a conditional `updateMany` (`verdict:
+  null`) in the same transaction as the change, so the verdict and the
+  change commit together and of two people acting at once only the first
+  gives one. Entries a person happens to act on later, not audited and no
+  longer waiting, give none: they are not a sample of anything, and would
+  tilt agreement towards whatever people go looking for.
+- **What agreement rates (KG-5.3).** `triage/agreement.ts`, pure. Triage's
+  label is its decision, or, for a decision held back by a back-off, the
+  decision it reached (so a backed-off type can be seen to recover). An
+  escalation is rated only when every reason is JUDGES_DISAGREE: every
+  other reason is a rule that sends the entry to a person whatever they make
+  of it, so a person accepting it does not say triage should have. A SECRET
+  rejection is not rated: a credential is refused whatever agreement says.
+  The person's decision: ACCEPTED is AUTO_ACCEPT; REJECTED agrees with a
+  CORROBORATE or REJECT (taking it out of use is what those did), and is
+  otherwise ESCALATE (triage has no way to drop an entry for being wrong);
+  EDITED is ESCALATE (as written it was neither to keep nor to drop).
+- **Kappa (KG-5.3).** Cohen's kappa per acting type (AUTO_ACCEPT,
+  CORROBORATE, REJECT), that type against the rest, over verdicts whose
+  `verdictAt` is inside `KNOWLEDGE_KAPPA_WINDOW_DAYS` (30). Audited
+  decisions are weighted by `1 / auditRate`, the rate recorded on the
+  decision: audits are a sample of what triage did alone while every
+  escalation reaches a person, so unweighted they would make acting look
+  rarer, and chance agreement different, than it is. `samples` is the count
+  of verdicts, not the weighted total, and is what the minimum is checked
+  against. Kappa is null when both sides gave one same label throughout
+  (chance agreement is already complete), which back-off reads as complete
+  agreement. Tested against hand-worked values (1, 0, 0.4, -1, a weighted
+  0.625, a per-type table).
+- **Audits (KG-5.2).** `KNOWLEDGE_AUDIT_RATE` (0.1, per workspace
+  `auditRate`). The decision id is generated before the row is written, and
+  the draw is the first 52 bits of sha256(id) over 2^52: seeded by the id,
+  so whether a decision was audited can be worked out again from the id
+  alone. Every applied acting decision is drawn (AUTO_ACCEPT, CORROBORATE,
+  REJECT ONE_FACT), a superset of "auto-accepted", because in `on` mode a
+  corroboration or a refusal never reaches a person otherwise and its kappa
+  would never have samples. SECRET is never drawn: a person would be shown a
+  credential. Shadow decisions are not drawn: they reach a person anyway.
+  `auditRate` is recorded whenever the decision was drawable, for the
+  weights. An open audit is listed while its entry is still in the status
+  the decision left it (STANDING for an acceptance, ARCHIVED otherwise).
+- **Answering an audit.** `POST /api/v1/knowledge/review/:decisionId/audit`
+  `{agree}`. Agreeing keeps what triage did, not agreeing undoes it through
+  the ordinary `updateEntry` (an acceptance is archived; a repeat or a
+  refusal is put into use), and that change records the verdict like any
+  other. 404 outside the workspace, 400 for a decision not drawn for audit,
+  409 once it has a verdict. Any other action on an audited entry (setting
+  it aside from the rail, editing it) gives the verdict too.
+- **Back-off (KG-5.4).** `KNOWLEDGE_KAPPA_FLOOR` (0.6) and
+  `KNOWLEDGE_KAPPA_MIN_SAMPLES` (20), per workspace. A type with at least
+  the minimum verdicts and a kappa under the floor backs off; a backed-off
+  type resumes only with at least the minimum and a kappa at the floor or
+  above. Under the minimum the state holds either way, so a type resumes on
+  evidence, not on its verdicts ageing out of the window. State is the
+  append-only `KnowledgeBackoffChange` table (the latest row per type),
+  which is also the record of each change with the kappa, samples, floor,
+  minimum and window it was made on, and each change is logged once
+  committed. Re-evaluated after every verdict, inside a transaction holding
+  a per-workspace advisory lock, so two verdicts landing together cannot
+  both record the same change; a failure is logged and never fails the
+  person's action. A backed-off decision (never a SECRET refusal) is
+  recorded as ESCALATE with reason `LOW_AGREEMENT` and `backedOffFrom`, in
+  shadow and in on, so it is still rated as what triage reached. Changing
+  the floor or minimum takes effect at the next verdict.
+- **The queue (KG-5.1).** `GET /api/v1/knowledge/review[?pageId][&reason]`:
+  every PROPOSED entry, as the inbox always listed, each with the reasons of
+  its open escalation; then the open audits, with reason AUDIT. Counts per
+  reason are over the whole queue; `reason` narrows the items. With triage
+  off it is the inbox alone, no reasons and no audits. The webapp keeps
+  reading waiting entries from the synced store and takes reasons and audits
+  from the endpoint, so the queue stays live and, until the endpoint
+  answers, is exactly the inbox. Reason chips filter it; audits carry a
+  question and two answers and are never selected in bulk. `GET
+  /api/v1/knowledge/agreement` gives the kappa, counts, weighted counts and
+  state per type, shown on Settings > Agents. All three routes refuse
+  agents: an agent reads every entry through the knowledge routes, and is
+  refused only the reviewer's view of why each was held back.
+- **Migration** `20260927050000_knowledge_audit`: `prisma migrate diff`'s
+  output (an enum, a value added to `KnowledgeEscalationReason`, seven
+  columns, a table, two indexes). Replayed on postgres 16 over the earlier
+  migrations; the diff against the schema is then empty. The new table is
+  not replicated.
+
 ## Phase reviews
 
 ### Phase 0, round 1 (fresh reviewer subagent)

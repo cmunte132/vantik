@@ -83,7 +83,9 @@ do not find another page to dump into); `LOCKED` pages are readable but not
 appendable by agents. Everything you write lands as proposed and is served to
 nobody until a person accepts it. Where the workspace has switched triage on,
 the server folds your repeats into what they repeat and rejects what
-breaks policy first; it accepts nothing an agent wrote on its own.
+breaks policy first; it accepts nothing an agent wrote on its own. People
+audit a sample of what it does alone, and it stops acting alone where they
+keep disagreeing.
 Write for the reviewer and for the stranger after them. Triage is for people: you cannot accept, dispute or verify entries.
 You can reword or archive your own while they are still proposed; correct an
 accepted one by superseding it, and it stays in use until your correction is

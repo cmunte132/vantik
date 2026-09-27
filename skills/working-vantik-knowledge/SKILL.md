@@ -268,5 +268,14 @@ The session you name is kept for tracing and decides nothing. Triage is off
 or only recording by default, so do not count on it: cite what you claim,
 and it helps the person and the check alike.
 
+People check triage in turn. A share of what it does alone, a repeat folded
+in or an entry refused on a policy, is put in front of a person to confirm or
+undo, and every verdict a person gives on something triage decided counts
+towards how far the two agree. A kind of decision people keep disagreeing
+with stops being made alone: those entries wait for a person, with the reason
+`LOW_AGREEMENT`, until agreement recovers. So an entry of yours that triage
+folded in or refused can still be put into use by a person. The review queue
+and the agreement figures are for people, and refuse an agent.
+
 Write for the reviewer, and for the stranger after them. A claim they cannot
 evaluate is a claim they will archive.

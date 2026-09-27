@@ -13,9 +13,12 @@ import {
   PageEntryRelationType,
   PageEntryStatus,
   Prisma,
+  UserType,
 } from '@prisma/client';
 import { KnowledgeTrustEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
+
+import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
 
 import { VectorService } from 'modules/vector/vector.service';
 
@@ -29,16 +32,24 @@ import TriageJudges, {
   type AcceptJudgment,
   type PairJudgment,
 } from './triage-judges';
-import { externalSourceOf, secretIn, severalClaimsIn } from './triage-policy';
+import {
+  commentSourceOf,
+  externalSourceOf,
+  redactSecrets,
+  secretIn,
+  severalClaimsIn,
+} from './triage-policy';
 
 /**
  * Decides what becomes of a new entry before a person looks at it.
  *
  * One pass per entry, in a fixed order, cheapest and most certain first:
  *
- * 1. policy: a credential or several claims in one entry is refused outright,
- *    and an entry from a run that read text from outside the workspace is
- *    marked for a person, before any model sees it;
+ * 1. policy: a credential or several claims in one entry is refused outright;
+ *    an entry that rests on text from outside the workspace, through the run
+ *    that wrote it or what it cites, and an agent's entry written outside any
+ *    run the server knows of, are marked for a person before any model sees
+ *    them;
  * 2. an exact repeat, found by hash, corroborates the entry it repeats;
  * 3. the nearest entries in the same modules are related to it, by a rule in
  *    code where the two differ in a number, date, negation or condition, and
@@ -62,11 +73,15 @@ import { externalSourceOf, secretIn, severalClaimsIn } from './triage-policy';
 export const MAX_NEIGHBOURS = 3;
 
 /**
- * More modules than one fact is about. A scope that reaches this many is a
+ * As many modules as one fact is about. A scope over more than this is a
  * claim about most of a codebase, which every run in each of them would be
- * handed; a person decides whether it is true that widely.
+ * handed; a person decides whether it is true that widely. So does an entry
+ * with no scope at all, which is served to every query.
  */
 export const BROAD_SCOPE_MODULES = 3;
+
+/** How much of a cited issue or comment the acceptance judges are shown. */
+export const MAX_CITED_TEXT = 1_500;
 
 /** Results under which a citation still supports its claim. */
 const HOLDING = new Set<string>(['HOLDS', 'MOVED']);
@@ -84,6 +99,8 @@ export interface TriageOutcome {
 /** One neighbour, as it was compared. */
 interface Neighbour {
   id: string;
+  /** As read; acting on the comparison requires it unchanged. */
+  content: string;
   similarity: number;
   status: string;
   trust: KnowledgeTrustEnum;
@@ -124,6 +141,7 @@ const ENTRY_SELECT = {
       startLine: true,
       endLine: true,
       snippet: true,
+      targetId: true,
       targetLabel: true,
       checkResult: true,
     },
@@ -135,6 +153,13 @@ type TriagedEntry = Prisma.PageEntryGetPayload<{
 }>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Something the decision rested on changed before it could be acted on. The
+ * transaction that was acting on it is rolled back, and the decision is
+ * recorded as not applied.
+ */
+class StaleTriage extends Error {}
 
 @Injectable()
 export default class KnowledgeTriageService {
@@ -221,9 +246,21 @@ export default class KnowledgeTriageService {
 
     const reasons = new Set<KnowledgeEscalationReason>();
     const writer = await this.writerOf(entry, workspaceId);
+    const cited = await this.citedTexts(entry, workspaceId);
 
-    if (writer.externalSource) {
+    // Where the entry's text came from, established by the server: the runs
+    // its writer was in when it was written, and the issues and comments it
+    // cites. Never the session the writer names, which is whatever the
+    // client sent. A repeat is held to this too: text from outside should
+    // not add weight to what is already accepted.
+    if (writer.externalSource || cited.externalSource) {
       reasons.add(KnowledgeEscalationReason.EXTERNAL_INPUT);
+    }
+
+    // An agent that wrote outside any run could have read anything, so
+    // "nothing from outside" is a check that could not run.
+    if (writer.unknownSource) {
+      reasons.add(KnowledgeEscalationReason.UNKNOWN_SOURCE);
     }
 
     // Only a person's acceptance retires what a correction replaces: an
@@ -255,7 +292,7 @@ export default class KnowledgeTriageService {
     // ---------------------------------------------------- 2. exact repeat
     const repeats = await this.prisma.pageEntry.findMany({
       where: { ...neighbourhood, contentHash },
-      select: { id: true, status: true, createdAt: true },
+      select: { id: true, status: true, createdAt: true, contentHash: true },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
     // The accepted one if there is one, since that is the one served, and
@@ -308,9 +345,11 @@ export default class KnowledgeTriageService {
         continue;
       }
 
+      // The entry passed the credential check; a neighbour written before
+      // there was one may not have.
       const judgments = await this.judges.classify(
         entry.content,
-        neighbour.content,
+        redactSecrets(neighbour.content),
       );
       const asked = judgments
         .map((judgment) => judgment.model)
@@ -373,6 +412,13 @@ export default class KnowledgeTriageService {
         neighbour.decidedBy === PageEntryRelationDecider.MODEL,
     );
     const corroborates = repeated?.id ?? nearDuplicate?.id ?? null;
+    // What the entry it repeats must still be for folding this one in to
+    // mean anything: live, and saying the same thing it said when compared.
+    const corroboratesAsRead: Prisma.PageEntryWhereInput | null = repeated
+      ? { contentHash: repeated.contentHash }
+      : nearDuplicate
+        ? { content: nearDuplicate.content }
+        : null;
 
     // A repeat is folded into what it repeats rather than accepted, so what
     // acceptance asks of an entry does not apply to it.
@@ -394,7 +440,10 @@ export default class KnowledgeTriageService {
         reasons.add(KnowledgeEscalationReason.PIN_REQUEST);
       }
 
-      if (entry.moduleIds.length > BROAD_SCOPE_MODULES) {
+      if (
+        !entry.scope?.trim() ||
+        entry.moduleIds.length > BROAD_SCOPE_MODULES
+      ) {
         reasons.add(KnowledgeEscalationReason.BROAD_SCOPE);
       }
 
@@ -414,7 +463,9 @@ export default class KnowledgeTriageService {
             content: entry.content,
             kind: entry.kind,
             scope: entry.scope,
-            evidence: entry.citations.map(evidenceOf),
+            evidence: entry.citations.map((citation) =>
+              evidenceOf(citation, cited.texts),
+            ),
           });
 
           models.push(
@@ -474,6 +525,7 @@ export default class KnowledgeTriageService {
         decision === KnowledgeTriageDecisionType.CORROBORATE
           ? corroborates
           : null,
+      corroboratesAsRead,
       // Standing entries precedence ruled against. Only an accepted entry
       // displaces anything, and only in `on` mode.
       displaces: neighbours
@@ -482,7 +534,7 @@ export default class KnowledgeTriageService {
             neighbour.preferredId === entry.id &&
             neighbour.status === PageEntryStatus.STANDING,
         )
-        .map((neighbour) => neighbour.id),
+        .map((neighbour) => ({ id: neighbour.id, content: neighbour.content })),
       relations,
       models,
       outputs,
@@ -498,6 +550,7 @@ export default class KnowledgeTriageService {
           result: citation.checkResult,
         })),
         writer,
+        cited: cited.targets,
         similarityThreshold: settings.similarityThreshold,
         repeats: repeated?.id ?? null,
         neighbours: neighbours.map((neighbour) => ({
@@ -523,7 +576,7 @@ export default class KnowledgeTriageService {
     entry: TriagedEntry,
     neighbourhood: Prisma.PageEntryWhereInput,
     minSimilarity: number,
-  ): Promise<Array<Neighbour & { content: string }>> {
+  ): Promise<Neighbour[]> {
     const near = await this.vector.findNearEntries(
       entry.page.workspaceId,
       entry.content,
@@ -557,7 +610,7 @@ export default class KnowledgeTriageService {
     });
 
     return rows
-      .map((row): Neighbour & { content: string } => ({
+      .map((row): Neighbour => ({
         id: row.id,
         content: row.content,
         similarity: similarity.get(row.id) ?? 0,
@@ -576,15 +629,40 @@ export default class KnowledgeTriageService {
   }
 
   /**
-   * Who wrote the entry, and whether the run that wrote it read text from
-   * outside the workspace. A hosted run writes with its run id as the
-   * session, and the run names its issue.
+   * Who wrote the entry, the runs it was written in, and whether any of them
+   * read text from outside the workspace.
+   *
+   * The runs are the server's own record: those its writer, as an agent, was
+   * working in when the entry was written. Hosted runs cannot write yet
+   * (ENG-84), so every agent writes through a client that names its own
+   * session; the session is kept as the writer gave it, and trusted for
+   * nothing. A run that has not finished counts whether or not it has
+   * started, so of two runs at once, the one with outside input decides.
    */
   private async writerOf(entry: TriagedEntry, workspaceId: string) {
-    const run =
-      entry.sourceSession && UUID.test(entry.sourceSession)
-        ? await this.prisma.agentRun.findFirst({
-            where: { id: entry.sourceSession, workspaceId },
+    const user = entry.sourceUserId
+      ? await this.prisma.user.findUnique({
+          where: { id: entry.sourceUserId },
+          select: { type: true },
+        })
+      : null;
+    // A person answers for what they write and reviews it as they do; the
+    // check is on what an agent was handed.
+    const person = user?.type === UserType.User;
+
+    const runs =
+      entry.sourceUserId && !person
+        ? await this.prisma.agentRun.findMany({
+            where: {
+              workspaceId,
+              agentUserId: entry.sourceUserId,
+              deleted: null,
+              createdAt: { lte: entry.createdAt },
+              OR: [
+                { finishedAt: null },
+                { finishedAt: { gte: entry.createdAt } },
+              ],
+            },
             select: {
               id: true,
               modelId: true,
@@ -598,19 +676,129 @@ export default class KnowledgeTriageService {
                     where: { deleted: null },
                     select: { sourceData: true, sync: true },
                   },
+                  // Every comment there was to read when the entry was
+                  // written, including one deleted since.
+                  comments: {
+                    where: { createdAt: { lte: entry.createdAt } },
+                    select: { sourceMetadata: true },
+                  },
                 },
               },
             },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           })
-        : null;
+        : [];
+
+    const read = runs.map((run) => ({
+      id: run.id,
+      model: run.modelId,
+      issueId: run.issue.id,
+      externalSource: externalSourceOf(run.issue),
+    }));
 
     return {
       userId: entry.sourceUserId,
+      userType: user?.type ?? null,
       session: entry.sourceSession,
-      runId: run?.id ?? null,
-      model: run?.modelId ?? null,
-      issueId: run?.issue?.id ?? null,
-      externalSource: run?.issue ? externalSourceOf(run.issue) : null,
+      runs: read,
+      externalSource:
+        read.find((run) => run.externalSource)?.externalSource ?? null,
+      unknownSource: !person && read.length === 0,
+    };
+  }
+
+  /**
+   * The text of the issues and comments the entry cites, as the acceptance
+   * judges are shown it, and whether any of it came from outside the
+   * workspace. A citation that holds says only that its target exists; what
+   * the target says is what grounds the claim.
+   */
+  private async citedTexts(entry: TriagedEntry, workspaceId: string) {
+    const idsOf = (kind: PageEntryCitationKind) =>
+      entry.citations
+        .filter(
+          (citation) =>
+            citation.kind === kind &&
+            citation.targetId &&
+            UUID.test(citation.targetId),
+        )
+        .map((citation) => citation.targetId as string);
+    const issueIds = idsOf(PageEntryCitationKind.ISSUE);
+    const commentIds = idsOf(PageEntryCitationKind.COMMENT);
+
+    const [issues, comments] = await Promise.all([
+      issueIds.length
+        ? this.prisma.issue.findMany({
+            where: {
+              id: { in: issueIds },
+              deleted: null,
+              team: { workspaceId, deleted: null },
+            },
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              sourceMetadata: true,
+              support: { select: { id: true } },
+              team: { select: { preferences: true } },
+              linkedIssue: {
+                where: { deleted: null },
+                select: { sourceData: true, sync: true },
+              },
+            },
+          })
+        : [],
+      commentIds.length
+        ? this.prisma.issueComment.findMany({
+            where: {
+              id: { in: commentIds },
+              deleted: null,
+              issue: { deleted: null, team: { workspaceId, deleted: null } },
+            },
+            select: { id: true, body: true, sourceMetadata: true },
+          })
+        : [],
+    ]);
+
+    // Plain text rather than markdown: markdown escapes the underscores in a
+    // token, and an escaped credential no longer looks like one.
+    const texts = new Map<string, string>();
+    const targets: Array<{
+      kind: PageEntryCitationKind;
+      id: string;
+      externalSource: string | null;
+    }> = [];
+
+    for (const issue of issues) {
+      texts.set(
+        issue.id,
+        citedText(
+          `${issue.title}\n\n${convertTiptapJsonToText(
+            issue.description ?? '',
+          )}`,
+        ),
+      );
+      targets.push({
+        kind: PageEntryCitationKind.ISSUE,
+        id: issue.id,
+        externalSource: externalSourceOf(issue),
+      });
+    }
+
+    for (const comment of comments) {
+      texts.set(comment.id, citedText(convertTiptapJsonToText(comment.body)));
+      targets.push({
+        kind: PageEntryCitationKind.COMMENT,
+        id: comment.id,
+        externalSource: commentSourceOf(comment),
+      });
+    }
+
+    return {
+      texts,
+      targets,
+      externalSource:
+        targets.find((target) => target.externalSource)?.externalSource ?? null,
     };
   }
 
@@ -619,104 +807,106 @@ export default class KnowledgeTriageService {
    * it, all in one transaction: a decision is never recorded as applied
    * without its effect, nor an effect left without its decision.
    *
-   * Acting is conditional on the entry being exactly as it was read. An entry
-   * edited, triaged by a person, or deleted while the pass ran is left alone,
-   * and the decision records that it was not applied.
+   * Acting is conditional on everything it acts on being as it was read: the
+   * entry, the entry it repeats, and each entry it displaces. If any of them
+   * was edited, triaged or verified by a person, or deleted while the pass
+   * ran, nothing is changed, and the decision is recorded as not applied,
+   * with why.
    */
   private async record(
     entry: TriagedEntry,
     mode: KnowledgeTriageMode,
-    found: {
-      decision: KnowledgeTriageDecisionType;
-      policy: KnowledgeTriagePolicy | null;
-      reasons: KnowledgeEscalationReason[];
-      inputs: Record<string, unknown>;
-      corroborates?: string | null;
-      displaces?: string[];
-      relations?: Array<{
-        toId: string;
-        type: PageEntryRelationType;
-        decidedBy: PageEntryRelationDecider;
-        models: string[];
-        similarity: number | null;
-        preferredId: string | null;
-        reason: string | null;
-      }>;
-      models?: string[];
-      outputs?: unknown;
-    },
+    found: Found,
   ): Promise<TriageOutcome> {
     const changed: string[] = [];
 
-    const { id, applied } = await this.prisma.$transaction(async (tx) => {
-      for (const relation of found.relations ?? []) {
-        const data = {
-          type: relation.type,
-          decidedBy: relation.decidedBy,
-          models: relation.models,
-          similarity: relation.similarity,
-          preferredId: relation.preferredId,
-          reason: relation.reason,
-        };
+    const write = (act: boolean, notApplied?: string) =>
+      this.prisma.$transaction(async (tx) => {
+        for (const relation of found.relations ?? []) {
+          const data = {
+            type: relation.type,
+            decidedBy: relation.decidedBy,
+            models: relation.models,
+            similarity: relation.similarity,
+            preferredId: relation.preferredId,
+            reason: relation.reason,
+          };
 
-        await tx.pageEntryRelation.upsert({
-          where: { fromId_toId: { fromId: entry.id, toId: relation.toId } },
-          create: { fromId: entry.id, toId: relation.toId, ...data },
-          update: data,
-        });
-      }
+          await tx.pageEntryRelation.upsert({
+            where: { fromId_toId: { fromId: entry.id, toId: relation.toId } },
+            create: { fromId: entry.id, toId: relation.toId, ...data },
+            update: data,
+          });
+        }
 
-      const applied =
-        mode === KnowledgeTriageMode.ON
+        const applied = act
           ? await this.apply(tx, entry, found, changed)
           : false;
+        const outputs =
+          notApplied !== undefined
+            ? { ...found.outputs, notApplied }
+            : found.outputs;
 
-      const decision = await tx.knowledgeTriageDecision.create({
-        data: {
-          entryId: entry.id,
-          workspaceId: entry.page.workspaceId,
-          decision: found.decision,
-          reasons: found.reasons,
-          policy: found.policy,
-          mode,
-          applied,
-          corroboratedEntryId: found.corroborates ?? null,
-          inputs: found.inputs as Prisma.InputJsonValue,
-          inputsDigest: digestOf(found.inputs),
-          models: found.models ?? [],
-          ...(found.outputs !== undefined && {
-            outputs: found.outputs as Prisma.InputJsonValue,
-          }),
-        },
-        select: { id: true },
+        const decision = await tx.knowledgeTriageDecision.create({
+          data: {
+            entryId: entry.id,
+            workspaceId: entry.page.workspaceId,
+            decision: found.decision,
+            reasons: found.reasons,
+            policy: found.policy,
+            mode,
+            applied,
+            corroboratedEntryId: found.corroborates ?? null,
+            inputs: found.inputs as Prisma.InputJsonValue,
+            inputsDigest: digestOf(found.inputs),
+            models: found.models ?? [],
+            ...(outputs !== undefined && {
+              outputs: outputs as Prisma.InputJsonValue,
+            }),
+          },
+          select: { id: true },
+        });
+
+        return { id: decision.id, applied };
       });
 
-      return { id: decision.id, applied };
-    });
+    let result: { id: string; applied: boolean };
+
+    try {
+      result = await write(mode === KnowledgeTriageMode.ON);
+    } catch (error) {
+      if (!(error instanceof StaleTriage)) {
+        throw error;
+      }
+
+      // Rolled back: record what was decided, and that it was not acted on.
+      changed.length = 0;
+      result = await write(false, error.message);
+    }
 
     if (changed.length) {
       await this.indexer?.entriesChanged(changed);
     }
 
     return {
-      decisionId: id,
+      decisionId: result.id,
       decision: found.decision,
       reasons: found.reasons,
       policy: found.policy,
       mode,
-      applied,
+      applied: result.applied,
     };
   }
 
-  /** Acts on a decision in `on` mode. True when anything changed. */
+  /**
+   * Acts on a decision in `on` mode. False when there is nothing to act on;
+   * throws `StaleTriage` when something it would act on changed since it was
+   * read, which rolls back whatever it had already changed.
+   */
   private async apply(
     tx: Prisma.TransactionClient,
     entry: TriagedEntry,
-    found: {
-      decision: KnowledgeTriageDecisionType;
-      corroborates?: string | null;
-      displaces?: string[];
-    },
+    found: Found,
     changed: string[],
   ): Promise<boolean> {
     // An escalation waits for a person, whatever the mode.
@@ -740,55 +930,135 @@ export default class KnowledgeTriageService {
     });
 
     if (count === 0) {
-      return false;
+      throw new StaleTriage('the entry changed while it was triaged');
     }
 
     changed.push(entry.id);
 
     if (found.corroborates) {
-      await tx.pageEntry.updateMany({
-        where: { id: found.corroborates, deleted: null },
+      const { count: corroborated } = await tx.pageEntry.updateMany({
+        where: {
+          id: found.corroborates,
+          deleted: null,
+          status: {
+            in: [PageEntryStatus.PROPOSED, PageEntryStatus.STANDING],
+          },
+          page: { deleted: null },
+          ...found.corroboratesAsRead,
+        },
         data: { corroborationCount: { increment: 1 } },
       });
+
+      // Archiving a repeat of something no longer there, or no longer
+      // saying the same, would lose the only copy of the claim.
+      if (corroborated === 0) {
+        throw new StaleTriage(
+          `the entry it repeats, ${found.corroborates}, changed while it was triaged`,
+        );
+      }
     }
 
     // Disputed rather than superseded: withheld until a person looks, and
-    // reversible, because a model found the contradiction.
-    if (
-      found.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT &&
-      found.displaces?.length
-    ) {
-      await tx.pageEntry.updateMany({
-        where: {
-          id: { in: found.displaces },
-          deleted: null,
-          status: PageEntryStatus.STANDING,
-        },
-        data: { status: PageEntryStatus.DISPUTED },
-      });
-      changed.push(...found.displaces);
+    // reversible, because a model found the contradiction. Each only as it
+    // was compared: a person verifying it, rewording it or locking its page
+    // since takes it out of what precedence decided about.
+    if (found.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT) {
+      for (const displaced of found.displaces ?? []) {
+        const { count: disputed } = await tx.pageEntry.updateMany({
+          where: {
+            id: displaced.id,
+            deleted: null,
+            status: PageEntryStatus.STANDING,
+            verifiedAt: null,
+            content: displaced.content,
+            page: {
+              deleted: null,
+              entryPolicy: { not: PageEntryPolicy.LOCKED },
+            },
+          },
+          data: { status: PageEntryStatus.DISPUTED },
+        });
+
+        if (disputed === 0) {
+          throw new StaleTriage(
+            `the entry it contradicts, ${displaced.id}, changed while it was triaged`,
+          );
+        }
+
+        changed.push(displaced.id);
+      }
     }
 
     return true;
   }
 }
 
-/** A citation as the acceptance judges are shown it. */
-function evidenceOf(citation: TriagedEntry['citations'][number]): string {
+/** What a pass found, as it is recorded and acted on. */
+interface Found {
+  decision: KnowledgeTriageDecisionType;
+  policy: KnowledgeTriagePolicy | null;
+  reasons: KnowledgeEscalationReason[];
+  inputs: Record<string, unknown>;
+  corroborates?: string | null;
+  /** What the entry it repeats must still match to be corroborated. */
+  corroboratesAsRead?: Prisma.PageEntryWhereInput | null;
+  /** Standing entries precedence ruled against, with their content as read. */
+  displaces?: Array<{ id: string; content: string }>;
+  relations?: Array<{
+    toId: string;
+    type: PageEntryRelationType;
+    decidedBy: PageEntryRelationDecider;
+    models: string[];
+    similarity: number | null;
+    preferredId: string | null;
+    reason: string | null;
+  }>;
+  models?: string[];
+  outputs?: Record<string, unknown>;
+}
+
+/**
+ * A citation as the acceptance judges are shown it: the lines as the server
+ * read them, or the issue or comment as it reads now. Any credential in them
+ * is withheld; the entry passed that check, what it cites did not have to.
+ */
+function evidenceOf(
+  citation: TriagedEntry['citations'][number],
+  texts: Map<string, string>,
+): string {
+  const result = (citation.checkResult ?? 'unchecked').toLowerCase();
+
   if (citation.kind === PageEntryCitationKind.CODE) {
     const lines =
       citation.startLine && citation.endLine
         ? `:${citation.startLine}-${citation.endLine}`
         : '';
 
-    return `${citation.path ?? '(no path)'}${lines} (${(
-      citation.checkResult ?? 'unchecked'
-    ).toLowerCase()})\n${citation.snippet ?? '(not read)'}`;
+    return `${citation.path ?? '(no path)'}${lines} (${result})\n${
+      citation.snippet === null ? '(not read)' : redactSecrets(citation.snippet)
+    }`;
   }
 
-  return `${citation.kind.toLowerCase().replace('_', ' ')} ${
+  const label = `${citation.kind.toLowerCase().replace('_', ' ')} ${
     citation.targetLabel ?? '(unknown)'
-  } (${(citation.checkResult ?? 'unchecked').toLowerCase()})`;
+  } (${result})`;
+  const text = citation.targetId ? texts.get(citation.targetId) : undefined;
+
+  return text === undefined
+    ? `${label}; its text is not shown`
+    : `${label}\n${text}`;
+}
+
+/**
+ * A cited issue's or comment's text, cut to what the judges are shown.
+ * Redacted before it is cut, so a cut cannot hide a credential's shape.
+ */
+function citedText(text: string): string {
+  const redacted = redactSecrets(text.trim());
+
+  return redacted.length > MAX_CITED_TEXT
+    ? `${redacted.slice(0, MAX_CITED_TEXT)} [cut]`
+    : redacted;
 }
 
 /** A digest of what a decision was made on, stable for the same inputs. */

@@ -24,7 +24,10 @@ import { PrismaService } from 'nestjs-prisma';
 import type { VectorService } from 'modules/vector/vector.service';
 
 import { contentHashOf } from '../page-entries.service';
-import KnowledgeTriageService, { digestOf } from './knowledge-triage.service';
+import KnowledgeTriageService, {
+  digestOf,
+  MAX_CITED_TEXT,
+} from './knowledge-triage.service';
 import TriageJudges, { type Complete } from './triage-judges';
 
 const WORKSPACE = 'workspace-1';
@@ -49,6 +52,7 @@ interface Citation {
   startLine: number | null;
   endLine: number | null;
   snippet: string | null;
+  targetId: string | null;
   targetLabel: string | null;
   checkResult: string | null;
 }
@@ -103,11 +107,13 @@ function matches(row: Record<string, unknown>, where: Where): boolean {
     if (typeof condition === 'object' && !Array.isArray(condition)) {
       const c = condition as Record<string, unknown>;
 
-      if (['in', 'not', 'lt', 'hasSome'].some((op) => op in c)) {
+      if (['in', 'not', 'lt', 'lte', 'gte', 'hasSome'].some((op) => op in c)) {
         return (
           (!('in' in c) || (c.in as unknown[]).includes(value)) &&
           (!('not' in c) || value !== c.not) &&
           (!('lt' in c) || compare(value, c.lt) < 0) &&
+          (!('lte' in c) || compare(value, c.lte) <= 0) &&
+          (!('gte' in c) || compare(value, c.gte) >= 0) &&
           (!('hasSome' in c) ||
             (c.hasSome as unknown[]).some((item) =>
               (value as unknown[]).includes(item),
@@ -138,6 +144,10 @@ function compare(a: unknown, b: unknown): number {
 interface Run {
   id: string;
   workspaceId: string;
+  agentUserId: string;
+  createdAt: Date;
+  finishedAt: Date | null;
+  deleted: Date | null;
   modelId: string | null;
   issue: {
     id: string;
@@ -145,12 +155,44 @@ interface Run {
     support: { id: string } | null;
     team: { preferences: unknown } | null;
     linkedIssue: Array<{ sourceData: unknown; sync: boolean }>;
+    comments: Array<{ createdAt: Date; sourceMetadata: unknown }>;
   };
 }
 
+/** An issue or comment an entry can cite. */
+interface Target {
+  id: string;
+  deleted: Date | null;
+  /** An issue's. */
+  title?: string;
+  description?: string | null;
+  sourceMetadata: unknown;
+  support?: { id: string } | null;
+  team?: { workspaceId: string; deleted: Date | null; preferences: unknown };
+  linkedIssue?: Array<{ sourceData: unknown; sync: boolean }>;
+  /** A comment's. */
+  body?: string;
+  issue?: {
+    deleted: Date | null;
+    team: { workspaceId: string; deleted: Date | null };
+  };
+}
+
+/** Who wrote what: agents, and one person. */
+const USERS: Record<string, string> = {
+  'agent-1': 'Agent',
+  'agent-2': 'Agent',
+  'person-1': 'User',
+};
+
 function store(
   rows: Row[],
-  options: { runs?: Run[]; preferences?: unknown } = {},
+  options: {
+    runs?: Run[];
+    issues?: Target[];
+    comments?: Target[];
+    preferences?: unknown;
+  } = {},
 ) {
   const page = (id: string, entryPolicy = 'CURATED'): PageRow => ({
     id,
@@ -256,24 +298,75 @@ function store(
         },
       ),
     },
+    user: {
+      findUnique: jest.fn(async ({ where }: { where: { id: string } }) =>
+        USERS[where.id] ? { type: USERS[where.id] } : null,
+      ),
+    },
     agentRun: {
-      findFirst: jest.fn(
-        async ({ where }: { where: { id: string; workspaceId: string } }) =>
-          (options.runs ?? []).find(
-            (run) =>
-              run.id === where.id && run.workspaceId === where.workspaceId,
-          ) ?? null,
+      findMany: jest.fn(
+        async ({
+          where,
+          select,
+        }: {
+          where: Where;
+          select: {
+            issue: { select: { comments: { where: Where } } };
+          };
+        }) =>
+          (options.runs ?? [])
+            .filter((run) => matches(run as never, where))
+            .map((run) => ({
+              ...run,
+              issue: {
+                ...run.issue,
+                comments: run.issue.comments.filter((comment) =>
+                  matches(comment, select.issue.select.comments.where),
+                ),
+              },
+            })),
+      ),
+    },
+    issue: {
+      findMany: jest.fn(async ({ where }: { where: Where }) =>
+        (options.issues ?? []).filter((issue) =>
+          matches(issue as never, where),
+        ),
+      ),
+    },
+    issueComment: {
+      findMany: jest.fn(async ({ where }: { where: Where }) =>
+        (options.comments ?? []).filter((comment) =>
+          matches(comment as never, where),
+        ),
       ),
     },
   };
   const prisma = {
     ...client,
+    // Interactive, as postgres runs it: whatever the work changed is undone
+    // when it throws.
     $transaction: jest.fn(
-      async (work: (tx: typeof client) => Promise<unknown>) => work(client),
+      async (work: (tx: typeof client) => Promise<unknown>) => {
+        const saved = [...entries.values()].map((row) => ({ ...row }));
+        const savedDecisions = decisions.length;
+        const savedRelations = relations.map((relation) => ({ ...relation }));
+
+        try {
+          return await work(client);
+        } catch (error) {
+          for (const row of saved) {
+            Object.assign(entries.get(row.id) as Row, row);
+          }
+          decisions.length = savedDecisions;
+          relations.splice(0, relations.length, ...savedRelations);
+          throw error;
+        }
+      },
     ),
   };
 
-  return { prisma, entries, decisions, relations };
+  return { prisma, entries, decisions, relations, pages };
 }
 
 // ------------------------------------------------------------------ fixtures
@@ -285,6 +378,7 @@ function holds(path = 'apps/server/src/webhooks.ts'): Citation {
     startLine: 40,
     endLine: 52,
     snippet: 'await queue.add(job, { attempts: RETRIES });',
+    targetId: null,
     targetLabel: null,
     checkResult: 'HOLDS',
   };
@@ -333,18 +427,92 @@ function fresh(overrides: Partial<Row> = {}): Row {
   });
 }
 
-function externalRun(sourceMetadata: unknown): Run {
+/**
+ * A run of the writer's, open since before anything in the store was
+ * written, on an issue written in the workspace.
+ */
+function run(
+  overrides: Partial<Omit<Run, 'issue'>> & {
+    issue?: Partial<Run['issue']>;
+  } = {},
+): Run {
+  const { issue, ...rest } = overrides;
+
   return {
     id: RUN,
     workspaceId: WORKSPACE,
+    agentUserId: 'agent-1',
+    createdAt: at(-60),
+    finishedAt: null,
+    deleted: null,
     modelId: 'writer-model',
+    ...rest,
     issue: {
       id: 'issue-1',
-      sourceMetadata,
+      sourceMetadata: null,
       support: null,
       team: { preferences: {} },
       linkedIssue: [],
+      comments: [],
+      ...issue,
     },
+  };
+}
+
+function externalRun(sourceMetadata: unknown): Run {
+  return run({ issue: { sourceMetadata } });
+}
+
+const ISSUE_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
+const OTHER_ISSUE_ID = 'aaaaaaaa-0000-4000-8000-000000000002';
+const COMMENT_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
+
+/** Rich text as the editor stores it. */
+function tiptap(text: string): string {
+  return JSON.stringify({
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  });
+}
+
+/** A citation of an issue, pull request, comment or run that holds. */
+function cites(kind: string, targetId: string, targetLabel: string): Citation {
+  return {
+    kind,
+    path: null,
+    startLine: null,
+    endLine: null,
+    snippet: null,
+    targetId,
+    targetLabel,
+    checkResult: 'HOLDS',
+  };
+}
+
+function issueTarget(overrides: Partial<Target> = {}): Target {
+  return {
+    id: ISSUE_ID,
+    deleted: null,
+    title: 'Retry webhooks from the queue',
+    description: tiptap(
+      'Deliveries are retried by the worker, not the handler.',
+    ),
+    sourceMetadata: null,
+    support: null,
+    team: { workspaceId: WORKSPACE, deleted: null, preferences: {} },
+    linkedIssue: [],
+    ...overrides,
+  };
+}
+
+function commentTarget(overrides: Partial<Target> = {}): Target {
+  return {
+    id: COMMENT_ID,
+    deleted: null,
+    body: tiptap('Confirmed in staging: the worker retries.'),
+    sourceMetadata: null,
+    issue: { deleted: null, team: { workspaceId: WORKSPACE, deleted: null } },
+    ...overrides,
   };
 }
 
@@ -352,7 +520,10 @@ type Answer = string | [string, string];
 
 interface Setup {
   rows: Row[];
+  /** The writers' runs; by default one open run on an issue from inside. */
   runs?: Run[];
+  issues?: Target[];
+  comments?: Target[];
   preferences?: unknown;
   /** What the index returns as near entries. */
   near?: Array<{ entryId: string; similarity: number }> | Error;
@@ -367,8 +538,10 @@ interface Setup {
 }
 
 function triage(setup: Setup) {
-  const { prisma, entries, decisions, relations } = store(setup.rows, {
-    runs: setup.runs,
+  const { prisma, entries, decisions, relations, pages } = store(setup.rows, {
+    runs: setup.runs ?? [run()],
+    issues: setup.issues,
+    comments: setup.comments,
     preferences: setup.preferences,
   });
   const calls: Array<{
@@ -442,6 +615,7 @@ function triage(setup: Setup) {
     entries,
     decisions,
     relations,
+    pages,
     calls,
     findNearEntries,
     indexer,
@@ -582,6 +756,67 @@ describe('an exact repeat', () => {
     expect(byEntry.a.decision).not.toBe(Decision.CORROBORATE);
     expect(byEntry.a.corroboratedEntryId).toBeNull();
   });
+});
+
+describe('folding in a repeat', () => {
+  it.each<[string, (row: Row) => void]>([
+    [
+      'archived',
+      (row) => {
+        row.status = 'ARCHIVED';
+      },
+    ],
+    [
+      'deleted',
+      (row) => {
+        row.deleted = at(11);
+      },
+    ],
+    [
+      'reworded',
+      (row) => {
+        row.content = 'Webhook deliveries are dropped by the queue worker.';
+        row.contentHash = contentHashOf(row.content);
+      },
+    ],
+  ])(
+    '[KG-4.1] leaves the repeat in the inbox when what it repeats was %s after it was found',
+    async (_change, change) => {
+      const t = triage({
+        rows: [existing('original', { content: NEW_CONTENT }), fresh()],
+      });
+      const find = t.prisma.pageEntry.findMany.getMockImplementation();
+      // The first read is the look for repeats; the change lands after it.
+      t.prisma.pageEntry.findMany.mockImplementationOnce(async (args) => {
+        const found = await find?.(args);
+        change(t.entries.get('original') as Row);
+
+        return found ?? [];
+      });
+
+      const outcome = await t.service.triage('new', ON);
+
+      expect(outcome).toMatchObject({
+        decision: Decision.CORROBORATE,
+        applied: false,
+      });
+      // Not archived as a repeat of something no longer there to repeat.
+      expect(t.entries.get('new')?.status).toBe('PROPOSED');
+      expect(t.entries.get('original')?.corroborationCount).toBe(0);
+      expect(t.decisions).toHaveLength(1);
+      expect(t.decisions[0]).toMatchObject({
+        applied: false,
+        outputs: {
+          notApplied:
+            'the entry it repeats, original, changed while it was triaged',
+        },
+      });
+      expect(t.relations).toEqual([
+        expect.objectContaining({ toId: 'original', type: Relation.DUPLICATE }),
+      ]);
+      expect(t.indexer.entriesChanged).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('near neighbours', () => {
@@ -803,6 +1038,31 @@ describe('near neighbours', () => {
       decidedBy: Decider.MODEL,
     });
   });
+
+  it('[KG-4.2] folds in nothing when the near duplicate was reworded while the judges answered', async () => {
+    const reworded = 'The queue worker retries webhook deliveries twice.';
+    const t = triage({
+      rows: [existing('neighbour', { content: neighbourText }), fresh()],
+      near: [{ entryId: 'neighbour', similarity: 0.93 }],
+      pair: () => {
+        (t.entries.get('neighbour') as Row).content = reworded;
+
+        return agreed('duplicate');
+      },
+    });
+
+    const outcome = await t.service.triage('new', ON);
+
+    expect(outcome).toMatchObject({
+      decision: Decision.CORROBORATE,
+      applied: false,
+    });
+    expect(t.entries.get('neighbour')).toMatchObject({
+      corroborationCount: 0,
+      content: reworded,
+    });
+    expect(t.entries.get('new')?.status).toBe('PROPOSED');
+  });
 });
 
 describe('the triage job and its record', () => {
@@ -844,6 +1104,13 @@ describe('the triage job and its record', () => {
       moduleIds: [SERVER],
       citations: [{ kind: 'CODE', result: 'HOLDS' }],
       similarityThreshold: 0.25,
+      writer: {
+        userId: 'agent-1',
+        runs: [expect.objectContaining({ id: RUN, externalSource: null })],
+        externalSource: null,
+        unknownSource: false,
+      },
+      cited: [],
       repeats: null,
       neighbours: [
         expect.objectContaining({
@@ -962,6 +1229,10 @@ describe('the triage job and its record', () => {
       applied: false,
     });
     expect(t.entries.get('new')?.status).toBe('PROPOSED');
+    expect(t.decisions[0].outputs).toMatchObject({
+      notApplied: 'the entry changed while it was triaged',
+    });
+    expect(t.indexer.entriesChanged).not.toHaveBeenCalled();
   });
 });
 
@@ -1005,6 +1276,12 @@ describe('auto-accept', () => {
       [Reason.BROAD_SCOPE],
     ],
     [
+      'it has no scope, so every query would be served it',
+      {},
+      { scope: null },
+      [Reason.BROAD_SCOPE],
+    ],
+    [
       'it asks to replace an entry',
       {},
       { supersedesId: 'someone-else' },
@@ -1034,6 +1311,17 @@ describe('auto-accept', () => {
       [Reason.JUDGES_DISAGREE],
     ],
   ];
+
+  it('[KG-4.4] reads a scope over three modules as broad, and three as not', async () => {
+    const t = triage({
+      rows: [fresh({ moduleIds: [SERVER, WEBAPP, 'module-3'] })],
+    });
+
+    expect(await t.service.triage('new', ON)).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      reasons: [],
+    });
+  });
 
   it.each(cases)(
     '[KG-4.4] escalates when %s',
@@ -1292,6 +1580,108 @@ describe('contradictions', () => {
     expect(t.relations[0]).toMatchObject({ preferredId: 'new' });
     expect(t.entries.get('proposed')?.status).toBe('PROPOSED');
   });
+
+  // Each change lands while the judges are answering, which is the window in
+  // which a person can act on the entry being contradicted.
+  it.each<[string, (t: ReturnType<typeof triage>) => void, string]>([
+    [
+      'verified by a person',
+      (t) => {
+        (t.entries.get('older') as Row).verifiedAt = at(11);
+      },
+      'STANDING',
+    ],
+    [
+      'reworded so it no longer says that',
+      (t) => {
+        (t.entries.get('older') as Row).content =
+          'The queue worker retries webhook deliveries with backoff.';
+      },
+      'STANDING',
+    ],
+    [
+      'on a page that was locked',
+      (t) => {
+        (t.pages.get(PAGE) as PageRow).entryPolicy = 'LOCKED';
+      },
+      'STANDING',
+    ],
+    [
+      'archived by a person',
+      (t) => {
+        (t.entries.get('older') as Row).status = 'ARCHIVED';
+      },
+      'ARCHIVED',
+    ],
+  ])(
+    '[KG-4.6] disputes nothing, and accepts nothing, when what it contradicts was %s while it decided',
+    async (_change, change, olderStatus) => {
+      const t = triage({
+        rows: [existing('older', { content: contradicting }), fresh()],
+        near: [{ entryId: 'older', similarity: 0.8 }],
+        pair: () => {
+          change(t);
+
+          return agreed('contradicts');
+        },
+      });
+
+      const outcome = await t.service.triage('new', ON);
+
+      expect(outcome).toMatchObject({
+        decision: Decision.AUTO_ACCEPT,
+        applied: false,
+      });
+      expect(t.entries.get('older')?.status).toBe(olderStatus);
+      expect(t.entries.get('new')?.status).toBe('PROPOSED');
+      expect(t.decisions).toHaveLength(1);
+      expect(t.decisions[0]).toMatchObject({
+        applied: false,
+        outputs: {
+          notApplied:
+            'the entry it contradicts, older, changed while it was triaged',
+        },
+      });
+      // What was found is still recorded.
+      expect(t.relations[0]).toMatchObject({
+        toId: 'older',
+        type: Relation.CONTRADICTS,
+        preferredId: 'new',
+      });
+      expect(t.indexer.entriesChanged).not.toHaveBeenCalled();
+    },
+  );
+
+  it('[KG-4.6] undoes every change it made when one entry it contradicts changed', async () => {
+    const t = triage({
+      rows: [
+        existing('first', { content: contradicting }),
+        existing('second', {
+          content: 'The queue worker discards failed webhook deliveries.',
+        }),
+        fresh(),
+      ],
+      near: [
+        { entryId: 'first', similarity: 0.9 },
+        { entryId: 'second', similarity: 0.8 },
+      ],
+      pair: () => {
+        (t.entries.get('second') as Row).verifiedAt = at(11);
+
+        return agreed('contradicts');
+      },
+    });
+
+    const outcome = await t.service.triage('new', ON);
+
+    expect(outcome?.applied).toBe(false);
+    // The first was disputed before the second was found changed, and is
+    // standing again.
+    expect(t.entries.get('first')?.status).toBe('STANDING');
+    expect(t.entries.get('second')?.status).toBe('STANDING');
+    expect(t.entries.get('new')?.status).toBe('PROPOSED');
+    expect(t.relations).toHaveLength(2);
+  });
 });
 
 describe('without a model', () => {
@@ -1431,7 +1821,7 @@ describe('secrets and outside input', () => {
     '[KG-4.8] never accepts an entry from a run whose issue came from %s',
     async (_source, sourceMetadata) => {
       const t = triage({
-        rows: [fresh({ sourceSession: RUN })],
+        rows: [fresh()],
         runs: [externalRun(sourceMetadata)],
       });
 
@@ -1442,12 +1832,23 @@ describe('secrets and outside input', () => {
         reasons: [Reason.EXTERNAL_INPUT],
         applied: false,
       });
+      // Found from the server's record of the writer's runs; the entry
+      // named no session.
       expect(t.decisions[0].inputs).toMatchObject({
         writer: {
-          runId: RUN,
-          issueId: 'issue-1',
+          userId: 'agent-1',
+          userType: 'Agent',
+          session: null,
+          runs: [
+            {
+              id: RUN,
+              issueId: 'issue-1',
+              externalSource: sourceMetadata.type,
+              model: 'writer-model',
+            },
+          ],
           externalSource: sourceMetadata.type,
-          model: 'writer-model',
+          unknownSource: false,
         },
       });
       expect(t.entries.get('new')?.status).toBe('PROPOSED');
@@ -1461,7 +1862,7 @@ describe('secrets and outside input', () => {
     synced.issue.linkedIssue = [{ sourceData: { type: 'slack' }, sync: true }];
 
     for (const run of [support, synced]) {
-      const t = triage({ rows: [fresh({ sourceSession: RUN })], runs: [run] });
+      const t = triage({ rows: [fresh()], runs: [run] });
 
       expect((await t.service.triage('new', ON))?.reasons).toEqual([
         Reason.EXTERNAL_INPUT,
@@ -1471,10 +1872,7 @@ describe('secrets and outside input', () => {
 
   it('[KG-4.8] does not fold a repeat from outside input into accepted knowledge', async () => {
     const t = triage({
-      rows: [
-        existing('original', { content: NEW_CONTENT }),
-        fresh({ sourceSession: RUN }),
-      ],
+      rows: [existing('original', { content: NEW_CONTENT }), fresh()],
       runs: [externalRun({ type: 'github' })],
     });
 
@@ -1489,7 +1887,7 @@ describe('secrets and outside input', () => {
 
   it('[KG-4.8] accepts from a run whose issue was written in the workspace', async () => {
     const t = triage({
-      rows: [fresh({ sourceSession: RUN })],
+      rows: [fresh()],
       // A run handing work back records where it came from; that is not
       // outside the workspace.
       runs: [externalRun({ source: 'agent-run' })],
@@ -1498,5 +1896,320 @@ describe('secrets and outside input', () => {
     const outcome = await t.service.triage('new', ON);
 
     expect(outcome?.decision).toBe(Decision.AUTO_ACCEPT);
+  });
+
+  it('[KG-4.8] finds the runs the writer was in from its own record, never from the session it names', async () => {
+    const OTHER_RUN = '99999999-2222-4333-8444-555555555555';
+    // The session names an internal run, of another agent; the writer's own
+    // open run is on an issue synced from GitHub.
+    const named = run({ id: OTHER_RUN, agentUserId: 'agent-2' });
+
+    for (const sourceSession of [OTHER_RUN, 'my-harness-session', null]) {
+      const t = triage({
+        rows: [fresh({ sourceSession })],
+        runs: [externalRun({ type: 'github' }), named],
+      });
+
+      expect(await t.service.triage('new', ON)).toMatchObject({
+        decision: Decision.ESCALATE,
+        reasons: [Reason.EXTERNAL_INPUT],
+      });
+      expect(t.decisions[0].inputs).toMatchObject({
+        writer: {
+          session: sourceSession,
+          runs: [expect.objectContaining({ id: RUN })],
+        },
+      });
+      expect(
+        (t.decisions[0].inputs as { writer: { runs: unknown[] } }).writer.runs,
+      ).toHaveLength(1);
+    }
+  });
+
+  it('[KG-4.8] counts the runs of the writer that were open when the entry was written, and no others', async () => {
+    const outside = (overrides: Partial<Omit<Run, 'issue'>>) =>
+      run({ ...overrides, issue: { sourceMetadata: { type: 'github' } } });
+    // The entry was written at minute 10.
+    const t = triage({
+      rows: [fresh()],
+      runs: [
+        run(),
+        outside({ id: 'finished-before', finishedAt: at(9) }),
+        outside({ id: 'started-after', createdAt: at(11) }),
+        outside({ id: 'another-agent', agentUserId: 'agent-2' }),
+        outside({ id: 'deleted', deleted: at(1) }),
+        outside({ id: 'other-workspace', workspaceId: 'workspace-2' }),
+      ],
+    });
+
+    expect(await t.service.triage('new', ON)).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      reasons: [],
+    });
+    expect(t.decisions[0].inputs).toMatchObject({
+      writer: { runs: [expect.objectContaining({ id: RUN })] },
+    });
+
+    // Open until the moment it was written, and one started that moment,
+    // both count.
+    for (const edge of [
+      outside({ finishedAt: at(10) }),
+      outside({ createdAt: at(10) }),
+    ]) {
+      const atEdge = triage({ rows: [fresh()], runs: [run(), edge] });
+
+      expect((await atEdge.service.triage('new', ON))?.reasons).toEqual([
+        Reason.EXTERNAL_INPUT,
+      ]);
+    }
+  });
+
+  it("[KG-4.8] escalates an agent's entry written outside any run the server knows of", async () => {
+    const t = triage({ rows: [fresh()], runs: [] });
+
+    expect(await t.service.triage('new', ON)).toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: [Reason.UNKNOWN_SOURCE],
+      applied: false,
+    });
+    expect(t.decisions[0].inputs).toMatchObject({
+      writer: { userType: 'Agent', runs: [], unknownSource: true },
+    });
+    // No model is asked to accept what a person has to look at anyway.
+    expect(t.calls.filter((call) => call.system.includes('knowledge'))).toEqual(
+      [],
+    );
+    expect(t.entries.get('new')?.status).toBe('PROPOSED');
+
+    // Nor is its repeat folded into accepted knowledge, and a writer the
+    // server has no record of is held the same way.
+    const repeat = triage({
+      rows: [existing('original', { content: NEW_CONTENT }), fresh()],
+      runs: [],
+    });
+    const unrecorded = triage({
+      rows: [fresh({ sourceUserId: null })],
+      runs: [],
+    });
+
+    expect((await repeat.service.triage('new', ON))?.reasons).toEqual([
+      Reason.UNKNOWN_SOURCE,
+    ]);
+    expect(repeat.entries.get('original')?.corroborationCount).toBe(0);
+    expect((await unrecorded.service.triage('new', ON))?.reasons).toEqual([
+      Reason.UNKNOWN_SOURCE,
+    ]);
+  });
+
+  it('[KG-4.8] holds a person to what they wrote, not to a run', async () => {
+    const t = triage({ rows: [fresh({ sourceUserId: 'person-1' })], runs: [] });
+
+    expect(await t.service.triage('new', ON)).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      reasons: [],
+    });
+    expect(t.decisions[0].inputs).toMatchObject({
+      writer: { userType: 'User', runs: [], unknownSource: false },
+    });
+  });
+
+  it('[KG-4.8] reads a comment mirrored from outside as outside input, after its link is gone too', async () => {
+    const withComment = (comment: {
+      createdAt: Date;
+      sourceMetadata: unknown;
+    }) => run({ issue: { comments: [comment], linkedIssue: [] } });
+
+    const mirrored = triage({
+      rows: [fresh()],
+      runs: [
+        withComment({
+          createdAt: at(1),
+          sourceMetadata: { type: 'github', id: 'account-1' },
+        }),
+      ],
+    });
+    // Written after the entry, so not read before it.
+    const later = triage({
+      rows: [fresh()],
+      runs: [
+        withComment({ createdAt: at(11), sourceMetadata: { type: 'github' } }),
+      ],
+    });
+    // A run handing its work back is inside the workspace.
+    const handback = triage({
+      rows: [fresh()],
+      runs: [
+        withComment({
+          createdAt: at(1),
+          sourceMetadata: { source: 'agent-run', agentRunId: RUN },
+        }),
+      ],
+    });
+
+    expect((await mirrored.service.triage('new', ON))?.reasons).toEqual([
+      Reason.EXTERNAL_INPUT,
+    ]);
+    expect(mirrored.decisions[0].inputs).toMatchObject({
+      writer: { externalSource: 'github' },
+    });
+    expect((await later.service.triage('new', ON))?.decision).toBe(
+      Decision.AUTO_ACCEPT,
+    );
+    expect((await handback.service.triage('new', ON))?.decision).toBe(
+      Decision.AUTO_ACCEPT,
+    );
+  });
+
+  it('[KG-4.8] never accepts an entry that rests on an issue or comment from outside', async () => {
+    const cases: Array<[Setup, Citation, string]> = [
+      [
+        {
+          rows: [],
+          issues: [issueTarget({ sourceMetadata: { type: 'github' } })],
+        },
+        cites('ISSUE', ISSUE_ID, 'ENG-4'),
+        'github',
+      ],
+      [
+        { rows: [], issues: [issueTarget({ support: { id: 'ticket-1' } })] },
+        cites('ISSUE', ISSUE_ID, 'ENG-4'),
+        'support',
+      ],
+      [
+        {
+          rows: [],
+          comments: [commentTarget({ sourceMetadata: { type: 'discord' } })],
+        },
+        cites('COMMENT', COMMENT_ID, COMMENT_ID),
+        'discord',
+      ],
+    ];
+
+    for (const [setup, citation, source] of cases) {
+      const t = triage({
+        ...setup,
+        rows: [fresh({ citations: [holds(), citation] })],
+      });
+
+      expect(await t.service.triage('new', ON)).toMatchObject({
+        decision: Decision.ESCALATE,
+        reasons: [Reason.EXTERNAL_INPUT],
+      });
+      expect(t.decisions[0].inputs).toMatchObject({
+        cited: [{ id: citation.targetId, externalSource: source }],
+      });
+      // Its text never reached a judge.
+      expect(t.calls).toEqual([]);
+    }
+  });
+
+  it('[KG-4.8] withholds a credential in anything it shows a model', async () => {
+    const t = triage({
+      rows: [
+        // Written before writes were checked for credentials.
+        existing('neighbour', {
+          content: `The queue worker signs requests with ${fakeToken}.`,
+        }),
+        fresh({
+          citations: [
+            { ...holds(), snippet: `const TOKEN = '${fakeToken}';` },
+            cites('ISSUE', ISSUE_ID, 'ENG-4'),
+          ],
+        }),
+      ],
+      issues: [
+        issueTarget({ description: tiptap(`Call the API with ${fakeToken}.`) }),
+      ],
+      near: [{ entryId: 'neighbour', similarity: 0.5 }],
+    });
+
+    await t.service.triage('new', ON);
+
+    const pair = t.calls.filter((call) => call.system.includes('NEWER claim'));
+    const accept = t.calls.filter((call) => call.system.includes('knowledge'));
+
+    expect(pair).toHaveLength(2);
+    expect(accept).toHaveLength(2);
+    for (const call of t.calls) {
+      expect(call.prompt).not.toContain(fakeToken);
+    }
+    expect(pair[0].prompt).toContain(
+      'The queue worker signs requests with [withheld: GitHub token].',
+    );
+    expect(accept[0].prompt).toContain(
+      "const TOKEN = '[withheld: GitHub token]';",
+    );
+    expect(accept[0].prompt).toContain(
+      'Call the API with [withheld: GitHub token].',
+    );
+  });
+});
+
+describe('what the acceptance judges are shown', () => {
+  it('[KG-4.4] the text of a cited issue or comment, not only that it exists', async () => {
+    const t = triage({
+      rows: [
+        fresh({
+          citations: [
+            cites('ISSUE', ISSUE_ID, 'ENG-4'),
+            cites('COMMENT', COMMENT_ID, COMMENT_ID),
+            // In another workspace, so not shown.
+            cites('ISSUE', OTHER_ISSUE_ID, 'OPS-9'),
+            cites(
+              'PULL_REQUEST',
+              'cccccccc-0000-4000-8000-000000000001',
+              'https://github.com/acme/app/pull/7',
+            ),
+          ],
+        }),
+      ],
+      issues: [
+        issueTarget(),
+        issueTarget({
+          id: OTHER_ISSUE_ID,
+          title: 'Not this workspace',
+          team: { workspaceId: 'workspace-2', deleted: null, preferences: {} },
+        }),
+      ],
+      comments: [commentTarget()],
+    });
+
+    await t.service.triage('new', ON);
+
+    const [accept] = t.calls.filter((call) =>
+      call.system.includes('knowledge'),
+    );
+
+    expect(accept.prompt).toContain(
+      'issue ENG-4 (holds)\nRetry webhooks from the queue\n\nDeliveries are retried by the worker, not the handler.',
+    );
+    expect(accept.prompt).toContain(
+      `comment ${COMMENT_ID} (holds)\nConfirmed in staging: the worker retries.`,
+    );
+    expect(accept.prompt).toContain(
+      'issue OPS-9 (holds); its text is not shown',
+    );
+    expect(accept.prompt).not.toContain('Not this workspace');
+    expect(accept.prompt).toContain(
+      'pull request https://github.com/acme/app/pull/7 (holds); its text is not shown',
+    );
+  });
+
+  it('[KG-4.4] no more of a cited issue than one screen of it', async () => {
+    const t = triage({
+      rows: [fresh({ citations: [cites('ISSUE', ISSUE_ID, 'ENG-4')] })],
+      issues: [issueTarget({ description: tiptap('word '.repeat(1_000)) })],
+    });
+
+    await t.service.triage('new', ON);
+
+    const [accept] = t.calls.filter((call) =>
+      call.system.includes('knowledge'),
+    );
+    const shown = /issue ENG-4 \(holds\)\n([\s\S]*?) \[cut\]/.exec(
+      accept.prompt,
+    )?.[1];
+
+    expect(shown).toHaveLength(MAX_CITED_TEXT);
   });
 });

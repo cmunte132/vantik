@@ -175,4 +175,43 @@ describe('judging whether to accept an entry', () => {
     ).toBe(false);
     expect(TriageJudges.using(run).available()).toBe(true);
   });
+
+  describe('as the server builds them', () => {
+    const LLM_ENV = [
+      'LLM_BASE_URL',
+      'LLM_API_KEY',
+      'LLM_MODEL_FAST',
+      'LLM_MODEL_SMART',
+    ];
+    const saved: Record<string, string | undefined> = {};
+
+    beforeEach(() => {
+      for (const name of LLM_ENV) {
+        saved[name] = process.env[name];
+        delete process.env[name];
+      }
+    });
+
+    afterEach(() => {
+      for (const name of LLM_ENV) {
+        if (saved[name] === undefined) {
+          delete process.env[name];
+        } else {
+          process.env[name] = saved[name];
+        }
+      }
+    });
+
+    it('[KG-4.7] read the deployment: no model until all four settings are there', () => {
+      expect(new TriageJudges().available()).toBe(false);
+
+      process.env.LLM_BASE_URL = 'http://llm.test/v1';
+      process.env.LLM_API_KEY = 'test-key';
+      process.env.LLM_MODEL_FAST = 'fast';
+      expect(new TriageJudges().available()).toBe(false);
+
+      process.env.LLM_MODEL_SMART = 'smart';
+      expect(new TriageJudges().available()).toBe(true);
+    });
+  });
 });

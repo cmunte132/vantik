@@ -53,6 +53,24 @@ export function secretIn(content: string): string | null {
   );
 }
 
+/**
+ * The text with every credential in it replaced by what kind it was.
+ *
+ * For text triage shows a model but did not refuse: a neighbour written before
+ * writes were checked, the lines a citation points at, the issue it names. The
+ * claim is still judged; the credential goes no further than it already has.
+ */
+export function redactSecrets(text: string): string {
+  return SECRET_PATTERNS.reduce(
+    (redacted, { name, pattern }) =>
+      redacted.replace(
+        new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`),
+        `[withheld: ${name}]`,
+      ),
+    text ?? '',
+  );
+}
+
 /** Longer than one fact is written in, with its reason. */
 export const MAX_ONE_FACT_LENGTH = 1_000;
 
@@ -87,6 +105,7 @@ export interface IssueProvenance {
   team?: { preferences: unknown } | null;
   support?: { id: string } | null;
   linkedIssue?: Array<{ sourceData: unknown; sync?: boolean | null }> | null;
+  comments?: Array<{ sourceMetadata: unknown }> | null;
 }
 
 /**
@@ -133,7 +152,28 @@ export function externalSourceOf(issue: IssueProvenance): string | null {
     }
   }
 
+  // A comment mirrored from a thread outside stays on the issue after the
+  // link is gone, and a run is handed the comments with the issue.
+  for (const comment of issue.comments ?? []) {
+    const source = commentSourceOf(comment);
+
+    if (source) {
+      return source;
+    }
+  }
+
   return null;
+}
+
+/** Where a comment's text came from outside the workspace, or null. */
+export function commentSourceOf(comment: {
+  sourceMetadata: unknown;
+}): string | null {
+  const metadata = asRecord(comment.sourceMetadata);
+
+  return typeof metadata.type === 'string' && metadata.type.trim()
+    ? metadata.type
+    : null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

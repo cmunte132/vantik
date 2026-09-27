@@ -11,6 +11,7 @@ import {
   externalSourceOf,
   type IssueProvenance,
   MAX_ONE_FACT_LENGTH,
+  redactSecrets,
   secretIn,
   severalClaimsIn,
 } from './triage-policy';
@@ -186,6 +187,23 @@ describe('the policies an entry is held to', () => {
     expect(secretIn(`Connect with ${secret} before deploying.`)).toBe(name);
   });
 
+  it('[KG-4.8] withholds every credential in text it shows a model, and leaves the rest as written', () => {
+    for (const [name, secret] of fakes) {
+      const text = `First ${secret} then ${secret} again.`;
+      const redacted = redactSecrets(text);
+
+      expect(redacted).not.toContain(secret);
+      expect(redacted).toContain(`[withheld: ${name}]`);
+      expect(secretIn(redacted)).toBeNull();
+    }
+
+    const prose =
+      'Tokens live in the GITHUB_TOKEN secret; connect to postgres://db.internal/app.';
+    expect(redactSecrets(prose)).toBe(prose);
+    // The patterns are not left in a state that skips the next match.
+    expect(secretIn(fakes[1][1])).toBe('GitHub token');
+  });
+
   it('[KG-4.8] does not mistake prose about credentials for one', () => {
     for (const prose of [
       'Tokens live in the GITHUB_TOKEN secret, never in the repository.',
@@ -235,6 +253,17 @@ describe('the policies an entry is held to', () => {
         issue({ linkedIssue: [{ sourceData: {}, sync: true }] }),
       ),
     ).toBe('linked issue');
+    // A mirrored comment outlives the link it came through.
+    expect(
+      externalSourceOf(
+        issue({
+          comments: [
+            { sourceMetadata: null },
+            { sourceMetadata: { type: 'github', id: 'account-1' } },
+          ],
+        }),
+      ),
+    ).toBe('github');
   });
 
   it('[KG-4.8] does not read work inside the workspace as outside input', () => {
@@ -242,6 +271,16 @@ describe('the policies an entry is held to', () => {
     // A run handing work back says where it came from.
     expect(
       externalSourceOf(issue({ sourceMetadata: { source: 'agent-run' } })),
+    ).toBeNull();
+    expect(
+      externalSourceOf(
+        issue({
+          comments: [
+            { sourceMetadata: null },
+            { sourceMetadata: { source: 'agent-run', agentRunId: 'run-1' } },
+          ],
+        }),
+      ),
     ).toBeNull();
     // The pull request is the work itself.
     expect(

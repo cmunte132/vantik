@@ -157,7 +157,11 @@ export class PagesProcessor {
     const detail = [
       outcome.reasons.length ? ` (${outcome.reasons.join(', ')})` : '',
       outcome.policy ? ` (policy ${outcome.policy})` : '',
+      outcome.backedOffFrom
+        ? ` instead of ${outcome.backedOffFrom}, which is backed off`
+        : '',
       outcome.applied ? ', applied' : '',
+      outcome.audit ? ', drawn for audit' : '',
     ].join('');
 
     this.logger.info({

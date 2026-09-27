@@ -24,6 +24,7 @@ import { PrismaService } from 'nestjs-prisma';
 import type { VectorService } from 'modules/vector/vector.service';
 
 import { contentHashOf } from '../page-entries.service';
+import { auditDraw } from './agreement';
 import KnowledgeTriageService, {
   digestOf,
   MAX_CITED_TEXT,
@@ -179,6 +180,14 @@ interface Target {
   };
 }
 
+/** A decision type stopping or resuming, as recorded. */
+interface Backoff {
+  workspaceId: string;
+  decision: string;
+  backedOff: boolean;
+  createdAt: Date;
+}
+
 /** Who wrote what: agents, a person, and an account that is neither. */
 const USERS: Record<string, string> = {
   'agent-1': 'Agent',
@@ -194,6 +203,7 @@ function store(
     issues?: Target[];
     comments?: Target[];
     preferences?: unknown;
+    backoff?: Backoff[];
   } = {},
 ) {
   const page = (id: string, entryPolicy = 'CURATED'): PageRow => ({
@@ -353,6 +363,15 @@ function store(
         (options.comments ?? []).filter((comment) =>
           matches(comment as never, where),
         ),
+      ),
+    },
+    knowledgeBackoffChange: {
+      // The latest change for the type is its state.
+      findFirst: jest.fn(
+        async ({ where }: { where: Where }) =>
+          (options.backoff ?? [])
+            .filter((change) => matches(change as never, where))
+            .sort((a, b) => compare(b.createdAt, a.createdAt))[0] ?? null,
       ),
     },
   };
@@ -559,6 +578,8 @@ interface Setup {
   llm?: boolean;
   /** One model serving both roles. */
   sameModel?: boolean;
+  /** Decision types stopped or resumed in the workspace. */
+  backoff?: Backoff[];
 }
 
 function triage(setup: Setup) {
@@ -567,6 +588,7 @@ function triage(setup: Setup) {
     issues: setup.issues,
     comments: setup.comments,
     preferences: setup.preferences,
+    backoff: setup.backoff,
   });
   const calls: Array<{
     role: string;
@@ -1102,7 +1124,7 @@ describe('the triage job and its record', () => {
     const outcome = await t.service.triage('new', ON);
 
     expect(outcome).toMatchObject({
-      decisionId: 'decision-1',
+      decisionId: t.decisions[0].id,
       decision: Decision.AUTO_ACCEPT,
       reasons: [],
       policy: null,
@@ -2286,5 +2308,274 @@ describe('what the acceptance judges are shown', () => {
     )?.[1];
 
     expect(shown).toHaveLength(MAX_CITED_TEXT);
+  });
+});
+
+describe('audits', () => {
+  const fakeToken = ['gh', 'p_', 'x'.repeat(36)].join('');
+  const atRate = (rate: string, mode = ON) => ({
+    ...mode,
+    KNOWLEDGE_AUDIT_RATE: rate,
+  });
+
+  it('[KG-5.2] draws a share of what it accepts for audit, by the decision id', async () => {
+    for (let index = 0; index < 20; index++) {
+      const t = triage({ rows: [fresh()] });
+
+      const outcome = await t.service.triage('new', atRate('0.5'));
+      const [decision] = t.decisions as Array<{
+        id: string;
+        audit: boolean;
+        auditRate: number | null;
+      }>;
+
+      expect(outcome).toMatchObject({
+        decision: Decision.AUTO_ACCEPT,
+        applied: true,
+        audit: decision.audit,
+      });
+      // Whether it is audited can be worked out again from its id alone.
+      expect(decision.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      expect(decision.audit).toBe(auditDraw(decision.id) < 0.5);
+      expect(decision.auditRate).toBe(0.5);
+    }
+  });
+
+  it('[KG-5.2] audits at KNOWLEDGE_AUDIT_RATE, a tenth unless told otherwise', async () => {
+    const always = triage({ rows: [fresh()] });
+    await always.service.triage('new', atRate('1'));
+    expect(always.decisions[0]).toMatchObject({ audit: true, auditRate: 1 });
+
+    const never = triage({ rows: [fresh()] });
+    await never.service.triage('new', atRate('0'));
+    expect(never.decisions[0]).toMatchObject({ audit: false, auditRate: 0 });
+
+    const unset = triage({ rows: [fresh()] });
+    await unset.service.triage('new', ON);
+    expect(unset.decisions[0]).toMatchObject({ auditRate: 0.1 });
+
+    // The workspace's own rate over the deployment's.
+    const own = triage({
+      rows: [fresh()],
+      preferences: { knowledge: { auditRate: 1 } },
+    });
+    await own.service.triage('new', atRate('0'));
+    expect(own.decisions[0]).toMatchObject({ audit: true, auditRate: 1 });
+  });
+
+  it('[KG-5.2] audits folded repeats and policy refusals it acted on too', async () => {
+    const repeat = triage({
+      rows: [
+        existing('original', { content: NEW_CONTENT }),
+        fresh({ citations: [] }),
+      ],
+    });
+    await repeat.service.triage('new', atRate('1'));
+    expect(repeat.decisions[0]).toMatchObject({
+      decision: Decision.CORROBORATE,
+      applied: true,
+      audit: true,
+    });
+
+    const several = triage({
+      rows: [
+        fresh({
+          content: '- Webhooks retry.\n- Sessions expire.\n- Deploys freeze.',
+        }),
+      ],
+    });
+    await several.service.triage('new', atRate('1'));
+    expect(several.decisions[0]).toMatchObject({
+      decision: Decision.REJECT,
+      policy: KnowledgeTriagePolicy.ONE_FACT,
+      audit: true,
+    });
+  });
+
+  it('[KG-5.2] never audits what reaches a person anyway, or a refused credential', async () => {
+    // In shadow mode everything waits for a person.
+    const shadow = triage({ rows: [fresh()] });
+    await shadow.service.triage('new', atRate('1', SHADOW));
+    expect(shadow.decisions[0]).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: false,
+      audit: false,
+      auditRate: null,
+    });
+
+    const escalated = triage({ rows: [fresh({ citations: [] })] });
+    await escalated.service.triage('new', atRate('1'));
+    expect(escalated.decisions[0]).toMatchObject({
+      decision: Decision.ESCALATE,
+      audit: false,
+      auditRate: null,
+    });
+
+    // Refused, and not put in front of anyone else.
+    const secret = triage({
+      rows: [fresh({ content: `Deploys authenticate with ${fakeToken}.` })],
+    });
+    await secret.service.triage('new', atRate('1'));
+    expect(secret.decisions[0]).toMatchObject({
+      decision: Decision.REJECT,
+      policy: KnowledgeTriagePolicy.SECRET,
+      applied: true,
+      audit: false,
+      auditRate: null,
+    });
+
+    // Not acted on, because the entry changed while it was decided.
+    const stale = triage({ rows: [fresh()] });
+    stale.prisma.pageEntry.findFirst.mockImplementationOnce(async () => {
+      const row = stale.entries.get('new') as Row;
+      const read = {
+        ...row,
+        page: { workspaceId: WORKSPACE, workspace: { preferences: {} } },
+      };
+      row.updatedAt = at(12);
+      return read as never;
+    });
+    await stale.service.triage('new', atRate('1'));
+    expect(stale.decisions[0]).toMatchObject({ applied: false, audit: false });
+  });
+});
+
+describe('backing off', () => {
+  const fakeToken = ['gh', 'p_', 'x'.repeat(36)].join('');
+  const stopped = (decision: string, minutes = -5): Backoff => ({
+    workspaceId: WORKSPACE,
+    decision,
+    backedOff: true,
+    createdAt: at(minutes),
+  });
+
+  it('[KG-5.4] escalates what a backed-off type would have decided, and says what it was', async () => {
+    const t = triage({
+      rows: [fresh()],
+      backoff: [stopped(Decision.AUTO_ACCEPT)],
+    });
+
+    const outcome = await t.service.triage('new', {
+      ...ON,
+      KNOWLEDGE_AUDIT_RATE: '1',
+    });
+
+    expect(outcome).toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: [Reason.LOW_AGREEMENT],
+      backedOffFrom: Decision.AUTO_ACCEPT,
+      applied: false,
+      audit: false,
+    });
+    expect(t.decisions[0]).toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: [Reason.LOW_AGREEMENT],
+      backedOffFrom: Decision.AUTO_ACCEPT,
+    });
+    // Waits for a person.
+    expect(t.entries.get('new')?.status).toBe('PROPOSED');
+  });
+
+  it('[KG-5.4] acts again once the type resumes, and only on its own workspace', async () => {
+    const resumed = triage({
+      rows: [fresh()],
+      backoff: [
+        stopped(Decision.AUTO_ACCEPT, -5),
+        { ...stopped(Decision.AUTO_ACCEPT, -1), backedOff: false },
+      ],
+    });
+    expect(await resumed.service.triage('new', ON)).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      backedOffFrom: null,
+      applied: true,
+    });
+
+    const elsewhere = triage({
+      rows: [fresh()],
+      backoff: [
+        { ...stopped(Decision.AUTO_ACCEPT), workspaceId: 'workspace-2' },
+      ],
+    });
+    expect(await elsewhere.service.triage('new', ON)).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: true,
+    });
+
+    // Another type backed off leaves this one acting.
+    const other = triage({
+      rows: [fresh()],
+      backoff: [stopped(Decision.CORROBORATE)],
+    });
+    expect(await other.service.triage('new', ON)).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: true,
+    });
+  });
+
+  it('[KG-5.4] holds back a folded repeat, leaving the entry it repeats uncounted', async () => {
+    const t = triage({
+      rows: [
+        existing('original', { content: NEW_CONTENT, corroborationCount: 2 }),
+        fresh({ citations: [] }),
+      ],
+      backoff: [stopped(Decision.CORROBORATE)],
+    });
+
+    expect(await t.service.triage('new', ON)).toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: [Reason.LOW_AGREEMENT],
+      backedOffFrom: Decision.CORROBORATE,
+      applied: false,
+    });
+    expect(t.decisions[0]).toMatchObject({ corroboratedEntryId: null });
+    expect(t.entries.get('new')?.status).toBe('PROPOSED');
+    expect(t.entries.get('original')?.corroborationCount).toBe(2);
+  });
+
+  it('[KG-5.4] holds back a one-fact refusal, but never lets a credential through', async () => {
+    const several = triage({
+      rows: [
+        fresh({
+          content: '- Webhooks retry.\n- Sessions expire.\n- Deploys freeze.',
+        }),
+      ],
+      backoff: [stopped(Decision.REJECT)],
+    });
+    expect(await several.service.triage('new', ON)).toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: [Reason.LOW_AGREEMENT],
+      backedOffFrom: Decision.REJECT,
+      policy: KnowledgeTriagePolicy.ONE_FACT,
+      applied: false,
+    });
+    expect(several.entries.get('new')?.status).toBe('PROPOSED');
+
+    const secret = triage({
+      rows: [fresh({ content: `Deploys authenticate with ${fakeToken}.` })],
+      backoff: [stopped(Decision.REJECT)],
+    });
+    expect(await secret.service.triage('new', ON)).toMatchObject({
+      decision: Decision.REJECT,
+      policy: KnowledgeTriagePolicy.SECRET,
+      backedOffFrom: null,
+      applied: true,
+    });
+    expect(secret.entries.get('new')?.status).toBe('ARCHIVED');
+  });
+
+  it('[KG-5.4] records the same in shadow mode, where nothing is acted on', async () => {
+    const t = triage({
+      rows: [fresh()],
+      backoff: [stopped(Decision.AUTO_ACCEPT)],
+    });
+
+    expect(await t.service.triage('new', SHADOW)).toMatchObject({
+      decision: Decision.ESCALATE,
+      backedOffFrom: Decision.AUTO_ACCEPT,
+      mode: KnowledgeTriageMode.SHADOW,
+      applied: false,
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { Injectable, Optional } from '@nestjs/common';
 import {
@@ -26,6 +26,8 @@ import KnowledgeIndexService from '../knowledge-index.service';
 import { entryTrust } from '../knowledge-proof';
 import { knowledgeSettings } from '../knowledge-settings';
 import { contentHashOf } from '../page-entries.service';
+import { auditDraw, isActing } from './agreement';
+import { backoffState, type BackoffState } from './knowledge-agreement.service';
 import { preferred } from './precedence';
 import { factualDifference } from './relation-guard';
 import TriageJudges, {
@@ -56,7 +58,10 @@ import {
  * 4. acceptance: an agent's entry is not accepted without a person (see
  *    `writerOf`); every citation must hold, and an entry that cites nothing
  *    is not grounded;
- * 5. the decision, and in `on` mode, acting on it.
+ * 5. the decision, and in `on` mode, acting on it. A decision of a type
+ *    whose agreement with people has fallen under the floor escalates
+ *    instead (see `KnowledgeAgreementService`), and a share of what is acted
+ *    on is drawn for a person to audit.
  *
  * Anything the pass cannot settle escalates with every reason that applied,
  * and nothing is accepted on a check that did not run: with no model, the
@@ -94,6 +99,10 @@ export interface TriageOutcome {
   policy: KnowledgeTriagePolicy | null;
   mode: KnowledgeTriageMode;
   applied: boolean;
+  /** The decision it reached, when its type was backed off. */
+  backedOffFrom: KnowledgeTriageDecisionType | null;
+  /** Whether it was drawn for a person to check. */
+  audit: boolean;
 }
 
 /** One neighbour, as it was compared. */
@@ -219,6 +228,9 @@ export default class KnowledgeTriageService {
         ? KnowledgeTriageMode.ON
         : KnowledgeTriageMode.SHADOW;
     const contentHash = entry.contentHash ?? contentHashOf(entry.content);
+    const backoff = await backoffState(this.prisma, workspaceId);
+    const decide = (found: Found) =>
+      this.record(entry, mode, settings.auditRate, heldBack(found, backoff));
 
     // ------------------------------------------------------------ 1. policy
     // Refused before anything else reads the content, and before any model
@@ -227,7 +239,7 @@ export default class KnowledgeTriageService {
     const severalClaims = secret ? null : severalClaimsIn(entry.content);
 
     if (secret || severalClaims) {
-      return this.record(entry, mode, {
+      return decide({
         decision: KnowledgeTriageDecisionType.REJECT,
         policy: secret
           ? KnowledgeTriagePolicy.SECRET
@@ -518,7 +530,7 @@ export default class KnowledgeTriageService {
         })),
     ];
 
-    return this.record(entry, mode, {
+    return decide({
       decision,
       policy: null,
       reasons: [...reasons],
@@ -820,14 +832,18 @@ export default class KnowledgeTriageService {
    * entry, the entry it repeats, and each entry it displaces. If any of them
    * was edited, triaged or verified by a person, or deleted while the pass
    * ran, nothing is changed, and the decision is recorded as not applied,
-   * with why.
+   * with why. A decision that was acted on is drawn for audit at
+   * `auditRate`, by its id, so the draw can be worked out again.
    */
   private async record(
     entry: TriagedEntry,
     mode: KnowledgeTriageMode,
+    auditRate: number,
     found: Found,
   ): Promise<TriageOutcome> {
     const changed: string[] = [];
+    // Chosen here so the audit draw can be seeded with it.
+    const id = randomUUID();
 
     const write = (act: boolean, notApplied?: string) =>
       this.prisma.$transaction(async (tx) => {
@@ -851,6 +867,11 @@ export default class KnowledgeTriageService {
         const applied = act
           ? await this.apply(tx, entry, found, changed)
           : false;
+        // Drawn from what was acted on without a person: whatever else was
+        // decided reaches a person anyway. Never a refused credential, which
+        // an audit would only put in front of more people.
+        const drawn = applied && found.policy !== KnowledgeTriagePolicy.SECRET;
+        const audit = drawn && auditDraw(id) < auditRate;
         const outputs =
           notApplied !== undefined
             ? { ...found.outputs, notApplied }
@@ -858,6 +879,7 @@ export default class KnowledgeTriageService {
 
         const decision = await tx.knowledgeTriageDecision.create({
           data: {
+            id,
             entryId: entry.id,
             workspaceId: entry.page.workspaceId,
             decision: found.decision,
@@ -866,6 +888,9 @@ export default class KnowledgeTriageService {
             mode,
             applied,
             corroboratedEntryId: found.corroborates ?? null,
+            backedOffFrom: found.backedOffFrom ?? null,
+            audit,
+            auditRate: drawn ? auditRate : null,
             inputs: found.inputs as Prisma.InputJsonValue,
             inputsDigest: digestOf(found.inputs),
             models: found.models ?? [],
@@ -876,10 +901,10 @@ export default class KnowledgeTriageService {
           select: { id: true },
         });
 
-        return { id: decision.id, applied };
+        return { id: decision.id, applied, audit };
       });
 
-    let result: { id: string; applied: boolean };
+    let result: { id: string; applied: boolean; audit: boolean };
 
     try {
       result = await write(mode === KnowledgeTriageMode.ON);
@@ -904,6 +929,8 @@ export default class KnowledgeTriageService {
       policy: found.policy,
       mode,
       applied: result.applied,
+      backedOffFrom: found.backedOffFrom ?? null,
+      audit: result.audit,
     };
   }
 
@@ -1024,6 +1051,32 @@ interface Found {
   }>;
   models?: string[];
   outputs?: Record<string, unknown>;
+  /** The decision it reached, when its type was backed off. */
+  backedOffFrom?: KnowledgeTriageDecisionType | null;
+}
+
+/**
+ * What a pass decides once back-off has had its say: a decision of a type
+ * people have lately disagreed with escalates instead, with what it would
+ * have been kept beside it. Never a refused credential, which no measure of
+ * agreement lets through.
+ */
+function heldBack(found: Found, backoff: Map<string, BackoffState>): Found {
+  if (
+    !isActing(found.decision) ||
+    found.policy === KnowledgeTriagePolicy.SECRET ||
+    !backoff.get(found.decision)?.backedOff
+  ) {
+    return found;
+  }
+
+  return {
+    ...found,
+    decision: KnowledgeTriageDecisionType.ESCALATE,
+    reasons: [KnowledgeEscalationReason.LOW_AGREEMENT],
+    backedOffFrom: found.decision,
+    corroborates: null,
+  };
 }
 
 /**

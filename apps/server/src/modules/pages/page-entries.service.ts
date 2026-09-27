@@ -47,6 +47,7 @@ import {
   triageEntryJobOptions,
   WriterIdentity,
 } from './pages.interface';
+import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 import { secretIn } from './triage/triage-policy';
 
 @Injectable()
@@ -59,7 +60,9 @@ export default class PageEntriesService {
    * Typesense down still gets the exact-duplicate check, which is postgres.
    * The citation checker is not a cache, so a write that names citations is
    * refused rather than stored unchecked when it is absent. Without the queue
-   * an entry is not triaged, and waits in the inbox for a person as before.
+   * an entry is not triaged, and waits in the inbox for a person as before;
+   * without the agreement service, what people decide about triaged entries
+   * is not recorded as verdicts on triage.
    */
   constructor(
     private prisma: PrismaService,
@@ -67,6 +70,7 @@ export default class PageEntriesService {
     private vectorService?: VectorService,
     private citations?: EntryCitationsService,
     @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
+    @Optional() private agreement?: KnowledgeAgreementService,
   ) {}
 
   // ----------------------------------------------------------------- reading
@@ -307,6 +311,9 @@ export default class PageEntriesService {
       where: { id: entryId, deleted: null },
       select: {
         status: true,
+        content: true,
+        scope: true,
+        kind: true,
         sourceUserId: true,
         supersedesId: true,
         supersedes: { select: { status: true } },
@@ -318,7 +325,9 @@ export default class PageEntriesService {
       throw new NotFoundException({ message: `Entry ${entryId} not found` });
     }
 
-    if (await this.isAgent(userId)) {
+    const agent = await this.isAgent(userId);
+
+    if (agent) {
       this.assertAgentMayEdit(current, userId, entryData);
     }
 
@@ -345,6 +354,27 @@ export default class PageEntriesService {
           )
         : { operations: [], retired: [] };
 
+    // A person acting on an entry triage sent them gives triage a verdict,
+    // written with the change. An agent withdrawing or rewording its own
+    // entry is not a verdict on anything.
+    const verdicts =
+      agent || !this.agreement
+        ? { operations: [], workspaceIds: [] }
+        : await this.agreement.verdictsFor(
+            [{ id: entryId, status: current.status }],
+            {
+              status: entryData.status,
+              edited:
+                (entryData.content !== undefined &&
+                  entryData.content !== current.content) ||
+                (entryData.scope !== undefined &&
+                  entryData.scope !== current.scope) ||
+                (entryData.kind !== undefined &&
+                  entryData.kind !== current.kind),
+            },
+            userId,
+          );
+
     const [entry] = await this.prisma.$transaction([
       this.prisma.pageEntry.update({
         where: { id: entryId },
@@ -370,9 +400,11 @@ export default class PageEntriesService {
         include: { citations: { select: PROOF_CITATION_SELECT } },
       }),
       ...settled.operations,
+      ...verdicts.operations,
     ]);
     await this.indexer?.entryChanged(entryId);
     await this.indexer?.entriesChanged(settled.retired);
+    await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
 
     return {
       ...entry,
@@ -430,6 +462,13 @@ export default class PageEntriesService {
         eligibleEntries,
         input.status,
       );
+      const verdicts = this.agreement
+        ? await this.agreement.verdictsFor(
+            eligibleEntries,
+            { status: input.status, edited: false },
+            userId,
+          )
+        : { operations: [], workspaceIds: [] };
 
       await this.prisma.$transaction([
         this.prisma.pageEntry.updateMany({
@@ -437,8 +476,10 @@ export default class PageEntriesService {
           data: { status: input.status },
         }),
         ...settled.operations,
+        ...verdicts.operations,
       ]);
       await this.indexer?.entriesChanged([...eligible, ...settled.retired]);
+      await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
     }
 
     return {

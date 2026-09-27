@@ -1184,6 +1184,23 @@ describe('audits', () => {
     expect(t.entries.get('original')?.corroborationCount).toBe(1);
   });
 
+  it('[KG-5.2] closes an audit whose entry has moved on since', async () => {
+    const decayed = audited('decayed', Decision.AUTO_ACCEPT);
+    decayed.entry.status = PageEntryStatusEnum.ARCHIVED;
+    const t = harness({
+      entries: [decayed.entry],
+      decisions: [decayed.decision],
+    });
+
+    for (const agree of [true, false]) {
+      await expect(
+        t.review.resolveAudit(WORKSPACE, 'decision-decayed', 'person-1', agree),
+      ).rejects.toThrow('This entry has moved on since triage decided it');
+    }
+    expect(t.entries.get('decayed')?.status).toBe('ARCHIVED');
+    expect(decided(t, 'decayed')).toMatchObject({ verdict: null });
+  });
+
   it('[KG-5.2] answers once, only for an audit, and only in its own workspace', async () => {
     const { entry: row, decision: audit } = audited('a1', Decision.AUTO_ACCEPT);
     const foreign = audited('a2', Decision.AUTO_ACCEPT);
@@ -1316,7 +1333,7 @@ describe('agreement', () => {
     });
   });
 
-  it('[KG-5.3] counts each audited decision for all it was drawn from', async () => {
+  it('[KG-5.3] counts each verdict once, and shows what the audits stand for', async () => {
     const t = harness({
       entries: [],
       decisions: [
@@ -1336,15 +1353,14 @@ describe('agreement', () => {
 
     const [accept] = (await t.agreement.report(WORKSPACE)).types;
 
-    // Weighted: n 23, alike 12; triage said accept for 20, people for 11;
-    // chance = 20×11 + 3×12 = 256; (12×23 - 256) / (23² - 256) = 20/273.
-    // Counted once each it would be (15 - 13) / (25 - 13) = 1/6.
+    // Once each: alike 3; chance = 2×2 + 3×3 = 13; (15 - 13) / (25 - 13) =
+    // 1/6. The weighted cells say each audit stands for ten.
     expect(accept).toMatchObject({
       samples: 3,
       counts: { both: 1, triageOnly: 1, personOnly: 1, neither: 2 },
       weighted: { both: 10, triageOnly: 10, personOnly: 1, neither: 2 },
     });
-    expect(accept.kappa).toBeCloseTo(20 / 273, 12);
+    expect(accept.kappa).toBeCloseTo(1 / 6, 12);
   });
 
   it('[KG-5.3] is served to people through the endpoint, and refused to agents', async () => {
@@ -1598,6 +1614,37 @@ describe('backing off as verdicts arrive', () => {
       [Decision.REJECT, 0, true],
       [Decision.ESCALATE, 3, false],
     ]);
+  });
+
+  it('[KG-5.4] keeps acceptance acting at nineteen agreements in twenty audits', async () => {
+    const open = audited('open', Decision.AUTO_ACCEPT);
+    const t = harness({
+      entries: [open.entry],
+      decisions: [
+        ...Array.from({ length: 18 }, (_, index) =>
+          ruled(`a${index}`, Decision.AUTO_ACCEPT, Verdict.ACCEPTED, {
+            audit: true,
+            auditRate: 0.1,
+          }),
+        ),
+        ruled('wrong', Decision.AUTO_ACCEPT, Verdict.REJECTED, {
+          audit: true,
+          auditRate: 0.1,
+        }),
+        ruled('x1', Decision.ESCALATE, Verdict.REJECTED),
+        ruled('x2', Decision.ESCALATE, Verdict.REJECTED),
+        open.decision,
+      ],
+    });
+
+    // The twentieth audit, kept: both 19, triage only 1, neither 2. alike
+    // 21; chance = 20×19 + 2×3 = 386; (462 - 386) / (484 - 386) = 76/98.
+    await t.review.resolveAudit(WORKSPACE, 'decision-open', 'person-1', true);
+
+    expect(t.backoff).toEqual([]);
+    const [accept] = (await t.agreement.report(WORKSPACE)).types;
+    expect(accept).toMatchObject({ samples: 20, backedOff: false });
+    expect(accept.kappa).toBeCloseTo(76 / 98, 12);
   });
 
   it('[KG-5.4] never fails the person for a re-evaluation that could not run', async () => {

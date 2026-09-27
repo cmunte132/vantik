@@ -65,7 +65,7 @@ export function agreementNote(report: KnowledgeAgreementReport): string {
     ? 'Triage is in shadow: it records what it would do and a person decides ' +
         `everything, which measures it before it acts. ${measure}`
     : `${Math.round(report.auditRate * 100)}% of what triage does alone is ` +
-        `drawn for a person to check, and counted for all it stands for. ${measure}`;
+        `drawn for a person to check. ${measure}`;
 }
 
 function kappaOf(type: KnowledgeTypeAgreement): string {

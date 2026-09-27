@@ -136,33 +136,6 @@ describe("Cohen's kappa", () => {
       expected: null,
     });
   });
-
-  it('[KG-5.3] counts a weighted item as that many items', () => {
-    const pairs = [
-      ['yes', 'yes'],
-      ['no', 'no'],
-      ['no', 'yes'],
-    ] as const;
-
-    // Unweighted: alike 2; chance = 1×2 + 2×1 = 4; (6 - 4) / (9 - 4) = 0.4.
-    expect(cohensKappa(pairs).kappa).toBe(0.4);
-
-    // The first standing for ten: n 12, alike 11; chance = 10×11 + 2×1 =
-    // 112; (132 - 112) / (144 - 112) = 0.625. Still three verdicts.
-    expect(cohensKappa(pairs, [10, 1, 1])).toMatchObject({
-      kappa: 0.625,
-      samples: 3,
-    });
-
-    // A weight of two is the same as the item twice.
-    const doubled = cohensKappa(pairs, [2, 1, 1]);
-    const repeated = cohensKappa([pairs[0], ...pairs]);
-    expect([doubled.kappa, doubled.observed, doubled.expected]).toEqual([
-      repeated.kappa,
-      repeated.observed,
-      repeated.expected,
-    ]);
-  });
 });
 
 describe('what triage and the person each said', () => {
@@ -371,7 +344,7 @@ describe('agreement per decision type', () => {
     expect(reject).toMatchObject({ samples: 0, kappa: null });
   });
 
-  it('[KG-5.3] lets an audited decision stand for those it was drawn from', () => {
+  it('[KG-5.3] counts each verdict once, and shows what the audits stand for', () => {
     const audited = weightOf({ audit: true, auditRate: 0.1 });
 
     expect(audited).toBe(10);
@@ -385,9 +358,9 @@ describe('agreement per decision type', () => {
       rated(Decision.ESCALATE, Verdict.ACCEPTED, judged),
     ]);
 
-    // n 13, alike 12; chance = 10×11 + 3×2 = 116; (156 - 116) / (169 -
-    // 116) = 40/53. Counted once each it would be (12 - 8) / (16 - 8) = 0.5.
-    expect(accept.kappa).toBeCloseTo(40 / 53, 12);
+    // Once each: alike 3; chance = 1×2 + 3×2 = 8; (12 - 8) / (16 - 8) =
+    // 0.5. The weighted cells say the audited acceptance stands for ten.
+    expect(accept.kappa).toBe(0.5);
     expect(accept).toMatchObject({
       samples: 2,
       counts: { both: 1, triageOnly: 0, personOnly: 1, neither: 2 },

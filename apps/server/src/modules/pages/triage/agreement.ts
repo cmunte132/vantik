@@ -34,35 +34,26 @@ export interface Kappa {
  * Cohen's kappa over pairs of labels, one pair per item: (p_o - p_e) /
  * (1 - p_e), where p_o is the share of items labelled alike and p_e the sum,
  * over labels, of the product of each rater's share for that label.
- *
- * An item may stand for more than one: with weights, each counts as many
- * items as its weight, which is how a sampled item stands for those it was
- * drawn from. Computed from counts, so hand-worked values come out exactly.
+ * Computed from counts, so hand-worked values come out exactly.
  */
-export function cohensKappa<L>(
-  pairs: ReadonlyArray<readonly [L, L]>,
-  weights?: readonly number[],
-): Kappa {
+export function cohensKappa<L>(pairs: ReadonlyArray<readonly [L, L]>): Kappa {
   if (pairs.length === 0) {
     return { kappa: null, samples: 0, observed: null, expected: null };
   }
 
   const first = new Map<L, number>();
   const second = new Map<L, number>();
-  let n = 0;
+  const n = pairs.length;
   let alike = 0;
 
-  pairs.forEach(([a, b], index) => {
-    const weight = weights?.[index] ?? 1;
-
-    n += weight;
-    first.set(a, (first.get(a) ?? 0) + weight);
-    second.set(b, (second.get(b) ?? 0) + weight);
+  for (const [a, b] of pairs) {
+    first.set(a, (first.get(a) ?? 0) + 1);
+    second.set(b, (second.get(b) ?? 0) + 1);
 
     if (a === b) {
-      alike += weight;
+      alike += 1;
     }
-  });
+  }
 
   // Σ over labels of count_a × count_b, which is p_e × n².
   let chance = 0;
@@ -74,11 +65,9 @@ export function cohensKappa<L>(
   const denominator = n * n - chance;
 
   return {
-    // Zero exactly when both raters used one label throughout; the margin
-    // only keeps rounding in the weights from dividing by what is left of it.
-    kappa:
-      denominator <= n * n * 1e-12 ? null : (alike * n - chance) / denominator,
-    samples: pairs.length,
+    // Zero exactly when both raters used one label throughout.
+    kappa: denominator === 0 ? null : (alike * n - chance) / denominator,
+    samples: n,
     observed: alike / n,
     expected: chance / (n * n),
   };
@@ -234,11 +223,13 @@ export interface TypeAgreement extends Kappa {
   /** Verdicts in each cell. */
   counts: AgreementCells;
   /**
-   * The same, with each audited decision standing for those it was drawn
-   * from, which is what kappa is computed over. Audits are a sample of what
-   * triage acted on, while every escalation reaches a person, so counted
-   * once each they would make acting look rarer, and chance agreement
-   * different, than it is.
+   * The same, with each audited decision counted for all it was drawn from:
+   * how the verdicts stand for everything triage decided, since audits are a
+   * sample of what it did alone while every escalation reaches a person.
+   * For reading only. Kappa is computed over the verdicts as given: weighted
+   * up, a window of audits makes acting so nearly universal that one
+   * disagreement in twenty puts kappa under any sensible floor, and a type
+   * would stop and resume as audits entered and left the window.
    */
   weighted: AgreementCells;
 }
@@ -293,7 +284,7 @@ export function agreementByType(
 
     return {
       decision,
-      ...cohensKappa(pairs, weights),
+      ...cohensKappa(pairs),
       samples: counts.both + counts.triageOnly + counts.personOnly,
       counts,
       weighted: cells((index) => weights[index]),

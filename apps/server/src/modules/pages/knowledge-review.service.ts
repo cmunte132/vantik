@@ -208,6 +208,7 @@ export default class KnowledgeReviewService {
         decision: true,
         audit: true,
         verdict: true,
+        entry: { select: { status: true } },
       },
     });
 
@@ -228,6 +229,18 @@ export default class KnowledgeReviewService {
     if (decision.verdict !== null) {
       throw new ConflictException({
         message: `This audit already has a verdict: ${decision.verdict.toLowerCase()}.`,
+      });
+    }
+
+    // The queue stops listing an audit once its entry has moved on (decay
+    // archived it, a correction superseded it). An answer from a list opened
+    // before then would judge, or undo, what something else did.
+    if (decision.entry.status !== statusLeftBy(decision.decision)) {
+      throw new ConflictException({
+        message:
+          `This entry has moved on since triage decided it (it is now ` +
+          `${decision.entry.status.toLowerCase()}), so the audit is closed. ` +
+          'Act on the entry itself instead.',
       });
     }
 

@@ -106,7 +106,9 @@ export function parsePullRequestEvent(
 
   const merged = mergeOf(eventBody);
 
-  if (issueKeys.length === 0 && !merged) {
+  // With no issue to route and no knowledge to check, there is nothing to
+  // read its files for.
+  if (issueKeys.length === 0 && !merged?.onDefaultBranch) {
     return null;
   }
 
@@ -236,10 +238,11 @@ export function parsePushEvent(eventBody: any): PushRef | null {
  * with more files than the limit allows is a rare thing, and the modules of the
  * first three thousand files describe it well enough.
  *
- * For a merged pull request, a page that fails fails the read: the knowledge
- * citing its files is checked against this list, once, and a list cut short
- * would leave the rest unchecked with nothing to check it later. The error
- * fails the webhook's job, which is tried again.
+ * For a pull request merged into the default branch, a page that fails fails
+ * the read: the knowledge citing its files is checked against this list,
+ * once, and a list cut short would leave the rest unchecked with nothing to
+ * check it later. The error fails the webhook's job, which is tried again.
+ * For any other, the pages read so far are kept, as they are only routed.
  */
 export async function changedPathsOf(
   ref: PullRequestRef,
@@ -259,7 +262,7 @@ export async function changedPathsOf(
     // to expect.
     const data = await pageOrNull(url, accessToken);
 
-    if (data === null && ref.mergeSha) {
+    if (data === null && ref.mergeSha && ref.onDefaultBranch) {
       throw new Error(
         `Could not read page ${page} of the files of merged pull request ` +
           `${ref.fullName}#${ref.pullNumber}`,
@@ -312,9 +315,12 @@ async function pageOrNull(url: string, accessToken: string): Promise<any> {
  *
  * It returns null when the webhook is neither a pull request nor a push to the
  * default branch, when the pull request neither names an issue nor was merged
- * into the default branch, and when GitHub refuses the request for the files.
- * A webhook that this function cannot read is not a fault, and it must not
- * stop the rest of the webhook handler.
+ * into the default branch, and when GitHub refuses the first request for the
+ * files of a pull request that was not merged into the default branch. A
+ * webhook that this function cannot read is not a fault, and it must not stop
+ * the rest of the webhook handler. For a pull request merged into the default
+ * branch, a refused request throws instead, so the webhook's job is tried
+ * again: see `changedPathsOf`.
  *
  * A push names no issue, so it routes no modules to issues; it carries the
  * commit it landed, which is what knowledge is checked against.

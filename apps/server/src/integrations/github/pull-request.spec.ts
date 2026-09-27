@@ -233,25 +233,42 @@ describe('landed changes', () => {
     });
   });
 
-  it('[KG-6.1] reads a pull request merged into another branch with its merge SHA, as not on the default branch', async () => {
+  it('[KG-6.1] reads a keyed pull request merged into another branch with its merge SHA, as not on the default branch, and keeps the files it could read', async () => {
+    const body = mergedBody();
+    body.pull_request.base = { ref: 'release/1.2' };
+    body.pull_request.body = 'Closes ENG-42';
+
+    expect(parsePullRequestEvent(body)).toMatchObject({
+      issueKeys: ['ENG-42'],
+      mergeSha: MERGE_SHA,
+      onDefaultBranch: false,
+    });
+
+    // Only routed, so a page that fails keeps the pages before it, as an
+    // open pull request does.
+    const full = Array.from({ length: 100 }, (_unused, index) => ({
+      filename: `file-${index}.ts`,
+    }));
+    mockedAxios.get
+      .mockResolvedValueOnce({ data: full })
+      .mockRejectedValueOnce(new Error('rate limited'));
+
+    const change = await codeChangeOf(body, 'a-token');
+
+    expect(change).toMatchObject({
+      mergeSha: MERGE_SHA,
+      onDefaultBranch: false,
+    });
+    expect(change?.changedPaths).toHaveLength(100);
+  });
+
+  it('[KG-6.1] reads nothing of a pull request merged into another branch that names no issue', async () => {
     const body = mergedBody();
     body.pull_request.base = { ref: 'release/1.2' };
 
-    expect(parsePullRequestEvent(body)).toMatchObject({
-      issueKeys: [],
-      mergeSha: MERGE_SHA,
-      onDefaultBranch: false,
-    });
-
-    mockedAxios.get.mockResolvedValueOnce({
-      data: [{ filename: 'apps/server/src/main.ts' }],
-    });
-
-    expect(await codeChangeOf(body, 'a-token')).toMatchObject({
-      changedPaths: ['apps/server/src/main.ts'],
-      mergeSha: MERGE_SHA,
-      onDefaultBranch: false,
-    });
+    expect(parsePullRequestEvent(body)).toBeNull();
+    expect(await codeChangeOf(body, 'a-token')).toBeNull();
+    expect(mockedAxios.get).not.toHaveBeenCalled();
   });
 
   it('[KG-6.1] fails, to be tried again, when the files of a merged pull request cannot all be read', async () => {

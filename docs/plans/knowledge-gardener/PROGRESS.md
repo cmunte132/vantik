@@ -593,11 +593,14 @@ next session starts by reading it.
   the rest, over verdicts whose `verdictAt` is inside
   `KNOWLEDGE_KAPPA_WINDOW_DAYS` (30): the three acting types (AUTO_ACCEPT,
   CORROBORATE, REJECT), and ESCALATE, which is reported (whether what triage
-  sent people needed them) but never backs off. Audited
-  decisions are weighted by `1 / auditRate`, the rate recorded on the
-  decision: audits are a sample of what triage did alone while every
-  escalation reaches a person, so unweighted they would make acting look
-  rarer, and chance agreement different, than it is. A type's `samples` is
+  sent people needed them) but never backs off. Each verdict counts once.
+  The report also gives the cells with each audit weighted by `1 /
+  auditRate` (the rate recorded on the decision), which say how the
+  verdicts stand for everything triage decided, for reading only: kappa
+  over the weighted cells made acting so nearly universal that nineteen
+  agreements in twenty audits came to 0.27 and backed acceptance off, and a
+  type would stop and resume as audits entered and left the window (review
+  round 2). A type's `samples` is
   the count of verdicts about it (triage decided it, or the verdict says it
   should have), unweighted, and is what the minimum is checked against.
   Verdicts on which neither side said it still enter its kappa, as the
@@ -1205,6 +1208,34 @@ Mutation-checked: 16 mutants over the fixes, all killed (two reworded to
 compile; one survived at first because a test's two scenarios shared
 fixture rows, now separate).
 
+### Phase 5, round 2 (same reviewer, on the round 1 fixes, and a final pass)
+
+The reviewer checked the three fix commits and made a final pass over the
+phase: the pages suites (376 tests) and the webapp specs, `pnpm typecheck
+--force`, and the strict audit write against Prisma 6 and postgres (the
+non-unique filter is accepted and throws P2025, rolling back the batch).
+All six round 1 findings resolved, including the answer on displaced
+neighbours. No blocking findings; three non-blocking, now fixed or
+answered:
+
+- **A. Weighting audits backed acceptance off at 95% agreement.** Twenty
+  audited acceptances, one set aside, beside two escalations set aside,
+  came to kappa 0.27 weighted (0.78 unweighted), and a type would stop and
+  resume as audits came and went. Kappa is now over the verdicts as given,
+  as KG-5.3 reads; the weighted cells stay in the report for reading.
+  Tests: "[KG-5.4] keeps acceptance acting at nineteen agreements in twenty
+  audits" (76/98 by hand), "[KG-5.3] counts each verdict once, and shows
+  what the audits stand for".
+- **B. The corroboration decrement is not tied to the verdict landing,** so
+  two people un-folding one audited repeat at once from the rail or in bulk
+  take two off its count. Answered under Observed: the queue's own answer
+  is strict, the count cannot go negative and is unread, and making every
+  un-fold strict would make the race an error for the second person.
+- **C. An audit the queue had stopped listing could still be answered.**
+  `resolveAudit` now refuses (409) once the entry is no longer in the
+  status the decision left it, as the queue does. Test: "[KG-5.2] closes an
+  audit whose entry has moved on since".
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -1271,8 +1302,16 @@ Give the evidence, and stop until the maintainer answers.
   every verdict about a type but one, and never said anything else, kappa
   is 0 (one rater used one class throughout) and the type backs off once
   it has the minimum. Escalations people set aside and shadow decisions
-  usually give it both classes; where they do not, it fails safe, towards a
-  person deciding.
+  usually give it both classes (nineteen of twenty audits kept, beside two
+  escalations set aside, is 0.78); where they do not, it fails safe,
+  towards a person deciding. Worth watching in the first weeks of `on`.
+- **Un-folding one audited repeat twice at once takes two off its count.**
+  Two people putting the same audited repeat back into use at the same
+  moment from the rail or in bulk (not from the queue, whose answer is
+  strict) each commit the decrement, while only one verdict lands. The
+  count cannot go below zero and nothing reads it yet. Making every
+  un-fold strict would turn that harmless race into an error for the
+  second person, so it is left.
 - **An audited acceptance that is undone leaves what it displaced
   DISPUTED.** When an accepted entry won against a STANDING neighbour,
   that neighbour was disputed in the same transaction; a person setting
@@ -1374,3 +1413,7 @@ Give the evidence, and stop until the maintainer answers.
   minimum not per type, ESCALATE not measured, an audit only partly undone,
   two answers to one audit at once, consolidation dropping an audit). All
   fixed or answered, with tagged tests; round 2 started.
+- 2026-09-27: Phase 5 review round 2: all round 1 findings resolved, no
+  blocking findings, three non-blocking (audit weights backing acceptance
+  off at 95% agreement, a decrement race, stale audits answerable): two
+  fixed with tagged tests, one answered. Round 3 started.

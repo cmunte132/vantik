@@ -5,8 +5,9 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 6, in progress: KG-6.1 to KG-6.5 implemented and
-  mutation-checked; the phase review next. PR #45
+- Current phase: 6, in review: KG-6.1 to KG-6.5 implemented and
+  mutation-checked; review round 1 (FAIL, two blocking findings) fixed and
+  answered, round 2 next. PR #45
   is open from this branch, so the phase 6 commits are in it too; its
   description says so.
   Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
@@ -680,17 +681,23 @@ next session starts by reading it.
 
 ### Phase 6
 
-- **Landed changes (KG-6.1).** `CodeChangeEvent` gains `mergeSha`: the
-  merge commit of a pull request merged into the repository's default
-  branch, or the new head of a push to that branch. A merge into any other
-  branch has none: its code is not what agents are told about. A push is
+- **Landed changes (KG-6.1).** `CodeChangeEvent` gains `mergeSha`, the
+  merge commit of any merged pull request or the new head of a push to the
+  default branch, and `onDefaultBranch`, whether it landed there. A merge
+  into another branch carries its merge commit with `onDefaultBranch:
+  false` and is not checked: its code is not what agents are told about,
+  and it is checked when that branch is merged. A push is
   recognised by its shape (a `ref`, an `after` and a `commits` list, no
   `pull_request`), must be to `refs/heads/<default_branch>`, not a deletion,
   and its paths come from the commits' added, modified and removed lists
   (the head commit's when the list is empty); it names no issue keys, so
-  routing is unchanged. `ModuleRoutingProcessor` routes keyed changes as
-  before, and queues `recheckLandedChange` on the `pages` queue for any
-  change with a `mergeSha` and paths, with the job id
+  routing is unchanged. For a merged pull request, a page of its files
+  that fails fails the webhook's job, which Bull tries again (three
+  attempts): a list cut short would leave knowledge citing the rest
+  unchecked, with nothing to check it later. An open pull request keeps the
+  pages it read, as before. `ModuleRoutingProcessor` routes keyed changes
+  as before, and queues `recheckLandedChange` on the `pages` queue for any
+  change with a `mergeSha` on the default branch and paths, with the job id
   `recheckLandedChange:<workspace>:<repo>:<sha>`, so a merged pull request
   and the push of its merge commit queue one job while either is waiting.
 - **Re-checking a landed change (KG-6.2).** `EntryCitationsService.recheckLanded`
@@ -705,15 +712,29 @@ next session starts by reading it.
     merge SHA unless more has landed since; jobs run on several workers and
     not always in the order changes landed, so reading an older commit than
     the newest could put back a result a later change had already
-    corrected. The merge SHA names the job, is cited in the evidence, and
-    skips a citation already checked at it. Also skipped: a citation checked
-    since the job was queued (Bull's `job.timestamp`), since any check since
-    then read a head containing the change. That makes the duplicate report
-    and a retry read only what is left.
+    corrected. The merge SHA names the job and is cited in the evidence.
+  - **Newest reading wins.** A reading is stamped with when its head was
+    asked for (`RepoReads.headAskedAt`), not when the file was read: every
+    change that had landed by then is in it, so a reading stamped later
+    never read less. A reading is stored only over an older one
+    (`readBefore`), by a landed change's check and by the re-check after a
+    harmful signal alike, each under the entry's advisory lock
+    (`knowledge-entry:<id>`). Where a newer reading is stored already, the
+    landed check acts on that one instead: its head was asked for after
+    this change landed, so it contains it, and a re-check stores what it
+    finds without acting on it.
+  - **Read once.** A citation already read at the change's own commit is
+    not read or judged again: that reading comes back as stored and is
+    acted on like any other. So the duplicate report (a merged pull request
+    and the push of its merge commit) is read and judged once, a retry
+    reads only what is left while the head is still that commit, and a
+    contradiction a re-check stored at that commit is acted on here. The
+    first version also skipped anything checked since the job was queued;
+    round 1 of the review found that unsound (below), and it is gone.
   - **Nothing is written by the check.** Each result comes back with what to
     store, and the upkeep stores it in the same transaction as what it does
-    about it, so a crash cannot leave a result stored and not acted on
-    (the retry would skip it). Unread citations fail the job after
+    about it, so a crash cannot leave a result stored and not acted on.
+    Unread citations fail the job after
     everything read was acted on; Bull retries with its backoff.
   - **What is done (`upkeep/knowledge-upkeep.service.ts`).** HOLDS and MOVED
     are stored (check time and sha; MOVED also the lines). For an entry in
@@ -728,13 +749,20 @@ next session starts by reading it.
     beats unjudged, one row per entry per change. A PROPOSED entry is only
     checked: triage reads the fresh results.
   - **When it asks instead of acting.** A verified entry, one on a LOCKED
-    page, or one a person put back after a dispute in the last 90 days
-    (`STANDING_ENTRY_DECAY_DAYS`) gets an archive proposal with
-    CITATION_CONTRADICTED and the same issue, not a dispute: a person has
-    read the claim or the code, and the judge is a model. A proposal is not
-    made while one is open for the entry, nor for 90 days after a person
-    declined one for the same reason, so the queue does not ask again on
-    every change to the file.
+    page, or one a person put back, saying the same thing, after a dispute
+    in the last 90 days (`STANDING_ENTRY_DECAY_DAYS`) gets an archive
+    proposal with CITATION_CONTRADICTED and the same issue, not a dispute:
+    a person has read the claim or the code, and the judge is a model. The
+    evidence says which (`askedBecause`: VERIFIED, LOCKED or RESTORED), and
+    the issue and the queue's summary say it in words. A dispute records the
+    entry's content hash (`claim`); an entry a person corrected before
+    putting it back has another, makes a new claim, and is disputed like
+    any other. A proposal is not made while one for the same reason is
+    open for the entry, nor for 90 days after a person declined one for the
+    same reason, so the queue does not ask again on every change to the
+    file; a proposal for another reason (an unused verified entry) does not
+    stand in for a contradiction and its issue. Proposals are made under
+    the entry's lock, so two callers never both ask.
   - **The correction issue (`upkeep/knowledge-issues.ts`).** Opened through
     `IssuesService.createIssueAPI` (numbering, history, notifications and
     the team's triage suggestions all apply) by a System bot member
@@ -751,8 +779,9 @@ next session starts by reading it.
     judge's reason, all through `redactSecrets`, since cited code can hold a
     credential the entry never could. The issue is opened after the dispute
     commits; one a run failed to open is opened by the next run in the
-    workspace once the row is ten minutes old, claimed by a compare-and-set
-    on `updatedAt` so two runs never open two.
+    workspace, or by the nightly decay pass in every workspace, once the
+    row is ten minutes old, claimed by a compare-and-set on `updatedAt` so
+    two runs never open two.
   - **Proposals in the review queue.** `GET /api/v1/knowledge/review` lists
     open proposals whose entry is still STANDING, with or without triage,
     with the reason (`CITATION_MISSING`, `CITATION_UNJUDGED`,
@@ -769,7 +798,8 @@ next session starts by reading it.
     disputed entry is agreeing with it, not an undo.
   - **Tests.** The fakes of two existing suites gained a
     `pageEntryMaintenance` table (the undo write goes through it); no
-    assertion changed.
+    assertion changed. The citation suite's double gained the re-check's
+    compare-and-set store and a transaction.
 - **Decay (KG-6.5).** Both passes keep an entry any of whose citations a
   check found to hold within the pass's window (`checkedAt` in the window,
   and HOLDS, MOVED, or CHANGED with a HOLDS judgment: MOVED is the same code
@@ -820,7 +850,9 @@ next session starts by reading it.
     separate runs (`KNOWLEDGE_CONVENTION_MIN_RUNS`, default 3, workspace
     `conventionMinRuns`) is written through `createEntry` as the
     gardener's System bot, kind CONVENTION, never `standing`, so it lands
-    PROPOSED and is queued for triage like an agent's entry. Content:
+    PROPOSED and is queued for triage like an agent's entry. The entry
+    service holds a System bot to an agent's gates (`isAutomated`): no
+    writing to a LOCKED page, no entry straight into use. Content:
     "Review found this in N separate agent runs on <module>: <the finding
     most like the rest>", deterministic, one line. Scope: the repository
     and module folder most of the findings are in (the repository alone
@@ -880,7 +912,11 @@ next session starts by reading it.
     (`KNOWLEDGE_GAP_ISSUE_MIN_COUNT`, default 5, workspace
     `gapIssueMinCount`), the most asked first, at most ten a run; the rest
     wait for the next run. One workspace failing does not stop the others,
-    and the run fails at the end so Bull records it.
+    and the run fails at the end so Bull records it. A workspace can switch
+    the issues off for itself with `gapIssuesCron: 'off'` (setting
+    `gapIssues`); it cannot move the schedule, since one job serves every
+    workspace, so any other value leaves them on. Its gaps are still
+    counted and answered.
   - **The module.** A question names a module by a path in it, held by the
     deepest module whose folder holds it (a path starting with a
     repository's full name is read in that repository; a whole-repository
@@ -908,7 +944,7 @@ next session starts by reading it.
     there, after the acceptance is written, and again by the job at the
     start of each run, which marks any that were missed.
   - **Tests.** The settings suite's full-object expectations gained the new
-    setting; the processor suite's constructions gained the gap service;
+    settings; the processor suite's constructions gained the gap service;
     the entry service suite's database double gained the two tables
     answering reads (empty); the triage suite's store gained them too. No
     assertion changed.
@@ -1531,6 +1567,100 @@ left it; a hand-written migration matching `prisma migrate diff`; mutation
 checks on every fix; no skipped or loosened tests, checklist and verifier
 untouched.
 
+### Phase 6, round 1 (fresh reviewer subagent)
+
+The reviewer read the phase diff (fb60560..8e3d8db) against PLAN.md and the
+KG-6 criteria and ran the affected suites. Verdict FAIL: two blocking
+findings, both in KG-6.2, and nine non-blocking. All are fixed or answered:
+
+1. **Blocking: skipping citations "checked since the job was queued" was
+   unsound.** A job's head is resolved once and cached, so a job that asked
+   for it before a change landed could store its result after the change's
+   job was queued, and that job then skipped it (A); an older job could
+   overwrite a newer job's result (B); and a re-check after a harmful
+   signal, which acts on nothing, could store a contradiction the landed
+   job then skipped, so nobody disputed (C). Now: the queued-time skip is
+   gone, and with it the `since` argument; a reading is stamped with when
+   its head was asked for; every reading is stored only over an older one,
+   under the entry's advisory lock, by the landed check and the re-check
+   alike; the landed check acts on a newer stored reading where there is
+   one; and a citation already read at the change's own commit is acted on
+   as stored rather than skipped. Tests: "[KG-6.2] reads again a citation
+   last read at another commit, however recently" (A), "[KG-6.2] stamps a
+   reading with when the head was asked for, not when the file was read",
+   "[KG-6.2] never stores an older reading over a newer one, and acts on the
+   newer one instead" and "[KG-6.2] leaves a newer reading in place when a
+   later change already acted on it" (B), "[KG-6.2] acts on a contradiction
+   a re-check found at the change's commit and only stored" (C, through the
+   real re-check), "[KG-6.2] a re-check never stores an older reading over a
+   newer one", "[KG-6.2] stores and acts on an entry's readings under its
+   lock", and the reworked "[KG-6.2] reads and judges one commit once,
+   however often it is reported".
+2. **Blocking: an open proposal for any reason suppressed a contradiction**
+   and its correction issue. The open check is now for the same reason, so
+   an open UNUSED proposal no longer stands in for CITATION_CONTRADICTED.
+   Tests: "[KG-6.2] is still asked about, with its correction issue" (an
+   open UNUSED proposal on a verified entry) and the open-for-another-reason
+   case in "[KG-6.2] does not ask twice".
+3. **Only default-branch merges carried `mergeSha`.** Every merged pull
+   request now carries it, with `onDefaultBranch`; only a change on the
+   default branch is checked. Tests: "[KG-6.1] reads a pull request merged
+   into another branch with its merge SHA, as not on the default branch",
+   "[KG-6.1] checks nothing for a pull request merged into another branch,
+   which lands on the default branch later".
+4. **A failed files request on a merged pull request was dropped.** A page
+   that fails now fails the webhook's job for a merged pull request, which
+   Bull tries again; an open one keeps the pages it read. Test: "[KG-6.1]
+   fails, to be tried again, when the files of a merged pull request cannot
+   all be read".
+5. **Owed correction issues were retried only when a change landed** in the
+   workspace. The nightly decay pass now opens them in every workspace
+   (`openOwedIssues()` with no workspace). Tests: "[KG-6.2] opens the
+   correction issues failed runs owed, in every workspace" (processor) and
+   "[KG-6.2] opens owed correction issues in the workspace a change landed
+   in, or in every one from the nightly pass".
+6. **Two callers could both propose** (count, then create). `propose` takes
+   the entry's advisory lock, as `settle` does. Tests: the lock is asserted
+   in the ordering test above and in "[KG-6.5] asks a person about a
+   verified entry nobody used or found to hold in the window, once".
+7. **A failed `weigh` lost the re-check** (one attempt, removed on failure).
+   The re-check now runs whether or not weighing fails, and the failure is
+   raised after it. Test: "[KG-6.5] still checks the citations when weighing
+   fails, and fails the job after".
+8. **The overruled case said "a person verified it, or its page is
+   locked"**, and a corrected entry put back counted as overruled for 90
+   days. The proposal now records why it asks (`askedBecause`: VERIFIED,
+   LOCKED or RESTORED) and the issue and the queue say that; a dispute
+   records the entry's content hash, and only an entry put back with the
+   same content counts as overruled. Tests: the reasons in "[KG-6.2] asks
+   instead of disputing an entry a person verified or on a locked page",
+   "[KG-6.2] asks rather than disputing again once a person has put the
+   entry back", and "[KG-6.2] disputes again an entry a person corrected
+   before putting it back, and asks about one put back unchanged".
+9. **No per-workspace override of `KNOWLEDGE_GAP_ISSUES_CRON`** (section
+   5). A workspace can switch the issues off with `gapIssuesCron: 'off'`
+   (setting `gapIssues`); it cannot move the schedule, since one job serves
+   every workspace, which is recorded with the job's decisions and in
+   `.env.example`. Tests: "[KG-6.4] opens gap issues unless the deployment,
+   or the workspace for itself, switches them off", "[KG-6.4] opens no
+   issue in a workspace that switched them off for itself".
+10. **The gardener, a System bot, was not refused on a LOCKED page.** The
+    entry service now holds a System bot to an agent's gates. Test:
+    "[KG-6.3] refuses the gardener, a system bot, on a LOCKED page too, and
+    never puts its entry straight into use".
+11. **The agent guide said nothing of answering a gap or of automatic
+    disputes.** Both guides now say how to answer a gap (cite its issue)
+    and that a change contradicting an entry disputes it.
+
+The two weaker tests the reviewer named were accepted as they are; the
+first is now "[KG-6.2] reads and judges one commit once", on a verified
+entry so the second report meets a live entry.
+
+Mutation-checked: 39 mutants over the fixes, all killed. Six did not
+compile or matched twice at first and were reworded; one (a blank
+per-workspace schedule read as a schedule) survived and a new case killed
+it. Full server suite: 1817 passed, 15 skipped.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -1757,3 +1887,15 @@ Give the evidence, and stop until the maintainer answers.
   testing: a path's folders were read as module names too (`apps/api/...`
   naming the API); paths are now read only as paths. Full server suite:
   1800 passed, 15 skipped.
+- 2026-09-27: Phase 6 review round 1: FAIL, two blocking findings in KG-6.2
+  (the skip of citations checked since the job was queued was unsound; an
+  open proposal for any reason suppressed a contradiction) and nine
+  non-blocking. All fixed or answered with tagged tests: readings stamped
+  with when their head was asked for, stored newest-first under the
+  entry's lock, the newest acted on; proposals per reason, under the lock;
+  merged pull requests into any branch carry their commit; a merged pull
+  request's failed file read retried; owed issues opened nightly; the
+  re-check survives a failed weigh; why a contradiction is asked about
+  recorded, and a corrected entry disputed again; gap issues switchable
+  per workspace; the gardener refused on locked pages; the agent guides
+  updated. 39 mutants, all killed.

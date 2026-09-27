@@ -154,6 +154,16 @@ age of each citation's last check. Weigh them when you read:
   gone. Check it against the code before you rely on it; if it is wrong,
   supersede it with a cited correction.
 
+Citations are checked again as the code changes. When a change lands on the
+default branch, every entry citing a file it touched is read against the new
+code. Lines that read the same, or have only moved, keep the entry as it is.
+Where a judge finds the changed code now contradicts the claim, the entry is
+taken out of use as `DISPUTED` and a correction issue, labelled `knowledge`,
+goes to the team that owns the module; a person corrects it and puts it back,
+or archives it. A cited file that is gone, or changed code no judge could
+read, only asks a person. So cite the lines that show the claim, not the file
+around them: a citation is checked against exactly what it points at.
+
 ## Prefer appending to an existing page
 
 Check `list_pages` before you write anything down, and `read_page` the page you
@@ -241,6 +251,12 @@ answer, most-asked first. It is the most direct answer available to "what should
 I document next" — it says what people actually needed, rather than what
 somebody thought to write down. If you just spent an hour answering one of
 those questions, that hour is worth an entry.
+
+A question asked often enough gets an issue asking a person to answer it,
+titled `Knowledge gap: ` and the question. To answer one, write the entry and
+cite that issue: `citations: [{ issue: "ENG-57" }]`, beside the code or
+decision the answer rests on. Once the entry is accepted, the question counts
+as answered and agents asking it are given the entry.
 
 ## Your entries are reviewed
 

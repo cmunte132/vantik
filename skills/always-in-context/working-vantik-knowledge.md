@@ -92,4 +92,12 @@ accepted one by superseding it, and it stays in use until your correction is
 accepted.
 
 `knowledge_gaps` lists questions the bank could not answer, most-asked first. If
-you just spent an hour answering one, that hour is worth an entry.
+you just spent an hour answering one, that hour is worth an entry. A question
+asked often enough gets an issue titled `Knowledge gap: …`; answer it with an
+entry citing that issue (`{ issue: "ENG-57" }`), and it counts as answered once
+the entry is accepted.
+
+Citations are checked again when a change lands on the default branch. An
+entry whose cited code a judge finds now contradicts it is taken out of use as
+`DISPUTED`, with a correction issue for a person; so cite the exact lines that
+show the claim.

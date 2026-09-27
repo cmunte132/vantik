@@ -28,6 +28,12 @@ export const FULL_SIGNAL = 1;
  */
 export const WEAK_SIGNAL = 0.5;
 
+/**
+ * Runs read when matching a pull request to the run that pushed its branch.
+ * Branches are suffixed per run, so this is a bound, not a sample.
+ */
+const MAX_RUNS_PER_BRANCH = 20;
+
 /** Run ends whose checks and review say something about the work. */
 const MEASURED_ENDS = ['SUCCEEDED', 'NEEDS_REVIEW', 'FAILED'];
 
@@ -164,28 +170,24 @@ export class KnowledgeSignalsService {
    * signals the entries that run was served.
    *
    * Merged is helpful; closed without merging is weakly harmful; reopened
-   * withdraws whichever was given. Matched on the pull request's address, so
-   * only the run that produced it is credited: another pull request on the
-   * same issue says nothing about what this run was told.
+   * withdraws whichever was given. Only the run that produced the work is
+   * credited: another pull request on the same issue says nothing about what
+   * this run was told.
    */
   async pullRequestChanged(input: {
     workspaceId: string;
     url: string;
     state: PullRequestState;
     closedAt?: Date | null;
+    branch?: string | null;
+    repo?: string | null;
+    openedAt?: Date | null;
   }): Promise<{ runs: number }> {
     if (!input.url) {
       return { runs: 0 };
     }
 
-    const runs = await this.prisma.agentRun.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        deleted: null,
-        result: { path: ['prUrl'], equals: input.url },
-      },
-      select: { id: true },
-    });
+    const runs = await this.runsOfPullRequest(input);
 
     for (const run of runs) {
       await this.prisma.agentRun.update({
@@ -230,6 +232,59 @@ export class KnowledgeSignalsService {
   }
 
   // --------------------------------------------------------------- internals
+
+  /**
+   * The runs a pull request is the work of. The run that opened it, by its
+   * address; or, for one a person opened from a run's branch because the run
+   * pushed but could not open one itself, the newest run that pushed that
+   * branch to that repository before it was opened. Newest, because a branch
+   * deleted after its merge can be pushed again by a later run on the same
+   * issue. A run with a pull request of its own is spoken for by that one.
+   */
+  private async runsOfPullRequest(input: {
+    workspaceId: string;
+    url: string;
+    branch?: string | null;
+    repo?: string | null;
+    openedAt?: Date | null;
+  }): Promise<Array<{ id: string }>> {
+    const opened = await this.prisma.agentRun.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        deleted: null,
+        result: { path: ['prUrl'], equals: input.url },
+      },
+      select: { id: true },
+    });
+
+    if (!input.branch || !input.repo) {
+      return opened;
+    }
+
+    const pushed = await this.prisma.agentRun.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        deleted: null,
+        result: { path: ['branch'], equals: input.branch },
+        ...(input.openedAt ? { createdAt: { lte: input.openedAt } } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_RUNS_PER_BRANCH,
+      select: { id: true, config: true, result: true },
+    });
+    const repo = input.repo.toLowerCase();
+    const newest = pushed.find((run) => repoNameOf(run.config) === repo);
+
+    if (
+      !newest ||
+      stringField(newest.result, 'prUrl') ||
+      opened.some((run) => run.id === newest.id)
+    ) {
+      return opened;
+    }
+
+    return [...opened, { id: newest.id }];
+  }
 
   /** The live entries a run was served, with what places them. */
   private async entriesServedTo(runId: string): Promise<EntryShape[]> {
@@ -503,4 +558,13 @@ export function repoNameOf(config: Prisma.JsonValue): string | null {
   const match = /[/:]([^/:]+\/[^/]+?)(?:\.git)?\/?$/.exec(repoUrl.trim());
 
   return match ? match[1].toLowerCase() : null;
+}
+
+function stringField(value: Prisma.JsonValue, key: string): string | null {
+  const field =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? value[key]
+      : null;
+
+  return typeof field === 'string' && field.length > 0 ? field : null;
 }

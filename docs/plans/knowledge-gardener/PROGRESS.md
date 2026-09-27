@@ -5,14 +5,15 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 3 implemented; its independent review is next. Phase 1's
-  review fixes, phase 2 and phase 3 ride PR #44.
+- Current phase: 3 in review; round 1's findings are fixed and back with the
+  reviewer. Phase 1's review fixes, phase 2 and phase 3 ride PR #44.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
 - Last verify: phases 0-2 PASS; phase 3 6/7, KG-3.R waiting on the review
-  (server 1513, agent-core 65, cli 10, webapp 621 tests; typecheck ok).
+  (server 1519 with the 15 database-only skipped, agent-core 66, cli 10,
+  webapp 621 with its 2 expected failures; typecheck and lint ok).
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
   (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
@@ -306,7 +307,10 @@ next session starts by reading it.
   request; the session from an `x-vantik-session` header, which agent-core
   sends when given a `sessionId` and the MCP loopback passes through from its
   caller. A header that is not printable ASCII of at most 200 characters is
-  dropped, not stored.
+  dropped, not stored. Since round 1, `recall_knowledge` and `load_context`
+  also take a `session` argument, as `remember` does, which agent-core sends
+  as that call's header; MCP clients that cannot set headers name the session
+  that way. Both routes are documented in `connect-mcp.mdx`.
 - **Run knowledge (KG-3.2).** `KnowledgeService.knowledgeForRun` packs, in
   order: the STANDING CONVENTION entries whose modules overlap the issue's
   (verified first, then newest; at most 25 read), which are not held to a
@@ -323,7 +327,9 @@ next session starts by reading it.
   per workspace under `Workspace.preferences.knowledge` (`holdoutRate`,
   `contextTopK`, `contextTokenBudget`). A value that cannot be read (a stored
   string, a share above 1, a fraction of an entry) falls to the layer
-  beneath. Documented in `.env.example` and declared in `turbo.json`.
+  beneath. Documented in `.env.example` and declared in `turbo.json`. The
+  preferences route accepts `knowledge` since round 1; before it, the global
+  pipe's whitelist dropped the key and nothing could set the override.
 - **Holdout (KG-3.3).** The arm is the first 32 bits of the sha256 of the
   run's id, as a fraction, against the rate: below is HOLDOUT. The id is
   chosen (`randomUUID`) before the pack is built, since whether it carries
@@ -362,7 +368,13 @@ next session starts by reading it.
   scoped to the plugin's workspace. Runs are matched by `result.prUrl` equal
   to the pull request's URL: "a merged pull request for a run's issue" is
   read as the run's own pull request, so one a person opened for the same
-  issue credits nothing the run was handed. Merged gives HELPFUL (1); closed
+  issue credits nothing the run was handed. A pull request a person opened
+  from a run's branch counts as the run's own (round 1): the plugin also
+  reports the head branch, its repository and when it was opened, and the
+  newest run in that repository that pushed that branch before then, and has
+  no pull request of its own, is credited. Branches are reused across runs
+  of one issue, hence the newest before the opening, and a run with its own
+  pull request is never credited for another. Merged gives HELPFUL (1); closed
   without merging HARMFUL (0.5, weak) with a re-check; a reopen withdraws the
   pull request's signal. The run records `pullRequestOutcome` and
   `pullRequestClosedAt`. A held-out run records its outcome, for the merge
@@ -372,7 +384,9 @@ next session starts by reading it.
   (`?since=` an ISO date; members only, an agent token gets 403) summarises
   each arm over finished runs that have one: runs; verification pass rate
   over runs whose last pass ran checks; mean review passes over runs that
-  reached a pass; mean cost over runs that reported one; merge rate over
+  reached a pass; mean cost over runs that reported one (a failed hosted run
+  reports what it spent since round 1, so failing expensively is not left
+  out); merge rate over
   decided pull requests, with the open ones counted apart. Every figure
   carries what it was measured over. Settings → Agents has a "Does knowledge
   help?" section with both arms, the rate in force, and a warning while the
@@ -625,6 +639,59 @@ served path, a written entry included; mutation checks on each; no skipped
 or loosened tests, checklist and verifier untouched by the session (KG-2.1's
 path was later moved at the maintainer's request).
 
+### Phase 3, round 1 (fresh reviewer subagent)
+
+The reviewer read the phase diff (60f5db7..3b0ceac) against PLAN.md and the
+KG-3 criteria, ran the phase's suites, replayed `prisma migrate diff` against
+the hand-written migration (it matches), and mutated the signals service.
+What held: uses written in the serve's transaction on all three paths, the
+pack's order and budget, the arm stable across retries with nothing served
+to the holdout, counts that only move with their signal row, re-checks on
+the `pages` queue with nothing archived, workspace scoping of the plugin
+capability, and agent tokens refused by the comparison. One blocking
+finding and six non-blocking, all fixed:
+
+1. **Blocking: the per-workspace override could not be saved.**
+   `UpdateWorkspacePreferencesDto` declared only `agentRuns`, and the global
+   pipe's `whitelist` dropped `knowledge`, so `knowledge-settings.ts` read a
+   key nothing could write. The DTO now declares `knowledge` as an optional
+   object (`update-workspace-preferences.dto.ts:28`); `knowledgeSettings`
+   still reads it value by value. Test: `validation.spec.ts` "[KG-3.3] keeps
+   a workspace's knowledge settings", through the real pipe; it keeps the
+   object and refuses a string.
+2. **No test pinned the "checks passed" half of HELPFUL.** Dropping the
+   verification check survived. New test "[KG-3.4] is helpful only when the
+   checks passed and the reviewer accepted, both": accepted with a failing
+   check elsewhere, and checks passing with the reviewer not accepting, each
+   give nothing.
+3. **"Reads the last pass" did not test which pass.** The double ignored
+   `orderBy` and `take`; it now honours both, so reading the first pass fails
+   the test.
+4. **Mean cost left out failed runs' spend.** `HostedExecutor.fail` wrote
+   only `egressDenied`. It now writes `costUsd` when the run spent anything:
+   a pass-1 crash reports the attempt's spend, and every failure after a
+   cycle (no diff, push rejected, a crash later) reports the cycle's. Test:
+   "[KG-3.6] says what a failed run spent" in `hosted-cycle.spec.ts`.
+5. **A pull request a person opened from the run's branch credited
+   nothing.** Now matched by head branch and repository as described under
+   Decisions (`knowledge-signals.service.ts:244`, at most 20 runs read per
+   branch). `pr-sync.ts` and the plugin context pass the branch, repository
+   and opening time. Tests: "[KG-3.5] credits the run whose branch a person
+   opened the pull request from" (an older run on the same reused branch and
+   a later one are passed over) and "does not credit a branch of the same
+   name in another repository, or a run with its own pull request"; the
+   plugin and pr-sync specs check the new fields.
+6. **Uses from MCP had no session.** The header was undocumented and no
+   documented client sends it. `recall_knowledge` and `load_context` now
+   take a `session` argument (`mcp.tools.ts:774`), agent-core sends a
+   per-call session as that call's header (`client.ts:88`), and
+   `connect-mcp.mdx` documents both. Tests in `mcp.tools.spec.ts` and
+   `agent.spec.ts`.
+7. **A doc comment on the wrong model.** `PageKnowledgeGap`'s comment sat
+   above `PageEntryUse`; moved back. Comments only, so no migration change.
+
+Every new test fails with its fix reverted (14 mutations, all caught).
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -715,3 +782,7 @@ Give the evidence, and stop until the maintainer answers.
   knowledge settings reader added for the plan's per-workspace override. 29
   mutations over the new code, all caught. Verify: phases 0-2 PASS, phase 3
   6/7 (review pending); all suites and typecheck green.
+- 2026-09-27: Phase 3 pushed to PR #44 (3b0ceac); CI green, including the
+  migration replay. Review round 1: one blocking finding (the workspace
+  override could not be saved) and six non-blocking; all fixed with tagged,
+  mutation-checked tests.

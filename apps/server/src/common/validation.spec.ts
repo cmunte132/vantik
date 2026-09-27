@@ -146,6 +146,19 @@ describe('the global validation pipe', () => {
       await expect(run(metatype, value, type)).resolves.toEqual(value);
     });
 
+    it('[KG-3.3] keeps a workspace’s knowledge settings, which the holdout reads', async () => {
+      // Undeclared, the key was dropped here and the per-workspace override
+      // could never be saved: the holdout stayed at the deployment's rate.
+      await expect(
+        run(UpdateWorkspacePreferencesDto, {
+          knowledge: { holdoutRate: 0.5, contextTopK: 3 },
+        }),
+      ).resolves.toEqual({ knowledge: { holdoutRate: 0.5, contextTopK: 3 } });
+      await expect(
+        run(UpdateWorkspacePreferencesDto, { knowledge: 'on' }),
+      ).rejects.toThrow();
+    });
+
     it('keeps the cycle an issue is created in', async () => {
       // The cycle overview sends it. Undeclared, it would be dropped, and the
       // issue created outside the cycle it was added from.

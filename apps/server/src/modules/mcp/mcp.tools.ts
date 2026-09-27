@@ -769,6 +769,18 @@ export function registerVantikTools(
       ),
   };
 
+  // The protocol is stateless and names no session, so a harness that knows
+  // its own says so, as it does when it remembers something.
+  const sessionSchema = {
+    session: z
+      .string()
+      .max(200)
+      .optional()
+      .describe(
+        'Your session id, so what you are served is recorded against it.',
+      ),
+  };
+
   server.registerTool(
     'load_context',
     {
@@ -801,6 +813,7 @@ export function registerVantikTools(
           .optional()
           .describe('How much context you can afford. Defaults to 2000.'),
         ...seedSchema,
+        ...sessionSchema,
       },
     },
     handler((input) => agent.loadContext(input)),
@@ -834,6 +847,7 @@ export function registerVantikTools(
               'done in an area. Leaves page bodies out.',
           ),
         ...seedSchema,
+        ...sessionSchema,
       },
     },
     handler((input) => agent.recallKnowledge(input)),

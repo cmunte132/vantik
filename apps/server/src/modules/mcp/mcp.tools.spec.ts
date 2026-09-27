@@ -17,6 +17,8 @@ async function connect(routes: Record<string, unknown>) {
     /** The query string, so a test can assert on a filter the tool applied. */
     query: string;
     body: unknown;
+    /** The harness session the call named, if any. */
+    session?: string;
   }> = [];
 
   const fetchImpl = (async (url: string, init: RequestInit = {}) => {
@@ -28,6 +30,9 @@ async function connect(routes: Record<string, unknown>) {
       path,
       query: parsed.search,
       body: init.body ? JSON.parse(init.body as string) : undefined,
+      session: (init.headers as Record<string, string> | undefined)?.[
+        'x-vantik-session'
+      ],
     });
 
     const key = `${method} ${path}`;
@@ -931,6 +936,34 @@ describe('knowledge tools and the product graph', () => {
       issueId: 'issue-1',
       moduleIds: ['m-1'],
     });
+  });
+
+  it('[KG-3.1] recall_knowledge and load_context record what they serve against the session named', async () => {
+    const { client, requests } = await connect({
+      'GET /knowledge/search': { hits: [] },
+      'POST /knowledge/context': { items: [], estimatedTokens: 0 },
+    });
+
+    await client.callTool({
+      name: 'recall_knowledge',
+      arguments: { query: 'migrations', session: 'claude-session-9' },
+    });
+    await client.callTool({
+      name: 'load_context',
+      arguments: { scope: 'apps/server', session: 'claude-session-9' },
+    });
+    await client.callTool({
+      name: 'recall_knowledge',
+      arguments: { query: 'migrations' },
+    });
+
+    expect(requests.map((request) => request.session)).toEqual([
+      'claude-session-9',
+      'claude-session-9',
+      undefined,
+    ]);
+    // Asked for, not searched for: the session is not a query parameter.
+    expect(new URLSearchParams(requests[0].query).has('session')).toBe(false);
   });
 
   it('[KG-1.6] pages_for and link_page accept products, modules and capabilities', async () => {

@@ -1102,6 +1102,7 @@ export class VantikAgent {
             : undefined,
           issueId: input.issueId,
         },
+        sessionId: input.session,
       },
     );
 
@@ -1124,6 +1125,7 @@ export class VantikAgent {
         ...(input.moduleIds?.length ? { moduleIds: input.moduleIds } : {}),
         ...(input.issueId ? { issueId: input.issueId } : {}),
       },
+      sessionId: input.session,
     });
 
     return {

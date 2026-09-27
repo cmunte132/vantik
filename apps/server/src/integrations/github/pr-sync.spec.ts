@@ -10,6 +10,16 @@ import { prSync } from './pr-sync';
 
 const PR_URL = 'https://github.com/acme/api/pull/12';
 
+/**
+ * Where it was opened from, and when: how a pull request a person opened from
+ * a run's branch finds the run.
+ */
+const FROM = {
+  branch: 'agent/eng-42',
+  repo: 'acme/api',
+  openedAt: '2026-09-01T09:00:00Z',
+};
+
 function contextFor() {
   const ctx = {
     log: { debug: jest.fn(), error: jest.fn(), info: jest.fn() },
@@ -21,7 +31,10 @@ function contextFor() {
       forIssue: jest.fn(async (): Promise<unknown[]> => []),
       update: jest.fn(),
     },
-    workspace: { workflows: jest.fn(async (): Promise<unknown[]> => []) },
+    workspace: {
+      workflows: jest.fn(async (): Promise<unknown[]> => []),
+      teamByName: jest.fn(async (): Promise<unknown> => null),
+    },
     issues: { update: jest.fn() },
     vendor: {
       fetch: jest.fn(async () => ({ ok: false, status: 404 })),
@@ -48,6 +61,7 @@ function payloadFor(
         title: 'Fix the thing',
         html_url: PR_URL,
         created_at: '2026-09-01T09:00:00Z',
+        head: { ref: 'agent/eng-42', repo: { full_name: 'acme/api' } },
         merged_at: null as string | null,
         closed_at: null as string | null,
         ...pull,
@@ -73,6 +87,7 @@ describe('a pull request reported to the runs that opened it', () => {
       url: PR_URL,
       state: 'MERGED',
       closedAt: '2026-09-02T10:00:00Z',
+      ...FROM,
     });
     // The issue side still ran.
     expect(ctx.links.bySource).toHaveBeenCalledWith('5');
@@ -93,6 +108,7 @@ describe('a pull request reported to the runs that opened it', () => {
       url: PR_URL,
       state: 'CLOSED',
       closedAt: '2026-09-02T10:00:00Z',
+      ...FROM,
     });
   });
 
@@ -105,6 +121,7 @@ describe('a pull request reported to the runs that opened it', () => {
       url: PR_URL,
       state: 'OPEN',
       closedAt: null,
+      ...FROM,
     });
     expect(ctx.links.bySource).not.toHaveBeenCalled();
   });

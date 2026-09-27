@@ -25,6 +25,11 @@ export interface VantikClientConfig {
 interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined | null>;
   body?: unknown;
+  /**
+   * The harness session this one call is for, over the client's own: a
+   * shared client serving several sessions knows each only per call.
+   */
+  sessionId?: string;
 }
 
 const DEFAULT_BASE_URL = 'http://localhost:3001';
@@ -78,8 +83,9 @@ export class VantikClient {
   private async request<T>(
     method: string,
     path: string,
-    { query, body }: RequestOptions,
+    { query, body, sessionId }: RequestOptions,
   ): Promise<T> {
+    const session = sessionId?.trim() || this.sessionId;
     const url = new URL(`${this.baseUrl}/v1${path}`);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value !== undefined && value !== null && value !== '') {
@@ -97,7 +103,7 @@ export class VantikClient {
         signal: controller.signal,
         headers: {
           authorization: `Bearer ${this.token}`,
-          ...(this.sessionId ? { 'x-vantik-session': this.sessionId } : {}),
+          ...(session ? { 'x-vantik-session': session } : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

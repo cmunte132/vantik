@@ -184,6 +184,8 @@ export interface RecallInput extends KnowledgeSeeds {
   limit?: number;
   /** Only these kinds of entry. Page bodies drop out. */
   kinds?: EntryKind[];
+  /** Harness session id, so what it is served is recorded against it. */
+  session?: string;
 }
 
 export interface LoadContextInput extends KnowledgeSeeds {
@@ -192,6 +194,8 @@ export interface LoadContextInput extends KnowledgeSeeds {
   scope?: string;
   /** How much context the caller can afford, in tokens. */
   tokenBudget?: number;
+  /** Harness session id, so what it is served is recorded against it. */
+  session?: string;
 }
 
 /** What a page can be linked to. */

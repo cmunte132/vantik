@@ -198,7 +198,7 @@ function buildGuest(script: GuestScript) {
 function build(
   script: GuestScript,
   config: Record<string, unknown> = {},
-  options: { leaseHeld?: boolean } = {},
+  options: { leaseHeld?: boolean; nothingPushed?: boolean } = {},
 ) {
   const guest = buildGuest(script);
   const specs: SandboxSpec[] = [];
@@ -224,11 +224,14 @@ function build(
 
   const pushWorkTree = jest.fn(async (request: { summary: string }) => {
     void request;
-    return {
-      branch: 'agent/eng-42',
-      headCommit: 'head111',
-      prUrl: 'https://example.test/pr/1',
-    };
+    // The proxy answers null when the tree matches the base: nothing to push.
+    return options.nothingPushed
+      ? null
+      : {
+          branch: 'agent/eng-42',
+          headCommit: 'head111',
+          prUrl: 'https://example.test/pr/1',
+        };
   });
 
   const executor = new HostedExecutor(
@@ -763,6 +766,29 @@ describe('when a pass crashes', () => {
 
     expect(harness.final().status).toBe('FAILED');
     expect(harness.final().patch).toMatchObject({ failure: 'HARNESS_CRASHED' });
+  });
+
+  it('[KG-3.6] says what a failed run spent, so the arms compare what runs cost', async () => {
+    // Each fake pass reports $0.50. Leaving a failed run's spend out would
+    // make whichever arm fails expensively look cheap.
+    const crashed = build({ verdicts: {}, harnessExit: { 'prompt.md': 1 } });
+    await crashed.execute();
+    expect(crashed.final().patch).toMatchObject({
+      failure: 'HARNESS_CRASHED',
+      result: { costUsd: 0.5 },
+    });
+
+    const empty = build(
+      { verdicts: { 1: ACCEPTED } },
+      {},
+      { nothingPushed: true },
+    );
+    await empty.execute();
+    expect(empty.final().patch).toMatchObject({
+      failure: 'NO_DIFF_PRODUCED',
+      // One implementing pass and one review.
+      result: { costUsd: 1 },
+    });
   });
 
   it('delivers what the earlier passes built when a later one crashes', async () => {

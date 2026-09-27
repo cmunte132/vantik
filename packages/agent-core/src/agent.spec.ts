@@ -1057,6 +1057,23 @@ describe('the harness session', () => {
     ]);
   });
 
+  it('[KG-3.1] lets recall and load_context name the session of one call', async () => {
+    // The MCP loopback serves every session through one client, so a session
+    // the harness names on a call is the one that call is recorded against.
+    const { client, headers } = recording('client-session');
+    const agent = new VantikAgent(client);
+
+    await agent.recallKnowledge({ query: 'redis', session: 'codex-7' });
+    await agent.loadContext({ scope: 'apps', session: 'codex-7' });
+    await agent.recallKnowledge({ query: 'redis' });
+
+    expect(headers.map((sent) => sent['x-vantik-session'])).toEqual([
+      'codex-7',
+      'codex-7',
+      'client-session',
+    ]);
+  });
+
   it('[KG-3.1] sends no session header when it has none', async () => {
     const { client, headers } = recording('   ');
 

@@ -149,6 +149,9 @@ describe('the plugin context', () => {
       url: 'https://github.com/acme/api/pull/12',
       state: 'MERGED',
       closedAt: '2026-09-01T10:00:00Z',
+      branch: 'agent/eng-42',
+      repo: 'acme/api',
+      openedAt: '2026-08-30T10:00:00Z',
     });
 
     expect(knowledgeSignals.pullRequestChanged).toHaveBeenCalledWith({
@@ -156,6 +159,9 @@ describe('the plugin context', () => {
       url: 'https://github.com/acme/api/pull/12',
       state: 'MERGED',
       closedAt: new Date('2026-09-01T10:00:00Z'),
+      branch: 'agent/eng-42',
+      repo: 'acme/api',
+      openedAt: new Date('2026-08-30T10:00:00Z'),
     });
 
     // Without a workspace there is nothing to scope to, and nothing is told.

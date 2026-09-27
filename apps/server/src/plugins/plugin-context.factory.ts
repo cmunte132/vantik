@@ -239,6 +239,9 @@ export class PluginContextFactory {
                 url: input.url,
                 state: input.state,
                 closedAt: input.closedAt ? new Date(input.closedAt) : null,
+                branch: input.branch ?? null,
+                repo: input.repo ?? null,
+                openedAt: input.openedAt ? new Date(input.openedAt) : null,
               })
             : { runs: 0 },
       },

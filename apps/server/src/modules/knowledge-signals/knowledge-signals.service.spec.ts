@@ -51,6 +51,7 @@ interface Run {
   pullRequestClosedAt: Date | null;
   passes: Pass[];
   served: string[];
+  createdAt: Date;
 }
 
 function entry(id: string, overrides: Partial<Entry> = {}): Entry {
@@ -77,6 +78,7 @@ function run(overrides: Partial<Run> = {}): Run {
     pullRequestClosedAt: null,
     passes: [{ verificationPassed: true, accepted: true, findings: [] }],
     served: [],
+    createdAt: new Date('2026-09-01T10:00:00Z'),
     ...overrides,
   };
 }
@@ -107,28 +109,48 @@ function build(options: { runs: Run[]; entries: Entry[] }) {
 
   const prisma = {
     agentRun: {
-      findUnique: jest.fn(async ({ where }) => {
+      findUnique: jest.fn(async ({ where, select }) => {
         const row = runs.get(where.id);
-        return row
-          ? {
-              id: row.id,
-              status: row.status,
-              config: row.config,
-              // Newest first, as the service asks.
-              iterations: [...row.passes].reverse().slice(0, 1),
-            }
-          : null;
+        if (!row) {
+          return null;
+        }
+        // The passes are stored in index order; the order and count asked
+        // for are honoured, so reading the wrong pass reads the wrong one here.
+        const { orderBy, take } = select.iterations;
+        const ordered =
+          orderBy?.index === 'desc' ? [...row.passes].reverse() : row.passes;
+        return {
+          id: row.id,
+          status: row.status,
+          config: row.config,
+          iterations: ordered.slice(0, take ?? ordered.length),
+        };
       }),
-      findMany: jest.fn(async ({ where }) =>
-        [...runs.values()]
-          .filter(
-            (row) =>
-              row.workspaceId === where.workspaceId &&
-              row.deleted === null &&
-              (row.result as { prUrl?: string })?.prUrl === where.result.equals,
-          )
-          .map((row) => ({ id: row.id })),
-      ),
+      // By a field of the run's result (its pull request's address, or the
+      // branch it pushed), optionally created by a time, newest first.
+      findMany: jest.fn(async ({ where, orderBy, take }) => {
+        const [key] = where.result.path as string[];
+        const found = [...runs.values()].filter(
+          (row) =>
+            row.workspaceId === where.workspaceId &&
+            row.deleted === null &&
+            (row.result as Record<string, unknown> | null)?.[key] ===
+              where.result.equals &&
+            (!where.createdAt || row.createdAt <= where.createdAt.lte),
+        );
+        if (orderBy?.createdAt) {
+          const direction = orderBy.createdAt === 'desc' ? -1 : 1;
+          found.sort(
+            (a, b) =>
+              direction * (a.createdAt.getTime() - b.createdAt.getTime()),
+          );
+        }
+        return found.slice(0, take ?? found.length).map((row) => ({
+          id: row.id,
+          config: row.config,
+          result: row.result,
+        }));
+      }),
       update: jest.fn(async ({ where, data }) =>
         Object.assign(runs.get(where.id) as Run, data),
       ),
@@ -378,6 +400,52 @@ describe('the signals a run’s end gives its knowledge', () => {
     });
     expect(counts(entries.get('cited'))).toEqual([0, 0]);
     expect(signals).toEqual([]);
+  });
+
+  it('[KG-3.4] is helpful only when the checks passed and the reviewer accepted, both', async () => {
+    // A check failed somewhere no served entry speaks about, and the reviewer
+    // accepted anyway: nothing here says the knowledge helped.
+    const checksFailed = build({
+      runs: [
+        run({
+          served: ['cited'],
+          passes: [
+            {
+              verificationPassed: false,
+              accepted: true,
+              findings: [],
+              failedChecks: [
+                {
+                  label: 'lint',
+                  command: 'pnpm lint',
+                  paths: ['src/other.ts'],
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+      entries: [entry('cited', { citations: [{ path: 'src/cache.ts' }] })],
+    });
+
+    await checksFailed.service.runFinished(RUN);
+    expect(counts(checksFailed.entries.get('cited'))).toEqual([0, 0]);
+
+    // The checks passed and the reviewer did not accept.
+    const notAccepted = build({
+      runs: [
+        run({
+          served: ['cited'],
+          passes: [{ verificationPassed: true, accepted: false, findings: [] }],
+        }),
+      ],
+      entries: [entry('cited', { citations: [{ path: 'src/cache.ts' }] })],
+    });
+
+    await notAccepted.service.runFinished(RUN);
+    expect(counts(notAccepted.entries.get('cited'))).toEqual([0, 0]);
+    expect(checksFailed.signals).toEqual([]);
+    expect(notAccepted.signals).toEqual([]);
   });
 
   it('[KG-3.4] reads the last pass, whose findings are the ones still standing', async () => {
@@ -682,6 +750,83 @@ describe('the signals a pull request gives the knowledge of the run that opened 
     });
     expect(runs.get('run-other-pr')?.pullRequestOutcome).toBeNull();
     expect(runs.get('run-elsewhere')?.pullRequestOutcome).toBeNull();
+  });
+
+  it('[KG-3.5] credits the run whose branch a person opened the pull request from', async () => {
+    // The run pushed its branch and could not open a pull request, so a person
+    // did. The branch is the run's: freeBranch suffixes it per run.
+    const branch = 'agent/eng-42-2';
+    const manual = 'https://github.com/acme/api/pull/9';
+    const { service, entries, runs } = build({
+      runs: [
+        // An older run that pushed the same name, since deleted and reused.
+        run({
+          id: 'run-older',
+          served: ['b'],
+          result: { branch },
+          createdAt: new Date('2026-08-01T10:00:00Z'),
+        }),
+        run({ served: ['a'], result: { branch } }),
+        // A run started after the pull request was opened.
+        run({
+          id: 'run-later',
+          served: ['c'],
+          result: { branch },
+          createdAt: new Date('2026-09-20T10:00:00Z'),
+        }),
+      ],
+      entries: [entry('a'), entry('b'), entry('c')],
+    });
+    const report = {
+      workspaceId: WORKSPACE,
+      url: manual,
+      branch,
+      repo: 'Acme/API',
+      openedAt: new Date('2026-09-02T10:00:00Z'),
+    };
+
+    await expect(
+      service.pullRequestChanged({ ...report, state: 'MERGED' }),
+    ).resolves.toEqual({ runs: 1 });
+
+    expect(runs.get(RUN)?.pullRequestOutcome).toBe('MERGED');
+    expect(counts(entries.get('a'))).toEqual([1, 0]);
+    expect(runs.get('run-older')?.pullRequestOutcome).toBeNull();
+    expect(runs.get('run-later')?.pullRequestOutcome).toBeNull();
+    expect(counts(entries.get('b'))).toEqual([0, 0]);
+    expect(counts(entries.get('c'))).toEqual([0, 0]);
+  });
+
+  it('[KG-3.5] does not credit a branch of the same name in another repository, or a run with its own pull request', async () => {
+    const branch = 'agent/eng-42';
+    const { service, runs } = build({
+      runs: [
+        run({
+          id: 'run-web',
+          served: ['a'],
+          config: { repoUrl: 'https://github.com/acme/web.git' },
+          result: { branch },
+        }),
+        run({
+          id: 'run-own-pr',
+          served: ['a'],
+          result: { branch, prUrl: 'https://github.com/acme/api/pull/3' },
+        }),
+      ],
+      entries: [entry('a')],
+    });
+
+    await expect(
+      service.pullRequestChanged({
+        workspaceId: WORKSPACE,
+        url: 'https://github.com/acme/api/pull/9',
+        state: 'MERGED',
+        branch,
+        repo: 'acme/api',
+      }),
+    ).resolves.toEqual({ runs: 0 });
+    expect(runs.get('run-web')?.pullRequestOutcome).toBeNull();
+    expect(runs.get('run-own-pr')?.pullRequestOutcome).toBeNull();
   });
 
   it('[KG-3.5] records the outcome of a held-out run’s pull request, with no signal', async () => {

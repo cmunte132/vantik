@@ -967,16 +967,6 @@ model PageEntryCitation {
   @@index([checkResult])
 }
 
-/// A question an agent asked that the bank could not answer.
-///
-/// The most valuable signal the system produces: it says which page to write
-/// next, and it turns the bank from a record of what agents dumped into a
-/// record of what agents needed.
-///
-/// Kept in postgres rather than in a typesense `nohits_queries` analytics rule,
-/// which aggregates across the whole index with no workspace field — one
-/// workspace's unanswered questions are not another's to read, and a query
-/// string is often the most revealing thing about work in progress.
 /// One entry served to one reader, once.
 ///
 /// `retrievalCount` says how often an entry is served; this says to whom and
@@ -1037,6 +1027,16 @@ model PageEntrySignal {
   @@index([agentRunId])
 }
 
+/// A question an agent asked that the bank could not answer.
+///
+/// The most valuable signal the system produces: it says which page to write
+/// next, and it turns the bank from a record of what agents dumped into a
+/// record of what agents needed.
+///
+/// Kept in postgres rather than in a typesense `nohits_queries` analytics rule,
+/// which aggregates across the whole index with no workspace field — one
+/// workspace's unanswered questions are not another's to read, and a query
+/// string is often the most revealing thing about work in progress.
 model PageKnowledgeGap {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())

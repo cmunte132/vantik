@@ -225,6 +225,11 @@ async function reportToRuns(ctx: PluginContext, pull: Json) {
       url: pull.html_url,
       state,
       closedAt: pull.closed_at ?? null,
+      // For a pull request a person opened from a run's branch, when the run
+      // pushed it but could not open one itself.
+      branch: pull.head?.ref ?? null,
+      repo: pull.head?.repo?.full_name ?? null,
+      openedAt: pull.created_at ?? null,
     });
   } catch (error) {
     ctx.log.error(

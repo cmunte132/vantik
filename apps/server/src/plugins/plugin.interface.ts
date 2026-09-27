@@ -105,12 +105,17 @@ export interface LinkCapability {
 export interface AgentRunCapability {
   /**
    * A pull request was merged, closed without merging, or reopened. A pull
-   * request no run opened is ignored.
+   * request no run opened, or opened from a run's branch, is ignored.
    */
   pullRequestChanged(input: {
     url: string;
     state: 'MERGED' | 'CLOSED' | 'OPEN';
     closedAt?: string | null;
+    /** The branch it was opened from, and the repository that branch is in. */
+    branch?: string | null;
+    repo?: string | null;
+    /** When it was opened. */
+    openedAt?: string | null;
   }): Promise<unknown>;
 }
 

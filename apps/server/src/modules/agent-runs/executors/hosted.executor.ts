@@ -243,6 +243,7 @@ type CycleResult =
       kind: 'failed';
       error: string;
       summary: string | null;
+      costUsd: number;
       egressDenied: number;
     };
 
@@ -442,6 +443,11 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     const secrets = [model.secret];
     let sandbox: SandboxHandle | undefined;
     let egressDenied = 0;
+    // What the model calls cost, kept outside the cycle so a run that fails
+    // after spending still says what it spent: the knowledge arms compare
+    // mean cost, and leaving failures out would flatter whichever arm fails
+    // expensively.
+    let costUsd = 0;
     let releaseLease: (() => void) | undefined;
 
     const note = async (message: string, phase: string) => {
@@ -677,6 +683,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       );
 
       egressDenied += cycle.egressDenied;
+      costUsd = cycle.costUsd;
 
       if (cycle.kind === 'failed') {
         await this.fail(
@@ -685,6 +692,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           cycle.error,
           egressDenied,
           cycle.summary,
+          costUsd,
         );
         return;
       }
@@ -734,6 +742,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           )}`,
           egressDenied,
           cycle.summary,
+          costUsd,
         );
         return;
       }
@@ -764,6 +773,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           `The agent changed nothing. ${cycle.reason}`,
           egressDenied,
           cycle.summary,
+          costUsd,
         );
         return;
       }
@@ -834,6 +844,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
             : 'ENVIRONMENT_SETUP_FAILED',
         scrubSecrets(message, secrets),
         egressDenied,
+        null,
+        costUsd,
       );
     } finally {
       // Always. On success, on failure, on cancel — the VM, the checkout, the
@@ -936,6 +948,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
             kind: 'failed',
             error: attempt.stderr,
             summary,
+            costUsd: spend.costUsd,
             egressDenied,
           };
         }
@@ -1410,6 +1423,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     error: string,
     egressDenied = 0,
     summary?: string | null,
+    costUsd = 0,
   ) {
     // Gated on the transition landing. A run this executor lost — swept for a
     // lapsed lease, cancelled from the UI — is already terminal and already
@@ -1420,7 +1434,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         failure,
         error: error.slice(0, 4000),
         ...(summary ? { summary } : {}),
-        result: { egressDenied },
+        result: { egressDenied, ...(costUsd ? { costUsd } : {}) },
       })
       .then(() => true)
       .catch(() => false);

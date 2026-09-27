@@ -27,7 +27,7 @@ import type { VectorService } from 'modules/vector/vector.service';
 
 import type EntryCitationsService from './entry-citations.service';
 import type KnowledgeIndexService from './knowledge-index.service';
-import PageEntriesService from './page-entries.service';
+import PageEntriesService, { contentHashOf } from './page-entries.service';
 import { PROPOSED_ENTRY_BUDGET, WriterIdentity } from './pages.interface';
 
 const AGENT: WriterIdentity = { userId: 'agent-1', tokenId: 'token-1' };
@@ -536,6 +536,8 @@ describe('what an agent may change on an entry', () => {
     const calls = (prisma.pageEntry.update as jest.Mock).mock.calls;
     expect(calls[0][0].data).toEqual({
       content: 'clearer words',
+      // New words are a new hash, which is what repeats are found by.
+      contentHash: contentHashOf('clearer words'),
       scope: 'apps/server',
       // A new scope is resolved to modules again; this workspace has none.
       moduleIds: [],

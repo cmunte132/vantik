@@ -23,6 +23,8 @@ import {
 } from './pages.processor';
 import PagesService from './pages.service';
 import RepoFileSourceService from './repo-file-source.service';
+import KnowledgeTriageService from './triage/knowledge-triage.service';
+import TriageJudges from './triage/triage-judges';
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import RepoFileSourceService from './repo-file-source.service';
     RepoFileSourceService,
     CitationJudge,
     EntryCitationsService,
+    TriageJudges,
+    KnowledgeTriageService,
     PagesScheduler,
     EntryModulesScheduler,
     PagesProcessor,

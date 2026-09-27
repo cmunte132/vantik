@@ -632,6 +632,8 @@ export class VectorService implements OnModuleInit {
       vectorDistance?: number;
       /** Only these entry kinds. Page bodies are not entries and drop out. */
       kinds?: string[];
+      /** Only entries in at least one of these modules. Filtered in the query. */
+      moduleIds?: string[];
       /**
        * Modules whose knowledge ranks first, and their neighbours in the
        * product graph, which rank after them and ahead of everything else.
@@ -703,6 +705,48 @@ export class VectorService implements OnModuleInit {
     });
 
     return hits.filter((hit) => hit.entryId);
+  }
+
+  /**
+   * Proposed and standing entries like `content`, among those of the given
+   * modules (or of one page, for an entry scoped to none), with how alike
+   * each is: 1 minus the vector distance. Only hits the embedding matched are
+   * kept; a match on words alone says nothing about meaning. Triage compares
+   * a new entry with these before any model is asked about it.
+   */
+  async findNearEntries(
+    workspaceId: string,
+    content: string,
+    options: {
+      moduleIds?: string[];
+      pageId?: string;
+      minSimilarity: number;
+      limit?: number;
+    },
+  ): Promise<Array<{ entryId: string; similarity: number }>> {
+    const { hits } = await this.searchKnowledge(workspaceId, content, {
+      limit: options.limit ?? 10,
+      vectorDistance: 1 - options.minSimilarity,
+      ...(options.moduleIds?.length
+        ? { moduleIds: options.moduleIds }
+        : { pageId: options.pageId }),
+      includeStatuses: [
+        PageEntryStatusEnum.STANDING,
+        PageEntryStatusEnum.PROPOSED,
+      ],
+    });
+
+    return hits
+      .filter(
+        (hit) =>
+          hit.entryId &&
+          typeof hit.distance === 'number' &&
+          1 - hit.distance >= options.minSimilarity,
+      )
+      .map((hit) => ({
+        entryId: hit.entryId as string,
+        similarity: 1 - (hit.distance as number),
+      }));
   }
 
   /**
@@ -888,6 +932,7 @@ function buildKnowledgeFilterBy(
     pageId?: string;
     includeStatuses?: string[];
     kinds?: string[];
+    moduleIds?: string[];
   } = {},
 ): string {
   if (!UUID_REGEX.test(workspaceId)) {
@@ -913,6 +958,13 @@ function buildKnowledgeFilterBy(
 
   if (options.pageId) {
     filters.push(`pageId:=\`${options.pageId}\``);
+  }
+
+  const moduleIds = (options.moduleIds ?? []).filter((id) =>
+    UUID_REGEX.test(id),
+  );
+  if (moduleIds.length > 0) {
+    filters.push(`moduleIds:=[${moduleIds.map(quoteFilterValue).join(',')}]`);
   }
 
   if (options.scope) {

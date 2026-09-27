@@ -1,3 +1,4 @@
+import { InjectQueue } from '@nestjs/bull';
 import {
   BadRequestException,
   ConflictException,
@@ -5,6 +6,8 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   BulkUpdatePageEntriesDto,
@@ -16,6 +19,8 @@ import {
   UserTypeEnum,
 } from '@vantikhq/types';
 import { Prisma } from '@prisma/client';
+import type { Queue } from 'bull';
+import { createHash } from 'node:crypto';
 import { PrismaService } from 'nestjs-prisma';
 
 import { modulesForScope } from 'modules/modules/module-routing';
@@ -33,12 +38,16 @@ import {
 } from './knowledge-proof';
 import {
   ALLOWED_STATUS_TRANSITIONS,
+  PAGES_QUEUE,
   PROPOSED_ENTRY_BUDGET,
   PROPOSED_ENTRY_EXPIRY_DAYS,
   STANDING_ENTRY_DECAY_DAYS,
   type ServedTo,
+  TRIAGE_ENTRY_JOB,
+  triageEntryJobOptions,
   WriterIdentity,
 } from './pages.interface';
+import { secretIn } from './triage/triage-policy';
 
 @Injectable()
 export default class PageEntriesService {
@@ -49,13 +58,15 @@ export default class PageEntriesService {
    * indexer is on PagesService: the index is a cache. A write that finds
    * Typesense down still gets the exact-duplicate check, which is postgres.
    * The citation checker is not a cache, so a write that names citations is
-   * refused rather than stored unchecked when it is absent.
+   * refused rather than stored unchecked when it is absent. Without the queue
+   * an entry is not triaged, and waits in the inbox for a person as before.
    */
   constructor(
     private prisma: PrismaService,
     private indexer?: KnowledgeIndexService,
     private vectorService?: VectorService,
     private citations?: EntryCitationsService,
+    @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
   ) {}
 
   // ----------------------------------------------------------------- reading
@@ -118,6 +129,8 @@ export default class PageEntriesService {
     if (!page) {
       throw new NotFoundException({ message: `Page ${pageId} not found` });
     }
+
+    assertNoSecret(entryData.content);
 
     const isAgent = await this.isAgent(writer.userId);
 
@@ -199,6 +212,7 @@ export default class PageEntriesService {
       this.prisma.pageEntry.create({
         data: {
           content: entryData.content,
+          contentHash: contentHashOf(entryData.content),
           scope: entryData.scope ?? null,
           moduleIds,
           ...(entryData.kind && { kind: entryData.kind }),
@@ -243,7 +257,30 @@ export default class PageEntriesService {
     // then the entry is written, and simply not grounded.
     await this.citations?.retryLater(entry.id, citations);
 
+    if (status === PageEntryStatusEnum.PROPOSED) {
+      await this.triageLater(entry.id);
+    }
+
     return { ...entry, ...entryProof(entry) } as unknown as PageEntry;
+  }
+
+  /**
+   * Queues the triage of a new entry in the inbox. The write has happened
+   * whether or not the queue takes it: an entry that is not triaged waits
+   * for a person, which is where every entry waited before triage existed.
+   */
+  private async triageLater(entryId: string): Promise<void> {
+    try {
+      await this.pagesQueue?.add(
+        TRIAGE_ENTRY_JOB,
+        { entryId },
+        triageEntryJobOptions(entryId),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue triage for entry ${entryId}: ${error}; it waits for a person`,
+      );
+    }
   }
 
   private async checkCitations(
@@ -285,6 +322,10 @@ export default class PageEntriesService {
       this.assertAgentMayEdit(current, userId, entryData);
     }
 
+    if (entryData.content !== undefined) {
+      assertNoSecret(entryData.content);
+    }
+
     if (entryData.status !== undefined) {
       this.assertTransitionAllowed(
         current.status as PageEntryStatusEnum,
@@ -310,6 +351,7 @@ export default class PageEntriesService {
         data: {
           ...(entryData.content !== undefined && {
             content: entryData.content,
+            contentHash: contentHashOf(entryData.content),
           }),
           ...(entryData.scope !== undefined && {
             scope: entryData.scope,
@@ -1041,6 +1083,36 @@ function isDecided(status: string): boolean {
  */
 export function normaliseContent(content: string): string {
   return content.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * The hash exact repeats are found by: sha256 of the normalised content. The
+ * migration that added it computes the same for existing entries in SQL.
+ */
+export function contentHashOf(content: string): string {
+  return createHash('sha256').update(normaliseContent(content)).digest('hex');
+}
+
+/**
+ * Refuses content that looks like it holds a credential, before anything is
+ * stored. Entries are replicated to every member's browser and handed to
+ * agents, so a key written into one has been shared with all of them; a
+ * refusal at the door is the only point at which that can still be stopped.
+ * Said without echoing the content back, so the refusal does not repeat it.
+ */
+function assertNoSecret(content: string): void {
+  const secret = secretIn(content);
+
+  if (secret) {
+    throw new UnprocessableEntityException({
+      status: 'secret-refused',
+      message:
+        `Nothing was written: the content looks like it holds a ${secret}. ` +
+        'Knowledge is shared with every member and every agent of the ' +
+        'workspace, so credentials never belong in it. Describe where the ' +
+        'secret is kept and how it is used instead of writing it down.',
+    });
+  }
 }
 
 function firstLine(content: string): string {

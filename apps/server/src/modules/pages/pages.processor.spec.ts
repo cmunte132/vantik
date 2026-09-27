@@ -30,6 +30,7 @@ import {
   PagesProcessor,
   PagesScheduler,
 } from './pages.processor';
+import KnowledgeTriageService from './triage/knowledge-triage.service';
 
 function buildQueue(existing: Array<{ name: string; key: string }> = []) {
   return {
@@ -95,6 +96,7 @@ describe('PagesProcessor', () => {
     await new PagesProcessor(
       service,
       {} as EntryCitationsService,
+      {} as KnowledgeTriageService,
     ).handleDecay();
 
     // Unscoped deliberately: the windows are a property of the deployment, not
@@ -151,6 +153,7 @@ describe('re-resolving entry modules', () => {
     const processor = new PagesProcessor(
       { recomputeModules } as unknown as PageEntriesService,
       {} as EntryCitationsService,
+      {} as KnowledgeTriageService,
     );
 
     await processor.handleRecomputeModules({ data: { workspaceId: 'ws-1' } });
@@ -166,6 +169,7 @@ describe('retrying citations that could not be read', () => {
     const processor = new PagesProcessor(
       {} as PageEntriesService,
       { retryUnknown } as unknown as EntryCitationsService,
+      {} as KnowledgeTriageService,
     );
 
     return { processor, retryUnknown };
@@ -207,6 +211,7 @@ describe('checking an entry again after a harmful signal', () => {
     const processor = new PagesProcessor(
       {} as PageEntriesService,
       { recheck } as unknown as EntryCitationsService,
+      {} as KnowledgeTriageService,
     );
 
     await expect(

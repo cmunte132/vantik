@@ -17,7 +17,9 @@ import {
   recomputeModulesJobOptions,
   RETRY_CITATIONS_JOB,
   STANDING_ENTRY_DECAY_DAYS,
+  TRIAGE_ENTRY_JOB,
 } from './pages.interface';
+import KnowledgeTriageService from './triage/knowledge-triage.service';
 
 /**
  * The scheduler for the decay pass.
@@ -136,7 +138,33 @@ export class PagesProcessor {
   constructor(
     private pageEntriesService: PageEntriesService,
     private entryCitations: EntryCitationsService,
+    private triage: KnowledgeTriageService,
   ) {}
+
+  /**
+   * Triages one new entry. A pass that throws is tried again by Bull; one
+   * that finds nothing to decide (the entry is gone, triaged, or triage is
+   * off) returns without a decision.
+   */
+  @Process(TRIAGE_ENTRY_JOB)
+  async handleTriageEntry(job: { data: { entryId: string } }) {
+    const outcome = await this.triage.triage(job.data.entryId);
+
+    if (!outcome) {
+      return;
+    }
+
+    const detail = [
+      outcome.reasons.length ? ` (${outcome.reasons.join(', ')})` : '',
+      outcome.policy ? ` (policy ${outcome.policy})` : '',
+      outcome.applied ? ', applied' : '',
+    ].join('');
+
+    this.logger.info({
+      message: `Triage (${outcome.mode.toLowerCase()}) decided ${outcome.decision} for entry ${job.data.entryId}${detail}`,
+      where: 'PagesProcessor.handleTriageEntry',
+    });
+  }
 
   /**
    * Reads again an entry's citations that the server could not read when the

@@ -171,6 +171,31 @@ export function recheckEntryJobOptions(entryId: string): JobOptions {
 }
 
 /**
+ * Decides what becomes of a new entry before a person looks at it: see
+ * `triage/knowledge-triage.service.ts`.
+ */
+export const TRIAGE_ENTRY_JOB = 'triageEntry';
+
+/** How many times a triage pass is tried before the entry waits for a person. */
+export const TRIAGE_ENTRY_ATTEMPTS = 3;
+
+/**
+ * One pass per entry, since a pass decides once and records it. Tried again
+ * when it fails, which it does when the index cannot be asked for the entry's
+ * neighbours: a pass that cannot look must not decide. An entry whose passes
+ * all fail stays in the inbox, where a person triages it as before.
+ */
+export function triageEntryJobOptions(entryId: string): JobOptions {
+  return {
+    jobId: `${TRIAGE_ENTRY_JOB}:${entryId}`,
+    attempts: TRIAGE_ENTRY_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
+
+/**
  * Transitions a client may ask for.
  *
  * `CONSOLIDATED` and `SUPERSEDED` are absent as sources because they are

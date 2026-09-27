@@ -1063,7 +1063,7 @@ model KnowledgeTriageDecision {
   decision KnowledgeTriageDecisionType
   /// Why it escalated, every reason that applied. Empty for any other decision.
   reasons  KnowledgeEscalationReason[] @default([])
-  /// The policy a REJECT broke.
+  /// The policy a REJECT broke, kept when a backed-off REJECT escalated.
   policy   KnowledgeTriagePolicy?
   /// SHADOW records and leaves the entry as it is; ON acts on the decision.
   mode     KnowledgeTriageMode
@@ -1083,8 +1083,56 @@ model KnowledgeTriageDecision {
   /// What each model answered, raw.
   outputs      Json?
 
+  /// The decision it reached when agreement with people on decisions of
+  /// that type had fallen under the floor (see KnowledgeBackoffChange). It
+  /// is then recorded as ESCALATE with LOW_AGREEMENT, and agreement is still
+  /// measured on what it reached, so a type that backed off can recover.
+  backedOffFrom KnowledgeTriageDecisionType?
+
+  /// Drawn for a person to check: a share of the decisions acted on without
+  /// one, chosen by a draw seeded with the decision's id.
+  audit     Boolean @default(false)
+  /// The share it was drawn at, whenever a draw was made. An audited
+  /// decision stands for 1/auditRate decisions when agreement is measured.
+  auditRate Float?
+
+  /// What a person did once the entry reached them: as an escalation, as a
+  /// decision made in shadow mode, or as an audit. Null until then.
+  verdict     KnowledgeVerdict?
+  /// Whether the verdict agreed with the decision. Null without a verdict,
+  /// and for a decision made by a rule a person's verdict says nothing about.
+  agreed      Boolean?
+  verdictById String?
+  verdictAt   DateTime?
+
   @@index([entryId, createdAt])
   @@index([workspaceId, createdAt])
+  @@index([workspaceId, verdictAt])
+}
+
+/// A decision type stopping or resuming acting on its own in a workspace.
+///
+/// Appended whenever agreement is re-evaluated and a type's state changes,
+/// never updated: the latest row for a type is its state, and the rows before
+/// it are when and why it changed. A type with no row acts.
+model KnowledgeBackoffChange {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+  workspaceId String
+
+  decision  KnowledgeTriageDecisionType
+  /// True when the type stopped acting, false when it resumed.
+  backedOff Boolean
+
+  /// What it was decided on: kappa over the window (null where it is
+  /// undefined), the verdicts it was measured over, and the settings then.
+  kappa      Float?
+  samples    Int
+  floor      Float
+  minSamples Int
+  windowDays Int
+
+  @@index([workspaceId, decision, createdAt])
 }
 
 /// How one entry relates to another, as triage found it.
@@ -2008,6 +2056,19 @@ enum KnowledgeEscalationReason {
   HARMFUL_SIGNAL
   /// A sample of what was accepted, for a person to check.
   AUDIT
+  /// People have lately disagreed with decisions of the type it reached, so
+  /// a person decides instead (see KnowledgeBackoffChange).
+  LOW_AGREEMENT
+}
+
+/// What a person did with an entry triage had decided about.
+enum KnowledgeVerdict {
+  /// Kept it as written.
+  ACCEPTED
+  /// Took it out of use: archived or disputed it.
+  REJECTED
+  /// Changed what it says, where it applies, or its kind.
+  EDITED
 }
 
 /// The policy a rejected entry broke.

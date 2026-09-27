@@ -17,6 +17,10 @@ describe('the knowledge settings of a workspace', () => {
       contextTokenBudget: 1_500,
       autoTriage: 'shadow',
       similarityThreshold: 0.25,
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
     });
     expect(DEFAULT_KNOWLEDGE_SETTINGS).toEqual(knowledgeSettings({}, {}));
   });
@@ -34,6 +38,10 @@ describe('the knowledge settings of a workspace', () => {
       contextTokenBudget: 800,
       autoTriage: 'shadow',
       similarityThreshold: 0.25,
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
     });
     // The ends of a share are shares.
     expect(
@@ -68,6 +76,10 @@ describe('the knowledge settings of a workspace', () => {
       contextTokenBudget: 600,
       autoTriage: 'shadow',
       similarityThreshold: 0.25,
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
     });
     // One setting stored leaves the others to the deployment.
     expect(knowledgeSettings({ knowledge: { contextTopK: 3 } }, env)).toEqual({
@@ -76,6 +88,10 @@ describe('the knowledge settings of a workspace', () => {
       contextTokenBudget: 800,
       autoTriage: 'shadow',
       similarityThreshold: 0.25,
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
     });
     // Other preferences are not knowledge settings.
     expect(
@@ -122,6 +138,10 @@ describe('the knowledge settings of a workspace', () => {
       contextTokenBudget: 1_500,
       autoTriage: 'shadow',
       similarityThreshold: 0.25,
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
     });
     expect(
       knowledgeSettings({ knowledge: { holdoutRate: 1.5 } }, {}).holdoutRate,
@@ -195,6 +215,72 @@ describe('the knowledge settings of a workspace', () => {
           .similarityThreshold,
       ).toBe(0.25);
     }
+  });
+
+  it('[KG-5.2] [KG-5.4] audits a tenth, and backs off below 0.6 over 20 verdicts in 30 days, unless told otherwise', () => {
+    expect(knowledgeSettings(null, {})).toMatchObject({
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
+    });
+
+    const env = {
+      KNOWLEDGE_AUDIT_RATE: '0.5',
+      KNOWLEDGE_KAPPA_FLOOR: '0.7',
+      KNOWLEDGE_KAPPA_MIN_SAMPLES: '40',
+      KNOWLEDGE_KAPPA_WINDOW_DAYS: '14',
+    };
+
+    expect(knowledgeSettings(null, env)).toMatchObject({
+      auditRate: 0.5,
+      kappaFloor: 0.7,
+      kappaMinSamples: 40,
+      kappaWindowDays: 14,
+    });
+    // The workspace's own over the deployment's.
+    expect(
+      knowledgeSettings(
+        {
+          knowledge: {
+            auditRate: 1,
+            kappaFloor: 0,
+            kappaMinSamples: 5,
+            kappaWindowDays: 7,
+          },
+        },
+        env,
+      ),
+    ).toMatchObject({
+      auditRate: 1,
+      kappaFloor: 0,
+      kappaMinSamples: 5,
+      kappaWindowDays: 7,
+    });
+    // What cannot be read falls to the layer beneath.
+    expect(
+      knowledgeSettings(
+        {
+          knowledge: {
+            auditRate: 2,
+            kappaFloor: '0.9',
+            kappaMinSamples: 0,
+            kappaWindowDays: 1.5,
+          },
+        },
+        {
+          KNOWLEDGE_AUDIT_RATE: 'some',
+          KNOWLEDGE_KAPPA_FLOOR: '-0.2',
+          KNOWLEDGE_KAPPA_MIN_SAMPLES: 'many',
+          KNOWLEDGE_KAPPA_WINDOW_DAYS: '-3',
+        },
+      ),
+    ).toMatchObject({
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
+    });
   });
 
   it('[KG-3.2] caps the budget, so a budget cannot mean everything', () => {

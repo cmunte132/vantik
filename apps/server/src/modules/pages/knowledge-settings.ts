@@ -42,6 +42,23 @@ export interface KnowledgeSettings {
    * the write-time near-match check uses. `KNOWLEDGE_SIMILARITY_THRESHOLD`.
    */
   similarityThreshold: number;
+  /**
+   * The share of decisions triage acted on that a person is asked to check,
+   * from 0 to 1. `KNOWLEDGE_AUDIT_RATE`.
+   */
+  auditRate: number;
+  /**
+   * The agreement, as Cohen's kappa from 0 to 1, below which a decision type
+   * stops acting and escalates instead. `KNOWLEDGE_KAPPA_FLOOR`.
+   */
+  kappaFloor: number;
+  /**
+   * How many verdicts a decision type needs in the window before the floor
+   * applies to it. `KNOWLEDGE_KAPPA_MIN_SAMPLES`.
+   */
+  kappaMinSamples: number;
+  /** How many days of verdicts agreement is measured over. `KNOWLEDGE_KAPPA_WINDOW_DAYS`. */
+  kappaWindowDays: number;
 }
 
 export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
@@ -50,6 +67,10 @@ export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
   contextTokenBudget: 1_500,
   autoTriage: 'shadow',
   similarityThreshold: 0.25,
+  auditRate: 0.1,
+  kappaFloor: 0.6,
+  kappaMinSamples: 20,
+  kappaWindowDays: 30,
 };
 
 /** The most tokens any knowledge budget allows, whatever is configured. */
@@ -85,6 +106,22 @@ export function knowledgeSettings(
       shareOf(stored.similarityThreshold) ??
       shareOf(fromEnv(env.KNOWLEDGE_SIMILARITY_THRESHOLD)) ??
       DEFAULT_KNOWLEDGE_SETTINGS.similarityThreshold,
+    auditRate:
+      shareOf(stored.auditRate) ??
+      shareOf(fromEnv(env.KNOWLEDGE_AUDIT_RATE)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.auditRate,
+    kappaFloor:
+      shareOf(stored.kappaFloor) ??
+      shareOf(fromEnv(env.KNOWLEDGE_KAPPA_FLOOR)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.kappaFloor,
+    kappaMinSamples:
+      countOf(stored.kappaMinSamples) ??
+      countOf(fromEnv(env.KNOWLEDGE_KAPPA_MIN_SAMPLES)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.kappaMinSamples,
+    kappaWindowDays:
+      countOf(stored.kappaWindowDays) ??
+      countOf(fromEnv(env.KNOWLEDGE_KAPPA_WINDOW_DAYS)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.kappaWindowDays,
   };
 }
 

@@ -8,7 +8,8 @@ next session starts by reading it.
 - Current phase: 6, in review: KG-6.1 to KG-6.5 implemented and
   mutation-checked; review round 1 (FAIL, two blocking findings) fixed and
   answered; round 2 PASS with five non-blocking findings, all fixed; round
-  3 next, to confirm them. PR #45
+  3 PASS with four non-blocking findings, all fixed; round 4 next, to
+  confirm them. PR #45
   is open from this branch, so the phase 6 commits are in it too; its
   description says so.
   Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
@@ -729,10 +730,14 @@ next session starts by reading it.
     reading the check found when it queried is read again under the lock
     too. A reading of the commit a citation cites (the retry of an unread
     citation, or the re-check of one) is stored only while the citation is
-    still unread, under the lock: it is older than any head read since.
-    Stamps come from the servers' clocks; two readings could be misordered
-    only if their heads were asked for within the servers' skew of each
-    other with a change landing between, which is noted at `readBefore`.
+    still unread, under the lock, and is stamped with when the citation was
+    written: it is older than any head read since, and never outranks one,
+    however close the two finish. Stamps come from the servers' clocks; two
+    readings of heads could be misordered only if the heads were asked for
+    within the servers' skew of each other with a change landing between,
+    which is noted at `readBefore`. Before acting, `settle` also holds the
+    entry's row (`SELECT ... FOR UPDATE`), so a person's change to it waits
+    rather than landing between reading the entry and acting on it.
   - **Read once.** A citation already read at the change's own commit is
     not read or judged again: that reading comes back as stored and is
     acted on like any other. So while the change is still the head, the
@@ -748,8 +753,9 @@ next session starts by reading it.
     column holding the entry's content hash the judge read), is not acted
     on: the job counts it as stale and is retried, and the retry reads and
     judges it again rather than reusing it. A contradiction a person has
-    already put back, the same citation read at the same commit and
-    disputed for the same words, is not raised again.
+    already put back, of the same citation's same code (`judgedCodeHash`, a
+    hash of the snippet and the lines the judge read) for the same words,
+    is not raised again, however far unrelated commits have moved the head.
   - **Nothing is written by the check.** Each result comes back with what to
     store, and the upkeep stores it in the same transaction as what it does
     about it, so a crash cannot leave a result stored and not acted on.
@@ -1741,6 +1747,55 @@ Mutation-checked: 21 mutants over these fixes, all killed (two did not
 compile at first and were reworded). Full server suite: 1825 passed, 15
 skipped.
 
+### Phase 6, round 3 (same reviewer, on the round 2 fixes)
+
+The reviewer read e17beb7..a9f909d and the round 2 answers, compared the
+schema change with `prisma migrate diff`, ran tsc and the full server
+suite (1825 passed), and re-ran their round 2 probes against the new code.
+N1 to N5 and the doc nit resolved; their three questions answered (the
+stale retry cannot loop, as one retry reads after the put-back; it drops a
+check only in the windows an unread citation already could; `settle`
+suppresses a contradiction for one attempt at most). Verdict PASS, with
+four non-blocking findings, all fixed:
+
+- **R1. `ruledOn` matched on the repository's head commit,** so any commit
+  landing before the retry, even one leaving the cited file alone, made
+  the gardener ask again about code the person had overruled. A judgment
+  now records a hash of the code it read (`judgedCodeHash`: the snippet,
+  and the lines shown to the judge), carried in the dispute's evidence,
+  and `ruledOn` matches citation and that hash. The migration is now
+  `20260927070000_citation_judgment_inputs`, with both columns (renamed
+  from round 2's, which is unmerged and unreleased); `prisma migrate diff`
+  finds no difference. Tests: "[KG-6.2] does not raise again a
+  contradiction a person overruled once unrelated commits moved the head,
+  and asks when the code judged changed"; "[KG-6.2] does not raise again a
+  stored judgment a person overruled, read again after they put the entry
+  back"; and "disputes again an entry a person corrected before putting it
+  back, and asks about one put back unchanged", whose evidence now names
+  another citation over this code and this citation over other code.
+- **R2. A rewording committed between `settle` reading the entry and
+  writing the dispute was disputed on the old words' judgment.**
+  `updateEntry` takes no advisory lock, so `settle` now holds the entry's
+  row before reading it (`lockEntryRow`, `SELECT ... FOR UPDATE`, checked
+  on Postgres: a concurrent update waits until the transaction commits).
+  This covers the proposals too, not only the dispute. Test: "[KG-6.2]
+  holds the entry's row before reading it, so a person rewording it
+  meanwhile is read, not disputed over".
+- **R3. A reading of a cited commit could outrank a head reading taken in
+  the same millisecond.** It is now stamped with when the citation was
+  written. Tests: "[KG-6.2] ranks a reading of the commit a citation cites
+  below a reading of a head, even in the same millisecond" (frozen clock),
+  and the retry test in entry-citations.service.spec asserts the stamp.
+- **R4. Job docs** (`handleCodeLanded`, `codeLandedJobOptions`) now say a
+  retry also follows a person acting on an entry after it was read, and
+  when a citation checked at the commit is read again.
+
+Mutation-checked: 16 mutants over these fixes. The code-hash null guard in
+`ruledOn` survived as equivalent (a judged contradiction always carries a
+hash) and was removed; a stored reading's hash survived until the stored
+judgment test above killed it; two did not compile at first and were
+reworded; all others killed. Full server suite: 1829 passed, 15 skipped.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -1987,3 +2042,8 @@ Give the evidence, and stop until the maintainer answers.
   is read again, and an overruled contradiction is not raised again; merges
   into other branches neither fail nor fetch for nothing; "judged once"
   documented as while the change is the head. 21 mutants, all killed.
+- 2026-09-27: Phase 6 review round 3: PASS, with four non-blocking
+  findings, all fixed with tagged tests: an overruled contradiction is
+  known by the code judged (`judgedCodeHash`), not the head commit;
+  `settle` holds the entry's row before reading it; a reading of a cited
+  commit is stamped with when the citation was written; job docs updated.

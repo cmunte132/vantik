@@ -109,11 +109,30 @@ function buildService({
           page: { workspaceId: 'workspace-1' },
         }),
       ),
-      create: jest.fn(({ data }) => {
+      // Returns what postgres would: the row, and its citations as rows when
+      // they are asked for.
+      create: jest.fn(({ data, include }) => {
         created.push(data);
-        return { id: 'entry-new', ...data };
+        const { citations, ...row } = data;
+        return {
+          id: 'entry-new',
+          ...row,
+          ...(include?.citations && {
+            citations: (citations?.create ?? []).map((citation: object) => ({
+              targetLabel: null as string | null,
+              judgment: null as string | null,
+              judgeModel: null as string | null,
+              moduleRepo: { fullName: 'acme/api' },
+              ...citation,
+            })),
+          }),
+        };
       }),
-      update: jest.fn(({ where, data }) => ({ id: where.id, ...data })),
+      update: jest.fn(({ where, data, include }) => ({
+        id: where.id,
+        ...data,
+        ...(include?.citations && { citations: [] }),
+      })),
       updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
     },
     // The transaction double runs whatever the service handed it, so a create
@@ -1392,6 +1411,112 @@ describe('citations on a write', () => {
       }),
     ).rejects.toThrow('no checker');
     expect(created).toEqual([]);
+  });
+});
+
+describe('an entry as it is written', () => {
+  it('[KG-2.8] comes back with its trust, citations and last check, so the writer sees what they came to', async () => {
+    const checkedAt = new Date('2026-09-27T01:00:00Z');
+    const { prisma, vectorService } = buildService();
+    const withCitations = new PageEntriesService(
+      prisma,
+      undefined,
+      vectorService,
+      {
+        checkForWrite: jest.fn(async () => [
+          {
+            kind: PageEntryCitationKindEnum.CODE,
+            moduleRepoId: 'repo-1',
+            path: 'src/a.ts',
+            commitSha: 'abcdef1',
+            startLine: 3,
+            endLine: 5,
+            snippet: 'a();',
+            snippetHash: 'hash',
+            checkedAt,
+            checkedSha: 'abcdef1',
+            checkResult: PageEntryCitationCheckEnum.HOLDS,
+          },
+          {
+            kind: PageEntryCitationKindEnum.CODE,
+            moduleRepoId: 'repo-1',
+            path: 'src/b.ts',
+            commitSha: 'abcdef1',
+            startLine: 1,
+            endLine: 1,
+            checkedAt: null as Date | null,
+            checkResult: PageEntryCitationCheckEnum.UNKNOWN,
+          },
+        ]),
+        retryLater: jest.fn(async (): Promise<void> => undefined),
+      } as unknown as EntryCitationsService,
+    );
+
+    const entry = await withCitations.createEntry('page-1', AGENT, {
+      content: 'The importer drops the last row when the file has no newline.',
+      citations: [
+        { path: 'src/a.ts', lines: '3-5', sha: 'abcdef1' },
+        { path: 'src/b.ts', lines: '1', sha: 'abcdef1' },
+      ],
+    });
+
+    expect(entry).toMatchObject({
+      id: 'entry-new',
+      // Proposed: not grounded until a person accepts it.
+      trust: KnowledgeTrustEnum.UNGROUNDED,
+      citations: [
+        {
+          kind: 'CODE',
+          repo: 'acme/api',
+          path: 'src/a.ts',
+          lines: '3-5',
+          result: 'HOLDS',
+          checkedSha: 'abcdef1',
+        },
+        { kind: 'CODE', path: 'src/b.ts', lines: '1', result: 'UNKNOWN' },
+      ],
+      lastCheckedAt: checkedAt.toISOString(),
+      lastCheckedSha: 'abcdef1',
+    });
+  });
+
+  it('[KG-2.8] comes back with its proof when it is edited', async () => {
+    const { service, prisma } = buildService({ userType: 'User' });
+    (prisma.pageEntry.update as jest.Mock).mockImplementationOnce(
+      ({ where, data, include }) => ({
+        id: where.id,
+        status: PageEntryStatusEnum.STANDING,
+        verifiedAt: null,
+        ...data,
+        ...(include?.citations && {
+          citations: [
+            {
+              kind: 'ISSUE',
+              path: null,
+              commitSha: null,
+              startLine: null,
+              endLine: null,
+              targetLabel: 'ENG-42',
+              checkedAt: new Date('2026-09-27T01:00:00Z'),
+              checkedSha: null,
+              checkResult: 'HOLDS',
+              judgment: null,
+              judgeModel: null,
+              moduleRepo: null,
+            },
+          ],
+        }),
+      }),
+    );
+
+    const entry = await service.updateEntry('entry-1', HUMAN.userId, {
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    expect(entry).toMatchObject({
+      trust: KnowledgeTrustEnum.GROUNDED,
+      citations: [{ kind: 'ISSUE', target: 'ENG-42', result: 'HOLDS' }],
+    });
   });
 });
 

@@ -19,6 +19,9 @@ import {
 import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
+import { IntegrationsService } from 'modules/integrations/integrations.service';
+import { LocalRepoService } from 'modules/local-repo/local-repo.service';
+
 import CitationJudge, { JudgeRequest } from './citation-judge';
 import { hashSnippet } from './citation-matching';
 import EntryCitationsService from './entry-citations.service';
@@ -135,7 +138,25 @@ function world() {
     (where.team === undefined || matchesTeam(teamOf(issue), where.team));
   const select = (row: Row | undefined) => (row ? { ...row } : null);
 
+  const accounts: Row[] = [
+    { id: 'acct-1', workspaceId: WS, deleted: null, slug: 'github' },
+    { id: 'acct-2', workspaceId: OTHER, deleted: null, slug: 'github' },
+  ];
+
   const prisma = {
+    integrationAccount: {
+      findFirst: async ({ where }: Row) => {
+        const account = accounts.find(
+          (a) =>
+            a.id === where.id &&
+            a.workspaceId === where.workspaceId &&
+            a.deleted === null,
+        );
+        return account
+          ? { integrationDefinition: { slug: account.slug } }
+          : null;
+      },
+    },
     moduleRepo: {
       findMany: async ({ where }: Row) =>
         moduleRepos.filter(
@@ -313,6 +334,7 @@ function store(
       endLine: null,
       snippet: null,
       targetId: null,
+      pendingQuote: null,
       ...draft,
     }),
   );
@@ -395,7 +417,7 @@ describe('checking citations when an entry is written', () => {
           service.checkForWrite(WS, [code({ path: 'src/gone.ts' })]),
         )
       ).message,
-    ).toContain('src/gone.ts at 111111111111 does not exist');
+    ).toContain('src/gone.ts at 111111111111 is not a file there');
     expect(
       (await refusalOf(service.checkForWrite(WS, [code({ lines: '4-9' })])))
         .message,
@@ -561,6 +583,188 @@ describe('a repository that cannot be reached', () => {
   });
 });
 
+describe('a repository that throws instead of answering', () => {
+  it('[KG-2.3] still lets the write through with an UNKNOWN citation', async () => {
+    const { db, judge, queue, indexer } = setup();
+    // The real file source, over an integration whose plugin rejects, as
+    // loadIntegration passes on an async plugin's failure (here a token
+    // refresh that cannot reach GitHub).
+    const source = new RepoFileSourceService(
+      db.prisma,
+      {
+        loadIntegration: jest.fn(async () => {
+          throw new Error('getaddrinfo ENOTFOUND github.com');
+        }),
+      } as unknown as IntegrationsService,
+      { pathOf: jest.fn() } as unknown as LocalRepoService,
+    );
+    const service = new EntryCitationsService(
+      db.prisma,
+      source,
+      judge as unknown as CitationJudge,
+      indexer as unknown as KnowledgeIndexService,
+      queue as unknown as Queue,
+    );
+
+    const drafts = await service.checkForWrite(WS, [
+      code(),
+      code({ sha: undefined }),
+    ]);
+
+    expect(drafts.map((draft) => draft.checkResult)).toEqual([
+      PageEntryCitationCheckEnum.UNKNOWN,
+      PageEntryCitationCheckEnum.UNKNOWN,
+    ]);
+  });
+});
+
+describe('a quote that could not be checked at write', () => {
+  function unreachable() {
+    const context = setup();
+    context.files.put('acme/api', SHA1, 'src/pages.ts', {
+      unknown: true,
+      reason: 'GitHub answered 503',
+    });
+    return context;
+  }
+
+  it('[KG-2.3] is kept with the unread citation, and checked when the retry reads the lines', async () => {
+    const context = unreachable();
+    const quote = 'archive(page.entries)';
+
+    const [draft] = await context.service.checkForWrite(WS, [code({ quote })]);
+    expect(draft).toMatchObject({
+      checkResult: 'UNKNOWN',
+      pendingQuote: quote,
+    });
+
+    const entryId = store(context.db, [draft]);
+    context.files.put('acme/api', SHA1, 'src/pages.ts', { content: PAGES_TS });
+
+    await context.service.retryUnknown(entryId);
+
+    expect(context.db.citations[0]).toMatchObject({
+      checkResult: 'HOLDS',
+      pendingQuote: null,
+    });
+  });
+
+  it('[KG-2.3] fails the citation, keeping no snippet, when the lines do not say what was quoted', async () => {
+    const context = unreachable();
+
+    const [draft] = await context.service.checkForWrite(WS, [
+      // Line 1 is the import, not the call the writer quoted.
+      code({ lines: '1', quote: 'archive(page.entries)' }),
+    ]);
+    const entryId = store(context.db, [draft]);
+    context.files.put('acme/api', SHA1, 'src/pages.ts', { content: PAGES_TS });
+
+    await context.service.retryUnknown(entryId);
+
+    expect(context.db.citations[0]).toMatchObject({
+      checkResult: 'MISSING',
+      snippet: null,
+      pendingQuote: null,
+    });
+
+    // With no snippet there is nothing a later check could find to hold.
+    context.files.heads.set('acme/api', { sha: SHA1 });
+    await context.service.recheck(entryId);
+    expect(context.db.citations[0].checkResult).toBe('MISSING');
+  });
+});
+
+describe('a citation still unread when the retries have run out', () => {
+  it('[KG-2.3] is read by the next check, at the commit it cites', async () => {
+    const { service, db, files } = setup();
+    const entryId = store(db, [
+      {
+        kind: 'CODE',
+        moduleRepoId: 'r-api',
+        path: 'src/pages.ts',
+        commitSha: SHA1,
+        startLine: 3,
+        endLine: 5,
+        checkResult: 'UNKNOWN',
+      },
+    ]);
+    // The head has moved on; the citation is read at its own commit.
+    files.heads.set('acme/api', { sha: SHA2 });
+
+    await expect(service.recheck(entryId)).resolves.toEqual({ checked: 1 });
+    expect(db.citations[0]).toMatchObject({
+      checkResult: 'HOLDS',
+      checkedSha: SHA1,
+      snippet: 'export function removePage(page) {\narchive(page.entries);\n}',
+    });
+  });
+
+  it('[KG-2.3] stays unread, untouched, while the repository still does not answer', async () => {
+    const { service, db, files, indexer } = setup();
+    const entryId = store(db, [
+      {
+        kind: 'CODE',
+        moduleRepoId: 'r-api',
+        path: 'src/pages.ts',
+        commitSha: SHA1,
+        startLine: 3,
+        endLine: 5,
+        checkResult: 'UNKNOWN',
+      },
+    ]);
+    files.put('acme/api', SHA1, 'src/pages.ts', { unknown: true, reason: 'x' });
+
+    await expect(service.recheck(entryId)).resolves.toEqual({ checked: 0 });
+    expect(db.citations[0].checkResult).toBe('UNKNOWN');
+    expect(indexer.entryChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe('repository heads', () => {
+  it('[KG-2.3] are resolved once per repository in a write, however many of its files are cited', async () => {
+    const { service, files } = setup();
+
+    await service.checkForWrite(WS, [
+      code({ sha: undefined }),
+      code({ sha: undefined, lines: '1' }),
+      code({ sha: undefined, lines: '4' }),
+    ]);
+
+    expect(files.source.head).toHaveBeenCalledTimes(1);
+  });
+
+  it('[KG-2.4] are resolved once per repository in a check', async () => {
+    const { service, db, files } = setup();
+    const snippet = 'archive(page.entries);';
+    const entryId = store(db, [
+      {
+        kind: 'CODE',
+        moduleRepoId: 'r-api',
+        path: 'src/pages.ts',
+        commitSha: SHA1,
+        startLine: 4,
+        endLine: 4,
+        snippet,
+        checkResult: 'HOLDS',
+      },
+      {
+        kind: 'CODE',
+        moduleRepoId: 'r-api',
+        path: 'src/pages.ts',
+        commitSha: SHA1,
+        startLine: 4,
+        endLine: 4,
+        snippet,
+        checkResult: 'HOLDS',
+      },
+    ]);
+
+    await service.recheck(entryId);
+
+    expect(files.source.head).toHaveBeenCalledTimes(1);
+  });
+});
+
 // ----------------------------------------------------- against current code
 
 describe('re-checking a code citation against the default branch', () => {
@@ -688,6 +892,56 @@ describe('re-checking a code citation against the default branch', () => {
     await context.service.recheck(entryId);
 
     expect(context.judge.judge.mock.calls[0][0].writerModel).toBeNull();
+  });
+
+  it('[KG-2.5] shows the judge the end of a file that shrank past the old lines', async () => {
+    const context = setup();
+    const entryId = store(context.db, [
+      {
+        kind: 'CODE',
+        moduleRepoId: 'r-api',
+        path: 'src/pages.ts',
+        commitSha: SHA1,
+        startLine: 60,
+        endLine: 70,
+        snippet: 'long gone();',
+        checkResult: 'HOLDS',
+      },
+    ]);
+    context.files.heads.set('acme/api', { sha: SHA2 });
+    context.files.put('acme/api', SHA2, 'src/pages.ts', { content: PAGES_TS });
+
+    await context.service.recheck(entryId);
+
+    const [request] = context.judge.judge.mock.calls[0];
+    expect(request.region.startLine).toBe(1);
+    expect(request.region.lines).toContain('  archive(page.entries);');
+  });
+
+  it('[KG-2.4] missing once the repository is removed from the workspace, as the retry has it', async () => {
+    const context = setup();
+    const entryId = cited(context);
+    const unread = store(context.db, [
+      {
+        kind: 'CODE',
+        moduleRepoId: 'r-api',
+        path: 'src/pages.ts',
+        commitSha: SHA1,
+        startLine: 3,
+        endLine: 5,
+        checkResult: 'UNKNOWN',
+      },
+    ]);
+    context.db.moduleRepos[0].deleted = new Date();
+
+    await context.service.recheck(entryId);
+    await context.service.retryUnknown(unread);
+
+    expect(context.db.citations.map((c) => c.checkResult)).toEqual([
+      'MISSING',
+      'MISSING',
+    ]);
+    expect(context.files.source.read).not.toHaveBeenCalled();
   });
 });
 

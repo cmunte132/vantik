@@ -133,18 +133,23 @@ remember(
   citation.
 
 The server reads every cited file itself before it writes anything. **A
-citation that does not hold refuses the write** — the file is not at that
-commit, the lines run past its end, the quote is not in them — and the answer
-names the citation and the reason. Fix that citation and call again; do not
-drop it to get the write through. If the repository cannot be reached just
-then, the entry is written and its citation is checked later.
+citation that does not hold refuses the write** — there is no file at that
+path and commit (a folder is not a file), the lines run past its end, the
+quote is not in them — and the answer names the citation and the reason. Fix
+that citation and call again; do not drop it to get the write through. If the
+repository cannot be reached just then, the entry is written and the citation
+is read later, quote and all; until it has been read it is `UNKNOWN`, and the
+entry is not grounded. The answer to a write lists each citation's result, so
+you can see which were read.
 
 Cited facts are served with their proof: a **trust** tier and the result and
 age of each citation's last check. Weigh them when you read:
 
 - `HUMAN_VERIFIED` — a person confirmed it.
-- `GROUNDED` — accepted, and every cited line still reads the same (in place,
-  or moved elsewhere in the file). Ranks above uncited knowledge.
+- `GROUNDED` — accepted, and every citation has been read and still holds:
+  cited lines read the same (in place, or moved elsewhere in the file), and a
+  cited issue, pull request, comment or run still exists. Ranks above uncited
+  knowledge.
 - `UNGROUNDED` — nothing checked backs it, or the code it cited has changed or
   gone. Check it against the code before you rely on it; if it is wrong,
   supersede it with a cited correction.

@@ -73,7 +73,7 @@ describe('trust', () => {
 });
 
 describe('proof', () => {
-  it('[KG-2.8] lists each citation with its last check, and the latest check of all', () => {
+  it('[KG-2.8] lists each citation with its last check, the latest check of all, and the commit of the latest code check', () => {
     const later = new Date('2026-09-25T08:00:00Z');
 
     expect(
@@ -135,8 +135,10 @@ describe('proof', () => {
           judgeModel: 'vendor/smart',
         },
       ],
+      // The issue was looked at last, at no commit; the code's commit is
+      // still the one it was last checked at.
       lastCheckedAt: later.toISOString(),
-      lastCheckedSha: null,
+      lastCheckedSha: '9f8e7d6c5b4a39f8e7d6c5b4a3',
     });
   });
 
@@ -163,6 +165,26 @@ describe('proof', () => {
       ),
     ).toBe(
       'grounded · cites acme/api:src/a.ts:40-52 (holds), pull request https://x/pull/5 (holds) · checked 2026-09-20 at 9f8e7d6c5b4a',
+    );
+    expect(
+      describeProof(
+        entryProof({
+          status: STANDING,
+          verifiedAt: null,
+          citations: [
+            citation(),
+            citation({
+              kind: 'ISSUE',
+              targetLabel: 'ENG-42',
+              checkedAt: new Date('2026-09-25T08:00:00Z'),
+              checkedSha: null,
+              moduleRepo: null,
+            }),
+          ],
+        }),
+      ),
+    ).toBe(
+      'grounded · cites acme/api:src/a.ts:40-52 (holds), issue ENG-42 (holds) · checked 2026-09-25 at 9f8e7d6c5b4a',
     );
     expect(
       describeProof(entryProof({ status: STANDING, verifiedAt: null })),

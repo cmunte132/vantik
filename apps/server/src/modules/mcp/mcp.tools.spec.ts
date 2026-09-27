@@ -1033,6 +1033,40 @@ describe('citations and proof over MCP', () => {
     });
   });
 
+  it('[KG-2.8] remember answers with the entry and what its citations came to', async () => {
+    const { client } = await connect({
+      'GET /pages': pages,
+      'POST /page_entries': {
+        id: 'entry-1',
+        content: 'Redis holds only cache here.',
+        pageId: 'page-1',
+        status: 'PROPOSED',
+        ...proof,
+        trust: 'UNGROUNDED',
+      },
+    });
+
+    const result = await client.callTool({
+      name: 'remember',
+      arguments: {
+        page: 'Server',
+        content: 'Redis holds only cache here.',
+        citations: [{ path: 'src/cache.ts', lines: '12-30', sha: 'abcdef1' }],
+      },
+    });
+
+    expect(jsonOf(result)).toMatchObject({
+      status: 'written',
+      entry: {
+        id: 'entry-1',
+        trust: 'UNGROUNDED',
+        citations: proof.citations,
+        lastCheckedAt: proof.lastCheckedAt,
+        lastCheckedSha: proof.lastCheckedSha,
+      },
+    });
+  });
+
   it('[KG-2.1] relays a citation that does not hold, naming it, so the agent can fix it', async () => {
     const { client } = await connect({
       'GET /pages': pages,

@@ -96,7 +96,7 @@ describe('RepoFileSourceService', () => {
       'account-1': { workspaceId: WORKSPACE, slug: 'github' },
     });
 
-    // loadIntegration swallows a plugin's throw and returns undefined.
+    // loadIntegration returns undefined when it catches a plugin failing.
     loadIntegration.mockResolvedValueOnce(undefined);
     await expect(source.read(repo(), 'a.ts', SHA)).resolves.toMatchObject({
       unknown: true,
@@ -110,6 +110,42 @@ describe('RepoFileSourceService', () => {
     loadIntegration.mockResolvedValueOnce({ missing: true });
     await expect(source.read(repo(), 'a.ts', SHA)).resolves.toEqual({
       missing: true,
+    });
+  });
+
+  it('[KG-2.3] answers unknown, never throws, when the integration rejects', async () => {
+    const { source, loadIntegration } = build({
+      'account-1': { workspaceId: WORKSPACE, slug: 'github' },
+    });
+
+    // loadIntegration returns the plugin's promise without awaiting it, so an
+    // async plugin that fails (a token refresh that cannot reach GitHub)
+    // rejects through it.
+    loadIntegration.mockRejectedValue(
+      new Error('getaddrinfo ENOTFOUND github.com'),
+    );
+
+    await expect(source.read(repo(), 'a.ts', SHA)).resolves.toEqual({
+      unknown: true,
+      reason:
+        'the repository could not be read: getaddrinfo ENOTFOUND github.com',
+    });
+    await expect(source.head(repo())).resolves.toMatchObject({
+      unknown: true,
+    });
+  });
+
+  it('[KG-2.3] answers unknown when the local checkout cannot be looked up', async () => {
+    const { source, pathOf } = build({
+      'account-1': { workspaceId: WORKSPACE, slug: 'local-repo' },
+    });
+    pathOf.mockRejectedValue(new Error('connection terminated'));
+
+    await expect(source.read(repo(), 'a.ts', SHA)).resolves.toMatchObject({
+      unknown: true,
+    });
+    await expect(source.head(repo())).resolves.toMatchObject({
+      unknown: true,
     });
   });
 

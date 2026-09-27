@@ -917,6 +917,11 @@ model PageEntryCitation {
   /// What a reader recognises it by: an issue key or a pull request URL.
   targetLabel String?
 
+  /// A quote the writer gave that could not be checked because the source was
+  /// unreachable at write. Compared with the lines when they are first read,
+  /// then cleared; never served, and never the snippet.
+  pendingQuote String?
+
   // The last check
   checkedAt   DateTime?
   checkedSha  String?

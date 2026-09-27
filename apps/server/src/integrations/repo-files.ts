@@ -8,9 +8,7 @@
  * the code, so it must never count against a claim. It is retried instead.
  */
 export type RepoFileRead =
-  | { content: string }
-  | { missing: true }
-  | { unknown: true; reason: string };
+  { content: string } | { missing: true } | { unknown: true; reason: string };
 
 export type RepoHead = { sha: string } | { unknown: true; reason: string };
 
@@ -19,6 +17,12 @@ export const COMMIT_SHA = /^[0-9a-f]{7,40}$/i;
 
 /** The largest file read for a citation, in bytes. */
 export const MAX_REPO_FILE_BYTES = 1_000_000;
+
+/**
+ * How long one read may take. A write waits on its citations, so a source
+ * that hangs gives an unread citation, retried later, not a stuck request.
+ */
+export const REPO_READ_TIMEOUT_MS = 10_000;
 
 /**
  * A repository-relative path, cleaned, or null if it could reach outside the
@@ -36,7 +40,9 @@ export function cleanRepoPath(path: string | undefined): string | null {
     trimmed.endsWith('/') ||
     trimmed.includes('\\') ||
     trimmed.includes('\0') ||
-    trimmed.split('/').some((segment) => segment === '..' || segment === '')
+    trimmed
+      .split('/')
+      .some((segment) => segment === '..' || segment === '.' || segment === '')
   ) {
     return null;
   }

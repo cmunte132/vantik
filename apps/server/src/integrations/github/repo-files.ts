@@ -3,6 +3,7 @@ import {
   cleanRepoPath,
   COMMIT_SHA,
   MAX_REPO_FILE_BYTES,
+  REPO_READ_TIMEOUT_MS,
   type RepoFileRead,
   type RepoHead,
 } from 'integrations/repo-files';
@@ -23,12 +24,8 @@ const API = 'https://api.github.com';
 /** `owner/name`, and nothing that could add or climb a segment of a URL. */
 const FULL_NAME = /^(?!\.{1,2}\/)[\w.-]+\/(?!\.{1,2}$)[\w.-]+$/;
 
-function headers(token: string, accept = GITHUB_HEADERS.Accept) {
-  return {
-    ...GITHUB_HEADERS,
-    Accept: accept,
-    Authorization: `Bearer ${token}`,
-  };
+function headers(token: string) {
+  return { ...GITHUB_HEADERS, Authorization: `Bearer ${token}` };
 }
 
 function statusOf(error: unknown): number | undefined {
@@ -42,6 +39,10 @@ function statusOf(error: unknown): number | undefined {
  * what a repository the token cannot see returns. So a 404 is only called
  * missing after the repository itself has answered; otherwise the answer is
  * that the repository could not be reached.
+ *
+ * The JSON form of the contents API rather than the raw one, because only it
+ * says what the path is: a folder comes back as a listing, which the raw form
+ * would hand over as if it were the file's text.
  */
 export async function readGithubFile(
   fullName: string,
@@ -68,21 +69,14 @@ export async function readGithubFile(
     const { data } = await axios.get(
       `${API}/repos/${fullName}/contents/${encoded}?ref=${ref}`,
       {
-        headers: headers(token, 'application/vnd.github.raw+json'),
-        // The raw body is the file. Parsing it as JSON would turn a JSON file
-        // into an object and every other file into an error.
-        responseType: 'text',
-        transformResponse: (body: unknown) => body,
-        maxContentLength: MAX_REPO_FILE_BYTES,
+        headers: headers(token),
+        timeout: REPO_READ_TIMEOUT_MS,
+        // Base64 and the JSON around it, for a file at the size limit.
+        maxContentLength: MAX_REPO_FILE_BYTES * 2,
       },
     );
 
-    return typeof data === 'string'
-      ? { content: data }
-      : {
-          unknown: true,
-          reason: 'GitHub answered with something other than a file',
-        };
+    return fileOf(data);
   } catch (error) {
     if (statusOf(error) === 404) {
       return (await repositoryAnswers(fullName, token))
@@ -92,6 +86,48 @@ export async function readGithubFile(
 
     return { unknown: true, reason: reasonFor(error) };
   }
+}
+
+/**
+ * The text of a contents API answer, when the path is a file.
+ *
+ * A folder is answered with a listing, and a symlink or submodule with an
+ * object of its own type: the repository answered, and there is no file there
+ * whose lines could be cited. A file too large for the API to inline, or an
+ * answer of any other shape, says nothing about the code.
+ */
+function fileOf(data: unknown): RepoFileRead {
+  if (Array.isArray(data)) {
+    return { missing: true };
+  }
+
+  const entry = data as Partial<{
+    type: unknown;
+    encoding: unknown;
+    content: unknown;
+    size: unknown;
+  }> | null;
+
+  if (typeof entry?.type === 'string' && entry.type !== 'file') {
+    return { missing: true };
+  }
+
+  if (typeof entry?.size === 'number' && entry.size > MAX_REPO_FILE_BYTES) {
+    return { unknown: true, reason: 'the file is too large to check' };
+  }
+
+  if (
+    entry?.type === 'file' &&
+    entry.encoding === 'base64' &&
+    typeof entry.content === 'string'
+  ) {
+    return { content: Buffer.from(entry.content, 'base64').toString('utf8') };
+  }
+
+  return {
+    unknown: true,
+    reason: 'GitHub answered with something other than a file',
+  };
 }
 
 /** The commit at the head of the repository's default branch. */
@@ -110,6 +146,7 @@ export async function githubHead(
   try {
     const { data: repository } = await axios.get(`${API}/repos/${fullName}`, {
       headers: headers(token),
+      timeout: REPO_READ_TIMEOUT_MS,
     });
     const branch = repository?.default_branch;
 
@@ -119,7 +156,7 @@ export async function githubHead(
 
     const { data } = await axios.get(
       `${API}/repos/${fullName}/branches/${encodeURIComponent(branch)}`,
-      { headers: headers(token) },
+      { headers: headers(token), timeout: REPO_READ_TIMEOUT_MS },
     );
     const sha = data?.commit?.sha;
 
@@ -136,7 +173,10 @@ async function repositoryAnswers(
   token: string,
 ): Promise<boolean> {
   try {
-    await axios.get(`${API}/repos/${fullName}`, { headers: headers(token) });
+    await axios.get(`${API}/repos/${fullName}`, {
+      headers: headers(token),
+      timeout: REPO_READ_TIMEOUT_MS,
+    });
     return true;
   } catch {
     return false;

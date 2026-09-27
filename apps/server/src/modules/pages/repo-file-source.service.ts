@@ -51,45 +51,53 @@ export default class RepoFileSourceService implements RepoFileSource {
     path: string,
     ref: string,
   ): Promise<RepoFileRead> {
-    const slug = await this.sourceOf(repo);
+    try {
+      const slug = await this.sourceOf(repo);
 
-    if (slug === GITHUB_SLUG) {
-      return asFileRead(
-        await this.integrations.loadIntegration(GITHUB_SLUG, {
-          event: IntegrationPayloadEventType.READ_REPO_FILE,
-          integrationAccountId: repo.integrationAccountId,
-          workspaceId: repo.workspaceId,
-          data: { fullName: repo.fullName, path, ref },
-        }),
-      );
+      if (slug === GITHUB_SLUG) {
+        return asFileRead(
+          await this.integrations.loadIntegration(GITHUB_SLUG, {
+            event: IntegrationPayloadEventType.READ_REPO_FILE,
+            integrationAccountId: repo.integrationAccountId,
+            workspaceId: repo.workspaceId,
+            data: { fullName: repo.fullName, path, ref },
+          }),
+        );
+      }
+
+      if (slug === LOCAL_REPO_SLUG) {
+        return await readLocalFile(await this.checkoutOf(repo), path, ref);
+      }
+
+      return noSource(repo);
+    } catch (error) {
+      return failed(error);
     }
-
-    if (slug === LOCAL_REPO_SLUG) {
-      return readLocalFile(await this.checkoutOf(repo), path, ref);
-    }
-
-    return noSource(repo);
   }
 
   async head(repo: CitedRepo): Promise<RepoHead> {
-    const slug = await this.sourceOf(repo);
+    try {
+      const slug = await this.sourceOf(repo);
 
-    if (slug === GITHUB_SLUG) {
-      return asHead(
-        await this.integrations.loadIntegration(GITHUB_SLUG, {
-          event: IntegrationPayloadEventType.RESOLVE_REPO_HEAD,
-          integrationAccountId: repo.integrationAccountId,
-          workspaceId: repo.workspaceId,
-          data: { fullName: repo.fullName },
-        }),
-      );
+      if (slug === GITHUB_SLUG) {
+        return asHead(
+          await this.integrations.loadIntegration(GITHUB_SLUG, {
+            event: IntegrationPayloadEventType.RESOLVE_REPO_HEAD,
+            integrationAccountId: repo.integrationAccountId,
+            workspaceId: repo.workspaceId,
+            data: { fullName: repo.fullName },
+          }),
+        );
+      }
+
+      if (slug === LOCAL_REPO_SLUG) {
+        return await localHead(await this.checkoutOf(repo));
+      }
+
+      return noSource(repo);
+    } catch (error) {
+      return failed(error);
     }
-
-    if (slug === LOCAL_REPO_SLUG) {
-      return localHead(await this.checkoutOf(repo));
-    }
-
-    return noSource(repo);
   }
 
   /**
@@ -127,8 +135,21 @@ function noSource(repo: CitedRepo): { unknown: true; reason: string } {
 }
 
 /**
+ * A source that threw. `loadIntegration` does not catch a plugin's rejected
+ * promise, so a GitHub that cannot be reached while a token is refreshed
+ * arrives here as a throw. It is the source failing, not the file, and a write
+ * must not fail with it.
+ */
+function failed(error: unknown): { unknown: true; reason: string } {
+  return {
+    unknown: true,
+    reason: `the repository could not be read: ${(error as Error)?.message ?? error}`,
+  };
+}
+
+/**
  * A plugin's answer, trusted only for its shape. `loadIntegration` returns
- * undefined when the plugin threw, which is the plugin failing, not the file.
+ * undefined when it caught the plugin failing, which is not the file either.
  */
 function asFileRead(answer: unknown): RepoFileRead {
   const value = answer as Partial<{

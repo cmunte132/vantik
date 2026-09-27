@@ -12,7 +12,7 @@ next session starts by reading it.
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
 - Last verify: `KNOWLEDGE-GARDENER VERIFY: FAIL phases 0-2 spec-hash 069a84bf6612`
-  (21/23; server 1398, agent-core 62, cli 8, webapp 616 tests; typecheck ok).
+  (21/23; server 1415, agent-core 63, cli 10, webapp 616 tests; typecheck ok).
   KG-2.1 fails on a checklist path that no longer exists (see Needs a
   decision); KG-2.R waits on the review.
 
@@ -187,8 +187,10 @@ next session starts by reading it.
   - `sha` is optional and defaults to the head of the default branch, so a
     writer that knows no commit can still cite.
   - `quote` is optional: when given it must appear in the cited lines, or the
-    write is refused. It is compared and never stored. The stored snippet is
-    always what the server read.
+    write is refused. It is never served and never the snippet, which is
+    always what the server read. When the source is unreachable at write, the
+    quote is kept (`pendingQuote`) and checked when the retry reads the
+    lines, then cleared (review round 1).
   - `repo` picks among the workspace's module repositories when the path
     alone is ambiguous; otherwise the repository is the one whose modules
     the path belongs to, or the only one.
@@ -202,25 +204,40 @@ next session starts by reading it.
   agent-core relays that as a `citation-failed` result, the CLI prints it,
   and `remember` returns it to the agent. A commit the repository does not
   have counts as missing, so the write is refused rather than stored as
-  unknown.
+  unknown, and so does a folder: there is no file there to cite. A written
+  or edited entry comes back with its proof, so the writer sees what each
+  citation came to, including any left unread.
 - **Unreachable sources (KG-2.3).** A repository that does not answer gives
   UNKNOWN, and the write goes ahead: the server failing to read the code is
   not evidence against the claim. A `retryUnknownCitations` job on the
   `pages` queue retries the entry: one job per entry (fixed job id), six
   attempts with exponential backoff from five minutes, about five hours in
-  all. A citation never read stays UNKNOWN, which never counts against the
-  entry. A later re-check that cannot reach the source keeps the last result
-  instead of replacing it with UNKNOWN.
+  all. When the retry reads it, what the write would have refused (no file,
+  lines past the end, a quote not in the lines) becomes MISSING with no
+  snippet, so no later check can turn it into a citation that holds. A
+  citation still unread when the retries run out is read by the next
+  re-check. A re-check that cannot reach the source keeps the last result
+  instead of replacing it with UNKNOWN. A repository removed from the
+  workspace makes its citations MISSING, in the retry and the re-check alike.
 - **Sources.** `RepoFileSourceService` chooses by the integration behind
   `ModuleRepo.integrationAccountId`, checked against the workspace:
-  - GitHub: the contents API with the installation token
-    (`READ_REPO_FILE` and `RESOLVE_REPO_HEAD` integration events). Files over
-    1 MB are unknown, not missing.
-  - Local-repo: `git show <sha>:<path>` and `git rev-parse` in the configured
-    checkout, with the path normalised and refused if it leaves the
-    repository, and only hexadecimal commit ids passed to git.
-  - An integration that throws or answers something malformed gives
-    UNKNOWN, never MISSING.
+  - GitHub: the JSON contents API with the installation token alone
+    (`READ_REPO_FILE` and `RESOLVE_REPO_HEAD` integration events), so the
+    person's OAuth token is never refreshed for a citation. The JSON form,
+    not the raw one, because only it says whether the path is a file; a
+    folder, symlink or submodule is missing. Files over 1 MB are unknown,
+    not missing.
+  - Local-repo: `git cat-file blob <sha>:<path>` (which, unlike `git show`,
+    refuses a folder) and `git rev-parse` in the configured checkout, with
+    the path normalised and refused if it leaves the repository or has a `.`
+    segment, and only hexadecimal commit ids passed to git.
+  - Every read has a 10-second timeout, since a write waits on it.
+  - Each repository's head is resolved once per write or check, however
+    many of its files are cited.
+  - An integration that throws, rejects or answers something malformed gives
+    UNKNOWN, never MISSING, and never fails the write.
+    `IntegrationsService.loadIntegration` does not catch an async plugin's
+    rejection, so the file source catches it itself.
 - **Relocation (KG-2.4)** compares whitespace-normalised text, with a sha256
   of the snippet stored beside it. The snippet at its lines is HOLDS; found
   elsewhere is MOVED, taking the occurrence nearest the old lines and storing
@@ -244,8 +261,10 @@ next session starts by reading it.
 - **Trust (KG-2.7)** is derived, never stored: `verifiedAt` set →
   HUMAN_VERIFIED; STANDING with at least one citation and every one HOLDS or
   MOVED → GROUNDED; everything else UNGROUNDED. That includes a CHANGED
-  citation the judge thinks still holds: that is an opinion, not a check.
-  Page bodies carry no tier.
+  citation the judge thinks still holds: that is an opinion, not a check. It
+  also includes an entry with an UNKNOWN citation: unread never refuses a
+  write or counts as a failed check, but it has not been checked, and the
+  criterion says every citation holds. Page bodies carry no tier.
 - **Ranking.** `trust` is a new Typesense facet in `requiredPageFields`, so
   an existing collection is rebuilt from Postgres on boot. The `_eval` tiers
   are verified, then grounded, then the rest, inside the scope and module
@@ -254,8 +273,10 @@ next session starts by reading it.
   retrieval count.
 - **Served proof (KG-2.8).** `knowledge-proof.ts` is the one serializer:
   trust, each citation with its last result, time and commit (the judgment
-  only for CHANGED), and the latest check of all. Search hits, recall, the
-  entry list, `load_context`, MCP and agent-core use it. Proof comes from
+  only for CHANGED), the latest check of any citation, and the commit of the
+  latest code check (an issue or run is checked at no commit). Search hits,
+  recall, the entry list, a written or edited entry, `load_context`, MCP,
+  agent-core and the CLI (hits, entry tables, `append`) use it. Proof comes from
   Postgres after the search, not from the index, so it is never staler than
   the last check. The run context pack's knowledge items are typed with the
   proof and rendered with one line of prose each (`describeProof`); the pack
@@ -412,6 +433,52 @@ search evaluator matching Typesense's filter, `_eval` and bucketing
 semantics; mutation checks on each; no skipped or loosened tests, checklist
 and verifier untouched.
 
+### Phase 2, round 1 (fresh reviewer subagent)
+
+2 blocking, 11 non-blocking findings, and the Needs-a-decision entry
+confirmed accurate. The reviewer mutation-checked 17 behaviours (each caught
+by a tagged test), matched the migration against `prisma migrate diff`, and
+checked workspace isolation and injection. All findings fixed; each new test
+was mutation-checked:
+
+1. **Blocking: an unreachable GitHub failed the write with a 500.**
+   `loadIntegration` returns an async plugin's promise without awaiting it,
+   so a token refresh that cannot reach GitHub rejected through it, and the
+   test's double (resolving undefined) hid that. The file source now catches
+   any throw or rejection as UNKNOWN; tested through a rejecting integration,
+   and through `checkForWrite` with the real file source.
+2. **Blocking: `remember` returned the entry with no proof.** Create and
+   update now return the entry with its citations and proof; tagged tests on
+   the service, agent-core and the MCP `remember` result.
+3. **The last-checked commit was lost when a non-code citation was checked
+   last.** It is now the latest code check's; the proof test that encoded the
+   old behaviour asserts the new one.
+4. **A folder could be cited and hold.** git reads with `cat-file blob`;
+   GitHub through the JSON contents API, where a folder, symlink or submodule
+   is missing; `.` path segments refused. Tested with real git and stubbed
+   GitHub answers.
+5. **No timeouts on the write path.** 10 seconds on every GitHub call and on
+   git; a killed git answers "took too long".
+6. **A citation unread after the retries was never read again.** Re-checks
+   now read it at its own commit.
+7. **UNKNOWN does count against trust.** Kept, as the criterion says every
+   citation holds; the comment and this log now say so.
+8. **A removed repository was handled two ways.** MISSING in both the retry
+   and the re-check.
+9. **A quote was not checked when the write could not read the code.** Kept
+   as `pendingQuote` (new migration `20260927020000_citation_pending_quote`)
+   and checked by the retry; a mismatch is MISSING with no snippet.
+10. **The judge could be shown no code** when the file shrank past the old
+    lines. The region is clamped to the end of the file.
+11. **CLI entry tables showed trust only.** Each entry's proof is listed
+    beneath the table, and `append` prints what its citations came to.
+12. **Too many GitHub calls per write.** The installation token alone (no
+    OAuth refresh), and each repository's head resolved once per write or
+    check.
+13. **Skill text.** GROUNDED now says accepted and every citation read and
+    holding, in both guides and the `remember` description; the unreachable
+    case says the citation is UNKNOWN until read.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -448,6 +515,12 @@ Give the evidence, and stop until the maintainer answers.
   write). KG-4.1's content hash is the place to add a uniqueness guarantee.
 - **Consolidating an entry that has a pending correction** leaves the old text
   in the body if the correction is later accepted. For KG-7.4.
+- **`IntegrationsService.loadIntegration` does not catch async plugin
+  failures.** It returns `integrationModule.default(payload, ctx)` inside a
+  `try` without `await`, so the `catch` (which logs and returns undefined)
+  never sees a rejected promise; every caller gets the rejection instead.
+  Phase 2's file source now guards itself. Other callers may rely on either
+  behaviour, so changing it is a separate fix.
 - **The webapp shows no supersede links** (nothing under
   `apps/webapp/src/modules` reads `supersedesId`), so a reviewer accepting a
   correction cannot see what it retires. Predates phase 0; worth surfacing in
@@ -484,3 +557,7 @@ Give the evidence, and stop until the maintainer answers.
   6 and 7 last. Verify through phase 2: 21/23, all suites and typecheck
   green. KG-2.1's file check names a path `main` moved; under Needs a
   decision.
+- 2026-09-27: Phase 2 pushed to PR #44 (5f55146); CI green. Review round 1:
+  two blocking findings (a 500 on an unreachable GitHub, no proof on a
+  written entry) and eleven non-blocking; all fixed with tagged,
+  mutation-checked tests.

@@ -26,7 +26,11 @@ import EntryCitationsService, {
   type CitationDraft,
 } from './entry-citations.service';
 import KnowledgeIndexService from './knowledge-index.service';
-import { entryProof, PROOF_CITATION_SELECT } from './knowledge-proof';
+import {
+  entryProof,
+  PROOF_CITATION_SELECT,
+  type ProofRow,
+} from './knowledge-proof';
 import {
   ALLOWED_STATUS_TRANSITIONS,
   PROPOSED_ENTRY_BUDGET,
@@ -205,6 +209,9 @@ export default class PageEntriesService {
           pageId,
           ...(citations.length && { citations: { create: citations } }),
         },
+        // Returned with its proof, so a writer sees what its citations came
+        // to: held, or unread and to be retried.
+        include: { citations: { select: PROOF_CITATION_SELECT } },
       }),
       // The replaced row keeps its content — the audit trail is the point — but
       // stops being served the moment its accepted replacement exists, so a
@@ -218,7 +225,7 @@ export default class PageEntriesService {
           ]
         : []),
     ]);
-    const entry = results[detach ? 1 : 0] as { id: string };
+    const entry = results[detach ? 1 : 0] as ProofRow & { id: string };
 
     // The new entry enters the index in the same breath as it is written. A
     // human writing a fact by hand *is* the review step, so it lands STANDING
@@ -235,7 +242,7 @@ export default class PageEntriesService {
     // then the entry is written, and simply not grounded.
     await this.citations?.retryLater(entry.id, citations);
 
-    return entry as unknown as PageEntry;
+    return { ...entry, ...entryProof(entry) } as unknown as PageEntry;
   }
 
   private async checkCitations(
@@ -317,13 +324,17 @@ export default class PageEntriesService {
             verifiedAt: entryData.verified ? new Date() : null,
           }),
         },
+        include: { citations: { select: PROOF_CITATION_SELECT } },
       }),
       ...settled.operations,
     ]);
     await this.indexer?.entryChanged(entryId);
     await this.indexer?.entriesChanged(settled.retired);
 
-    return entry as unknown as PageEntry;
+    return {
+      ...entry,
+      ...entryProof(entry as unknown as ProofRow),
+    } as unknown as PageEntry;
   }
 
   /**

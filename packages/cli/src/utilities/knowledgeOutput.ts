@@ -134,7 +134,16 @@ export function renderEntries(entries: KnowledgeEntry[]): string {
     ]);
   }
 
-  return table.toString();
+  // Beneath the table, whole: a proof squeezed into a column would lose the
+  // commit and the results, which are the point of it.
+  const proofs = entries
+    .map((entry) => ({ id: entry.id.slice(0, 8), proof: renderProof(entry) }))
+    .filter(({ proof }) => proof)
+    .map(({ id, proof }) => `${id}  ${chalkGrey(proof)}`);
+
+  return [table.toString(), ...(proofs.length ? ['', ...proofs] : [])].join(
+    '\n',
+  );
 }
 
 export function renderHits(hits: KnowledgeHit[]): string {
@@ -173,7 +182,12 @@ export function renderContextPack(pack: ContextPack): string {
 
 export function renderRemember(result: RememberResult): string {
   if (result.status === 'written') {
-    return `${chalkGreen('Remembered')} ${chalkGrey(result.entry.id)}`;
+    const proof = renderProof(result.entry);
+
+    return [
+      `${chalkGreen('Remembered')} ${chalkGrey(result.entry.id)}`,
+      ...(proof ? [chalkGrey(proof)] : []),
+    ].join('\n');
   }
 
   if (result.status === 'citation-failed') {

@@ -4,6 +4,7 @@ import {
   cleanRepoPath,
   COMMIT_SHA,
   MAX_REPO_FILE_BYTES,
+  REPO_READ_TIMEOUT_MS,
   type RepoFileRead,
   type RepoHead,
 } from 'integrations/repo-files';
@@ -22,7 +23,7 @@ export interface GitResult {
   stdout: string;
   stderr: string;
   /** Null when git ran and exited 0. */
-  error: (Error & { code?: string | number }) | null;
+  error: (Error & { code?: string | number; killed?: boolean }) | null;
 }
 
 export type RunGit = (root: string, args: string[]) => Promise<GitResult>;
@@ -32,19 +33,25 @@ export const runGit: RunGit = (root, args) =>
     execFile(
       'git',
       ['-C', root, ...args],
-      { maxBuffer: MAX_REPO_FILE_BYTES + 1, encoding: 'utf8' },
+      // A write waits on this, so a git stuck on a lock or a slow disk is
+      // killed and the citation is unread, rather than holding the request.
+      {
+        maxBuffer: MAX_REPO_FILE_BYTES + 1,
+        encoding: 'utf8',
+        timeout: REPO_READ_TIMEOUT_MS,
+      },
       (error, stdout, stderr) =>
         resolve({ stdout: String(stdout), stderr: String(stderr), error }),
     );
   });
 
 /**
- * What git says when the checkout answered and the object is not in it: the
- * path is not in that commit, or the commit is not in the repository. Both are
- * the citation's fault, not the checkout's.
+ * What git says when the checkout answered and there is no file there: the
+ * path is not in that commit, the commit is not in the repository, or the path
+ * is a folder (`bad file`). All are the citation's fault, not the checkout's.
  */
 const NOT_THERE =
-  /does not exist in|exists on disk, but not in|invalid object name|not a valid object name|bad revision|unknown revision/i;
+  /does not exist in|exists on disk, but not in|invalid object name|not a valid object name|bad revision|unknown revision|: bad file$/im;
 
 export async function readLocalFile(
   root: string | null,
@@ -65,8 +72,11 @@ export async function readLocalFile(
     };
   }
 
+  // `cat-file blob` rather than `show`, which prints a folder's listing as
+  // if it were a file.
   const { stdout, stderr, error } = await run(root, [
-    'show',
+    'cat-file',
+    'blob',
     `${ref}:${clean}`,
   ]);
 
@@ -117,11 +127,15 @@ export async function localHead(
 }
 
 function gitReason(
-  error: Error & { code?: string | number },
+  error: Error & { code?: string | number; killed?: boolean },
   stderr: string,
 ): string {
   if (error.code === 'ENOENT') {
     return 'git is not installed on this server';
+  }
+
+  if (error.killed) {
+    return 'git took too long to answer';
   }
 
   if (/maxBuffer/i.test(error.message)) {

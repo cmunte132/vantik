@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -39,6 +39,8 @@ describe('local repository files', () => {
 
     await writeFile(join(root, 'a.ts'), 'one\ntwo\nthree\n');
     await writeFile(join(root, 'b.ts'), 'bee\n');
+    await mkdir(join(root, 'src'));
+    await writeFile(join(root, 'src', 'c.ts'), 'sea\n');
     git('add', '.');
     git('commit', '-q', '-m', 'second');
     second = git('rev-parse', 'HEAD');
@@ -69,6 +71,15 @@ describe('local repository files', () => {
     ).resolves.toEqual({ missing: true });
   });
 
+  it('[KG-2.3] answers missing for a folder, which has no lines to cite', async () => {
+    await expect(readLocalFile(root, 'src', second)).resolves.toEqual({
+      missing: true,
+    });
+    await expect(readLocalFile(root, 'src/c.ts', second)).resolves.toEqual({
+      content: 'sea\n',
+    });
+  });
+
   it('[KG-2.3] answers unknown, never missing, when the checkout cannot be asked', async () => {
     await expect(readLocalFile(null, 'a.ts', first)).resolves.toMatchObject({
       unknown: true,
@@ -87,6 +98,18 @@ describe('local repository files', () => {
       unknown: true,
       reason: 'git is not installed on this server',
     });
+
+    // What execFile reports when its timeout kills git.
+    const stuck: RunGit = async () => ({
+      stdout: '',
+      stderr: '',
+      error: Object.assign(new Error('Command failed'), { killed: true }),
+    });
+
+    await expect(readLocalFile(root, 'a.ts', first, stuck)).resolves.toEqual({
+      unknown: true,
+      reason: 'git took too long to answer',
+    });
   });
 
   it('[KG-2.3] never hands git a path outside the repository or a ref that is not a commit', async () => {
@@ -95,6 +118,8 @@ describe('local repository files', () => {
     for (const [path, ref] of [
       ['../outside.ts', first],
       ['/etc/passwd', first],
+      ['.', first],
+      ['src/.', first],
       ['a.ts', 'HEAD'],
       ['a.ts', '--output=/tmp/x'],
     ]) {

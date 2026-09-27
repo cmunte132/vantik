@@ -49,6 +49,13 @@ export interface ProofCitationRow {
   moduleRepo: { fullName: string } | null;
 }
 
+/** An entry as a proof is built from it. */
+export interface ProofRow {
+  status: string;
+  verifiedAt: Date | null;
+  citations?: ProofCitationRow[] | null;
+}
+
 /** Results under which a citation still supports its claim. */
 const HOLDING: string[] = [
   PageEntryCitationCheckEnum.HOLDS,
@@ -62,8 +69,10 @@ const HOLDING: string[] = [
  * when it was accepted, cites something, and every citation still reads the
  * same, in place or moved. A changed citation is not grounded even when a
  * judge thought the new code still supports the claim: the judge is a model's
- * opinion, and grounded means the text itself was checked. Unread (UNKNOWN)
- * citations are not held against an entry, and do not ground it either.
+ * opinion, and grounded means the text itself was checked. An unread
+ * (UNKNOWN) citation never refuses a write or counts as a failed check, but
+ * it has not been checked either, so an entry is grounded only once every
+ * citation it has has been read and holds.
  */
 export function entryTrust(entry: {
   status: string;
@@ -121,22 +130,23 @@ export function servedCitation(row: ProofCitationRow): ServedCitation {
   };
 }
 
-/** The proof of an entry. */
-export function entryProof(entry: {
-  status: string;
-  verifiedAt: Date | null;
-  citations?: ProofCitationRow[] | null;
-}): KnowledgeProof {
+/**
+ * The proof of an entry. The last check is the latest of any citation; its
+ * commit is the latest code check's, since an issue or a run is checked at no
+ * commit, and a later look at one does not make the code's commit unknown.
+ */
+export function entryProof(entry: ProofRow): KnowledgeProof {
   const rows = entry.citations ?? [];
-  const latest = rows
+  const newestFirst = rows
     .filter((row) => row.checkedAt)
-    .sort((a, b) => b.checkedAt.getTime() - a.checkedAt.getTime())[0];
+    .sort((a, b) => b.checkedAt.getTime() - a.checkedAt.getTime());
+  const latestCode = newestFirst.find((row) => row.checkedSha);
 
   return {
     trust: entryTrust({ ...entry, citations: rows }),
     citations: rows.map(servedCitation),
-    lastCheckedAt: latest?.checkedAt.toISOString() ?? null,
-    lastCheckedSha: latest?.checkedSha ?? null,
+    lastCheckedAt: newestFirst[0]?.checkedAt.toISOString() ?? null,
+    lastCheckedSha: latestCode?.checkedSha ?? null,
   };
 }
 

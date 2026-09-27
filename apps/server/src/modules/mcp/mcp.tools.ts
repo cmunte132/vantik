@@ -939,8 +939,10 @@ export function registerVantikTools(
         'is about; a decision cites where it was decided (the issue, pull ' +
         'request, comment or run). The server reads cited code itself and ' +
         'refuses the write if a citation does not hold, telling you which ' +
-        'one and why, so fix it and call again. A cited fact whose code ' +
-        'still reads the same is served as grounded, above uncited ones.\n\n' +
+        'one and why, so fix it and call again. The answer lists what each ' +
+        'citation came to. Once a person accepts it, a fact whose ' +
+        'citations all still hold is served as grounded, above uncited ' +
+        'ones.\n\n' +
         'The call searches before it writes. If near matches come back, ' +
         'nothing was written: read them, then either supersede one or say ' +
         'the fact is distinct.',

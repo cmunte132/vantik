@@ -39,8 +39,9 @@ cites where it was decided (`{ issue: "ENG-42" }`, `{ pullRequest: "<url>" }`,
 `{ comment }` or `{ run }`). The server reads cited code itself and refuses the
 write if a citation does not hold, naming which one and why; fix it and call
 again. Served knowledge carries a trust tier: `HUMAN_VERIFIED` (a person
-confirmed it), `GROUNDED` (every cited line still reads the same), or
-`UNGROUNDED` — check an ungrounded claim against the code before relying on it.
+confirmed it), `GROUNDED` (accepted, and every citation has been read and
+still holds), or `UNGROUNDED` — check an ungrounded claim against the code
+before relying on it.
 
 **Worth remembering:** a decision and why it went that way, a gotcha that cost
 you time, a convention that is not obvious from the code, a constraint someone

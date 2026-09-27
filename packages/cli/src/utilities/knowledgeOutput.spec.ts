@@ -1,6 +1,15 @@
-import type { KnowledgeHit, KnowledgeProof } from '@vantikhq/agent-core';
+import type {
+  KnowledgeEntry,
+  KnowledgeHit,
+  KnowledgeProof,
+} from '@vantikhq/agent-core';
 
-import { renderHits, renderProof, renderRemember } from './knowledgeOutput';
+import {
+  renderEntries,
+  renderHits,
+  renderProof,
+  renderRemember,
+} from './knowledgeOutput';
 
 // chalk is ESM-only; colour is not what is being tested.
 jest.mock('chalk', () => ({
@@ -55,6 +64,68 @@ describe('knowledge as a terminal shows it', () => {
     expect(text).toContain('Server fact · apps/server · grounded');
     expect(text).toContain(
       'cites src/cache.ts:12-30 (moved), pull request https://github.com/acme/api/pull/5 (holds) · checked 2026-09-20 at 9f8e7d6c5b4a',
+    );
+  });
+
+  function entry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
+    return {
+      id: '1a2b3c4d-0000-0000-0000-000000000000',
+      content: 'Redis holds only cache here.',
+      scope: 'apps/server',
+      status: 'STANDING',
+      sourceUserId: null,
+      sourceSession: null,
+      verified: false,
+      retrievalCount: 2,
+      supersedesId: null,
+      pageId: 'page-1',
+      createdAt: '2026-09-20T10:00:00.000Z',
+      ...proof,
+      ...overrides,
+    };
+  }
+
+  it('[KG-2.8] lists entries with their trust, and beneath the table what each cites and when it was checked', () => {
+    const text = renderEntries([
+      entry(),
+      entry({
+        id: '5e6f7a8b-0000-0000-0000-000000000000',
+        trust: 'UNGROUNDED',
+        citations: [],
+        lastCheckedAt: null,
+        lastCheckedSha: null,
+      }),
+    ]);
+
+    expect(text).toContain('grounded');
+    expect(text).toContain(
+      '1a2b3c4d  cites src/cache.ts:12-30 (moved), pull request https://github.com/acme/api/pull/5 (holds) · checked 2026-09-20 at 9f8e7d6c5b4a',
+    );
+    expect(text).not.toMatch(/5e6f7a8b {2}cites/);
+  });
+
+  it('[KG-2.8] tells the writer what its citations came to once the fact is written', () => {
+    expect(
+      renderRemember({
+        status: 'written',
+        entry: entry({
+          trust: 'UNGROUNDED',
+          citations: [
+            {
+              kind: 'CODE',
+              repo: 'acme/api',
+              path: 'src/cache.ts',
+              lines: '12-30',
+              commitSha: 'abcdef1',
+              result: 'UNKNOWN',
+              checkedAt: null,
+              checkedSha: null,
+            },
+          ],
+        }),
+      }),
+    ).toBe(
+      'Remembered 1a2b3c4d-0000-0000-0000-000000000000\ncites src/cache.ts:12-30 (unknown) · checked 2026-09-20 at 9f8e7d6c5b4a',
     );
   });
 

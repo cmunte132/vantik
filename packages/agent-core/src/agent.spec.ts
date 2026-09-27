@@ -1263,6 +1263,48 @@ describe('citations and proof', () => {
     });
   });
 
+  it('[KG-2.8] hands back the written entry with what its citations came to', async () => {
+    const unread = {
+      ...citation,
+      path: 'src/slow.ts',
+      result: 'UNKNOWN',
+      checkedAt: null as string | null,
+      checkedSha: null as string | null,
+    };
+    const { agent } = makeAgent({
+      'GET /pages': pages,
+      'POST /page_entries': {
+        id: 'entry-1',
+        content: 'Redis holds only cache here.',
+        pageId: 'page-1',
+        status: 'PROPOSED',
+        trust: 'UNGROUNDED',
+        citations: [citation, unread],
+        lastCheckedAt: proof.lastCheckedAt,
+        lastCheckedSha: proof.lastCheckedSha,
+      },
+    });
+
+    await expect(
+      agent.remember({
+        page: 'Server',
+        content: 'Redis holds only cache here.',
+        citations: [
+          { path: 'src/cache.ts', lines: '12-30', sha: 'abcdef1' },
+          { path: 'src/slow.ts', lines: '1', sha: 'abcdef1' },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      status: 'written',
+      entry: {
+        trust: 'UNGROUNDED',
+        citations: [citation, unread],
+        lastCheckedAt: proof.lastCheckedAt,
+        lastCheckedSha: proof.lastCheckedSha,
+      },
+    });
+  });
+
   it('[KG-2.1] relays a citation that does not hold as an answer to act on', async () => {
     const { agent } = makeAgent({
       'GET /pages': pages,

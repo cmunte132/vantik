@@ -14,7 +14,7 @@ import { Queue } from 'bull';
 import {
   cleanRepoPath,
   COMMIT_SHA,
-  type RepoFileRead,
+  type RepoHead,
 } from 'integrations/repo-files';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -55,7 +55,15 @@ export interface CitationDraft {
   checkedAt: Date | null;
   checkedSha?: string | null;
   checkResult: PageEntryCitationCheckEnum;
+  /** A quote the write could not check, kept until the lines are read. */
+  pendingQuote?: string | null;
 }
+
+/**
+ * The head of each repository, resolved once per write or check however many
+ * of its files are cited, since every resolution is a call to the source.
+ */
+type HeadCache = Map<string, Promise<RepoHead>>;
 
 /** Lines of context either side of a changed citation, shown to the judge. */
 const JUDGE_CONTEXT_LINES = 20;
@@ -75,6 +83,7 @@ interface CitationRow {
   snippet: string | null;
   targetId: string | null;
   checkResult: string | null;
+  pendingQuote: string | null;
 }
 
 /**
@@ -117,9 +126,10 @@ export default class EntryCitationsService {
     inputs: PageEntryCitationInputDto[],
   ): Promise<CitationDraft[]> {
     const drafts: CitationDraft[] = [];
+    const heads: HeadCache = new Map();
 
     for (const [index, input] of inputs.entries()) {
-      drafts.push(await this.checkOne(workspaceId, input, index));
+      drafts.push(await this.checkOne(workspaceId, input, index, heads));
     }
 
     return drafts;
@@ -151,6 +161,7 @@ export default class EntryCitationsService {
     workspaceId: string,
     input: PageEntryCitationInputDto,
     index: number,
+    heads: HeadCache,
   ): Promise<CitationDraft> {
     const targets = [
       input.path !== undefined && 'path',
@@ -170,7 +181,7 @@ export default class EntryCitationsService {
     }
 
     if (input.path !== undefined) {
-      return this.checkCode(workspaceId, input, index);
+      return this.checkCode(workspaceId, input, index, heads);
     }
 
     const target = await this.findTarget(workspaceId, input);
@@ -192,6 +203,7 @@ export default class EntryCitationsService {
     workspaceId: string,
     input: PageEntryCitationInputDto,
     index: number,
+    heads: HeadCache,
   ): Promise<CitationDraft> {
     const path = cleanRepoPath(input.path);
     const range = parseLineRange(input.lines);
@@ -223,19 +235,25 @@ export default class EntryCitationsService {
       startLine: range.start,
       endLine: range.end,
     };
+    // Unread for now. The quote cannot be checked either, so it is kept, and
+    // the retry checks it when it reads the lines: a quote is what catches
+    // wrong line numbers, and they are no less wrong for the source being
+    // down when they were written.
+    const unread = (commitSha: string | null): CitationDraft => ({
+      ...base,
+      commitSha,
+      checkedAt: null,
+      checkResult: PageEntryCitationCheckEnum.UNKNOWN,
+      pendingQuote: input.quote ?? null,
+    });
 
     let ref = input.sha ?? null;
 
     if (!ref) {
-      const head = await this.files.head(repo);
+      const head = await this.headOf(repo, heads);
 
       if ('unknown' in head) {
-        return {
-          ...base,
-          commitSha: null,
-          checkedAt: null,
-          checkResult: PageEntryCitationCheckEnum.UNKNOWN,
-        };
+        return unread(null);
       }
 
       ref = head.sha;
@@ -245,18 +263,13 @@ export default class EntryCitationsService {
     const at = `${repo.fullName}:${path} at ${ref.slice(0, 12)}`;
 
     if ('unknown' in read) {
-      return {
-        ...base,
-        commitSha: ref,
-        checkedAt: null,
-        checkResult: PageEntryCitationCheckEnum.UNKNOWN,
-      };
+      return unread(ref);
     }
 
     if ('missing' in read) {
       throw refusal(
         index,
-        `(${name}): ${at} does not exist. Check the path and that the commit is in the repository`,
+        `(${name}): ${at} is not a file there. Check the path, and that the commit is in the repository`,
       );
     }
 
@@ -487,12 +500,17 @@ export default class EntryCitationsService {
     }
 
     let checked = 0;
+    const heads: HeadCache = new Map();
 
     for (const citation of entry.citations) {
       const update =
-        citation.kind === PageEntryCitationKindEnum.CODE
-          ? await this.recheckCode(entry, citation)
-          : await this.recheckTarget(entry.page.workspaceId, citation);
+        citation.kind !== PageEntryCitationKindEnum.CODE
+          ? await this.recheckTarget(entry.page.workspaceId, citation)
+          : citation.checkResult === PageEntryCitationCheckEnum.UNKNOWN
+            ? // Never read, and the retries may have run out: read it now,
+              // at the commit it cites, as the retry would have.
+              await this.readUnread(entry.page.workspaceId, citation, heads)
+            : await this.recheckCode(entry, citation, heads);
 
       if (update) {
         await this.prisma.pageEntryCitation.update({
@@ -524,6 +542,7 @@ export default class EntryCitationsService {
 
     let stillUnknown = 0;
     let settled = 0;
+    const heads: HeadCache = new Map();
 
     for (const citation of entry.citations) {
       if (
@@ -533,64 +552,20 @@ export default class EntryCitationsService {
         continue;
       }
 
-      const repo = await this.citedRepo(
-        citation.moduleRepoId,
+      const update = await this.readUnread(
         entry.page.workspaceId,
+        citation,
+        heads,
       );
-      const range = rangeOf(citation);
-      const head = citation.commitSha
-        ? null
-        : repo
-          ? await this.files.head(repo)
-          : null;
-      const ref =
-        citation.commitSha ?? (head && 'sha' in head ? head.sha : null);
-      const read: RepoFileRead =
-        repo && ref && citation.path
-          ? await this.files.read(repo, citation.path, ref)
-          : { unknown: true, reason: 'nothing to read yet' };
 
-      if ('unknown' in read || !range || !ref) {
-        // A repository removed from the module leaves nothing to read ever
-        // again; that is a missing citation rather than one to keep retrying.
-        if (!repo) {
-          await this.prisma.pageEntryCitation.update({
-            where: { id: citation.id },
-            data: {
-              checkResult: PageEntryCitationCheckEnum.MISSING,
-              checkedAt: new Date(),
-            },
-          });
-          settled++;
-          continue;
-        }
-
+      if (!update) {
         stillUnknown++;
         continue;
       }
 
-      const cited = 'content' in read ? snippetAt(read.content, range) : null;
-
       await this.prisma.pageEntryCitation.update({
         where: { id: citation.id },
-        data:
-          cited && 'snippet' in cited
-            ? {
-                commitSha: ref,
-                snippet: cited.snippet,
-                snippetHash: cited.snippetHash,
-                checkedAt: new Date(),
-                checkedSha: ref,
-                checkResult: PageEntryCitationCheckEnum.HOLDS,
-              }
-            : {
-                // The file or the cited lines are not at the commit: the
-                // citation never held.
-                commitSha: ref,
-                checkedAt: new Date(),
-                checkedSha: ref,
-                checkResult: PageEntryCitationCheckEnum.MISSING,
-              },
+        data: update,
       });
       settled++;
     }
@@ -602,11 +577,94 @@ export default class EntryCitationsService {
     return { stillUnknown };
   }
 
+  /**
+   * Reads a code citation that has never been read, at the commit it cites,
+   * or the head when it named none. What to store, or null while the source
+   * still cannot be read.
+   *
+   * What the write would have refused, had it been able to read the code,
+   * never held and is MISSING: the file or the lines are not at the commit,
+   * or they do not say what the writer quoted. It keeps no snippet, so later
+   * checks cannot turn it into a citation that holds.
+   */
+  private async readUnread(
+    workspaceId: string,
+    citation: CitationRow,
+    heads: HeadCache,
+  ) {
+    const repo = await this.citedRepo(citation.moduleRepoId, workspaceId);
+
+    // A repository removed from the workspace leaves nothing to read, now or
+    // later.
+    if (!repo) {
+      return removedRepo();
+    }
+
+    let ref = citation.commitSha;
+
+    if (!ref) {
+      const head = await this.headOf(repo, heads);
+
+      if ('unknown' in head) {
+        return null;
+      }
+
+      ref = head.sha;
+    }
+
+    const range = rangeOf(citation);
+    const read = citation.path
+      ? await this.files.read(repo, citation.path, ref)
+      : ({ missing: true } as const);
+
+    if ('unknown' in read) {
+      return null;
+    }
+
+    const checked = {
+      commitSha: ref,
+      checkedAt: new Date(),
+      checkedSha: ref,
+      pendingQuote: null as string | null,
+    };
+    const cited =
+      'content' in read && range ? snippetAt(read.content, range) : null;
+
+    if (
+      !cited ||
+      'error' in cited ||
+      (citation.pendingQuote !== null &&
+        !snippetContains(cited.snippet, citation.pendingQuote))
+    ) {
+      return { ...checked, checkResult: PageEntryCitationCheckEnum.MISSING };
+    }
+
+    return {
+      ...checked,
+      snippet: cited.snippet,
+      snippetHash: cited.snippetHash,
+      checkResult: PageEntryCitationCheckEnum.HOLDS,
+    };
+  }
+
+  private headOf(repo: CitedRepo, heads: HeadCache): Promise<RepoHead> {
+    const key = `${repo.integrationAccountId ?? ''}|${repo.externalRepoId}`;
+    let head = heads.get(key);
+
+    if (!head) {
+      head = this.files.head(repo);
+      heads.set(key, head);
+    }
+
+    return head;
+  }
+
   private async recheckCode(
     entry: NonNullable<
       Awaited<ReturnType<EntryCitationsService['entryWithCitations']>>
     >,
     citation: CitationRow,
+    heads: HeadCache,
   ) {
     const range = rangeOf(citation);
     const repo = await this.citedRepo(
@@ -614,12 +672,19 @@ export default class EntryCitationsService {
       entry.page.workspaceId,
     );
 
-    // Never read: that is the retry's job, which reads it at its own commit.
-    if (!citation.snippet || !range || !citation.path || !repo) {
+    // Gone from the workspace, as the retry treats it: the cited code is no
+    // longer anywhere the workspace can read, and leaving the last result
+    // would serve the entry as grounded on code nobody checks.
+    if (!repo) {
+      return { ...removedRepo(), ...NO_JUDGMENT };
+    }
+
+    // Never held (the retry found nothing to hold): nothing to compare.
+    if (!citation.snippet || !range || !citation.path) {
       return null;
     }
 
-    const head = await this.files.head(repo);
+    const head = await this.headOf(repo, heads);
 
     if ('unknown' in head) {
       return null;
@@ -632,17 +697,11 @@ export default class EntryCitationsService {
     }
 
     const checked = { checkedAt: new Date(), checkedSha: head.sha };
-    const clearJudgment = {
-      judgment: null as PageEntryCitationJudgmentEnum | null,
-      judgeModel: null as string | null,
-      judgeLines: null as string | null,
-      judgeReason: null as string | null,
-    };
 
     if ('missing' in read) {
       return {
         ...checked,
-        ...clearJudgment,
+        ...NO_JUDGMENT,
         checkResult: PageEntryCitationCheckEnum.MISSING,
       };
     }
@@ -652,16 +711,18 @@ export default class EntryCitationsService {
     if (found.result !== PageEntryCitationCheckEnum.CHANGED) {
       return {
         ...checked,
-        ...clearJudgment,
+        ...NO_JUDGMENT,
         checkResult: found.result,
         startLine: found.range.start,
         endLine: found.range.end,
       };
     }
 
+    // Around the old lines, or the end of a file that has shrunk past them,
+    // so the judge always has code to read.
     const lines = fileLines(read.content);
-    const from = Math.max(1, range.start - JUDGE_CONTEXT_LINES);
     const to = Math.min(lines.length, range.end + JUDGE_CONTEXT_LINES);
+    const from = Math.max(1, Math.min(range.start, to) - JUDGE_CONTEXT_LINES);
     const verdict = await this.judge.judge({
       claim: entry.content,
       path: citation.path,
@@ -742,6 +803,7 @@ export default class EntryCitationsService {
             snippet: true,
             targetId: true,
             checkResult: true,
+            pendingQuote: true,
           },
         },
       },
@@ -772,6 +834,22 @@ export default class EntryCitationsService {
 
     return row ? { ...row, workspaceId } : null;
   }
+}
+
+/** A judgment only describes a CHANGED check; any other clears it. */
+const NO_JUDGMENT = {
+  judgment: null as PageEntryCitationJudgmentEnum | null,
+  judgeModel: null as string | null,
+  judgeLines: null as string | null,
+  judgeReason: null as string | null,
+};
+
+function removedRepo() {
+  return {
+    checkedAt: new Date(),
+    checkResult: PageEntryCitationCheckEnum.MISSING,
+    pendingQuote: null as string | null,
+  };
 }
 
 function rangeOf(citation: {

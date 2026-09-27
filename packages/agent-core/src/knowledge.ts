@@ -118,8 +118,9 @@ export interface KnowledgeCitation {
 export interface KnowledgeProof {
   trust: KnowledgeTrust | null;
   citations: KnowledgeCitation[];
-  /** The latest check of any citation, and the commit it was made at. */
+  /** The latest check of any citation. */
   lastCheckedAt: string | null;
+  /** The commit of the latest check of code; an issue or run has none. */
   lastCheckedSha: string | null;
 }
 

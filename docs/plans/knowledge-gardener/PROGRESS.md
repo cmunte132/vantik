@@ -5,14 +5,13 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 3 in review; round 2's finding is fixed and back with the
-  reviewer. Phase 1's review fixes, phase 2 and phase 3 ride PR #44.
+- Current phase: 3 done; phases 4 and 5 are next, in a new pull request once
+  PR #44 (phase 1's review fixes, phase 2 and phase 3) is merged.
 - Pull requests: the maintainer asked for the remaining phases in two or three
   pull requests rather than one each. PR #44 carries phase 1's review fixes,
   phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
   and 7.
-- Last verify: phases 0-2 PASS; phase 3 6/7, KG-3.R waiting on the review
-  (server 1519 with the 15 database-only skipped, agent-core 67, cli 10,
+- Last verify: phases 0-3 PASS, 30/30 (server 1519 with the 15 database-only skipped, agent-core 67, cli 10,
   webapp 621 with its 2 expected failures; typecheck and lint ok).
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
@@ -711,6 +710,29 @@ whose fetch double checks headers as real fetch does; four mutations (each
 call site, the length, the character rule), all caught. `connect-mcp.mdx`
 states the rule for both routes.
 
+### Phase 3, round 3 (same reviewer, on the round 2 fix, and a final pass)
+
+`VERDICT: NO UNRESOLVED FINDINGS`. The reviewer re-ran its round 2
+reproduction against the rebuilt agent-core with real `fetch` and a local
+server: a session with a newline, or one in Chinese, now reads the
+knowledge and sends no header. Final pass over the phase: KG-3.1 to KG-3.6
+pass in the verifier with every suite green, and nothing it verified in
+rounds 1 and 2 moved.
+
+Phase 3 review: PASS - three rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-3 criteria: uses recorded in the
+serve's transaction on every path, with the session from a header or the
+tool argument and an unusable one dropped; run knowledge packed as
+conventions then top K grounded entries within one budget; a deterministic,
+retry-stable holdout that is served nothing, clean because the hosted guest
+cannot reach Vantik; signals from runs and pull requests (a person's pull
+request from the run's branch included) that count once per entry, run and
+source, re-check on the `pages` queue and archive nothing; an arm comparison
+that counts failed runs' cost, members only; settings with an env default
+and a per-workspace override that can be saved, read through one function;
+a hand-written migration matching `prisma migrate diff`; mutation checks on
+each fix; no skipped or loosened tests, checklist and verifier untouched.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -807,3 +829,6 @@ Give the evidence, and stop until the maintainer answers.
   mutation-checked tests.
 - 2026-09-27: Review round 2 (6a0ed75): all round 1 fixes confirmed; one new
   non-blocking finding (a session `fetch` cannot send failed the read) fixed.
+- 2026-09-27: Review round 3 (cc25aa1): no unresolved findings. Phase 3
+  review: PASS. Verify through phase 3: PASS. Phase 3 done; PR #44 ready for
+  review.

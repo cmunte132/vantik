@@ -24,6 +24,7 @@ describe('the knowledge settings of a workspace', () => {
       conventionMinRuns: 3,
       conventionHarmMargin: 3,
       gapIssueMinCount: 5,
+      gapIssues: true,
     });
     expect(DEFAULT_KNOWLEDGE_SETTINGS).toEqual(knowledgeSettings({}, {}));
   });
@@ -48,6 +49,7 @@ describe('the knowledge settings of a workspace', () => {
       conventionMinRuns: 3,
       conventionHarmMargin: 3,
       gapIssueMinCount: 5,
+      gapIssues: true,
     });
     // The ends of a share are shares.
     expect(
@@ -89,6 +91,7 @@ describe('the knowledge settings of a workspace', () => {
       conventionMinRuns: 3,
       conventionHarmMargin: 3,
       gapIssueMinCount: 5,
+      gapIssues: true,
     });
     // One setting stored leaves the others to the deployment.
     expect(knowledgeSettings({ knowledge: { contextTopK: 3 } }, env)).toEqual({
@@ -104,6 +107,7 @@ describe('the knowledge settings of a workspace', () => {
       conventionMinRuns: 3,
       conventionHarmMargin: 3,
       gapIssueMinCount: 5,
+      gapIssues: true,
     });
     // Other preferences are not knowledge settings.
     expect(
@@ -157,6 +161,7 @@ describe('the knowledge settings of a workspace', () => {
       conventionMinRuns: 3,
       conventionHarmMargin: 3,
       gapIssueMinCount: 5,
+      gapIssues: true,
     });
     expect(
       knowledgeSettings({ knowledge: { holdoutRate: 1.5 } }, {}).holdoutRate,
@@ -354,6 +359,43 @@ describe('the knowledge settings of a workspace', () => {
         { KNOWLEDGE_GAP_ISSUE_MIN_COUNT: '1.5' },
       ).gapIssueMinCount,
     ).toBe(5);
+  });
+
+  it('[KG-6.4] opens gap issues unless the deployment, or the workspace for itself, switches them off', () => {
+    expect(knowledgeSettings(null, {}).gapIssues).toBe(true);
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_GAP_ISSUES_CRON: ' OFF ' }).gapIssues,
+    ).toBe(false);
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssuesCron: 'off' } },
+        { KNOWLEDGE_GAP_ISSUES_CRON: '0 4 * * 1' },
+      ).gapIssues,
+    ).toBe(false);
+    // A schedule of its own leaves it on, on the deployment's schedule; one
+    // that cannot be read falls to the deployment's.
+    expect(
+      knowledgeSettings({ knowledge: { gapIssuesCron: '0 9 * * *' } }, {})
+        .gapIssues,
+    ).toBe(true);
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssuesCron: 7 } },
+        { KNOWLEDGE_GAP_ISSUES_CRON: 'off' },
+      ).gapIssues,
+    ).toBe(false);
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssuesCron: '  ' } },
+        { KNOWLEDGE_GAP_ISSUES_CRON: 'off' },
+      ).gapIssues,
+    ).toBe(false);
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssuesCron: '  ' } },
+        { KNOWLEDGE_GAP_ISSUES_CRON: '' },
+      ).gapIssues,
+    ).toBe(true);
   });
 
   it('[KG-3.2] caps the budget, so a budget cannot mean everything', () => {

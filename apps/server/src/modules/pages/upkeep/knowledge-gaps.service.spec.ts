@@ -403,6 +403,17 @@ describe('opening issues for knowledge gaps', () => {
     ]);
   });
 
+  it('[KG-6.4] opens no issue in a workspace that switched them off for itself', async () => {
+    const h = harness({
+      preferences: { knowledge: { gapIssuesCron: 'off' } },
+      gaps: [{ id: 'gap-1', query: 'who owns billing', count: 9 }],
+    });
+
+    expect(await h.service.openIssues()).toEqual({ opened: 0, answered: 0 });
+    expect(h.open).not.toHaveBeenCalled();
+    expect(h.gap('gap-1').issueId).toBeNull();
+  });
+
   it('[KG-6.4] never opens a second issue for the same gap', async () => {
     const h = harness({
       gaps: [{ id: 'gap-1', query: 'how are refunds rounded', count: 6 }],

@@ -77,6 +77,14 @@ export interface KnowledgeSettings {
    * `KNOWLEDGE_GAP_ISSUE_MIN_COUNT`.
    */
   gapIssueMinCount: number;
+  /**
+   * Whether the gardener opens issues for the workspace's knowledge gaps. The
+   * job runs on the deployment's schedule, `KNOWLEDGE_GAP_ISSUES_CRON`, and
+   * `off` there switches it off everywhere. A workspace can switch it off for
+   * itself with `gapIssuesCron: 'off'`; it cannot move the schedule, as one
+   * job serves every workspace, so any other value leaves it on.
+   */
+  gapIssues: boolean;
 }
 
 export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
@@ -92,6 +100,7 @@ export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
   conventionMinRuns: 3,
   conventionHarmMargin: 3,
   gapIssueMinCount: 5,
+  gapIssues: true,
 };
 
 /** The most tokens any knowledge budget allows, whatever is configured. */
@@ -155,7 +164,21 @@ export function knowledgeSettings(
       countOf(stored.gapIssueMinCount) ??
       countOf(fromEnv(env.KNOWLEDGE_GAP_ISSUE_MIN_COUNT)) ??
       DEFAULT_KNOWLEDGE_SETTINGS.gapIssueMinCount,
+    gapIssues:
+      scheduleOf(stored.gapIssuesCron) ??
+      scheduleOf(env.KNOWLEDGE_GAP_ISSUES_CRON?.trim().toLowerCase()) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.gapIssues,
   };
+}
+
+/**
+ * Whether a schedule runs: `off` does not, and any other schedule does. An
+ * empty one, or one that is not text, says nothing.
+ */
+function scheduleOf(value: unknown): boolean | undefined {
+  return typeof value === 'string' && value.trim()
+    ? value.trim() !== 'off'
+    : undefined;
 }
 
 const MODES: readonly KnowledgeAutoTriage[] = ['off', 'shadow', 'on'];

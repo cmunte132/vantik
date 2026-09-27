@@ -163,11 +163,15 @@ export default class KnowledgeGapsService {
       select: { preferences: true },
     });
 
-    if (!workspace) {
+    const settings = workspace && knowledgeSettings(workspace.preferences);
+
+    // Switched off for this workspace: its gaps are still counted, and
+    // answered, but nobody is asked to answer them.
+    if (!settings?.gapIssues) {
       return 0;
     }
 
-    const { gapIssueMinCount } = knowledgeSettings(workspace.preferences);
+    const { gapIssueMinCount } = settings;
     const due = await this.prisma.pageKnowledgeGap.findMany({
       where: {
         workspaceId,

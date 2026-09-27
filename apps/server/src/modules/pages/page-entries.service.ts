@@ -49,7 +49,7 @@ import {
 } from './pages.interface';
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 import { secretIn } from './triage/triage-policy';
-import { reversalsFor } from './upkeep/maintenance';
+import { heldSince, reversalsFor, unusedSince } from './upkeep/maintenance';
 
 @Injectable()
 export default class PageEntriesService {
@@ -650,6 +650,15 @@ export default class PageEntriesService {
    * Nothing is deleted either way — archived entries stay readable and can be
    * revived.
    *
+   * Either way, an entry a check found to hold within the window stays: its
+   * citations were read against the code and still support it, which says it
+   * is true whether or not anyone asked. And an entry a person verified is
+   * never archived by decay: the gardener asks a person instead
+   * (`KnowledgeUpkeepService.proposeUnused`), and an untriaged one is already
+   * waiting on a person. Outcomes do not archive either: a harmful signal
+   * re-checks the entry's citations, and what that check finds is what
+   * counts.
+   *
    * Called nightly by `PagesProcessor` on the `pages` queue, on the schedule in
    * `DECAY_CRON`. Setting `PAGE_DECAY_CRON=off` disables the pass, which leaves
    * both windows dormant and the inbox bounded only by the per-token budget on
@@ -672,6 +681,8 @@ export default class PageEntriesService {
         deleted: null,
         status: PageEntryStatusEnum.PROPOSED,
         createdAt: { lt: proposedCutoff },
+        citations: { none: heldSince(proposedCutoff) },
+        verifiedAt: null,
       },
       data: { status: PageEntryStatusEnum.ARCHIVED },
     });
@@ -681,8 +692,7 @@ export default class PageEntriesService {
         ...scope,
         deleted: null,
         status: PageEntryStatusEnum.STANDING,
-        createdAt: { lt: standingCutoff },
-        OR: [{ lastServedAt: { lt: standingCutoff } }, { lastServedAt: null }],
+        ...unusedSince(standingCutoff),
         // A human vouched for it. Demonstrated usefulness is a proxy for
         // "worth keeping"; an explicit human confirmation is the real thing,
         // and it outranks the proxy.

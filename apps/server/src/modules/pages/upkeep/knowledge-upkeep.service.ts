@@ -24,7 +24,11 @@ import {
   STANDING_ENTRY_DECAY_DAYS,
 } from '../pages.interface';
 import KnowledgeIssues from './knowledge-issues';
-import { type CitationEvidence, type MaintenanceEvidence } from './maintenance';
+import {
+  type CitationEvidence,
+  type MaintenanceEvidence,
+  unusedSince,
+} from './maintenance';
 import { redactSecrets } from '../triage/triage-policy';
 
 /**
@@ -336,6 +340,52 @@ export default class KnowledgeUpkeepService {
       },
       select: { id: true, action: true, reason: true },
     });
+  }
+
+  /**
+   * Asks a person about each verified entry decay would otherwise archive:
+   * in use, older than the window, and within it neither served nor found to
+   * hold by a check. A person vouched for it, so decay never archives it
+   * alone; the proposal waits in the review queue, and is not repeated while
+   * open or soon after a person declined it. Run after each decay pass.
+   */
+  async proposeUnused(workspaceId?: string): Promise<number> {
+    const cutoff = daysAgo(STANDING_ENTRY_DECAY_DAYS);
+    const candidates = await this.prisma.pageEntry.findMany({
+      where: {
+        deleted: null,
+        status: PageEntryStatus.STANDING,
+        verifiedAt: { not: null },
+        page: workspaceId ? { workspaceId, deleted: null } : { deleted: null },
+        ...unusedSince(cutoff),
+      },
+      select: {
+        id: true,
+        lastServedAt: true,
+        page: { select: { workspaceId: true } },
+      },
+    });
+    let proposed = 0;
+
+    for (const entry of candidates) {
+      const row = await this.prisma.$transaction((tx) =>
+        this.propose(tx, {
+          workspaceId: entry.page.workspaceId,
+          entryId: entry.id,
+          reason: PageEntryMaintenanceReason.UNUSED,
+          evidence: {
+            windowDays: STANDING_ENTRY_DECAY_DAYS,
+            lastServedAt: entry.lastServedAt?.toISOString() ?? null,
+          },
+        }),
+      );
+
+      if (row) {
+        proposed++;
+      }
+    }
+
+    return proposed;
   }
 
   /**

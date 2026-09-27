@@ -248,10 +248,13 @@ export class PagesProcessor {
   async handleDecay() {
     let expiredProposed: number;
     let archivedStanding: number;
+    let proposedVerified: number;
 
     try {
       ({ expiredProposed, archivedStanding } =
         await this.pageEntriesService.runDecay());
+      // What decay may not archive alone, it asks a person about.
+      proposedVerified = await this.upkeep.proposeUnused();
     } catch (error) {
       // Said out loud, because the alternative is silence. The only other
       // signal this pass gives is the line below, and "no line" reads exactly
@@ -269,7 +272,8 @@ export class PagesProcessor {
     this.logger.info({
       message:
         `Knowledge decay archived ${expiredProposed} untriaged and ` +
-        `${archivedStanding} unserved standing entr(ies)`,
+        `${archivedStanding} unused standing entr(ies), and asked a person ` +
+        `about ${proposedVerified} unused verified entr(ies)`,
       where: 'PagesProcessor.handleDecay',
     });
   }

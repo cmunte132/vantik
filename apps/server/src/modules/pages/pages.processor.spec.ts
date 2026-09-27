@@ -98,7 +98,7 @@ describe('PagesProcessor', () => {
       service,
       {} as EntryCitationsService,
       {} as KnowledgeTriageService,
-      {} as KnowledgeUpkeepService,
+      { proposeUnused: async () => 0 } as unknown as KnowledgeUpkeepService,
     ).handleDecay();
 
     // Unscoped deliberately: the windows are a property of the deployment, not
@@ -309,5 +309,29 @@ describe('a change that landed', () => {
     await expect(
       processor.handleCodeLanded({ data, timestamp: 1_700_000_000_000 }),
     ).rejects.toThrow('unread');
+  });
+});
+
+describe('the decay pass', () => {
+  it('[KG-6.5] asks a person about the verified entries it may not archive, after archiving the rest', async () => {
+    const order: string[] = [];
+    const runDecay = jest.fn(async () => {
+      order.push('archive');
+      return { expiredProposed: 0, archivedStanding: 2 };
+    });
+    const proposeUnused = jest.fn(async () => {
+      order.push('ask');
+      return 1;
+    });
+
+    await new PagesProcessor(
+      { runDecay } as unknown as PageEntriesService,
+      {} as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      { proposeUnused } as unknown as KnowledgeUpkeepService,
+    ).handleDecay();
+
+    expect(order).toEqual(['archive', 'ask']);
+    expect(proposeUnused).toHaveBeenCalledWith();
   });
 });

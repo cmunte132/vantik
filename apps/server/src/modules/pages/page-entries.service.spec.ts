@@ -829,6 +829,12 @@ describe('decay', () => {
   const DAY = 24 * 60 * 60 * 1000;
   const daysAgo = (days: number) => new Date(Date.now() - days * DAY);
 
+  interface Citation {
+    checkedAt: Date | null;
+    checkResult: string | null;
+    judgment: string | null;
+  }
+
   interface Row {
     name: string;
     status: PageEntryStatusEnum;
@@ -836,14 +842,18 @@ describe('decay', () => {
     lastServedAt: Date | null;
     retrievalCount: number;
     verifiedAt: Date | null;
+    citations: Citation[];
   }
 
   /**
-   * Applies the fields of a Prisma `where` that the standing pass filters on,
-   * so the test can say which entries it archives rather than only what the
-   * query looks like.
+   * Applies the fields of a Prisma `where` that the passes filter on, so the
+   * test can say which entries they archive rather than only what the query
+   * looks like. A relation list is matched with `none` against its rows.
    */
-  function matches(where: Record<string, unknown>, row: Row): boolean {
+  function matches(
+    where: Record<string, unknown>,
+    row: Row | Citation,
+  ): boolean {
     return Object.entries(where).every(([field, condition]) => {
       if (field === 'page' || field === 'deleted') {
         return true;
@@ -853,23 +863,42 @@ describe('decay', () => {
           matches(branch, row),
         );
       }
-      const value = row[field as keyof Row];
+      const value = (row as unknown as Record<string, unknown>)[field];
       if (condition !== null && typeof condition === 'object') {
-        const { lt } = condition as { lt?: Date };
-        return value instanceof Date && lt !== undefined && value < lt;
+        const { lt, gte, none } = condition as {
+          lt?: Date;
+          gte?: Date;
+          none?: Record<string, unknown>;
+          in?: unknown[];
+        };
+        const within = (condition as { in?: unknown[] }).in;
+        if (none !== undefined) {
+          return !(value as Citation[]).some((each) => matches(none, each));
+        }
+        if (within !== undefined) {
+          return within.includes(value);
+        }
+        return (
+          value instanceof Date &&
+          (lt === undefined || value < lt) &&
+          (gte === undefined || value >= gte) &&
+          (lt !== undefined || gte !== undefined)
+        );
       }
       return value === condition;
     });
   }
 
-  async function archivedBy(rows: Row[]): Promise<string[]> {
+  /** The rows a pass archives: the standing pass, or the inbox pass (0). */
+  async function archivedBy(rows: Row[], pass = 1): Promise<string[]> {
     const { service, prisma } = buildService();
     await service.runDecay('workspace-1');
-    const standingPass = (prisma.pageEntry.updateMany as jest.Mock).mock
-      .calls[1][0];
+    const { where } = (prisma.pageEntry.updateMany as jest.Mock).mock.calls[
+      pass
+    ][0];
 
     return rows
-      .filter((row) => matches(standingPass.where, row))
+      .filter((row) => row.status === where.status && matches(where, row))
       .map((row) => row.name);
   }
 
@@ -879,6 +908,7 @@ describe('decay', () => {
     lastServedAt: null,
     retrievalCount: 0,
     verifiedAt: null,
+    citations: [],
     ...row,
   });
 
@@ -897,6 +927,89 @@ describe('decay', () => {
         }),
       ]),
     ).resolves.toEqual(['served once, long ago']);
+  });
+
+  const checked = (
+    daysBack: number,
+    checkResult: string,
+    judgment: string | null = null,
+  ): Citation => ({ checkedAt: daysAgo(daysBack), checkResult, judgment });
+
+  it('[KG-6.5] keeps an entry a check found to hold within the window, though nobody served it', async () => {
+    await expect(
+      archivedBy([
+        standing({ name: 'held', citations: [checked(10, 'HOLDS')] }),
+        standing({ name: 'moved', citations: [checked(10, 'MOVED')] }),
+        standing({
+          name: 'changed, judged to hold',
+          citations: [checked(10, 'CHANGED', 'HOLDS')],
+        }),
+        standing({
+          name: 'one of two held',
+          citations: [checked(10, 'MISSING'), checked(20, 'HOLDS')],
+        }),
+        standing({ name: 'held long ago', citations: [checked(200, 'HOLDS')] }),
+        standing({
+          name: 'contradicted',
+          citations: [checked(10, 'CHANGED', 'CONTRADICTED')],
+        }),
+        standing({
+          name: 'unjudged',
+          citations: [checked(10, 'CHANGED', 'UNCLEAR')],
+        }),
+        standing({ name: 'missing', citations: [checked(10, 'MISSING')] }),
+        standing({ name: 'unread', citations: [checked(10, 'UNKNOWN')] }),
+      ]),
+    ).resolves.toEqual([
+      'held long ago',
+      'contradicted',
+      'unjudged',
+      'missing',
+      'unread',
+    ]);
+  });
+
+  it('[KG-6.5] expires an untriaged entry only when no check found it to hold, and leaves a verified one to the person', async () => {
+    const waiting = (row: Partial<Row> & { name: string }): Row =>
+      standing({
+        status: PageEntryStatusEnum.PROPOSED,
+        createdAt: daysAgo(40),
+        ...row,
+      });
+
+    await expect(
+      archivedBy(
+        [
+          waiting({ name: 'stale' }),
+          waiting({ name: 'held', citations: [checked(5, 'HOLDS')] }),
+          waiting({ name: 'held before', citations: [checked(35, 'HOLDS')] }),
+          waiting({ name: 'verified', verifiedAt: daysAgo(3) }),
+          waiting({ name: 'new', createdAt: daysAgo(5) }),
+        ],
+        0,
+      ),
+    ).resolves.toEqual(['stale', 'held before']);
+  });
+
+  it('[KG-6.5] archives on use and checks, never on outcomes', async () => {
+    const { service, prisma } = buildService();
+    await service.runDecay('workspace-1');
+    const passes = (prisma.pageEntry.updateMany as jest.Mock).mock.calls.map(
+      ([{ where }]) => JSON.stringify(where),
+    );
+
+    // A harmful signal has the entry checked again, and what the check finds
+    // is what counts; the counts themselves archive nothing.
+    expect(passes).toHaveLength(2);
+    for (const where of passes) {
+      expect(where).not.toMatch(/harmful|helpful/i);
+    }
+    await expect(
+      archivedBy([
+        standing({ name: 'harmed, served', lastServedAt: daysAgo(1) }),
+        standing({ name: 'harmed, held', citations: [checked(1, 'HOLDS')] }),
+      ]),
+    ).resolves.toEqual([]);
   });
 
   it('[KG-0.6] archives an old entry nobody ever served, and spares a verified one', async () => {

@@ -71,6 +71,10 @@ function matches(row: Row, where: Where): boolean {
     if (typeof condition === 'object' && !Array.isArray(condition)) {
       const c = condition as Record<string, unknown>;
 
+      if ('none' in c) {
+        return !(value as Row[]).some((each) => matches(each, c.none as Where));
+      }
+
       if (
         ['in', 'not', 'lt', 'gte', 'hasSome'].some((operator) => operator in c)
       ) {
@@ -200,6 +204,7 @@ function harness(seed: Seed = {}) {
   const entryView = (row: Row): Row => ({
     ...row,
     page: pages.get(row.pageId as string),
+    citations: citations.filter((c) => c.entryId === row.id),
   });
   const citationView = (row: Row): Row => {
     const repo = repos.find((candidate) => candidate.id === row.moduleRepoId);
@@ -239,6 +244,11 @@ function harness(seed: Seed = {}) {
       ),
     },
     pageEntry: {
+      findMany: jest.fn(async ({ where }: { where: Where }) =>
+        [...entries.values()]
+          .map(entryView)
+          .filter((row) => matches(row, where)),
+      ),
       findFirst: jest.fn(
         async ({ where }: { where: Where }) =>
           [...entries.values()]
@@ -1098,5 +1108,54 @@ describe('who a correction issue goes to', () => {
     expect(await owner({ teams, modules: [productModule([])] })).toBe(
       'team-old',
     );
+  });
+});
+
+describe('decay asks rather than archives what a person verified', () => {
+  it('[KG-6.5] asks a person about a verified entry nobody used or found to hold in the window, once', async () => {
+    const old = new Date(Date.now() - 400 * DAY);
+    const t = harness({
+      entries: [
+        entry('unused', {
+          verifiedAt: old,
+          createdAt: old,
+          lastServedAt: null,
+        }),
+        entry('served', {
+          verifiedAt: old,
+          createdAt: old,
+          lastServedAt: new Date(Date.now() - DAY),
+        }),
+        entry('held', { verifiedAt: old, createdAt: old, lastServedAt: null }),
+        entry('unverified', { createdAt: old, lastServedAt: null }),
+        entry('recent', {
+          verifiedAt: old,
+          createdAt: new Date(Date.now() - 10 * DAY),
+          lastServedAt: null,
+        }),
+      ],
+      citations: [
+        citation('c1', 'held', {
+          checkResult: Check.HOLDS,
+          checkedAt: new Date(Date.now() - 3 * DAY),
+        }),
+      ],
+    });
+
+    expect(await t.upkeep.proposeUnused()).toBe(1);
+    expect(await t.upkeep.proposeUnused()).toBe(0);
+
+    expect(t.maintenance).toEqual([
+      expect.objectContaining({
+        workspaceId: WORKSPACE,
+        entryId: 'unused',
+        action: Action.ARCHIVE_PROPOSED,
+        reason: Reason.UNUSED,
+        proposalState: ProposalState.OPEN,
+        evidence: { windowDays: 90, lastServedAt: null },
+      }),
+    ]);
+    // Asked, not archived.
+    expect(t.entries.get('unused')?.status).toBe(Status.STANDING);
   });
 });

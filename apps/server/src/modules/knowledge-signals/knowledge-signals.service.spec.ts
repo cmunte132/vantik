@@ -509,6 +509,41 @@ describe('the signals a run’s end gives its knowledge', () => {
     }
   });
 
+  it('[KG-6.5] answers harm with a check of each entry it points at, never with a status', async () => {
+    const { service, prisma, queue } = build({
+      runs: [
+        run({
+          served: ['first', 'second'],
+          passes: [
+            {
+              verificationPassed: false,
+              accepted: false,
+              findings: [{ message: 'Stale', evidence: 'src/cache.ts:9' }],
+            },
+          ],
+        }),
+      ],
+      entries: [
+        entry('first', { citations: [{ path: 'src/cache.ts' }] }),
+        entry('second', { citations: [{ path: 'src/cache.ts' }] }),
+      ],
+    });
+
+    await service.runFinished(RUN);
+
+    expect(queue.add).toHaveBeenCalledTimes(2);
+    for (const entryId of ['first', 'second']) {
+      expect(queue.add).toHaveBeenCalledWith(
+        RECHECK_ENTRY_JOB,
+        { entryId },
+        expect.objectContaining({ jobId: `${RECHECK_ENTRY_JOB}:${entryId}` }),
+      );
+    }
+    for (const [{ data }] of prisma.pageEntry.update.mock.calls) {
+      expect(data).not.toHaveProperty('status');
+    }
+  });
+
   it('[KG-3.4] counts a run’s end once, however often it is attributed', async () => {
     const { service, entries, signals, queue } = build({
       runs: [

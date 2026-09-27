@@ -1,4 +1,6 @@
 import {
+  PageEntryCitationCheck,
+  PageEntryCitationJudgment,
   PageEntryMaintenanceAction,
   PageEntryMaintenanceReason,
   PageEntryStatus,
@@ -149,4 +151,40 @@ export function reversalsFor(
         ]
       : [];
   });
+}
+
+/**
+ * A citation found to hold by a check since `since`: the cited code is where
+ * it was, or has moved and still reads the same, or changed and a judge read
+ * it as still supporting the claim.
+ */
+export function heldSince(since: Date): Prisma.PageEntryCitationWhereInput {
+  return {
+    checkedAt: { gte: since },
+    OR: [
+      {
+        checkResult: {
+          in: [PageEntryCitationCheck.HOLDS, PageEntryCitationCheck.MOVED],
+        },
+      },
+      {
+        checkResult: PageEntryCitationCheck.CHANGED,
+        judgment: PageEntryCitationJudgment.HOLDS,
+      },
+    ],
+  };
+}
+
+/**
+ * An entry decay may take out of use: older than the window, and within it
+ * neither served nor found to hold by a check. Being checked and found to
+ * hold is evidence the entry is still true, even if nobody asked for it;
+ * being served is evidence it is still wanted. Either keeps it.
+ */
+export function unusedSince(cutoff: Date): Prisma.PageEntryWhereInput {
+  return {
+    createdAt: { lt: cutoff },
+    OR: [{ lastServedAt: { lt: cutoff } }, { lastServedAt: null }],
+    citations: { none: heldSince(cutoff) },
+  };
 }

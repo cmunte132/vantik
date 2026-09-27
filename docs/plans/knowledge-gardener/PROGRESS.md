@@ -5,8 +5,10 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 6, in progress: KG-6.1 and KG-6.2 implemented and
-  mutation-checked; KG-6.5, KG-6.3 and KG-6.4 next, then the review.
+- Current phase: 6, in progress: KG-6.1, KG-6.2 and KG-6.5 implemented
+  and mutation-checked; KG-6.3 and KG-6.4 next, then the review. PR #45
+  is open from this branch, so the phase 6 commits are in it too; its
+  description says so.
   Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
   request.
 - Pull requests: the maintainer asked for the remaining phases in two or three
@@ -768,6 +770,27 @@ next session starts by reading it.
   - **Tests.** The fakes of two existing suites gained a
     `pageEntryMaintenance` table (the undo write goes through it); no
     assertion changed.
+- **Decay (KG-6.5).** Both passes keep an entry any of whose citations a
+  check found to hold within the pass's window (`checkedAt` in the window,
+  and HOLDS, MOVED, or CHANGED with a HOLDS judgment: MOVED is the same code
+  on other lines). The standing pass's rule is `unusedSince(cutoff)` in
+  `upkeep/maintenance.ts`: older than the window, not served within it, and
+  no citation held within it. The inbox pass, which has no serving to go
+  by, uses the check alone. Contradicted, unjudged, missing or unread
+  results keep nothing. A verified entry is never archived: the standing
+  pass kept `verifiedAt: null`, the inbox pass now has it too (a verified
+  entry still waiting is already in front of a person), and after each pass
+  `KnowledgeUpkeepService.proposeUnused` gives each verified entry the
+  standing rule would take an archive proposal with reason UNUSED and the
+  window as evidence, not repeated while open or for 90 days after a
+  decline. Outcomes archive nothing: the passes read no signal counts, and
+  a harmful signal still queues a re-check of the entry (KG-3.4), whose
+  result is what decay reads. The one place outcomes take an entry out of
+  use is KG-6.3's disabling of a candidate convention, which the plan asks
+  for and a person can reverse. The existing decay tests' matcher was
+  taught `none`, `in` and `gte`, and rows got an empty citation list; their
+  assertions are unchanged (and now also require the row's status to match
+  the pass's).
 - **Migration** `20260927060000_knowledge_upkeep`: `prisma migrate diff`'s
   output for all of phase 6 (three enums, `PageEntryMaintenance`,
   `KnowledgeFinding`, and four nullable columns on `PageKnowledgeGap`).
@@ -1584,3 +1607,7 @@ Give the evidence, and stop until the maintainer answers.
   queue; undo recorded) implemented with tagged tests. Mutation-checked:
   19 server mutants for KG-6.2, 15 killed at once, three survivors and one
   that did not compile killed by new tests or a compiling rewording.
+- 2026-09-27: KG-6.5 (decay keeps what a check found to hold; verified
+  entries are proposed, never archived; outcomes archive nothing)
+  implemented with tagged tests. Mutation-checked: nine mutants, eight
+  killed at once, one that did not compile reworded and killed.

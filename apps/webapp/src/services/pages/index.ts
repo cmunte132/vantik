@@ -1,3 +1,8 @@
+import type {
+  KnowledgeAgreementReport,
+  KnowledgeReviewQueue,
+} from '@vantikhq/types';
+
 import { useQuery } from '@tanstack/react-query';
 
 import type {
@@ -123,9 +128,15 @@ export const useDeletePageMutation = mutationHook(deletePage);
 
 export const useConsolidatePageMutation = mutationHook(consolidatePage);
 
-export const useUpdatePageEntryMutation = mutationHook(updatePageEntry);
+// Either can resolve an escalation or an audit, so the queue's reasons and
+// the agreement figures are asked for again.
+export const useUpdatePageEntryMutation = mutationHook(updatePageEntry, {
+  invalidates: ['knowledge-review', 'knowledge-agreement'],
+});
 
-export const useBulkTriageMutation = mutationHook(bulkTriageEntries);
+export const useBulkTriageMutation = mutationHook(bulkTriageEntries, {
+  invalidates: ['knowledge-review', 'knowledge-agreement'],
+});
 
 export const useCreatePageEntryMutation = mutationHook(createPageEntry);
 
@@ -191,13 +202,7 @@ export function usePageMarkdown(pageId?: string, enabled = true) {
 }
 
 export type PageLinkType =
-  | 'TEAM'
-  | 'PROJECT'
-  | 'ISSUE'
-  | 'PAGE'
-  | 'PRODUCT'
-  | 'MODULE'
-  | 'CAPABILITY';
+  'TEAM' | 'PROJECT' | 'ISSUE' | 'PAGE' | 'PRODUCT' | 'MODULE' | 'CAPABILITY';
 
 export interface PageLink {
   id: string;
@@ -353,5 +358,58 @@ export function useKnowledgeGaps() {
     queryKey: ['knowledge-gaps'],
     queryFn: () =>
       ajaxGet({ url: '/api/v1/knowledge/gaps' }) as Promise<KnowledgeGapType[]>,
+  });
+}
+
+/**
+ * Why each waiting entry is waiting, and the decisions drawn for audit.
+ *
+ * Not synced: triage decisions are read when someone sits down to review,
+ * and the entries themselves still come live from the store. Scoped to a
+ * page when one is given.
+ */
+export function useKnowledgeReview(pageId?: string, enabled = true) {
+  return useQuery<KnowledgeReviewQueue>({
+    queryKey: ['knowledge-review', pageId ?? 'workspace'],
+    enabled,
+    queryFn: () =>
+      ajaxGet({
+        url: pageId
+          ? `/api/v1/knowledge/review?pageId=${pageId}`
+          : '/api/v1/knowledge/review',
+      }) as Promise<KnowledgeReviewQueue>,
+  });
+}
+
+export interface ResolveAuditParams {
+  decisionId: string;
+  /** Whether triage was right to do what it did. */
+  agree: boolean;
+}
+
+export function resolveAudit({ decisionId, agree }: ResolveAuditParams) {
+  return ajaxPost({
+    url: `/api/v1/knowledge/review/${decisionId}/audit`,
+    data: { agree },
+  });
+}
+
+export const useResolveAuditMutation = mutationHook(resolveAudit, {
+  invalidates: ['knowledge-review', 'knowledge-agreement'],
+});
+
+/**
+ * How far triage and people agree, per decision type, and which types have
+ * stopped acting because of it. Moves only as verdicts arrive.
+ */
+export function useKnowledgeAgreement(enabled = true) {
+  return useQuery<KnowledgeAgreementReport>({
+    queryKey: ['knowledge-agreement'],
+    enabled,
+    staleTime: 60 * 1000,
+    queryFn: () =>
+      ajaxGet({
+        url: '/api/v1/knowledge/agreement',
+      }) as Promise<KnowledgeAgreementReport>,
   });
 }

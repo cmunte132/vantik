@@ -1,3 +1,5 @@
+import type { KnowledgeReviewReasonEnum } from '@vantikhq/types';
+
 import { Button } from '@vantikhq/ui/components/button';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import { observer } from 'mobx-react-lite';
@@ -5,11 +7,23 @@ import * as React from 'react';
 
 import { PageEntryStatus, type PageEntryType } from 'common/types';
 
+import {
+  useBulkTriageMutation,
+  useKnowledgeReview,
+  useResolveAuditMutation,
+} from 'services/pages';
+
 import { useContextStore } from 'store/global-context-provider';
 
-import { useBulkTriageMutation } from 'services/pages';
-
 import { EntryRow } from './entry-row';
+import {
+  auditPrompt,
+  REASON_LABELS,
+  reasonFacets,
+  reviewRows,
+  withReason,
+  type ReviewRow,
+} from './review-reasons';
 
 /**
  * The queue of facts waiting on a decision.
@@ -28,24 +42,48 @@ import { EntryRow } from './entry-row';
  */
 
 export type ReviewScope =
-  | { kind: 'page'; pageId: string }
-  | { kind: 'workspace' };
+  { kind: 'page'; pageId: string } | { kind: 'workspace' };
 
+/**
+ * With triage on, each waiting fact says why it was held back, and beside
+ * them sit a sample of what triage did alone, drawn for a person to check.
+ * The reasons and the audits come from the server; the facts themselves from
+ * the synced store, so the queue stays live and, with triage off or the
+ * server not answering, is exactly the inbox it always was.
+ */
 export const ReviewQueue = observer(({ scope }: { scope: ReviewScope }) => {
   const { pageEntriesStore } = useContextStore();
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [reason, setReason] = React.useState<KnowledgeReviewReasonEnum | null>(
+    null,
+  );
+  const pageId = scope.kind === 'page' ? scope.pageId : undefined;
+  const { data: review } = useKnowledgeReview(pageId);
 
-  const entries: PageEntryType[] =
+  const waiting: PageEntryType[] =
     scope.kind === 'page'
       ? pageEntriesStore.getByStatus(scope.pageId, PageEntryStatus.PROPOSED)
       : pageEntriesStore.getAllByStatus(PageEntryStatus.PROPOSED);
 
+  const all = reviewRows(waiting, review, (entryId, pageId) =>
+    pageEntriesStore
+      .getEntries(pageId)
+      .find((entry: PageEntryType) => entry.id === entryId),
+  );
+  const facets = reasonFacets(all);
+  // A reason whose last row was just resolved stops narrowing the queue,
+  // rather than leaving the reviewer looking at nothing.
+  const chosen = facets.some((facet) => facet.reason === reason)
+    ? reason
+    : null;
+  const rows = withReason(all, chosen);
+
   // Dropped when the scope changes, so a bulk action can never land on rows the
   // reviewer is no longer looking at.
-  React.useEffect(
-    () => setSelected(new Set()),
-    [scope.kind, scope.kind === 'page' ? scope.pageId : ''],
-  );
+  React.useEffect(() => {
+    setSelected(new Set());
+    setReason(null);
+  }, [scope.kind, pageId]);
 
   const toggle = (id: string) =>
     setSelected((current: Set<string>) => {
@@ -65,29 +103,31 @@ export const ReviewQueue = observer(({ scope }: { scope: ReviewScope }) => {
       return next;
     });
 
-  if (entries.length === 0) {
+  if (all.length === 0) {
     return <EmptyQueue scope={scope} />;
   }
 
   return (
     <div className="flex flex-col gap-4 h-full">
+      {facets.length > 0 && (
+        <ReasonFilter facets={facets} chosen={chosen} onChoose={setReason} />
+      )}
+
       <div className="grow flex flex-col gap-4 min-h-0">
         {scope.kind === 'workspace' ? (
           <ByPage
-            entries={entries}
+            rows={rows}
             selected={selected}
             onToggle={toggle}
             onSelectMany={selectMany}
           />
         ) : (
           <div className="flex flex-col">
-            {entries.map((entry) => (
-              <EntryRow
-                key={entry.id}
-                entry={entry}
-                variant="review"
-                selected={selected.has(entry.id)}
-                selecting={selected.size > 0}
+            {rows.map((row) => (
+              <QueueRow
+                key={rowKey(row)}
+                row={row}
+                selected={selected}
                 onToggle={toggle}
               />
             ))}
@@ -120,6 +160,88 @@ const EmptyQueue = observer(({ scope }: { scope: ReviewScope }) => (
 ));
 
 /**
+ * Narrows the queue to one reason, with how many rows carry each, so a
+ * reviewer can clear everything that cites nothing in one sitting and every
+ * contradiction in another: each asks for a different kind of reading.
+ */
+const ReasonFilter = observer(
+  ({
+    facets,
+    chosen,
+    onChoose,
+  }: {
+    facets: ReturnType<typeof reasonFacets>;
+    chosen: KnowledgeReviewReasonEnum | null;
+    onChoose: (reason: KnowledgeReviewReasonEnum | null) => void;
+  }) => (
+    <div className="flex gap-1 flex-wrap -ml-2">
+      <Button
+        variant={chosen === null ? 'secondary' : 'ghost'}
+        size="sm"
+        onClick={() => onChoose(null)}
+      >
+        All
+      </Button>
+      {facets.map((facet) => (
+        <Button
+          key={facet.reason}
+          variant={chosen === facet.reason ? 'secondary' : 'ghost'}
+          size="sm"
+          onClick={() => onChoose(facet.reason)}
+        >
+          {facet.label}
+          <span className="text-muted-foreground ml-1">{facet.count}</span>
+        </Button>
+      ))}
+    </div>
+  ),
+);
+
+/**
+ * One row: a waiting fact with its choices, or an audit with its question.
+ * An audit is answered on its own, never in bulk, since each asks whether
+ * triage was right about that one fact.
+ */
+const QueueRow = observer(
+  ({
+    row,
+    selected,
+    onToggle,
+  }: {
+    row: ReviewRow;
+    selected: Set<string>;
+    onToggle: (id: string) => void;
+  }) => {
+    const { mutate: answer } = useResolveAuditMutation();
+    const { audit } = row;
+
+    return (
+      <EntryRow
+        entry={row.entry}
+        variant="review"
+        reasons={row.reasons.map((reason) => REASON_LABELS[reason])}
+        audit={
+          audit
+            ? {
+                ...auditPrompt(audit),
+                onAnswer: (agree: boolean) =>
+                  answer({ decisionId: audit.decisionId, agree }),
+              }
+            : undefined
+        }
+        selected={!audit && selected.has(row.entry.id)}
+        selecting={selected.size > 0}
+        onToggle={audit ? undefined : onToggle}
+      />
+    );
+  },
+);
+
+function rowKey(row: ReviewRow): string {
+  return row.audit ? `audit:${row.audit.decisionId}` : row.entry.id;
+}
+
+/**
  * Workspace review, grouped under the page each fact belongs to.
  *
  * A claim is only judgeable against what its page is for — "we deploy with
@@ -128,54 +250,60 @@ const EmptyQueue = observer(({ scope }: { scope: ReviewScope }) => (
  */
 const ByPage = observer(
   ({
-    entries,
+    rows,
     selected,
     onToggle,
     onSelectMany,
   }: {
-    entries: PageEntryType[];
+    rows: ReviewRow[];
     selected: Set<string>;
     onToggle: (id: string) => void;
     onSelectMany: (ids: string[], select: boolean) => void;
   }) => {
     const { pagesStore } = useContextStore();
 
-    const groups = new Map<string, PageEntryType[]>();
-    for (const entry of entries) {
-      groups.set(entry.pageId, [...(groups.get(entry.pageId) ?? []), entry]);
+    const groups = new Map<string, ReviewRow[]>();
+    for (const row of rows) {
+      const { pageId } = row.entry;
+      groups.set(pageId, [...(groups.get(pageId) ?? []), row]);
     }
 
     return (
       <div className="flex flex-col gap-6">
-        {[...groups.entries()].map(([pageId, rows]) => {
+        {[...groups.entries()].map(([pageId, group]) => {
           const page = pagesStore.getPageWithId(pageId);
-          const ids = rows.map((row) => row.id);
-          const allSelected = ids.every((id) => selected.has(id));
+          // Selecting a page selects what can be decided in bulk: its
+          // waiting facts, not its audits.
+          const ids = group
+            .filter((row) => !row.audit)
+            .map((row) => row.entry.id);
+          const allSelected =
+            ids.length > 0 && ids.every((id) => selected.has(id));
 
           return (
             <section key={pageId} className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={allSelected}
-                  aria-label={`Select all waiting on ${page?.title ?? 'this page'}`}
-                  onCheckedChange={(checked: boolean) =>
-                    onSelectMany(ids, Boolean(checked))
-                  }
-                />
+                {ids.length > 0 && (
+                  <Checkbox
+                    checked={allSelected}
+                    aria-label={`Select all waiting on ${page?.title ?? 'this page'}`}
+                    onCheckedChange={(checked: boolean) =>
+                      onSelectMany(ids, Boolean(checked))
+                    }
+                  />
+                )}
                 <h3 className="truncate">{page?.title || 'Untitled page'}</h3>
                 <span className="text-muted-foreground">
-                  {rows.length} waiting
+                  {group.length} waiting
                 </span>
               </div>
 
               <div className="flex flex-col">
-                {rows.map((entry) => (
-                  <EntryRow
-                    key={entry.id}
-                    entry={entry}
-                    variant="review"
-                    selected={selected.has(entry.id)}
-                    selecting={selected.size > 0}
+                {group.map((row) => (
+                  <QueueRow
+                    key={rowKey(row)}
+                    row={row}
+                    selected={selected}
                     onToggle={onToggle}
                   />
                 ))}
@@ -193,7 +321,8 @@ const BulkBar = observer(
   ({ ids, onDone }: { ids: string[]; onDone: () => void }) => {
     const { mutate: triage } = useBulkTriageMutation({ onSuccess: onDone });
 
-    const apply = (status: PageEntryStatus) => triage({ entryIds: ids, status });
+    const apply = (status: PageEntryStatus) =>
+      triage({ entryIds: ids, status });
 
     return (
       <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-background-2 border-t border-border flex items-center gap-2 flex-wrap">

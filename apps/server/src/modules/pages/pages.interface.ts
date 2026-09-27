@@ -198,6 +198,12 @@ export interface CodeLandedJob {
   /** The commit it landed as, which the citations are read at. */
   sha: string;
   changedPaths: string[];
+  /**
+   * For a citation handed on after its first reading: the commit it was
+   * read at. The check is then of every change since, which the head holds,
+   * and not of one change that landed as `sha`.
+   */
+  since?: string;
 }
 
 /**

@@ -862,7 +862,7 @@ export default class EntryCitationsService {
       await this.indexer?.entryChanged(entryId);
     }
 
-    await this.checkSinceCited(entry.page.workspaceId, firstReads, reads);
+    await this.checkSinceCited(entry.page.workspaceId, firstReads);
 
     return { checked };
   }
@@ -1032,7 +1032,8 @@ export default class EntryCitationsService {
    * head a landed change's check or a re-check has read since, and must not
    * replace what they found. The changes that landed since that commit
    * passed the citation over while it was unread, so a citation found to
-   * hold there is handed to the landed-change check, at the head.
+   * hold there is handed to the landed-change check, at the head: see
+   * `checkSinceCited`.
    */
   async retryUnknown(entryId: string): Promise<{ stillUnknown: number }> {
     const entry = await this.entryWithCitations(entryId);
@@ -1094,7 +1095,7 @@ export default class EntryCitationsService {
       await this.indexer?.entryChanged(entryId);
     }
 
-    await this.checkSinceCited(entry.page.workspaceId, firstReads, reads);
+    await this.checkSinceCited(entry.page.workspaceId, firstReads);
 
     return { stillUnknown };
   }
@@ -1102,19 +1103,25 @@ export default class EntryCitationsService {
   /**
    * Hands the landed-change check each citation just read for the first
    * time, and found to hold, at a commit the default branch has since moved
-   * past: the commit it cites. The checks of the changes that landed since
-   * passed it over while it was unread, so none of them was checked against
-   * it: the check reads it at the head, as they would have, and acts on what
-   * it finds as they would have. A citation that named no commit was read
-   * at the head, and has nothing to hand on. Queued under a job id of its
-   * own, so a check of the same commit waiting with other files does not
-   * stand in for it.
+   * past: the commit it cites, or the head it was read at, when more landed
+   * while it was read. The checks of the changes that landed since passed it
+   * over while it was unread, so none of them was checked against it: the
+   * check reads it at the head, as they would have, and acts on what it
+   * finds as they would have.
+   *
+   * The head is asked for again, once the reading is stored, rather than
+   * taken from the reads that found it: a change that landed after those
+   * asked, and whose check found the citation still unread, is in the head
+   * asked for now. A change whose check came after the store checks the
+   * citation itself. Queued under a job id of its own, so a check of the
+   * same commit waiting with other files does not stand in for it.
    */
   private async checkSinceCited(
     workspaceId: string,
     firstReads: FirstReading[],
-    reads: RepoReads,
   ): Promise<void> {
+    const reads = new RepoReads(this.files);
+
     for (const { citation, result, sha } of firstReads) {
       if (!citation.path || result !== PageEntryCitationCheckEnum.HOLDS) {
         continue;
@@ -1137,6 +1144,7 @@ export default class EntryCitationsService {
         externalRepoId: repo.externalRepoId,
         sha: head.sha,
         changedPaths: [citation.path],
+        ...(sha ? { since: sha } : {}),
       };
 
       try {

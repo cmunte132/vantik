@@ -10,7 +10,8 @@ next session starts by reading it.
   answered; round 2 PASS with five non-blocking findings, all fixed; round
   3 PASS with four non-blocking findings, all fixed; round 4 PASS with
   two low findings, both fixed; round 5 PASS with one non-blocking
-  finding, fixed; round 6 next, to confirm it. PR #45
+  finding, fixed; round 6 PASS with two non-blocking findings, both
+  fixed; round 7 next, to confirm them. PR #45
   is open from this branch, so the phase 6 commits are in it too; its
   description says so.
   Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
@@ -752,15 +753,20 @@ next session starts by reading it.
     first version also skipped anything checked since the job was queued;
     round 1 of the review found that unsound (below), and it is gone.
   - **Passed over while unread.** A landed change's check leaves an unread
-    citation to its retry, which reads the commit the citation cites. When
-    that first reading finds the claim held there and the default branch
-    has since moved past that commit, the citation is handed to the
+    citation to its retry, which reads the commit the citation cites (or
+    the head, when it names none). When that first reading finds the claim
+    held and the default branch is no longer at the commit read, asked for
+    again once the reading is stored, the citation is handed to the
     landed-change check at the head (`checkSinceCited`: a
-    `CODE_LANDED_JOB` for the head and the cited path, under a job id of
-    its own), so the changes that landed meanwhile are checked against it
-    after all. A citation that named no commit was read at the head, and a
-    reading that lost to a newer one has already been acted on; neither is
-    handed on.
+    `CODE_LANDED_JOB` for the head and the cited path, carrying the commit
+    read as `since`, under a job id of its own), so the changes that
+    landed meanwhile are checked against it after all. Asking again, rather
+    than reusing the head the reading's own job asked for, covers a change
+    that landed while the citation was read. A reading that lost to a
+    newer one has already been acted on, and is not handed on. The
+    correction issue of a handed-on check says it was checked at the head
+    against the changes since the commit read, naming none of them as the
+    change.
   - **A person's word is newer.** A reading taken before a person last put
     the entry back (the newest `reversedAt` of its maintenance rows), or a
     judgment of words the entry no longer has (`judgedContentHash`, a new
@@ -1868,6 +1874,38 @@ keyed the skip on the citation's `commitSha`; its mutant survived because
 the test store updates rows in place, so the skip now uses the commit the
 reading read). Full server suite: 1833 passed, 15 skipped.
 
+### Phase 6, round 6 (same reviewer, on the round 5 fix)
+
+The reviewer read b5236e5..ca142cd, ran tsc and the full server suite
+(1833 passed), and probed the handoff against the real services. F1
+resolved; the handoff cannot loop (the queued check stores only head
+readings, never a first reading), its job id cannot collide with a
+change's, and a citation is handed on at most once. Verdict PASS, with two
+non-blocking findings, both fixed:
+
+- **U1 (low). The handoff compared with the head its own job had asked
+  for.** A change landing between that ask and the store was missed: its
+  check found the citation unread, and the handoff saw the old head (an
+  unread citation naming no commit, read at the head; or one naming the
+  head, in a re-check that had asked for the head for another citation).
+  `checkSinceCited` now asks for the head again, once the reading is
+  stored, and hands on any holding first reading of another commit,
+  whether or not it named one. Test: "[KG-6.2] asks for the head again
+  once a first reading is stored, so a change landing while it was read is
+  checked against it" (retry of a citation naming no commit; re-check of
+  one naming the head, with the head asked for another citation first).
+- **U2 (cosmetic). A handed-on check's issue named the head as the
+  change.** The job now carries the commit read (`CodeLandedJob.since`),
+  kept in the evidence (`change.since`), and the correction issue says it
+  was checked at the head against the changes after that commit. Tests:
+  the handoff test asserts the wording; the correction-issue test asserts
+  "The change landed as" for an ordinary change.
+
+Mutation-checked: 6 mutants over these fixes, all killed (the cached head
+passed back in, from both callers and from the re-check alone; `since`
+dropped from the job, from the evidence and from the wording; the
+repository dropped from it). Full server suite: 1834 passed, 15 skipped.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -2127,3 +2165,8 @@ Give the evidence, and stop until the maintainer answers.
   fixed with tagged tests: a citation first found to hold at the commit it
   cites, once the default branch has moved past it, is handed to the
   landed-change check at the head. 14 mutants, all killed.
+- 2026-09-27: Phase 6 review round 6: PASS, with two non-blocking
+  findings, both fixed with tagged tests: the handoff asks for the head
+  again after the store, so a change landing while a citation was read is
+  checked against it; a handed-on check's correction issue names the
+  commit read rather than a single change. 6 mutants, all killed.

@@ -698,8 +698,9 @@ describe('a change that landed re-checks the citations it touches', () => {
     expect(issue.title).toContain('Retries make three attempts (e1).');
     // It cites the entry and the change.
     expect(issue.descriptionMarkdown).toContain('e1');
-    expect(issue.descriptionMarkdown).toContain(SHA);
-    expect(issue.descriptionMarkdown).toContain('acme/api');
+    expect(issue.descriptionMarkdown).toContain(
+      `The change landed as \`${SHA}\` on acme/api.`,
+    );
     expect(issue.descriptionMarkdown).toContain('src/retry.ts');
     expect(issue.descriptionMarkdown).toContain('const attempts = 3;');
     expect(issue.descriptionMarkdown).toContain(
@@ -1424,7 +1425,7 @@ describe('a change that landed re-checks the citations it touches', () => {
         checkResult: Check.HOLDS,
         checkedSha: cited,
       });
-      const job = landed();
+      const job = { ...landed(), since: cited };
       expect(queue.add).toHaveBeenCalledTimes(1);
       expect(queue.add).toHaveBeenCalledWith(
         CODE_LANDED_JOB,
@@ -1444,6 +1445,85 @@ describe('a change that landed re-checks the citations it touches', () => {
         judgment: Judgment.CONTRADICTED,
       });
       expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
+      // Which change since the cited commit touched the code is not known,
+      // so the correction issue names none of them as the change.
+      expect(t.issues).toHaveLength(1);
+      expect(t.issues[0].descriptionMarkdown).toContain(
+        `It was checked at \`${SHA}\` on acme/api, against the changes ` +
+          `that landed after \`${cited}\`, the commit it was first read at.`,
+      );
+      expect(t.issues[0].descriptionMarkdown).not.toContain('landed as');
+    }
+  });
+
+  it('[KG-6.2] asks for the head again once a first reading is stored, so a change landing while it was read is checked against it', async () => {
+    const cited = 'c'.repeat(40);
+
+    for (const run of ['retry', 'recheck'] as const) {
+      // Retry: c1 names no commit and is read at the head, SHA. Re-check: c1
+      // cites the head, and the head was asked for, for c0, before c1 was
+      // read. Either way, while c1 is read a change lands as NEWER; its
+      // check finds c1 unread and passes it over.
+      const pinned = run === 'recheck';
+      const t = harness({
+        entries: [entry('e1')],
+        citations: [
+          ...(pinned
+            ? [citation('c0', 'e1', { path: 'src/other.ts', commitSha: null })]
+            : []),
+          citation('c1', 'e1', {
+            checkResult: Check.UNKNOWN,
+            checkedAt: null,
+            checkedSha: null,
+            commitSha: pinned ? cited : null,
+          }),
+        ],
+      });
+      t.repo.head = { sha: pinned ? cited : SHA };
+      t.repo.code['src/other.ts'] = ORIGINAL;
+      const read = t.files.read.getMockImplementation() as NonNullable<
+        ReturnType<typeof t.files.read.getMockImplementation>
+      >;
+      t.files.read.mockImplementation(async (repo, path, ref) => {
+        if (path === 'src/retry.ts') {
+          t.repo.head = { sha: NEWER };
+        }
+
+        return read(repo, path, ref);
+      });
+      const queue = { add: jest.fn(async (): Promise<void> => undefined) };
+
+      await new EntryCitationsService(
+        t.prisma as never,
+        t.files as never,
+        t.judge as never,
+        undefined,
+        queue as never,
+      )[pinned ? 'recheck' : 'retryUnknown']('e1');
+
+      const read1 = pinned ? cited : SHA;
+      expect(t.reads).toEqual([
+        ...(pinned ? [{ path: 'src/other.ts', ref: cited }] : []),
+        { path: 'src/retry.ts', ref: read1 },
+      ]);
+      expect(t.citations.find((c) => c.id === 'c1')).toMatchObject({
+        checkResult: Check.HOLDS,
+        checkedSha: read1,
+      });
+      expect(queue.add).toHaveBeenCalledTimes(1);
+      expect(queue.add).toHaveBeenCalledWith(
+        CODE_LANDED_JOB,
+        {
+          workspaceId: WORKSPACE,
+          externalRepoId: 'gh-1',
+          sha: NEWER,
+          changedPaths: ['src/retry.ts'],
+          since: read1,
+        },
+        expect.objectContaining({
+          jobId: `${CODE_LANDED_JOB}:citation:c1:${NEWER}`,
+        }),
+      );
     }
   });
 

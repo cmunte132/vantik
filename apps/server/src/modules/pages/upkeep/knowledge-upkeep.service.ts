@@ -153,6 +153,7 @@ export default class KnowledgeUpkeepService {
         sha: change.sha,
         externalRepoId: change.externalRepoId,
         repo: repo?.fullName ?? null,
+        ...(change.since ? { since: change.since } : {}),
       });
 
       summary.stale += stale;
@@ -724,14 +725,29 @@ function correctionMarkdown(
     `Entry \`${row.entry.id}\` on the page "${row.entry.page.title}".`,
     what,
     '',
-    change
-      ? `The change landed as \`${change.sha}\`${change.repo ? ` on ${change.repo}` : ''}.`
-      : '',
+    change ? changeText(change) : '',
     '',
     ...citations.flatMap((citation) => [citation, '']),
     'To close this: correct the entry so it says what the code does and ' +
       'put it back into use, or archive it if it no longer applies.',
   ].join('\n');
+}
+
+/**
+ * What the check was of. A citation handed on after its first reading is
+ * checked at the head against every change since the commit it was read at,
+ * and which of them changed the cited code is not known, so no one commit is
+ * named as the change.
+ */
+function changeText(
+  change: NonNullable<MaintenanceEvidence['change']>,
+): string {
+  const on = change.repo ? ` on ${change.repo}` : '';
+
+  return change.since
+    ? `It was checked at \`${change.sha}\`${on}, against the changes that ` +
+        `landed after \`${change.since}\`, the commit it was first read at.`
+    : `The change landed as \`${change.sha}\`${on}.`;
 }
 
 function daysAgo(days: number): Date {

@@ -31,7 +31,13 @@ export interface CitationEvidence {
  * when the entry was last served or held, a disabled convention its counts.
  */
 export interface MaintenanceEvidence {
-  change?: { sha: string; externalRepoId: string; repo: string | null };
+  change?: {
+    sha: string;
+    externalRepoId: string;
+    repo: string | null;
+    /** For a citation handed on after its first reading: the commit read. */
+    since?: string;
+  };
   citations?: CitationEvidence[];
   windowDays?: number;
   lastServedAt?: string | null;

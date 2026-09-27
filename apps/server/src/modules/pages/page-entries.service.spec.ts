@@ -43,7 +43,7 @@ const HUMAN: WriterIdentity = { userId: 'human-1', tokenId: null };
 interface Options {
   policy?: PageEntryPolicyEnum;
   outstanding?: number;
-  userType?: 'Agent' | 'User';
+  userType?: 'Agent' | 'User' | 'System';
   entryStatus?: PageEntryStatusEnum;
   /** Who wrote the entry `updateEntry` finds. */
   entrySource?: string;
@@ -210,6 +210,34 @@ describe('entry policy', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('[KG-6.3] refuses the gardener, a system bot, on a LOCKED page too, and never puts its entry straight into use', async () => {
+    const locked = buildService({
+      policy: PageEntryPolicyEnum.LOCKED,
+      userType: 'System',
+    });
+
+    await expect(
+      locked.service.createEntry('page-1', AGENT, { content: 'a fact' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(locked.prisma.pageEntry.create).not.toHaveBeenCalled();
+
+    const open = buildService({
+      policy: PageEntryPolicyEnum.OPEN,
+      userType: 'System',
+    });
+
+    await open.service.createEntry('page-1', AGENT, {
+      content: 'a fact',
+      standing: true,
+    });
+
+    expect(open.prisma.pageEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: PageEntryStatusEnum.PROPOSED }),
+      }),
+    );
   });
 
   it('still lets a human append to a LOCKED page', async () => {

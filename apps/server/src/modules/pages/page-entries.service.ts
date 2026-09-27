@@ -139,7 +139,7 @@ export default class PageEntriesService {
 
     assertNoSecret(entryData.content);
 
-    const isAgent = await this.isAgent(writer.userId);
+    const isAgent = await this.isAutomated(writer.userId);
 
     if (page.entryPolicy === PageEntryPolicyEnum.LOCKED && isAgent) {
       throw new ForbiddenException({
@@ -355,7 +355,7 @@ export default class PageEntriesService {
       throw new NotFoundException({ message: `Entry ${entryId} not found` });
     }
 
-    const agent = await this.isAgent(userId);
+    const agent = await this.isAutomated(userId);
 
     if (agent) {
       this.assertAgentMayEdit(current, userId, entryData);
@@ -505,7 +505,7 @@ export default class PageEntriesService {
     // Every bulk request is a triage decision — it only sets a status — and
     // triage is the review step an agent's writes wait for. An agent able to
     // make it would be its own reviewer.
-    if (await this.isAgent(userId)) {
+    if (await this.isAutomated(userId)) {
       throw new ForbiddenException({
         message:
           'Triage is for people: accepting, disputing or archiving entries in ' +
@@ -1184,13 +1184,21 @@ export default class PageEntriesService {
     }
   }
 
-  private async isAgent(userId: string): Promise<boolean> {
+  /**
+   * Whether a writer is automated: an agent, or a system bot such as the
+   * knowledge gardener. Neither is a person, so both are held to what an
+   * agent is: no writing to a locked page, no entry straight into use, and
+   * no decision that stands for a person's.
+   */
+  private async isAutomated(userId: string): Promise<boolean> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { type: true },
     });
 
-    return user?.type === UserTypeEnum.Agent;
+    return (
+      user?.type === UserTypeEnum.Agent || user?.type === UserTypeEnum.System
+    );
   }
 }
 

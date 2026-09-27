@@ -8,8 +8,8 @@ next session starts by reading it.
 - Current phase: 6, in review: KG-6.1 to KG-6.5 implemented and
   mutation-checked; review round 1 (FAIL, two blocking findings) fixed and
   answered; round 2 PASS with five non-blocking findings, all fixed; round
-  3 PASS with four non-blocking findings, all fixed; round 4 next, to
-  confirm them. PR #45
+  3 PASS with four non-blocking findings, all fixed; round 4 PASS with
+  two low findings, both fixed; round 5 next, to confirm them. PR #45
   is open from this branch, so the phase 6 commits are in it too; its
   description says so.
   Phases 4 and 5 are in PR #45; phases 6 and 7 go in the third pull
@@ -732,12 +732,15 @@ next session starts by reading it.
     citation, or the re-check of one) is stored only while the citation is
     still unread, under the lock, and is stamped with when the citation was
     written: it is older than any head read since, and never outranks one,
-    however close the two finish. Stamps come from the servers' clocks; two
+    however close the two finish. An unread citation that names no commit
+    is read at the head, and stamped with when that was asked for. Stamps come from the servers' clocks; two
     readings of heads could be misordered only if the heads were asked for
     within the servers' skew of each other with a change landing between,
     which is noted at `readBefore`. Before acting, `settle` also holds the
-    entry's row (`SELECT ... FOR UPDATE`), so a person's change to it waits
-    rather than landing between reading the entry and acting on it.
+    entry's row (`SELECT ... FOR NO KEY UPDATE`), so a person's change to
+    it waits rather than landing between reading the entry and acting on
+    it, while rows referring to it (its uses as it is served) are still
+    written.
   - **Read once.** A citation already read at the change's own commit is
     not read or judged again: that reading comes back as stored and is
     acted on like any other. So while the change is still the head, the
@@ -1796,6 +1799,34 @@ hash) and was removed; a stored reading's hash survived until the stored
 judgment test above killed it; two did not compile at first and were
 reworded; all others killed. Full server suite: 1829 passed, 15 skipped.
 
+### Phase 6, round 4 (same reviewer, on the round 3 fixes)
+
+The reviewer read a9f909d..2601458, compared the schema change with
+`prisma migrate diff`, ran tsc and the full server suite (1829 passed),
+re-ran their earlier probes (R1, R5 five times out of five, B1, B2, C), and
+checked the row lock's reach on Postgres. R1 to R4 resolved: the code hash
+is stable over the judged region, the removed guard was equivalent, and
+the lock order admits no cycle (citation rows are written only under the
+entry's advisory lock, so nothing holding the entry's row waits on it).
+Verdict PASS, with two low findings, both fixed:
+
+- **S1. `FOR UPDATE` also held off rows referring to the entry** (a
+  foreign-key check's key-share lock), so serving it waited on `settle`.
+  Now `FOR NO KEY UPDATE`, which still holds off a person's update of the
+  entry; checked on Postgres (an update waited 906 ms on the held row, an
+  insert referring to it did not wait). Test: the row-lock test's harness
+  now answers only to this statement.
+- **S2. An unread citation that names no commit is read at the head, not
+  a cited commit,** yet was stamped with when it was written, so it was
+  served as old and never counted as found to hold. It is now stamped with
+  when the head was asked for, as any head reading is; a reading of a
+  cited commit keeps the citation's written time. Test: "[KG-6.2] stamps
+  an unread citation that names no commit, read at the head, with when the
+  head was asked for".
+
+Mutation-checked: 3 mutants over these fixes, all killed. Full server
+suite: 1830 passed, 15 skipped.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -2047,3 +2078,7 @@ Give the evidence, and stop until the maintainer answers.
   known by the code judged (`judgedCodeHash`), not the head commit;
   `settle` holds the entry's row before reading it; a reading of a cited
   commit is stamped with when the citation was written; job docs updated.
+- 2026-09-27: Phase 6 review round 4: PASS, with two low findings, both
+  fixed with tests: the entry row is held `FOR NO KEY UPDATE`, so serving
+  it never waits; an unread citation read at the head is stamped as a head
+  reading.

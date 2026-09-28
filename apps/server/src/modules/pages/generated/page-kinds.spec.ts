@@ -8,7 +8,7 @@ import { convertMarkdownToTiptapJson } from 'common/utils/tiptap.utils';
 import KnowledgeIndexService from '../knowledge-index.service';
 import PageLinksService from '../page-links.service';
 import { PagesController } from '../pages.controller';
-import { REFRESH_PAGE_JOB } from '../pages.interface';
+import { REFRESH_PAGE_JOB, refreshPageJobOptions } from '../pages.interface';
 import PagesService from '../pages.service';
 
 /**
@@ -25,6 +25,10 @@ const HOUR = 60 * 60 * 1000;
 type Row = Record<string, any>;
 
 function setup(current?: Row, userType = 'User') {
+  // `updatedAt`, as postgres stamps it on every write, a second apart.
+  let writes = 0;
+  const stamp = () =>
+    new Date(Date.parse('2026-09-02T00:00:00Z') + ++writes * 1_000);
   const prisma = {
     user: {
       findUnique: jest.fn(async (): Promise<Row> => ({ type: userType })),
@@ -39,11 +43,13 @@ function setup(current?: Row, userType = 'User') {
         question: null,
         description: null,
         ...data,
+        updatedAt: stamp(),
       })),
       update: jest.fn(async ({ where, data }: Row) => ({
         ...current,
         id: where.id,
         ...data,
+        updatedAt: stamp(),
       })),
     },
     pageHistory: {
@@ -138,7 +144,9 @@ describe('authored and generated pages', () => {
     expect(queue.add).toHaveBeenCalledWith(
       REFRESH_PAGE_JOB,
       { pageId: 'page-new' },
-      expect.objectContaining({ jobId: `${REFRESH_PAGE_JOB}:page-new` }),
+      expect.objectContaining({
+        jobId: `${REFRESH_PAGE_JOB}:page-new:${Date.parse('2026-09-02T00:00:01Z')}`,
+      }),
     );
   });
 
@@ -309,6 +317,54 @@ describe('authored and generated pages', () => {
       { title: 'Deploys' },
     );
     expect(renamed.prisma.page.update).toHaveBeenCalled();
+  });
+
+  it('[KG-7.1] [KG-7.2] queues a build of its own each time a page is made or asked anew, which no job held for it swallows', async () => {
+    const { service, queue } = setup(GENERATED);
+    // As Bull does: a job id it already holds (waiting, delayed, running,
+    // or kept after failing) is not added again.
+    const held = new Map<string, unknown>();
+    queue.add.mockImplementation(async (...args: unknown[]) => {
+      const { jobId } = args[2] as { jobId: string };
+
+      if (!held.has(jobId)) {
+        held.set(jobId, args[1]);
+      }
+
+      return {};
+    });
+
+    // Made: its first build is queued. Say it fails twice (the model is
+    // down), so Bull keeps it.
+    await service.createPage(WORKSPACE, USER, {
+      title: 'Deploying',
+      kind: PageKindEnum.GENERATED,
+      question: 'How do we deploy the server?',
+    });
+    expect(held.size).toBe(1);
+
+    // Asked anew, then again while that build still waits or runs: each
+    // change is a job of its own, for the page it names.
+    await service.updatePage(GENERATED.id, USER, {
+      question: 'How do we roll back a deploy?',
+    });
+    await service.updatePage(GENERATED.id, USER, {
+      question: 'How do we deploy on Fridays?',
+    });
+    expect(held.size).toBe(3);
+    expect([...held.values()].slice(1)).toEqual([
+      { pageId: GENERATED.id },
+      { pageId: GENERATED.id },
+    ]);
+    for (const id of [...held.keys()].slice(1)) {
+      expect(id.startsWith(`${REFRESH_PAGE_JOB}:${GENERATED.id}:`)).toBe(true);
+    }
+
+    // The same request queued twice is still one job.
+    const asked = new Date('2026-09-02T00:00:05Z');
+    expect(refreshPageJobOptions(GENERATED.id, asked).jobId).toBe(
+      refreshPageJobOptions(GENERATED.id, new Date(asked)).jobId,
+    );
   });
 
   it('[KG-7.1] rebuilds a generated page asked a new question, without waiting for its evidence to change', async () => {

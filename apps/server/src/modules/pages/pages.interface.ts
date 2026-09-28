@@ -105,10 +105,19 @@ export const PAGE_REFRESH_JOB_ID = 'generated-page-refresh';
  */
 export const REFRESH_PAGE_JOB = 'refreshGeneratedPage';
 
-/** One job per page at a time; a request while one waits is the same request. */
-export function refreshPageJobOptions(pageId: string, delay = 0): JobOptions {
+/**
+ * One job per request: the page as the making or the question change left
+ * it (`asked`, its `updatedAt` then). The same request queued twice is one
+ * job; a later request is its own, so a job still waiting, running or kept
+ * after failing never swallows it (Bull ignores an id it already holds).
+ */
+export function refreshPageJobOptions(
+  pageId: string,
+  asked: Date,
+  delay = 0,
+): JobOptions {
   return {
-    jobId: `${REFRESH_PAGE_JOB}:${pageId}`,
+    jobId: `${REFRESH_PAGE_JOB}:${pageId}:${asked.getTime()}`,
     ...(delay > 0 ? { delay } : {}),
     attempts: 2,
     backoff: { type: 'exponential', delay: 60_000 },

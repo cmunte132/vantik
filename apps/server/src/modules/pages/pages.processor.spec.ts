@@ -749,9 +749,9 @@ describe('refreshing generated pages', () => {
       expect(refresh).toHaveBeenCalledWith('page-1');
     }
 
-    // One job per page at a time.
-    expect(refreshPageJobOptions('page-1')).toMatchObject({
-      jobId: `${REFRESH_PAGE_JOB}:page-1`,
+    // One job per request: the page and when it was made or asked anew.
+    expect(refreshPageJobOptions('page-1', new Date(5_000))).toMatchObject({
+      jobId: `${REFRESH_PAGE_JOB}:page-1:5000`,
       attempts: 2,
     });
   });

@@ -299,7 +299,10 @@ it covers.
 - **A new question is a new page.** When you change a page's question, the
   server rebuilds it for the new one without waiting for an entry to change.
   The minimum interval still applies: the rebuild runs once it has passed
-  since the last build, even with the hourly look turned off.
+  since the last build, even with the hourly look turned off. Every new
+  question gets its own build, even while an earlier one is still waiting
+  or running. A build that cannot reach the search index or the model is
+  tried once more, and after that is left to the hourly look.
 - **Edits, not rewrites.** A model proposes edits to single sections: replace
   one, insert one, or remove one. A section that no edit names stays exactly
   as it was. A new section can cite only the entries that the refresh read.
@@ -372,7 +375,7 @@ read is ignored, and the next layer applies.
 | `KNOWLEDGE_GAP_ISSUE_MIN_COUNT` | `5` | `gapIssueMinCount` | How often a question must be asked before it gets an issue. |
 | `KNOWLEDGE_GAP_ISSUES_CRON` | `0 4 * * 1` (weekly, Monday 04:00) | `gapIssuesCron` | When gap issues are opened. `off` disables the job. A workspace can only set `off`: one job serves every workspace. |
 | `KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL` | `6h` | `pageRefreshMinInterval` | The least time between two builds of one generated page, such as `90m`, `6h` or `1d`. |
-| `KNOWLEDGE_PAGE_REFRESH_CRON` | `23 * * * *` (hourly) | none | When the server looks for generated pages to rebuild. `off` disables it, and a page is then built only when it is made or its question changes (after the minimum interval). |
+| `KNOWLEDGE_PAGE_REFRESH_CRON` | `23 * * * *` (hourly) | none | When the server looks for generated pages to rebuild. `off` disables it, and a page is then built only when it is made or its question changes (after the minimum interval), and a build that failed twice is not tried again. |
 
 These settings of the knowledge bank existed before, and apply to every
 workspace:

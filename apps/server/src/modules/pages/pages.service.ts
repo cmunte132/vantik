@@ -367,7 +367,7 @@ export default class PagesService {
     await this.indexer?.pageChanged(page.id);
 
     if (generated) {
-      await this.queueRefresh(page.id);
+      await this.queueRefresh(page.id, page.updatedAt);
     }
 
     return this.withMarkdown(page);
@@ -524,6 +524,7 @@ export default class PagesService {
     if (questionChanged) {
       await this.queueRefresh(
         pageId,
+        page.updatedAt,
         untilDue(current.refreshedAt, current.workspace?.preferences),
       );
     }
@@ -533,15 +534,20 @@ export default class PagesService {
 
   /**
    * Asks for a generated page to be built as soon as it may be, `delay` from
-   * now, rather than at the next look. Best effort: the scheduled look builds
-   * it anyway, when it runs.
+   * now, rather than at the next look: one job for each time it is made or
+   * asked anew (`asked`, the page's `updatedAt` then). Best effort: the
+   * scheduled look builds it anyway, when it runs.
    */
-  private async queueRefresh(pageId: string, delay = 0): Promise<void> {
+  private async queueRefresh(
+    pageId: string,
+    asked: Date,
+    delay = 0,
+  ): Promise<void> {
     try {
       await this.pagesQueue?.add(
         REFRESH_PAGE_JOB,
         { pageId },
-        refreshPageJobOptions(pageId, delay),
+        refreshPageJobOptions(pageId, asked, delay),
       );
     } catch {
       // The next scheduled look finds it.

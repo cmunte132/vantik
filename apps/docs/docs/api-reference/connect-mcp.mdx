@@ -241,10 +241,20 @@ of the guidance certain:
   file the issue and to record the work. If the change is too small for an
   issue, or the repository does not use Vantik, the agent can say so in one line
   and stop.
+- **Before the agent stops**, Vantik also finds knowledge that the agent did not
+  record. If the session changed files ten times or more, and the agent wrote
+  nothing to the knowledge bank in that period, Vantik holds the agent once. It
+  asks the agent to record what the work taught, one fact for each `remember`
+  call, and to supersede each entry that the work made false. A fact, a change
+  to a page, or a proposal for a page counts as a write. If the work taught
+  nothing new, the agent can say so in one line and stop. The session brief
+  also tells the agent to record each fact when it learns it.
 
 Vantik asks once for each quiet period. After the agent writes to the issue, a
 new quiet period of 20 minutes can cause one more request. Vantik asks about
-work with no issue one time in a session. The rules are on the server, so the
+work with no issue one time in a session. Vantik asks about knowledge again only
+after ten more edits. If more than one check applies at a stop, the agent gets
+one message. The rules are on the server, so the
 hooks only relay the answer. The hooks write nothing to the tracker. If Vantik
 does not answer, the hook prints `{}`, and the agent continues as if there were
 no hooks.

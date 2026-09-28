@@ -91,6 +91,12 @@ of the guidance certain:
   name of the agent, Vantik holds the agent once and asks it to find or file the
   issue. If the change is too small, or the repository does not use Vantik, the
   agent can say so in one line and stop.
+- **Before the agent stops**, Vantik also finds knowledge that the agent did not
+  record. If the session changed files ten times or more, and the agent wrote
+  nothing to the knowledge bank in that period, Vantik holds the agent once and
+  asks it to record what the work taught with `remember`, and to supersede each
+  entry that the work made false. If the work taught nothing new, the agent can
+  say so in one line and stop. Vantik asks again only after ten more edits.
 
 The rules are on the server, so the hooks only relay the answer. The hooks
 write nothing to the tracker. If Vantik does not answer, the agent continues as

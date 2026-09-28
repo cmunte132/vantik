@@ -120,7 +120,8 @@ function SkillInstall({
  * The third, and the one that is checked rather than advised: hooks that brief
  * the agent when a session begins, name the pages of the knowledge bank that
  * match each prompt, and hold the agent at a stop once. The stop hook holds it
- * over an issue that went quiet, or over work that has no issue.
+ * over an issue that went quiet, over work that has no issue, or over a long
+ * stretch of work that recorded nothing in the knowledge bank.
  *
  * Offered after the skills, because they enforce what the skills explain; an
  * agent held at a stop without the guide still gets told what to do, but one
@@ -138,9 +139,10 @@ function HookInstall({ harness }: { harness: Harness }) {
           told what the agent has in progress, and each prompt is told which
           pages of the knowledge bank match it. An agent about to stop is held
           once if an issue it has in progress has gone 20 minutes without an
-          update from it, or if it changed files with nothing in progress. The
-          check runs on this server; the hooks write nothing to the tracker
-          themselves.
+          update from it, if it changed files with nothing in progress, or if it
+          changed files ten times and recorded nothing it learned in the
+          knowledge bank. The check runs on this server; the hooks write nothing
+          to the tracker themselves.
         </p>
         <p className="text-sm text-muted-foreground">{hooks.intro}</p>
       </div>

@@ -17,6 +17,16 @@ export interface InProgressIssue {
 }
 
 /**
+ * The brief asks for knowledge while the agent works. At the stop, the agent
+ * has forgotten the details, or a compaction has discarded them.
+ */
+const RECORD_AS_YOU_GO =
+  'When you learn something the next session would otherwise have to ' +
+  'learn again (a decision and its reason, a gotcha, a convention, how a ' +
+  'part of the system actually works), record it then with remember, one ' +
+  'fact per call.';
+
+/**
  * The session brief: what this agent already has in progress.
  *
  * Deliberately not a knowledge dump. `load_context` counts what it serves as
@@ -31,7 +41,7 @@ export function sessionBrief(issues: InProgressIssue[], now: number): string {
       'Vantik: nothing is in progress under your name. Before substantial ' +
       'work, find or file its issue (search_tasks), read its Definition of ' +
       'Done (get_task), and pick_up_task before the first edit. Before ' +
-      'reading code in an area new to you, call load_context with that area.'
+      `reading code in an area new to you, call load_context with that area. ${RECORD_AS_YOU_GO}`
     );
   }
 
@@ -45,7 +55,7 @@ export function sessionBrief(issues: InProgressIssue[], now: number): string {
       'when the approach changes or you stop, and close_task with a ' +
       'resolution when it is done. If this session is about something else, ' +
       'leave them be. Before reading code in an area new to you, call ' +
-      'load_context with that area.',
+      `load_context with that area. ${RECORD_AS_YOU_GO}`,
   ].join('\n');
 }
 
@@ -138,6 +148,39 @@ export function untrackedStopReason(edits: number): string {
       'it is done. If the change is too small to track, or this repository ' +
       'does not use Vantik, say so in one line and stop. Vantik asks this ' +
       'once for each session.',
+  ].join('\n');
+}
+
+/**
+ * This message holds up a stop when the session changed files many times and
+ * the agent wrote nothing to the knowledge bank.
+ *
+ * It asks for facts, not for a report. A summary of the work belongs on the
+ * issue, and a knowledge bank full of summaries is a knowledge bank that
+ * nobody searches. It also asks the agent to correct the entries that the
+ * work made false, because a stale entry is worse than no entry.
+ *
+ * The message gives a way out. Much work teaches nothing new, and one line
+ * from the agent costs less than an entry that says nothing.
+ */
+export function knowledgeStopReason(
+  edits: number,
+  { also = false }: { also?: boolean } = {},
+): string {
+  return [
+    `${also ? 'Also' : 'Before you stop'}: this session changed files ` +
+      `${count(edits, 'time')} and recorded nothing in the Vantik knowledge ` +
+      'bank.',
+    'What did this work teach that the next session would otherwise have to ' +
+      'learn again? Record each thing with remember, one fact per call, ' +
+      'scoped to where it applies and citing the code or issue it rests on: ' +
+      'a decision and its reason, a gotcha that cost time, a convention a ' +
+      'newcomer would not guess, how a part of the system actually works. ' +
+      'If this session changed behaviour that the bank describes (check with ' +
+      'load_context for the area), record the new behaviour and supersede ' +
+      'the entry it replaces. Do not record a summary of what you did; that ' +
+      'belongs on the issue. If nothing here is worth keeping, say so in one ' +
+      'line and stop.',
   ].join('\n');
 }
 

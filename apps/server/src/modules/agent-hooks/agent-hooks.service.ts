@@ -13,6 +13,7 @@ import {
   InProgressIssue,
   KnowledgePointer,
   knowledgePointers,
+  knowledgeStopReason,
   sessionBrief,
   stopReason,
   untrackedStopReason,
@@ -44,6 +45,15 @@ const MAX_ISSUES = 10;
  * few, large issues.
  */
 export const EDITS_WORTH_AN_ISSUE = 5;
+
+/**
+ * A session must change files this number of times, with no write to the
+ * knowledge bank, before the stop check asks what the agent learned. The
+ * number is larger than {@link EDITS_WORTH_AN_ISSUE}: most short fixes teach
+ * nothing new, and an agent that is asked too frequently learns to answer
+ * "nothing" without thought.
+ */
+export const EDITS_WORTH_KNOWLEDGE = 10;
 
 /**
  * A shorter prompt, for example "yes" or "go on", continues the work. It is not
@@ -82,6 +92,12 @@ interface SessionState {
   edits: number;
   /** When the hook held up the session for work with no issue, or null. */
   untrackedNudgedAt: number | null;
+  /**
+   * The edit count and the time of the last knowledge check. The next check
+   * comes after {@link EDITS_WORTH_KNOWLEDGE} more edits, and looks for writes
+   * to the knowledge bank after this time.
+   */
+  knowledgeCheck: { edits: number; at: number };
   /** The pages that the hook named to this session. It names each page once. */
   pointed: string[];
   /**
@@ -386,6 +402,11 @@ export class AgentHooksService {
    * a long one is held up over the silence it caused rather than one it
    * inherited. After a nudge, only a new word on the issue starts a stretch
    * that can earn another.
+   *
+   * The same stop also asks for work with no issue, and for knowledge that
+   * the agent did not record. The tracker holds what was done. The knowledge
+   * bank holds what the next session must know, and only the agent that did
+   * the work can write it.
    */
   private async stop(
     actor: HookActor,
@@ -432,8 +453,25 @@ export class AgentHooksService {
       state.edits >= EDITS_WORTH_AN_ISSUE &&
       state.untrackedNudgedAt === null;
 
-    if (stale.length === 0 && !untracked) {
-      await this.save(actor, sessionId, { ...state, seenAt: now });
+    // This is knowledge that is not recorded: the session changed files many
+    // times after the last check, and the agent wrote nothing to the
+    // knowledge bank in that period. Each check starts a new period, so the
+    // hook asks again only after more work.
+    const editsSinceCheck = state.edits - state.knowledgeCheck.edits;
+    const knowledgeDue = editsSinceCheck >= EDITS_WORTH_KNOWLEDGE;
+    const unrecorded =
+      knowledgeDue &&
+      !(await this.recordedKnowledge(actor, state.knowledgeCheck.at));
+    const knowledgeCheck = knowledgeDue
+      ? { edits: state.edits, at: now }
+      : state.knowledgeCheck;
+
+    if (stale.length === 0 && !untracked && !unrecorded) {
+      await this.save(actor, sessionId, {
+        ...state,
+        seenAt: now,
+        knowledgeCheck,
+      });
       return null;
     }
 
@@ -448,6 +486,7 @@ export class AgentHooksService {
       seenAt: now,
       nudged,
       untrackedNudgedAt: untracked ? now : state.untrackedNudgedAt,
+      knowledgeCheck,
     });
 
     // Only once the nudge is on record. Unrecorded, the next stop would find
@@ -457,9 +496,60 @@ export class AgentHooksService {
       return null;
     }
 
-    return untracked
+    // A harness holds the agent one time for each stop, so the service gives
+    // all the requests in one message.
+    const tracker = untracked
       ? untrackedStopReason(state.edits)
-      : stopReason(stale, now);
+      : stale.length > 0
+        ? stopReason(stale, now)
+        : null;
+    const knowledge = unrecorded
+      ? knowledgeStopReason(editsSinceCheck, { also: tracker !== null })
+      : null;
+
+    return [tracker, knowledge].filter(Boolean).join('\n\n');
+  }
+
+  /**
+   * True if the agent wrote to the knowledge bank of this workspace after
+   * `since`: a fact (`remember`), a change to a page (`write_page`), or a
+   * proposal for a page body (`consolidate_knowledge`).
+   *
+   * If the query fails, the method returns true, and the agent can stop. A
+   * request for knowledge is not worth a stop that the agent cannot explain.
+   */
+  private async recordedKnowledge(
+    { userId, workspaceId }: HookActor,
+    since: number,
+  ): Promise<boolean> {
+    const after = { gte: new Date(since) };
+    const page = { workspaceId };
+
+    try {
+      const writes = await Promise.all([
+        this.prisma.pageEntry.findFirst({
+          where: { sourceUserId: userId, createdAt: after, page },
+          select: { id: true },
+        }),
+        this.prisma.pageHistory.findFirst({
+          where: { userId, createdAt: after, page },
+          select: { id: true },
+        }),
+        this.prisma.pageProposal.findFirst({
+          where: { proposedById: userId, createdAt: after, page },
+          select: { id: true },
+        }),
+      ]);
+
+      return writes.some((write) => write !== null);
+    } catch (error) {
+      this.logger.error({
+        message: `Could not look for knowledge writes: ${(error as Error).message}`,
+        where: 'AgentHooksService.recordedKnowledge',
+        error: error as Error,
+      });
+      return true;
+    }
   }
 
   /**
@@ -623,6 +713,7 @@ function fresh(now: number): SessionState {
     nudged: {},
     edits: 0,
     untrackedNudgedAt: null,
+    knowledgeCheck: { edits: 0, at: now },
     pointed: [],
     pending: [],
   };

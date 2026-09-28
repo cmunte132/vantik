@@ -8,6 +8,7 @@ import { HookEvent, HookInput } from './agent-hooks.harness';
 import {
   AgentHooksService,
   EDITS_WORTH_AN_ISSUE,
+  EDITS_WORTH_KNOWLEDGE,
   HookActor,
   IDLE_MS,
   POINTER_DISTANCE,
@@ -51,8 +52,36 @@ function fakeTracker() {
   const notes: Write[] = [];
   const history: Write[] = [];
   const ticks: Write[] = [];
+  /** Writes to the knowledge bank, by kind of write. */
+  const knowledge: Array<{
+    table: 'pageEntry' | 'pageHistory' | 'pageProposal';
+    userId: string;
+    workspaceId: string;
+    at: number;
+  }> = [];
   const calls = { issueFindMany: 0 };
   let failing = false;
+  let knowledgeFailing = false;
+
+  const knowledgeWrite =
+    (
+      table: 'pageEntry' | 'pageHistory' | 'pageProposal',
+      author: 'sourceUserId' | 'userId' | 'proposedById',
+    ) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async ({ where }: any) => {
+      if (knowledgeFailing) {
+        throw new Error('database unavailable');
+      }
+      const row = knowledge.find(
+        (write) =>
+          write.table === table &&
+          write.userId === where[author] &&
+          write.workspaceId === where.page.workspaceId &&
+          write.at >= where.createdAt.gte.getTime(),
+      );
+      return row ? { id: `${table}-1` } : null;
+    };
 
   const latest = (rows: Write[], ids: string[], userId: string) =>
     ids
@@ -127,6 +156,9 @@ function fakeTracker() {
           ({ issueId, at }) => ({ issueId, _max: { createdAt: at } }),
         ),
     },
+    pageEntry: { findFirst: knowledgeWrite('pageEntry', 'sourceUserId') },
+    pageHistory: { findFirst: knowledgeWrite('pageHistory', 'userId') },
+    pageProposal: { findFirst: knowledgeWrite('pageProposal', 'proposedById') },
   };
 
   return {
@@ -135,9 +167,13 @@ function fakeTracker() {
     notes,
     history,
     ticks,
+    knowledge,
     calls,
     fail: () => {
       failing = true;
+    },
+    failKnowledge: () => {
+      knowledgeFailing = true;
     },
   };
 }
@@ -548,8 +584,15 @@ describe('work with no issue', () => {
   });
 
   it('asks only once in a stretch, whatever the agent answered', async () => {
-    const { hook, issues, edits } = setup();
+    const { hook, issues, edits, knowledge } = setup();
     issues.length = 0;
+    // The agent recorded what it learned, so only the issue check can speak.
+    knowledge.push({
+      table: 'pageEntry',
+      userId: ME,
+      workspaceId: 'ws-1',
+      at: T0,
+    });
 
     await hook('prompt');
     await edits(EDITS_WORTH_AN_ISSUE);
@@ -615,6 +658,154 @@ describe('work with no issue', () => {
     await edits(EDITS_WORTH_AN_ISSUE);
 
     expect(await hook('stop')).toContain('nothing is in progress');
+  });
+});
+
+describe('knowledge the session did not record', () => {
+  it('holds up a stop after a stretch of edits with nothing in the knowledge bank', async () => {
+    const { hook, edits } = setup();
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_KNOWLEDGE);
+    const reason = await hook('stop');
+
+    expect(reason).toContain(
+      `Before you stop: this session changed files ${EDITS_WORTH_KNOWLEDGE} times and recorded nothing in the Vantik knowledge bank.`,
+    );
+    expect(reason).toContain('remember, one fact per call');
+    expect(reason).toContain('supersede the entry it replaces');
+    // A summary of the work is not knowledge, and much work teaches nothing.
+    expect(reason).toContain('Do not record a summary of what you did');
+    expect(reason).toContain('say so in one line and stop');
+  });
+
+  it('lets a shorter stretch of edits stop', async () => {
+    const { hook, edits } = setup();
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_KNOWLEDGE - 1);
+
+    expect(await hook('stop')).toBeNull();
+  });
+
+  it.each(['pageEntry', 'pageHistory', 'pageProposal'] as const)(
+    'lets the agent stop when it wrote to the bank (%s)',
+    async (table) => {
+      const { hook, edits, knowledge } = setup();
+
+      await hook('prompt');
+      await edits(EDITS_WORTH_KNOWLEDGE);
+      at(3);
+      knowledge.push({
+        table,
+        userId: ME,
+        workspaceId: 'ws-1',
+        at: Date.now(),
+      });
+
+      expect(await hook('stop')).toBeNull();
+    },
+  );
+
+  it('does not count a write by someone else, in another workspace, or before the session', async () => {
+    const { hook, edits, knowledge } = setup();
+    knowledge.push(
+      { table: 'pageEntry', userId: ME, workspaceId: 'ws-1', at: T0 - MINUTE },
+      { table: 'pageEntry', userId: SOMEONE_ELSE, workspaceId: 'ws-1', at: T0 },
+      { table: 'pageEntry', userId: ME, workspaceId: 'ws-2', at: T0 },
+    );
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_KNOWLEDGE);
+
+    expect(await hook('stop')).toContain('recorded nothing');
+  });
+
+  it('asks again only after another stretch of edits', async () => {
+    const { hook, edits } = setup();
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_KNOWLEDGE);
+    await hook('stop');
+
+    await edits(EDITS_WORTH_KNOWLEDGE - 1);
+    expect(await hook('stop')).toBeNull();
+
+    await edits(1);
+    expect(await hook('stop')).toContain(
+      `changed files ${EDITS_WORTH_KNOWLEDGE} times`,
+    );
+  });
+
+  it('starts a new stretch from a write to the bank', async () => {
+    const { hook, edits, knowledge } = setup();
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_KNOWLEDGE);
+    at(1);
+    knowledge.push({
+      table: 'pageEntry',
+      userId: ME,
+      workspaceId: 'ws-1',
+      at: Date.now(),
+    });
+    at(2);
+    expect(await hook('stop')).toBeNull();
+
+    // The fact that the agent wrote is old now. Only more work after it
+    // earns another request.
+    at(5);
+    await edits(EDITS_WORTH_KNOWLEDGE - 1);
+    expect(await hook('stop')).toBeNull();
+
+    await edits(1);
+    expect(await hook('stop')).toContain('recorded nothing');
+  });
+
+  it('gives one message when the session also has work with no issue', async () => {
+    const { hook, issues, edits } = setup();
+    issues.length = 0;
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_KNOWLEDGE);
+    const reason = await hook('stop');
+
+    expect(reason).toContain('nothing is in progress under your name');
+    expect(reason).toContain(
+      `Also: this session changed files ${EDITS_WORTH_KNOWLEDGE} times and recorded nothing`,
+    );
+  });
+
+  it('gives one message when an issue has also gone quiet', async () => {
+    const { hook, edits } = setup();
+
+    await hook('prompt');
+    at(QUIET_MS / MINUTE);
+    await edits(EDITS_WORTH_KNOWLEDGE);
+    const reason = await hook('stop');
+
+    expect(reason).toContain('ENG-42 Rate-limit the webhook');
+    expect(reason).toContain('Also: this session changed files');
+  });
+
+  it('lets the agent stop when it cannot read the bank', async () => {
+    const { hook, edits, failKnowledge } = setup();
+    failKnowledge();
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_KNOWLEDGE);
+
+    expect(await hook('stop')).toBeNull();
+  });
+
+  it('asks for knowledge as the agent works, in the brief', async () => {
+    const { hook, issues } = setup();
+
+    expect(await hook('prompt')).toContain('with remember, one fact per call');
+
+    issues.length = 0;
+    at(IDLE_MS / MINUTE + 5);
+    expect(await hook('prompt')).toContain('with remember, one fact per call');
   });
 });
 

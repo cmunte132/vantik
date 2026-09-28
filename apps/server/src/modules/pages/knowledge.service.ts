@@ -3,7 +3,6 @@ import {
   KnowledgeProof,
   KnowledgeTrustEnum,
   PageEntryKindEnum,
-  PageEntryStatusEnum,
 } from '@vantikhq/types';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'nestjs-prisma';
@@ -270,8 +269,12 @@ export default class KnowledgeService {
       return [];
     }
 
+    // Served entries: standing, or consolidated as a page's evidence. A
+    // consolidated entry is packed too, conventions pinned included: its fact
+    // is in a page body, and page bodies are not packed, so leaving it out
+    // would retire it for runs.
     const live: Prisma.PageEntryWhereInput = {
-      status: PageEntryStatusEnum.STANDING,
+      status: { in: SERVED_STATUSES },
       deleted: null,
       page: { workspaceId, deleted: null },
     };
@@ -297,15 +300,9 @@ export default class KnowledgeService {
       (id) => !conventionIds.has(id),
     );
 
-    // A consolidated entry is packed too: its fact is in a page body, and
-    // page bodies are not packed, so leaving it out would retire it for runs.
     const rows = ranked.length
       ? await this.prisma.pageEntry.findMany({
-          where: {
-            ...live,
-            status: { in: SERVED_STATUSES },
-            id: { in: ranked },
-          },
+          where: { ...live, id: { in: ranked } },
           select: PACKED_ENTRY_SELECT,
         })
       : [];

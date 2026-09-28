@@ -50,7 +50,7 @@ import {
 } from './findings';
 import KnowledgeIssues, { KNOWLEDGE_BOT } from './knowledge-issues';
 import KnowledgeUpkeepService from './knowledge-upkeep.service';
-import { type MaintenanceEvidence } from './maintenance';
+import { IN_USE, type MaintenanceEvidence } from './maintenance';
 import { redactSecrets } from '../triage/triage-policy';
 
 /** Run ends whose review said something about the work, as for signals. */
@@ -302,15 +302,18 @@ export default class KnowledgeConventionsService {
    * is.
    */
   async weigh(entryId: string): Promise<Weighed> {
+    // In use: standing, or consolidated, which is still served (pinned to
+    // its modules' runs, as its page's evidence) and so still weighed.
     const entry = await this.prisma.pageEntry.findFirst({
       where: {
         id: entryId,
         deleted: null,
-        status: PageEntryStatus.STANDING,
+        status: { in: IN_USE },
         kind: PageEntryKind.CONVENTION,
       },
       select: {
         id: true,
+        status: true,
         verifiedAt: true,
         sourceUserId: true,
         page: {
@@ -364,9 +367,12 @@ export default class KnowledgeConventionsService {
     };
 
     const done = await this.prisma.$transaction(async (tx) => {
-      // A person vouched for it, or keeps its page by hand: asked, not done.
+      // A person vouched for it, folded it into its page's body (which a
+      // person then corrects too), or keeps its page by hand: asked, not
+      // done.
       if (
         entry.verifiedAt ||
+        entry.status === PageEntryStatus.CONSOLIDATED ||
         entry.page.entryPolicy === PageEntryPolicy.LOCKED
       ) {
         const asked = await this.upkeep.propose(tx, {
@@ -511,9 +517,8 @@ export default class KnowledgeConventionsService {
           deleted: null,
           OR: [
             {
-              status: {
-                in: [PageEntryStatus.PROPOSED, PageEntryStatus.STANDING],
-              },
+              // Waiting, or in use: standing or consolidated.
+              status: { in: [PageEntryStatus.PROPOSED, ...IN_USE] },
             },
             { updatedAt: { gte: daysAgo(STANDING_ENTRY_DECAY_DAYS) } },
           ],

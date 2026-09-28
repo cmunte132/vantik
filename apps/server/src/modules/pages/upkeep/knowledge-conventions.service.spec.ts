@@ -979,6 +979,46 @@ describe('proposing a convention from findings that keep coming back', () => {
     ).toBe(true);
   });
 
+  it('[KG-6.3] [KG-7.4] joins findings to a convention folded into its page’s body however long ago, which is still served', async () => {
+    const t = harness({
+      entries: [
+        {
+          id: 'folded',
+          pageId: 'page-linked',
+          status: 'CONSOLIDATED',
+          kind: 'CONVENTION',
+          updatedAt: new Date(Date.now() - 200 * DAY),
+        },
+      ],
+      findings: [
+        {
+          id: 'old-1',
+          workspaceId: WORKSPACE,
+          moduleId: 'module-api',
+          agentRunId: 'run-old',
+          words: findingWords(LOGGER[0]),
+          candidateId: 'folded',
+          createdAt: new Date(1),
+        },
+      ],
+      runs: LOGGER.map((message, i) => reviewed(`run-${i + 1}`, message)),
+    });
+
+    for (const i of [1, 2, 3]) {
+      await t.service.runFinished(`run-${i}`);
+    }
+
+    // Still in use: nothing is written again, and the findings join it.
+    expect(t.createEntry).not.toHaveBeenCalled();
+    expect(
+      t.findings
+        .filter((f) =>
+          ['run-1', 'run-2', 'run-3'].includes(f.agentRunId as string),
+        )
+        .every((f) => f.candidateId === 'folded'),
+    ).toBe(true);
+  });
+
   it('[KG-6.3] leaves out code that does not hold where its run ended, rather than refusing the candidate', async () => {
     const t = harness({
       unreadable: ['apps/api/src/users.ts:12'],
@@ -1368,6 +1408,37 @@ describe('switching off a convention runs keep going wrong with', () => {
     });
     expect(await locked.service.weigh('convention')).toBe('PROPOSED');
     expect(locked.entries.get('convention')?.status).toBe('STANDING');
+  });
+
+  it('[KG-6.3] [KG-7.4] weighs a convention folded into its page’s body, which is still served, and asks a person rather than archive it alone', async () => {
+    const t = weighing({
+      signals: harm(3),
+      entry: { status: 'CONSOLIDATED' },
+    });
+
+    // A person folded it into the page, whose body still says it: they are
+    // asked, once, and nothing is taken out of use meanwhile.
+    expect(await t.service.weigh('convention')).toBe('PROPOSED');
+    expect(await t.service.weigh('convention')).toBeNull();
+    expect(t.entries.get('convention')?.status).toBe('CONSOLIDATED');
+    expect(t.maintenance).toEqual([
+      expect.objectContaining({
+        entryId: 'convention',
+        action: Action.ARCHIVE_PROPOSED,
+        reason: Reason.HARMFUL_SIGNALS,
+        proposalState: ProposalState.OPEN,
+        evidence: { harmful: 3, helpful: 0, margin: 3, since: null },
+      }),
+    ]);
+    expect(t.open).not.toHaveBeenCalled();
+
+    // Short of the margin, it is left as it is.
+    const fine = weighing({
+      signals: [...harm(3), ['HELPFUL', 1]],
+      entry: { status: 'CONSOLIDATED' },
+    });
+    expect(await fine.service.weigh('convention')).toBeNull();
+    expect(fine.maintenance).toEqual([]);
   });
 
   it('[KG-6.3] counts from a person’s decline, so a declined proposal is not asked again on old outcomes', async () => {

@@ -700,7 +700,9 @@ describe('the knowledge a run is handed', () => {
       pageEntry: {
         findMany: jest.fn(async ({ where }) =>
           where.kind === 'CONVENTION'
-            ? (options.conventions ?? [])
+            ? (options.conventions ?? []).filter((entry) =>
+                where.status.in.includes(entry.status),
+              )
             : entries.filter(
                 (entry) =>
                   where.id.in.includes(entry.id) &&
@@ -763,12 +765,15 @@ describe('the knowledge a run is handed', () => {
       KnowledgeTrustEnum.GROUNDED,
     ]);
 
-    // Conventions are the issue's modules', accepted, in this workspace.
+    // Conventions are the issue's modules', served (standing, or
+    // consolidated as a page's evidence), in this workspace.
     const conventionQuery = (prisma.pageEntry.findMany as jest.Mock).mock
       .calls[0][0];
     expect(conventionQuery.where).toMatchObject({
       kind: 'CONVENTION',
-      status: PageEntryStatusEnum.STANDING,
+      status: {
+        in: [PageEntryStatusEnum.STANDING, PageEntryStatusEnum.CONSOLIDATED],
+      },
       deleted: null,
       moduleIds: { hasSome: [MODULE] },
       page: { workspaceId: WORKSPACE, deleted: null },
@@ -789,6 +794,28 @@ describe('the knowledge a run is handed', () => {
       },
       deleted: null,
     });
+  });
+
+  it('[KG-3.2] [KG-7.4] pins a convention folded into its page’s body to its modules’ runs, as a standing one, and none retired', async () => {
+    const convention = (id: string, status: PageEntryStatusEnum) =>
+      row(id, { kind: 'CONVENTION', citations: [], status });
+    const { service } = forRun({
+      conventions: [
+        convention('folded', PageEntryStatusEnum.CONSOLIDATED),
+        convention('standing', PageEntryStatusEnum.STANDING),
+        convention('retired', PageEntryStatusEnum.ARCHIVED),
+        convention('disputed', PageEntryStatusEnum.DISPUTED),
+      ],
+      // Not found by the search for this run: pinned all the same.
+      ranked: [],
+    });
+
+    const packed = await service.knowledgeForRun(WORKSPACE, ask, LIMITS);
+
+    expect(packed.map((entry) => entry.entryId)).toEqual([
+      'folded',
+      'standing',
+    ]);
   });
 
   it('[KG-7.4] hands a run an entry folded into a page body, which the run is not handed, and nothing retired', async () => {

@@ -4,7 +4,7 @@ description: >-
   How to use the Vantik knowledge bank as an agent over MCP: load context
   before starting work, remember one fact at a time with citations for what
   it rests on, supersede rather than contradict, and consolidate instead of
-  piling up. Use before starting work
+  piling up (consolidating is a proposal a person accepts). Use before starting work
   on any unfamiliar area, and whenever recalling or recording what a workspace
   knows.
 ---
@@ -210,13 +210,30 @@ the one move that turns this whole design into a rubber stamp.
 
 ## Consolidate when a page grows facts that read as a paragraph
 
-`consolidate_knowledge` folds standing facts into the page body and marks them
-folded, so the same thing is not served twice — once as narrative and once as
-the entry it was written from.
+`consolidate_knowledge` proposes folding a page's standing facts into its body.
+You supply the rewritten body — deciding how a set of facts reads as prose is
+the judgment being asked for — and the server stores it as a **proposal**. The
+page does not change: a person accepts or declines it in the review queue. Until
+then the page and its facts read exactly as before, so do not carry on as if the
+new body had landed. Read the page right before you propose: accepting is
+refused if the page is edited after your proposal, or one of the facts is no
+longer standing.
 
-You supply the rewritten body. Deciding how a set of facts reads as prose is the
-judgment being asked for; the tool only makes sure the folded entries stop
-being served separately.
+Once a person accepts, the facts are marked `CONSOLIDATED` and are still served,
+as evidence for the page: a search shows each one just below its page, with
+`evidenceFor` naming the page, and it keeps its trust tier. Read the page for the
+narrative; the entry under it is what the sentence rests on, and its citations
+are what get checked when the code changes.
+
+## Generated pages
+
+A **generated** page answers a question it states, and the server writes it from
+the entries in its scope: each section cites the entries it was written from,
+and when those change, the page is rebuilt one section at a time. `read_page`
+reads it like any other page. You cannot edit its body or consolidate it. To
+change what it says, change its evidence: `remember` the fact under its scope,
+or supersede the entry that is wrong. Once a person accepts the entry, the next
+refresh writes it up.
 
 ## Limits you will meet, and what they mean
 

@@ -74,8 +74,13 @@ written**: read them, then either supersede one or pass `distinct: true`. Do not
 pass `distinct` without reading them.
 
 **Consolidate** when a page has grown facts that now read as a paragraph:
-`consolidate_knowledge` folds them into the body and stops them being served
-separately, so one fact is not returned twice.
+`consolidate_knowledge` proposes a new body that folds them in. It is a
+proposal, not a change: the page stays as it is until a person accepts it in the
+review queue. Once accepted, the facts are `CONSOLIDATED` and still served, as
+evidence for the page (`evidenceFor` names it), just below it in a search. A
+**generated** page is written by the server from the entries it cites, to
+answer the question it states; it cannot be edited or consolidated, so correct
+it by correcting its entries.
 
 **Limits you will meet**, enforced server-side: ten untriaged entries per page
 per token (the error names the ones in your way — consolidate or supersede them,

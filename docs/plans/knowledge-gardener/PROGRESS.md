@@ -5,8 +5,9 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 7, in progress. KG-7.1 to KG-7.5 are implemented and
-  mutation-checked; KG-7.6 is next. Phase 6
+- Current phase: 7, in progress. KG-7.1 to KG-7.6 are implemented, and
+  KG-7.1 to KG-7.5 mutation-checked; the phase 7 verify and review are
+  next. Phase 6
   is done: KG-6.1 to KG-6.5
   implemented and mutation-checked, and its review passed after eight
   rounds with no finding left (see "Phase 6 review: PASS" below). PR #45
@@ -1143,6 +1144,29 @@ next session starts by reading it.
   on `Page`, `previousSections` on `PageHistory`, and `PageProposal`.
   Replayed on postgres 16 over the earlier migrations; the diff against
   the schema is then empty.
+- **Documentation (KG-7.6).** `apps/docs/docs/fundamentals/knowledge.mdx`,
+  listed under Fundamentals in `sidebars.ts`, in the plain style of the
+  other fundamentals pages: pages and entry policies, entries (kinds,
+  scope, statuses, supersede, search before write), citations and trust
+  (the check at write, the tiers, the re-check on landed changes, decay),
+  what agents get, triage and escalation (the pipeline, the modes, every
+  escalation reason, the review queue), audits and agreement (audits,
+  verdicts, kappa, back-off), the holdout, upkeep (conventions from
+  review, gap issues), generated pages, consolidation, and every setting
+  with its default and workspace key: all fifteen `KNOWLEDGE_*` variables
+  (the plan's table and the six this plan added beside it) and, apart, the
+  four `PAGE_*` variables that were there before. How a workspace sets its
+  own values is given as the route admins call; the `knowledge` object
+  replaces the stored one, since preferences merge one level deep, and the
+  page says so. The docs build passes with the page in it. The agent
+  guides (`skills/working-vantik-knowledge/SKILL.md` and its
+  always-in-context form) now say consolidation is a proposal a person
+  accepts, that consolidated entries are still served as evidence with
+  `evidenceFor`, and what a generated page is and how to correct one.
+  Three comments that still said a consolidated entry is not served (the
+  schema's and the types' status enums, `ConsolidatePageDto`) and the
+  preferences DTO's list of knowledge keys were brought up to date;
+  comments only, so no migration.
 
 ## Phase reviews
 
@@ -2393,3 +2417,7 @@ Give the evidence, and stop until the maintainer answers.
   deleted or foreign citing page, an entry found after its page), except
   the filter that looked for an accepted proposal when reverting, which
   only an acceptance can name; it was taken out.
+- 2026-09-28: KG-7.6: the knowledge page in apps/docs, with every setting
+  and its default, the page in the docs sidebar, and the agent guides
+  brought up to date for proposals, evidence and generated pages. The docs
+  build passes.

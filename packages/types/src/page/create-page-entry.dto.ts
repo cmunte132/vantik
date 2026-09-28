@@ -284,7 +284,10 @@ export class BulkUpdatePageEntriesDto {
   status: PageEntryStatusEnum;
 }
 
-/** Folds standing entries into the page body and marks them CONSOLIDATED. */
+/**
+ * Proposes folding standing entries into the page body. A person accepting
+ * the proposal writes the body and marks them CONSOLIDATED.
+ */
 export class ConsolidatePageDto {
   /** Entries to fold. Omit to fold every standing entry on the page. */
   @IsOptional()

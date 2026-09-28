@@ -21,9 +21,9 @@ export enum PageEntryPolicyEnum {
 export enum PageEntryStatusEnum {
   /** Awaiting triage. An inbox — never served. */
   PROPOSED = 'PROPOSED',
-  /** True, too granular for prose, worth retrieving. The only served status. */
+  /** True, too granular for prose, worth retrieving. Served. */
   STANDING = 'STANDING',
-  /** Folded into the page body; serving it again would duplicate the fact. */
+  /** Folded into the page body; served as evidence for the page, below it. */
   CONSOLIDATED = 'CONSOLIDATED',
   /** Replaced by a newer entry. Kept for audit, never served. */
   SUPERSEDED = 'SUPERSEDED',

@@ -2356,11 +2356,11 @@ enum PageEntryCitationJudgment {
 enum PageEntryStatus {
   /// Awaiting triage. An inbox, never served.
   PROPOSED
-  /// True, too granular for prose, and worth retrieving. The only status
-  /// retrieval serves.
+  /// True, too granular for prose, and worth retrieving. Served.
   STANDING
-  /// Folded into the page body. Must stop being served separately, or the same
-  /// fact comes back twice.
+  /// Folded into the page body by an accepted proposal. Still served, as
+  /// evidence for the page that cites it and ranked below that page, so the
+  /// narrative keeps what it rests on.
   CONSOLIDATED
   /// Replaced by a newer entry. Kept for audit, never served.
   SUPERSEDED

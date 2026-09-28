@@ -1,0 +1,5 @@
+# The documentation was at vantik.dev/docs. It is now at docs.vantik.dev, and
+# its pages have no /docs prefix.
+/docs            https://docs.vantik.dev/            301
+/docs/introduction https://docs.vantik.dev/          301
+/docs/*          https://docs.vantik.dev/:splat      301

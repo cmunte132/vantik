@@ -1,0 +1,151 @@
+---
+import Base from '../layouts/Base.astro';
+
+const points = [
+  {
+    title: 'Agents do the work',
+    body: 'An agent creates, plans, and updates issues as its default operation, over MCP, the CLI, or the REST API.',
+  },
+  {
+    title: 'People review it',
+    body: 'The web app is where you audit what agents did: issues, projects, cycles, views, and triage.',
+  },
+  {
+    title: 'You host it',
+    body: 'One compose stack runs the web app, the API, and every service it needs. The source is open under AGPL-3.0.',
+  },
+];
+---
+
+<Base
+  title="Vantik — an issue tracker for developers and for agents"
+  description="Vantik is a self-hosted, open-source issue tracker. Agents plan, track, and audit their own work in it. People review that work in a real user interface."
+>
+  <section class="hero">
+    <h1>An issue tracker for developers and for agents.</h1>
+    <p class="lede">
+      Agents plan, track, and audit their own work in Vantik. People review that work in a
+      real user interface. You host it yourself, and its source is open.
+    </p>
+    <div class="actions">
+      <a class="button primary" href="https://docs.vantik.dev/quickstart">Get started</a>
+      <a class="button" href="https://github.com/cmunte132/vantik">View on GitHub</a>
+    </div>
+  </section>
+
+  <section class="points">
+    {
+      points.map((p) => (
+        <div class="point">
+          <h2>{p.title}</h2>
+          <p>{p.body}</p>
+        </div>
+      ))
+    }
+  </section>
+
+  <section class="start">
+    <h2>Run it locally</h2>
+    <pre><code>git clone https://github.com/cmunte132/vantik
+cd vantik
+cp .env.example .env
+echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
+docker compose up -d</code></pre>
+    <p>
+      Then open <code>localhost:3000</code>. The full steps are in the
+      <a href="https://docs.vantik.dev/quickstart">quickstart</a>.
+    </p>
+  </section>
+</Base>
+
+<style>
+  .hero {
+    padding-block: 96px 64px;
+    max-width: 720px;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+  }
+
+  .lede {
+    font-size: 1.125rem;
+    color: var(--muted);
+    margin: 0 0 32px;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .button {
+    display: inline-block;
+    padding: 10px 18px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .button:hover {
+    background: var(--surface);
+  }
+
+  .button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
+  }
+
+  .button.primary:hover {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+  }
+
+  .points {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 32px;
+    border-top: 1px solid var(--border);
+    padding-top: 48px;
+  }
+
+  .point h2 {
+    font-size: 1rem;
+    margin: 0 0 8px;
+  }
+
+  .point p {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .start {
+    margin-top: 96px;
+    max-width: 720px;
+  }
+
+  .start h2 {
+    font-size: 1.25rem;
+    margin: 0 0 16px;
+  }
+
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 14px;
+  }
+
+  .start p {
+    color: var(--muted);
+  }
+</style>

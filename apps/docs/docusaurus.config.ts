@@ -13,14 +13,11 @@ const config: Config = {
     v4: true,
   },
 
-  // Since vantik.dev is registered, this is set up for a custom domain via
-  // GitHub Pages. To go live: add a CNAME file (see static/CNAME) and point
-  // vantik.dev's DNS at GitHub Pages per
-  // https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site
-  // Until DNS is configured, GitHub will still serve this at
-  // https://cmunte132.github.io/vantik/ - if you want that instead, change
-  // url below to that and set baseUrl to '/vantik/'.
-  url: 'https://vantik.dev',
+  // GitHub Pages serves this site at docs.vantik.dev. The deploy uses GitHub
+  // Actions, so GitHub ignores static/CNAME: set the custom domain in the
+  // repository's Pages settings. The marketing site at vantik.dev is
+  // apps/landing, on Cloudflare Pages.
+  url: 'https://docs.vantik.dev',
   baseUrl: '/',
 
   organizationName: 'cmunte132',
@@ -46,7 +43,7 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           editUrl: 'https://github.com/cmunte132/vantik/tree/main/apps/docs/',
-          routeBasePath: 'docs',
+          routeBasePath: '/',
         },
         blog: false,
         theme: {
@@ -101,6 +98,11 @@ const config: Config = {
           label: 'API Reference',
         },
         {
+          href: 'https://vantik.dev',
+          label: 'Home',
+          position: 'right',
+        },
+        {
           href: 'https://github.com/cmunte132/vantik',
           label: 'GitHub',
           position: 'right',
@@ -113,9 +115,9 @@ const config: Config = {
         {
           title: 'Docs',
           items: [
-            {label: 'Introduction', to: '/docs/introduction'},
-            {label: 'Quickstart', to: '/docs/quickstart'},
-            {label: 'API Reference', to: '/docs/api-reference/overview'},
+            {label: 'Introduction', to: '/'},
+            {label: 'Quickstart', to: '/quickstart'},
+            {label: 'API Reference', to: '/api-reference/overview'},
           ],
         },
         {

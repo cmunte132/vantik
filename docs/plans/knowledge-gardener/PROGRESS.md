@@ -7,8 +7,10 @@ next session starts by reading it.
 
 - Current phase: 7, in progress. KG-7.1 to KG-7.6 are implemented and
   mutation-checked. The phase 7 review's round 1 failed with three
-  blocking and eight non-blocking findings (F1-F11), all fixed with tagged,
-  mutation-checked tests (see "Phase 7, round 1" below); round 2 is next.
+  blocking and eight non-blocking findings (F1-F11), round 2 with two
+  non-blocking ones (F12, F13); all are fixed with tagged,
+  mutation-checked tests (see "Phase 7, round 1" and "round 2" below);
+  round 3 is next.
   Phase 6 is done: KG-6.1 to KG-6.5 implemented and mutation-checked, and
   its review passed after eight rounds with no finding left (see "Phase 6
   review: PASS" below). PR #45 is open from this branch, so the phase 6
@@ -1028,7 +1030,12 @@ next session starts by reading it.
   something else is read as a new page, whose first build is the same.
   Queuing it for when the interval has passed, rather than at once, keeps
   the gate: a question changed back and forth builds once an interval, and
-  the build happens even with the hourly look off.
+  the build happens even with the hourly look off. Each making and each
+  question change is a job of its own (its id carries the page's
+  `updatedAt` then), since Bull ignores an id it already holds: a job
+  still waiting, running or kept after failing would otherwise swallow the
+  new one. A build that fails twice (index or model unreachable) is left
+  to the hourly look.
 - **The gate (KG-7.2).** Hourly (`refreshGeneratedPages`, cron
   `KNOWLEDGE_PAGE_REFRESH_CRON`, default `23 * * * *`, `off` disables; the
   PAGE_DECAY_CRON pattern with a fixed job id), each generated page is
@@ -1133,7 +1140,11 @@ next session starts by reading it.
     repeat corroborates it and an accepted contradiction withholds it; a
     correction can supersede it; and a person can dispute or archive it
     (CONSOLIDATED now leads to DISPUTED and ARCHIVED), from the page's
-    rail too. Putting it back makes it standing, and records the undo.
+    rail too. Putting it back makes it standing, and records the undo. A
+    consolidated convention is still pinned to its modules' runs, still
+    weighed on its outcomes, and still the candidate later findings join;
+    harm past the margin asks a person rather than archiving it alone,
+    since the page's body says it too.
   - **Put back in the index.** Entries consolidated before consolidated
     entries were served were taken out of the index then. Once at boot
     (`indexConsolidatedEntries`, a job id per minute so several instances
@@ -2304,6 +2315,50 @@ through in the service or the controller; 33 over F4-F8 and F11). Verify
 through phase 7: 57/58, every criterion but KG-7.R (server 1944,
 agent-core 71, cli 13, webapp 655).
 
+### Phase 7, round 2 (same reviewer, on the round 1 fixes)
+
+The reviewer read dd1f572..ae42296 (HEAD by then 7a1c6f0, a merge of
+`main` that touches none of the reviewed files), ran the verify through
+phase 7 (57/58, only KG-7.R failing; server 1944, agent-core 71, cli 13,
+webapp 655; typecheck ok), and found F1 to F11 resolved: F5 as designed,
+accepting that a new question is a new page; F4's unstamped sections exist
+only on pages built before the fix, which exist only on this branch.
+Verdict FAIL, with two non-blocking findings, both fixed:
+
+- **F12. A question change's build could be swallowed.** The refresh job's
+  id was fixed per page, and Bull 4 ignores an id it holds (waiting,
+  delayed, running, or kept after failing: `removeOnFail: 20`), so a
+  failed first build, or one still running when the question was edited,
+  swallowed the rebuild; with the hourly look off the page was then never
+  built, against what the docs promised. The id now carries the page's
+  `updatedAt` as the making or the question change left it; the docs say
+  a build that fails twice is left to the hourly look (3dfb2da). Test:
+  "[KG-7.1] [KG-7.2] queues a build of its own each time a page is made or
+  asked anew, which no job held for it swallows" (over a queue that
+  ignores an id it holds); the processor and first-build tests assert the
+  new id.
+- **F13. A consolidated convention lost what a standing one gets.** The
+  pinned conventions of a run, the harm weighing and the dedupe of new
+  candidates read STANDING only. They now read the statuses in use; harm
+  past the margin on a consolidated convention asks a person rather than
+  archiving it alone, since the page's body says it too (30ceafc). The
+  sweep of every other STANDING-only read in the server found none left
+  that concerns a served entry: decay leaves consolidated entries alone by
+  design, and the rest are new-entry statuses and verdict mapping. Tests:
+  "[KG-3.2] [KG-7.4] pins a convention folded into its page's body to its
+  modules' runs, as a standing one, and none retired"; "[KG-6.3] [KG-7.4]
+  weighs a convention folded into its page's body, which is still served,
+  and asks a person rather than archive it alone"; "[KG-6.3] [KG-7.4]
+  joins findings to a convention folded into its page's body however long
+  ago, which is still served". The KG-3.2 test's assertion on the
+  conventions query now expects the served statuses, and its fake filters
+  conventions by status.
+
+Mutation-checked: 6 mutants over these fixes, all killed (the job id
+without the time, or keyed by the page before the change; pinned, weighed
+and deduped conventions standing only; a consolidated convention archived
+alone). Full server suite: 1933 passed, 15 skipped.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -2605,3 +2660,9 @@ Give the evidence, and stop until the maintainer answers.
   citations not shown, a misplaced schema comment, undoing a revert
   serving facts twice). All fixed with tagged tests; 45 mutants, all
   killed. Verify through phase 7: 57/58, KG-7.R pending.
+- 2026-09-28: Merged `main` (the landing site's Worker config, #46) into
+  the branch, which the Workers build needs. Phase 7 review round 2: FAIL,
+  F1-F11 resolved, two non-blocking findings, both fixed with tagged
+  tests: a refresh job per request, so a held job never swallows a
+  question change's build; consolidated conventions pinned and weighed as
+  standing ones. 6 mutants, all killed.

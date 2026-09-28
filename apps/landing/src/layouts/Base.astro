@@ -1,0 +1,142 @@
+---
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={Astro.site} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="/">
+        <img src="/logo.svg" alt="" width="24" height="24" />
+        <span>Vantik</span>
+      </a>
+      <nav>
+        <a href="https://docs.vantik.dev">Docs</a>
+        <a href="https://github.com/cmunte132/vantik">GitHub</a>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="footer">
+      <p>
+        Vantik is a fork of <a href="https://github.com/RedPlanetHQ/tegon">RedPlanetHQ/tegon</a>,
+        licensed AGPL-3.0.
+      </p>
+    </footer>
+  </body>
+</html>
+
+<style is:global>
+  /* The brand greens come from the docs theme (apps/docs/src/css/custom.css). */
+  :root {
+    --bg: #ffffff;
+    --fg: #202020;
+    --muted: #646464;
+    --border: #e8e8e8;
+    --surface: #f9f9f9;
+    --accent: #2e8555;
+    --accent-strong: #205d3b;
+    --accent-fg: #ffffff;
+    color-scheme: light dark;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131313;
+      --fg: #efefef;
+      --muted: #8d8d8d;
+      --border: #2a2a2a;
+      --surface: #1b1b1b;
+      --accent: #3cad6e;
+      --accent-strong: #4fddbf;
+      --accent-fg: #0d1f15;
+    }
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  main,
+  .nav,
+  .footer {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding-inline: 16px;
+  }
+
+  code,
+  pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+</style>
+
+<style>
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  nav {
+    display: flex;
+    gap: 20px;
+    font-size: 14px;
+  }
+
+  nav a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  nav a:hover {
+    color: var(--fg);
+  }
+
+  .footer {
+    border-top: 1px solid var(--border);
+    margin-top: 96px;
+    padding-block: 24px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+</style>

@@ -217,12 +217,15 @@ To read what the server collects, and what the maintainer left out, see
 ## Documentation
 
 The documentation is in `apps/docs`, and it uses Docusaurus. A push to `main`
-that changes that directory deploys the documentation to GitHub Pages. See
-`.github/workflows/deploy-docs.yml`. The DNS for `vantik.dev` does not point at
-GitHub Pages yet. See `apps/docs/static/CNAME` and
-[the GitHub guide for a custom domain](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site).
-Until then, GitHub builds the documentation and serves it at
-`https://cmunte132.github.io/vantik/`.
+that changes that directory deploys the documentation to GitHub Pages at
+`https://docs.vantik.dev`. See `.github/workflows/deploy-docs.yml`. The workflow
+deploys with GitHub Actions, so GitHub ignores `apps/docs/static/CNAME`. The
+custom domain is a setting in the repository: Settings, then Pages.
+
+The marketing site is in `apps/landing`, and it uses Astro. A Cloudflare Worker
+serves its build output at `https://vantik.dev`. See `apps/landing/wrangler.jsonc`. The file
+`apps/landing/public/_redirects` sends the old `vantik.dev/docs/...` addresses
+to the documentation site.
 
 To work on the documentation on your machine, run these commands:
 
@@ -236,6 +239,13 @@ pnpm start                     # the local dev server, with hot reload
 The repository needs one more setup step, and you do it one time only. In the
 GitHub repository, open Settings, then Pages. Set the source to "GitHub Actions"
 and not to "Deploy from a branch". The workflow above needs this setting.
+
+To work on the marketing site on your machine, run this command from the root
+of the repository:
+
+```bash
+pnpm --filter landing dev      # http://localhost:4321
+```
 
 ## Roadmap (the plan, not yet built)
 

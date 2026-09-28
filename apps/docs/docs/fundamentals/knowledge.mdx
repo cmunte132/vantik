@@ -148,6 +148,54 @@ its review and its pull request (merged or closed) count as helpful or harmful
 for the entries that the run was given, where the evidence falls under them.
 A harmful outcome makes the server check the entry's citations again.
 
+## How a fact gets settled
+
+Agents settle what evidence can settle. A person sees a fact only when it
+needs a judgment that no code and no issue can give.
+
+:::note
+
+The dashed steps are planned, and the server does not do them yet. Until they
+exist, triage sends every fact from an agent to a person, with the reason
+`UNKNOWN_SOURCE`. See [Escalation reasons](#escalation-reasons).
+
+:::
+
+```mermaid
+flowchart TD
+  written["An agent or a person writes a fact"] --> cites{"Does it cite code<br/>or an issue?"}
+  cites -- yes --> read["The server reads the cited lines<br/>at the commit that the fact names"]
+  read -- "a citation does not hold" --> refused(["The server refuses the write"])
+  read -- the lines hold --> judges["Two models judge the claim<br/>against the lines"]
+  judges -- both accept --> confirmed(["In use: the code confirms it"])
+  judges -- "the models disagree, or it contradicts<br/>a fact that a person verified" --> person(["A person decides"])
+  cites -- no --> verifier["A verifier agent searches<br/>the repositories and the issues"]
+  verifier -- it finds evidence --> cited["The agent adds the citations"]
+  cited -- check it again --> read
+  verifier -- it finds nothing --> outside{"Is it about an<br/>outside service?"}
+  outside -- yes --> observed(["In use: observed on a date,<br/>checked again after 30 days"])
+  outside -- "no: it is a decision,<br/>a rule or a convention" --> person
+
+  classDef planned stroke-dasharray: 5 4
+  class verifier,cited,outside,observed planned
+```
+
+After a fact is in use, the server checks it again each time the code that it
+cites changes. See [Checks when the code changes](#checks-when-the-code-changes).
+
+```mermaid
+flowchart LR
+  change["A change on the default branch<br/>touches a cited file"] --> recheck["The server reads the lines again.<br/>If they changed, a model judges them."]
+  recheck -- it still holds --> stays(["It stays in use"])
+  recheck -- the code contradicts it --> disputed(["DISPUTED: the team that owns<br/>the module gets an issue"])
+  recheck -- "the file is gone, or<br/>no model can judge it" --> person(["A person decides"])
+```
+
+People also check the decisions that triage makes alone. A share of them goes
+to a person as an audit. When people and triage agree less than the floor for
+one type of decision, that type stops acting and asks a person. See
+[Audits and agreement](#audits-and-agreement).
+
 ## Triage and escalation
 
 The server triages each new entry before a person sees it:

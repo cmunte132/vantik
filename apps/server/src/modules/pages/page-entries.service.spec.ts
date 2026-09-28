@@ -1765,6 +1765,25 @@ describe('entries about modules', () => {
     });
   });
 
+  it('[KG-7.1] lists the entries a page cites, by id, in the workspace only', async () => {
+    const { service, prisma } = buildService();
+
+    await service.getEntries('workspace-1', {
+      ids: ['e-1', 'e-2'],
+      status: [PageEntryStatusEnum.STANDING, PageEntryStatusEnum.CONSOLIDATED],
+    });
+
+    const { where } = (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0];
+    expect(where).toMatchObject({
+      deleted: null,
+      page: { workspaceId: 'workspace-1', deleted: null },
+      id: { in: ['e-1', 'e-2'] },
+      status: {
+        in: [PageEntryStatusEnum.STANDING, PageEntryStatusEnum.CONSOLIDATED],
+      },
+    });
+  });
+
   it('[KG-1.6] returns at most the number asked for, newest first', async () => {
     const { service, prisma } = buildService();
 

@@ -46,6 +46,7 @@ import { Header } from './header';
 import { MemoryRail } from './memory-rail';
 import { PageHistory } from './page-history';
 import { PageNav } from './page-nav';
+import { PageSources } from './page-sources';
 import { PageTitle } from './page-title';
 import { RelatedLinks } from './related-links';
 import { SaveIndicator, type SaveState } from './save-indicator';
@@ -334,6 +335,10 @@ const SinglePageView = observer(() => {
                 >
                   <EditorExtensions suggestionItems={suggestionItems} />
                 </Editor>
+
+                {generated && (
+                  <PageSources pageId={page.id} revision={page.updatedAt} />
+                )}
 
                 <RelatedLinks pageId={page.id} />
 

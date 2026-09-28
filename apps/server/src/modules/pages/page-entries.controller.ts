@@ -62,6 +62,7 @@ export class PageEntriesController {
       // The same caveat: `?moduleIds=a` arrives as a string whatever the DTO
       // made of it, so it is split here too.
       moduleIds: parseIdList(query.moduleIds),
+      ids: parseIdList(query.ids),
       limit: parseKnowledgeLimit(query.limit),
     });
   }

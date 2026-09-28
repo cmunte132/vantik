@@ -230,7 +230,10 @@ are what get checked when the code changes.
 A **generated** page answers a question it states, and the server writes it from
 the entries in its scope: each section cites the entries it was written from,
 and when those change, the page is rebuilt one section at a time. `read_page`
-reads it like any other page. You cannot edit its body or consolidate it. To
+reads it like any other page, and also gives its `question`, its `sections`
+with the entry ids each cites, and `cited`: those entries still in use, with
+their proof. Weigh the page by them: an id a section cites that is missing
+from `cited` is out of use. You cannot edit its body or consolidate it. To
 change what it says, change its evidence: `remember` the fact under its scope,
 or supersede the entry that is wrong. Once a person accepts the entry, the next
 refresh writes it up.

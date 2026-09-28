@@ -102,6 +102,9 @@ export function renderPage(page: KnowledgePage): string {
   const parts = [
     chalkGreen(breadcrumb),
     chalkGrey(`${page.id} · entries ${page.entryPolicy}`),
+    ...(page.kind === 'GENERATED'
+      ? [chalkGrey(`Generated: answers "${page.question ?? ''}"`)]
+      : []),
     '',
     page.body || chalkGrey('(no body yet)'),
   ];
@@ -109,6 +112,28 @@ export function renderPage(page: KnowledgePage): string {
   if (page.standing.length > 0) {
     parts.push('', chalkGreen(`Standing facts (${page.standing.length})`));
     parts.push(renderEntries(page.standing));
+  }
+
+  // What a generated page's sections rest on, section by section: the
+  // prose above is a model's, and this is what it was written from.
+  if (page.sections.length > 0) {
+    const inUse = new Set(page.cited.map((entry) => entry.id));
+
+    parts.push('', chalkGreen('Written from'));
+    for (const section of page.sections) {
+      parts.push(
+        `${section.heading}: ${section.entryIds
+          .map((id) =>
+            inUse.has(id) ? id.slice(0, 8) : `${id.slice(0, 8)} (out of use)`,
+          )
+          .join(', ')}`,
+      );
+    }
+  }
+
+  if (page.cited.length > 0) {
+    parts.push('', chalkGreen(`Cited facts (${page.cited.length})`));
+    parts.push(renderEntries(page.cited));
   }
 
   return parts.join('\n');

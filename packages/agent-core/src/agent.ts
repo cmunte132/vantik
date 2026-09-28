@@ -19,10 +19,12 @@ import {
   KnowledgeHit,
   KnowledgePage,
   KnowledgePageRef,
+  KnowledgePageSection,
   KnowledgeProof,
   KnowledgeTrust,
   LinkPageInput,
   LoadContextInput,
+  PageKind,
   PageLink,
   PagesForInput,
   RecallInput,
@@ -1063,7 +1065,12 @@ export class VantikAgent {
     }));
   }
 
-  /** One page: its body as markdown, its place in the tree, its standing facts. */
+  /**
+   * One page: its body as markdown, its place in the tree, its standing
+   * facts. For a generated page, the question it answers and its sections;
+   * for any page, the entries it cites that are still in use, with their
+   * proof, so what it says can be checked against what it rests on.
+   */
   async readPage(reference: string): Promise<KnowledgePage> {
     const { id } = await this.resolvePage(reference);
 
@@ -1075,6 +1082,12 @@ export class VantikAgent {
         query: { pageId: id, status: 'STANDING' },
       }),
     ]);
+    const cited = [...new Set(page.citedEntryIds ?? [])];
+    const citedEntries = cited.length
+      ? await this.client.get<RawEntry[]>('/page_entries', {
+          query: { ids: cited.join(','), status: 'STANDING,CONSOLIDATED' },
+        })
+      : [];
 
     return {
       id: page.id,
@@ -1084,6 +1097,10 @@ export class VantikAgent {
       entryPolicy: page.entryPolicy,
       ancestors: page.ancestors ?? [],
       standing: (entries ?? []).map((entry) => toEntry(entry)),
+      kind: page.kind ?? 'AUTHORED',
+      question: page.question ?? null,
+      sections: toSections(page.sections),
+      cited: (citedEntries ?? []).map((entry) => toEntry(entry)),
       updatedAt: page.updatedAt,
     };
   }
@@ -1667,6 +1684,10 @@ interface RawPage {
   parentId?: string | null;
   entryPolicy: EntryPolicy;
   updatedAt: string;
+  kind?: PageKind;
+  question?: string | null;
+  sections?: unknown;
+  citedEntryIds?: string[];
 }
 
 interface RawEntry {
@@ -1736,6 +1757,30 @@ interface RawContextPack {
   estimatedTokens: number;
   tokenBudget: number;
   omitted: number;
+}
+
+/** A generated page's sections, without their bodies, which `body` holds. */
+function toSections(stored: unknown): KnowledgePageSection[] {
+  if (!Array.isArray(stored)) {
+    return [];
+  }
+
+  return stored.flatMap((section) =>
+    section &&
+    typeof section.id === 'string' &&
+    typeof section.heading === 'string' &&
+    Array.isArray(section.entryIds)
+      ? [
+          {
+            id: section.id,
+            heading: section.heading,
+            entryIds: section.entryIds.filter(
+              (id: unknown): id is string => typeof id === 'string',
+            ),
+          },
+        ]
+      : [],
+  );
 }
 
 function toEntry(entry: RawEntry): KnowledgeEntry {

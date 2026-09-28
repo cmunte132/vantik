@@ -8,6 +8,7 @@ import {
   renderConsolidateProposal,
   renderEntries,
   renderHits,
+  renderPage,
   renderProof,
   renderRemember,
 } from './knowledgeOutput';
@@ -139,6 +140,35 @@ describe('knowledge as a terminal shows it', () => {
       '1a2b3c4d  cites src/cache.ts:12-30 (moved), pull request https://github.com/acme/api/pull/5 (holds) · checked 2026-09-20 at 9f8e7d6c5b4a',
     );
     expect(text).not.toMatch(/5e6f7a8b {2}cites/);
+  });
+
+  it('[KG-7.1] shows a generated page with its question, and what each section was written from', () => {
+    const cited = entry();
+    const text = renderPage({
+      id: 'page-gen',
+      title: 'Deploying',
+      body: '## Deploying\n\nMerge to main.',
+      parentId: null,
+      entryPolicy: 'OPEN',
+      ancestors: [],
+      standing: [],
+      kind: 'GENERATED',
+      question: 'How do we deploy the server?',
+      sections: [
+        {
+          id: 'sec_deploy',
+          heading: 'Deploying',
+          entryIds: [cited.id, '9d8c7b6a-0000-0000-0000-000000000000'],
+        },
+      ],
+      cited: [cited],
+      updatedAt: '2026-09-20T10:00:00.000Z',
+    });
+
+    expect(text).toContain('Generated: answers "How do we deploy the server?"');
+    expect(text).toContain('Deploying: 1a2b3c4d, 9d8c7b6a (out of use)');
+    expect(text).toContain('Cited facts (1)');
+    expect(text).toContain('1a2b3c4d  cites src/cache.ts:12-30 (moved)');
   });
 
   it('[KG-2.8] tells the writer what its citations came to once the fact is written', () => {

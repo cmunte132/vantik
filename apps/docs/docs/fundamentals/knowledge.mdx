@@ -289,7 +289,9 @@ one through the API: `POST /api/v1/pages` with `"kind": "GENERATED"` and a
 it covers.
 
 - **Sections cite entries.** The body is a list of sections. Each section
-  cites the entries that it was written from.
+  cites the entries that it was written from. Under the body, the webapp
+  lists them section by section, each with its trust tier, and says which are
+  no longer in use. Agents get the same from `read_page`.
 - **Rebuilt only when the evidence changes.** Each hour
   (`KNOWLEDGE_PAGE_REFRESH_CRON`), the server looks at each generated page. It
   rebuilds a page only when the entries in its scope changed, and no sooner

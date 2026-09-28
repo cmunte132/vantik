@@ -301,4 +301,43 @@ describe('PageEntriesController.getEntries', () => {
       limit: 50,
     });
   });
+
+  it('[KG-7.1] hands the entries a page cites to the list, and refuses an id that is not one', async () => {
+    const pageEntriesService = {
+      getEntries: jest.fn().mockResolvedValue([]),
+    } as unknown as PageEntriesService;
+    const prisma = {
+      usersOnWorkspaces: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE' }),
+      },
+    } as unknown as PrismaService;
+    const controller = new PageEntriesController(pageEntriesService, prisma);
+    const ids = [
+      '33333333-3333-4333-8333-000000000001',
+      '33333333-3333-4333-8333-000000000002',
+    ];
+
+    // As a generated page's reader sends it: the ids, and in use only.
+    const query = plainToInstance(ListPageEntriesQueryDto, {
+      ids: ids.join(','),
+      status: 'STANDING,CONSOLIDATED',
+    });
+    await expect(validate(query)).resolves.toEqual([]);
+    await controller.getEntries('workspace-1', 'user-1', query);
+
+    expect(pageEntriesService.getEntries).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({
+        ids,
+        status: ['STANDING', 'CONSOLIDATED'],
+      }),
+    );
+
+    const bad = plainToInstance(ListPageEntriesQueryDto, {
+      ids: `${ids[0]},page-1`,
+    });
+    await expect(validate(bad)).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ property: 'ids' })]),
+    );
+  });
 });

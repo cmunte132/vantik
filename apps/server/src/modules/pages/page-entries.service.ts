@@ -90,6 +90,8 @@ export default class PageEntriesService {
       status?: PageEntryStatusEnum[];
       /** Entries resolved to any of these modules. */
       moduleIds?: string[];
+      /** These entries only, as a page cites them. */
+      ids?: string[];
       /** At most this many, newest first. */
       limit?: number;
     } = {},
@@ -99,6 +101,7 @@ export default class PageEntriesService {
         deleted: null,
         page: { workspaceId, deleted: null },
         ...(filters.pageId ? { pageId: filters.pageId } : {}),
+        ...(filters.ids?.length ? { id: { in: filters.ids } } : {}),
         ...(filters.status?.length ? { status: { in: filters.status } } : {}),
         ...(filters.moduleIds?.length
           ? { moduleIds: { hasSome: filters.moduleIds } }

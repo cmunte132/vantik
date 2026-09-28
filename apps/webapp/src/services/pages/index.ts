@@ -23,9 +23,17 @@ import {
   proposalAnswerUrl,
   proposeAndAccept,
 } from './page-proposals';
+import {
+  type CitedEntry,
+  citedEntriesUrl,
+  readSectionRefs,
+  type SectionSources,
+  sectionSources,
+} from './page-sources';
 
 export { MODULE_KNOWLEDGE_LIMIT } from './module-knowledge';
 export { pageProposalSummary } from './page-proposals';
+export type { SectionSources } from './page-sources';
 
 /**
  * The page and entry API, as react-query hooks.
@@ -226,6 +234,30 @@ export function usePageHistory(pageId?: string, enabled = true) {
       ajaxGet({ url: `/api/v1/pages/${pageId}/history` }) as Promise<
         PageRevision[]
       >,
+  });
+}
+
+/**
+ * What each section of a generated page was written from: the entries it
+ * cites, in use or not. Keyed on the page's last change, so a refresh that
+ * rewrote a section is read again.
+ */
+export function usePageSources(pageId?: string, revision?: string) {
+  return useQuery<SectionSources[]>({
+    queryKey: ['page-sources', pageId, revision],
+    enabled: Boolean(pageId),
+    queryFn: async () => {
+      const page = (await ajaxGet({ url: `/api/v1/pages/${pageId}` })) as {
+        sections?: unknown;
+      };
+      const sections = readSectionRefs(page.sections);
+      const url = citedEntriesUrl(
+        sections.flatMap((section) => section.entryIds),
+      );
+      const entries = url ? ((await ajaxGet({ url })) as CitedEntry[]) : [];
+
+      return sectionSources(sections, entries);
+    },
   });
 }
 

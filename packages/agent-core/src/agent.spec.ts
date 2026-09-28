@@ -1463,6 +1463,97 @@ describe('citations and proof', () => {
     expect(page.standing[0]).toMatchObject(proof);
   });
 
+  it('[KG-7.1] reads a generated page with its question, what each section cites, and those entries with their proof', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /pages': [{ id: 'page-gen', title: 'Deploying' }],
+      'GET /pages/page-gen': {
+        id: 'page-gen',
+        title: 'Deploying',
+        descriptionMarkdown: '## Deploying\n\nMerge to main.',
+        entryPolicy: 'OPEN',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+        ancestors: [],
+        kind: 'GENERATED',
+        question: 'How do we deploy the server?',
+        sections: [
+          {
+            id: 'sec_deploy',
+            heading: 'Deploying',
+            body: 'Merge to main.',
+            entryIds: ['entry-1', 'entry-gone'],
+            evidence: 'abc',
+          },
+          { id: 'sec_broken', heading: 7 },
+        ],
+        citedEntryIds: ['entry-1', 'entry-gone'],
+      },
+      'GET /page_entries': (call: RecordedCall) =>
+        call.query.ids
+          ? [
+              {
+                id: 'entry-1',
+                content: 'Deploys go out from main on merge.',
+                scope: 'apps/server',
+                status: 'STANDING',
+                verifiedAt: null as string | null,
+                retrievalCount: 0,
+                pageId: 'page-notes',
+                createdAt: '2026-09-20T10:00:00.000Z',
+                ...proof,
+              },
+            ]
+          : [],
+    });
+
+    const page = await agent.readPage('Deploying');
+
+    expect(page).toMatchObject({
+      kind: 'GENERATED',
+      question: 'How do we deploy the server?',
+      sections: [
+        {
+          id: 'sec_deploy',
+          heading: 'Deploying',
+          entryIds: ['entry-1', 'entry-gone'],
+        },
+      ],
+    });
+    expect(page.sections[0]).not.toHaveProperty('body');
+    // What it cites, in use, with its proof; the one no longer in use is
+    // missing, which is how a reader tells.
+    expect(page.cited.map((entry) => entry.id)).toEqual(['entry-1']);
+    expect(page.cited[0]).toMatchObject(proof);
+    expect(
+      calls.find((call) => call.path === '/page_entries' && call.query.ids)
+        ?.query,
+    ).toEqual({ ids: 'entry-1,entry-gone', status: 'STANDING,CONSOLIDATED' });
+  });
+
+  it('[KG-7.1] reads a page people write as authored, citing nothing, without asking for what it cites', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /pages': pages,
+      'GET /pages/page-1': {
+        id: 'page-1',
+        title: 'Server',
+        descriptionMarkdown: '',
+        entryPolicy: 'CURATED',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+        ancestors: [],
+      },
+      'GET /page_entries': [],
+    });
+
+    await expect(agent.readPage('Server')).resolves.toMatchObject({
+      kind: 'AUTHORED',
+      question: null,
+      sections: [],
+      cited: [],
+    });
+    expect(calls.filter((call) => call.path === '/page_entries')).toHaveLength(
+      1,
+    );
+  });
+
   it('[KG-2.8] says plainly when the server sent no proof, rather than inventing one', async () => {
     const { agent } = makeAgent({
       'GET /knowledge/search': {

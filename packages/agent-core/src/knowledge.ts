@@ -21,6 +21,16 @@ export type EntryStatus =
 
 export type EntryPolicy = 'OPEN' | 'CURATED' | 'LOCKED';
 
+/** AUTHORED: people write it. GENERATED: the server writes it from entries. */
+export type PageKind = 'AUTHORED' | 'GENERATED';
+
+/** One section of a generated page, and the entries it was written from. */
+export interface KnowledgePageSection {
+  id: string;
+  heading: string;
+  entryIds: string[];
+}
+
 export interface KnowledgePageRef {
   id: string;
   title: string;
@@ -35,6 +45,17 @@ export interface KnowledgePage extends KnowledgePageRef {
   ancestors: KnowledgePageRef[];
   /** Facts currently being served for this page. */
   standing: KnowledgeEntry[];
+  kind: PageKind;
+  /** The question a generated page answers; null for one people write. */
+  question: string | null;
+  /** A generated page's sections, each with what it cites; empty otherwise. */
+  sections: KnowledgePageSection[];
+  /**
+   * The entries the page cites that are still in use, with their proof: what
+   * a generated page's sections, or a consolidated body, rest on. An id a
+   * section cites that is missing here is no longer in use.
+   */
+  cited: KnowledgeEntry[];
   /**
    * When the page last changed. This is the revision a file on disk records, so
    * a push can tell "nothing moved" from "somebody else edited this while I had

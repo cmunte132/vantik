@@ -876,7 +876,11 @@ export function registerVantikTools(
         'One page in full: its body as markdown, where it sits in the tree, ' +
         'and the facts currently being served from it. Read the page before ' +
         'adding to it — the thing you are about to assert may already be in ' +
-        'the body, in which case there is nothing to add.',
+        'the body, in which case there is nothing to add. A generated page ' +
+        'also gives the question it answers and each section with the entry ' +
+        'ids it cites; `cited` holds those entries, still in use, with their ' +
+        'proof. An id a section cites that is missing from `cited` is no ' +
+        'longer in use, and the next refresh rewrites that section.',
       inputSchema: {
         page: z.string().describe('Page title or id.'),
       },

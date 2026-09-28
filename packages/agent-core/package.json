@@ -1,6 +1,6 @@
 {
   "name": "@vantikhq/agent-core",
-  "version": "0.1.0",
+  "version": "2026.9.0",
   "description": "Task-shaped Vantik operations shared by the CLI and the MCP server",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -2,7 +2,7 @@ openapi: 3.0.0
 info:
   title: Vantik
   description: AI First Project Management Tool
-  version: 0.3.10
+  version: 2026.9.0
 
 servers:
   - url: https://app.vantik.dev

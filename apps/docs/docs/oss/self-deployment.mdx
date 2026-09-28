@@ -349,6 +349,16 @@ response. `wId` is the workspace, `aId` is the user who acts, and `opName` is
 the endpoint. When you enable the traces, each line also holds `traceId` and
 `spanId`. From any log line you therefore go to its trace.
 
+Each call to a model writes one line with the context `LLM`. The line holds
+`purpose`, the feature that made the call, for example `triage.pair`. It also
+holds `role`, `model`, `durationMs`, the token counts, and `finishReason`. A
+call that fails writes an error line with the same fields. To find the model
+calls, filter on `"ctx":"LLM"`.
+
+> **Warning:** Do not set `LOG_LEVEL=debug` in production if the logs leave
+> your control. At this level, each model call also writes its prompt and its
+> answer. These can hold issue text and page text.
+
 `OTEL_EXPORTER_OTLP_ENDPOINT` also exports every line over OTLP, with the same
 correlation fields as record attributes. This setting **adds** a destination,
 and it replaces none. The server writes to stdout in both cases, so your usual

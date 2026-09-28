@@ -1,12 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { LLMRole, PageEntryCitationJudgmentEnum } from '@vantikhq/types';
-import { generateText } from 'ai';
 
 import {
-  getLanguageModel,
   isLLMConfigured,
   resolveModel,
 } from 'modules/ai-requests/llm-provider';
+import { generateModelText } from 'modules/ai-requests/model-call';
 
 import { formatLineRange, parseLineRange } from './citation-matching';
 
@@ -50,17 +49,14 @@ export type Complete = (
   prompt: string,
 ) => Promise<{ text: string; model: string }>;
 
-const complete: Complete = async (role, system, prompt) => {
-  const { modelId } = resolveModel(role);
-  const { text } = await generateText({
-    model: getLanguageModel(modelId),
+const complete: Complete = (role, system, prompt) =>
+  generateModelText({
+    purpose: 'citation.judge',
+    role,
     system,
     prompt,
     temperature: 0,
   });
-
-  return { text, model: modelId };
-};
 
 const SYSTEM = [
   'You check whether a claim about a codebase is still supported by the code.',

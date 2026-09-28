@@ -1,13 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PageEntryRelationType } from '@prisma/client';
 import { LLMRole } from '@vantikhq/types';
-import { generateText } from 'ai';
 
 import {
-  getLanguageModel,
   isLLMConfigured,
   resolveModel,
 } from 'modules/ai-requests/llm-provider';
+import { generateModelText } from 'modules/ai-requests/model-call';
 
 /**
  * The model judgments triage asks for, and nothing else.
@@ -33,17 +32,14 @@ export type Complete = (
   temperature: number,
 ) => Promise<{ text: string; model: string }>;
 
-const complete: Complete = async (role, system, prompt, temperature) => {
-  const { modelId } = resolveModel(role);
-  const { text } = await generateText({
-    model: getLanguageModel(modelId),
+const complete: Complete = (role, system, prompt, temperature) =>
+  generateModelText({
+    purpose: system === PAIR_SYSTEM ? 'triage.pair' : 'triage.accept',
+    role,
     system,
     prompt,
     temperature,
   });
-
-  return { text, model: modelId };
-};
 
 /** An entry as the judges see it. */
 export interface JudgedEntry {

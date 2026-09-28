@@ -1,16 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { AIStreamResponse, GetAIRequestDTO } from '@vantikhq/types';
-import {
-  generateText,
-  type ModelMessage,
-  streamText,
-  type UserModelMessage,
-} from 'ai';
+import { type ModelMessage, type UserModelMessage } from 'ai';
 import { PrismaService } from 'nestjs-prisma';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
-import { getLanguageModel, resolveModel } from './llm-provider';
+import { generateModelText, streamModelText } from './model-call';
 
 @Injectable()
 export default class AIRequestsService {
@@ -56,15 +51,21 @@ export default class AIRequestsService {
         stream,
         model,
         messages,
-        (text: string, model: string) => {
+        (text: string, model: string) =>
           this.createRecord(
             text,
             userMessages,
             model,
             reqBody.model,
             workspaceId,
-          );
-        },
+          ).catch((error) =>
+            this.logger.error({
+              message: `Could not save the AI request: ${error.message}`,
+              where: `AIRequestsService.createRecord`,
+              error,
+            }),
+          ),
+        reqBody.model,
       );
     } catch (error) {
       this.logger.error({
@@ -80,32 +81,23 @@ export default class AIRequestsService {
     stream: boolean,
     model: string,
     messages: ModelMessage[],
-    onFinish: (text: string, model: string) => void,
+    onFinish: (text: string, model: string) => void | Promise<void>,
+    // The feature that asked, for example `IssueTitle`. The log line names it.
+    purpose?: string,
   ) {
-    const { role, modelId: finalModel } = resolveModel(model);
-    const modelInstance = getLanguageModel(finalModel);
-
-    this.logger.info({
-      message: `Sending request for role '${role}' with model: ${finalModel}`,
-      where: `AIRequestsService.makeModelCall`,
-    });
+    purpose = purpose || 'ai-request';
 
     if (stream) {
-      return await streamText({
-        model: modelInstance,
-        messages,
-        onFinish: async ({ text }) => {
-          onFinish(text, finalModel);
-        },
-      });
+      return streamModelText({ purpose, role: model, messages }, onFinish);
     }
 
-    const { text } = await generateText({
-      model: modelInstance,
+    const { text, model: finalModel } = await generateModelText({
+      purpose,
+      role: model,
       messages,
     });
 
-    onFinish(text, finalModel);
+    await onFinish(text, finalModel);
 
     return text;
   }

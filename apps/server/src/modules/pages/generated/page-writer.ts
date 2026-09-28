@@ -1,12 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { type LLMRole, type PageSection } from '@vantikhq/types';
-import { generateText } from 'ai';
 
-import {
-  getLanguageModel,
-  isLLMConfigured,
-  resolveModel,
-} from 'modules/ai-requests/llm-provider';
+import { isLLMConfigured } from 'modules/ai-requests/llm-provider';
+import { generateModelText } from 'modules/ai-requests/model-call';
 
 import { parseOperations } from './sections';
 
@@ -28,17 +24,14 @@ export type WriterComplete = (
   prompt: string,
 ) => Promise<{ text: string; model: string }>;
 
-const complete: WriterComplete = async (role, system, prompt) => {
-  const { modelId } = resolveModel(role);
-  const { text } = await generateText({
-    model: getLanguageModel(modelId),
+const complete: WriterComplete = (role, system, prompt) =>
+  generateModelText({
+    purpose: 'page.refresh',
+    role,
     system,
     prompt,
     temperature: 0,
   });
-
-  return { text, model: modelId };
-};
 
 /** An entry as the writer sees it. */
 export interface WriterEntry {

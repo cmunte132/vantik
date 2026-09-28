@@ -335,21 +335,33 @@ function setup(
     ),
   };
 
-  // The index: every in-use entry in the search's filter, as a hit.
+  // The index: every in-use entry in the search's filter, as a hit, and
+  // three a page unless asked for every one, as Typesense groups them.
   const searchKnowledge = jest.fn(
-    async (workspaceId: string, _query: string, filter: Where) => ({
-      hits: entries
-        .filter(
-          (row) =>
-            pageOf(row.pageId)?.workspaceId === workspaceId &&
-            row.deleted === null &&
-            filter.includeStatuses.includes(row.status) &&
-            (filter.pageId
-              ? row.pageId === filter.pageId
-              : row.moduleIds.some((id) => filter.moduleIds.includes(id))),
-        )
-        .map((row) => ({ entryId: row.id, trust: 'GROUNDED' })),
-    }),
+    async (workspaceId: string, _query: string, filter: Where) => {
+      const perPage = new Map<string, number>();
+
+      return {
+        hits: entries
+          .filter(
+            (row) =>
+              pageOf(row.pageId)?.workspaceId === workspaceId &&
+              row.deleted === null &&
+              filter.includeStatuses.includes(row.status) &&
+              (filter.pageId
+                ? row.pageId === filter.pageId
+                : row.moduleIds.some((id) => filter.moduleIds.includes(id))),
+          )
+          .filter((row) => {
+            const seen = perPage.get(row.pageId) ?? 0;
+            perPage.set(row.pageId, seen + 1);
+
+            return filter.ungrouped || seen < 3;
+          })
+          .slice(0, filter.limit)
+          .map((row) => ({ entryId: row.id, trust: 'GROUNDED' })),
+      };
+    },
   );
   const vectorService = { searchKnowledge } as unknown as VectorService;
 
@@ -961,6 +973,29 @@ describe('refreshing a generated page', () => {
       });
       expect(store.shown[2].editable).toEqual([]);
       expect(sectionsOf(store.page()).slice(1)).toEqual(after);
+    });
+
+    it('[KG-7.3] reads every entry in its scope that the index finds, not three a page', async () => {
+      const facts = ['one', 'two', 'three', 'four', 'five'];
+      const store = setup({
+        entries: facts.map((fact) =>
+          entry(`e-${fact}`, `Deploys go out on merge, rule ${fact}.`),
+        ),
+      });
+      store.script(sectionPerEntry);
+
+      await store.service.refresh(PAGE, at(1), {});
+
+      // All five sit on one page, and all five were read and written up.
+      expect(store.shown[0].evidence.map((item) => item.id)).toEqual(
+        facts.map((fact) => `e-${fact}`),
+      );
+      expect([...store.page().citedEntryIds].sort()).toEqual(
+        facts.map((fact) => `e-${fact}`).sort(),
+      );
+      for (const [, , filter] of store.searchKnowledge.mock.calls) {
+        expect(filter).toMatchObject({ limit: 40, ungrouped: true });
+      }
     });
 
     it('[KG-7.3] writes nothing when the index cannot be reached', async () => {

@@ -209,6 +209,19 @@ function fakeIndex(
           ranked.sort(order);
         }
 
+        if (search.group_by === undefined) {
+          return {
+            results: [
+              {
+                hits: ranked
+                  .slice(0, Number(search.per_page))
+                  .map((document) => ({ document })),
+                found: ranked.length,
+              },
+            ],
+          };
+        }
+
         const groups = new Map<unknown, Doc[]>();
         for (const doc of ranked) {
           const group = groups.get(doc.pageId) ?? [];
@@ -859,6 +872,27 @@ describe('entries a page cites', () => {
       workspaceId: WORKSPACE,
       updatedAt: at,
     });
+
+  it('[KG-7.3] reads every entry a page holds for a generated page’s refresh, and serves three a page to everyone else', async () => {
+    const { service, searches } = fakeIndex();
+    const facts = ['one', 'two', 'three', 'four', 'five'];
+    for (const fact of facts) {
+      await index(service, fact, `Deploys go out on merge, rule ${fact}.`);
+    }
+
+    const served = await service.searchKnowledge(WORKSPACE, 'deploys');
+    const whole = await service.searchKnowledge(WORKSPACE, 'deploys', {
+      limit: 40,
+      ungrouped: true,
+    });
+
+    expect(served.hits).toHaveLength(3);
+    expect(searches[0]).toMatchObject({ group_by: 'pageId', group_limit: 3 });
+    expect(ids(whole.hits).sort()).toEqual([...facts].sort());
+    expect(searches[1]).not.toHaveProperty('group_by');
+    expect(searches[1]).not.toHaveProperty('group_limit');
+    expect(searches[1].per_page).toBe(40);
+  });
 
   it('[KG-7.4] serves an entry folded into a page, as evidence for it, ranked below it', async () => {
     const { service, searches } = fakeIndex({}, [

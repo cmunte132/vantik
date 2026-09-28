@@ -553,7 +553,8 @@ export default class PageRefreshService {
    * The entries a refresh writes from: those in scope that best answer the
    * question, as the index finds them, confirmed in use from postgres, since
    * the index can be behind. An index that cannot be reached throws, and
-   * the refresh writes nothing.
+   * the refresh writes nothing. Ungrouped, as the scope is the page's own:
+   * a module whose facts sit on one page gives up all of them, not three.
    */
   private async retrieve(
     page: RefreshedPage,
@@ -565,6 +566,7 @@ export default class PageRefreshService {
         limit: EVIDENCE_LIMIT,
         pageId: page.id,
         includeStatuses: IN_USE,
+        ungrouped: true,
       }),
       ...(modules.length
         ? [
@@ -572,6 +574,7 @@ export default class PageRefreshService {
               limit: EVIDENCE_LIMIT,
               moduleIds: modules,
               includeStatuses: IN_USE,
+              ungrouped: true,
             }),
           ]
         : []),

@@ -640,6 +640,12 @@ export class VectorService implements OnModuleInit {
        * product graph, which rank after them and ahead of everything else.
        */
       boost?: { modules: string[]; neighbours: string[] };
+      /**
+       * Every hit, not three a page. Only for a reader that takes a scope's
+       * evidence whole, as a generated page's refresh does; what is served
+       * to agents stays grouped.
+       */
+      ungrouped?: boolean;
     } = {},
   ): Promise<KnowledgeSearchResult> {
     const searchParameters = {
@@ -653,8 +659,9 @@ export class VectorService implements OnModuleInit {
           facet_by: KNOWLEDGE_FACET_BY,
           // The control that holds when every other gate has failed: fifty
           // entries on one page contribute at most three documents.
-          group_by: 'pageId',
-          group_limit: KNOWLEDGE_GROUP_LIMIT,
+          ...(options.ungrouped
+            ? {}
+            : { group_by: 'pageId', group_limit: KNOWLEDGE_GROUP_LIMIT }),
           vector_query: `embeddings:([], distance_threshold:${
             options.vectorDistance ?? 0.8
           })`,

@@ -264,6 +264,17 @@ describe('KnowledgeService.contextPack', () => {
 
     expect(searchParams(typesense).q).toBe('apps/server/prisma');
   });
+
+  it('[ENG-224] never records a task or a scope as a knowledge gap, though it found nothing', async () => {
+    const { service, prisma } = buildService([]);
+
+    await service.contextPack(WORKSPACE, {
+      query: 'Add a retry to the webhook worker',
+    });
+    await service.contextPack(WORKSPACE, { scope: 'apps/server/prisma' });
+
+    expect(prisma.pageKnowledgeGap.upsert).not.toHaveBeenCalled();
+  });
 });
 
 describe('KnowledgeService.knowledgeGaps', () => {
@@ -358,10 +369,15 @@ describe('KnowledgeService.seedsFor', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       where: any,
     ): boolean => {
-      if (where.workspaceId && m.workspaceId !== where.workspaceId)
+      if (where.workspaceId && m.workspaceId !== where.workspaceId) {
         return false;
-      if (where.deleted === null && m.deleted) return false;
-      if (where.id?.in && !where.id.in.includes(m.id)) return false;
+      }
+      if (where.deleted === null && m.deleted) {
+        return false;
+      }
+      if (where.id?.in && !where.id.in.includes(m.id)) {
+        return false;
+      }
       if (where.OR) {
         return where.OR.some(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -678,8 +694,8 @@ describe('the knowledge a run is handed', () => {
    * service makes: the module's conventions, and the ranked ids.
    */
   function forRun(options: {
-    conventions?: ReturnType<typeof row>[];
-    entries?: ReturnType<typeof row>[];
+    conventions?: Array<ReturnType<typeof row>>;
+    entries?: Array<ReturnType<typeof row>>;
     ranked?: string[];
     search?: Error;
     issue?: { moduleIds: string[] } | null;

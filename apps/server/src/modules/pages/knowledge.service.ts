@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   KnowledgeProof,
   KnowledgeTrustEnum,
   PageEntryKindEnum,
 } from '@vantikhq/types';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from 'nestjs-prisma';
 
 import {
@@ -219,16 +219,17 @@ export default class KnowledgeService {
       estimatedTokens += cost;
     }
 
-    // Counted against what the search *found*, not against what fit. A pack
-    // that matched fifty things and could afford none of them answered the
-    // question; recording it as a gap would put questions the bank handles well
-    // at the top of the list of things nobody has written down.
+    // Never a knowledge gap. The query here is the task an agent is about to
+    // do, or the area it works in, not a question it asked: a pack that finds
+    // nothing says the area is new, and recording "add a retry to the webhook
+    // worker" as a gap filled the list with work descriptions nobody could
+    // answer. A question the bank cannot answer arrives through recall.
     await this.recordDemand(
       workspaceId,
       query,
       items,
       { ...input.reader, workspaceId, via: 'LOAD_CONTEXT' },
-      hits.length,
+      { gap: false },
     );
 
     return {
@@ -558,8 +559,8 @@ export default class KnowledgeService {
     query: string,
     served: KnowledgeSearchHit[],
     to: ServedTo,
-    /** What the search matched, which is not always what was served. */
-    found = served.length,
+    /** Whether finding nothing records the query as a knowledge gap. */
+    { gap }: { gap: boolean } = { gap: true },
   ): Promise<void> {
     try {
       const entryIds = served
@@ -570,7 +571,7 @@ export default class KnowledgeService {
         await this.pageEntriesService.recordServed(entryIds, to);
       }
 
-      if (found === 0) {
+      if (gap && served.length === 0) {
         await this.recordKnowledgeGap(workspaceId, query);
       }
     } catch {

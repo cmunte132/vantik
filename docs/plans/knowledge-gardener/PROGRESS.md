@@ -5,21 +5,21 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 7, in progress. KG-7.1 to KG-7.6 are implemented, and
-  KG-7.1 to KG-7.5 mutation-checked; the phase 7 verify and review are
-  next. Phase 6
-  is done: KG-6.1 to KG-6.5
-  implemented and mutation-checked, and its review passed after eight
-  rounds with no finding left (see "Phase 6 review: PASS" below). PR #45
-  is open from this branch, so the phase 6 commits are in it too; its
-  description says so. Phases 4 and 5 are in PR #45; phases 6 and 7 go in
-  the third pull request.
+- Current phase: 7, in progress. KG-7.1 to KG-7.6 are implemented and
+  mutation-checked. The phase 7 review's round 1 failed with three
+  blocking and eight non-blocking findings (F1-F11), all fixed with tagged,
+  mutation-checked tests (see "Phase 7, round 1" below); round 2 is next.
+  Phase 6 is done: KG-6.1 to KG-6.5 implemented and mutation-checked, and
+  its review passed after eight rounds with no finding left (see "Phase 6
+  review: PASS" below). PR #45 is open from this branch, so the phase 6
+  and 7 commits are in it too; phases 4 and 5 are in it as well.
 - Pull requests: the maintainer asked for the remaining phases in two or three
-  pull requests rather than one each. PR #44 carries phase 1's review fixes,
-  phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
-  and 7.
-- Last verify: phases 0-6, PASS, 51/51 (server 1850, agent-core 67,
-  cli 10, webapp 638; typecheck ok).
+  pull requests rather than one each. PR #44 carried phase 1's review fixes,
+  phase 2 and phase 3. PR #45 was opened for phases 4 and 5; it is still
+  open from this branch, so it carries phases 6 and 7 as well, and its
+  title and description are to say so once phase 7's review passes.
+- Last verify: phases 0-7, 57/58, every criterion but KG-7.R (the review)
+  passing (server 1944, agent-core 71, cli 13, webapp 655; typecheck ok).
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
   (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
@@ -1011,11 +1011,24 @@ next session starts by reading it.
   A page people wrote never becomes generated (the gardener would replace
   its body); a generated page can be taken over by hand (`kind: AUTHORED`
   in an update), which is recorded in its history, and until then an edit
-  to its body is refused. A new question clears the watermark and the
-  evidence hash, is recorded, and queues a build; the same question again
-  changes nothing. Making a generated page, or asking it a new question,
-  queues `refreshGeneratedPage` for it (best effort: the hourly look
-  builds it anyway).
+  to its body is refused. Only a person takes a page over: the controller
+  refuses an agent token and the service an Agent or System user, so no
+  agent turns a generated page into one people write with its own text in
+  it. A page taken over keeps its `citedEntryIds`: the body it keeps was
+  written from them, so they stay its evidence. Making a generated page
+  queues `refreshGeneratedPage` for it at once (best effort: the hourly
+  look builds it anyway).
+- **A new question is a new page (KG-7.1, KG-7.2).** A new question clears
+  the watermark and the evidence hash, is recorded, and queues a build for
+  a second after the minimum interval since the last build has passed, or
+  at once when it has; the same question again changes nothing. The
+  question is part of every section's fingerprint (below), so that build
+  may rewrite every section. It is a refresh with no entry changed, which
+  KG-7.2's "only when an entry changed" does not name: a page asked
+  something else is read as a new page, whose first build is the same.
+  Queuing it for when the interval has passed, rather than at once, keeps
+  the gate: a question changed back and forth builds once an interval, and
+  the build happens even with the hourly look off.
 - **The gate (KG-7.2).** Hourly (`refreshGeneratedPages`, cron
   `KNOWLEDGE_PAGE_REFRESH_CRON`, default `23 * * * *`, `off` disables; the
   PAGE_DECAY_CRON pattern with a fixed job id), each generated page is
@@ -1048,9 +1061,23 @@ next session starts by reading it.
   removed) drops that operation; a written section cites only entries the
   refresh read, and one left citing none is dropped; at most 30
   operations; a new section's id is made in code (`sec_` and 12 hex).
+  - **Only what changed is rewritten.** Every section written stores
+    `evidence`, a fingerprint (sha256, 32 hex) of the page's question and,
+    for each entry it cites, by id, its kind and content, or that it is
+    out of use or out of scope. Before the writer is asked, the kept
+    sections whose fingerprint no longer matches are the editable ones; the
+    writer is shown each section marked "evidence changed" or "evidence
+    unchanged", and in code a replace or remove of a section not editable
+    is dropped ("the evidence of section X has not changed"). Inserting is
+    allowed anywhere. So a model that answers with removals for the whole
+    page cannot collapse it: only the sections whose evidence moved can
+    go. A section written before fingerprints has none, so is editable
+    once.
   - **What is read.** The index, searched for the question with the page's
-    id and with its modules, for STANDING and CONSOLIDATED entries, each
-    hit confirmed in use and in scope in postgres, in the order the index
+    id and with its modules, for STANDING and CONSOLIDATED entries,
+    ungrouped (everyone else is served at most three documents a page; a
+    refresh reads every entry of its scope the index finds), each hit
+    confirmed in use and in scope in postgres, in the order the index
     ranked them, at most 40; then the entries the kept sections cite, if
     the search missed them, so a section can be rewritten from what it
     still rests on.
@@ -1097,6 +1124,22 @@ next session starts by reading it.
   - **Trust.** A consolidated entry is accepted, so it is GROUNDED when
     its citations hold, as a standing one is (`entryTrust`); the run pack
     packs only grounded or verified entries.
+  - **Held to its citations, and correctable.** A consolidated entry is
+    served, so it is treated as a served entry everywhere else too: a
+    landed change re-checks its citations, and a contradiction disputes
+    it, with the correction issue saying the page's body carries it as
+    well; the review queue lists and answers what the gardener asks about
+    it; triage and the near-match checks compare new entries with it, so a
+    repeat corroborates it and an accepted contradiction withholds it; a
+    correction can supersede it; and a person can dispute or archive it
+    (CONSOLIDATED now leads to DISPUTED and ARCHIVED), from the page's
+    rail too. Putting it back makes it standing, and records the undo.
+  - **Put back in the index.** Entries consolidated before consolidated
+    entries were served were taken out of the index then. Once at boot
+    (`indexConsolidatedEntries`, a job id per minute so several instances
+    queue one), the consolidated entries of live pages the index does not
+    hold are indexed again; nothing else is written, and an index that
+    cannot be reached is logged and tried at the next boot.
   - **Not decayed.** Decay does not archive, and the gardener does not
     ask a person about, an entry a live page cites: the page is read in
     its place (`citedByLivePages`, scoped to the workspace when one is
@@ -1116,14 +1159,20 @@ next session starts by reading it.
     that edit), or an entry it folds in that is no longer standing. It
     then, in one transaction: marks the proposal accepted only while still
     open (so two people accepting at once fold it in once), writes the
-    body, adds the entries to `citedEntryIds`, marks them CONSOLIDATED,
+    body only over the page as it was checked (its `updatedAt` and kind
+    unchanged, so an edit saved meanwhile is not overwritten: the
+    acceptance is refused and changes nothing), adds the entries to `citedEntryIds`, marks them CONSOLIDATED,
     and writes a `PageHistory` row with `previousBody` and
     `changes.proposal`, with the agreement verdicts for audited entries.
     Declining changes only the proposal, and also only while open.
   - **Undone by the existing revert.** Reverting the accepting change puts
     the body back, and puts the entries it folded in, where still
     CONSOLIDATED, back in use as STANDING and out of `citedEntryIds`
-    (`changes.unconsolidated`).
+    (`changes.unconsolidated`). Undoing that revert puts the consolidated
+    body back and folds the entries it put back, where still STANDING, in
+    again: CONSOLIDATED and cited (`changes.reconsolidated`), so no fact
+    is served beside the page that carries it without being marked as its
+    evidence.
   - **In front of a person.** The review queue lists open page proposals
     (`pageProposals`, newest first, 50 at most, scoped to the page when
     asked), apart from the entries and not narrowed by reason; the webapp
@@ -1132,7 +1181,14 @@ next session starts by reading it.
   - **Generated pages in the webapp.** Synced with their kind and
     question, shown read-only with the question they answer, and taken
     over by hand from the page menu; the rest of the refresh bookkeeping
-    is not synced.
+    is not synced. Under the body, each section lists the entries it was
+    written from, marking those out of use.
+  - **What a section cites, for agents.** `read_page` (agent-core, the MCP
+    tool and the CLI) returns a page's kind and question, its sections
+    with the entries each cites, and those entries with their proof, read
+    through `GET /page_entries?ids=` (in the workspace, in use). The page
+    search's hits carry no citations; the entries they cite are served
+    beside them, marked `evidenceFor`.
 - **Tests.** The settings suite's full-object expectations gained
   `pageRefreshMinIntervalMs`; the processor suite's constructions gained
   the refresh service. For KG-7.4, the tests that said consolidated
@@ -2129,6 +2185,125 @@ conventions, knowledge gaps become issues, and decay weighs checks and
 outcomes. Every finding (N1-N5, R1-R4, S1-S2, F1, U1-U2, W1-W2) fixed with
 a tagged, mutation-checked test.
 
+### Phase 7, round 1 (fresh reviewer subagent)
+
+The reviewer read 5eccd0c..dd1f572 against PLAN.md and the KG-7 criteria,
+without reading this file. It ran the verify through phase 7 (every KG-7
+criterion but the review passing; server 1924, agent-core 69, cli 12,
+webapp 651; typecheck ok) and `prisma migrate diff` from the old schema
+(matches the migration), and found the new queries scoped to the
+workspace, accept and decline refused to agents in the controller and the
+service, and the tagged tests over fakes. Verdict FAIL, with three
+blocking and eight non-blocking findings, all fixed:
+
+- **F1 (blocking). Consolidated entries were served but never checked
+  again.** `recheckLanded` read only STANDING and PROPOSED entries'
+  citations, and upkeep disputed or asked about STANDING entries only, so
+  a consolidated entry whose code was deleted went on being served as
+  GROUNDED. The landed-change check now reads consolidated entries' citations
+  too, upkeep acts on every entry in use (`IN_USE`), and the correction
+  issue for a consolidated entry says the page's body carries it as well
+  (37651a8). Tests: "[KG-7.4] re-checks a consolidated entry, which is
+  served as its page's evidence, and disputes it when the code contradicts
+  it"; "[KG-7.4] lists and answers what the gardener asks about a
+  consolidated entry, which is served as its page's evidence".
+- **F2 (blocking). Nothing could correct, retire or deduplicate a
+  consolidated entry.** CONSOLIDATED was terminal, a supersede of one was
+  refused, and triage and the near-match checks did not look at it.
+  CONSOLIDATED now leads to DISPUTED and ARCHIVED (a person, from the
+  page's rail too), a correction can supersede it, and triage and the
+  write-time and triage near-match checks compare new entries with it
+  (37651a8). Tests: "[KG-7.4] lets a person take a consolidated entry out
+  of use, and puts it back as standing"; "[KG-0.1] [KG-7.4] keeps a
+  consolidated entry in use while its correction waits, and retires it
+  once a person accepts the correction"; "[KG-7.4] refuses an exact repeat
+  of a consolidated entry, which is still served, but not of one out of
+  use"; "[KG-7.4] corroborates a consolidated entry it repeats, which is
+  served as its page's evidence"; "[KG-7.4] withholds a consolidated entry
+  an accepted one wins against, as it would a standing one"; "[KG-7.4]
+  finds consolidated entries too, which are served as their page's
+  evidence, for triage and for the write-time check"; webapp "[KG-7.4]
+  offers to take a fact written into the page out of use, and not to put
+  it in use again".
+- **F3 (blocking). An agent could take a generated page over and rewrite
+  its body in one call.** Taking over is now refused to agent tokens in the
+  controller and to Agent and System users in the service, and the
+  refusal to an agent's `write_page` no longer tells it to take the page
+  over (37651a8). The page keeps its `citedEntryIds` (see "Kinds" above).
+  Test: "[KG-7.1] leaves taking a generated page over to a person: an
+  agent cannot, by its token or as its user".
+- **F4. Nothing in code limited how much of a page a refresh rewrote.**
+  Each section now stores a fingerprint of the question and what its
+  entries say; a replace or remove of a section whose fingerprint still
+  matches is dropped in code, and the writer is told which sections it may
+  edit (253e1f2). Tests: "[KG-7.3] rewrites or removes only a section
+  whose evidence changed, and adds to the rest"; "[KG-7.3] fingerprints
+  what a section rests on: its question and what its entries say";
+  "[KG-7.3] rewrites or removes only the sections whose evidence changed,
+  whatever the model asks".
+- **F5. A question change did not get the rebuild the docs promised.** The
+  queued job found the page too soon, and with the hourly look off it
+  never ran. The build is now queued with a delay of a second past the
+  minimum interval (at once when that has passed), and the question is in
+  the fingerprint, so the rebuild may rewrite every section; the choice
+  is recorded above ("A new question is a new page"). The docs now say a
+  section is removed without a model when its entries are out of use or
+  out of the page's scope (253e1f2). Tests: "[KG-7.2] [KG-7.3] rebuilds a
+  page asked a new question once the interval has passed, and may rewrite
+  all of it"; the KG-7.1 question-change test asserts the delay.
+- **F6. Accepting a proposal could overwrite a concurrent edit.** The body
+  is now written only where the page's `updatedAt` and kind are those
+  checked; otherwise nothing is changed and the person is told why, apart
+  from a proposal answered meanwhile (7603bb0). Test: the racing case in
+  "[KG-7.4] is refused once the page or an entry it folds in has moved on,
+  and writes nothing".
+- **F7. A refresh read at most three entries a page.** `searchKnowledge`
+  takes `ungrouped`, which the refresh's two searches pass (738000f).
+  Tests: "[KG-7.3] reads every entry in its scope that the index finds,
+  not three a page"; "[KG-7.3] reads every entry a page holds for a
+  generated page's refresh, and serves three a page to everyone else"; the
+  refresh suite's fake index now groups as Typesense does.
+- **F8. Entries consolidated before this phase were not in the index.**
+  Once at boot, the consolidated entries of live pages the index does not
+  hold are indexed again (`indexConsolidatedEntries`,
+  `VectorService.indexedEntryIds`) (3945c89). Tests: "[KG-7.4] puts back
+  the consolidated entries the index lost, and touches nothing else";
+  "[KG-7.4] asks the index nothing when no entry is consolidated, and
+  survives an index that cannot be reached"; "[KG-7.4] queues one pass at
+  boot, which indexes the consolidated entries the index lost".
+- **F9. No reader could see what a section cites.** `read_page` returns
+  the kind, question, sections with their citations and the cited entries
+  with their proof, through a new `ids` filter on the entry list; the CLI
+  prints them; the webapp lists each section's sources under a generated
+  page (8bcbf8f). Search hits carry no citations; the entries they cite are
+  served beside them as `evidenceFor`. Tests: "[KG-7.1] hands the entries
+  a page cites to the list, and refuses an id that is not one"; "[KG-7.1]
+  lists the entries a page cites, by id, in the workspace only";
+  "[KG-7.1] reads a generated page with its question, what each section
+  cites, and those entries with their proof"; "[KG-7.1] reads a page
+  people write as authored, citing nothing, without asking for what it
+  cites"; "[KG-7.1] shows a generated page with its question, and what
+  each section was written from"; webapp "[KG-7.1] asks for the entries
+  its sections cite, once each, in use only" and "[KG-7.1] shows each
+  section with what it cites, and which of it is out of use".
+- **F10. The PageEntryPolicy doc comment sat above `enum PageKind`.** Moved
+  back (4b61132); a comment only, so no migration.
+- **F11. Undoing the revert of an accepted consolidation served each fact
+  twice.** The revert of a revert now folds the entries the first revert
+  put back, where still standing, in again, and cites them
+  (`changes.reconsolidated`); the webapp's history says so (ae42296).
+  Test: "[KG-7.4] undoing that revert folds the entries still standing
+  back in, so no fact is served twice", which replaces the assertion that
+  they stayed standing.
+
+Mutation-checked: 45 mutants over these fixes, all killed (12 over F1-F3:
+consolidated entries left out of the re-check, of upkeep, of the
+supersede, of triage and of the near-match check, CONSOLIDATED made
+terminal again, the body line left out of the issue, a takeover let
+through in the service or the controller; 33 over F4-F8 and F11). Verify
+through phase 7: 57/58, every criterion but KG-7.R (server 1944,
+agent-core 71, cli 13, webapp 655).
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -2421,3 +2596,12 @@ Give the evidence, and stop until the maintainer answers.
   and its default, the page in the docs sidebar, and the agent guides
   brought up to date for proposals, evidence and generated pages. The docs
   build passes.
+- 2026-09-28: Phase 7 review round 1: FAIL, with three blocking findings
+  (consolidated entries not re-checked, not correctable or compared with
+  new entries; an agent could take a generated page over) and eight
+  non-blocking (no code limit on how much a refresh rewrites, a new
+  question's rebuild, a racing acceptance, a refresh reading three
+  entries a page, consolidated entries missing from the index, sections'
+  citations not shown, a misplaced schema comment, undoing a revert
+  serving facts twice). All fixed with tagged tests; 45 mutants, all
+  killed. Verify through phase 7: 57/58, KG-7.R pending.

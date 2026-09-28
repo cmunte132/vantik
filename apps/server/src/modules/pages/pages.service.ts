@@ -770,8 +770,15 @@ export default class PagesService {
             decidedAt: new Date(),
           },
         }),
+        // Over the page as it was read, or not at all: an edit landing since
+        // would be overwritten, and the history row would not hold it.
         this.prisma.page.update({
-          where: { id: pageId },
+          where: {
+            id: pageId,
+            updatedAt: page.updatedAt,
+            kind: PageKindEnum.AUTHORED,
+            deleted: null,
+          },
           data: {
             description: proposal.body,
             citedEntryIds: [
@@ -806,8 +813,18 @@ export default class PagesService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2025'
       ) {
+        // Either the proposal was answered, or the page moved under it.
+        const open = await this.prisma.pageProposal.findFirst({
+          where: { id: proposalId, state: PageProposalStateEnum.OPEN },
+          select: { id: true },
+        });
+
         throw new ConflictException({
-          message: 'This proposal was answered meanwhile.',
+          message: open
+            ? 'The page changed while this was being accepted, so accepting ' +
+              'it would undo that change. Nothing was changed. Decline it ' +
+              'and ask for it again.'
+            : 'This proposal was answered meanwhile.',
         });
       }
 

@@ -64,12 +64,21 @@ function lazy<T>(run: () => T): Promise<T> {
   } as Promise<T>;
 }
 
+const isDate = (value: unknown): value is Date =>
+  Object.prototype.toString.call(value) === '[object Date]';
+
 function matches(row: Row, where: Row): boolean {
   return Object.entries(where).every(([key, condition]) => {
     const value = row[key];
 
     if (condition === null) {
       return value === null || value === undefined;
+    }
+
+    // By kind rather than `instanceof`: structuredClone's dates come from
+    // another realm.
+    if (isDate(condition)) {
+      return isDate(value) && value.getTime() === condition.getTime();
     }
 
     if (typeof condition === 'object' && !Array.isArray(condition)) {
@@ -174,9 +183,15 @@ function setup() {
           return row ? structuredClone(row) : null;
         }),
       ),
+      // As Prisma's: a row the filter no longer matches is an error.
       update: jest.fn(({ where, data }: Row) =>
         lazy(() => {
-          const row = pages.get(where.id) as Row;
+          const row = pages.get(where.id);
+
+          if (!row || !matches(row, where)) {
+            throw notFound();
+          }
+
           set(row, { ...data, updatedAt: at() });
 
           return structuredClone(row);
@@ -633,6 +648,28 @@ describe('consolidating entries into a page people write', () => {
       edited.service.acceptProposal(PAGE, onEdited.id, 'person-1'),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(edited.state()).toBe(before);
+
+    // A person saves an edit after the check, before the write: the edit
+    // stands, and so does the proposal, still open.
+    const racing = setup();
+    const onRacing = await proposed(racing);
+    const read = racing.prisma.pageEntry.findMany.getMockImplementation()!;
+    let edit = '';
+    racing.prisma.pageEntry.findMany.mockImplementationOnce((args: Row) => {
+      racing.page().description = body('A person’s edit, just saved.');
+      racing.page().updatedAt = new Date(
+        racing.page().updatedAt.getTime() + 60_000,
+      );
+      edit = racing.state();
+
+      return read(args);
+    });
+    await expect(
+      racing.service.acceptProposal(PAGE, onRacing.id, 'person-1'),
+    ).rejects.toThrow(/The page changed while this was being accepted/);
+    expect(racing.state()).toBe(edit);
+    expect(racing.proposals[0].state).toBe(PageProposalStateEnum.OPEN);
+    expect(racing.indexer.pageChanged).not.toHaveBeenCalled();
 
     // An entry it folds in is no longer standing.
     const moved = setup();

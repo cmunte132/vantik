@@ -115,14 +115,60 @@ describe('the hook tools', () => {
     const { client } = await connect(() => json({}));
     const { tools } = await client.listTools();
 
-    for (const name of ['hook_prompt_submit', 'hook_stop']) {
-      expect(tools.find((tool) => tool.name === name)?.description).toContain(
-        'Do not call it yourself',
-      );
+    const hookTools = tools.filter((tool) => tool.name.startsWith('hook_'));
+
+    expect(hookTools.map((tool) => tool.name).sort()).toEqual([
+      'hook_prompt_submit',
+      'hook_session_start',
+      'hook_stop',
+      'hook_tool_use',
+    ]);
+    for (const tool of hookTools) {
+      expect(tool.description).toContain('Do not call it yourself');
+      expect(client.getInstructions()).toContain(tool.name);
     }
-    expect(client.getInstructions()).toContain(
-      'hook_prompt_submit and hook_stop are called by the hooks',
-    );
+    expect(client.getInstructions()).toContain('are called by the hooks');
+  });
+
+  it('forwards the prompt, cut to what the endpoint keeps', async () => {
+    const { client, requests } = await connect(() => json({}));
+
+    await client.callTool({
+      name: 'hook_prompt_submit',
+      arguments: { session_id: 'session-1', prompt: 'x'.repeat(5_000) },
+    });
+
+    expect(requests[0].body).toEqual({
+      session_id: 'session-1',
+      prompt: 'x'.repeat(1_000),
+    });
+  });
+
+  it('forwards how a session started, and an edit, to their events', async () => {
+    const { client, requests } = await connect(() => json({}));
+
+    await client.callTool({
+      name: 'hook_session_start',
+      arguments: { session_id: 'session-1', source: 'compact' },
+    });
+    const edit = await client.callTool({
+      name: 'hook_tool_use',
+      arguments: { session_id: 'session-1', tool_name: 'Edit' },
+    });
+
+    expect(requests).toEqual([
+      {
+        path: '/agent-hooks/session-start',
+        query: '?harness=claude-code',
+        body: { session_id: 'session-1', source: 'compact' },
+      },
+      {
+        path: '/agent-hooks/tool-use',
+        query: '?harness=claude-code',
+        body: { session_id: 'session-1', tool_name: 'Edit' },
+      },
+    ]);
+    expect(JSON.parse(textOf(edit))).toEqual({});
   });
 });
 

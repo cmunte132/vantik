@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { CachceModule } from 'modules/cache/cache.module';
 import { UsersService } from 'modules/users/users.service';
+import { VectorModule } from 'modules/vector/vector.module';
 
 import { AgentHooksController } from './agent-hooks.controller';
 import { AgentHooksService } from './agent-hooks.service';
@@ -11,7 +12,7 @@ import { AgentHooksService } from './agent-hooks.service';
  * guards, the same way every other controller in the app supplies it.
  */
 @Module({
-  imports: [CachceModule],
+  imports: [CachceModule, VectorModule],
   controllers: [AgentHooksController],
   providers: [AgentHooksService, UsersService],
 })

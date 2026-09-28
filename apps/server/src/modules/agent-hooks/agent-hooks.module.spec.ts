@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { PrismaService } from 'nestjs-prisma';
+import { Client as TypesenseClient } from 'typesense';
 
 import { CacheService } from 'modules/cache/cache.service';
 import { UsersService } from 'modules/users/users.service';
@@ -20,6 +21,8 @@ describe('the agent hooks wiring', () => {
     })
       // The real one opens a redis connection on construction.
       .overrideProvider(CacheService)
+      .useValue({})
+      .overrideProvider(TypesenseClient)
       .useValue({})
       // Global in the real app, so it is stood in for rather than imported.
       .useMocker((token) => (token === PrismaService ? {} : undefined))

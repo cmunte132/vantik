@@ -118,8 +118,9 @@ function SkillInstall({
 
 /**
  * The third, and the one that is checked rather than advised: hooks that brief
- * the agent when a session begins and hold it at a stop once when an issue it
- * has in progress has gone quiet.
+ * the agent when a session begins, name the pages of the knowledge bank that
+ * match each prompt, and hold the agent at a stop once. The stop hook holds it
+ * over an issue that went quiet, or over work that has no issue.
  *
  * Offered after the skills, because they enforce what the skills explain; an
  * agent held at a stop without the guide still gets told what to do, but one
@@ -134,10 +135,12 @@ function HookInstall({ harness }: { harness: Harness }) {
         <p className="text-sm">Optional: hooks that keep the tracker current</p>
         <p className="text-sm text-muted-foreground">
           A skill is advice. With these hooks, the first prompt of a session is
-          told what the agent has in progress, and an agent about to stop while
-          an issue it has in progress has gone 20 minutes without an update from
-          it is held once and asked to record where it stands. The check runs on
-          this server; the hooks write nothing to the tracker themselves.
+          told what the agent has in progress, and each prompt is told which
+          pages of the knowledge bank match it. An agent about to stop is held
+          once if an issue it has in progress has gone 20 minutes without an
+          update from it, or if it changed files with nothing in progress. The
+          check runs on this server; the hooks write nothing to the tracker
+          themselves.
         </p>
         <p className="text-sm text-muted-foreground">{hooks.intro}</p>
       </div>

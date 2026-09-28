@@ -118,3 +118,57 @@ export function duration(ms: number): string {
 
   return count(Math.round(hours / 24), 'day');
 }
+
+/**
+ * This message holds up a stop when the session changed files and nothing is
+ * in progress under the name of the agent.
+ *
+ * The message gives a way out. The hook cannot know if the change is too
+ * small for an issue, or if the repository uses Vantik at all. The agent
+ * knows, and one line from it costs less than an issue that nobody needs.
+ */
+export function untrackedStopReason(edits: number): string {
+  return [
+    `Before you stop: this session changed files ${count(edits, 'time')}, ` +
+      'and nothing is in progress under your name in Vantik.',
+    'If the tracker should know about this work, find its issue ' +
+      '(search_tasks) or file one (create_task), pick_up_task, and record ' +
+      'what you did: update_criteria for each criterion that is met, add_note ' +
+      'with what changed and what is next, or close_task with a resolution if ' +
+      'it is done. If the change is too small to track, or this repository ' +
+      'does not use Vantik, say so in one line and stop. Vantik asks this ' +
+      'once for each session.',
+  ].join('\n');
+}
+
+/** A page of the knowledge bank that matched a prompt. */
+export interface KnowledgePointer {
+  title: string;
+  /** How many of its documents, the page body and its entries, matched. */
+  matches: number;
+  scope: string | null;
+}
+
+/**
+ * This message tells the agent which pages of the knowledge bank match the
+ * prompt. It gives the titles only.
+ *
+ * The contents stay out on purpose. `load_context` counts what it serves as
+ * demand, and a hook that served content for each prompt would keep entries
+ * alive that nobody read. So the hook names the pages, and the agent loads
+ * them if the work needs them.
+ */
+export function knowledgePointers(pointers: KnowledgePointer[]): string {
+  const lines = pointers.map((pointer) => {
+    const where = pointer.scope ? `, scope ${pointer.scope}` : '';
+    return `- "${pointer.title}" (${count(pointer.matches, 'match', 'matches')}${where})`;
+  });
+
+  return [
+    'Vantik: the knowledge bank has pages that match this prompt.',
+    ...lines,
+    'Before you rely on your own reading of the code in this area, call ' +
+      'load_context with a task that describes this work. These are titles ' +
+      'only: Vantik loaded none of their content.',
+  ].join('\n');
+}

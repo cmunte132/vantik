@@ -1,12 +1,16 @@
 import { PrismaService } from 'nestjs-prisma';
 
 import { CacheService } from 'modules/cache/cache.service';
+import { KnowledgeSearchHit } from 'modules/vector/vector.interface';
+import { VectorService } from 'modules/vector/vector.service';
 
-import { HookInput } from './agent-hooks.harness';
+import { HookEvent, HookInput } from './agent-hooks.harness';
 import {
   AgentHooksService,
+  EDITS_WORTH_AN_ISSUE,
   HookActor,
   IDLE_MS,
+  POINTER_DISTANCE,
   QUIET_MS,
 } from './agent-hooks.service';
 
@@ -157,6 +161,7 @@ function fakeCache() {
 
   return {
     cache: cache as unknown as CacheService,
+    entries: store,
     goDown: () => {
       down = true;
     },
@@ -167,23 +172,111 @@ function fakeCache() {
   };
 }
 
+/**
+ * The knowledge index as the hook reads it: every search answers with the
+ * same hits, and each search is recorded so a test can see what was asked.
+ */
+function fakeIndex() {
+  const hits: KnowledgeSearchHit[] = [];
+  const searches: Array<{ query: string; options: unknown }> = [];
+  let failing = false;
+
+  const vector = {
+    searchKnowledge: async (
+      _workspaceId: string,
+      query: string,
+      options: unknown,
+    ) => {
+      searches.push({ query, options });
+      if (failing) {
+        throw new Error('typesense unavailable');
+      }
+      return { hits, facets: {}, found: hits.length };
+    },
+  };
+
+  return {
+    vector: vector as unknown as VectorService,
+    hits,
+    searches,
+    failSearch: () => {
+      failing = true;
+    },
+  };
+}
+
+function hit(
+  pageId: string,
+  pageTitle: string,
+  distance: number | undefined,
+  scope: string | null = null,
+): KnowledgeSearchHit {
+  return {
+    id: `entry:${pageId}:${distance}`,
+    kind: 'entry',
+    pageId,
+    pageTitle,
+    entryId: `${pageId}-entry`,
+    title: pageTitle,
+    content: 'A claim.',
+    scope,
+    status: 'STANDING',
+    sourceUserId: null,
+    verified: false,
+    retrievalCount: 0,
+    trust: null,
+    citations: [],
+    lastCheckedAt: null,
+    lastCheckedSha: null,
+    distance,
+  } as KnowledgeSearchHit;
+}
+
+const A_PROMPT = 'Why does the sync engine drop updates after a reconnect?';
+
 function setup() {
   const tracker = fakeTracker();
   const store = fakeCache();
-  const service = new AgentHooksService(tracker.prisma, store.cache);
+  const index = fakeIndex();
+  const service = new AgentHooksService(
+    tracker.prisma,
+    store.cache,
+    index.vector,
+  );
 
   const hook = (
-    event: 'session-start' | 'prompt' | 'stop',
+    event: HookEvent,
     input: Partial<HookInput> = {},
+    options?: { canSay?: boolean },
   ) =>
-    service.run(event, actor, {
-      sessionId: 'session-a',
-      source: null,
-      continued: false,
-      ...input,
-    });
+    service.run(
+      event,
+      actor,
+      {
+        sessionId: 'session-a',
+        source: null,
+        prompt: null,
+        toolName: null,
+        continued: false,
+        ...input,
+      },
+      options,
+    );
 
-  return { ...tracker, ...store, service, hook };
+  const edits = async (count: number) => {
+    for (let i = 0; i < count; i += 1) {
+      await hook('tool-use', { toolName: 'Edit' }, { canSay: false });
+    }
+  };
+
+  /** The hooks as Cursor sends them: it cannot add context on these two. */
+  const cursor = {
+    prompt: (prompt: string) => hook('prompt', { prompt }, { canSay: false }),
+    compact: () => hook('compact', {}, { canSay: false }),
+    tool: (toolName: string) => hook('tool-use', { toolName }),
+  };
+
+  return { ...tracker, ...store, ...index, service, hook, edits, cursor };
 }
 
 function at(minutes: number) {
@@ -417,9 +510,302 @@ describe('the stop check', () => {
       await service.run('stop', actor, {
         sessionId: null,
         source: null,
+        prompt: null,
+        toolName: null,
         continued: false,
       }),
     ).toBeNull();
     expect(calls.issueFindMany).toBe(0);
+  });
+});
+
+describe('work with no issue', () => {
+  it('holds up a stop when the session changed files and nothing is in progress', async () => {
+    const { hook, issues, edits } = setup();
+    issues.length = 0;
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_AN_ISSUE);
+    const reason = await hook('stop');
+
+    expect(reason).toContain(
+      `this session changed files ${EDITS_WORTH_AN_ISSUE} times, and nothing is in progress under your name`,
+    );
+    expect(reason).toContain('create_task');
+    expect(reason).toContain('pick_up_task');
+    // The way out, for a small fix or a repository that is not on Vantik.
+    expect(reason).toContain('say so in one line and stop');
+  });
+
+  it('lets a session with only a few edits stop', async () => {
+    const { hook, issues, edits } = setup();
+    issues.length = 0;
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_AN_ISSUE - 1);
+
+    expect(await hook('stop')).toBeNull();
+  });
+
+  it('asks only once in a stretch, whatever the agent answered', async () => {
+    const { hook, issues, edits } = setup();
+    issues.length = 0;
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_AN_ISSUE);
+    await hook('stop');
+    await edits(EDITS_WORTH_AN_ISSUE * 3);
+
+    expect(await hook('stop')).toBeNull();
+  });
+
+  it('asks again in a new stretch that does its own work', async () => {
+    const { hook, issues, edits } = setup();
+    issues.length = 0;
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_AN_ISSUE);
+    await hook('stop');
+
+    at(IDLE_MS / MINUTE + 5);
+    await hook('prompt');
+    expect(await hook('stop')).toBeNull();
+
+    await edits(EDITS_WORTH_AN_ISSUE);
+    expect(await hook('stop')).toContain('nothing is in progress');
+  });
+
+  it('leaves work on an issue in progress to the quiet check', async () => {
+    const { hook, edits } = setup();
+
+    await hook('prompt');
+    await edits(EDITS_WORTH_AN_ISSUE);
+
+    expect(await hook('stop')).toBeNull();
+  });
+
+  it('counts nothing for a session it never saw begin', async () => {
+    const { hook, issues, edits } = setup();
+    issues.length = 0;
+
+    await edits(EDITS_WORTH_AN_ISSUE);
+
+    expect(await hook('stop')).toBeNull();
+  });
+
+  it('says nothing back to an edit', async () => {
+    const { hook } = setup();
+
+    await hook('prompt');
+
+    expect(
+      await hook('tool-use', { toolName: 'Edit' }, { canSay: false }),
+    ).toBeNull();
+  });
+
+  it('reads a session recorded before edits were counted', async () => {
+    // A record written by the previous release has no edit count; it must
+    // read as none, not as NaN that never reaches the threshold or throws.
+    const { hook, issues, edits, entries } = setup();
+    issues.length = 0;
+    await hook('prompt');
+    const [key] = [...entries.keys()];
+    entries.set(key, JSON.stringify({ startedAt: T0, seenAt: T0, nudged: {} }));
+
+    await edits(EDITS_WORTH_AN_ISSUE);
+
+    expect(await hook('stop')).toContain('nothing is in progress');
+  });
+});
+
+describe('pointers to the knowledge bank', () => {
+  it('names the pages that match the prompt, with no content', async () => {
+    const { hook, hits } = setup();
+    hits.push(
+      hit('page-sync', 'Sync engine', 0.3, 'apps/server/src/modules/sync'),
+      hit('page-sync', 'Sync engine', 0.4),
+      hit('page-auth', 'Auth', 0.5),
+    );
+
+    const said = await hook('prompt', { prompt: A_PROMPT });
+
+    expect(said).toContain('ENG-42');
+    expect(said).toContain(
+      '- "Sync engine" (2 matches, scope apps/server/src/modules/sync)',
+    );
+    expect(said).toContain('- "Auth" (1 match)');
+    expect(said).toContain('load_context');
+    expect(said).not.toContain('A claim.');
+  });
+
+  it('points on later prompts too, without the brief', async () => {
+    const { hook, hits } = setup();
+
+    await hook('prompt', { prompt: A_PROMPT });
+    hits.push(hit('page-sync', 'Sync engine', 0.3));
+    at(5);
+    const said = await hook('prompt', { prompt: A_PROMPT });
+
+    expect(said).toContain('"Sync engine"');
+    expect(said).not.toContain('ENG-42');
+  });
+
+  it('names a page only once in a session', async () => {
+    const { hook, hits } = setup();
+    hits.push(hit('page-sync', 'Sync engine', 0.3));
+
+    await hook('prompt', { prompt: A_PROMPT });
+    at(5);
+
+    expect(await hook('prompt', { prompt: A_PROMPT })).toBeNull();
+  });
+
+  it('names the pages again after a compaction', async () => {
+    // The summary may not have kept them.
+    const { hook, hits } = setup();
+    hits.push(hit('page-sync', 'Sync engine', 0.3));
+
+    await hook('prompt', { prompt: A_PROMPT });
+    at(5);
+    await hook('session-start', { source: 'compact' });
+    at(6);
+
+    expect(await hook('prompt', { prompt: A_PROMPT })).toContain(
+      '"Sync engine"',
+    );
+  });
+
+  it('ignores a weak match, and one found by its words alone', async () => {
+    const { hook, hits } = setup();
+    hits.push(
+      hit('page-far', 'Far', POINTER_DISTANCE + 0.05),
+      hit('page-words', 'Words', undefined),
+    );
+    at(0);
+
+    const said = await hook('prompt', { prompt: A_PROMPT });
+
+    expect(said).not.toContain('Far');
+    expect(said).not.toContain('Words');
+  });
+
+  it('names at most three pages', async () => {
+    const { hook, hits } = setup();
+    hits.push(
+      hit('p1', 'One', 0.1),
+      hit('p2', 'Two', 0.2),
+      hit('p3', 'Three', 0.3),
+      hit('p4', 'Four', 0.4),
+    );
+
+    const said = await hook('prompt', { prompt: A_PROMPT });
+
+    expect(said).toContain('"Three"');
+    expect(said).not.toContain('"Four"');
+  });
+
+  it('does not search for a short prompt', async () => {
+    const { hook, searches } = setup();
+
+    await hook('prompt', { prompt: 'yes, go on' });
+
+    expect(searches).toEqual([]);
+  });
+
+  it('searches the index with the tight distance, never through demand', async () => {
+    // KnowledgeService would count the hits as demand and a miss as a gap;
+    // the hook goes to the index so neither is recorded.
+    const { hook, searches } = setup();
+
+    await hook('prompt', { prompt: A_PROMPT });
+
+    expect(searches).toEqual([
+      {
+        query: A_PROMPT,
+        options: { limit: 10, vectorDistance: POINTER_DISTANCE },
+      },
+    ]);
+  });
+
+  it('still briefs when the search fails', async () => {
+    const { hook, failSearch } = setup();
+    failSearch();
+
+    expect(await hook('prompt', { prompt: A_PROMPT })).toContain('ENG-42');
+  });
+});
+
+describe('a harness that cannot add context on every event', () => {
+  it('keeps the pointers from a Cursor prompt for the next tool', async () => {
+    const { hook, hits, cursor } = setup();
+    hits.push(hit('page-sync', 'Sync engine', 0.3));
+
+    await hook('session-start', { source: 'startup' });
+    expect(await cursor.prompt(A_PROMPT)).toBeNull();
+
+    expect(await cursor.tool('Read')).toContain('"Sync engine"');
+  });
+
+  it('gives what it kept only once', async () => {
+    const { hook, hits, cursor } = setup();
+    hits.push(hit('page-sync', 'Sync engine', 0.3));
+
+    await hook('session-start', { source: 'startup' });
+    await cursor.prompt(A_PROMPT);
+    await cursor.tool('Read');
+
+    expect(await cursor.tool('Read')).toBeNull();
+  });
+
+  it('keeps the brief from a Cursor compaction for the next tool', async () => {
+    const { hook, cursor } = setup();
+
+    await hook('session-start', { source: 'startup' });
+    at(5);
+    expect(await cursor.compact()).toBeNull();
+
+    expect(await cursor.tool('Grep')).toContain('ENG-42');
+  });
+
+  it('keeps the clock and the edits through a Cursor compaction', async () => {
+    const { hook, issues, cursor } = setup();
+    issues.length = 0;
+
+    await hook('session-start', { source: 'startup' });
+    for (let i = 0; i < EDITS_WORTH_AN_ISSUE; i += 1) {
+      await cursor.tool('Write');
+    }
+    await cursor.compact();
+
+    expect(await hook('stop')).toContain('nothing is in progress');
+  });
+
+  it('counts only the Cursor tools that change a file', async () => {
+    const { hook, issues, cursor } = setup();
+    issues.length = 0;
+
+    await hook('session-start', { source: 'startup' });
+    for (let i = 0; i < EDITS_WORTH_AN_ISSUE; i += 1) {
+      await cursor.tool('Read');
+      await cursor.tool('Shell');
+    }
+    expect(await hook('stop')).toBeNull();
+
+    for (let i = 0; i < EDITS_WORTH_AN_ISSUE; i += 1) {
+      await cursor.tool(i % 2 ? 'Write' : 'Delete');
+    }
+    expect(await hook('stop')).toContain('nothing is in progress');
+  });
+
+  it('never gives Claude Code a kept message on its edit hook', async () => {
+    // Claude Code takes the pointers on the prompt itself, so it keeps none,
+    // and its edit hook says nothing.
+    const { hook, hits } = setup();
+    hits.push(hit('page-sync', 'Sync engine', 0.3));
+
+    expect(await hook('prompt', { prompt: A_PROMPT })).toContain('Sync');
+    expect(
+      await hook('tool-use', { toolName: 'Edit' }, { canSay: false }),
+    ).toBeNull();
   });
 });

@@ -19,8 +19,25 @@ export type Harness = (typeof HARNESSES)[number];
  * launch is after SessionStart has already fired — so the first prompt is the
  * earliest moment those hooks can reach Vantik without a second copy of the
  * token. Cursor runs a command at session start, and reports `session-start`.
+ * Claude Code also reports `session-start`, but only after a compaction. At
+ * that time, its MCP servers are already connected.
+ *
+ * The harness reports `tool-use` after a tool. Claude Code and Codex report
+ * only the tools that change a file. Cursor reports every tool, because its
+ * `postToolUse` hook is the only Cursor hook that can add context during a
+ * turn. The stop check uses the count of edits to find a session that did work
+ * with no issue for it.
+ *
+ * Cursor reports `compact` before a compaction. Its `preCompact` hook cannot
+ * add context, so the service keeps the brief for the next `tool-use`.
  */
-export const HOOK_EVENTS = ['session-start', 'prompt', 'stop'] as const;
+export const HOOK_EVENTS = [
+  'session-start',
+  'compact',
+  'prompt',
+  'tool-use',
+  'stop',
+] as const;
 
 export type HookEvent = (typeof HOOK_EVENTS)[number];
 
@@ -29,6 +46,13 @@ export interface HookInput {
   sessionId: string | null;
   /** How the session started, where the harness says: `compact`, `resume`… */
   source: string | null;
+  /**
+   * On a prompt hook, this is the text of the prompt. It has a maximum length
+   * of {@link MAX_PROMPT_LENGTH} characters.
+   */
+  prompt: string | null;
+  /** On a `tool-use` hook, this is the name of the tool, if the harness sent it. */
+  toolName: string | null;
   /**
    * This stop is Claude Code or Codex already continuing because a stop hook
    * asked. Cursor's `loop_count` is not read as the same thing: it counts
@@ -41,6 +65,14 @@ export interface HookInput {
 
 /** Longer than any harness's id, short enough to put in a cache key. */
 const MAX_SESSION_ID_LENGTH = 200;
+
+/**
+ * The service keeps this number of characters from the start of a prompt. It
+ * uses the prompt only as a query for the knowledge bank. The embedding model
+ * reads approximately this much text, and a long pasted log does not make a
+ * better query.
+ */
+export const MAX_PROMPT_LENGTH = 1_000;
 
 /**
  * Reads the fields the rules use out of whatever the harness sent.
@@ -73,8 +105,52 @@ export function readHookInput(body: unknown): HookInput {
   return {
     sessionId,
     source: typeof record.source === 'string' ? record.source : null,
+    prompt: readPrompt(record.prompt),
+    toolName: readToolName(record.tool_name),
     continued,
   };
+}
+
+/** A placeholder that the harness did not replace, for example `${prompt}`. */
+const PLACEHOLDER = /^\$\{[^}]*\}$/;
+
+function readToolName(value: unknown): string | null {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 200 &&
+    !PLACEHOLDER.test(value)
+    ? value
+    : null;
+}
+
+/**
+ * This function returns the prompt, trimmed and cut to length. It returns null
+ * if there is no prompt. It also returns null for a `${…}` placeholder. A
+ * harness that does not replace a placeholder sends the placeholder text, and
+ * that text is not a prompt from the person.
+ */
+function readPrompt(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const prompt = value.trim().slice(0, MAX_PROMPT_LENGTH);
+
+  return prompt.length === 0 || PLACEHOLDER.test(prompt) ? null : prompt;
+}
+
+/**
+ * This function tells if the harness can add context to the agent on this
+ * event. If it cannot, the service keeps the message for a later hook.
+ */
+export function canSay(harness: Harness, event: HookEvent): boolean {
+  if (harness === 'cursor') {
+    return event !== 'prompt' && event !== 'compact';
+  }
+
+  // Claude Code and Codex give the brief on the prompt, and the service keeps
+  // nothing for them. Their `tool-use` hook only counts edits.
+  return event !== 'tool-use' && event !== 'compact';
 }
 
 /**
@@ -89,12 +165,18 @@ export function hookOutput(
   event: HookEvent,
   text: string | null,
 ): Record<string, unknown> {
-  if (!text) {
+  if (harness === 'cursor' && event === 'prompt') {
+    // Cursor reads this hook as a gate. Say "continue", so that a Cursor that
+    // reads an empty answer as a refusal still sends the prompt.
+    return { continue: true };
+  }
+
+  if (!text || !canSay(harness, event)) {
     return {};
   }
 
   if (harness === 'cursor') {
-    if (event === 'session-start') {
+    if (event === 'session-start' || event === 'tool-use') {
       return { additional_context: text };
     }
 
@@ -105,7 +187,6 @@ export function hookOutput(
       return { followup_message: text };
     }
 
-    // Cursor's prompt hook may allow or refuse a prompt, not add to it.
     return {};
   }
 

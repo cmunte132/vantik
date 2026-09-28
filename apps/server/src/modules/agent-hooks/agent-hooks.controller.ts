@@ -14,6 +14,7 @@ import { AuthGuard } from 'modules/auth/auth.guard';
 import { UserId, Workspace } from 'modules/auth/session.decorator';
 
 import {
+  canSay,
   HARNESSES,
   HOOK_EVENTS,
   hookOutput,
@@ -66,6 +67,7 @@ export class AgentHooksController {
       event,
       { userId, workspaceId },
       readHookInput(body),
+      { canSay: canSay(harness, event) },
     );
 
     return hookOutput(harness, event, text);

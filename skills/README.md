@@ -71,16 +71,26 @@ even before it loads a skill.
 
 ## Hooks
 
-A skill is advice, and the agent decides when to read it. Hooks make two parts
+A skill is advice, and the agent decides when to read it. Hooks make these parts
 of the guidance certain:
 
 - **At the start of a session**, the agent gets a list of the issues that it
-  has in progress, with how much of each Definition of Done is met.
-- **Before the agent stops**, Vantik examines each of those issues. If an issue
-  has had no update from the agent for 20 minutes of this session, Vantik holds
-  the agent once and asks it to record where the issue stands. If the session
-  did not touch that issue, the agent can say so in one line and stop. Vantik
-  asks once for each quiet period.
+  has in progress, with how much of each Definition of Done is met. After a
+  compaction, the agent gets the list again.
+- **On each prompt**, Vantik compares the prompt with the knowledge bank. If
+  pages match closely, the agent gets their titles and an instruction to call
+  `load_context`. Vantik sends the titles only, and names each page one time in
+  a session.
+- **Before the agent stops**, Vantik examines each issue that the agent has in
+  progress. If an issue has had no update from the agent for 20 minutes of this
+  session, Vantik holds the agent once and asks it to record where the issue
+  stands. If the session did not touch that issue, the agent can say so in one
+  line and stop. Vantik asks once for each quiet period.
+- **Before the agent stops**, Vantik also finds work that has no issue. If the
+  session changed files five times or more, and nothing is in progress under the
+  name of the agent, Vantik holds the agent once and asks it to find or file the
+  issue. If the change is too small, or the repository does not use Vantik, the
+  agent can say so in one line and stop.
 
 The rules are on the server, so the hooks only relay the answer. The hooks
 write nothing to the tracker. If Vantik does not answer, the agent continues as
@@ -91,12 +101,12 @@ if there were no hooks.
 | Agent | How the hook reaches Vantik | Where the file goes |
 | --- | --- | --- |
 | Claude Code | An `mcp_tool` hook, through the MCP server that you configured. It holds no token. | `.claude/settings.json` |
-| Codex | The same. | `.codex/hooks.json` |
-| Cursor | A `curl` command that reads `VANTIK_TOKEN` from the environment. Cursor cannot hold an agent at a stop, so the reminder comes back as the next message. | `.cursor/hooks.json` |
+| Codex | The same. The edit hook matches `apply_patch`. | `.codex/hooks.json` |
+| Cursor | A `curl` command that reads `VANTIK_TOKEN` from the environment. Cursor cannot add context to a prompt, so the page titles come after the next tool. Cursor cannot hold an agent at a stop, so the reminder comes back as the next message. | `.cursor/hooks.json` |
 
-The endpoint behind them is `POST /v1/agent-hooks/<event>?harness=<harness>`,
-for any other agent that can run a command at the start of a session and before
-it stops.
+The endpoint behind them is `POST /v1/agent-hooks/<event>?harness=<harness>`.
+Any other agent that can run a command at the start of a session and before it
+stops can use it.
 
 ## working-vantik-issues
 

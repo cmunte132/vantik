@@ -28,22 +28,89 @@ const SESSION_ID = z
   .max(200)
   .describe("The harness's session id, from the hook's ${session_id}.");
 
+/**
+ * The hook sends the prompt as the harness wrote it. The schema has no maximum
+ * length, because a schema error is a hook error that the person sees. The
+ * tool cuts the prompt before it forwards it.
+ */
+const PROMPT = z
+  .string()
+  .optional()
+  .describe("The prompt, from the hook's ${prompt}.");
+
+/** The endpoint keeps this much of a prompt. The tool forwards no more. */
+const MAX_FORWARDED_PROMPT = 1_000;
+
 export function registerHookTools(
   server: McpServer,
   client: VantikClient,
 ): void {
   server.registerTool(
+    'hook_session_start',
+    {
+      title: 'Hook: a session started again',
+      description:
+        'The Vantik hook in Claude Code or Codex calls this tool after a ' +
+        'compaction. ' +
+        'Do not call it yourself: it returns hook output, not an answer. It ' +
+        'gives the agent the brief of its issues in progress again.',
+      inputSchema: {
+        session_id: SESSION_ID,
+        harness: HOOK_HARNESS,
+        source: z
+          .string()
+          .max(40)
+          .optional()
+          .describe("How the session started, from the hook's ${source}."),
+      },
+    },
+    ({ session_id, harness, source }) =>
+      forward(client, 'session-start', session_id, harness, { source }),
+  );
+
+  server.registerTool(
     'hook_prompt_submit',
     {
       title: 'Hook: a prompt was submitted',
       description:
-        'Called by the Vantik hook in Claude Code or Codex when a prompt is ' +
-        'submitted. Do not call it yourself: it returns hook output, not an ' +
-        'answer. On the first prompt of a session it briefs the agent on ' +
-        'the issues it has in progress.',
-      inputSchema: { session_id: SESSION_ID, harness: HOOK_HARNESS },
+        'The Vantik hook in Claude Code or Codex calls this tool for each ' +
+        'prompt. Do not call it yourself: it returns hook output, not an ' +
+        'answer. On the first prompt of a session, it gives the agent a brief ' +
+        'of its issues in progress. On each prompt, it names the pages of the ' +
+        'knowledge bank that match the prompt.',
+      inputSchema: {
+        session_id: SESSION_ID,
+        harness: HOOK_HARNESS,
+        prompt: PROMPT,
+      },
     },
-    ({ session_id, harness }) => forward(client, 'prompt', session_id, harness),
+    ({ session_id, harness, prompt }) =>
+      forward(client, 'prompt', session_id, harness, {
+        prompt: prompt?.slice(0, MAX_FORWARDED_PROMPT),
+      }),
+  );
+
+  server.registerTool(
+    'hook_tool_use',
+    {
+      title: 'Hook: the agent changed a file',
+      description:
+        'The Vantik hook in Claude Code or Codex calls this tool after each ' +
+        'change to a file. Do not call it yourself: it returns hook output, ' +
+        'not an answer. Vantik counts the changes, and the stop hook uses the ' +
+        'count to find work that has no issue.',
+      inputSchema: {
+        session_id: SESSION_ID,
+        harness: HOOK_HARNESS,
+        tool_name: z
+          .string()
+          .max(200)
+          .optional()
+          .describe("The tool that ran, from the hook's ${tool_name}."),
+      },
+    },
+    ({ session_id, harness, tool_name }) =>
+      forward(client, 'tool-use', session_id, harness, { tool_name }),
   );
 
   server.registerTool(
@@ -70,16 +137,17 @@ export function registerHookTools(
  */
 async function forward(
   client: VantikClient,
-  event: 'prompt' | 'stop',
+  event: 'session-start' | 'prompt' | 'tool-use' | 'stop',
   sessionId: string,
   harness: 'claude-code' | 'codex' = 'claude-code',
+  fields: { source?: string; prompt?: string; tool_name?: string } = {},
 ) {
   let output: unknown = {};
 
   try {
     output = await client.post(`/agent-hooks/${event}`, {
       query: { harness },
-      body: { session_id: sessionId },
+      body: { session_id: sessionId, ...fields },
     });
   } catch {
     output = {};

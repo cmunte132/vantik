@@ -142,7 +142,7 @@ export function harnessConfigs(url: string, token: string): Harness[] {
       skill: { agent: 'cursor', contextFile: 'AGENTS.md' },
       hooks: {
         intro:
-          'Save as .cursor/hooks.json in the project, or ~/.cursor/hooks.json, and set VANTIK_TOKEN wherever Cursor is started from. Cursor runs hooks as shell commands (macOS and Linux), and it cannot hold an agent at a stop: the reminder comes back as the next message instead.',
+          'Save as .cursor/hooks.json in the project, or ~/.cursor/hooks.json, and set VANTIK_TOKEN wherever Cursor is started from. Cursor runs hooks as shell commands (macOS and Linux), and it cannot hold an agent at a stop: the reminder comes back as the next message instead. Cursor also cannot add context to a prompt, so the pages of the knowledge bank that match it reach the agent after its first tool.',
         blocks: [
           { label: '.cursor/hooks.json', value: cursorHooks(hooksUrl) },
           tokenEnv,
@@ -169,11 +169,11 @@ export function harnessConfigs(url: string, token: string): Harness[] {
       skill: { contextFile: 'AGENTS.md' },
       hooks: {
         intro:
-          'Any harness that runs a command at session start and before it stops can use the same endpoint: send the hook’s own input as the body, and name the output format to answer in with ?harness= (claude-code, codex or cursor).',
+          'Any harness that runs a command at session start and before it stops can use the same endpoint: send the hook’s own input as the body, and name the output format to answer in with ?harness= (claude-code, codex or cursor). Send the prompt as `prompt` on the prompt event for pointers to the knowledge bank, and report each tool on the tool-use event, with its name as `tool_name`, so the stop check can find work that has no issue.',
         blocks: [
           {
             label: 'Endpoint',
-            value: `${hooksUrl}/{session-start | prompt | stop}?harness={claude-code | codex | cursor}`,
+            value: `${hooksUrl}/{session-start | compact | prompt | tool-use | stop}?harness={claude-code | codex | cursor}`,
           },
           {
             label: 'As a command hook',
@@ -191,40 +191,78 @@ export function harnessConfigs(url: string, token: string): Harness[] {
  * same tab configures. They carry no token — the connection already has one —
  * so the file can be committed for a whole team.
  *
- * Only `${session_id}` is templated: it is the one field both harnesses send
- * on both events, and Codex refuses a hook whose placeholder is missing.
- * UserPromptSubmit rather than SessionStart, because neither harness has its
- * MCP servers connected when SessionStart fires at launch, and skips an MCP
- * hook it cannot reach.
+ * Both harnesses use the same four hooks. Only the name of the edit tool is
+ * different.
+ *
+ * - UserPromptSubmit gives the brief on the first prompt, and sends each
+ *   prompt, so the server can name the matching pages of the knowledge bank.
+ *   It is used in place of SessionStart at launch: at that time the MCP
+ *   servers are not connected, and both harnesses skip an MCP hook.
+ * - SessionStart with the `compact` matcher gives the brief again. After a
+ *   compaction the MCP servers are connected, so both harnesses run the hook.
+ * - PostToolUse on the edit tools counts the changed files. The stop check
+ *   uses the count to find work that has no issue.
+ * - Stop holds up the agent over an issue that went quiet, or over work that
+ *   has no issue.
+ *
+ * Each placeholder names a field that the event sends. Codex refuses a hook if
+ * the input of its event does not have the placeholder.
  */
 export function mcpToolHooks(harness: 'claude-code' | 'codex'): string {
-  const call = (tool: string) => ({
-    hooks: [
-      {
-        type: 'mcp_tool',
-        server: MCP_SERVER_NAME,
-        tool,
-        // eslint-disable-next-line no-template-curly-in-string
-        input: { session_id: '${session_id}', harness },
-      },
-    ],
+  const call = (tool: string, input: Record<string, string> = {}) => ({
+    type: 'mcp_tool',
+    server: MCP_SERVER_NAME,
+    tool,
+    // eslint-disable-next-line no-template-curly-in-string
+    input: { session_id: '${session_id}', harness, ...input },
   });
 
+  /* eslint-disable no-template-curly-in-string */
   return JSON.stringify(
     {
       hooks: {
-        UserPromptSubmit: [call('hook_prompt_submit')],
-        Stop: [call('hook_stop')],
+        SessionStart: [
+          {
+            matcher: 'compact',
+            hooks: [call('hook_session_start', { source: '${source}' })],
+          },
+        ],
+        UserPromptSubmit: [
+          { hooks: [call('hook_prompt_submit', { prompt: '${prompt}' })] },
+        ],
+        PostToolUse: [
+          {
+            matcher: EDIT_TOOLS[harness],
+            hooks: [call('hook_tool_use', { tool_name: '${tool_name}' })],
+          },
+        ],
+        Stop: [{ hooks: [call('hook_stop')] }],
       },
     },
     null,
     2,
   );
+  /* eslint-enable no-template-curly-in-string */
 }
+
+/**
+ * The tools that change a file, as a PostToolUse matcher for each harness.
+ * Codex makes each change to a file with `apply_patch`.
+ */
+export const EDIT_TOOLS = {
+  'claude-code': 'Edit|Write|MultiEdit|NotebookEdit',
+  codex: 'apply_patch',
+} as const;
 
 /**
  * Cursor: its hooks run commands, so each is a `curl` that pipes the hook's
  * input to the endpoint and prints what comes back.
+ *
+ * Cursor cannot add context on a prompt or a compaction. The server keeps the
+ * pointers from `beforeSubmitPrompt` and the brief from `preCompact`, and
+ * `postToolUse` gives them to the agent after its next tool. For that reason
+ * `postToolUse` has no matcher. The server counts only the tools that change a
+ * file.
  */
 export function cursorHooks(hooksUrl: string): string {
   return JSON.stringify(
@@ -234,6 +272,15 @@ export function cursorHooks(hooksUrl: string): string {
         sessionStart: [
           { command: hookCommand(hooksUrl, 'session-start', 'cursor') },
         ],
+        beforeSubmitPrompt: [
+          {
+            command: hookCommand(hooksUrl, 'prompt', 'cursor', {
+              continue: true,
+            }),
+          },
+        ],
+        postToolUse: [{ command: hookCommand(hooksUrl, 'tool-use', 'cursor') }],
+        preCompact: [{ command: hookCommand(hooksUrl, 'compact', 'cursor') }],
         stop: [{ command: hookCommand(hooksUrl, 'stop', 'cursor') }],
       },
     },
@@ -245,18 +292,21 @@ export function cursorHooks(hooksUrl: string): string {
 /**
  * One hook as a shell command. The token is read from the environment rather
  * than written in, so the file holding the command can be committed; and any
- * failure — Vantik down, the token unset — prints `{}`, which every harness
- * reads as "carry on", so a broken hook never stands in the agent's way.
+ * failure — Vantik down, the token unset — prints `fallback`, which the
+ * harness reads as "carry on", so a broken hook never stands in the agent's
+ * way. For most hooks that is `{}`. A hook that gates, such as Cursor's
+ * `beforeSubmitPrompt`, needs an answer that allows the action.
  */
 export function hookCommand(
   hooksUrl: string,
-  event: 'session-start' | 'prompt' | 'stop',
+  event: 'session-start' | 'compact' | 'prompt' | 'tool-use' | 'stop',
   harness: 'claude-code' | 'codex' | 'cursor',
+  fallback: Record<string, unknown> = {},
 ): string {
   return (
     `curl -fsS -m 10 -X POST '${hooksUrl}/${event}?harness=${harness}' ` +
     `-H "Authorization: Bearer $VANTIK_TOKEN" -H 'Content-Type: application/json' ` +
-    `--data-binary @- || echo '{}'`
+    `--data-binary @- || echo '${JSON.stringify(fallback)}'`
   );
 }
 

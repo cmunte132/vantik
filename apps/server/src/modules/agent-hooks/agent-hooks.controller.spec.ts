@@ -29,7 +29,14 @@ describe('AgentHooksController', () => {
     expect(run).toHaveBeenCalledWith(
       'stop',
       { userId: 'agent-1', workspaceId: 'ws-1' },
-      { sessionId: 'conv-1', source: null, continued: false },
+      {
+        sessionId: 'conv-1',
+        source: null,
+        prompt: null,
+        toolName: null,
+        continued: false,
+      },
+      { canSay: true },
     );
     expect(output).toEqual({ followup_message: 'ENG-42 went quiet.' });
   });

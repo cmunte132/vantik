@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  EDIT_TOOLS,
   MCP_SERVER_NAME,
   contextAppendCommand,
   harnessConfigs,
@@ -78,40 +79,101 @@ describe('the hooks', () => {
   it('call the hook tools on the MCP server the same tab configures', () => {
     for (const id of ['claude-code', 'codex'] as const) {
       const config = JSON.parse(byId(id).hooks.blocks[0].value);
-      const handlers = [
-        ...config.hooks.UserPromptSubmit,
-        ...config.hooks.Stop,
-      ].flatMap((group: { hooks: unknown[] }) => group.hooks);
+      const handlers = Object.values(config.hooks)
+        .flat()
+        .flatMap((group) => (group as { hooks: unknown[] }).hooks);
 
-      expect(handlers).toEqual([
-        {
+      for (const handler of handlers) {
+        expect(handler).toMatchObject({
           type: 'mcp_tool',
           server: MCP_SERVER_NAME,
-          tool: 'hook_prompt_submit',
           input: { session_id: '${session_id}', harness: id },
-        },
-        {
-          type: 'mcp_tool',
-          server: MCP_SERVER_NAME,
-          tool: 'hook_stop',
-          input: { session_id: '${session_id}', harness: id },
-        },
-      ]);
+        });
+      }
       // The server key the hooks name is the one the MCP config declares.
       expect(byId(id).blocks[0].value).toContain(MCP_SERVER_NAME);
     }
   });
 
+  it('give Claude Code and Codex the prompt, the compaction and the edits', () => {
+    for (const id of ['claude-code', 'codex'] as const) {
+      const { hooks } = JSON.parse(byId(id).hooks.blocks[0].value);
+
+      expect(Object.keys(hooks)).toEqual([
+        'SessionStart',
+        'UserPromptSubmit',
+        'PostToolUse',
+        'Stop',
+      ]);
+      expect(hooks.SessionStart).toEqual([
+        {
+          matcher: 'compact',
+          hooks: [
+            expect.objectContaining({
+              tool: 'hook_session_start',
+              input: expect.objectContaining({ source: '${source}' }),
+            }),
+          ],
+        },
+      ]);
+      expect(hooks.UserPromptSubmit[0].hooks[0]).toMatchObject({
+        tool: 'hook_prompt_submit',
+        input: { prompt: '${prompt}' },
+      });
+      expect(hooks.PostToolUse).toEqual([
+        {
+          matcher: EDIT_TOOLS[id],
+          hooks: [
+            expect.objectContaining({
+              tool: 'hook_tool_use',
+              input: expect.objectContaining({ tool_name: '${tool_name}' }),
+            }),
+          ],
+        },
+      ]);
+      expect(hooks.Stop[0].hooks[0].tool).toBe('hook_stop');
+    }
+  });
+
+  it('match the edit tool each harness names', () => {
+    // Codex makes every change to a file with apply_patch.
+    expect(EDIT_TOOLS).toEqual({
+      'claude-code': 'Edit|Write|MultiEdit|NotebookEdit',
+      codex: 'apply_patch',
+    });
+  });
+
   it('give Cursor commands for its own events, answered in its format', () => {
     const config = JSON.parse(byId('cursor').hooks.blocks[0].value);
+    const url = (event: string) =>
+      `'${ORIGIN}/api/v1/agent-hooks/${event}?harness=cursor'`;
 
     expect(config.version).toBe(1);
-    expect(Object.keys(config.hooks)).toEqual(['sessionStart', 'stop']);
+    expect(Object.keys(config.hooks)).toEqual([
+      'sessionStart',
+      'beforeSubmitPrompt',
+      'postToolUse',
+      'preCompact',
+      'stop',
+    ]);
     expect(config.hooks.sessionStart[0].command).toContain(
-      `'${ORIGIN}/api/v1/agent-hooks/session-start?harness=cursor'`,
+      url('session-start'),
     );
-    expect(config.hooks.stop[0].command).toContain(
-      `'${ORIGIN}/api/v1/agent-hooks/stop?harness=cursor'`,
+    expect(config.hooks.beforeSubmitPrompt[0].command).toContain(url('prompt'));
+    expect(config.hooks.postToolUse[0].command).toContain(url('tool-use'));
+    expect(config.hooks.preCompact[0].command).toContain(url('compact'));
+    expect(config.hooks.stop[0].command).toContain(url('stop'));
+    // Every tool reaches the server, which gives back what Cursor could not
+    // take on the prompt; the server counts only the edits.
+    expect(config.hooks.postToolUse[0].matcher).toBeUndefined();
+  });
+
+  it('never block a Cursor prompt when Vantik cannot answer', () => {
+    // An empty answer to a gate could read as a refusal.
+    const config = JSON.parse(byId('cursor').hooks.blocks[0].value);
+
+    expect(config.hooks.beforeSubmitPrompt[0].command).toMatch(
+      /\|\| echo '\{"continue":true\}'$/,
     );
   });
 

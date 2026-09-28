@@ -219,40 +219,62 @@ this.
 
 ## Optional: hooks that keep the tracker current
 
-A skill is advice, and the agent decides when to read it. Hooks make two parts
+A skill is advice, and the agent decides when to read it. Hooks make these parts
 of the guidance certain:
 
 - **At the start of a session**, the agent gets a list of the issues that it
-  has in progress, with how much of each Definition of Done is met.
-- **Before the agent stops**, Vantik examines each of those issues. If an issue
-  has had no update from the agent for 20 minutes of this session, Vantik holds
-  the agent once and asks it to record where the issue stands. A note, a ticked
-  criterion, or a change to the issue counts as an update. If the session did
-  not touch the issue, the agent can say so in one line and stop.
+  has in progress, with how much of each Definition of Done is met. After a
+  compaction, the agent gets the list again.
+- **On each prompt**, Vantik compares the prompt with the knowledge bank. If
+  pages match closely, the agent gets their titles and an instruction to call
+  `load_context`. Vantik names each page one time in a session. It sends the
+  titles only, and it does not count them as a use of the knowledge.
+- **Before the agent stops**, Vantik examines each issue that the agent has in
+  progress. If an issue has had no update from the agent for 20 minutes of this
+  session, Vantik holds the agent once and asks it to record where the issue
+  stands. A note, a ticked criterion, or a change to the issue counts as an
+  update. If the session did not touch the issue, the agent can say so in one
+  line and stop.
+- **Before the agent stops**, Vantik also finds work that has no issue. If the
+  session changed files five times or more, and nothing is in progress under the
+  name of the agent, Vantik holds the agent once. It asks the agent to find or
+  file the issue and to record the work. If the change is too small for an
+  issue, or the repository does not use Vantik, the agent can say so in one line
+  and stop.
 
 Vantik asks once for each quiet period. After the agent writes to the issue, a
-new quiet period of 20 minutes can cause one more request. The rules are on the
-server, so the hooks only relay the answer. The hooks write nothing to the
-tracker. If Vantik does not answer, the hook prints `{}`, and the agent
-continues as if there were no hooks.
+new quiet period of 20 minutes can cause one more request. Vantik asks about
+work with no issue one time in a session. The rules are on the server, so the
+hooks only relay the answer. The hooks write nothing to the tracker. If Vantik
+does not answer, the hook prints `{}`, and the agent continues as if there were
+no hooks.
 
 **Settings → Agents** shows the hooks for each agent, with your host already in
 them.
 
 ### Claude Code and Codex
 
-Both agents can call a tool on an MCP server from a hook. The hooks call
-`hook_prompt_submit` and `hook_stop` on the `vantik` server that you configured
-above, so they use its connection and its token, and the file holds no secret.
-You can commit it for your team. Add this to `.claude/settings.json`, or save it
-as `.codex/hooks.json` and change `claude-code` to `codex`:
+Both agents can call a tool on an MCP server from a hook. The hooks call the
+`hook_*` tools on the `vantik` server that you configured above. They use its
+connection and its token, so the file holds no secret, and you can commit it for
+your team. Add this to `.claude/settings.json`:
 
 ```json
 {
   "hooks": {
+    "SessionStart": [
+      { "matcher": "compact",
+        "hooks": [{ "type": "mcp_tool", "server": "vantik", "tool": "hook_session_start",
+                    "input": { "session_id": "${session_id}", "harness": "claude-code", "source": "${source}" } }] }
+    ],
     "UserPromptSubmit": [
       { "hooks": [{ "type": "mcp_tool", "server": "vantik", "tool": "hook_prompt_submit",
-                    "input": { "session_id": "${session_id}", "harness": "claude-code" } }] }
+                    "input": { "session_id": "${session_id}", "harness": "claude-code", "prompt": "${prompt}" } }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [{ "type": "mcp_tool", "server": "vantik", "tool": "hook_tool_use",
+                    "input": { "session_id": "${session_id}", "harness": "claude-code", "tool_name": "${tool_name}" } }] }
     ],
     "Stop": [
       { "hooks": [{ "type": "mcp_tool", "server": "vantik", "tool": "hook_stop",
@@ -262,10 +284,17 @@ as `.codex/hooks.json` and change `claude-code` to `codex`:
 }
 ```
 
+For Codex, save the same hooks as `.codex/hooks.json`, and make two changes:
+
+1. Change each `"harness": "claude-code"` to `"harness": "codex"`.
+2. Change the `PostToolUse` matcher to `"apply_patch"`. Codex makes each change
+   to a file with that tool.
+
 The brief comes with the first prompt, and not at `SessionStart`. At launch,
 neither agent has connected its MCP servers when `SessionStart` runs, so an MCP
-hook on that event does not run. Codex asks you to trust a new hook before it
-runs it.
+hook on that event does not run. After a compaction, the servers are connected,
+so the `compact` hook runs. Codex asks you to trust a new hook before it runs
+it.
 
 ### Cursor
 
@@ -279,13 +308,26 @@ and set `VANTIK_TOKEN` in the environment that starts Cursor:
   "version": 1,
   "hooks": {
     "sessionStart": [{ "command": "curl -fsS -m 10 -X POST 'https://your-vantik-host/api/v1/agent-hooks/session-start?harness=cursor' -H \"Authorization: Bearer $VANTIK_TOKEN\" -H 'Content-Type: application/json' --data-binary @- || echo '{}'" }],
+    "beforeSubmitPrompt": [{ "command": "curl -fsS -m 10 -X POST 'https://your-vantik-host/api/v1/agent-hooks/prompt?harness=cursor' -H \"Authorization: Bearer $VANTIK_TOKEN\" -H 'Content-Type: application/json' --data-binary @- || echo '{\"continue\":true}'" }],
+    "postToolUse": [{ "command": "curl -fsS -m 10 -X POST 'https://your-vantik-host/api/v1/agent-hooks/tool-use?harness=cursor' -H \"Authorization: Bearer $VANTIK_TOKEN\" -H 'Content-Type: application/json' --data-binary @- || echo '{}'" }],
+    "preCompact": [{ "command": "curl -fsS -m 10 -X POST 'https://your-vantik-host/api/v1/agent-hooks/compact?harness=cursor' -H \"Authorization: Bearer $VANTIK_TOKEN\" -H 'Content-Type: application/json' --data-binary @- || echo '{}'" }],
     "stop": [{ "command": "curl -fsS -m 10 -X POST 'https://your-vantik-host/api/v1/agent-hooks/stop?harness=cursor' -H \"Authorization: Bearer $VANTIK_TOKEN\" -H 'Content-Type: application/json' --data-binary @- || echo '{}'" }]
   }
 }
 ```
 
-Cursor cannot hold an agent at a stop. Vantik therefore sends the reminder back
-as the next message, and Cursor submits it for the agent. These commands need a
+Cursor has three limits, and Vantik works around each one:
+
+- Cursor cannot add context to a prompt or to a compaction. Vantik keeps the
+  page titles and the brief, and gives them to the agent after its next tool,
+  through `postToolUse`.
+- `postToolUse` runs after each tool, so it has no matcher. Vantik counts only
+  the tools that change a file.
+- Cursor cannot hold an agent at a stop. Vantik therefore sends the reminder
+  back as the next message, and Cursor submits it for the agent.
+
+If Vantik does not answer a prompt hook, the command prints
+`{"continue":true}`, so Cursor always sends the prompt. These commands need a
 shell with `curl`, as on macOS and Linux.
 
 ### Any other agent
@@ -294,11 +336,22 @@ The endpoint behind the hooks accepts any agent that can run a command at the
 start of a session and before it stops:
 
 ```
-POST /v1/agent-hooks/{session-start | prompt | stop}?harness={claude-code | codex | cursor}
+POST /v1/agent-hooks/{session-start | compact | prompt | tool-use | stop}?harness={claude-code | codex | cursor}
 ```
 
 Send the input of the hook as the body, with the token in the `Authorization`
 header, as for the other endpoints. The `harness` parameter selects the format
-of the answer. The endpoint needs only the `read` scope. The MCP hook tools call
-this endpoint, and each call from them counts toward the MCP rate limit: one
-request for each prompt, and one for each stop.
+of the answer. The endpoint needs only the `read` scope. These fields in the
+body are used:
+
+| Field | Event | Use |
+| --- | --- | --- |
+| `session_id` or `conversation_id` | All | Identifies the session. This field is necessary. |
+| `prompt` | `prompt` | Vantik compares it with the knowledge bank. |
+| `tool_name` | `tool-use` | Vantik counts the tool as an edit if it changes a file. |
+| `source` | `session-start` | The value `compact` keeps the clock of the session. |
+| `stop_hook_active` | `stop` | The value `true` lets the agent stop. |
+
+The MCP hook tools call this endpoint, and each call from them counts toward the
+MCP rate limit: one request for each prompt, each stop, each compaction, and each
+change to a file. The limit is 120 requests each minute for each token.

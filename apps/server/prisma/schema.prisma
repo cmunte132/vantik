@@ -2210,14 +2210,15 @@ enum KnowledgeEscalationReason {
   CONTRADICTS_VERIFIED
   /// It contradicts an entry on a page maintained by hand.
   CONTRADICTS_LOCKED
-  /// It cites nothing.
+  /// It cites nothing whose text can be checked: no code, issue or comment.
   UNGROUNDED
   /// A citation does not hold, or has not been read.
   CITATION_FAILED
   /// A convention, which every run in its modules is handed.
   PIN_REQUEST
-  /// It declares it replaces an entry, which only a person's acceptance
-  /// retires.
+  /// It declares it replaces an entry that is not in use, or no longer
+  /// there. Replacing one in use that no person answers for is decided like
+  /// any entry, and accepting the correction retires it.
   SUPERSEDE_REQUEST
   /// Its scope reaches more modules than one fact should.
   BROAD_SCOPE
@@ -2228,8 +2229,9 @@ enum KnowledgeEscalationReason {
   /// The run that wrote it worked on an issue from outside the workspace, or
   /// it rests on an issue or comment that came from outside.
   EXTERNAL_INPUT
-  /// Not written by a person. Runs do not write with a credential of their
-  /// own yet, so what an agent had read cannot be checked for outside input.
+  /// Not written by a person, and no evidence confirms it. Runs do not write
+  /// with a credential of their own yet, so what an agent had read cannot be
+  /// checked for outside input. A grounded entry is never held back for this.
   UNKNOWN_SOURCE
   /// Runs it was served to went wrong where it speaks.
   HARMFUL_SIGNAL

@@ -1400,22 +1400,25 @@ describe('auto-accept', () => {
       [Reason.CITATION_FAILED],
     ],
     [
-      'it is a convention, which would be pinned',
+      'it is a convention nothing states, which would be pinned',
       {},
-      { kind: 'CONVENTION' },
-      [Reason.PIN_REQUEST],
+      { kind: 'CONVENTION', citations: [] },
+      [Reason.UNGROUNDED, Reason.PIN_REQUEST],
     ],
     [
-      'its scope reaches most of the codebase',
+      'its unconfirmed scope reaches most of the codebase',
       {},
-      { moduleIds: [SERVER, WEBAPP, 'module-3', 'module-4'] },
-      [Reason.BROAD_SCOPE],
+      {
+        moduleIds: [SERVER, WEBAPP, 'module-3', 'module-4'],
+        citations: [{ ...holds(), checkResult: 'CHANGED' }],
+      },
+      [Reason.CITATION_FAILED, Reason.BROAD_SCOPE],
     ],
     [
-      'it has no scope, so every query would be served it',
+      'it has no scope and nothing confirms it, so every query would be served it',
       {},
-      { scope: null },
-      [Reason.BROAD_SCOPE],
+      { scope: null, citations: [] },
+      [Reason.UNGROUNDED, Reason.BROAD_SCOPE],
     ],
     [
       'it asks to replace an entry',
@@ -1457,6 +1460,100 @@ describe('auto-accept', () => {
       decision: Decision.AUTO_ACCEPT,
       reasons: [],
     });
+  });
+
+  it.each<[string, Partial<Row>]>([
+    ['a convention the cited code states', { kind: 'CONVENTION' }],
+    [
+      'a scope over most of the codebase, which its citations confirm',
+      { moduleIds: [SERVER, WEBAPP, 'module-3', 'module-4'] },
+    ],
+    ['no scope, when its citations confirm it', { scope: null }],
+  ])(
+    '[ENG-224] leaves to the evidence and the judges %s',
+    async (_why, overrides) => {
+      const t = triage({ rows: [agentEntry(overrides)] });
+
+      expect(await t.service.triage('new', ON)).toMatchObject({
+        decision: Decision.AUTO_ACCEPT,
+        reasons: [],
+        applied: true,
+      });
+      expect(t.entries.get('new')?.status).toBe('STANDING');
+    },
+  );
+
+  it('[ENG-224] accepts a grounded correction of a fact no person answers for, and retires that fact', async () => {
+    const t = triage({
+      rows: [
+        existing('old', { content: 'Webhooks retry twice.' }),
+        agentEntry({ supersedesId: 'old' }),
+      ],
+    });
+
+    expect(await t.service.triage('new', ON)).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      reasons: [],
+      applied: true,
+    });
+    expect(t.entries.get('new')?.status).toBe('STANDING');
+    expect(t.entries.get('old')?.status).toBe('SUPERSEDED');
+  });
+
+  it.each<[string, Partial<Row>, Reason]>([
+    ['a person verified', { verifiedAt: at(1) }, Reason.CONTRADICTS_VERIFIED],
+    [
+      'is on a page kept by hand',
+      { pageId: LOCKED_PAGE },
+      Reason.CONTRADICTS_LOCKED,
+    ],
+    [
+      'is itself waiting for a decision',
+      { status: 'PROPOSED' },
+      Reason.SUPERSEDE_REQUEST,
+    ],
+  ])(
+    '[ENG-224] leaves to a person a correction of a fact that %s',
+    async (_why, target, reason) => {
+      const t = triage({
+        rows: [
+          existing('old', { content: 'Webhooks retry twice.', ...target }),
+          agentEntry({ supersedesId: 'old' }),
+        ],
+      });
+
+      const outcome = await t.service.triage('new', ON);
+
+      expect(outcome?.decision).toBe(Decision.ESCALATE);
+      expect(outcome?.reasons).toContain(reason);
+      expect(t.entries.get('old')?.status).toBe(target.status ?? 'STANDING');
+    },
+  );
+
+  it('[ENG-224] does not count a run or a pull request as evidence, since the judges cannot read what it says', async () => {
+    const t = triage({
+      rows: [
+        agentEntry({
+          citations: [
+            {
+              kind: 'RUN',
+              path: null,
+              startLine: null,
+              endLine: null,
+              snippet: null,
+              targetId: 'run-a',
+              targetLabel: 'run run-a',
+              checkResult: 'HOLDS',
+            },
+          ],
+        }),
+      ],
+    });
+
+    expect((await t.service.triage('new', ON))?.reasons).toEqual([
+      Reason.UNGROUNDED,
+      Reason.UNKNOWN_SOURCE,
+    ]);
   });
 
   it.each(cases)(
@@ -1992,7 +2089,7 @@ describe('secrets and outside input', () => {
 
       expect(outcome).toMatchObject({
         decision: Decision.ESCALATE,
-        reasons: [Reason.EXTERNAL_INPUT, Reason.UNKNOWN_SOURCE],
+        reasons: [Reason.EXTERNAL_INPUT],
         applied: false,
       });
       // Found from the server's record of the writer's runs; the entry
@@ -2029,7 +2126,6 @@ describe('secrets and outside input', () => {
 
       expect((await t.service.triage('new', ON))?.reasons).toEqual([
         Reason.EXTERNAL_INPUT,
-        Reason.UNKNOWN_SOURCE,
       ]);
     }
   });
@@ -2049,12 +2145,12 @@ describe('secrets and outside input', () => {
     expect(t.entries.get('original')?.corroborationCount).toBe(0);
   });
 
-  it("[KG-4.8] never accepts an agent's entry, whatever run it had open, since what it read cannot be told", async () => {
+  it("[ENG-224] accepts an agent's grounded entry, whatever run it had open, since the evidence confirms it", async () => {
     // A run of the same agent open when the entry was written may have
     // nothing to do with it: runs do not write with their own credential.
+    // What it read does not matter to a claim the workspace's code confirms.
     const cases: Run[][] = [
       [run()],
-      // A run handing work back is inside the workspace, and still no proof.
       [externalRun({ source: 'agent-run' })],
       [],
     ];
@@ -2063,9 +2159,9 @@ describe('secrets and outside input', () => {
       const t = triage({ rows: [agentEntry()], runs });
 
       expect(await t.service.triage('new', ON)).toMatchObject({
-        decision: Decision.ESCALATE,
-        reasons: [Reason.UNKNOWN_SOURCE],
-        applied: false,
+        decision: Decision.AUTO_ACCEPT,
+        reasons: [],
+        applied: true,
       });
       expect(t.decisions[0].inputs).toMatchObject({
         writer: {
@@ -2075,6 +2171,18 @@ describe('secrets and outside input', () => {
           unknownSource: true,
         },
       });
+    }
+  });
+
+  it("[KG-4.8] holds an agent's ungrounded entry against its unknown source, and asks no model", async () => {
+    for (const runs of [[run()], []] as Run[][]) {
+      const t = triage({ rows: [agentEntry({ citations: [] })], runs });
+
+      expect(await t.service.triage('new', ON)).toMatchObject({
+        decision: Decision.ESCALATE,
+        reasons: [Reason.UNGROUNDED, Reason.UNKNOWN_SOURCE],
+        applied: false,
+      });
       // No model is asked to accept what a person has to look at anyway.
       expect(
         t.calls.filter((call) => call.system.includes('knowledge')),
@@ -2082,18 +2190,25 @@ describe('secrets and outside input', () => {
       expect(t.entries.get('new')?.status).toBe('PROPOSED');
     }
 
-    // Nor an entry the server has no user record of, or one by an account
-    // that is not a person.
+    // The same for an entry the server has no user record of, or one by an
+    // account that is not a person. A person's is not.
     for (const sourceUserId of [null, 'unknown-user', 'system-1']) {
-      const t = triage({ rows: [fresh({ sourceUserId })] });
+      const t = triage({ rows: [fresh({ sourceUserId, citations: [] })] });
 
       expect((await t.service.triage('new', ON))?.reasons).toEqual([
+        Reason.UNGROUNDED,
         Reason.UNKNOWN_SOURCE,
       ]);
     }
+
+    const person = triage({ rows: [fresh({ citations: [] })] });
+
+    expect((await person.service.triage('new', ON))?.reasons).toEqual([
+      Reason.UNGROUNDED,
+    ]);
   });
 
-  it('[KG-6.3] never accepts a convention the gardener proposed from review: pinning it waits for a person', async () => {
+  it('[KG-6.3] sends a convention the gardener proposed from review to the judges, who must find the rule stated', async () => {
     const ranIn = (id: string): Citation => ({
       kind: 'RUN',
       path: null,
@@ -2120,17 +2235,13 @@ describe('secrets and outside input', () => {
 
     const outcome = await t.service.triage('new', ON);
 
-    expect(outcome).toMatchObject({
-      decision: Decision.ESCALATE,
-      applied: false,
-    });
-    expect([...(outcome?.reasons ?? [])].sort()).toEqual(
-      [Reason.PIN_REQUEST, Reason.UNKNOWN_SOURCE].sort(),
-    );
-    expect(t.entries.get('new')?.status).toBe('PROPOSED');
-    expect(t.calls.filter((call) => call.system.includes('knowledge'))).toEqual(
-      [],
-    );
+    // It cites code that holds, so no rule holds it back; whether the code
+    // states the rule, rather than only follows it, is the judges' question.
+    expect(outcome?.reasons).toEqual([]);
+    const asked = t.calls.filter((call) => call.system.includes('knowledge'));
+    expect(asked).toHaveLength(2);
+    expect(asked[0].prompt).toContain('(convention,');
+    expect(asked[0].system).toContain('states the rule or the');
   });
 
   it("[KG-4.1] still folds an agent's repeat into the entry it repeats", async () => {
@@ -2178,7 +2289,6 @@ describe('secrets and outside input', () => {
 
       expect((await t.service.triage('new', ON))?.reasons).toEqual([
         Reason.EXTERNAL_INPUT,
-        Reason.UNKNOWN_SOURCE,
       ]);
       expect(t.decisions[0].inputs).toMatchObject({
         writer: {
@@ -2208,9 +2318,7 @@ describe('secrets and outside input', () => {
       ],
     });
 
-    expect((await t.service.triage('new', ON))?.reasons).toEqual([
-      Reason.UNKNOWN_SOURCE,
-    ]);
+    expect((await t.service.triage('new', ON))?.reasons).toEqual([]);
     expect(t.decisions[0].inputs).toMatchObject({
       writer: {
         runs: [expect.objectContaining({ id: RUN })],
@@ -2228,7 +2336,6 @@ describe('secrets and outside input', () => {
 
       expect((await atEdge.service.triage('new', ON))?.reasons).toEqual([
         Reason.EXTERNAL_INPUT,
-        Reason.UNKNOWN_SOURCE,
       ]);
     }
   });
@@ -2264,21 +2371,21 @@ describe('secrets and outside input', () => {
         createdAt: at(1),
         sourceMetadata: { type: 'github', id: 'account-1' },
       }),
-    ).toEqual([Reason.EXTERNAL_INPUT, Reason.UNKNOWN_SOURCE]);
+    ).toEqual([Reason.EXTERNAL_INPUT]);
     // Written after the entry, so not read before it.
     expect(
       await reasonsWith({
         createdAt: at(11),
         sourceMetadata: { type: 'github' },
       }),
-    ).toEqual([Reason.UNKNOWN_SOURCE]);
+    ).toEqual([]);
     // A run handing its work back is inside the workspace.
     expect(
       await reasonsWith({
         createdAt: at(1),
         sourceMetadata: { source: 'agent-run', agentRunId: RUN },
       }),
-    ).toEqual([Reason.UNKNOWN_SOURCE]);
+    ).toEqual([]);
   });
 
   it('[KG-4.8] never accepts an entry that rests on an issue or comment from outside', async () => {

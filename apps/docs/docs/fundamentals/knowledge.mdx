@@ -156,8 +156,8 @@ needs a judgment that no code and no issue can give.
 :::note
 
 The dashed steps are planned, and the server does not do them yet. Until they
-exist, triage sends every fact from an agent to a person, with the reason
-`UNKNOWN_SOURCE`. See [Escalation reasons](#escalation-reasons).
+exist, a fact that cites no evidence goes to a person. See
+[Escalation reasons](#escalation-reasons).
 
 :::
 
@@ -222,9 +222,12 @@ The server triages each new entry before a person sees it:
 | `on` | Triage accepts, folds in and refuses as it decides. Escalations still wait for a person. |
 
 Triage accepts an entry without a person only when every condition holds: the
-entry says one thing, every citation holds, it contradicts nothing that a
-person verified or that a locked page holds, it is not a convention, its scope
-reaches three modules or fewer, and two separate model judgments accept it.
+entry says one thing, it cites code, an issue or a comment, every citation
+holds, it contradicts nothing that a person verified or that a locked page
+holds, and two separate model judgments accept it. The writer does not change
+this: triage accepts a grounded entry from an agent as it accepts one from a
+person. For a convention or a decision, the judges accept only evidence that
+states the rule or the decision, not code that only follows a practice.
 
 ### Escalation reasons
 
@@ -234,21 +237,18 @@ An escalated entry waits in the review queue, with the reasons attached:
 |---|---|
 | `CONTRADICTS_VERIFIED` | It contradicts an entry that a person verified. |
 | `CONTRADICTS_LOCKED` | It contradicts an entry on a locked page. |
-| `UNGROUNDED` | It cites nothing. |
+| `UNGROUNDED` | It cites no code, issue or comment. A run or a pull request is not evidence, because the judges cannot read what it says. |
 | `CITATION_FAILED` | A citation does not hold, or was not read yet. |
-| `PIN_REQUEST` | It is a convention, which every run in its modules gets. A person decides. |
-| `SUPERSEDE_REQUEST` | It replaces an entry. Only a person's acceptance retires the old one. |
-| `BROAD_SCOPE` | Its scope reaches more modules than one fact should. |
+| `PIN_REQUEST` | It is a convention that no evidence confirms. Every run in its modules gets a convention, so a person decides. |
+| `SUPERSEDE_REQUEST` | It replaces an entry that is not in use, or that is gone. When it replaces an entry in use that no person verified, triage decides it like any entry, and its acceptance retires the old one. |
+| `BROAD_SCOPE` | No evidence confirms it, and it has no scope, or its scope reaches more than three modules. |
 | `JUDGES_DISAGREE` | The two model judgments did not agree. |
 | `NO_LLM` | A model was needed, and none is configured. |
 | `EXTERNAL_INPUT` | It rests on an issue or a comment that came from outside the workspace. |
-| `UNKNOWN_SOURCE` | An agent wrote it. The server cannot yet tell what an agent read, so it accepts nothing from an agent on its own. |
+| `UNKNOWN_SOURCE` | An agent wrote it, and no evidence confirms it. The server cannot yet tell what an agent read. This matters only when the workspace's own code or issues do not confirm the claim. |
 | `HARMFUL_SIGNAL` | Runs that were given it went wrong where it applies. |
 | `AUDIT` | A sample of what triage did alone, for a person to check. See below. |
 | `LOW_AGREEMENT` | People have disagreed with this type of decision lately, so a person decides. See below. |
-
-Because of `UNKNOWN_SOURCE`, every new claim from an agent waits for a person
-for now. Triage still folds repeats in and refuses what breaks a policy.
 
 ### The review queue
 

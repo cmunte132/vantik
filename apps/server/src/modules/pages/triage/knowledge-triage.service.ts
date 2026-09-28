@@ -57,9 +57,10 @@ import { answerGaps } from '../upkeep/gap-answers';
  * 3. the nearest entries in the same modules are related to it, by a rule in
  *    code where the two differ in a number, date, negation or condition, and
  *    otherwise by two model judgments that must agree;
- * 4. acceptance: an agent's entry is not accepted without a person (see
- *    `writerOf`); every citation must hold, and an entry that cites nothing
- *    is not grounded;
+ * 4. acceptance: every citation must hold, and an entry that cites nothing
+ *    is not grounded. Evidence decides, not the writer: an agent's grounded
+ *    entry is accepted as a person's is, and only an ungrounded one is held
+ *    against its unknown source (see `writerOf`);
  * 5. the decision, and in `on` mode, acting on it. A decision of a type
  *    whose agreement with people has fallen under the floor escalates
  *    instead (see `KnowledgeAgreementService`), and a share of what is acted
@@ -92,6 +93,29 @@ export const MAX_CITED_TEXT = 1_500;
 
 /** Results under which a citation still supports its claim. */
 const HOLDING = new Set<string>(['HOLDS', 'MOVED']);
+
+/**
+ * Citations whose text the acceptance judges are shown. A run or a pull
+ * request holds while it exists, which says nothing about the claim.
+ */
+const READABLE: PageEntryCitationKind[] = [
+  PageEntryCitationKind.CODE,
+  PageEntryCitationKind.ISSUE,
+  PageEntryCitationKind.COMMENT,
+];
+
+/**
+ * Whether evidence can confirm an entry: every citation still holds, and at
+ * least one of them shows the judges what it says.
+ */
+function isGrounded(
+  citations: Array<{ kind: PageEntryCitationKind; checkResult: string | null }>,
+) {
+  return (
+    citations.some((citation) => READABLE.includes(citation.kind)) &&
+    citations.every((citation) => HOLDING.has(citation.checkResult ?? ''))
+  );
+}
 
 /** Served entries: standing, or consolidated as a page's evidence. */
 const SERVED: PageEntryStatus[] = [
@@ -289,10 +313,32 @@ export default class KnowledgeTriageService {
       reasons.add(KnowledgeEscalationReason.EXTERNAL_INPUT);
     }
 
-    // Only a person's acceptance retires what a correction replaces: an
-    // unreviewed claim must not take accepted knowledge out of use.
+    // A correction retires what it replaces. It needs a person when what it
+    // replaces is what a person answers for (verified, or on a page kept by
+    // hand), and when that is itself an undecided correction, whose chain
+    // only a person's acceptance walks. Otherwise it is held to what any
+    // entry is held to, and accepting it retires its target (see `apply`).
+    const supersedes = entry.supersedesId
+      ? await this.prisma.pageEntry.findFirst({
+          where: { id: entry.supersedesId, deleted: null },
+          select: {
+            id: true,
+            status: true,
+            content: true,
+            verifiedAt: true,
+            page: { select: { entryPolicy: true } },
+          },
+        })
+      : null;
+
     if (entry.supersedesId) {
-      reasons.add(KnowledgeEscalationReason.SUPERSEDE_REQUEST);
+      if (!supersedes || !isServed(supersedes.status)) {
+        reasons.add(KnowledgeEscalationReason.SUPERSEDE_REQUEST);
+      } else if (supersedes.verifiedAt) {
+        reasons.add(KnowledgeEscalationReason.CONTRADICTS_VERIFIED);
+      } else if (supersedes.page.entryPolicy === PageEntryPolicy.LOCKED) {
+        reasons.add(KnowledgeEscalationReason.CONTRADICTS_LOCKED);
+      }
     }
 
     // Entries that were there before this one, in its modules, or on its
@@ -460,33 +506,37 @@ export default class KnowledgeTriageService {
     // A repeat is folded into what it repeats rather than accepted, so what
     // acceptance asks of an entry does not apply to it.
     if (!corroborates) {
-      // What an agent read cannot be told yet, so "nothing from outside" is
-      // a check that could not run. Not a bar to folding a repeat in, which
-      // puts no new claim in front of anyone.
-      if (writer.unknownSource) {
-        reasons.add(KnowledgeEscalationReason.UNKNOWN_SOURCE);
-      }
-
       // ---------------------------------------------------- 4. grounding
-      if (entry.citations.length === 0) {
-        reasons.add(KnowledgeEscalationReason.UNGROUNDED);
-      } else if (
-        entry.citations.some(
-          (citation) => !HOLDING.has(citation.checkResult ?? ''),
-        )
+      // Evidence settles a claim, whoever wrote it. What an agent read cannot
+      // be told (see `writerOf`), but a claim whose citations hold and which
+      // both judges find the cited text supports is true whatever the agent
+      // read. So who wrote it matters only when nothing confirms it.
+      const grounded = isGrounded(entry.citations);
+
+      if (
+        !entry.citations.some((citation) => READABLE.includes(citation.kind))
       ) {
+        reasons.add(KnowledgeEscalationReason.UNGROUNDED);
+      } else if (!grounded) {
         reasons.add(KnowledgeEscalationReason.CITATION_FAILED);
       }
 
+      if (!grounded && writer.unknownSource) {
+        reasons.add(KnowledgeEscalationReason.UNKNOWN_SOURCE);
+      }
+
       // A convention is handed to every run in its modules, whether or not
-      // it matches the work: accepting one pins it.
-      if (entry.kind === PageEntryKind.CONVENTION) {
+      // it matches the work: accepting one pins it. A person decides a rule
+      // nothing in the workspace states.
+      if (!grounded && entry.kind === PageEntryKind.CONVENTION) {
         reasons.add(KnowledgeEscalationReason.PIN_REQUEST);
       }
 
+      // How widely an unconfirmed claim is true is a person's call. The
+      // evidence of a grounded one says where it holds.
       if (
-        !entry.scope?.trim() ||
-        entry.moduleIds.length > BROAD_SCOPE_MODULES
+        !grounded &&
+        (!entry.scope?.trim() || entry.moduleIds.length > BROAD_SCOPE_MODULES)
       ) {
         reasons.add(KnowledgeEscalationReason.BROAD_SCOPE);
       }
@@ -570,6 +620,14 @@ export default class KnowledgeTriageService {
           ? corroborates
           : null,
       corroboratesAsRead,
+      retires:
+        supersedes && isServed(supersedes.status)
+          ? {
+              id: supersedes.id,
+              status: supersedes.status,
+              content: supersedes.content,
+            }
+          : null,
       // Served entries precedence ruled against, standing or consolidated.
       // Only an accepted entry displaces anything, and only in `on` mode.
       displaces: neighbours.flatMap((neighbour) =>
@@ -683,7 +741,9 @@ export default class KnowledgeTriageService {
    * their own (ENG-84), so every agent writes through a client that names
    * its own session, and a run of the same agent open at the time may have
    * nothing to do with the entry. Until a run's writes carry the run, every
-   * entry not written by a person has an unknown source. The runs are still
+   * entry not written by a person has an unknown source. That counts against
+   * an entry only when no evidence confirms it: a claim the workspace's own
+   * code or issues support is true whatever its writer read. The runs are still
    * read, from the server's own record: one on an issue from outside marks
    * the entry, which can only make the decision stricter. A run that has not
    * finished counts whether or not it has started. The session is kept as
@@ -1079,6 +1139,33 @@ export default class KnowledgeTriageService {
 
         changed.push(displaced.id);
       }
+
+      // Retired as a person's acceptance retires it: only as it was read,
+      // and never once a person has verified it or locked its page since.
+      if (found.retires) {
+        const { count: retired } = await tx.pageEntry.updateMany({
+          where: {
+            id: found.retires.id,
+            deleted: null,
+            status: found.retires.status,
+            verifiedAt: null,
+            content: found.retires.content,
+            page: {
+              deleted: null,
+              entryPolicy: { not: PageEntryPolicy.LOCKED },
+            },
+          },
+          data: { status: PageEntryStatus.SUPERSEDED },
+        });
+
+        if (retired === 0) {
+          throw new StaleTriage(
+            `the entry it corrects, ${found.retires.id}, changed while it was triaged`,
+          );
+        }
+
+        changed.push(found.retires.id);
+      }
     }
 
     return true;
@@ -1094,6 +1181,8 @@ interface Found {
   corroborates?: string | null;
   /** What the entry it repeats must still match to be corroborated. */
   corroboratesAsRead?: Prisma.PageEntryWhereInput | null;
+  /** The served entry it corrects, as read; accepting it retires that one. */
+  retires?: { id: string; status: PageEntryStatus; content: string } | null;
   /** Standing entries precedence ruled against, with their content as read. */
   displaces?: Array<{ id: string; status: PageEntryStatus; content: string }>;
   relations?: Array<{

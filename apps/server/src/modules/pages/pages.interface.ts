@@ -1,6 +1,10 @@
-import { type PageEntryUseVia } from '@prisma/client';
-import { PageEntryStatusEnum } from '@vantikhq/types';
 import type { JobOptions } from 'bull';
+
+import {
+  type KnowledgeTriageTrigger,
+  type PageEntryUseVia,
+} from '@prisma/client';
+import { PageEntryStatusEnum } from '@vantikhq/types';
 
 /**
  * The mechanical limits on writing to the knowledge bank.
@@ -336,6 +340,31 @@ export function triageEntryJobOptions(entryId: string): JobOptions {
     removeOnComplete: true,
     removeOnFail: 20,
   };
+}
+
+/**
+ * One more pass for an entry that waits, when its evidence changed. The job id
+ * is new each time, so a change is never lost to a pass already queued. The
+ * pass compares the evidence with that of the last decision, so a pass for
+ * evidence that did not change decides nothing.
+ */
+export function retriageJobOptions(
+  entryId: string,
+  trigger: KnowledgeTriageTrigger,
+): JobOptions {
+  return {
+    jobId: `${TRIAGE_ENTRY_JOB}:${entryId}:${trigger}:${Date.now()}`,
+    attempts: TRIAGE_ENTRY_ATTEMPTS,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
+
+/** What a triage job carries. A job without a trigger is for a new entry. */
+export interface TriageEntryJob {
+  entryId: string;
+  trigger?: KnowledgeTriageTrigger;
 }
 
 /**

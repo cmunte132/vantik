@@ -1044,13 +1044,16 @@ export default class EntryCitationsService {
    * replace what they found. The changes that landed since that commit
    * passed the citation over while it was unread, so a citation found to
    * hold there is handed to the landed-change check, at the head: see
-   * `checkSinceCited`.
+   * `checkSinceCited`. Returns too how many it read and stored, so the
+   * caller can triage the entry again.
    */
-  async retryUnknown(entryId: string): Promise<{ stillUnknown: number }> {
+  async retryUnknown(
+    entryId: string,
+  ): Promise<{ stillUnknown: number; read: number }> {
     const entry = await this.entryWithCitations(entryId);
 
     if (!entry) {
-      return { stillUnknown: 0 };
+      return { stillUnknown: 0, read: 0 };
     }
 
     let stillUnknown = 0;
@@ -1108,7 +1111,7 @@ export default class EntryCitationsService {
 
     await this.checkSinceCited(entry.page.workspaceId, firstReads);
 
-    return { stillUnknown };
+    return { stillUnknown, read: firstReads.length };
   }
 
   /**

@@ -10,6 +10,7 @@
  * ever called.
  */
 import type KnowledgeIndexService from '../knowledge-index.service';
+import type { Queue } from 'bull';
 
 import {
   KnowledgeEscalationReason as Reason,
@@ -108,9 +109,14 @@ function matches(row: Record<string, unknown>, where: Where): boolean {
     if (typeof condition === 'object' && !Array.isArray(condition)) {
       const c = condition as Record<string, unknown>;
 
-      if (['in', 'not', 'lt', 'lte', 'gte', 'hasSome'].some((op) => op in c)) {
+      if (
+        ['in', 'notIn', 'not', 'lt', 'lte', 'gte', 'hasSome'].some(
+          (op) => op in c,
+        )
+      ) {
         return (
           (!('in' in c) || (c.in as unknown[]).includes(value)) &&
+          (!('notIn' in c) || !(c.notIn as unknown[]).includes(value)) &&
           (!('not' in c) || value !== c.not) &&
           (!('lt' in c) || compare(value, c.lt) < 0) &&
           (!('lte' in c) || compare(value, c.lte) <= 0) &&
@@ -275,9 +281,13 @@ function store(
       ),
     },
     knowledgeTriageDecision: {
+      // Newest first when asked in order, as the decisions are written in
+      // order.
       findFirst: jest.fn(
-        async ({ where }: { where: Where }) =>
-          decisions.find((decision) => matches(decision, where)) ?? null,
+        async ({ where, orderBy }: { where: Where; orderBy?: unknown }) =>
+          (orderBy ? [...decisions].reverse() : decisions).find((decision) =>
+            matches(decision, where),
+          ) ?? null,
       ),
       create: jest.fn(async ({ data }: { data: Where }) => {
         const decision = { id: `decision-${decisions.length + 1}`, ...data };
@@ -287,6 +297,15 @@ function store(
       }),
     },
     pageEntryRelation: {
+      findMany: jest.fn(async ({ where }: { where: Where }) =>
+        relations
+          .map((relation) => {
+            const from = entries.get(relation.fromId as string);
+
+            return { ...relation, from: from ? view(from) : null };
+          })
+          .filter((relation) => matches(relation, where)),
+      ),
       upsert: jest.fn(
         async ({
           where,
@@ -478,9 +497,7 @@ const NEW_CONTENT = 'Webhook deliveries are retried by the queue worker.';
 
 /**
  * The entry being triaged: newer, proposed, grounded, one fact, and written
- * by a person. What an agent writes is never accepted without a person yet
- * (see "secrets and outside input"), so the rest of the pipeline is
- * exercised on a person's entry.
+ * by a person, so that nothing about its writer is in the way.
  */
 function fresh(overrides: Partial<Row> = {}): Row {
   return existing('new', {
@@ -682,11 +699,14 @@ function triage(setup: Setup) {
     ),
   };
 
+  const queue = { add: jest.fn(async () => ({})) };
+
   const service = new KnowledgeTriageService(
     prisma as unknown as PrismaService,
     judges,
     { findNearEntries } as unknown as VectorService,
     indexer as unknown as KnowledgeIndexService,
+    queue as unknown as Queue,
   );
 
   return {
@@ -700,6 +720,7 @@ function triage(setup: Setup) {
     calls,
     findNearEntries,
     indexer,
+    queue,
   };
 }
 
@@ -845,8 +866,18 @@ describe('an exact repeat', () => {
   });
 
   it('[KG-4.1] of two identical entries written at once, exactly one corroborates the other', async () => {
-    const first = fresh({ id: 'a', createdAt: at(5), updatedAt: at(5) });
-    const second = fresh({ id: 'b', createdAt: at(5), updatedAt: at(5) });
+    const first = fresh({
+      id: 'a',
+      createdAt: at(5),
+      updatedAt: at(5),
+      citations: [],
+    });
+    const second = fresh({
+      id: 'b',
+      createdAt: at(5),
+      updatedAt: at(5),
+      citations: [],
+    });
     // In shadow mode neither leaves the inbox, so each pass sees the other.
     const t = triage({ rows: [first, second] });
 
@@ -865,6 +896,57 @@ describe('an exact repeat', () => {
     // nothing to repeat.
     expect(byEntry.a.decision).not.toBe(Decision.CORROBORATE);
     expect(byEntry.a.corroboratedEntryId).toBeNull();
+  });
+
+  it('[ENG-224] of two identical grounded entries, accepts the newer and folds the older into it', async () => {
+    // The older one waits for a person; the newer one is grounded. Folding
+    // the newer into the older would archive its evidence.
+    const older = fresh({
+      id: 'a',
+      createdAt: at(5),
+      updatedAt: at(5),
+      citations: [],
+    });
+    const newer = fresh({ id: 'b', createdAt: at(6), updatedAt: at(6) });
+    const t = triage({ rows: [older, newer] });
+
+    await t.service.triage('a', ON);
+    expect(t.decisions[0]).toMatchObject({
+      decision: Decision.ESCALATE,
+      trigger: 'WRITTEN',
+    });
+
+    await expect(t.service.triage('b', ON)).resolves.toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: true,
+    });
+    expect(t.relations).toContainEqual(
+      expect.objectContaining({ fromId: 'b', toId: 'a', type: 'DUPLICATE' }),
+    );
+    // The older one is triaged again, since a relation was added.
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'triageEntry',
+      { entryId: 'a', trigger: 'RELATED' },
+      expect.objectContaining({
+        jobId: expect.stringMatching(/^triageEntry:a:RELATED:/),
+      }),
+    );
+
+    await expect(t.service.triage('a', ON, 'RELATED')).resolves.toMatchObject({
+      decision: Decision.CORROBORATE,
+      applied: true,
+      trigger: 'RELATED',
+    });
+    expect(t.decisions[2]).toMatchObject({
+      entryId: 'a',
+      trigger: 'RELATED',
+      corroboratedEntryId: 'b',
+    });
+    expect(t.entries.get('a')?.status).toBe('ARCHIVED');
+    expect(t.entries.get('b')).toMatchObject({
+      status: 'STANDING',
+      corroborationCount: 1,
+    });
   });
 });
 
@@ -2899,5 +2981,93 @@ describe('a knowledge gap answered by an entry triage accepts', () => {
         answeredByEntryId: null,
       });
     }
+  });
+});
+
+describe('triage again when the evidence changes', () => {
+  const waiting = () =>
+    agentEntry({
+      citations: [{ ...holds(), checkResult: 'UNKNOWN' }],
+    });
+
+  it('[ENG-224] decides once for a new entry, whatever job asks', async () => {
+    const t = triage({ rows: [waiting()] });
+
+    await t.service.triage('new', ON);
+    await expect(t.service.triage('new', ON)).resolves.toBeNull();
+    expect(t.decisions).toHaveLength(1);
+  });
+
+  it('[ENG-224] decides again when a citation starts to hold, and records why', async () => {
+    const t = triage({ rows: [waiting()] });
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: expect.arrayContaining([Reason.CITATION_FAILED]),
+    });
+
+    // Nothing changed: nothing is decided.
+    await expect(
+      t.service.triage('new', ON, 'CITATIONS_CHECKED'),
+    ).resolves.toBeNull();
+
+    (t.entries.get('new') as Row).citations[0].checkResult = 'HOLDS';
+
+    await expect(
+      t.service.triage('new', ON, 'CITATIONS_CHECKED'),
+    ).resolves.toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: true,
+      trigger: 'CITATIONS_CHECKED',
+    });
+    expect(t.decisions).toHaveLength(2);
+    expect(t.decisions[1]).toMatchObject({ trigger: 'CITATIONS_CHECKED' });
+    expect(t.decisions[1].inputsDigest).not.toBe(t.decisions[0].inputsDigest);
+    expect(t.entries.get('new')?.status).toBe('STANDING');
+  });
+
+  it('[ENG-224] decides again when a change to the code moves what a citation says', async () => {
+    const t = triage({
+      rows: [
+        agentEntry({ citations: [{ ...holds(), checkResult: 'CHANGED' }] }),
+      ],
+    });
+
+    await t.service.triage('new', SHADOW);
+    (t.entries.get('new') as Row).citations[0].checkResult = 'MOVED';
+
+    await expect(
+      t.service.triage('new', SHADOW, 'CODE_CHANGED'),
+    ).resolves.toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: false,
+      trigger: 'CODE_CHANGED',
+    });
+  });
+
+  it('[ENG-224] never decides again about an entry that was not escalated', async () => {
+    const t = triage({ rows: [agentEntry()] });
+
+    await expect(t.service.triage('new', SHADOW)).resolves.toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+    });
+    (t.entries.get('new') as Row).citations[0].checkResult = 'MOVED';
+
+    await expect(
+      t.service.triage('new', SHADOW, 'CODE_CHANGED'),
+    ).resolves.toBeNull();
+    expect(t.decisions).toHaveLength(1);
+  });
+
+  it('[ENG-224] never decides again about an entry a person or triage took out of the inbox', async () => {
+    const t = triage({ rows: [waiting()] });
+
+    await t.service.triage('new', ON);
+    (t.entries.get('new') as Row).status = 'ARCHIVED';
+    (t.entries.get('new') as Row).citations[0].checkResult = 'HOLDS';
+
+    await expect(
+      t.service.triage('new', ON, 'CITATIONS_CHECKED'),
+    ).resolves.toBeNull();
   });
 });

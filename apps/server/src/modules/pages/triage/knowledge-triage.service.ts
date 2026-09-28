@@ -1,11 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { InjectQueue } from '@nestjs/bull';
 import { Injectable, Optional } from '@nestjs/common';
 import {
   KnowledgeEscalationReason,
   KnowledgeTriageDecisionType,
   KnowledgeTriageMode,
   KnowledgeTriagePolicy,
+  KnowledgeTriageTrigger,
   PageEntryCitationKind,
   PageEntryKind,
   PageEntryPolicy,
@@ -16,6 +18,7 @@ import {
   UserType,
 } from '@prisma/client';
 import { KnowledgeTrustEnum } from '@vantikhq/types';
+import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
 import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
@@ -27,6 +30,11 @@ import KnowledgeIndexService from '../knowledge-index.service';
 import { entryTrust } from '../knowledge-proof';
 import { knowledgeSettings } from '../knowledge-settings';
 import { contentHashOf } from '../page-entries.service';
+import {
+  PAGES_QUEUE,
+  retriageJobOptions,
+  TRIAGE_ENTRY_JOB,
+} from '../pages.interface';
 import { auditDraw, isActing } from './agreement';
 import { backoffState, type BackoffState } from './knowledge-agreement.service';
 import { preferred } from './precedence';
@@ -75,6 +83,13 @@ import { answerGaps } from '../upkeep/gap-answers';
  * Every decision is recorded with what it was decided on, in shadow mode too,
  * where it changes nothing. That record is how the automation is measured,
  * and how a person can see why an entry was accepted without them.
+ *
+ * A pass runs when the entry is written. While the entry waits for a person
+ * after an escalation, a pass runs again each time its evidence changes: a
+ * citation that the server could not read is read, a change to the code
+ * touches a cited file, or a newer entry that says the same is accepted.
+ * Each decision records its trigger, and the latest decision is the one that
+ * counts.
  */
 
 /** How many of the nearest entries a new one is compared with. */
@@ -136,6 +151,8 @@ function isServed(status: string): status is PageEntryStatus {
 /** What a triage pass decided, as its caller logs it. */
 export interface TriageOutcome {
   decisionId: string;
+  /** What made triage decide. */
+  trigger: KnowledgeTriageTrigger;
   decision: KnowledgeTriageDecisionType;
   reasons: KnowledgeEscalationReason[];
   policy: KnowledgeTriagePolicy | null;
@@ -226,16 +243,21 @@ export default class KnowledgeTriageService {
     private judges: TriageJudges,
     private vector: VectorService,
     @Optional() private indexer?: KnowledgeIndexService,
+    @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
   ) {}
 
   /**
    * Triage one entry. Returns null when there is nothing to decide: the entry
-   * is gone, no longer waiting for triage, already decided about, or triage
-   * is off for its workspace.
+   * is gone, no longer waiting for triage, or triage is off for its
+   * workspace. A pass for a new entry (`WRITTEN`) also returns null when the
+   * entry has a decision. Any other trigger decides again only after an
+   * escalation, and only when the evidence differs from what the last
+   * decision saw.
    */
   async triage(
     entryId: string,
     env: NodeJS.ProcessEnv = process.env,
+    trigger: KnowledgeTriageTrigger = KnowledgeTriageTrigger.WRITTEN,
   ): Promise<TriageOutcome | null> {
     const entry = await this.prisma.pageEntry.findFirst({
       where: { id: entryId, deleted: null, page: { deleted: null } },
@@ -256,14 +278,27 @@ export default class KnowledgeTriageService {
       return null;
     }
 
-    // Once per entry: a retry after the decision was recorded, or a second
-    // job for the same entry, changes nothing.
-    const decided = await this.prisma.knowledgeTriageDecision.findFirst({
+    const servedDuplicates = await this.servedDuplicatesOf(entry, workspaceId);
+    const evidenceDigest = digestOf(evidenceOfEntry(entry, servedDuplicates));
+
+    // Once for each state of the evidence. A retry after the decision was
+    // recorded, or a second job for the same entry, changes nothing. A later
+    // pass decides again only about an entry that waits for a person, and
+    // only when what it rests on changed since the last decision.
+    const last = await this.prisma.knowledgeTriageDecision.findFirst({
       where: { entryId },
-      select: { id: true },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { decision: true, applied: true, inputs: true },
     });
 
-    if (decided) {
+    if (
+      last &&
+      (trigger === KnowledgeTriageTrigger.WRITTEN ||
+        last.applied ||
+        last.decision !== KnowledgeTriageDecisionType.ESCALATE ||
+        (last.inputs as { evidenceDigest?: string } | null)?.evidenceDigest ===
+          evidenceDigest)
+    ) {
       return null;
     }
 
@@ -274,7 +309,19 @@ export default class KnowledgeTriageService {
     const contentHash = entry.contentHash ?? contentHashOf(entry.content);
     const backoff = await backoffState(this.prisma, workspaceId);
     const decide = (found: Found) =>
-      this.record(entry, mode, settings.auditRate, heldBack(found, backoff));
+      this.record(
+        entry,
+        mode,
+        trigger,
+        settings.auditRate,
+        heldBack(
+          {
+            ...found,
+            inputs: { ...found.inputs, trigger, evidenceDigest },
+          },
+          backoff,
+        ),
+      );
 
     // ------------------------------------------------------------ 1. policy
     // Refused before anything else reads the content, and before any model
@@ -360,6 +407,14 @@ export default class KnowledgeTriageService {
       ],
     };
 
+    // Evidence settles a claim, whoever wrote it (see step 4). A grounded
+    // entry is not folded into a waiting one that says the same: the fold
+    // would archive the evidence and leave the claim with a person. It is
+    // decided on its own, and once it is accepted the waiting one is
+    // triaged again and folds into it.
+    const grounded = isGrounded(entry.citations);
+    const canFoldInto = (status: string) => isServed(status) || !grounded;
+
     // ---------------------------------------------------- 2. exact repeat
     const repeats = await this.prisma.pageEntry.findMany({
       where: { ...neighbourhood, contentHash },
@@ -368,8 +423,12 @@ export default class KnowledgeTriageService {
     });
     // The accepted one if there is one, since that is the one served, and
     // otherwise the first said.
-    const repeated =
+    const repeatOf =
       repeats.find((row) => isServed(row.status)) ?? repeats[0] ?? null;
+    const repeated = repeatOf && canFoldInto(repeatOf.status) ? repeatOf : null;
+    // A served entry written after this one that triage found says the same
+    // thing. It is the one served, so this one folds into it.
+    const foldsInto = servedDuplicates[0] ?? null;
 
     const models: string[] = [];
     const outputs: {
@@ -378,13 +437,17 @@ export default class KnowledgeTriageService {
     } = { pairs: [], accept: [] };
 
     // ------------------------------------------------ 3. near neighbours
-    const neighbours = repeated
-      ? []
-      : await this.nearNeighbours(
-          entry,
-          neighbourhood,
-          settings.similarityThreshold,
-        );
+    const neighbours =
+      repeated || foldsInto
+        ? []
+        : await this.nearNeighbours(
+            entry,
+            {
+              ...neighbourhood,
+              id: { notIn: [entry.id, ...repeats.map((row) => row.id)] },
+            },
+            settings.similarityThreshold,
+          );
     const wouldBe = {
       id: entry.id,
       trust: entryTrust({
@@ -492,16 +555,20 @@ export default class KnowledgeTriageService {
     const nearDuplicate = neighbours.find(
       (neighbour) =>
         neighbour.relation === PageEntryRelationType.DUPLICATE &&
-        neighbour.decidedBy === PageEntryRelationDecider.MODEL,
+        neighbour.decidedBy === PageEntryRelationDecider.MODEL &&
+        canFoldInto(neighbour.status),
     );
-    const corroborates = repeated?.id ?? nearDuplicate?.id ?? null;
+    const corroborates =
+      foldsInto?.id ?? repeated?.id ?? nearDuplicate?.id ?? null;
     // What the entry it repeats must still be for folding this one in to
     // mean anything: live, and saying the same thing it said when compared.
-    const corroboratesAsRead: Prisma.PageEntryWhereInput | null = repeated
-      ? { contentHash: repeated.contentHash }
-      : nearDuplicate
-        ? { content: nearDuplicate.content }
-        : null;
+    const corroboratesAsRead: Prisma.PageEntryWhereInput | null = foldsInto
+      ? { content: foldsInto.content }
+      : repeated
+        ? { contentHash: repeated.contentHash }
+        : nearDuplicate
+          ? { content: nearDuplicate.content }
+          : null;
 
     // A repeat is folded into what it repeats rather than accepted, so what
     // acceptance asks of an entry does not apply to it.
@@ -511,8 +578,6 @@ export default class KnowledgeTriageService {
       // be told (see `writerOf`), but a claim whose citations hold and which
       // both judges find the cited text supports is true whatever the agent
       // read. So who wrote it matters only when nothing confirms it.
-      const grounded = isGrounded(entry.citations);
-
       if (
         !entry.citations.some((citation) => READABLE.includes(citation.kind))
       ) {
@@ -585,10 +650,10 @@ export default class KnowledgeTriageService {
           : KnowledgeTriageDecisionType.AUTO_ACCEPT;
 
     const relations = [
-      ...(repeated
+      ...(repeatOf
         ? [
             {
-              toId: repeated.id,
+              toId: repeatOf.id,
               type: PageEntryRelationType.DUPLICATE,
               decidedBy: PageEntryRelationDecider.HASH,
               models: [],
@@ -642,6 +707,16 @@ export default class KnowledgeTriageService {
           : [],
       ),
       relations,
+      // Waiting entries that say the same thing. Once this one is accepted,
+      // each is triaged again and folds into it.
+      sameAsWaiting: [
+        ...repeats.filter((row) => !isServed(row.status)),
+        ...neighbours.filter(
+          (neighbour) =>
+            neighbour.relation === PageEntryRelationType.DUPLICATE &&
+            !isServed(neighbour.status),
+        ),
+      ].map((row) => row.id),
       models,
       outputs,
       inputs: {
@@ -651,14 +726,12 @@ export default class KnowledgeTriageService {
         moduleIds: entry.moduleIds,
         pageId: entry.pageId,
         supersedesId: entry.supersedesId,
-        citations: entry.citations.map((citation) => ({
-          kind: citation.kind,
-          result: citation.checkResult,
-        })),
+        citations: citationsOf(entry),
         writer,
         cited: cited.targets,
         similarityThreshold: settings.similarityThreshold,
-        repeats: repeated?.id ?? null,
+        repeats: repeatOf?.id ?? null,
+        foldsInto: foldsInto?.id ?? null,
         neighbours: neighbours.map((neighbour) => ({
           id: neighbour.id,
           similarity: neighbour.similarity,
@@ -671,6 +744,39 @@ export default class KnowledgeTriageService {
         })),
       },
     });
+  }
+
+  /**
+   * Served entries, written after this one, that triage found say the same
+   * thing as it: by hash, or by two judges and no rule against it. Oldest
+   * first.
+   */
+  private async servedDuplicatesOf(entry: TriagedEntry, workspaceId: string) {
+    const rows = await this.prisma.pageEntryRelation.findMany({
+      where: {
+        toId: entry.id,
+        type: PageEntryRelationType.DUPLICATE,
+        decidedBy: {
+          in: [PageEntryRelationDecider.HASH, PageEntryRelationDecider.MODEL],
+        },
+        from: {
+          deleted: null,
+          status: { in: SERVED },
+          page: { workspaceId, deleted: null },
+        },
+      },
+      select: {
+        from: { select: { id: true, content: true, createdAt: true } },
+      },
+    });
+
+    return rows
+      .map((row) => row.from)
+      .sort(
+        (a, b) =>
+          a.createdAt.getTime() - b.createdAt.getTime() ||
+          a.id.localeCompare(b.id),
+      );
   }
 
   /**
@@ -933,6 +1039,7 @@ export default class KnowledgeTriageService {
   private async record(
     entry: TriagedEntry,
     mode: KnowledgeTriageMode,
+    trigger: KnowledgeTriageTrigger,
     auditRate: number,
     found: Found,
   ): Promise<TriageOutcome> {
@@ -981,6 +1088,7 @@ export default class KnowledgeTriageService {
             reasons: found.reasons,
             policy: found.policy,
             mode,
+            trigger,
             applied,
             corroboratedEntryId: found.corroborates ?? null,
             backedOffFrom: found.backedOffFrom ?? null,
@@ -1022,9 +1130,14 @@ export default class KnowledgeTriageService {
       found.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT
     ) {
       await this.answerGapsQuietly(entry.id);
+      await this.triageAgain(
+        found.sameAsWaiting ?? [],
+        KnowledgeTriageTrigger.RELATED,
+      );
     }
 
     return {
+      trigger,
       decisionId: result.id,
       decision: found.decision,
       reasons: found.reasons,
@@ -1034,6 +1147,30 @@ export default class KnowledgeTriageService {
       backedOffFrom: found.backedOffFrom ?? null,
       audit: result.audit,
     };
+  }
+
+  /**
+   * Queues one more pass for each of these entries. Best effort: an entry
+   * that is not triaged again waits for a person, as it did before.
+   */
+  private async triageAgain(
+    entryIds: string[],
+    trigger: KnowledgeTriageTrigger,
+  ): Promise<void> {
+    for (const entryId of new Set(entryIds)) {
+      try {
+        await this.pagesQueue?.add(
+          TRIAGE_ENTRY_JOB,
+          { entryId, trigger },
+          retriageJobOptions(entryId, trigger),
+        );
+      } catch (error) {
+        this.logger.warn({
+          message: `Could not queue triage of entry ${entryId} again (${trigger}): ${error}; it waits for a person`,
+          where: 'KnowledgeTriageService.triageAgain',
+        });
+      }
+    }
   }
 
   /**
@@ -1185,6 +1322,8 @@ interface Found {
   retires?: { id: string; status: PageEntryStatus; content: string } | null;
   /** Standing entries precedence ruled against, with their content as read. */
   displaces?: Array<{ id: string; status: PageEntryStatus; content: string }>;
+  /** Waiting entries that say the same thing, to triage again on acceptance. */
+  sameAsWaiting?: string[];
   relations?: Array<{
     toId: string;
     type: PageEntryRelationType;
@@ -1266,6 +1405,36 @@ function citedText(text: string): string {
   return redacted.length > MAX_CITED_TEXT
     ? `${redacted.slice(0, MAX_CITED_TEXT)} [cut]`
     : redacted;
+}
+
+/** The citations of an entry, as a decision records them. */
+function citationsOf(entry: TriagedEntry) {
+  return entry.citations
+    .map((citation) => ({
+      kind: citation.kind,
+      path: citation.path,
+      startLine: citation.startLine,
+      endLine: citation.endLine,
+      targetId: citation.targetId,
+      result: citation.checkResult,
+    }))
+    .sort((a, b) => stableJson(a).localeCompare(stableJson(b)));
+}
+
+/**
+ * What a decision about an entry rests on, and what a later pass compares:
+ * its content, its citations with their results, and the served entries
+ * that say the same thing.
+ */
+function evidenceOfEntry(
+  entry: TriagedEntry,
+  servedDuplicates: Array<{ id: string }>,
+) {
+  return {
+    contentHash: entry.contentHash ?? contentHashOf(entry.content),
+    citations: citationsOf(entry),
+    servedDuplicates: servedDuplicates.map((row) => row.id).sort(),
+  };
 }
 
 /** A digest of what a decision was made on, stable for the same inputs. */

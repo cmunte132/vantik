@@ -50,7 +50,9 @@ import {
 import KnowledgeTriageService from './triage/knowledge-triage.service';
 import KnowledgeConventionsService from './upkeep/knowledge-conventions.service';
 import KnowledgeGapsService from './upkeep/knowledge-gaps.service';
-import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
+import KnowledgeUpkeepService, {
+  UnreadCitations,
+} from './upkeep/knowledge-upkeep.service';
 
 function buildQueue(existing: Array<{ name: string; key: string }> = []) {
   return {
@@ -322,6 +324,7 @@ describe('triaging a new entry', () => {
       reasons: ['UNGROUNDED'],
       policy: null as string | null,
       mode: 'SHADOW',
+      trigger: 'WRITTEN',
       applied: false,
     }));
     const processor = new PagesProcessor(
@@ -337,7 +340,7 @@ describe('triaging a new entry', () => {
     await expect(
       processor.handleTriageEntry({ data: { entryId: 'entry-1' } }),
     ).resolves.toBeUndefined();
-    expect(triage).toHaveBeenCalledWith('entry-1');
+    expect(triage).toHaveBeenCalledWith('entry-1', process.env, 'WRITTEN');
   });
 
   it('[KG-4.3] fails when the pass fails, so the queue tries it again', async () => {
@@ -553,6 +556,7 @@ describe('a change that landed', () => {
       disputed: 0,
       proposed: 0,
       unread: 0,
+      waiting: [] as string[],
     }));
     const processor = new PagesProcessor(
       {} as PageEntriesService,
@@ -754,5 +758,101 @@ describe('refreshing generated pages', () => {
       jobId: `${REFRESH_PAGE_JOB}:page-1:5000`,
       attempts: 2,
     });
+  });
+});
+
+describe('triaging a waiting entry again when its evidence changes', () => {
+  function processorWith(
+    services: {
+      citations?: Partial<EntryCitationsService>;
+      upkeep?: Partial<KnowledgeUpkeepService>;
+    } = {},
+  ) {
+    const queue = { add: jest.fn(async () => ({})) };
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      (services.citations ?? {}) as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      (services.upkeep ?? {}) as KnowledgeUpkeepService,
+      {
+        weigh: async (): Promise<null> => null,
+      } as unknown as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
+      {} as PageRefreshService,
+      undefined,
+      queue as unknown as Queue,
+    );
+    const queued = () => queue.add.mock.calls.map((call: unknown[]) => call[1]);
+
+    return { processor, queue, queued };
+  }
+
+  it('[ENG-224] after a retry reads a citation, even while others are still unread', async () => {
+    const { processor, queued } = processorWith({
+      citations: {
+        retryUnknown: jest.fn(async () => ({ stillUnknown: 1, read: 1 })),
+      },
+    });
+
+    await expect(
+      processor.handleRetryCitations({ data: { entryId: 'entry-1' } }),
+    ).rejects.toThrow('could not be read yet');
+    expect(queued()).toEqual([
+      { entryId: 'entry-1', trigger: 'CITATIONS_CHECKED' },
+    ]);
+  });
+
+  it('[ENG-224] not after a retry that read nothing', async () => {
+    const { processor, queued } = processorWith({
+      citations: {
+        retryUnknown: jest.fn(async () => ({ stillUnknown: 1, read: 0 })),
+      },
+    });
+
+    await expect(
+      processor.handleRetryCitations({ data: { entryId: 'entry-1' } }),
+    ).rejects.toThrow();
+    expect(queued()).toEqual([]);
+  });
+
+  it('[ENG-224] after a re-check stores a reading', async () => {
+    const { processor, queued } = processorWith({
+      citations: { recheck: jest.fn(async () => ({ checked: 1 })) },
+    });
+
+    await processor.handleRecheckEntry({ data: { entryId: 'entry-1' } });
+    expect(queued()).toEqual([
+      { entryId: 'entry-1', trigger: 'CITATIONS_CHECKED' },
+    ]);
+  });
+
+  it('[ENG-224] after a change that landed touches a file it cites, even while other citations are unread', async () => {
+    const codeLanded = jest.fn(async () => ({
+      checked: 2,
+      disputed: 0,
+      proposed: 0,
+      unread: 0,
+      stale: 0,
+      waiting: ['entry-1', 'entry-2'],
+    }));
+    const { processor, queued } = processorWith({ upkeep: { codeLanded } });
+    const data = {
+      workspaceId: 'workspace-1',
+      externalRepoId: 'repo-1',
+      sha: 'a'.repeat(40),
+      changedPaths: ['src/main.ts'],
+    };
+
+    await processor.handleCodeLanded({ data });
+    codeLanded.mockRejectedValueOnce(new UnreadCitations(1, 0, ['entry-3']));
+    await expect(processor.handleCodeLanded({ data })).rejects.toThrow(
+      UnreadCitations,
+    );
+
+    expect(queued()).toEqual([
+      { entryId: 'entry-1', trigger: 'CODE_CHANGED' },
+      { entryId: 'entry-2', trigger: 'CODE_CHANGED' },
+      { entryId: 'entry-3', trigger: 'CODE_CHANGED' },
+    ]);
   });
 });

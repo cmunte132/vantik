@@ -1,5 +1,6 @@
 import { InjectQueue, Process, Processor } from '@nestjs/bull';
 import { Injectable, OnModuleInit, Optional } from '@nestjs/common';
+import { KnowledgeTriageTrigger } from '@prisma/client';
 import { Queue } from 'bull';
 
 import { LoggerService } from 'modules/logger/logger.service';
@@ -28,15 +29,19 @@ import {
   RECOMPUTE_MODULES_JOB,
   recomputeModulesJobOptions,
   REFRESH_PAGE_JOB,
+  retriageJobOptions,
   RETRY_CITATIONS_JOB,
   RUN_FINDINGS_JOB,
   STANDING_ENTRY_DECAY_DAYS,
   TRIAGE_ENTRY_JOB,
+  type TriageEntryJob,
 } from './pages.interface';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
 import KnowledgeConventionsService from './upkeep/knowledge-conventions.service';
 import KnowledgeGapsService from './upkeep/knowledge-gaps.service';
-import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
+import KnowledgeUpkeepService, {
+  UnreadCitations,
+} from './upkeep/knowledge-upkeep.service';
 
 /**
  * The scheduler for the decay pass.
@@ -293,7 +298,34 @@ export class PagesProcessor {
     private gaps: KnowledgeGapsService,
     private pageRefresh: PageRefreshService,
     @Optional() private knowledgeIndex?: KnowledgeIndexService,
+    @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
   ) {}
+
+  /**
+   * Queues one more triage pass for entries whose evidence changed. Triage
+   * decides again only about an entry that waits after an escalation, and
+   * only when the evidence differs, so a pass for any other entry decides
+   * nothing. Best effort: an entry not triaged again waits for a person.
+   */
+  private async triageAgain(
+    entryIds: string[],
+    trigger: KnowledgeTriageTrigger,
+  ): Promise<void> {
+    for (const entryId of new Set(entryIds)) {
+      try {
+        await this.pagesQueue?.add(
+          TRIAGE_ENTRY_JOB,
+          { entryId, trigger },
+          retriageJobOptions(entryId, trigger),
+        );
+      } catch (error) {
+        this.logger.warn({
+          message: `Could not queue triage of entry ${entryId} again (${trigger}): ${error}`,
+          where: 'PagesProcessor.triageAgain',
+        });
+      }
+    }
+  }
 
   /** Indexes the consolidated entries the index lost. */
   @Process(INDEX_CONSOLIDATED_JOB)
@@ -327,13 +359,18 @@ export class PagesProcessor {
   }
 
   /**
-   * Triages one new entry. A pass that throws is tried again by Bull; one
-   * that finds nothing to decide (the entry is gone, triaged, or triage is
-   * off) returns without a decision.
+   * Triages one entry: a new one, or one whose evidence changed while it
+   * waits. A pass that throws is tried again by Bull; one that finds nothing
+   * to decide (the entry is gone, decided about, or triage is off) returns
+   * without a decision.
    */
   @Process(TRIAGE_ENTRY_JOB)
-  async handleTriageEntry(job: { data: { entryId: string } }) {
-    const outcome = await this.triage.triage(job.data.entryId);
+  async handleTriageEntry(job: { data: TriageEntryJob }) {
+    const outcome = await this.triage.triage(
+      job.data.entryId,
+      process.env,
+      job.data.trigger ?? KnowledgeTriageTrigger.WRITTEN,
+    );
 
     if (!outcome) {
       return;
@@ -350,7 +387,7 @@ export class PagesProcessor {
     ].join('');
 
     this.logger.info({
-      message: `Triage (${outcome.mode.toLowerCase()}) decided ${outcome.decision} for entry ${job.data.entryId}${detail}`,
+      message: `Triage (${outcome.mode.toLowerCase()}, ${outcome.trigger.toLowerCase()}) decided ${outcome.decision} for entry ${job.data.entryId}${detail}`,
       where: 'PagesProcessor.handleTriageEntry',
     });
   }
@@ -363,9 +400,16 @@ export class PagesProcessor {
    */
   @Process(RETRY_CITATIONS_JOB)
   async handleRetryCitations(job: { data: { entryId: string } }) {
-    const { stillUnknown } = await this.entryCitations.retryUnknown(
+    const { stillUnknown, read } = await this.entryCitations.retryUnknown(
       job.data.entryId,
     );
+
+    if (read > 0) {
+      await this.triageAgain(
+        [job.data.entryId],
+        KnowledgeTriageTrigger.CITATIONS_CHECKED,
+      );
+    }
 
     if (stillUnknown > 0) {
       throw new Error(
@@ -396,6 +440,13 @@ export class PagesProcessor {
 
     const { checked } = await this.entryCitations.recheck(job.data.entryId);
 
+    if (checked > 0) {
+      await this.triageAgain(
+        [job.data.entryId],
+        KnowledgeTriageTrigger.CITATIONS_CHECKED,
+      );
+    }
+
     this.logger.info({
       message: `Checked ${checked} citation(s) of entry ${job.data.entryId} after a harmful signal`,
       where: 'PagesProcessor.handleRecheckEntry',
@@ -425,7 +476,23 @@ export class PagesProcessor {
    */
   @Process(CODE_LANDED_JOB)
   async handleCodeLanded(job: { data: CodeLandedJob }) {
-    await this.upkeep.codeLanded(job.data);
+    let waiting: string[];
+
+    try {
+      ({ waiting } = await this.upkeep.codeLanded(job.data));
+    } catch (error) {
+      // What was checked is stored, though the rest is tried again.
+      if (error instanceof UnreadCitations) {
+        await this.triageAgain(
+          error.waiting,
+          KnowledgeTriageTrigger.CODE_CHANGED,
+        );
+      }
+
+      throw error;
+    }
+
+    await this.triageAgain(waiting, KnowledgeTriageTrigger.CODE_CHANGED);
   }
 
   /**

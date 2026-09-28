@@ -1716,7 +1716,7 @@ describe('a change that landed re-checks the citations it touches', () => {
         undefined,
         queue as never,
       ).retryUnknown('e1'),
-    ).resolves.toEqual({ stillUnknown: 0 });
+    ).resolves.toEqual({ stillUnknown: 0, read: 1 });
 
     expect(queue.add).toHaveBeenCalledTimes(1);
     expect(t.citations[0]).toMatchObject({ checkResult: Check.HOLDS });

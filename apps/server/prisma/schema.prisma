@@ -1108,6 +1108,9 @@ model KnowledgeTriageDecision {
   policy   KnowledgeTriagePolicy?
   /// SHADOW records and leaves the entry as it is; ON acts on the decision.
   mode     KnowledgeTriageMode
+  /// What made triage decide: the entry was written, or, for a later
+  /// decision about an entry that waits, what changed in its evidence.
+  trigger  KnowledgeTriageTrigger      @default(WRITTEN)
   /// Whether the decision changed anything: always false in shadow mode, and
   /// false for an escalation, which waits for a person.
   applied  Boolean                     @default(false)
@@ -2292,6 +2295,22 @@ enum KnowledgeTriagePolicy {
   SECRET
   /// It is several claims in one entry.
   ONE_FACT
+}
+
+/// Why triage decided about an entry. Triage decides once when an agent or a
+/// person writes the entry. It decides again, while the entry waits for a
+/// person, each time the evidence of the entry changes.
+enum KnowledgeTriageTrigger {
+  /// Someone wrote the entry.
+  WRITTEN
+  /// The server read a citation that it could not read before.
+  CITATIONS_CHECKED
+  /// A change to the code touched a file that the entry cites.
+  CODE_CHANGED
+  /// Triage related a newer entry to it.
+  RELATED
+  /// The verifier found evidence and attached it.
+  VERIFIER
 }
 
 /// Whether triage acted on its decisions when it made them.

@@ -591,6 +591,7 @@ describe('a repository that cannot be reached', () => {
 
     await expect(service.retryUnknown(entryId)).resolves.toEqual({
       stillUnknown: 1,
+      read: 1,
     });
 
     // Stamped with when it was written: it says whether the claim held at
@@ -621,6 +622,7 @@ describe('a repository that cannot be reached', () => {
 
     await expect(service.retryUnknown(entryId)).resolves.toEqual({
       stillUnknown: 0,
+      read: 1,
     });
     expect(db.citations[0].checkResult).toBe('MISSING');
   });
@@ -859,6 +861,7 @@ describe('a repository that moved to another module', () => {
 
     await expect(context.service.retryUnknown(entryId)).resolves.toEqual({
       stillUnknown: 0,
+      read: 1,
     });
     expect(context.db.citations[0]).toMatchObject({
       moduleRepoId: 'r-api-moved',

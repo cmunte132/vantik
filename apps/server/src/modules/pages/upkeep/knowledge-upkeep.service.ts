@@ -59,6 +59,8 @@ export interface LandedSummary {
   unread: number;
   /** Read before a person last acted on their entry, so read again. */
   stale: number;
+  /** Waiting entries whose citations were checked, to triage again. */
+  waiting: string[];
 }
 
 /**
@@ -69,6 +71,8 @@ export class UnreadCitations extends Error {
   constructor(
     readonly unread: number,
     readonly stale = 0,
+    /** Waiting entries whose citations were checked, to triage again. */
+    readonly waiting: string[] = [],
   ) {
     super(
       `${unread} citation(s) touched by the change could not be read and ` +
@@ -148,6 +152,7 @@ export default class KnowledgeUpkeepService {
       proposed: 0,
       unread,
       stale: 0,
+      waiting: [],
     };
 
     for (const [entryId, entryChecks] of byEntry) {
@@ -160,6 +165,14 @@ export default class KnowledgeUpkeepService {
 
       summary.stale += stale;
       await this.indexer?.entryChanged(entryId);
+
+      if (
+        entryChecks.some(
+          (check) => check.entryStatus === PageEntryStatus.PROPOSED,
+        )
+      ) {
+        summary.waiting.push(entryId);
+      }
 
       if (done?.action === PageEntryMaintenanceAction.DISPUTED) {
         summary.disputed++;
@@ -181,7 +194,7 @@ export default class KnowledgeUpkeepService {
     });
 
     if (unread > 0 || summary.stale > 0) {
-      throw new UnreadCitations(unread, summary.stale);
+      throw new UnreadCitations(unread, summary.stale, summary.waiting);
     }
 
     return summary;

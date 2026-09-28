@@ -83,6 +83,9 @@ An entry can cite what it rests on, up to ten citations:
   A short quote from the lines is optional, and catches a wrong line number.
 - **Where something was decided:** an issue, a pull request, a comment or an
   agent run.
+- **An outside page:** a public https page and a quote from it, for a fact
+  about an outside service, for example a vendor API or a cloud setting. The
+  quote must be 20 to 1000 characters.
 
 ### The check when an entry is written
 
@@ -91,6 +94,12 @@ citation does not hold (there is no file at that path and commit, the lines
 run past the end of the file, or the quote is not in the lines), the server
 refuses the write and names the citation. If the repository cannot be reached
 at that moment, the server writes the entry and reads the citation later.
+
+The server reads a cited outside page itself, and finds the quote on it. It
+reads only public https pages. It refuses an address that is private,
+loopback, link-local or reserved, and it checks the target of each redirect
+in the same way. The server keeps the quote as the page gives it, with the
+date of the read.
 
 ### Trust tiers
 
@@ -101,11 +110,13 @@ each citation's last check:
 |---|---|
 | `HUMAN_VERIFIED` | A person confirmed the entry. |
 | `GROUNDED` | The entry is accepted, and every citation was read and still holds. |
+| `OBSERVED` | The entry is accepted, it cites an outside page, and every citation still holds. The citation shows the date that the server last read the page. |
 | `UNGROUNDED` | Nothing that was checked supports the entry, or the code that it cites has changed or gone. An agent checks it against the code before relying on it. |
 
-Grounded and verified entries rank above the others. Apart from the
-conventions of its modules, a hosted agent run is given only grounded or
-verified entries.
+Verified entries rank first. Grounded and observed entries rank next, and a
+grounded entry wins over an observed one when the two contradict. Apart from
+the conventions of its modules, a hosted agent run is given only verified,
+grounded or observed entries.
 
 ### Checks when the code changes
 
@@ -120,6 +131,14 @@ the server reads every entry that cites a file the change touched:
   module. A person corrects the entry and puts it back, or archives it.
 - The cited file is gone, or no model could judge the change: a person is
   asked to decide. Nothing changes on its own.
+
+### Checks of outside pages
+
+The nightly pass reads each cited outside page again 30 days after the last
+read. If the quote is still on the page, the entry stays observed, with the
+new date. If the quote or the page is gone, the entry becomes ungrounded, and
+agent runs stop getting it. If the server cannot read the page for 60 days,
+the entry becomes ungrounded too.
 
 ### Decay
 
@@ -139,8 +158,8 @@ page is read in its place. Outcomes of agent runs never delete knowledge.
   budget. An agent calls it before it starts work.
 - **`recall_knowledge`** answers a question from the bank.
 - **A hosted agent run** gets the conventions of its issue's modules first,
-  then the `KNOWLEDGE_CONTEXT_TOP_K` most relevant grounded or verified
-  entries, within `KNOWLEDGE_CONTEXT_TOKEN_BUDGET` tokens. Each entry shows its
+  then the `KNOWLEDGE_CONTEXT_TOP_K` most relevant verified, grounded or
+  observed entries, within `KNOWLEDGE_CONTEXT_TOKEN_BUDGET` tokens. Each entry shows its
   citation and its age.
 
 The server records each time an entry is served. When a run ends, its checks,
@@ -152,14 +171,6 @@ A harmful outcome makes the server check the entry's citations again.
 
 Agents settle what evidence can settle. A person sees a fact only when it
 needs a judgment that no code and no issue can give.
-
-:::note
-
-The dashed steps are planned, and the server does not do them yet. Until they
-exist, a fact that cites no evidence goes to a person. See
-[Escalation reasons](#escalation-reasons).
-
-:::
 
 ```mermaid
 flowchart TD
@@ -173,12 +184,31 @@ flowchart TD
   verifier -- it finds evidence --> cited["The agent adds the citations"]
   cited -- check it again --> read
   verifier -- it finds nothing --> outside{"Is it about an<br/>outside service?"}
-  outside -- yes --> observed(["In use: observed on a date,<br/>checked again after 30 days"])
+  outside -- "yes: the service's own page<br/>states it, and both models accept" --> observed(["In use: observed on a date,<br/>checked again after 30 days"])
   outside -- "no: it is a decision,<br/>a rule or a convention" --> person
-
-  classDef planned stroke-dasharray: 5 4
-  class verifier,cited,outside,observed planned
 ```
+
+### The verifier
+
+When triage escalates a fact because it cites no evidence, a verifier agent
+looks for evidence first. The fact stays out of the review queue while the
+verifier looks, for a maximum of one hour. The verifier can search and read
+the code of the fact's modules, the workspace's issues, and public pages. It
+cannot change anything. It proposes a maximum of three citations, and the
+server checks each one as it checks a citation that a writer gives. The server
+attaches only the citations that hold, and triage decides again.
+
+The verifier uses the model and the key that the workspace set in its agent
+settings. It never uses a key of the deployment. If the workspace has no
+model or key for agents, the verifier does not look, and the fact goes to a
+person.
+
+### Triage decides again
+
+Triage decides again when the evidence of a waiting fact changes: a citation
+that the server could not read now holds, a change lands in a cited file, a
+served fact now says the same thing, or the verifier adds citations. Each
+decision records what caused it.
 
 After a fact is in use, the server checks it again each time the code that it
 cites changes. See [Checks when the code changes](#checks-when-the-code-changes).
@@ -209,7 +239,8 @@ The server triages each new entry before a person sees it:
    (`KNOWLEDGE_SIMILARITY_THRESHOLD`), rules in code and two model judgments
    decide how the two relate: a duplicate, a refinement, a replacement, a
    contradiction, or a different fact.
-4. **Grounding.** Every citation must hold.
+4. **Grounding.** Every citation must hold. A fact with no evidence goes to
+   the verifier before a person sees it.
 5. **Decision.** Triage accepts the entry, folds it into another, refuses it,
    or escalates it to a person.
 
@@ -222,8 +253,8 @@ The server triages each new entry before a person sees it:
 | `on` | Triage accepts, folds in and refuses as it decides. Escalations still wait for a person. |
 
 Triage accepts an entry without a person only when every condition holds: the
-entry says one thing, it cites code, an issue or a comment, every citation
-holds, it contradicts nothing that a person verified or that a locked page
+entry says one thing, it cites code, an issue, a comment or an outside page,
+every citation holds, it contradicts nothing that a person verified or that a locked page
 holds, and two separate model judgments accept it. The writer does not change
 this: triage accepts a grounded entry from an agent as it accepts one from a
 person. For a convention or a decision, the judges accept only evidence that
@@ -237,7 +268,7 @@ An escalated entry waits in the review queue, with the reasons attached:
 |---|---|
 | `CONTRADICTS_VERIFIED` | It contradicts an entry that a person verified. |
 | `CONTRADICTS_LOCKED` | It contradicts an entry on a locked page. |
-| `UNGROUNDED` | It cites no code, issue or comment. A run or a pull request is not evidence, because the judges cannot read what it says. |
+| `UNGROUNDED` | It cites no code, issue, comment or outside page. A run or a pull request is not evidence, because the judges cannot read what it says. The verifier looks for evidence before a person sees the entry. |
 | `CITATION_FAILED` | A citation does not hold, or was not read yet. |
 | `PIN_REQUEST` | It is a convention that no evidence confirms. Every run in its modules gets a convention, so a person decides. |
 | `SUPERSEDE_REQUEST` | It replaces an entry that is not in use, or that is gone. When it replaces an entry in use that no person verified, triage decides it like any entry, and its acceptance retires the old one. |

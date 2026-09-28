@@ -2117,14 +2117,6 @@ model PageLink {
   @@index([entityType, entityId])
 }
 
-/// How strictly a page polices appended entries.
-///
-/// The failure mode this exists for is not one badly-behaved agent; it is ten
-/// well-behaved ones each appending the same six facts, because rediscovering
-/// those facts is exactly what a memory bank exists to prevent. Asking agents to
-/// be tidy in a tool description is the weakest control available — it fails
-/// precisely when a cheaper or unfamiliar model is pointed at the endpoint,
-/// which is the cross-harness case this feature exists to serve.
 /// Who writes a page's body.
 enum PageKind {
   /// People. An agent's consolidation into it is a proposal. The default.
@@ -2140,6 +2132,14 @@ enum PageProposalState {
   DECLINED
 }
 
+/// How strictly a page polices appended entries.
+///
+/// The failure mode this exists for is not one badly-behaved agent; it is ten
+/// well-behaved ones each appending the same six facts, because rediscovering
+/// those facts is exactly what a memory bank exists to prevent. Asking agents to
+/// be tidy in a tool description is the weakest control available — it fails
+/// precisely when a cheaper or unfamiliar model is pointed at the endpoint,
+/// which is the cross-harness case this feature exists to serve.
 enum PageEntryPolicy {
   /// Append freely. Scratch pages, where volume does not matter.
   OPEN

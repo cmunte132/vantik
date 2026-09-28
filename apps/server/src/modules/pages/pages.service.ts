@@ -29,12 +29,29 @@ import {
 
 import { citedBy, readSections } from './generated/sections';
 import KnowledgeIndexService from './knowledge-index.service';
+import { knowledgeSettings } from './knowledge-settings';
 import {
   PAGES_QUEUE,
   REFRESH_PAGE_JOB,
   refreshPageJobOptions,
 } from './pages.interface';
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
+
+/**
+ * How long until a generated page built at `refreshedAt` may be built again:
+ * its workspace's minimum interval after that build, and a second more, so
+ * the job queued for then does not find it a moment too soon.
+ */
+function untilDue(refreshedAt: Date | null, preferences: unknown): number {
+  if (!refreshedAt) {
+    return 0;
+  }
+
+  const { pageRefreshMinIntervalMs } = knowledgeSettings(preferences);
+  const due = refreshedAt.getTime() + pageRefreshMinIntervalMs - Date.now();
+
+  return due > 0 ? due + 1_000 : 0;
+}
 
 /** The longest question a generated page may answer. */
 const MAX_QUESTION_LENGTH = 500;
@@ -371,6 +388,8 @@ export default class PagesService {
         workspaceId: true,
         kind: true,
         question: true,
+        refreshedAt: true,
+        workspace: { select: { preferences: true } },
       },
     });
 
@@ -456,7 +475,8 @@ export default class PagesService {
         }),
         ...(takenOver && { kind: PageKindEnum.AUTHORED }),
         // A new question is a new page to build: the watermark goes, so the
-        // next refresh does not wait for the evidence to change.
+        // next refresh does not wait for the evidence to change. The minimum
+        // interval since the last build still holds.
         ...(questionChanged && {
           question,
           watermark: null,
@@ -502,22 +522,26 @@ export default class PagesService {
     await this.indexer?.pageChanged(pageId, { titleChanged });
 
     if (questionChanged) {
-      await this.queueRefresh(pageId);
+      await this.queueRefresh(
+        pageId,
+        untilDue(current.refreshedAt, current.workspace?.preferences),
+      );
     }
 
     return this.withMarkdown(page);
   }
 
   /**
-   * Asks for a generated page to be built now rather than at the next look.
-   * Best effort: the scheduled look builds it anyway.
+   * Asks for a generated page to be built as soon as it may be, `delay` from
+   * now, rather than at the next look. Best effort: the scheduled look builds
+   * it anyway, when it runs.
    */
-  private async queueRefresh(pageId: string): Promise<void> {
+  private async queueRefresh(pageId: string, delay = 0): Promise<void> {
     try {
       await this.pagesQueue?.add(
         REFRESH_PAGE_JOB,
         { pageId },
-        refreshPageJobOptions(pageId),
+        refreshPageJobOptions(pageId, delay),
       );
     } catch {
       // The next scheduled look finds it.

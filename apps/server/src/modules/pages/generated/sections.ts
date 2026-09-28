@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { type PageSection } from '@vantikhq/types';
 
@@ -11,6 +11,12 @@ import { type PageSection } from '@vantikhq/types';
  * stored byte for byte as it was, and an operation that names a section the
  * page does not have is dropped rather than guessed at. A section always
  * cites the entries it was written from, and only entries the refresh read.
+ *
+ * Nor can a refresh rewrite what has not changed. Each section records a
+ * fingerprint of what it was written from, and one whose fingerprint still
+ * matches is neither replaced nor removed: what new evidence adds goes in a
+ * new section. So one answer can change only the sections whose evidence
+ * moved, whatever it asks for.
  */
 
 export type SectionOperation =
@@ -35,6 +41,22 @@ export type SectionOperation =
 export interface DroppedOperation {
   operation: unknown;
   reason: string;
+}
+
+/**
+ * What keeps a refresh to the sections whose evidence changed: which ones it
+ * may replace or remove, and the fingerprint to record on a section it
+ * writes, from the entries it cites.
+ */
+export interface EditGuard {
+  editable: ReadonlySet<string>;
+  stamp: (entryIds: string[]) => string;
+}
+
+/** An entry as a fingerprint reads it: what it says. */
+export interface EvidenceEntry {
+  kind: string;
+  content: string;
 }
 
 export interface AppliedOperations {
@@ -86,6 +108,29 @@ export function renderSections(sections: PageSection[]): string {
     .join('\n\n');
 }
 
+/**
+ * The fingerprint of what a section rests on: the question the page answers,
+ * and each entry it cites, by what it says, or as gone when it is no longer
+ * among `entries` (out of use, or out of the page's scope). The order of the
+ * ids does not matter, and neither does any entry the section does not cite.
+ */
+export function sectionEvidence(
+  question: string,
+  entryIds: string[],
+  entries: ReadonlyMap<string, EvidenceEntry>,
+): string {
+  const cited = [...new Set(entryIds)].sort().map((id) => {
+    const entry = entries.get(id);
+
+    return entry ? [id, entry.kind, entry.content] : [id, null];
+  });
+
+  return createHash('sha256')
+    .update(JSON.stringify([question, cited]))
+    .digest('hex')
+    .slice(0, 32);
+}
+
 /** A new section's id: stable from then on, and never reused. */
 export function newSectionId(): string {
   return `sec_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
@@ -100,12 +145,16 @@ export function newSectionId(): string {
  * citing nothing is not written, since every section says what it was
  * written from. An id an earlier operation removed is unknown to a later
  * one, as it would be to a reader.
+ *
+ * With a `guard`, a section it does not list as editable is neither replaced
+ * nor removed, and every section written records its fingerprint.
  */
 export function applyOperations(
   current: PageSection[],
   operations: unknown[],
   evidence: ReadonlySet<string>,
   makeId: () => string = newSectionId,
+  guard?: EditGuard,
 ): AppliedOperations {
   const sections = [...current];
   const applied: SectionOperation[] = [];
@@ -123,6 +172,16 @@ export function applyOperations(
 
     if (typeof operation === 'string') {
       drop(raw, operation);
+      continue;
+    }
+
+    if (
+      operation.op !== 'insert_section' &&
+      guard &&
+      !guard.editable.has(operation.id) &&
+      sections.some((section) => section.id === operation.id)
+    ) {
+      drop(raw, `the evidence of section ${operation.id} has not changed`);
       continue;
     }
 
@@ -161,6 +220,7 @@ export function applyOperations(
         heading: operation.heading,
         body: operation.body,
         entryIds,
+        ...(guard ? { evidence: guard.stamp(entryIds) } : {}),
       };
       applied.push({ ...operation, entryIds });
       continue;
@@ -181,6 +241,7 @@ export function applyOperations(
       heading: operation.heading,
       body: operation.body,
       entryIds,
+      ...(guard ? { evidence: guard.stamp(entryIds) } : {}),
     });
     applied.push({ ...operation, entryIds });
   }

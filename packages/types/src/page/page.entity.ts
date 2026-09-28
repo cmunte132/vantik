@@ -66,6 +66,12 @@ export interface PageSection {
   /** Markdown. */
   body: string;
   entryIds: string[];
+  /**
+   * A fingerprint of what the section was written from: the page's question
+   * and the entries it cites, as they said it then. A refresh may rewrite or
+   * remove the section only once this no longer matches.
+   */
+  evidence?: string;
 }
 
 /**

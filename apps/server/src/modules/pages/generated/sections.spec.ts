@@ -8,6 +8,7 @@ import {
   parseOperations,
   readSections,
   renderSections,
+  sectionEvidence,
 } from './sections';
 
 /**
@@ -308,6 +309,149 @@ describe('the sections of a generated page', () => {
     expect(applied).toHaveLength(MAX_OPERATIONS);
     expect(dropped).toHaveLength(2);
     expect(dropped[0].reason).toBe(`more than ${MAX_OPERATIONS} operations`);
+  });
+
+  it('[KG-7.3] rewrites or removes only a section whose evidence changed, and adds to the rest', () => {
+    // An answer that would collapse the page: every section removed, one
+    // written in their place.
+    const stamps: string[][] = [];
+    const { sections, applied, dropped } = applyOperations(
+      SECTIONS,
+      [
+        { op: 'remove_section', id: 'sec_setup' },
+        {
+          op: 'replace_section',
+          id: 'sec_rollback',
+          heading: 'Everything',
+          body: 'The whole page, rewritten.',
+          entryIds: ['e-install', 'e-deploy', 'e-ci', 'e-rollback'],
+        },
+        {
+          op: 'replace_section',
+          id: 'sec_deploy',
+          heading: 'Deploying',
+          body: 'Deploys go out from `main`, behind a canary.',
+          entryIds: ['e-deploy', 'e-canary'],
+        },
+        {
+          op: 'insert_section',
+          after: 'sec_setup',
+          heading: 'Before you start',
+          body: 'Ask in #ops first.',
+          entryIds: ['e-canary'],
+        },
+        { op: 'remove_section', id: 'sec_nowhere' },
+      ],
+      EVIDENCE,
+      ids,
+      {
+        editable: new Set(['sec_deploy', 'sec_nowhere']),
+        stamp: (entryIds) => {
+          stamps.push(entryIds);
+
+          return `stamp:${entryIds.join('+')}`;
+        },
+      },
+    );
+
+    expect(dropped.map((item) => item.reason)).toEqual([
+      'the evidence of section sec_setup has not changed',
+      'the evidence of section sec_rollback has not changed',
+      'no section sec_nowhere',
+    ]);
+    expect(applied.map((item) => item.op)).toEqual([
+      'replace_section',
+      'insert_section',
+    ]);
+    // The sections whose evidence did not change are as they were; what the
+    // refresh wrote records what it was written from.
+    expect(sections).toEqual([
+      SECTIONS[0],
+      {
+        id: 'sec_new1',
+        heading: 'Before you start',
+        body: 'Ask in #ops first.',
+        entryIds: ['e-canary'],
+        evidence: 'stamp:e-canary',
+      },
+      {
+        id: 'sec_deploy',
+        heading: 'Deploying',
+        body: 'Deploys go out from `main`, behind a canary.',
+        entryIds: ['e-deploy', 'e-canary'],
+        evidence: 'stamp:e-deploy+e-canary',
+      },
+      SECTIONS[2],
+    ]);
+    expect(sections[0]).toBe(SECTIONS[0]);
+    expect(sections[3]).toBe(SECTIONS[2]);
+    expect(stamps).toEqual([['e-deploy', 'e-canary'], ['e-canary']]);
+
+    // Without a guard, as when code removes what lost its evidence, nothing
+    // is held back and nothing is stamped.
+    const unguarded = applyOperations(
+      SECTIONS,
+      [{ op: 'remove_section', id: 'sec_setup' }],
+      new Set(),
+    );
+    expect(unguarded.sections).toEqual(SECTIONS.slice(1));
+  });
+
+  it('[KG-7.3] fingerprints what a section rests on: its question and what its entries say', () => {
+    const entries = new Map([
+      ['e-deploy', { kind: 'FACT', content: 'Deploys go out from main.' }],
+      ['e-ci', { kind: 'PROCEDURE', content: 'CI runs on every push.' }],
+      ['e-other', { kind: 'FACT', content: 'Not cited.' }],
+    ]);
+    const question = 'How do we deploy?';
+    const base = sectionEvidence(question, ['e-deploy', 'e-ci'], entries);
+    const without = (id: string) =>
+      new Map([...entries].filter(([key]) => key !== id));
+
+    expect(base).toMatch(/^[0-9a-f]{32}$/);
+    // The same evidence, cited in another order or twice, or beside an entry
+    // the section does not cite changing, is the same fingerprint.
+    expect(
+      sectionEvidence(question, ['e-ci', 'e-deploy', 'e-ci'], entries),
+    ).toBe(base);
+    expect(
+      sectionEvidence(
+        question,
+        ['e-deploy', 'e-ci'],
+        new Map([
+          ...entries,
+          ['e-other', { kind: 'FACT', content: 'Changed.' }],
+        ]),
+      ),
+    ).toBe(base);
+
+    // What an entry says, its kind, an entry leaving, and the question each
+    // change it.
+    const changed = [
+      sectionEvidence(
+        question,
+        ['e-deploy', 'e-ci'],
+        new Map([
+          ...entries,
+          [
+            'e-deploy',
+            { kind: 'FACT', content: 'Deploys go out behind a canary.' },
+          ],
+        ]),
+      ),
+      sectionEvidence(
+        question,
+        ['e-deploy', 'e-ci'],
+        new Map([
+          ...entries,
+          ['e-ci', { kind: 'FACT', content: 'CI runs on every push.' }],
+        ]),
+      ),
+      sectionEvidence(question, ['e-deploy', 'e-ci'], without('e-ci')),
+      sectionEvidence(question, ['e-deploy'], entries),
+      sectionEvidence('How do we roll back?', ['e-deploy', 'e-ci'], entries),
+    ];
+    expect(new Set([base, ...changed]).size).toBe(changed.length + 1);
   });
 
   it('[KG-7.3] reads operations from a JSON answer, and nothing from anything else', () => {

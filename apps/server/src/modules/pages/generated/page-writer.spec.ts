@@ -14,7 +14,14 @@ describe('the writer of a generated page', () => {
         body: 'Deploys go out from main on merge.',
         entryIds: ['e-deploy', 'e-old'],
       },
+      {
+        id: 'sec_setup',
+        heading: 'Setting up',
+        body: 'Run pnpm install, then pnpm dev.',
+        entryIds: ['e-setup'],
+      },
     ],
+    editable: ['sec_deploy'],
     evidence: [
       {
         id: 'e-deploy',
@@ -57,7 +64,12 @@ describe('the writer of a generated page', () => {
     expect(prompt).toContain(
       'QUESTION:\n"""\nHow do we deploy the server?\n"""',
     );
-    expect(prompt).toContain('--- section sec_deploy');
+    // Which sections it may rewrite, and which it may only add to.
+    expect(system).toMatch(
+      /"evidence unchanged" cannot be replaced or removed/,
+    );
+    expect(prompt).toContain('--- section sec_deploy (evidence changed)');
+    expect(prompt).toContain('--- section sec_setup (evidence unchanged)');
     expect(prompt).toContain('cites: e-deploy, e-old (no longer in use)');
     expect(prompt).toContain('--- entry e-deploy (fact, verified)');
     expect(prompt).toContain(

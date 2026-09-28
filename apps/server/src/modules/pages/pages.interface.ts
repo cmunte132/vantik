@@ -88,7 +88,7 @@ export const GAP_ISSUES_JOB_ID = 'knowledge-gap-issues';
  * one due: see `generated/page-refresh.service.ts`. Hourly by default, as a
  * page is rebuilt no sooner than its workspace's minimum interval anyway;
  * `off` disables it, and a generated page is then built only when it is made
- * or its question changes.
+ * or its question changes (once the minimum interval has passed).
  */
 export const PAGE_REFRESH_CRON =
   process.env.KNOWLEDGE_PAGE_REFRESH_CRON ?? '23 * * * *';
@@ -99,14 +99,17 @@ export const PAGE_REFRESH_JOB_ID = 'generated-page-refresh';
 
 /**
  * Builds one generated page, when it is made or its question changes, so it
- * is not left empty until the next look. The gate still applies.
+ * is not left empty until the next look. The gate still applies: after a
+ * question change the job waits out the minimum interval since the last
+ * build (`delay`), rather than running early and finding the page too soon.
  */
 export const REFRESH_PAGE_JOB = 'refreshGeneratedPage';
 
 /** One job per page at a time; a request while one waits is the same request. */
-export function refreshPageJobOptions(pageId: string): JobOptions {
+export function refreshPageJobOptions(pageId: string, delay = 0): JobOptions {
   return {
     jobId: `${REFRESH_PAGE_JOB}:${pageId}`,
+    ...(delay > 0 ? { delay } : {}),
     attempts: 2,
     backoff: { type: 'exponential', delay: 60_000 },
     removeOnComplete: true,

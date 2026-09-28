@@ -19,6 +19,7 @@ import PagesService from '../pages.service';
 
 const WORKSPACE = 'workspace-1';
 const USER = 'user-1';
+const HOUR = 60 * 60 * 1000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
@@ -49,7 +50,9 @@ function setup(current?: Row, userType = 'User') {
       create: jest.fn(async (args: Row): Promise<Row> => args),
     },
   };
-  const queue = { add: jest.fn(async (): Promise<Row> => ({})) };
+  const queue = {
+    add: jest.fn<Promise<Row>, unknown[]>(async () => ({})),
+  };
   const indexer = {
     pageChanged: jest.fn(async (): Promise<void> => undefined),
   } as unknown as KnowledgeIndexService;
@@ -328,11 +331,37 @@ describe('authored and generated pages', () => {
         },
       },
     });
+    // Never built: it is built now.
     expect(queue.add).toHaveBeenCalledWith(
       REFRESH_PAGE_JOB,
       { pageId: GENERATED.id },
-      expect.anything(),
+      expect.not.objectContaining({ delay: expect.anything() }),
     );
+
+    // Built two hours ago: the build waits out the rest of the workspace's
+    // interval (six hours by default, three here), then runs.
+    const now = Date.parse('2026-09-01T12:00:00Z');
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      for (const [preferences, left] of [
+        [null, 4 * HOUR],
+        [{ knowledge: { pageRefreshMinInterval: '3h' } }, HOUR],
+        [{ knowledge: { pageRefreshMinInterval: '1h' } }, 0],
+      ] as const) {
+        const built = setup({
+          ...GENERATED,
+          refreshedAt: new Date(now - 2 * HOUR),
+          workspace: { preferences },
+        });
+        await built.service.updatePage(GENERATED.id, USER, {
+          question: 'How do we roll back a deploy?',
+        });
+        const options = built.queue.add.mock.calls[0][2] as { delay?: number };
+        expect(options.delay).toBe(left ? left + 1_000 : undefined);
+      }
+    } finally {
+      clock.mockRestore();
+    }
 
     // The same question again is no change.
     const same = setup(GENERATED);

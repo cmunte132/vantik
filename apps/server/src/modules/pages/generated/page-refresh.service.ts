@@ -23,6 +23,7 @@ import {
   citedBy,
   readSections,
   renderSections,
+  sectionEvidence,
   type SectionOperation,
 } from './sections';
 
@@ -46,6 +47,11 @@ import {
  * says. New evidence then waits for a model, served meanwhile as the entries
  * it is. With a model, the removal is part of the refresh, and a refresh
  * whose retrieval is empty writes nothing at all, removals included.
+ *
+ * The model may rewrite or remove only a section whose evidence changed
+ * since it was written: its question, or what an entry it cites says, or an
+ * entry leaving use or scope. Every other section it can only add to, with a
+ * section of its own, so no answer rewrites the page whole.
  */
 
 /** The statuses whose entries a page may rest on: those still served. */
@@ -222,6 +228,15 @@ export default class PageRefreshService {
       ...found,
       ...citedRows.filter((entry) => !found.some((hit) => hit.id === entry.id)),
     ];
+    const question = page.question;
+    const inUse = new Map(citedRows.map((entry) => [entry.id, entry]));
+    const editable = kept
+      .filter(
+        (section) =>
+          section.evidence !==
+          sectionEvidence(question, section.entryIds, inUse),
+      )
+      .map((section) => section.id);
 
     let operations: unknown[] | null;
 
@@ -230,6 +245,7 @@ export default class PageRefreshService {
         await this.writer.operations({
           question: page.question,
           sections: kept,
+          editable,
           evidence,
           outOfUse: citedBy(kept).filter((id) => !cited.has(id)),
         })
@@ -248,10 +264,16 @@ export default class PageRefreshService {
       return { outcome: 'writer-failed' };
     }
 
+    const read = new Map(evidence.map((entry) => [entry.id, entry]));
     const edited = applyOperations(
       kept,
       operations,
-      new Set(evidence.map((entry) => entry.id)),
+      new Set(read.keys()),
+      undefined,
+      {
+        editable: new Set(editable),
+        stamp: (entryIds) => sectionEvidence(question, entryIds, read),
+      },
     );
     const applied = [...removals, ...edited.applied];
 

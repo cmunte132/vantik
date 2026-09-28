@@ -1,5 +1,6 @@
 import { PageLinkType } from '@prisma/client';
 import { PageKindEnum, type PageSection } from '@vantikhq/types';
+import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
 import { convertTiptapJsonToMarkdown } from 'common/utils/tiptap.utils';
@@ -374,14 +375,20 @@ function setup(
     writer,
     indexer,
   );
+  const queue = {
+    add: jest.fn<Promise<unknown>, unknown[]>(async () => ({})),
+  };
   const pagesService = new PagesService(
     prisma as unknown as PrismaService,
     indexer,
+    undefined,
+    queue as unknown as Queue,
   );
 
   return {
     service,
     pagesService,
+    queue,
     prisma,
     pages,
     entries,
@@ -735,6 +742,59 @@ describe('refreshing a generated page', () => {
       ]);
     });
 
+    it('[KG-7.2] [KG-7.3] rebuilds a page asked a new question once the interval has passed, and may rewrite all of it', async () => {
+      const store = setup();
+      store.script(sectionPerEntry);
+      await store.service.refresh(PAGE, at(1), {});
+      const before = sectionsOf(store.page());
+
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(at(2).getTime());
+      try {
+        await store.pagesService.updatePage(PAGE, USER, {
+          question: 'How do we roll back a deploy?',
+        });
+      } finally {
+        clock.mockRestore();
+      }
+
+      // The build is queued for when the interval since the last one has
+      // passed, so it runs whether or not the hourly look does.
+      const options = store.queue.add.mock.calls[0][2] as { delay: number };
+      expect(options.delay).toBe(5 * HOUR + 1_000);
+
+      // No entry changed. Before then, it is too soon.
+      store.script((input) => ({
+        operations: input.sections.map((section) => ({
+          op: 'replace_section',
+          id: section.id,
+          heading: `Rolling back: ${section.heading}`,
+          body: section.body,
+          entryIds: section.entryIds,
+        })),
+      }));
+      await expect(store.service.refresh(PAGE, at(3), {})).resolves.toEqual({
+        outcome: 'too-soon',
+      });
+      expect(store.run).toHaveBeenCalledTimes(1);
+
+      // When the job runs, the page is built for its new question, and every
+      // section, written for the old one, is the writer's to rewrite.
+      await expect(
+        store.service.refresh(
+          PAGE,
+          new Date(at(2).getTime() + options.delay),
+          {},
+        ),
+      ).resolves.toEqual({ outcome: 'written', applied: 2, dropped: 0 });
+      expect(store.shown[1].question).toBe('How do we roll back a deploy?');
+      expect(store.shown[1].editable).toEqual(
+        before.map((section) => section.id),
+      );
+      expect(
+        sectionsOf(store.page()).map((section) => section.heading),
+      ).toEqual(before.map((section) => `Rolling back: ${section.heading}`));
+    });
+
     it('[KG-7.2] leaves pages people write alone', async () => {
       const store = setup({ page: { kind: PageKindEnum.AUTHORED } });
 
@@ -825,7 +885,8 @@ describe('refreshing a generated page', () => {
             body: 'All new.',
             entryIds: ['e-deploy'],
           },
-          { op: 'remove_section', id: before[2].id },
+          // The section on the entry that changed, which it may remove.
+          { op: 'remove_section', id: before[1].id },
         ],
       }));
 
@@ -834,11 +895,72 @@ describe('refreshing a generated page', () => {
         applied: 1,
         dropped: 2,
       });
-      expect(sectionsOf(store.page())).toEqual(before.slice(0, 2));
+      expect(sectionsOf(store.page())).toEqual([before[0], before[2]]);
       expect(store.history[store.history.length - 1].changes).toEqual({
         body: true,
         refreshed: { operations: 1, dropped: 2 },
       });
+    });
+
+    it('[KG-7.3] rewrites or removes only the sections whose evidence changed, whatever the model asks', async () => {
+      const store = await built();
+      const [rollback, deploy, setupSection] = sectionsOf(store.page());
+      // An answer that would collapse the page into one section.
+      const collapse = (input: WriterInput) => ({
+        operations: [
+          ...input.sections.map((section) => ({
+            op: 'remove_section',
+            id: section.id,
+          })),
+          {
+            op: 'insert_section',
+            after: null as string | null,
+            heading: 'Deploying',
+            body: 'Everything, in one section.',
+            entryIds: input.evidence.map((item) => item.id),
+          },
+        ],
+      });
+      store.script(collapse);
+
+      await expect(store.service.refresh(PAGE, at(8), {})).resolves.toEqual({
+        outcome: 'written',
+        applied: 2,
+        dropped: 2,
+      });
+
+      // Only the section resting on the entry that changed was its to
+      // rewrite, and the writer was told so.
+      expect(store.shown[1].editable).toEqual([deploy.id]);
+      const after = sectionsOf(store.page());
+      expect(after.map((section) => section.id)).toEqual([
+        expect.stringMatching(/^sec_/),
+        rollback.id,
+        setupSection.id,
+      ]);
+      expect(after[0]).toMatchObject({
+        body: 'Everything, in one section.',
+        entryIds: ['e-setup', 'e-deploy', 'e-rollback'],
+      });
+      expect(JSON.stringify(after[1])).toBe(JSON.stringify(rollback));
+      expect(JSON.stringify(after[2])).toBe(JSON.stringify(setupSection));
+
+      // What it wrote records what it was written from: a new entry no
+      // section cites changes none of them, so none is its to rewrite.
+      store.entries.push(
+        entry('e-canary', 'Canaries run for ten minutes.', {
+          updatedAt: at(9),
+        }),
+      );
+      store.script(collapse);
+
+      await expect(store.service.refresh(PAGE, at(16), {})).resolves.toEqual({
+        outcome: 'written',
+        applied: 1,
+        dropped: 3,
+      });
+      expect(store.shown[2].editable).toEqual([]);
+      expect(sectionsOf(store.page()).slice(1)).toEqual(after);
     });
 
     it('[KG-7.3] writes nothing when the index cannot be reached', async () => {
@@ -1053,7 +1175,7 @@ describe('refreshing a generated page', () => {
       store.entries[0].updatedAt = at(2);
       store.script(() => ({
         operations: [
-          { op: 'remove_section', id: sectionsOf(first)[0].id },
+          { op: 'remove_section', id: sectionsOf(first)[1].id },
           { op: 'remove_section', id: 'sec_unknown' },
         ],
       }));
@@ -1095,6 +1217,8 @@ describe('refreshing a generated page', () => {
 
       store.entries[0].content = 'Deploys go out from main, behind a canary.';
       store.entries[0].updatedAt = at(2);
+      store.entries[1].content = 'Revert the merge commit, then redeploy.';
+      store.entries[1].updatedAt = at(2);
       store.script(() => ({
         operations: [
           {

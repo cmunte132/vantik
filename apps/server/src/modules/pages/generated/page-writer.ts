@@ -52,6 +52,8 @@ export interface WriterEntry {
 export interface WriterInput {
   question: string;
   sections: PageSection[];
+  /** The sections whose evidence changed: the only ones it may rewrite. */
+  editable: string[];
   /** The entries read for this refresh, which sections may cite. */
   evidence: WriterEntry[];
   /** Entries the sections cite that are no longer in use. */
@@ -74,8 +76,11 @@ const SYSTEM = [
   'Change only what the entries now require. Leave every other section alone:',
   'do not rephrase, reorder or tidy a section that is still true and complete.',
   'Write only what the entries say; add nothing from your own knowledge.',
-  'A section that rests on entries no longer in use must be rewritten from the',
-  'entries that remain, or removed.',
+  'A section marked "evidence changed" may be rewritten from the entries it',
+  'cites, or removed; one that rests on entries no longer in use must be. A',
+  'section marked "evidence unchanged" cannot be replaced or removed, and an',
+  'operation that tries is dropped: put what new entries add to it in a new',
+  'section inserted after it.',
   '',
   'Answer with one JSON object and nothing else:',
   '{"operations": [',
@@ -112,13 +117,16 @@ export default class PageWriter {
   /** The edits the model proposes. Throws when the model cannot be reached. */
   async operations(input: WriterInput): Promise<WriterAnswer> {
     const outOfUse = new Set(input.outOfUse);
+    const editable = new Set(input.editable);
     const prompt = [
       `QUESTION:\n"""\n${input.question}\n"""`,
       input.sections.length
         ? `SECTIONS:\n${input.sections
             .map((section) =>
               [
-                `--- section ${section.id}`,
+                `--- section ${section.id} (evidence ${
+                  editable.has(section.id) ? 'changed' : 'unchanged'
+                })`,
                 `heading: ${section.heading}`,
                 `cites: ${section.entryIds
                   .map((id) =>

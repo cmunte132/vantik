@@ -34,6 +34,7 @@ import KnowledgeIssues from './knowledge-issues';
 import {
   askedBecauseText,
   type CitationEvidence,
+  IN_USE,
   type MaintenanceEvidence,
   citedByLivePages,
   unusedSince,
@@ -254,8 +255,9 @@ export default class KnowledgeUpkeepService {
       // rather than landing between reading the entry and acting on it.
       await lockEntryRow(tx, entryId);
       const entry = await tx.pageEntry.findFirst({
-        where: { id: entryId, deleted: null, status: PageEntryStatus.STANDING },
+        where: { id: entryId, deleted: null, status: { in: IN_USE } },
         select: {
+          status: true,
           verifiedAt: true,
           contentHash: true,
           page: { select: { workspaceId: true, entryPolicy: true } },
@@ -322,7 +324,7 @@ export default class KnowledgeUpkeepService {
         where: {
           id: entryId,
           deleted: null,
-          status: PageEntryStatus.STANDING,
+          status: entry.status,
           verifiedAt: null,
         },
         data: { status: PageEntryStatus.DISPUTED },
@@ -337,6 +339,9 @@ export default class KnowledgeUpkeepService {
       const disputed: MaintenanceEvidence = {
         ...evidence,
         claim: entry.contentHash,
+        ...(entry.status === PageEntryStatus.CONSOLIDATED
+          ? { consolidated: true }
+          : {}),
       };
 
       return {
@@ -728,6 +733,12 @@ function correctionMarkdown(
     '',
     `Entry \`${row.entry.id}\` on the page "${row.entry.page.title}".`,
     what,
+    ...(evidence.consolidated
+      ? [
+          'It was also written into the body of that page, which still says ' +
+            'it: correct the body too.',
+        ]
+      : []),
     '',
     change ? changeText(change) : '',
     '',

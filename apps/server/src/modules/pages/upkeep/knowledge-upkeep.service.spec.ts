@@ -719,6 +719,45 @@ describe('a change that landed re-checks the citations it touches', () => {
     );
   });
 
+  it('[KG-7.4] re-checks a consolidated entry, which is served as its page’s evidence, and disputes it when the code contradicts it', async () => {
+    const t = harness({
+      entries: [entry('e1', { status: Status.CONSOLIDATED })],
+      citations: [citation('c1', 'e1')],
+    });
+    t.repo.code['src/retry.ts'] = CHANGED;
+
+    const summary = await t.upkeep.codeLanded(landed());
+
+    expect(t.citations[0]).toMatchObject({
+      checkResult: Check.CHANGED,
+      judgment: Judgment.CONTRADICTED,
+      checkedSha: SHA,
+    });
+    expect(t.entries.get('e1')?.status).toBe(Status.DISPUTED);
+    expect(summary.disputed).toBe(1);
+    expect(t.maintenance[0]).toMatchObject({
+      entryId: 'e1',
+      action: Action.DISPUTED,
+      reason: Reason.CITATION_CONTRADICTED,
+      evidence: { claim: 'hash-e1', consolidated: true },
+    });
+    // The page's body says it too, and a person correcting the entry is told.
+    expect(t.issues).toHaveLength(1);
+    expect(t.issues[0].descriptionMarkdown).toContain('correct the body too');
+
+    const standing = harness({
+      entries: [entry('e1')],
+      citations: [citation('c1', 'e1')],
+    });
+    standing.repo.code['src/retry.ts'] = CHANGED;
+    await standing.upkeep.codeLanded(landed());
+
+    expect(standing.maintenance[0].evidence).not.toHaveProperty('consolidated');
+    expect(standing.issues[0].descriptionMarkdown).not.toContain(
+      'correct the body too',
+    );
+  });
+
   it('[KG-6.2] proposes archiving an entry whose cited file the change removed, and leaves it in use', async () => {
     const t = harness({
       entries: [entry('e1')],

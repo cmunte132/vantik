@@ -63,7 +63,7 @@ Each entry has a status:
 |---|---|---|
 | `PROPOSED` | Waiting for triage or a person. Every new entry from an agent starts here. | No |
 | `STANDING` | Accepted. | Yes |
-| `CONSOLIDATED` | Accepted, and written into its page's body. Served as evidence for that page. | Yes |
+| `CONSOLIDATED` | Accepted, and written into its page's body. Served as evidence for that page, and corrected like a standing entry. | Yes |
 | `SUPERSEDED` | Replaced by a newer entry. Kept for the record. | No |
 | `DISPUTED` | Contradicts the code or another entry. Held back until a person resolves it. | No |
 | `ARCHIVED` | Out of use: rejected, or not used for a long time. | No |
@@ -303,7 +303,8 @@ it covers.
   from before it. Revert a refresh like any other change.
 - **Take it over by hand.** In the webapp a generated page is read-only. To
   edit it, take it over from the page menu. It then becomes an authored page,
-  and the server stops rebuilding it.
+  and the server stops rebuilding it. Only a person can take a page over; the
+  server refuses an agent.
 
 ## Consolidation
 
@@ -321,6 +322,11 @@ fold them into the page's body.
 - **The entries stay as evidence.** Accepted, the entries become
   `CONSOLIDATED`. They are still served, marked as evidence for the page and
   ranked below it. They keep their trust tier, and decay does not archive them.
+- **They are still checked and corrected.** A consolidated entry is checked
+  again when the code changes, and triage compares new entries with it, as for
+  a standing entry. A correction can supersede it, and a person can dispute or
+  archive it: **Agent memory → In the page** on the page. The page's body keeps
+  the old text until a person rewrites it.
 - **Undo it with a revert.** Reverting the accepted change restores the old
   body, and puts the entries back in use as standing entries.
 

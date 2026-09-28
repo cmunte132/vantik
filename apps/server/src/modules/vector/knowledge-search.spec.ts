@@ -787,6 +787,30 @@ describe('near entries, for triage', () => {
     expect(searches[0].filter_by).not.toContain('pageId');
   });
 
+  it('[KG-7.4] finds consolidated entries too, which are served as their page’s evidence, for triage and for the write-time check', async () => {
+    const { service } = indexWith([
+      doc('folded', { distance: 0.1, status: 'CONSOLIDATED', pageId: PAGE_ID }),
+      doc('superseded', {
+        distance: 0.1,
+        status: 'SUPERSEDED',
+        pageId: PAGE_ID,
+      }),
+    ]);
+
+    const near = await service.findNearEntries(WORKSPACE, 'webhook retries', {
+      moduleIds: [SERVER],
+      minSimilarity: 0.6,
+    });
+    const similar = await service.findSimilarEntries(
+      WORKSPACE,
+      PAGE_ID,
+      'webhook retries',
+    );
+
+    expect(near).toEqual([{ entryId: 'folded', similarity: 0.9 }]);
+    expect(similar.map((hit) => hit.entryId)).toEqual(['folded']);
+  });
+
   it('[KG-4.2] looks on the page instead, for an entry in no module', async () => {
     const { service, searches } = indexWith([
       doc('same-page', { distance: 0.2, pageId: PAGE_ID, moduleIds: [] }),

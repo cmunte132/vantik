@@ -796,18 +796,17 @@ export class VectorService implements OnModuleInit {
       pageId,
       // Proposed entries are indexed for this query and served by no other:
       // ten agents appending the same untriaged fact is the flood this exists
-      // to catch, and every one of those claims is PROPOSED.
-      includeStatuses: [
-        PageEntryStatusEnum.STANDING,
-        PageEntryStatusEnum.PROPOSED,
-      ],
+      // to catch, and every one of those claims is PROPOSED. Consolidated
+      // ones are served, as their page's evidence, so a repeat of one is a
+      // repeat.
+      includeStatuses: [...SERVED_STATUSES, PageEntryStatusEnum.PROPOSED],
     });
 
     return hits.filter((hit) => hit.entryId);
   }
 
   /**
-   * Proposed and standing entries like `content`, among those of the given
+   * Proposed and served entries like `content`, among those of the given
    * modules (or of one page, for an entry scoped to none), with how alike
    * each is: 1 minus the vector distance. Only hits the embedding matched are
    * kept; a match on words alone says nothing about meaning. Triage compares
@@ -829,10 +828,7 @@ export class VectorService implements OnModuleInit {
       ...(options.moduleIds?.length
         ? { moduleIds: options.moduleIds }
         : { pageId: options.pageId }),
-      includeStatuses: [
-        PageEntryStatusEnum.STANDING,
-        PageEntryStatusEnum.PROPOSED,
-      ],
+      includeStatuses: [...SERVED_STATUSES, PageEntryStatusEnum.PROPOSED],
     });
 
     return hits

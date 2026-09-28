@@ -935,9 +935,18 @@ export default class EntryCitationsService {
         ...(change.citationIds ? { id: { in: change.citationIds } } : {}),
         snippet: { not: null },
         checkResult: { not: PageEntryCitationCheckEnum.UNKNOWN },
+        // Every entry in use or waiting: a consolidated entry is served as
+        // its page's evidence, so it is held to its citations as a standing
+        // one is.
         entry: {
           deleted: null,
-          status: { in: [PageEntryStatus.STANDING, PageEntryStatus.PROPOSED] },
+          status: {
+            in: [
+              PageEntryStatus.STANDING,
+              PageEntryStatus.CONSOLIDATED,
+              PageEntryStatus.PROPOSED,
+            ],
+          },
           page: { workspaceId: change.workspaceId, deleted: null },
         },
       },

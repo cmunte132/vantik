@@ -815,6 +815,35 @@ describe('an exact repeat', () => {
     expect(t.entries.get('proposed')?.corroborationCount).toBe(0);
   });
 
+  it('[KG-7.4] corroborates a consolidated entry it repeats, which is served as its page’s evidence', async () => {
+    const t = triage({
+      rows: [
+        existing('proposed', { content: NEW_CONTENT, status: 'PROPOSED' }),
+        existing('folded', {
+          content: NEW_CONTENT,
+          status: 'CONSOLIDATED',
+          createdAt: at(1),
+        }),
+        fresh(),
+      ],
+    });
+
+    const outcome = await t.service.triage('new', ON);
+
+    expect(outcome).toMatchObject({
+      decision: Decision.CORROBORATE,
+      applied: true,
+    });
+    // The served one, over the one first said.
+    expect(t.decisions[0].corroboratedEntryId).toBe('folded');
+    expect(t.entries.get('folded')).toMatchObject({
+      status: 'CONSOLIDATED',
+      corroborationCount: 1,
+    });
+    expect(t.entries.get('proposed')?.corroborationCount).toBe(0);
+    expect(t.entries.get('new')?.status).toBe('ARCHIVED');
+  });
+
   it('[KG-4.1] of two identical entries written at once, exactly one corroborates the other', async () => {
     const first = fresh({ id: 'a', createdAt: at(5), updatedAt: at(5) });
     const second = fresh({ id: 'b', createdAt: at(5), updatedAt: at(5) });
@@ -1608,6 +1637,33 @@ describe('contradictions', () => {
       content: contradicting,
     });
     expect(t.indexer.entriesChanged).toHaveBeenCalledWith(['new', 'older']);
+  });
+
+  it('[KG-7.4] withholds a consolidated entry an accepted one wins against, as it would a standing one', async () => {
+    const t = triage({
+      rows: [
+        existing('folded', { content: contradicting, status: 'CONSOLIDATED' }),
+        fresh(),
+      ],
+      near: [{ entryId: 'folded', similarity: 0.8 }],
+      pair: () => '{"relation": "contradicts", "reason": "they disagree"}',
+    });
+
+    const outcome = await t.service.triage('new', ON);
+
+    expect(outcome).toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: true,
+    });
+    expect(t.relations[0]).toMatchObject({
+      toId: 'folded',
+      type: Relation.CONTRADICTS,
+      preferredId: 'new',
+    });
+    expect(t.entries.get('folded')).toMatchObject({
+      status: 'DISPUTED',
+      content: contradicting,
+    });
   });
 
   it('[KG-4.6] a verified entry outranks a newer grounded one', async () => {

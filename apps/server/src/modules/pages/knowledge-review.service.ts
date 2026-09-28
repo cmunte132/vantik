@@ -26,6 +26,7 @@ import PageEntriesService from './page-entries.service';
 import { PROPOSAL_SELECT, proposalResponse } from './pages.service';
 import { statusLeftBy } from './triage/agreement';
 import {
+  IN_USE,
   type MaintenanceEvidence,
   proposalSummary,
   reviewReasonOf,
@@ -150,14 +151,15 @@ export default class KnowledgeReviewService {
         )
       : [];
 
-    // Proposals about entries still in use. One whose entry a person has
-    // since moved (archived it by hand, disputed it) asks about nothing.
+    // Proposals about entries still in use, standing or consolidated. One
+    // whose entry a person has since moved (archived it by hand, disputed
+    // it) asks about nothing.
     const proposals = await this.prisma.pageEntryMaintenance.findMany({
       where: {
         workspaceId,
         action: PageEntryMaintenanceAction.ARCHIVE_PROPOSED,
         proposalState: PageEntryProposalState.OPEN,
-        entry: { deleted: null, status: PageEntryStatus.STANDING, page },
+        entry: { deleted: null, status: { in: IN_USE }, page },
       },
       orderBy: { createdAt: 'desc' },
       select: {
@@ -272,7 +274,7 @@ export default class KnowledgeReviewService {
       });
     }
 
-    if (proposal.entry.status !== PageEntryStatus.STANDING) {
+    if (!IN_USE.includes(proposal.entry.status)) {
       throw new ConflictException({
         message:
           `This entry has moved on since the proposal was made (it is now ` +

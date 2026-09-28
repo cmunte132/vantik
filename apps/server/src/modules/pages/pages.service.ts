@@ -391,14 +391,27 @@ export default class PagesService {
       });
     }
 
+    // Taking a generated page over hands its body to people: from then on
+    // it is a page people write, and an agent's text in it would be an edit
+    // to such a page with no person involved.
+    if (takenOver) {
+      await this.assertPerson(
+        userId,
+        'A generated page is taken over by a person, who then writes it. ' +
+          'Nothing was changed. To change what it says, correct the entries ' +
+          'it is written from.',
+      );
+    }
+
     // Its body is its sections, rendered; an edit to the body alone would be
     // undone by the next refresh, or edit sections nothing records. Taking
     // the page over by hand makes it an authored page, edited like any other.
     if (wasGenerated && !takenOver && toStoredBody(pageData) !== undefined) {
       throw new BadRequestException({
         message:
-          'A generated page is written from its entries: correct those, or ' +
-          'take the page over by hand (kind AUTHORED) to edit its body.',
+          'A generated page is written from its entries: correct those. A ' +
+          'person can take the page over by hand (kind AUTHORED) to edit its ' +
+          'body.',
       });
     }
 
@@ -845,11 +858,15 @@ export default class PagesService {
   }
 
   /**
-   * Accepting or declining a change to a page people maintain is for
-   * people. The controller refuses agent tokens first; this holds for any
-   * other caller.
+   * Accepting or declining a change to a page people maintain, and taking a
+   * generated page over by hand, are for people. The controller refuses
+   * agent tokens first; this holds for any other caller.
    */
-  private async assertPerson(userId: string): Promise<void> {
+  private async assertPerson(
+    userId: string,
+    message = 'A change to a page people maintain is accepted or declined by ' +
+      'a person.',
+  ): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { type: true },
@@ -860,11 +877,7 @@ export default class PagesService {
       user.type === UserTypeEnum.Agent ||
       user.type === UserTypeEnum.System
     ) {
-      throw new ForbiddenException({
-        message:
-          'A change to a page people maintain is accepted or declined by a ' +
-          'person.',
-      });
+      throw new ForbiddenException({ message });
     }
   }
 

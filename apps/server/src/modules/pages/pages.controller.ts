@@ -14,6 +14,7 @@ import {
   CreatePageDto,
   CreatePageLinkDto,
   ListPagesQueryDto,
+  PageKindEnum,
   PageLinkRequestParamsDto,
   type PageProposal,
   PageProposalParamsDto,
@@ -194,9 +195,19 @@ export class PagesController {
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updatePage(
     @UserId() userId: string,
+    @Role() role: string,
     @Param() params: PageRequestParamsDto,
     @Body() pageData: UpdatePageDto,
   ): Promise<PageResponse> {
+    // Taking a generated page over by hand is for a person; on a page
+    // people write already it changes nothing an agent needs to send.
+    if (pageData.kind === PageKindEnum.AUTHORED) {
+      forPeople(
+        role,
+        'A generated page is taken over by a person, who then writes it.',
+      );
+    }
+
     return this.pagesService.updatePage(params.pageId, userId, pageData);
   }
 
@@ -340,11 +351,11 @@ export class PagesController {
  * A change to a page people maintain is theirs to accept. An agent proposes
  * it and is refused the answer, as it is refused the review queue.
  */
-function forPeople(role: string) {
+function forPeople(
+  role: string,
+  message = 'A proposed change to a page is accepted or declined by a person.',
+) {
   if (role === RoleEnum.AGENT) {
-    throw new ForbiddenException({
-      message:
-        'A proposed change to a page is accepted or declined by a person.',
-    });
+    throw new ForbiddenException({ message });
   }
 }

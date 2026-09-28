@@ -312,12 +312,15 @@ export function triageEntryJobOptions(entryId: string): JobOptions {
 /**
  * Transitions a client may ask for.
  *
- * `CONSOLIDATED` and `SUPERSEDED` are absent as sources because they are
- * terminal: the first has been folded into the page body and the second has
- * been replaced, and reviving either puts a fact back into circulation that the
- * workspace already decided about. `PROPOSED` is absent as a *target* because
- * triage does not run backwards, and `SUPERSEDED` is absent as a target because
- * it is only ever set by the supersede path, which also records the pointer.
+ * `SUPERSEDED` is absent as a source because it is terminal: it has been
+ * replaced, and reviving it puts a fact back into circulation that the
+ * workspace already decided about. `CONSOLIDATED` leads only out of use: it
+ * is served as the evidence its page's body was written from, so a person
+ * can take it out of use when it turns out wrong (disputed) or no longer
+ * applies (archived), and putting it back makes it standing. `PROPOSED` is
+ * absent as a *target* because triage does not run backwards, and
+ * `SUPERSEDED` is absent as a target because it is only ever set by the
+ * supersede path, which also records the pointer.
  */
 export const ALLOWED_STATUS_TRANSITIONS: Record<
   PageEntryStatusEnum,
@@ -343,7 +346,10 @@ export const ALLOWED_STATUS_TRANSITIONS: Record<
     PageEntryStatusEnum.STANDING,
     PageEntryStatusEnum.DISPUTED,
   ],
-  [PageEntryStatusEnum.CONSOLIDATED]: [],
+  [PageEntryStatusEnum.CONSOLIDATED]: [
+    PageEntryStatusEnum.DISPUTED,
+    PageEntryStatusEnum.ARCHIVED,
+  ],
   [PageEntryStatusEnum.SUPERSEDED]: [],
 };
 

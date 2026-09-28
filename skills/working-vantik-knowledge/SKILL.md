@@ -199,9 +199,9 @@ acting on it. Superseding keeps the old entry for audit and stops serving it
 once a person accepts your correction. Until then the old entry stays in use,
 so a correction nobody has reviewed cannot take accepted knowledge away, and a
 second correction to the same entry waits until the first is decided. An entry
-that has been folded into the page body cannot be superseded: write the
-correction as a new entry, without `supersedes`, and it goes to review like any
-other claim.
+folded into a page body (`CONSOLIDATED`, served with `evidenceFor`) is
+superseded the same way; the page body still says the old thing until a person
+rewrites it, so say in your correction which page it is written into.
 
 `remember` searches before it writes. When near matches come back **nothing was
 written**: read them, then either supersede one or pass `distinct: true` to say

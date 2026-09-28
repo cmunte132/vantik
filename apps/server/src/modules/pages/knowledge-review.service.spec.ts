@@ -2026,6 +2026,33 @@ describe("the gardener's proposals", () => {
     ).rejects.toThrow('already answered: accepted');
   });
 
+  it('[KG-7.4] lists and answers what the gardener asks about a consolidated entry, which is served as its page’s evidence', async () => {
+    const t = harness({
+      entries: [
+        inUse('folded', { status: PageEntryStatusEnum.CONSOLIDATED }),
+        inUse('superseded', { status: PageEntryStatusEnum.SUPERSEDED }),
+      ],
+      maintenance: [proposal('folded'), proposal('superseded')],
+      preferences: { knowledge: { autoTriage: 'off' } },
+    });
+
+    const queue = await t.review.queue(WORKSPACE);
+
+    expect(queue.items.map((item) => item.entry.id)).toEqual(['folded']);
+    await expect(
+      t.review.resolveProposal(WORKSPACE, 'proposal-folded', 'person-1', true),
+    ).resolves.toEqual({ proposalId: 'proposal-folded', accepted: true });
+    expect(t.entries.get('folded')?.status).toBe(PageEntryStatusEnum.ARCHIVED);
+    await expect(
+      t.review.resolveProposal(
+        WORKSPACE,
+        'proposal-superseded',
+        'person-1',
+        true,
+      ),
+    ).rejects.toThrow('moved on');
+  });
+
   it('[KG-6.2] of two answers at once, keeps the first and rolls back the second with its change', async () => {
     const t = harness({
       entries: [inUse('gone')],
@@ -2128,11 +2155,13 @@ describe("the gardener's proposals", () => {
         inUse('disputed', { status: PageEntryStatusEnum.DISPUTED }),
         inUse('archived', { status: PageEntryStatusEnum.ARCHIVED }),
         inUse('kept-out', { status: PageEntryStatusEnum.DISPUTED }),
+        inUse('folded', { status: PageEntryStatusEnum.DISPUTED }),
       ],
       maintenance: [
         undone('disputed', MaintenanceAction.DISPUTED),
         undone('archived', MaintenanceAction.ARCHIVED),
         undone('kept-out', MaintenanceAction.DISPUTED),
+        undone('folded', MaintenanceAction.DISPUTED),
       ],
     });
     const done = (id: string) =>
@@ -2149,10 +2178,15 @@ describe("the gardener's proposals", () => {
     await t.pageEntries.updateEntry('kept-out', 'person-1', {
       status: PageEntryStatusEnum.ARCHIVED,
     });
+    // [KG-7.4] Put back as its page's consolidated evidence is put back too.
+    await t.pageEntries.updateEntry('folded', 'person-2', {
+      status: PageEntryStatusEnum.CONSOLIDATED,
+    });
 
     expect(done('disputed')).toMatchObject({ reversedById: 'person-1' });
     expect(done('disputed').reversedAt).toBeInstanceOf(Date);
     expect(done('archived')).toMatchObject({ reversedById: 'person-2' });
     expect(done('kept-out')).toMatchObject({ reversedAt: null });
+    expect(done('folded')).toMatchObject({ reversedById: 'person-2' });
   });
 });

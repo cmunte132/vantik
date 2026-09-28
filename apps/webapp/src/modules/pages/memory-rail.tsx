@@ -66,6 +66,7 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
   const [reviewing, setReviewing] = React.useState(false);
   const [showStanding, setShowStanding] = React.useState(false);
   const [showSetAside, setShowSetAside] = React.useState(false);
+  const [showInPage, setShowInPage] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
   const [folding, setFolding] = React.useState<PageEntryType[]>([]);
   const [picked, setPicked] = React.useState<Set<string>>(new Set());
@@ -74,6 +75,7 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
     pageEntriesStore.getByStatus(pageId, status);
 
   const standing = byStatus(PageEntryStatus.STANDING);
+  const inPage = byStatus(PageEntryStatus.CONSOLIDATED);
   const waiting = byStatus(PageEntryStatus.PROPOSED);
   const setAside = [
     ...byStatus(PageEntryStatus.ARCHIVED),
@@ -219,6 +221,24 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
               </div>
             )}
           </Section>
+
+          {inPage.length > 0 && (
+            <Section
+              label="In the page"
+              count={inPage.length}
+              open={showInPage}
+              onToggle={() => setShowInPage((shown: boolean) => !shown)}
+            >
+              <p className="text-muted-foreground mb-1">
+                Written into the page, and still given to agents as what it
+                rests on. Take one out of use if it turns out wrong.
+              </p>
+
+              {inPage.map((entry) => (
+                <EntryRow key={entry.id} entry={entry} variant="reference" />
+              ))}
+            </Section>
+          )}
 
           {setAside.length > 0 && (
             <Section

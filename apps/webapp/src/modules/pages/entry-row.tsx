@@ -23,6 +23,8 @@ import { useAllUsers } from 'hooks/users';
 
 import { useUpdatePageEntryMutation } from 'services/pages';
 
+import { entryActions } from './entry-actions';
+
 /**
  * One fact, and where it came from.
  *
@@ -268,31 +270,10 @@ const RowMenu = observer(({ entry }: { entry: PageEntryType }) => {
   const { mutate: update } = useUpdatePageEntryMutation();
   const [open, setOpen] = React.useState(false);
 
-  const items = [
-    !entry.verifiedAt && {
-      label: 'Confirm',
-      hint: 'Vouch for it. Confirmed facts are never retired automatically',
-      run: () => update({ pageEntryId: entry.id, verified: true }),
-    },
-    entry.status !== PageEntryStatus.STANDING && {
-      label: 'Use it',
-      hint: 'Agents asking about this page start being given this fact',
-      run: () =>
-        update({ pageEntryId: entry.id, status: PageEntryStatus.STANDING }),
-    },
-    entry.status !== PageEntryStatus.ARCHIVED && {
-      label: 'Stop using it',
-      hint: 'Kept on the record, but no longer given to agents',
-      run: () =>
-        update({ pageEntryId: entry.id, status: PageEntryStatus.ARCHIVED }),
-    },
-    entry.status !== PageEntryStatus.DISPUTED && {
-      label: 'Mark as wrong',
-      hint: 'Flags it as contradicted and stops it being given to agents',
-      run: () =>
-        update({ pageEntryId: entry.id, status: PageEntryStatus.DISPUTED }),
-    },
-  ].filter(Boolean) as Array<{ label: string; hint: string; run: () => void }>;
+  const items = entryActions(entry).map((action) => ({
+    ...action,
+    run: () => update({ pageEntryId: entry.id, ...action.change }),
+  }));
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>

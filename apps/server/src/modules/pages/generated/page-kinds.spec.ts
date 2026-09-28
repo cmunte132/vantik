@@ -1,11 +1,13 @@
-import { BadRequestException } from '@nestjs/common';
-import { PageKindEnum } from '@vantikhq/types';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { PageKindEnum, RoleEnum } from '@vantikhq/types';
 import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
 import { convertMarkdownToTiptapJson } from 'common/utils/tiptap.utils';
 
 import KnowledgeIndexService from '../knowledge-index.service';
+import PageLinksService from '../page-links.service';
+import { PagesController } from '../pages.controller';
 import { REFRESH_PAGE_JOB } from '../pages.interface';
 import PagesService from '../pages.service';
 
@@ -21,8 +23,11 @@ const USER = 'user-1';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
-function setup(current?: Row) {
+function setup(current?: Row, userType = 'User') {
   const prisma = {
+    user: {
+      findUnique: jest.fn(async (): Promise<Row> => ({ type: userType })),
+    },
     page: {
       findFirst: jest.fn(async ({ where }: Row) =>
         current && where.id === current.id ? { ...current } : null,
@@ -55,8 +60,15 @@ function setup(current?: Row) {
     queue as unknown as Queue,
   );
 
+  const controller = new PagesController(
+    service,
+    {} as PageLinksService,
+    prisma as unknown as PrismaService,
+  );
+
   return {
     service,
+    controller,
     prisma,
     queue,
     expectNothingWritten: () => {
@@ -250,6 +262,50 @@ describe('authored and generated pages', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     withQuestion.expectNothingWritten();
+  });
+
+  it('[KG-7.1] leaves taking a generated page over to a person: an agent cannot, by its token or as its user', async () => {
+    const byToken = setup(GENERATED);
+    await expect(
+      byToken.controller.updatePage(
+        USER,
+        RoleEnum.AGENT,
+        { pageId: GENERATED.id },
+        {
+          kind: PageKindEnum.AUTHORED,
+          descriptionMarkdown: 'An agent’s text.',
+        },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    byToken.expectNothingWritten();
+
+    // Whatever the token, a user that is an agent or the gardener is not a
+    // person.
+    for (const type of ['Agent', 'System']) {
+      const byUser = setup(GENERATED, type);
+      await expect(
+        byUser.controller.updatePage(
+          USER,
+          RoleEnum.USER,
+          { pageId: GENERATED.id },
+          {
+            kind: PageKindEnum.AUTHORED,
+            descriptionMarkdown: 'An agent’s text.',
+          },
+        ),
+      ).rejects.toThrow('taken over by a person');
+      byUser.expectNothingWritten();
+    }
+
+    // An agent's other edits to the page are as before.
+    const renamed = setup(GENERATED, 'Agent');
+    await renamed.controller.updatePage(
+      USER,
+      RoleEnum.AGENT,
+      { pageId: GENERATED.id },
+      { title: 'Deploys' },
+    );
+    expect(renamed.prisma.page.update).toHaveBeenCalled();
   });
 
   it('[KG-7.1] rebuilds a generated page asked a new question, without waiting for its evidence to change', async () => {

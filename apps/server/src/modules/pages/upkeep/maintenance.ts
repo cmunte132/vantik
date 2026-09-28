@@ -9,6 +9,16 @@ import {
 import { KnowledgeReviewReasonEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+/**
+ * The entries in use: the ones served. A consolidated entry is served as its
+ * page's evidence, so the gardener holds it to its citations, and a person
+ * answers what it asks about it, as for a standing one.
+ */
+export const IN_USE: PageEntryStatus[] = [
+  PageEntryStatus.STANDING,
+  PageEntryStatus.CONSOLIDATED,
+];
+
 /** One citation a change was checked against, as a maintenance row keeps it. */
 export interface CitationEvidence {
   citationId: string;
@@ -57,6 +67,11 @@ export interface MaintenanceEvidence {
    * the same thing, after an earlier dispute.
    */
   askedBecause?: 'VERIFIED' | 'LOCKED' | 'RESTORED' | null;
+  /**
+   * For a dispute: the entry was folded into its page's body, which still
+   * says what it said.
+   */
+  consolidated?: boolean;
 }
 
 /** Why the gardener asked about a contradiction instead of disputing it. */
@@ -145,9 +160,10 @@ export function proposalSummary(
 }
 
 /**
- * What a person undoes by putting an entry back into use: the changes the
- * gardener made alone that took it out, a dispute for a disputed entry and
- * an archive for an archived one. Written with the person's change, so the
+ * What a person undoes by putting an entry back into use, as standing or as
+ * its page's consolidated evidence: the changes the gardener made alone that
+ * took it out, a dispute for a disputed entry and an archive for an archived
+ * one. Written with the person's change, so the
  * record never says an entry is out of use while it is served. The gardener
  * reads these to ask, rather than act, the next time.
  */
@@ -157,7 +173,7 @@ export function reversalsFor(
   to: string,
   userId: string,
 ): Array<Prisma.PrismaPromise<unknown>> {
-  if (to !== PageEntryStatus.STANDING) {
+  if (!(IN_USE as string[]).includes(to)) {
     return [];
   }
 

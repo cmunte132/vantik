@@ -93,6 +93,22 @@ export const MAX_CITED_TEXT = 1_500;
 /** Results under which a citation still supports its claim. */
 const HOLDING = new Set<string>(['HOLDS', 'MOVED']);
 
+/** Served entries: standing, or consolidated as a page's evidence. */
+const SERVED: PageEntryStatus[] = [
+  PageEntryStatus.STANDING,
+  PageEntryStatus.CONSOLIDATED,
+];
+
+/** What a new entry is compared with: what is waiting, and what is served. */
+const NEIGHBOUR_STATUSES: PageEntryStatus[] = [
+  PageEntryStatus.PROPOSED,
+  ...SERVED,
+];
+
+function isServed(status: string): status is PageEntryStatus {
+  return (SERVED as string[]).includes(status);
+}
+
 /** What a triage pass decided, as its caller logs it. */
 export interface TriageOutcome {
   decisionId: string;
@@ -280,15 +296,14 @@ export default class KnowledgeTriageService {
     }
 
     // Entries that were there before this one, in its modules, or on its
-    // page when it has none. "Before" is a total order, by time and then id,
-    // so of two identical entries written at once exactly one corroborates
-    // the other.
+    // page when it has none: waiting, or served (a consolidated entry is
+    // served as its page's evidence). "Before" is a total order, by time and
+    // then id, so of two identical entries written at once exactly one
+    // corroborates the other.
     const neighbourhood: Prisma.PageEntryWhereInput = {
       id: { not: entry.id },
       deleted: null,
-      status: {
-        in: [PageEntryStatus.PROPOSED, PageEntryStatus.STANDING],
-      },
+      status: { in: NEIGHBOUR_STATUSES },
       page: { workspaceId, deleted: null },
       ...(entry.moduleIds.length
         ? { moduleIds: { hasSome: entry.moduleIds } }
@@ -308,9 +323,7 @@ export default class KnowledgeTriageService {
     // The accepted one if there is one, since that is the one served, and
     // otherwise the first said.
     const repeated =
-      repeats.find((row) => row.status === PageEntryStatus.STANDING) ??
-      repeats[0] ??
-      null;
+      repeats.find((row) => isServed(row.status)) ?? repeats[0] ?? null;
 
     const models: string[] = [];
     const outputs: {
@@ -543,15 +556,19 @@ export default class KnowledgeTriageService {
           ? corroborates
           : null,
       corroboratesAsRead,
-      // Standing entries precedence ruled against. Only an accepted entry
-      // displaces anything, and only in `on` mode.
-      displaces: neighbours
-        .filter(
-          (neighbour) =>
-            neighbour.preferredId === entry.id &&
-            neighbour.status === PageEntryStatus.STANDING,
-        )
-        .map((neighbour) => ({ id: neighbour.id, content: neighbour.content })),
+      // Served entries precedence ruled against, standing or consolidated.
+      // Only an accepted entry displaces anything, and only in `on` mode.
+      displaces: neighbours.flatMap((neighbour) =>
+        neighbour.preferredId === entry.id && isServed(neighbour.status)
+          ? [
+              {
+                id: neighbour.id,
+                status: neighbour.status,
+                content: neighbour.content,
+              },
+            ]
+          : [],
+      ),
       relations,
       models,
       outputs,
@@ -1003,9 +1020,7 @@ export default class KnowledgeTriageService {
         where: {
           id: found.corroborates,
           deleted: null,
-          status: {
-            in: [PageEntryStatus.PROPOSED, PageEntryStatus.STANDING],
-          },
+          status: { in: NEIGHBOUR_STATUSES },
           page: { deleted: null },
           ...found.corroboratesAsRead,
         },
@@ -1031,7 +1046,7 @@ export default class KnowledgeTriageService {
           where: {
             id: displaced.id,
             deleted: null,
-            status: PageEntryStatus.STANDING,
+            status: displaced.status,
             verifiedAt: null,
             content: displaced.content,
             page: {
@@ -1066,7 +1081,7 @@ interface Found {
   /** What the entry it repeats must still match to be corroborated. */
   corroboratesAsRead?: Prisma.PageEntryWhereInput | null;
   /** Standing entries precedence ruled against, with their content as read. */
-  displaces?: Array<{ id: string; content: string }>;
+  displaces?: Array<{ id: string; status: PageEntryStatus; content: string }>;
   relations?: Array<{
     toId: string;
     type: PageEntryRelationType;

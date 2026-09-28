@@ -105,14 +105,19 @@ function buildService({
                 content: `a fact ${index}`,
                 status: PageEntryStatusEnum.PROPOSED,
               }))
-            : existing.map((entry) => ({
-                scope: null as string | null,
-                status: PageEntryStatusEnum.STANDING as string,
-                sourceUserId: 'someone',
-                verifiedAt: null as Date | null,
-                retrievalCount: 0,
-                ...entry,
-              })),
+            : existing
+                .map((entry) => ({
+                  scope: null as string | null,
+                  status: PageEntryStatusEnum.STANDING as string,
+                  sourceUserId: 'someone',
+                  verifiedAt: null as Date | null,
+                  retrievalCount: 0,
+                  ...entry,
+                }))
+                .filter(
+                  (entry) =>
+                    !where.status?.in || where.status.in.includes(entry.status),
+                ),
         ),
       ),
       findFirst: jest.fn(() =>
@@ -782,6 +787,43 @@ describe('a write the page already holds', () => {
       expect.objectContaining({ entryId: 'entry-9' }),
     ]);
     expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('[KG-7.4] refuses an exact repeat of a consolidated entry, which is still served, but not of one out of use', async () => {
+    const folded = buildService({
+      userType: 'User',
+      existing: [
+        {
+          id: 'entry-9',
+          content: 'Redis holds only cache here.',
+          status: PageEntryStatusEnum.CONSOLIDATED,
+        },
+      ],
+    });
+
+    await expect(
+      folded.service.createEntry('page-1', HUMAN, {
+        content: 'Redis holds only cache here.',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(folded.prisma.pageEntry.create).not.toHaveBeenCalled();
+
+    const archived = buildService({
+      userType: 'User',
+      existing: [
+        {
+          id: 'entry-9',
+          content: 'Redis holds only cache here.',
+          status: PageEntryStatusEnum.ARCHIVED,
+        },
+      ],
+    });
+
+    await expect(
+      archived.service.createEntry('page-1', HUMAN, {
+        content: 'Redis holds only cache here.',
+      }),
+    ).resolves.toBeDefined();
   });
 
   it('[KG-0.3] refuses a near match found by the index, and writes nothing', async () => {
@@ -1493,22 +1535,32 @@ describe('corrections', () => {
     expect(status(b.id)).toBe(PageEntryStatusEnum.STANDING);
   });
 
-  it('[KG-0.1] sends a correction of text folded into the page body to the body', async () => {
-    const { correct } = bank([
+  it('[KG-0.1] [KG-7.4] keeps a consolidated entry in use while its correction waits, and retires it once a person accepts the correction', async () => {
+    // A consolidated entry is served, as the evidence its page's body was
+    // written from, so it is corrected like a standing one.
+    const { service, status, pointer, correct } = bank([
       { id: 'A', status: PageEntryStatusEnum.CONSOLIDATED },
+      { id: 'C', status: PageEntryStatusEnum.CONSOLIDATED },
     ]);
 
-    await expect(correct(BOT, 'A')).rejects.toThrow(
-      /folded into the page body/,
-    );
-    await expect(correct(PERSON, 'A', true)).rejects.toThrow(
-      /folded into the page body/,
-    );
+    const b = await correct(BOT, 'A');
+    expect(pointer(b.id)).toBe('A');
+    expect(status(b.id)).toBe(PageEntryStatusEnum.PROPOSED);
+    expect(status('A')).toBe(PageEntryStatusEnum.CONSOLIDATED);
+
+    await service.updateEntry(b.id, PERSON, {
+      status: PageEntryStatusEnum.STANDING,
+    });
+    expect(status('A')).toBe(PageEntryStatusEnum.SUPERSEDED);
+
+    // A person's own correction is their acceptance.
+    await correct(PERSON, 'C', true);
+    expect(status('C')).toBe(PageEntryStatusEnum.SUPERSEDED);
   });
 
   it('[KG-0.1] never moves an entry out of a decided state', async () => {
     const { service, status } = bank([
-      { id: 'A', status: PageEntryStatusEnum.CONSOLIDATED },
+      { id: 'A', status: PageEntryStatusEnum.SUPERSEDED },
       {
         id: 'B',
         status: PageEntryStatusEnum.PROPOSED,
@@ -1521,7 +1573,45 @@ describe('corrections', () => {
       status: PageEntryStatusEnum.STANDING,
     });
 
+    expect(status('A')).toBe(PageEntryStatusEnum.SUPERSEDED);
+    await expect(
+      service.updateEntry('A', PERSON, {
+        status: PageEntryStatusEnum.STANDING,
+      }),
+    ).rejects.toThrow(/SUPERSEDED is terminal/);
+  });
+
+  it('[KG-7.4] lets a person take a consolidated entry out of use, and puts it back as standing', async () => {
+    const { service, status } = bank([
+      { id: 'A', status: PageEntryStatusEnum.CONSOLIDATED },
+      { id: 'B', status: PageEntryStatusEnum.CONSOLIDATED },
+    ]);
+
+    // Not straight back to standing: it is in use already.
+    await expect(
+      service.updateEntry('A', PERSON, {
+        status: PageEntryStatusEnum.STANDING,
+      }),
+    ).rejects.toThrow(/From CONSOLIDATED the options are DISPUTED, ARCHIVED/);
+    // Nor by an agent, which does not triage.
+    await expect(
+      service.updateEntry('A', BOT, { status: PageEntryStatusEnum.ARCHIVED }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(status('A')).toBe(PageEntryStatusEnum.CONSOLIDATED);
+
+    await service.updateEntry('A', PERSON, {
+      status: PageEntryStatusEnum.DISPUTED,
+    });
+    await service.updateEntry('B', PERSON, {
+      status: PageEntryStatusEnum.ARCHIVED,
+    });
+    expect(status('A')).toBe(PageEntryStatusEnum.DISPUTED);
+    expect(status('B')).toBe(PageEntryStatusEnum.ARCHIVED);
+
+    await service.updateEntry('A', PERSON, {
+      status: PageEntryStatusEnum.STANDING,
+    });
+    expect(status('A')).toBe(PageEntryStatusEnum.STANDING);
   });
 });
 

@@ -891,8 +891,9 @@ export default class PageEntriesService {
    * person accepting the latest link has accepted a replacement for the
    * original, and leaving the original in use would serve both truths. The
    * walk passes only through corrections still undecided (PROPOSED or
-   * DISPUTED), and never touches anything decided (SUPERSEDED or
-   * CONSOLIDATED).
+   * DISPUTED), and never touches anything already replaced (SUPERSEDED). A
+   * consolidated entry is retired like a standing one: it is served as its
+   * page's evidence, and the correction is what is served from then on.
    * Pointers are set only when an entry is written and always name an older
    * entry, so the chain cannot loop; the visited set is belt and braces.
    */
@@ -1019,8 +1020,13 @@ export default class PageEntriesService {
       where: {
         pageId: page.id,
         deleted: null,
+        // Consolidated too: it is still served, as the page's evidence.
         status: {
-          in: [PageEntryStatusEnum.PROPOSED, PageEntryStatusEnum.STANDING],
+          in: [
+            PageEntryStatusEnum.PROPOSED,
+            PageEntryStatusEnum.STANDING,
+            PageEntryStatusEnum.CONSOLIDATED,
+          ],
         },
       },
       select: {
@@ -1125,18 +1131,6 @@ export default class PageEntriesService {
       });
     }
 
-    if (target.status === PageEntryStatusEnum.CONSOLIDATED) {
-      throw new BadRequestException({
-        message:
-          `Entry ${supersedesId} has been folded into the page body, so the ` +
-          'body is what carries it now, and a correction standing beside it ' +
-          'would serve the old text and the new one together. Nothing was ' +
-          'written. Write the correction as a new entry without ' +
-          '`supersedesId`: it goes to review like any other claim, and ' +
-          'whoever accepts it fixes the body.',
-      });
-    }
-
     if (target.status === PageEntryStatusEnum.SUPERSEDED) {
       throw new BadRequestException({
         message:
@@ -1216,14 +1210,11 @@ function sameMembers(a: string[], b: string[]): boolean {
 }
 
 /**
- * A status the workspace has finished deciding about. Nothing moves an entry
- * out of these, so a correction never touches one.
+ * A status the workspace has finished deciding about: replaced already.
+ * Nothing moves an entry out of it, so a correction never touches one.
  */
 function isDecided(status: string): boolean {
-  return (
-    status === PageEntryStatusEnum.SUPERSEDED ||
-    status === PageEntryStatusEnum.CONSOLIDATED
-  );
+  return status === PageEntryStatusEnum.SUPERSEDED;
 }
 
 /**

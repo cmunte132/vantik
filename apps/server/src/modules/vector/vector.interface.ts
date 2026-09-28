@@ -148,12 +148,12 @@ export const KNOWLEDGE_GROUP_LIMIT = 3;
  * caller is doing.
  */
 export const KNOWLEDGE_SORT_BY =
-  '_text_match:desc,_eval([(verified:true):3,(trust:=GROUNDED):2,(scoped:true):1]):desc,retrievalCount:desc';
+  '_text_match:desc,_eval([(verified:true):3,(trust:=[GROUNDED,OBSERVED]):2,(scoped:true):1]):desc,retrievalCount:desc';
 
 /** The relations an entry's document is built from. */
 export const ENTRY_INDEX_INCLUDE = {
   page: { select: { title: true, workspaceId: true } },
-  citations: { select: { checkResult: true } },
+  citations: { select: { kind: true, checkResult: true, checkedAt: true } },
 } as const;
 
 /** Facets the review rail opens on, before it shows a single row. */

@@ -67,9 +67,15 @@ export interface KnowledgePage extends KnowledgePageRef {
 /**
  * How far an item of knowledge can be trusted. HUMAN_VERIFIED: a person
  * confirmed it. GROUNDED: accepted, and every citation it makes still reads
- * the same. UNGROUNDED: anything else. Null for a page body.
+ * the same. OBSERVED: accepted, and it rests on an outside page that the
+ * server read on the date of its last check. UNGROUNDED: anything else. Null
+ * for a page body.
  */
-export type KnowledgeTrust = 'HUMAN_VERIFIED' | 'GROUNDED' | 'UNGROUNDED';
+export type KnowledgeTrust =
+  | 'HUMAN_VERIFIED'
+  | 'GROUNDED'
+  | 'OBSERVED'
+  | 'UNGROUNDED';
 
 /**
  * The last check of a citation. HOLDS: the cited lines read the same (or the
@@ -89,7 +95,8 @@ export type CitationKind =
   | 'ISSUE'
   | 'PULL_REQUEST'
   | 'COMMENT'
-  | 'RUN';
+  | 'RUN'
+  | 'URL';
 
 /**
  * What a claim rests on, as a writer names it: lines of code, or where a
@@ -115,7 +122,12 @@ export type CitationInput =
   /** An issue comment's id. */
   | { comment: string }
   /** An agent run's id. */
-  | { run: string };
+  | { run: string }
+  /**
+   * A public https page, for a fact about an outside service. The server
+   * reads the page and finds the quote on it.
+   */
+  | { url: string; quote: string };
 
 /** A citation as it is served, with its last check. */
 export interface KnowledgeCitation {

@@ -69,7 +69,8 @@ const citationSchema = z.object({
     .optional()
     .describe(
       'A few words from the cited lines, checked to be there so a wrong ' +
-        'line number is caught. Not stored.',
+        'line number is caught. Not stored. Required with url: the words ' +
+        'on the page that state the fact, 20 to 1000 characters.',
     ),
   issue: z
     .string()
@@ -81,6 +82,14 @@ const citationSchema = z.object({
     .describe('The URL of a pull request linked to an issue.'),
   comment: z.string().optional().describe('An issue comment id.'),
   run: z.string().optional().describe('An agent run id.'),
+  url: z
+    .string()
+    .optional()
+    .describe(
+      'A public https page, for a fact about an outside service (a vendor ' +
+        'API, a cloud setting). Give it with a quote. The server reads the ' +
+        'page and finds the quote on it.',
+    ),
 });
 
 /** Tool results travel as text; JSON keeps them parseable by the model. */
@@ -965,8 +974,9 @@ export function registerVantikTools(
           .optional()
           .describe(
             'What the fact rests on, one thing per citation: code as ' +
-              '{ path, lines, sha?, repo?, quote? }, or { issue }, ' +
-              '{ pullRequest }, { comment } or { run }.',
+              '{ path, lines, sha?, repo?, quote? }, { issue }, ' +
+              '{ pullRequest }, { comment } or { run }, or an outside page ' +
+              'as { url, quote }.',
           ),
       },
     },

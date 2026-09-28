@@ -1,7 +1,12 @@
 /**
  * The trust tier and proof every served item of knowledge carries.
  */
-import { KnowledgeTrustEnum, PageEntryStatusEnum } from '@vantikhq/types';
+import {
+  KnowledgeTrustEnum,
+  PageEntryCitationCheckEnum,
+  PageEntryCitationKindEnum,
+  PageEntryStatusEnum,
+} from '@vantikhq/types';
 
 import {
   describeProof,
@@ -31,6 +36,11 @@ function citation(overrides: Partial<ProofCitationRow> = {}): ProofCitationRow {
 
 const STANDING = PageEntryStatusEnum.STANDING;
 
+/** A code citation with the given result. */
+function code(checkResult: string) {
+  return { kind: 'CODE', checkResult, checkedAt: null as Date | null };
+}
+
 describe('trust', () => {
   it('[KG-2.7] is HUMAN_VERIFIED once a person has confirmed the entry', () => {
     expect(
@@ -43,7 +53,7 @@ describe('trust', () => {
       entryTrust({
         status: STANDING,
         verifiedAt: null,
-        citations: [{ checkResult: 'HOLDS' }, { checkResult: 'MOVED' }],
+        citations: [code('HOLDS'), code('MOVED')],
       }),
     ).toBe(KnowledgeTrustEnum.GROUNDED);
   });
@@ -53,7 +63,7 @@ describe('trust', () => {
       entryTrust({
         status: PageEntryStatusEnum.CONSOLIDATED,
         verifiedAt: null,
-        citations: [{ checkResult: 'HOLDS' }],
+        citations: [code('HOLDS')],
       }),
     ).toBe(KnowledgeTrustEnum.GROUNDED);
 
@@ -66,7 +76,7 @@ describe('trust', () => {
         entryTrust({
           status,
           verifiedAt: null,
-          citations: [{ checkResult: 'HOLDS' }],
+          citations: [code('HOLDS')],
         }),
       ).toBe(KnowledgeTrustEnum.UNGROUNDED);
     }
@@ -77,14 +87,14 @@ describe('trust', () => {
       { status: STANDING, citations: [] },
       {
         status: STANDING,
-        citations: [{ checkResult: 'HOLDS' }, { checkResult: 'MISSING' }],
+        citations: [code('HOLDS'), code('MISSING')],
       },
       // A judge thinking changed code still agrees is an opinion, not a check.
-      { status: STANDING, citations: [{ checkResult: 'CHANGED' }] },
-      { status: STANDING, citations: [{ checkResult: 'UNKNOWN' }] },
+      { status: STANDING, citations: [code('CHANGED')] },
+      { status: STANDING, citations: [code('UNKNOWN')] },
       {
         status: PageEntryStatusEnum.PROPOSED,
-        citations: [{ checkResult: 'HOLDS' }],
+        citations: [code('HOLDS')],
       },
     ];
 
@@ -93,6 +103,68 @@ describe('trust', () => {
         KnowledgeTrustEnum.UNGROUNDED,
       );
     }
+  });
+});
+
+describe('trust of a fact observed on an outside page', () => {
+  const NOW = new Date('2026-09-28T00:00:00Z');
+  const page = (checkResult: string, daysAgo: number) => ({
+    kind: 'URL',
+    checkResult,
+    checkedAt: new Date(NOW.getTime() - daysAgo * 24 * 60 * 60 * 1000),
+  });
+
+  it('is OBSERVED once accepted while the page holds, with code beside it too', () => {
+    expect(
+      entryTrust(
+        { status: STANDING, verifiedAt: null, citations: [page('HOLDS', 3)] },
+        NOW,
+      ),
+    ).toBe(KnowledgeTrustEnum.OBSERVED);
+    expect(
+      entryTrust(
+        {
+          status: STANDING,
+          verifiedAt: null,
+          citations: [code('HOLDS'), page('HOLDS', 40)],
+        },
+        NOW,
+      ),
+    ).toBe(KnowledgeTrustEnum.OBSERVED);
+  });
+
+  it('is UNGROUNDED once the quote is gone, before acceptance, or when the last read is 60 days old', () => {
+    for (const entry of [
+      { status: STANDING, citations: [page('CHANGED', 1)] },
+      { status: STANDING, citations: [page('MISSING', 1)] },
+      { status: PageEntryStatusEnum.PROPOSED, citations: [page('HOLDS', 1)] },
+      { status: STANDING, citations: [page('HOLDS', 61)] },
+    ]) {
+      expect(entryTrust({ ...entry, verifiedAt: null }, NOW)).toBe(
+        KnowledgeTrustEnum.UNGROUNDED,
+      );
+    }
+  });
+
+  it('describes the page and the date the server read it', () => {
+    expect(
+      describeProof({
+        trust: KnowledgeTrustEnum.OBSERVED,
+        citations: [
+          {
+            kind: PageEntryCitationKindEnum.URL,
+            target: 'https://docs.vendor.example/limits',
+            result: PageEntryCitationCheckEnum.HOLDS,
+            checkedAt: '2026-09-20T10:00:00.000Z',
+            checkedSha: null,
+          },
+        ],
+        lastCheckedAt: '2026-09-20T10:00:00.000Z',
+        lastCheckedSha: null,
+      }),
+    ).toBe(
+      'observed · cites page https://docs.vendor.example/limits, read 2026-09-20 (holds) · checked 2026-09-20',
+    );
   });
 });
 

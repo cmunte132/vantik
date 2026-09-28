@@ -1182,3 +1182,191 @@ describe('citations of issues, pull requests, comments and runs', () => {
     ]);
   });
 });
+
+// ------------------------------------------------------- outside pages
+
+describe('citations of an outside page', () => {
+  const URL_ = 'https://docs.vendor.example/limits';
+  const QUOTE = 'Each key can make 100 requests per second.';
+
+  function withPage(content: string | null, other: Partial<Row> = {}) {
+    const context = setup();
+    context.service.readOutside = jest.fn(async () =>
+      content === null
+        ? { unknown: true as const, reason: 'down' }
+        : { content, url: URL_, ...other },
+    );
+    return context;
+  }
+
+  it('[KG-2.6] holds when the quote is on the page, and keeps the words as the page has them', async () => {
+    const { service } = withPage(
+      'Rate limits. EACH key can make 100 requests   per second. Bursts…',
+    );
+
+    const [draft] = await service.checkForWrite(WS, [
+      { url: `${URL_}#top`, quote: QUOTE },
+    ]);
+
+    expect(draft).toMatchObject({
+      kind: PageEntryCitationKindEnum.URL,
+      targetLabel: URL_,
+      snippet: 'EACH key can make 100 requests per second.',
+      checkResult: PageEntryCitationCheckEnum.HOLDS,
+    });
+    expect(draft.checkedAt).toBeInstanceOf(Date);
+  });
+
+  it('[KG-2.6] refuses a page with no quote, a quote not on the page, a page that is gone, and an address the server does not read', async () => {
+    const { service } = withPage('Nothing about limits here.');
+
+    expect(
+      (await refusalOf(service.checkForWrite(WS, [{ url: URL_ }]))).message,
+    ).toContain('no quote');
+    expect(
+      (
+        await refusalOf(
+          service.checkForWrite(WS, [{ url: URL_, quote: QUOTE }]),
+        )
+      ).message,
+    ).toContain('does not contain the quote');
+    expect(
+      (
+        await refusalOf(
+          service.checkForWrite(WS, [
+            { url: 'http://docs.vendor.example/', quote: QUOTE },
+          ]),
+        )
+      ).message,
+    ).toContain('only an https URL');
+
+    service.readOutside = jest.fn(async () => ({ missing: true as const }));
+    expect(
+      (
+        await refusalOf(
+          service.checkForWrite(WS, [{ url: URL_, quote: QUOTE }]),
+        )
+      ).message,
+    ).toContain('is not there');
+
+    service.readOutside = jest.fn(async () => ({
+      refused: 'docs.vendor.example resolves to 10.0.0.1',
+    }));
+    expect(
+      (
+        await refusalOf(
+          service.checkForWrite(WS, [{ url: URL_, quote: QUOTE }]),
+        )
+      ).message,
+    ).toContain('10.0.0.1');
+  });
+
+  it('[KG-2.3] gives an UNKNOWN citation that keeps the quote when the page does not answer, and reads it on retry', async () => {
+    const { service, db } = withPage(null);
+
+    const [draft] = await service.checkForWrite(WS, [
+      { url: URL_, quote: QUOTE },
+    ]);
+
+    expect(draft).toMatchObject({
+      checkResult: PageEntryCitationCheckEnum.UNKNOWN,
+      pendingQuote: QUOTE,
+      checkedAt: null,
+    });
+
+    const entryId = store(db, [{ ...draft }]);
+    service.readOutside = jest.fn(async () => ({
+      content: `Limits: ${QUOTE}`,
+      url: URL_,
+    }));
+
+    expect(await service.retryUnknown(entryId)).toEqual({
+      stillUnknown: 0,
+      read: 1,
+    });
+    expect(db.citations[0]).toMatchObject({
+      checkResult: 'HOLDS',
+      snippet: QUOTE,
+      pendingQuote: null,
+    });
+  });
+
+  it('[KG-2.4] on a new read, holds with a new date while the quote is there, and changed once it is gone', async () => {
+    const { service, db } = withPage(`Limits: ${QUOTE}`);
+    const entryId = store(db, [
+      {
+        kind: 'URL',
+        targetLabel: URL_,
+        snippet: QUOTE,
+        checkResult: 'HOLDS',
+        checkedAt: WRITTEN,
+      },
+    ]);
+
+    await service.recheck(entryId);
+
+    expect(db.citations[0].checkResult).toBe('HOLDS');
+    expect(db.citations[0].checkedAt.getTime()).toBeGreaterThan(
+      WRITTEN.getTime(),
+    );
+
+    // Each reading is stored only over an older one.
+    db.citations[0].checkedAt = WRITTEN;
+    service.readOutside = jest.fn(async () => ({
+      content: 'Limits: 50 requests per second.',
+      url: URL_,
+    }));
+    await service.recheck(entryId);
+
+    expect(db.citations[0].checkResult).toBe('CHANGED');
+
+    db.citations[0].checkedAt = WRITTEN;
+    service.readOutside = jest.fn(async () => ({ missing: true as const }));
+    await service.recheck(entryId);
+
+    expect(db.citations[0].checkResult).toBe('MISSING');
+  });
+
+  it('[KG-2.4] keeps the last result when the page does not answer', async () => {
+    const { service, db } = withPage(null);
+    const entryId = store(db, [
+      {
+        kind: 'URL',
+        targetLabel: URL_,
+        snippet: QUOTE,
+        checkResult: 'HOLDS',
+        checkedAt: WRITTEN,
+      },
+    ]);
+
+    expect(await service.recheck(entryId)).toEqual({ checked: 0 });
+    expect(db.citations[0]).toMatchObject({
+      checkResult: 'HOLDS',
+      checkedAt: WRITTEN,
+    });
+  });
+
+  it('queues a new read of each entry in use whose page is 30 days old, once per entry', async () => {
+    const { service, db, queue } = setup();
+    const findMany = jest.fn(async () => [
+      { entryId: 'entry-1' },
+      { entryId: 'entry-2' },
+    ]);
+    (db.prisma as unknown as Row).pageEntryCitation.findMany = findMany;
+    const now = new Date('2026-09-28T00:00:00Z');
+
+    expect(await service.recheckObservedLater(now)).toBe(2);
+
+    const [args] = findMany.mock.calls[0] as unknown as [Row];
+    expect(args.where.kind).toBe('URL');
+    expect(args.where.OR[0].checkedAt.lt).toEqual(
+      new Date('2026-08-29T00:00:00Z'),
+    );
+    expect(args.distinct).toEqual(['entryId']);
+    expect(queue.add).toHaveBeenCalledWith(
+      'recheckEntryCitations',
+      { entryId: 'entry-1' },
+      expect.objectContaining({ jobId: 'recheckEntryCitations:entry-1' }),
+    );
+  });
+});

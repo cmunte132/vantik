@@ -35,10 +35,21 @@ import {
 } from './citation-matching';
 import KnowledgeIndexService from './knowledge-index.service';
 import {
+  findQuote,
+  MAX_OUTSIDE_QUOTE,
+  MIN_OUTSIDE_QUOTE,
+  OBSERVED_RECHECK_MS,
+  type OutsideRead,
+  outsideUrl,
+  readOutsidePage,
+} from './outside-source';
+import {
   CODE_LANDED_JOB,
   type CodeLandedJob,
   codeLandedJobOptions,
   PAGES_QUEUE,
+  RECHECK_ENTRY_JOB,
+  recheckEntryJobOptions,
   RETRY_CITATIONS_JOB,
   retryCitationsJobOptions,
 } from './pages.interface';
@@ -366,6 +377,7 @@ interface CitationRow {
   endLine: number | null;
   snippet: string | null;
   targetId: string | null;
+  targetLabel: string | null;
   checkResult: string | null;
   pendingQuote: string | null;
 }
@@ -395,6 +407,9 @@ export default class EntryCitationsService {
     @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
   ) {}
 
+  /** Reads an outside page. A test replaces it, so no test reads the web. */
+  readOutside: (url: string) => Promise<OutsideRead> = readOutsidePage;
+
   // ------------------------------------------------------------------ write
 
   /**
@@ -417,6 +432,62 @@ export default class EntryCitationsService {
     }
 
     return drafts;
+  }
+
+  /**
+   * The gardener's look at observed facts: it queues a check of each entry
+   * in use whose outside page the server last read more than
+   * `OBSERVED_RECHECK_MS` ago. The check reads the page again. If the quote
+   * is still on the page, the entry stays observed, with the new date. If
+   * not, the entry is no longer observed, and context packs stop using it.
+   * Returns how many entries it queued.
+   */
+  async recheckObservedLater(
+    now: Date = new Date(),
+    limit = OBSERVED_RECHECK_LIMIT,
+  ): Promise<number> {
+    const due = await this.prisma.pageEntryCitation.findMany({
+      where: {
+        kind: PageEntryCitationKindEnum.URL,
+        OR: [
+          {
+            checkedAt: { lt: new Date(now.getTime() - OBSERVED_RECHECK_MS) },
+          },
+          { checkResult: PageEntryCitationCheckEnum.UNKNOWN },
+        ],
+        entry: {
+          deleted: null,
+          status: {
+            in: [
+              PageEntryStatus.STANDING,
+              PageEntryStatus.CONSOLIDATED,
+              PageEntryStatus.PROPOSED,
+            ],
+          },
+        },
+      },
+      orderBy: { checkedAt: { sort: 'asc', nulls: 'first' } },
+      distinct: ['entryId'],
+      take: limit,
+      select: { entryId: true },
+    });
+
+    let queued = 0;
+
+    for (const { entryId } of due) {
+      try {
+        await this.pagesQueue?.add(
+          RECHECK_ENTRY_JOB,
+          { entryId },
+          recheckEntryJobOptions(entryId),
+        );
+        queued++;
+      } catch {
+        // The next pass asks again: the page is still due.
+      }
+    }
+
+    return queued;
   }
 
   /** Queues the retry of an entry's UNKNOWN citations, when it has any. */
@@ -453,19 +524,24 @@ export default class EntryCitationsService {
       input.pullRequest !== undefined && 'pullRequest',
       input.comment !== undefined && 'comment',
       input.run !== undefined && 'run',
+      input.url !== undefined && 'url',
     ].filter(Boolean);
 
     if (targets.length !== 1) {
       throw refusal(
         index,
         targets.length === 0
-          ? 'names nothing to cite. Give a path with lines, or an issue, pullRequest, comment or run'
+          ? 'names nothing to cite. Give a path with lines, an issue, pullRequest, comment or run, or a url with a quote'
           : `names ${targets.join(' and ')}. One citation cites one thing; give each its own citation`,
       );
     }
 
     if (input.path !== undefined) {
       return this.checkCode(workspaceId, input, index, reads);
+    }
+
+    if (input.url !== undefined) {
+      return this.checkUrl(input, index);
     }
 
     const target = await this.findTarget(workspaceId, input);
@@ -478,6 +554,72 @@ export default class EntryCitationsService {
       kind: target.kind,
       targetId: target.id,
       targetLabel: target.label,
+      checkedAt: new Date(),
+      checkResult: PageEntryCitationCheckEnum.HOLDS,
+    };
+  }
+
+  /**
+   * A citation of an outside page. The server reads the page and finds the
+   * quote in it, and it keeps the quote as the page says it. A page that
+   * cannot be read now gives an UNKNOWN citation, as a repository does. The
+   * server reads it again later.
+   */
+  private async checkUrl(
+    input: PageEntryCitationInputDto,
+    index: number,
+  ): Promise<CitationDraft> {
+    const url = outsideUrl(input.url ?? '');
+
+    if (!(url instanceof URL)) {
+      throw refusal(index, `cannot be read: ${url.refused}`);
+    }
+
+    const quote = input.quote?.replace(/\s+/g, ' ').trim() ?? '';
+
+    if (quote.length < MIN_OUTSIDE_QUOTE || quote.length > MAX_OUTSIDE_QUOTE) {
+      throw refusal(
+        index,
+        `cites ${url.href} with ${
+          quote ? 'a quote of the wrong length' : 'no quote'
+        }. Give the words on the page that say what the fact claims, ${MIN_OUTSIDE_QUOTE} to ${MAX_OUTSIDE_QUOTE} characters`,
+      );
+    }
+
+    const read = await this.readOutside(url.href);
+
+    if ('refused' in read) {
+      throw refusal(index, `cannot be read: ${read.refused}`);
+    }
+
+    if ('missing' in read) {
+      throw refusal(index, `${url.href} is not there`);
+    }
+
+    if ('unknown' in read) {
+      return {
+        kind: PageEntryCitationKindEnum.URL,
+        targetLabel: url.href,
+        checkedAt: null,
+        checkResult: PageEntryCitationCheckEnum.UNKNOWN,
+        pendingQuote: quote,
+      };
+    }
+
+    const found = findQuote(read.content, quote);
+
+    if (!found) {
+      throw refusal(
+        index,
+        `the page at ${url.href} does not contain the quote`,
+      );
+    }
+
+    return {
+      kind: PageEntryCitationKindEnum.URL,
+      targetLabel: url.href,
+      snippet: found,
+      snippetHash: hashSnippet(found),
       checkedAt: new Date(),
       checkResult: PageEntryCitationCheckEnum.HOLDS,
     };
@@ -823,9 +965,11 @@ export default class EntryCitationsService {
       }
 
       const update =
-        citation.kind !== PageEntryCitationKindEnum.CODE
-          ? await this.recheckTarget(entry.page.workspaceId, citation)
-          : await this.recheckCode(entry, citation, reads);
+        citation.kind === PageEntryCitationKindEnum.URL
+          ? await this.recheckUrl(citation)
+          : citation.kind !== PageEntryCitationKindEnum.CODE
+            ? await this.recheckTarget(entry.page.workspaceId, citation)
+            : await this.recheckCode(entry, citation, reads);
 
       if (update) {
         found.push({
@@ -1061,9 +1205,28 @@ export default class EntryCitationsService {
       update: Prisma.PageEntryCitationUncheckedUpdateInput;
       firstRead: FirstReading;
     }> = [];
+    const pages: Array<{
+      id: string;
+      update: Prisma.PageEntryCitationUncheckedUpdateInput;
+    }> = [];
     const reads = new RepoReads(this.files);
 
     for (const citation of entry.citations) {
+      if (
+        citation.kind === PageEntryCitationKindEnum.URL &&
+        citation.checkResult === PageEntryCitationCheckEnum.UNKNOWN
+      ) {
+        const update = await this.recheckUrl(citation);
+
+        if (update) {
+          pages.push({ id: citation.id, update });
+        } else {
+          stillUnknown++;
+        }
+
+        continue;
+      }
+
       if (
         citation.kind !== PageEntryCitationKindEnum.CODE ||
         citation.checkResult !== PageEntryCitationCheckEnum.UNKNOWN
@@ -1085,33 +1248,43 @@ export default class EntryCitationsService {
       found.push({ update, firstRead: firstReading(citation, update) });
     }
 
-    const firstReads: FirstReading[] = found.length
-      ? await this.prisma.$transaction(async (tx) => {
-          await lockEntry(tx, entryId);
-          const stored: FirstReading[] = [];
+    let pagesRead = 0;
+    const firstReads: FirstReading[] =
+      found.length || pages.length
+        ? await this.prisma.$transaction(async (tx) => {
+            await lockEntry(tx, entryId);
+            const stored: FirstReading[] = [];
 
-          for (const { update, firstRead } of found) {
-            const { count } = await tx.pageEntryCitation.updateMany({
-              where: { id: firstRead.citation.id, ...STILL_UNREAD },
-              data: update,
-            });
-
-            if (count > 0) {
-              stored.push(firstRead);
+            for (const { id, update } of pages) {
+              const { count } = await tx.pageEntryCitation.updateMany({
+                where: { id, ...STILL_UNREAD },
+                data: update,
+              });
+              pagesRead += count;
             }
-          }
 
-          return stored;
-        })
-      : [];
+            for (const { update, firstRead } of found) {
+              const { count } = await tx.pageEntryCitation.updateMany({
+                where: { id: firstRead.citation.id, ...STILL_UNREAD },
+                data: update,
+              });
 
-    if (firstReads.length > 0) {
+              if (count > 0) {
+                stored.push(firstRead);
+              }
+            }
+
+            return stored;
+          })
+        : [];
+
+    if (firstReads.length > 0 || pagesRead > 0) {
       await this.indexer?.entryChanged(entryId);
     }
 
     await this.checkSinceCited(entry.page.workspaceId, firstReads);
 
-    return { stillUnknown, read: firstReads.length };
+    return { stillUnknown, read: firstReads.length + pagesRead };
   }
 
   /**
@@ -1341,6 +1514,45 @@ export default class EntryCitationsService {
     };
   }
 
+  /**
+   * Reads a cited outside page again and looks for its quote: the quote as
+   * the server found it, or as the writer gave it when the server could not
+   * read the page at the write. A page that cannot be read now gives no
+   * update, and the last result stays. A name that now resolves to a private
+   * address is as good as gone.
+   */
+  private async recheckUrl(citation: CitationRow) {
+    const quote = citation.snippet ?? citation.pendingQuote;
+
+    if (!citation.targetLabel || !quote) {
+      return null;
+    }
+
+    const read = await this.readOutside(citation.targetLabel);
+
+    if ('unknown' in read) {
+      return null;
+    }
+
+    const checkedAt = new Date();
+
+    if ('refused' in read || 'missing' in read) {
+      return { checkedAt, checkResult: PageEntryCitationCheckEnum.MISSING };
+    }
+
+    const found = findQuote(read.content, quote);
+
+    return found
+      ? {
+          checkedAt,
+          checkResult: PageEntryCitationCheckEnum.HOLDS,
+          snippet: found,
+          snippetHash: hashSnippet(found),
+          pendingQuote: null as string | null,
+        }
+      : { checkedAt, checkResult: PageEntryCitationCheckEnum.CHANGED };
+  }
+
   private async recheckTarget(workspaceId: string, citation: CitationRow) {
     const reference = citation.targetId ?? '';
     const input: PageEntryCitationInputDto =
@@ -1468,6 +1680,7 @@ const CITATION_SELECT = {
   endLine: true,
   snippet: true,
   targetId: true,
+  targetLabel: true,
   checkResult: true,
   pendingQuote: true,
 } as const;
@@ -1486,6 +1699,9 @@ const NO_JUDGMENT = {
  * A citation never read. A reading of the commit it cites is stored only
  * over this: any other reading is of a head, which is newer.
  */
+/** The most entries that one pass of the gardener reads outside pages for. */
+export const OBSERVED_RECHECK_LIMIT = 50;
+
 const STILL_UNREAD: Prisma.PageEntryCitationWhereInput = {
   checkResult: PageEntryCitationCheckEnum.UNKNOWN,
 };

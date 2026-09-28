@@ -14,6 +14,7 @@ import EntryCitationsService, {
 } from '../entry-citations.service';
 import RepoFileSourceService from '../repo-file-source.service';
 import KnowledgeVerifierService, {
+  pageExcerpt,
   parseAnswer,
   type VerifierModel,
 } from './knowledge-verifier.service';
@@ -424,5 +425,48 @@ describe('reading the answer of the verifier', () => {
       reason: null,
     });
     expect(parseAnswer('no json here')).toBeNull();
+  });
+});
+
+describe('a page the verifier reads', () => {
+  it('[ENG-224] keeps a page citation only with a quote long enough to check', () => {
+    expect(
+      parseAnswer(
+        JSON.stringify({
+          citations: [
+            {
+              url: 'https://docs.vendor.example/limits',
+              quote: 'Each key can make 100 requests per second.',
+            },
+            { url: 'https://docs.vendor.example/other', quote: 'too short' },
+            { url: 'https://docs.vendor.example/none' },
+          ],
+          outside: true,
+          reason: 'The vendor documents the limit.',
+        }),
+      ),
+    ).toEqual({
+      citations: [
+        {
+          url: 'https://docs.vendor.example/limits',
+          quote: 'Each key can make 100 requests per second.',
+        },
+      ],
+      outside: true,
+      reason: 'The vendor documents the limit.',
+    });
+  });
+
+  it('[ENG-224] returns the text around the words it asks for, or the start of the page', () => {
+    const page = `${'a'.repeat(1000)} rate limit is 100 ${'b'.repeat(1000)}`;
+
+    const found = pageExcerpt(page, 'RATE   limit');
+    expect(found).toContain('rate limit is 100');
+    expect(found.length).toBeLessThan(900);
+
+    expect(pageExcerpt(page, 'quota')).toMatch(
+      /^The words are not on the page\. It starts:/,
+    );
+    expect(pageExcerpt('short page')).toBe('short page');
   });
 });

@@ -5,6 +5,7 @@ import { usePageSources } from 'services/pages';
 const TRUST_LABEL: Record<string, string> = {
   HUMAN_VERIFIED: 'verified',
   GROUNDED: 'grounded',
+  OBSERVED: 'observed',
   UNGROUNDED: 'ungrounded',
 };
 

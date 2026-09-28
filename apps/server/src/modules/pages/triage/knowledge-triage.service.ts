@@ -119,11 +119,17 @@ const HOLDING = new Set<string>(['HOLDS', 'MOVED']);
 /**
  * Citations whose text the acceptance judges are shown. A run or a pull
  * request holds while it exists, which says nothing about the claim.
+ *
+ * An outside page is evidence of the same sort as code: the server read it,
+ * and found the quote on it. It is not EXTERNAL_INPUT. That reason is about
+ * where the entry's own text came from, and a page that the server reads is
+ * data that the judges assess, as the lines of a file are.
  */
 const READABLE: PageEntryCitationKind[] = [
   PageEntryCitationKind.CODE,
   PageEntryCitationKind.ISSUE,
   PageEntryCitationKind.COMMENT,
+  PageEntryCitationKind.URL,
 ];
 
 /**
@@ -219,6 +225,7 @@ const ENTRY_SELECT = {
       targetId: true,
       targetLabel: true,
       checkResult: true,
+      checkedAt: true,
     },
   },
 } as const;
@@ -824,7 +831,9 @@ export default class KnowledgeTriageService {
         verifiedAt: true,
         createdAt: true,
         page: { select: { entryPolicy: true } },
-        citations: { select: { checkResult: true } },
+        citations: {
+          select: { kind: true, checkResult: true, checkedAt: true },
+        },
       },
     });
 
@@ -1435,6 +1444,18 @@ function evidenceOf(
     }`;
   }
 
+  if (citation.kind === PageEntryCitationKind.URL) {
+    const read = citation.checkedAt
+      ? `, read ${citation.checkedAt.toISOString().slice(0, 10)}`
+      : '';
+
+    return `page ${citation.targetLabel ?? '(no URL)'}${read} (${result})\n${
+      citation.snippet === null
+        ? '(not read)'
+        : `"${redactSecrets(citation.snippet)}"`
+    }`;
+  }
+
   const label = `${citation.kind.toLowerCase().replace('_', ' ')} ${
     citation.targetLabel ?? '(unknown)'
   } (${result})`;
@@ -1466,6 +1487,9 @@ function citationsOf(entry: TriagedEntry) {
       startLine: citation.startLine,
       endLine: citation.endLine,
       targetId: citation.targetId,
+      ...(citation.kind === PageEntryCitationKind.URL && {
+        url: citation.targetLabel,
+      }),
       result: citation.checkResult,
     }))
     .sort((a, b) => stableJson(a).localeCompare(stableJson(b)));

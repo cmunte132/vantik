@@ -2221,6 +2221,10 @@ enum PageEntryCitationKind {
   PULL_REQUEST
   COMMENT
   RUN
+  /// A public page outside the workspace, for a fact about an outside
+  /// service. `targetLabel` is the URL and `snippet` the quote as the server
+  /// found it on the page; `checkedAt` is when the server last read it.
+  URL
 }
 
 /// How an entry reached a reader.

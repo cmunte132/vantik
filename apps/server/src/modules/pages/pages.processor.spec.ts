@@ -117,7 +117,9 @@ describe('PagesProcessor', () => {
 
     await new PagesProcessor(
       service,
-      {} as EntryCitationsService,
+      {
+        recheckObservedLater: async () => 0,
+      } as unknown as EntryCitationsService,
       {} as KnowledgeTriageService,
       {
         proposeUnused: async () => 0,
@@ -603,7 +605,9 @@ describe('the decay pass', () => {
 
     await new PagesProcessor(
       { runDecay } as unknown as PageEntriesService,
-      {} as EntryCitationsService,
+      {
+        recheckObservedLater: async () => 0,
+      } as unknown as EntryCitationsService,
       {} as KnowledgeTriageService,
       { proposeUnused, openOwedIssues } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
@@ -622,7 +626,9 @@ describe('the decay pass', () => {
       {
         runDecay: async () => ({ expiredProposed: 0, archivedStanding: 0 }),
       } as unknown as PageEntriesService,
-      {} as EntryCitationsService,
+      {
+        recheckObservedLater: async () => 0,
+      } as unknown as EntryCitationsService,
       {} as KnowledgeTriageService,
       {
         proposeUnused: async () => 0,
@@ -634,6 +640,27 @@ describe('the decay pass', () => {
     ).handleDecay();
 
     expect(openOwedIssues).toHaveBeenCalledWith();
+  });
+
+  it('[ENG-224] queues a new read of outside pages that are due', async () => {
+    const recheckObservedLater = jest.fn(async () => 4);
+
+    await new PagesProcessor(
+      {
+        runDecay: async () => ({ expiredProposed: 0, archivedStanding: 0 }),
+      } as unknown as PageEntriesService,
+      { recheckObservedLater } as unknown as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      {
+        proposeUnused: async () => 0,
+        openOwedIssues: async () => 0,
+      } as unknown as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
+      {} as PageRefreshService,
+    ).handleDecay();
+
+    expect(recheckObservedLater).toHaveBeenCalledWith();
   });
 });
 

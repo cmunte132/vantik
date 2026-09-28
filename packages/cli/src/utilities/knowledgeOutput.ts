@@ -30,6 +30,7 @@ function truncate(text: string, max: number): string {
 const TRUST: Record<string, string> = {
   HUMAN_VERIFIED: 'verified',
   GROUNDED: 'grounded',
+  OBSERVED: 'observed',
   UNGROUNDED: 'ungrounded',
 };
 

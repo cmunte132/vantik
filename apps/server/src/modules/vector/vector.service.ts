@@ -562,7 +562,11 @@ export class VectorService implements OnModuleInit {
     moduleIds?: string[] | null;
     kind?: string | null;
     /** The last check of each citation, which decides whether it is grounded. */
-    citations?: Array<{ checkResult: string | null }> | null;
+    citations?: Array<{
+      kind: string;
+      checkResult: string | null;
+      checkedAt: Date | null;
+    }> | null;
     page: { title: string; workspaceId: string };
   }) {
     await this.typesenseClient
@@ -1152,9 +1156,10 @@ function quoteFilterValue(value: string): string {
  */
 /**
  * Trust, best first, as conditions a tier can require. Page bodies are indexed
- * verified: they are the narrative a person maintains.
+ * verified: they are the narrative a person maintains. An observed entry
+ * ranks with a grounded one: the server checked the evidence of both.
  */
-const TRUST_LEVELS = ['verified:true', 'trust:=GROUNDED', null];
+const TRUST_LEVELS = ['verified:true', 'trust:=[GROUNDED,OBSERVED]', null];
 
 function buildKnowledgeSortBy(options: {
   scope?: string;

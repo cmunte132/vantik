@@ -102,6 +102,7 @@ const PACK_SEARCH_LIMIT = 20;
 /** The trust a relevant entry needs to be packed without a person asking. */
 const PACKABLE_TRUST: Array<KnowledgeTrustEnum | null> = [
   KnowledgeTrustEnum.GROUNDED,
+  KnowledgeTrustEnum.OBSERVED,
   KnowledgeTrustEnum.HUMAN_VERIFIED,
 ];
 

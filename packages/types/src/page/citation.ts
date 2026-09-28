@@ -17,6 +17,11 @@ export enum PageEntryCitationKindEnum {
   COMMENT = 'COMMENT',
   /** An agent run in the workspace. */
   RUN = 'RUN',
+  /**
+   * A public page outside the workspace, for a fact about an outside service.
+   * The server reads the page and finds the quote in it.
+   */
+  URL = 'URL',
 }
 
 /**
@@ -59,6 +64,12 @@ export enum KnowledgeTrustEnum {
   HUMAN_VERIFIED = 'HUMAN_VERIFIED',
   /** Accepted, cited, and every citation still holds. */
   GROUNDED = 'GROUNDED',
+  /**
+   * Accepted, and it rests on an outside page that the server read, with the
+   * date of that read. Every citation still holds. The gardener reads the
+   * page again after 30 days.
+   */
+  OBSERVED = 'OBSERVED',
   /** Anything else. */
   UNGROUNDED = 'UNGROUNDED',
 }
@@ -106,7 +117,7 @@ export interface ServedCitation {
   commitSha?: string | null;
   /** CODE: the cited lines, e.g. "40-52", at the last check. */
   lines?: string | null;
-  /** Non-code: the issue key, pull request URL, or comment or run id. */
+  /** Non-code: the issue key, pull request URL, comment or run id, or page URL. */
   target?: string | null;
   result: PageEntryCitationCheckEnum | null;
   checkedAt: string | null;

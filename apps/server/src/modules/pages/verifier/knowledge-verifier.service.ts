@@ -29,6 +29,7 @@ import EntryCitationsService, {
 } from '../entry-citations.service';
 import KnowledgeIndexService from '../knowledge-index.service';
 import { knowledgeSettings } from '../knowledge-settings';
+import { MAX_OUTSIDE_QUOTE, MIN_OUTSIDE_QUOTE } from '../outside-source';
 import {
   PAGES_QUEUE,
   retriageJobOptions,
@@ -53,6 +54,11 @@ import { redactSecrets } from '../triage/triage-policy';
  * gives, and it attaches only the citations that hold. Then triage decides
  * again, on the evidence, with the trigger VERIFIER. If the verifier finds
  * nothing, the entry stays with a person, as before.
+ *
+ * For a claim about an outside service, the verifier can read that service's
+ * public pages, and cite a page with the words on it that state the claim.
+ * The server reads the page itself and finds the words, as it does for a
+ * writer. If the judges then accept the entry, it is in use as observed.
  *
  * The verifier runs on the model that the workspace chose in its agent
  * settings, with the key that the workspace stored for that provider. It
@@ -88,6 +94,15 @@ const MAX_ISSUES = 8;
 /** The most characters of an issue that one read returns. */
 const MAX_ISSUE_TEXT = 2_000;
 
+/** The most characters of an outside page that one read returns. */
+const MAX_PAGE_TEXT = 6_000;
+
+/** The characters on each side of a found text that a page read returns. */
+const PAGE_CONTEXT = 400;
+
+/** The most places on a page that one read returns. */
+const MAX_PAGE_PLACES = 3;
+
 /** The most characters of a result that a step keeps in the record. */
 const MAX_STEP_TEXT = 300;
 
@@ -103,11 +118,12 @@ const SYSTEM = [
   'the claim.',
   '',
   'If the claim is about a service outside this workspace (a vendor API, a',
-  'cloud setting, a third-party limit) that the code and issues cannot',
-  'confirm, say so with "outside": true.',
+  'cloud setting, a third-party limit), say so with "outside": true. Then',
+  "read that service's own documentation with read_page, and cite the page",
+  'with the exact words on it that state the claim. Cite no other site.',
   '',
   'When you are done, answer with one JSON object and nothing else:',
-  '{"citations": [{"repo": "<repo>", "path": "<path>", "lines": "40-52", "quote": "<one line>"} | {"issue": "ENG-42"}],',
+  '{"citations": [{"repo": "<repo>", "path": "<path>", "lines": "40-52", "quote": "<one line>"} | {"issue": "ENG-42"} | {"url": "https://...", "quote": "<exact words>"}],',
   ' "outside": false, "reason": "<one sentence>"}',
   `Give at most ${MAX_VERIFIER_CITATIONS} citations. Give none if nothing states the claim.`,
 ].join('\n');
@@ -668,6 +684,42 @@ export default class KnowledgeVerifierService {
           );
         },
       }),
+      read_page: tool({
+        description:
+          "Read a public https page, such as an outside service's documentation. With find, returns the text around each place the words are; without it, the start of the page.",
+        inputSchema: z.object({
+          url: z.string().describe('An https URL'),
+          find: z
+            .string()
+            .optional()
+            .describe('Words to find on the page, without regard to case'),
+        }),
+        execute: async (input) => {
+          const read = await this.citations.readOutside(input.url);
+
+          if ('refused' in read) {
+            return record('read_page', input, `Not read: ${read.refused}.`);
+          }
+
+          if ('missing' in read) {
+            return record('read_page', input, 'There is no such page.');
+          }
+
+          if ('unknown' in read) {
+            return record('read_page', input, `Not read: ${read.reason}.`);
+          }
+
+          const text = redactSecrets(pageExcerpt(read.content, input.find));
+
+          steps.push({
+            tool: 'read_page',
+            input,
+            result: `${read.url}: ${read.content.length} characters`,
+          });
+
+          return `${read.url}\n${text}`;
+        },
+      }),
       read_issue: tool({
         description: 'Read the title and description of one issue, by key.',
         inputSchema: z.object({
@@ -878,6 +930,14 @@ function citationOf(value: unknown): PageEntryCitationInputDto | null {
     return { issue };
   }
 
+  const url = text('url', 2000);
+
+  if (url) {
+    const quote = text('quote', MAX_OUTSIDE_QUOTE);
+
+    return quote && quote.length >= MIN_OUTSIDE_QUOTE ? { url, quote } : null;
+  }
+
   const path = text('path', 1000);
   const lines = text('lines', 20);
 
@@ -891,6 +951,42 @@ function citationOf(value: unknown): PageEntryCitationInputDto | null {
     ...(text('repo', 200) ? { repo: text('repo', 200) } : {}),
     ...(text('quote', 2000) ? { quote: text('quote', 2000) } : {}),
   };
+}
+
+/**
+ * What a page read returns: the text around each place that has the words,
+ * or the start of the page.
+ */
+export function pageExcerpt(content: string, find?: string): string {
+  const words = find?.replace(/\s+/g, ' ').trim().toLowerCase();
+
+  if (!words) {
+    return content.length > MAX_PAGE_TEXT
+      ? `${content.slice(0, MAX_PAGE_TEXT)} [cut]`
+      : content;
+  }
+
+  const lower = content.toLowerCase();
+  const places: string[] = [];
+  let from = 0;
+
+  while (places.length < MAX_PAGE_PLACES) {
+    const at = lower.indexOf(words, from);
+
+    if (at === -1) {
+      break;
+    }
+
+    const start = Math.max(0, at - PAGE_CONTEXT);
+    const end = Math.min(content.length, at + words.length + PAGE_CONTEXT);
+
+    places.push(`…${content.slice(start, end)}…`);
+    from = end;
+  }
+
+  return places.length
+    ? places.join('\n\n')
+    : `The words are not on the page. It starts:\n${content.slice(0, PAGE_CONTEXT * 2)}`;
 }
 
 function cut(text: string): string {

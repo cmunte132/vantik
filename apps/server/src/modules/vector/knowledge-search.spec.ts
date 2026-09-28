@@ -30,7 +30,9 @@ const WORKSPACE = '00000000-0000-0000-0000-000000000001';
 function parseFilter(expression: string): Predicate {
   let at = 0;
   const skip = () => {
-    while (expression[at] === ' ') at++;
+    while (expression[at] === ' ') {
+      at++;
+    }
   };
   const take = (token: string) => {
     skip();
@@ -49,28 +51,42 @@ function parseFilter(expression: string): Predicate {
       return value;
     }
     const match = /^[\w.-]+/.exec(expression.slice(at));
-    if (!match) throw new Error(`Unreadable value at ${at}: ${expression}`);
+    if (!match) {
+      throw new Error(`Unreadable value at ${at}: ${expression}`);
+    }
     at += match[0].length;
     return match[0];
   };
   const values = (): string[] => {
-    if (!take('[')) return [scalar()];
+    if (!take('[')) {
+      return [scalar()];
+    }
     const list = [scalar()];
-    while (take(',')) list.push(scalar());
-    if (!take(']')) throw new Error(`Unclosed list: ${expression}`);
+    while (take(',')) {
+      list.push(scalar());
+    }
+    if (!take(']')) {
+      throw new Error(`Unclosed list: ${expression}`);
+    }
     return list;
   };
   const atom = (): Predicate => {
     if (take('(')) {
       const inner = or();
-      if (!take(')')) throw new Error(`Unclosed group: ${expression}`);
+      if (!take(')')) {
+        throw new Error(`Unclosed group: ${expression}`);
+      }
       return inner;
     }
     skip();
     const field = /^\w+/.exec(expression.slice(at))?.[0];
-    if (!field) throw new Error(`No field at ${at}: ${expression}`);
+    if (!field) {
+      throw new Error(`No field at ${at}: ${expression}`);
+    }
     at += field.length;
-    if (!take(':')) throw new Error(`No colon after ${field}`);
+    if (!take(':')) {
+      throw new Error(`No colon after ${field}`);
+    }
     take('=');
     const wanted = values();
     return (doc) => {
@@ -81,19 +97,24 @@ function parseFilter(expression: string): Predicate {
   };
   const and = (): Predicate => {
     const parts = [atom()];
-    while (take('&&')) parts.push(atom());
+    while (take('&&')) {
+      parts.push(atom());
+    }
     return (doc) => parts.every((part) => part(doc));
   };
   const or = (): Predicate => {
     const parts = [and()];
-    while (take('||')) parts.push(and());
+    while (take('||')) {
+      parts.push(and());
+    }
     return (doc) => parts.some((part) => part(doc));
   };
 
   const predicate = or();
   skip();
-  if (at !== expression.length)
+  if (at !== expression.length) {
     throw new Error(`Trailing input: ${expression}`);
+  }
   return predicate;
 }
 
@@ -103,8 +124,12 @@ function splitTop(text: string): string[] {
   let depth = 0;
   let start = 0;
   for (let i = 0; i < text.length; i++) {
-    if ('([{'.includes(text[i])) depth++;
-    if (')]}'.includes(text[i])) depth--;
+    if ('([{'.includes(text[i])) {
+      depth++;
+    }
+    if (')]}'.includes(text[i])) {
+      depth--;
+    }
     if (text[i] === ',' && depth === 0) {
       parts.push(text.slice(start, i));
       start = i + 1;
@@ -184,7 +209,9 @@ function fakeIndex(
         const order = (a: Doc, b: Doc) => {
           for (const key of keys) {
             const difference = key(b) - key(a);
-            if (difference !== 0) return difference;
+            if (difference !== 0) {
+              return difference;
+            }
           }
           return 0;
         };
@@ -225,7 +252,9 @@ function fakeIndex(
         const groups = new Map<unknown, Doc[]>();
         for (const doc of ranked) {
           const group = groups.get(doc.pageId) ?? [];
-          if (group.length < Number(search.group_limit)) group.push(doc);
+          if (group.length < Number(search.group_limit)) {
+            group.push(doc);
+          }
           groups.set(doc.pageId, group);
         }
 
@@ -551,7 +580,11 @@ describe('ranking by trust', () => {
         pageId: `page-${id}`,
         moduleIds: [],
         kind: PageEntryKindEnum.FACT,
-        citations: checks.map((checkResult) => ({ checkResult })),
+        citations: checks.map((checkResult) => ({
+          kind: 'CODE',
+          checkResult,
+          checkedAt: null as Date | null,
+        })),
         page: { title: 'Deploys', workspaceId: WORKSPACE },
         ...extra,
       });

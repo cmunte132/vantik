@@ -60,8 +60,8 @@ const toIdArray = ({ value }: { value: unknown }) =>
 
 /**
  * One citation, as a writer gives it. Exactly one kind of target per citation:
- * a file (`path`, with `lines`), or an `issue`, `pullRequest`, `comment` or
- * `run`. The server works out which from what is present, and refuses a
+ * a file (`path`, with `lines`), an `issue`, `pullRequest`, `comment` or
+ * `run`, or an outside page (`url`, with `quote`). The server works out which from what is present, and refuses a
  * citation that names none or more than one.
  */
 export class PageEntryCitationInputDto {
@@ -96,8 +96,9 @@ export class PageEntryCitationInputDto {
   repo?: string;
 
   /**
-   * Text the writer expects within the cited lines. Checked, never stored: the
-   * snippet kept is the one the server read.
+   * Text the writer expects within the cited lines, or on the cited page.
+   * Checked, never stored: the snippet kept is the one the server read. A
+   * `url` citation must have a quote.
    */
   @IsOptional()
   @IsString()
@@ -125,6 +126,15 @@ export class PageEntryCitationInputDto {
   @IsOptional()
   @IsUUID()
   run?: string;
+
+  /**
+   * A public https page, for a fact about an outside service. The server
+   * reads the page and finds the `quote` in it.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  url?: string;
 }
 
 /** The most citations one entry may carry: one claim needs few. */

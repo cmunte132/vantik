@@ -8,6 +8,8 @@ import {
   ServedCitation,
 } from '@vantikhq/types';
 
+import { OBSERVED_RECHECK_MS } from './outside-source';
+
 /**
  * What an item of knowledge is served with: how far it can be trusted, what it
  * rests on, and how long ago that was last looked at.
@@ -72,6 +74,13 @@ const HOLDING: string[] = [
 ];
 
 /**
+ * How long an observation of an outside page counts. The gardener reads the
+ * page again after `OBSERVED_RECHECK_MS`. If the page does not answer for as
+ * long again, the observation is too old to serve as observed.
+ */
+export const OBSERVED_STALE_MS = 2 * OBSERVED_RECHECK_MS;
+
+/**
  * An entry's trust tier.
  *
  * A person's confirmation outranks everything. Otherwise an entry is grounded
@@ -84,12 +93,24 @@ const HOLDING: string[] = [
  * (UNKNOWN) citation never refuses a write or counts as a failed check, but
  * it has not been checked either, so an entry is grounded only once every
  * citation it has has been read and holds.
+ *
+ * An entry that rests on an outside page, and whose citations all hold, is
+ * observed and not grounded: the server read the page on a date, and a page
+ * can change with no commit to show it. An observation older than
+ * `OBSERVED_STALE_MS` does not hold.
  */
-export function entryTrust(entry: {
-  status: string;
-  verifiedAt: Date | null;
-  citations?: Array<{ checkResult: string | null }> | null;
-}): KnowledgeTrustEnum {
+export function entryTrust(
+  entry: {
+    status: string;
+    verifiedAt: Date | null;
+    citations?: Array<{
+      kind: string;
+      checkResult: string | null;
+      checkedAt: Date | null;
+    }> | null;
+  },
+  now: Date = new Date(),
+): KnowledgeTrustEnum {
   if (entry.verifiedAt) {
     return KnowledgeTrustEnum.HUMAN_VERIFIED;
   }
@@ -97,14 +118,28 @@ export function entryTrust(entry: {
   const citations = entry.citations ?? [];
 
   if (
-    ACCEPTED.includes(entry.status) &&
-    citations.length > 0 &&
-    citations.every((citation) => HOLDING.includes(citation.checkResult ?? ''))
+    !ACCEPTED.includes(entry.status) ||
+    citations.length === 0 ||
+    !citations.every((citation) => HOLDING.includes(citation.checkResult ?? ''))
   ) {
+    return KnowledgeTrustEnum.UNGROUNDED;
+  }
+
+  const pages = citations.filter(
+    (citation) => citation.kind === PageEntryCitationKindEnum.URL,
+  );
+
+  if (pages.length === 0) {
     return KnowledgeTrustEnum.GROUNDED;
   }
 
-  return KnowledgeTrustEnum.UNGROUNDED;
+  return pages.every(
+    (citation) =>
+      citation.checkedAt &&
+      now.getTime() - citation.checkedAt.getTime() <= OBSERVED_STALE_MS,
+  )
+    ? KnowledgeTrustEnum.OBSERVED
+    : KnowledgeTrustEnum.UNGROUNDED;
 }
 
 export function servedCitation(row: ProofCitationRow): ServedCitation {
@@ -177,6 +212,7 @@ export function pageBodyProof(): KnowledgeProof {
 const TRUST_WORDS: Record<KnowledgeTrustEnum, string> = {
   [KnowledgeTrustEnum.HUMAN_VERIFIED]: 'verified by a person',
   [KnowledgeTrustEnum.GROUNDED]: 'grounded',
+  [KnowledgeTrustEnum.OBSERVED]: 'observed',
   [KnowledgeTrustEnum.UNGROUNDED]: 'ungrounded',
 };
 
@@ -196,7 +232,13 @@ export function describeProof(proof: KnowledgeProof): string {
             citation.kind === PageEntryCitationKindEnum.CODE
               ? `${citation.repo ? `${citation.repo}:` : ''}${citation.path}` +
                 `${citation.lines ? `:${citation.lines}` : ''}`
-              : `${citation.kind.toLowerCase().replace('_', ' ')} ${citation.target}`;
+              : citation.kind === PageEntryCitationKindEnum.URL
+                ? `page ${citation.target}${
+                    citation.checkedAt
+                      ? `, read ${citation.checkedAt.slice(0, 10)}`
+                      : ''
+                  }`
+                : `${citation.kind.toLowerCase().replace('_', ' ')} ${citation.target}`;
 
           return `${what} (${(citation.result ?? 'unchecked').toLowerCase()})`;
         })

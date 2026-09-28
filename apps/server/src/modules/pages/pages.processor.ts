@@ -439,8 +439,9 @@ export class PagesProcessor {
 
   /**
    * Checks an entry's citations again after a run it was served to went wrong
-   * in code it speaks about. A convention the gardener proposed has its
-   * outcomes weighed first, since outcomes are what take one out of use.
+   * in code it speaks about, or when the outside page it cites is due for a
+   * new read. A convention the gardener proposed has its outcomes weighed
+   * first, since outcomes are what take one out of use.
    */
   @Process(RECHECK_ENTRY_JOB)
   async handleRecheckEntry(job: { data: { entryId: string } }) {
@@ -467,7 +468,7 @@ export class PagesProcessor {
     }
 
     this.logger.info({
-      message: `Checked ${checked} citation(s) of entry ${job.data.entryId} after a harmful signal`,
+      message: `Checked ${checked} citation(s) of entry ${job.data.entryId}`,
       where: 'PagesProcessor.handleRecheckEntry',
     });
 
@@ -563,6 +564,7 @@ export class PagesProcessor {
     let proposedVerified: number;
     let owedIssues: number;
     let verified: number;
+    let observed: number;
 
     try {
       ({ expiredProposed, archivedStanding } =
@@ -574,6 +576,9 @@ export class PagesProcessor {
       owedIssues = await this.upkeep.openOwedIssues();
       // Entries that wait as UNGROUNDED with no look by the verifier.
       verified = (await this.verifier?.sweep()) ?? 0;
+      // Facts observed on an outside page that the server last read over
+      // 30 days ago.
+      observed = await this.entryCitations.recheckObservedLater();
     } catch (error) {
       // Said out loud, because the alternative is silence. The only other
       // signal this pass gives is the line below, and "no line" reads exactly
@@ -593,8 +598,9 @@ export class PagesProcessor {
         `Knowledge decay archived ${expiredProposed} untriaged and ` +
         `${archivedStanding} unused standing entr(ies), asked a person ` +
         `about ${proposedVerified} unused verified entr(ies), opened ` +
-        `${owedIssues} owed correction issue(s), and asked the verifier ` +
-        `about ${verified} entr(ies)`,
+        `${owedIssues} owed correction issue(s), asked the verifier ` +
+        `about ${verified} entr(ies), and queued a new read of the outside ` +
+        `pages of ${observed} observed entr(ies)`,
       where: 'PagesProcessor.handleDecay',
     });
   }

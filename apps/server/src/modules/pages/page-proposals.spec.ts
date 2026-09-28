@@ -493,24 +493,65 @@ describe('consolidating entries into a page people write', () => {
     expect(t.status('e2')).toBe(PageEntryStatusEnum.STANDING);
     expect(t.status('e3')).toBe(PageEntryStatusEnum.SUPERSEDED);
     expect(t.status('e-old')).toBe(PageEntryStatusEnum.CONSOLIDATED);
+    // It records which it put back, so undoing it knows what to fold back.
     expect(t.history[1]).toMatchObject({
       changes: {
         body: true,
         revertedTo: { to: 'history-1' },
-        unconsolidated: { to: 2 },
+        unconsolidated: { to: 2, entryIds: ['e1', 'e2'] },
       },
       previousBody: t.proposals[0].body,
     });
     expect(t.indexer.entriesChanged).toHaveBeenCalledWith(['e1', 'e2', 'e3']);
+  });
 
-    // Reverting the revert is an edit to the body alone.
+  it('[KG-7.4] undoing that revert folds the entries still standing back in, so no fact is served twice', async () => {
+    const t = setup();
+    const proposal = await proposed(t);
+    await t.service.acceptProposal(PAGE, proposal.id, 'person-1');
+    await t.service.revertBody(PAGE, 'history-1', 'person-2');
+    // Meanwhile a person set one of them aside: it stays aside.
+    t.entries.find((row) => row.id === 'e2')!.status =
+      PageEntryStatusEnum.DISPUTED;
+    t.indexer.entriesChanged.mockClear();
+
+    // The body that says them comes back, and with it their place as its
+    // evidence: consolidated, cited, ranked below the page.
     await t.service.revertBody(PAGE, 'history-2', 'person-2');
     expect(t.page().description).toBe(t.proposals[0].body);
-    expect(t.status('e1')).toBe(PageEntryStatusEnum.STANDING);
-    expect(t.page().citedEntryIds).toEqual(['e-old']);
+    expect(t.status('e1')).toBe(PageEntryStatusEnum.CONSOLIDATED);
+    expect(t.status('e3')).toBe(PageEntryStatusEnum.CONSOLIDATED);
+    expect(t.status('e2')).toBe(PageEntryStatusEnum.DISPUTED);
+    expect(t.page().citedEntryIds).toEqual(['e-old', 'e1', 'e3']);
     expect(t.history[2].changes).toEqual({
       body: true,
       revertedTo: { to: 'history-2' },
+      reconsolidated: { to: 2, entryIds: ['e1', 'e3'] },
+    });
+    expect(t.indexer.entriesChanged).toHaveBeenCalledWith(['e1', 'e3']);
+
+    // And undoing that takes them out again.
+    await t.service.revertBody(PAGE, 'history-3', 'person-2');
+    expect(t.page().description).toBe(BEFORE);
+    expect(t.status('e1')).toBe(PageEntryStatusEnum.STANDING);
+    expect(t.status('e3')).toBe(PageEntryStatusEnum.STANDING);
+    expect(t.page().citedEntryIds).toEqual(['e-old']);
+    expect(t.history[3].changes).toEqual({
+      body: true,
+      revertedTo: { to: 'history-3' },
+      unconsolidated: { to: 2, entryIds: ['e1', 'e3'] },
+    });
+
+    // A revert of an edit that folded nothing moves no entry.
+    await t.service.updatePage(PAGE, 'person-2', {
+      descriptionMarkdown: 'Edited by hand.',
+    });
+    const edit = t.history[t.history.length - 1];
+    await t.service.revertBody(PAGE, edit.id as string, 'person-2');
+    expect(t.status('e1')).toBe(PageEntryStatusEnum.STANDING);
+    expect(t.history[t.history.length - 1].changes).toEqual({
+      body: true,
+      revertedTo: { to: edit.id },
     });
   });
 

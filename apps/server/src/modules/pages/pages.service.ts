@@ -959,7 +959,8 @@ export default class PagesService {
    * Reverting the acceptance of a consolidation undoes it: the entries it
    * folded in, where still CONSOLIDATED, are put back in use as standing
    * entries and are no longer cited by the page, whose body no longer says
-   * them.
+   * them. The revert records which, so undoing it folds back those still
+   * standing, and undoing that takes them out again.
    */
   async revertBody(
     pageId: string,
@@ -1003,10 +1004,28 @@ export default class PagesService {
     // would edit sections the body no longer shows. What it cites follows.
     const generated = current.kind === PageKindEnum.GENERATED;
     const sections = generated ? readSections(revision.previousSections) : [];
-    const unfolded = generated ? [] : await this.acceptedEntries(revision);
-    const folded = new Set(unfolded);
+    // An authored page's body and the entries folded into it go back
+    // together: taking out a body that says them puts them back in use, and
+    // restoring one folds back those still standing, so a fact is never
+    // served twice, once in the body and once beside it.
+    const folding = generated
+      ? { unfold: [], refold: [] }
+      : await this.foldingUndone(revision);
+    const [unfolded, refolded] = await Promise.all([
+      this.entriesIn(pageId, folding.unfold, PageEntryStatusEnum.CONSOLIDATED),
+      this.entriesIn(pageId, folding.refold, PageEntryStatusEnum.STANDING),
+    ]);
+    // The body going back no longer says any entry the change folded in,
+    // whether or not it is still consolidated to put back in use.
+    const out = new Set(folding.unfold);
+    const citedEntryIds = [
+      ...new Set([
+        ...current.citedEntryIds.filter((id) => !out.has(id)),
+        ...refolded,
+      ]),
+    ];
 
-    const [page, restored] = await this.prisma.$transaction([
+    const [page] = await this.prisma.$transaction([
       this.prisma.page.update({
         where: { id: pageId },
         data: {
@@ -1016,12 +1035,8 @@ export default class PagesService {
                 sections: sections as unknown as Prisma.InputJsonValue,
                 citedEntryIds: citedBy(sections),
               }
-            : folded.size
-              ? {
-                  citedEntryIds: current.citedEntryIds.filter(
-                    (id) => !folded.has(id),
-                  ),
-                }
+            : out.size || refolded.length
+              ? { citedEntryIds }
               : {}),
           updatedById: userId,
         },
@@ -1035,6 +1050,15 @@ export default class PagesService {
         },
         data: { status: PageEntryStatusEnum.STANDING },
       }),
+      this.prisma.pageEntry.updateMany({
+        where: {
+          id: { in: refolded },
+          pageId,
+          deleted: null,
+          status: PageEntryStatusEnum.STANDING,
+        },
+        data: { status: PageEntryStatusEnum.CONSOLIDATED },
+      }),
     ]);
 
     await this.recordHistory(
@@ -1043,40 +1067,81 @@ export default class PagesService {
       {
         body: true,
         revertedTo: { to: historyId },
-        ...(restored.count ? { unconsolidated: { to: restored.count } } : {}),
+        ...(unfolded.length
+          ? { unconsolidated: { to: unfolded.length, entryIds: unfolded } }
+          : {}),
+        ...(refolded.length
+          ? { reconsolidated: { to: refolded.length, entryIds: refolded } }
+          : {}),
       },
       current.description,
       generated ? current.sections : undefined,
     );
     await this.indexer?.pageChanged(pageId);
 
-    if (unfolded.length) {
-      await this.indexer?.entriesChanged(unfolded);
+    const concerned = [...new Set([...folding.unfold, ...refolded])];
+
+    if (concerned.length) {
+      await this.indexer?.entriesChanged(concerned);
     }
 
     return this.withMarkdown(page);
   }
 
-  /** The entries an accepted consolidation, recorded as this change, folded in. */
-  private async acceptedEntries(revision: {
+  /**
+   * What reverting this change does to the entries folded into the page:
+   * the ones to take out of the body (an acceptance, or a revert that folded
+   * them back) and the ones to fold back in (a revert that took them out).
+   */
+  private async foldingUndone(revision: {
     changes: Prisma.JsonValue;
-  }): Promise<string[]> {
+  }): Promise<{ unfold: string[]; refold: string[] }> {
     const changes = revision.changes as {
       proposal?: { to?: unknown };
+      unconsolidated?: { entryIds?: unknown };
+      reconsolidated?: { entryIds?: unknown };
     } | null;
+    const ids = (value: unknown): string[] =>
+      Array.isArray(value)
+        ? value.filter((id): id is string => typeof id === 'string')
+        : [];
     const proposalId = changes?.proposal?.to;
 
-    if (typeof proposalId !== 'string') {
+    if (typeof proposalId === 'string') {
+      // Only accepting writes a change naming its proposal.
+      const proposal = await this.prisma.pageProposal.findFirst({
+        where: { id: proposalId },
+        select: { entryIds: true },
+      });
+
+      return { unfold: proposal?.entryIds ?? [], refold: [] };
+    }
+
+    // A revert that took entries out folded them back when it is undone,
+    // and one that folded them back takes them out again.
+    return {
+      unfold: ids(changes?.reconsolidated?.entryIds),
+      refold: ids(changes?.unconsolidated?.entryIds),
+    };
+  }
+
+  /** Which of `ids` are on the page, not deleted, and in `status`. */
+  private async entriesIn(
+    pageId: string,
+    ids: string[],
+    status: PageEntryStatusEnum,
+  ): Promise<string[]> {
+    if (ids.length === 0) {
       return [];
     }
 
-    // Only accepting writes a change naming its proposal.
-    const proposal = await this.prisma.pageProposal.findFirst({
-      where: { id: proposalId },
-      select: { entryIds: true },
+    const rows = await this.prisma.pageEntry.findMany({
+      where: { id: { in: ids }, pageId, deleted: null, status },
+      select: { id: true },
     });
+    const found = new Set(rows.map((row) => row.id));
 
-    return proposal?.entryIds ?? [];
+    return ids.filter((id) => found.has(id));
   }
 
   // --------------------------------------------------------------- internals

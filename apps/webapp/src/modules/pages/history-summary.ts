@@ -7,12 +7,16 @@ export function summarize(changes: Record<string, unknown>): string {
   }
 
   if (changes.revertedTo) {
-    // Reverting an accepted consolidation puts its notes back in use.
+    // Reverting an accepted consolidation puts its notes back in use, and
+    // undoing that writes them back into the page.
     const unfolded = changes.unconsolidated as { to: number } | undefined;
+    const refolded = changes.reconsolidated as { to: number } | undefined;
 
     return unfolded
       ? `Restored an earlier version, and put ${notes(unfolded.to)} back in use`
-      : 'Restored an earlier version';
+      : refolded
+        ? `Restored an earlier version, and wrote ${notes(refolded.to)} back into the page`
+        : 'Restored an earlier version';
   }
 
   if (changes.consolidated) {

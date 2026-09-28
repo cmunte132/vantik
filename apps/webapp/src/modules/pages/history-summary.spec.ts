@@ -19,6 +19,13 @@ describe('a change to a page, in words', () => {
         unconsolidated: { to: 1 },
       }),
     ).toBe('Restored an earlier version, and put 1 note back in use');
+    expect(
+      summarize({
+        body: true,
+        revertedTo: { to: 'history-2' },
+        reconsolidated: { to: 2, entryIds: ['e1', 'e2'] },
+      }),
+    ).toBe('Restored an earlier version, and wrote 2 notes back into the page');
     expect(summarize({ body: true, revertedTo: { to: 'history-2' } })).toBe(
       'Restored an earlier version',
     );

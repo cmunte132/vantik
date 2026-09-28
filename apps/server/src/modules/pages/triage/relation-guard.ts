@@ -1,12 +1,16 @@
 /**
- * Whether two entries differ in a way that makes them different facts,
- * whatever a model would say about them.
+ * This function tells if two entries differ in a way that prevents a
+ * duplicate, whatever a model says about them.
  *
  * "The cache holds sessions for 30 minutes" and "… for 60 minutes" read as
- * near duplicates to an embedding and often to a model too, and treating them
- * as one loses the only part that mattered. So a difference in a number, a
- * date, a negation or a condition decides the pair is DISTINCT in code, before
- * any model is asked. When unsure, both are kept.
+ * near duplicates to an embedding, and often to a model too. If triage folds
+ * one into the other, it loses the only part that is important. So a
+ * difference in a number, a date, a negation or a condition stops triage from
+ * calling the pair a duplicate.
+ *
+ * The difference does not make the pair unrelated. A correction and a
+ * contradiction usually differ in exactly these words. The judges still
+ * decide if one entry contradicts, replaces or refines the other.
  */
 
 // "May" is left out: it is far more often the verb, and a date in May

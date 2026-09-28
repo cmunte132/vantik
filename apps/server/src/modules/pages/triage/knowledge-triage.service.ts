@@ -350,21 +350,23 @@ export default class KnowledgeTriageService {
     };
 
     for (const neighbour of neighbours) {
+      // A different number, date, negation or condition prevents a
+      // duplicate: the rule never lets one entry fold into the other. It does
+      // not make the pair unrelated. A correction and a contradiction differ
+      // in exactly these words, so the judges still decide if the pair
+      // contradicts, replaces or refines.
       const difference = factualDifference(entry.content, neighbour.content);
-
-      // A different number, date, negation or condition is a different
-      // fact, whatever a model would make of it.
-      if (difference) {
-        Object.assign(neighbour, {
-          relation: PageEntryRelationType.DISTINCT,
-          decidedBy: PageEntryRelationDecider.RULE,
-          reason: difference,
-        });
-        continue;
-      }
 
       if (!this.judges.available()) {
         reasons.add(KnowledgeEscalationReason.NO_LLM);
+
+        if (difference) {
+          Object.assign(neighbour, {
+            relation: PageEntryRelationType.DISTINCT,
+            decidedBy: PageEntryRelationDecider.RULE,
+            reason: difference,
+          });
+        }
         continue;
       }
 
@@ -397,6 +399,18 @@ export default class KnowledgeTriageService {
             first.readable && second.readable
               ? `the judges disagreed: ${first.type.toLowerCase()} and ${second.type.toLowerCase()}`
               : 'a judge gave no answer that could be read',
+        });
+        continue;
+      }
+
+      // The judges agree that the two say the same thing, but the rule found
+      // a difference. The rule wins, and the triage keeps both entries.
+      if (difference && first.type === PageEntryRelationType.DUPLICATE) {
+        Object.assign(neighbour, {
+          relation: PageEntryRelationType.DISTINCT,
+          decidedBy: PageEntryRelationDecider.RULE,
+          models: asked,
+          reason: `the judges said duplicate, but ${difference}`,
         });
         continue;
       }

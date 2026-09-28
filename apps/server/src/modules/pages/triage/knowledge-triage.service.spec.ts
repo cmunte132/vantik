@@ -1062,7 +1062,7 @@ describe('near neighbours', () => {
       'The cache is flushed only on deploy.',
     ],
   ])(
-    '[KG-4.2] keeps two entries that differ in %s as distinct, without asking a model',
+    '[KG-4.2] keeps two entries that differ in %s as distinct when the judges call them duplicates',
     async (_what, before, after) => {
       const t = triage({
         rows: [
@@ -1082,13 +1082,38 @@ describe('near neighbours', () => {
           decidedBy: Decider.RULE,
         }),
       ]);
+      // The judges were asked, and the rule overruled their duplicate.
       expect(
         t.calls.filter((call) => call.system.includes('NEWER claim')),
-      ).toEqual([]);
+      ).toHaveLength(2);
       // Nothing was folded into the neighbour.
       expect(t.entries.get('neighbour')?.corroborationCount).toBe(0);
     },
   );
+
+  it('[KG-4.2] lets the judges find a contradiction in two entries that differ in a number', async () => {
+    const t = triage({
+      rows: [
+        existing('neighbour', {
+          content: 'Sessions expire after 30 minutes.',
+        }),
+        fresh({ content: 'Sessions expire after 60 minutes.' }),
+      ],
+      near: [{ entryId: 'neighbour', similarity: 0.97 }],
+      pair: () => agreed('contradicts'),
+    });
+
+    await t.service.triage('new', ON);
+
+    expect(t.relations).toEqual([
+      expect.objectContaining({
+        toId: 'neighbour',
+        type: Relation.CONTRADICTS,
+        decidedBy: Decider.MODEL,
+      }),
+    ]);
+    expect(t.entries.get('neighbour')?.corroborationCount).toBe(0);
+  });
 
   it.each([
     [

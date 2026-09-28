@@ -221,8 +221,8 @@ that changes that directory deploys the documentation to GitHub Pages at
 deploys with GitHub Actions, so GitHub ignores `apps/docs/static/CNAME`. The
 custom domain is a setting in the repository: Settings, then Pages.
 
-The marketing site is in `apps/landing`, and it uses Astro. Cloudflare Pages
-builds it and serves it at `https://vantik.dev`. The file
+The marketing site is in `apps/landing`, and it uses Astro. A Cloudflare Worker
+serves its build output at `https://vantik.dev`. See `apps/landing/wrangler.jsonc`. The file
 `apps/landing/public/_redirects` sends the old `vantik.dev/docs/...` addresses
 to the documentation site.
 

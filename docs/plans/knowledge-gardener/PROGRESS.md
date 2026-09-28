@@ -5,12 +5,11 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 7, in progress. KG-7.1 to KG-7.6 are implemented and
-  mutation-checked. The phase 7 review's round 1 failed with three
-  blocking and eight non-blocking findings (F1-F11), round 2 with two
-  non-blocking ones (F12, F13); all are fixed with tagged,
-  mutation-checked tests (see "Phase 7, round 1" and "round 2" below);
-  round 3 is next.
+- Phases 4 to 7 are done. Phase 7: KG-7.1 to KG-7.6 implemented and
+  mutation-checked, and its review passed after three rounds with no
+  finding left (see "Phase 7 review: PASS" below); round 1 found three
+  blocking and eight non-blocking findings (F1-F11), round 2 two
+  non-blocking (F12, F13), all fixed with tagged, mutation-checked tests.
   Phase 6 is done: KG-6.1 to KG-6.5 implemented and mutation-checked, and
   its review passed after eight rounds with no finding left (see "Phase 6
   review: PASS" below). PR #45 is open from this branch, so the phase 6
@@ -20,8 +19,9 @@ next session starts by reading it.
   phase 2 and phase 3. PR #45 was opened for phases 4 and 5; it is still
   open from this branch, so it carries phases 6 and 7 as well, and its
   title and description are to say so once phase 7's review passes.
-- Last verify: phases 0-7, 57/58, every criterion but KG-7.R (the review)
-  passing (server 1944, agent-core 71, cli 13, webapp 655; typecheck ok).
+- Last verify: phases 0-7, every criterion passing once the phase 7
+  review's PASS is recorded (server 1948, agent-core 71, cli 13, webapp
+  655; typecheck ok); the final run is in the log below.
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
   (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
@@ -2359,6 +2359,45 @@ without the time, or keyed by the page before the change; pinned, weighed
 and deduped conventions standing only; a consolidated convention archived
 alone). Full server suite: 1933 passed, 15 skipped.
 
+### Phase 7, round 3 (same reviewer, on the round 2 fixes)
+
+The reviewer read 7a1c6f0..30ceafc, ran the verify through phase 7
+(57/58, only KG-7.R failing; server 1948, agent-core 71, cli 13, webapp
+655; typecheck ok), and found F12 and F13 resolved. F12: `asked` is the
+stored row's own `updatedAt` on both paths; two jobs for one page are
+safe (the later one reads the latest question, and the write is
+conditional on `updatedAt`, so an overlap ends `raced` and a later one
+`too-soon`); the test models Bull's rule. F13: pinning, weighing and the
+candidate dedupe read the statuses in use; accepting the harm proposal
+about a consolidated convention archives it (CONSOLIDATED to ARCHIVED is
+allowed); the archive without a person still matches STANDING only,
+which is consistent. The reviewer checked every STANDING-only read left
+in the server and agreed with each. Verdict PASS, no findings.
+
+Checked by the reviewer and not counted as a finding: with the hourly
+look off (not the default), a build that is running when a person
+renames, moves or reorders the page, or changes its entry policy, ends
+`raced` and is not queued again; the page is then built at its next
+question change. The webapp does not edit the question.
+
+Phase 7 review: PASS - three rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-7 criteria: pages are authored or
+generated, a generated page answers a question with sections that each
+cite the entries they were written from, shown to agents (`read_page`, the
+CLI) and people (the webapp); it is rebuilt only when an entry in its
+scope changed and no sooner than the minimum interval, or once due after a
+new question, which is a new page, each such build a job of its own; a
+refresh reads every entry of its scope the index finds and applies section
+edits in code, rewriting or removing only sections whose evidence changed;
+every refresh is recorded and undone by the revert; consolidation of an
+authored page is a proposal a person accepts over the page as it was
+checked, its entries stay served as evidence below the page, re-checked,
+correctable, compared with new entries, pinned and weighed when
+conventions, put back in the index once at boot, and folded back in when
+a revert of the acceptance is undone; only a person takes a generated page
+over; the knowledge page documents every setting. Every finding (F1-F13)
+fixed with a tagged, mutation-checked test.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
@@ -2666,3 +2705,7 @@ Give the evidence, and stop until the maintainer answers.
   tests: a refresh job per request, so a held job never swallows a
   question change's build; consolidated conventions pinned and weighed as
   standing ones. 6 mutants, all killed.
+- 2026-09-28: Phase 7 review round 3: PASS, no findings. Phase 7 review:
+  PASS. Phases 4-7 done. Verify through phase 7: PASS, 58/58 (server
+  1948, agent-core 71, cli 13, webapp 655; typecheck ok; spec-hash
+  8409159da053).

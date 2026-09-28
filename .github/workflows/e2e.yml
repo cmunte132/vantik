@@ -28,11 +28,11 @@ permissions:
   contents: read
 
 env:
-  # docker-compose.yaml names its images ${REGISTRY}/vantik-<app>:${VERSION}.
+  # docker-compose.yaml names its images ${REGISTRY}/vantik-<app>:${VANTIK_IMAGE_TAG}.
   # The images are built under exactly that name below, so `compose up` finds
   # them locally and neither pulls a release nor rebuilds without the cache.
   REGISTRY: vantik-e2e
-  VERSION: ci
+  VANTIK_IMAGE_TAG: ci
   COMPOSE: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml
 
 jobs:
@@ -66,7 +66,7 @@ jobs:
         with:
           context: .
           file: apps/server/Dockerfile
-          tags: ${{ env.REGISTRY }}/vantik-server:${{ env.VERSION }}
+          tags: ${{ env.REGISTRY }}/vantik-server:${{ env.VANTIK_IMAGE_TAG }}
           load: true
           cache-from: type=gha,scope=e2e-server
           cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=e2e-server' || '' }}
@@ -76,7 +76,7 @@ jobs:
         with:
           context: .
           file: apps/webapp/Dockerfile
-          tags: ${{ env.REGISTRY }}/vantik-webapp:${{ env.VERSION }}
+          tags: ${{ env.REGISTRY }}/vantik-webapp:${{ env.VANTIK_IMAGE_TAG }}
           load: true
           build-args: |
             VANTIK_COMMIT=${{ github.sha }}

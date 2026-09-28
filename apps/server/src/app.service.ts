@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
+import { VANTIK_VERSION } from 'common/version';
+
 export interface ServerInfo {
   name: string;
   version: string;
@@ -11,7 +13,7 @@ export class AppService {
   getInfo(): ServerInfo {
     return {
       name: 'vantik-server',
-      version: process.env.VERSION ?? 'unknown',
+      version: VANTIK_VERSION,
       status: 'ok',
     };
   }

@@ -1,3 +1,5 @@
+import { VANTIK_VERSION } from './version';
+
 /**
  * This server image's build stamp.
  *
@@ -7,10 +9,7 @@
  * neither read nor enforced anywhere on this side.
  *
  * Resolution mirrors apps/webapp/build-id.js — the explicit stamp first, then
- * the version that self-hosted installs already set in .env.
+ * the release version from package.json.
  */
 export const SERVER_BUILD =
-  process.env.VANTIK_BUILD_ID ||
-  process.env.VANTIK_COMMIT ||
-  process.env.VERSION ||
-  'unknown';
+  process.env.VANTIK_BUILD_ID || process.env.VANTIK_COMMIT || VANTIK_VERSION;

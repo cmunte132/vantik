@@ -18,7 +18,8 @@
     "migrate": "dotenv -- turbo run migrate --filter=server",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "e2e": "pnpm --filter @vantikhq/e2e e2e"
+    "e2e": "pnpm --filter @vantikhq/e2e e2e",
+    "release": "node scripts/release.mjs"
   },
   "packageManager": "pnpm@10.34.5",
   "pnpm": {

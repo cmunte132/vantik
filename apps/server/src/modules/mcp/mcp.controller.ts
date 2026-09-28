@@ -18,6 +18,7 @@ import {
 import { Request, Response } from 'express';
 
 import { bearerToken } from 'common/pat-session';
+import { VANTIK_VERSION } from 'common/version';
 
 import { SkipAgentScope } from 'modules/auth/agent-scope';
 import { AuthGuard } from 'modules/auth/auth.guard';
@@ -32,7 +33,7 @@ import { registerHookTools } from './mcp.hook-tools';
 import { MCP_INSTRUCTIONS } from './mcp.instructions';
 import { registerVantikTools } from './mcp.tools';
 
-const SERVER_INFO = { name: 'vantik', version: '0.1.0' };
+const SERVER_INFO = { name: 'vantik', version: VANTIK_VERSION };
 
 /**
  * Streamable HTTP MCP endpoint.

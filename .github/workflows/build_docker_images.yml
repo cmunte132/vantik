@@ -19,8 +19,28 @@ on:
   workflow_dispatch:
 
 jobs:
+  # A release tag is made by `pnpm release`, which writes the same version into
+  # package.json. The running server reports the package.json version, so a tag
+  # that disagrees would publish images that name themselves wrongly.
+  version:
+    name: Tag matches package.json
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compare
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version. Make release tags with pnpm release."
+            exit 1
+          fi
+
   build:
     name: ${{ matrix.app }} (${{ matrix.platform }})
+    needs: [version]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -73,7 +93,7 @@ jobs:
           #
           # VANTIK_COMMIT is what makes the build id deterministic. .git is in
           # .dockerignore, so the build cannot read the commit itself; without
-          # it the id falls through to VERSION plus a timestamp, and every
+          # it the id falls through to the version plus a timestamp, and every
           # rebuild — including a re-run of this workflow on an unchanged
           # commit — moves the chunk namespace and evicts every open client for
           # a bundle that did not change.
@@ -134,11 +154,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # A tag push also moves `latest`, which is what docker-compose.yaml pulls
+      # when VANTIK_IMAGE_TAG is unset. A manual run from a branch does not.
       - name: Create and push manifest list
         working-directory: /tmp/digests
         run: |
-          docker buildx imagetools create \
-            -t "${IMAGE}:${{ github.ref_name }}" \
+          tags=(-t "${IMAGE}:${{ github.ref_name }}")
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            tags+=(-t "${IMAGE}:latest")
+          fi
+          docker buildx imagetools create "${tags[@]}" \
             $(printf "${IMAGE}@sha256:%s " *)
 
       - name: Inspect

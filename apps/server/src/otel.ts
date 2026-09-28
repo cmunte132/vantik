@@ -35,6 +35,8 @@ import {
 } from '@opentelemetry/semantic-conventions';
 import { PrismaInstrumentation } from '@prisma/instrumentation';
 
+import { VANTIK_VERSION } from './common/version';
+
 const SERVICE_NAME = 'vantik-server';
 
 /**
@@ -78,7 +80,7 @@ export function startOtel(): void {
     resource: defaultResource().merge(
       resourceFromAttributes({
         [ATTR_SERVICE_NAME]: SERVICE_NAME,
-        [ATTR_SERVICE_VERSION]: process.env.VERSION ?? 'unknown',
+        [ATTR_SERVICE_VERSION]: VANTIK_VERSION,
         [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]:
           process.env.NODE_ENV ?? 'development',
       }),

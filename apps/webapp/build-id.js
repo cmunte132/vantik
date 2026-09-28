@@ -69,12 +69,12 @@ function resolveBuildStamp() {
   //
   // Note the version tier carries a timestamp and the commit tiers do not. Two
   // builds of the same commit *should* share an id — that is what stops an
-  // unchanged rebuild from evicting open clients. But VERSION is bumped per
+  // unchanged rebuild from evicting open clients. But the version is bumped per
   // release, not per build, so on its own it would give two genuinely different
   // builds the same id, and a colliding id is far worse than a churning one: the
   // client cannot tell it is stale, and its cached chunk URLs now point at
   // different content. Where we cannot identify the source, uniqueness wins.
-  const version = process.env.VERSION || process.env.NEXT_PUBLIC_VERSION;
+  const { version } = require('./package.json');
 
   const buildId =
     process.env.VANTIK_BUILD_ID ||

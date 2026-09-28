@@ -21,9 +21,9 @@ export enum PageEntryPolicyEnum {
 export enum PageEntryStatusEnum {
   /** Awaiting triage. An inbox — never served. */
   PROPOSED = 'PROPOSED',
-  /** True, too granular for prose, worth retrieving. The only served status. */
+  /** True, too granular for prose, worth retrieving. Served. */
   STANDING = 'STANDING',
-  /** Folded into the page body; serving it again would duplicate the fact. */
+  /** Folded into the page body; served as evidence for the page, below it. */
   CONSOLIDATED = 'CONSOLIDATED',
   /** Replaced by a newer entry. Kept for audit, never served. */
   SUPERSEDED = 'SUPERSEDED',
@@ -35,6 +35,43 @@ export enum PageEntryStatusEnum {
 
 export enum PageVisibilityEnum {
   WORKSPACE = 'WORKSPACE',
+}
+
+/**
+ * Who writes a page's body. People write an AUTHORED page, and entries are
+ * folded into it only by a proposal a person accepts. The gardener builds a
+ * GENERATED page from the entries each of its sections cites, and edits it
+ * as those entries change.
+ */
+export enum PageKindEnum {
+  AUTHORED = 'AUTHORED',
+  GENERATED = 'GENERATED',
+}
+
+/** Where a proposed change to a page body stands. */
+export enum PageProposalStateEnum {
+  OPEN = 'OPEN',
+  ACCEPTED = 'ACCEPTED',
+  DECLINED = 'DECLINED',
+}
+
+/**
+ * One section of a generated page. The id is stable: a refresh names the
+ * sections it replaces or removes by it, and every other section is kept
+ * exactly as it was. `entryIds` are the entries it was written from.
+ */
+export interface PageSection {
+  id: string;
+  heading: string;
+  /** Markdown. */
+  body: string;
+  entryIds: string[];
+  /**
+   * A fingerprint of what the section was written from: the page's question
+   * and the entries it cites, as they said it then. A refresh may rewrite or
+   * remove the section only once this no longer matches.
+   */
+  evidence?: string;
 }
 
 /**
@@ -86,11 +123,45 @@ export class Page {
   entryPolicy: PageEntryPolicyEnum;
   visibility: PageVisibilityEnum;
 
+  kind: PageKindEnum;
+  /** The question a generated page answers. */
+  question: string | null;
+  /** A generated page's body as sections; null for an authored page. */
+  sections: PageSection[] | null;
+  /** The entries the page cites, which stay in use as its evidence. */
+  citedEntryIds: string[];
+  /** For a generated page: the newest change in its evidence at the last build. */
+  watermark: Date | null;
+  /** For a generated page: a hash of what its evidence said at the last build. */
+  evidenceHash: string | null;
+  /** For a generated page: when it was last built. */
+  refreshedAt: Date | null;
+
   workspace?: Workspace;
   workspaceId: string;
 
   createdById: string | null;
   updatedById: string | null;
+}
+
+/**
+ * A change to a page body waiting on a person: a consolidation of entries
+ * into a page people maintain, whoever asked for it. A person consolidating
+ * in the webapp accepts their own at once. The body is markdown here, as
+ * every page body the API returns is.
+ */
+export interface PageProposal {
+  id: string;
+  createdAt: string;
+  pageId: string;
+  pageTitle: string;
+  bodyMarkdown: string;
+  /** The entries it folds in, which the page cites once it is accepted. */
+  entryIds: string[];
+  proposedById: string | null;
+  state: PageProposalStateEnum;
+  decidedById: string | null;
+  decidedAt: string | null;
 }
 
 export class PageEntry {

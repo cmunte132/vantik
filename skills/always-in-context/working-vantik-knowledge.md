@@ -49,7 +49,8 @@ stated that is written down nowhere — say which with `kind` (`DECISION`,
 `GOTCHA`, `CONVENTION`, or the default `FACT`). **Not worth remembering:** what you did
 this session (that is a note on the issue), anything already in the page body,
 anything the code says plainly. Never secrets or credentials — the bank is
-readable by every agent in the workspace.
+readable by every agent in the workspace, and a write that looks like it holds
+one is refused.
 
 **Handed an issue or a project, call `pages_for` with it first** — a direct
 lookup of the pages attached to that work, for when you do not yet know what to
@@ -73,18 +74,35 @@ written**: read them, then either supersede one or pass `distinct: true`. Do not
 pass `distinct` without reading them.
 
 **Consolidate** when a page has grown facts that now read as a paragraph:
-`consolidate_knowledge` folds them into the body and stops them being served
-separately, so one fact is not returned twice.
+`consolidate_knowledge` proposes a new body that folds them in. It is a
+proposal, not a change: the page stays as it is until a person accepts it in the
+review queue. Once accepted, the facts are `CONSOLIDATED` and still served, as
+evidence for the page (`evidenceFor` names it), just below it in a search. A
+**generated** page is written by the server from the entries it cites, to
+answer the question it states; it cannot be edited or consolidated, so correct
+it by correcting its entries.
 
 **Limits you will meet**, enforced server-side: ten untriaged entries per page
 per token (the error names the ones in your way — consolidate or supersede them,
 do not find another page to dump into); `LOCKED` pages are readable but not
 appendable by agents. Everything you write lands as proposed and is served to
-nobody until a human accepts it, so write for the reviewer and for the stranger
-after them. Triage is for people: you cannot accept, dispute or verify entries.
+nobody until a person accepts it. Where the workspace has switched triage on,
+the server folds your repeats into what they repeat and rejects what
+breaks policy first; it accepts nothing an agent wrote on its own. People
+audit a sample of what it does alone, and it stops acting alone where they
+keep disagreeing.
+Write for the reviewer and for the stranger after them. Triage is for people: you cannot accept, dispute or verify entries.
 You can reword or archive your own while they are still proposed; correct an
 accepted one by superseding it, and it stays in use until your correction is
 accepted.
 
 `knowledge_gaps` lists questions the bank could not answer, most-asked first. If
-you just spent an hour answering one, that hour is worth an entry.
+you just spent an hour answering one, that hour is worth an entry. A question
+asked often enough gets an issue titled `Knowledge gap: …`; answer it with an
+entry citing that issue (`{ issue: "ENG-57" }`), and it counts as answered once
+the entry is accepted.
+
+Citations are checked again when a change lands on the default branch. An
+entry whose cited code a judge finds now contradicts it is taken out of use as
+`DISPUTED`, with a correction issue for a person; so cite the exact lines that
+show the claim.

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -13,10 +14,15 @@ import {
   CreatePageDto,
   CreatePageLinkDto,
   ListPagesQueryDto,
+  PageKindEnum,
   PageLinkRequestParamsDto,
+  type PageProposal,
+  PageProposalParamsDto,
+  PageProposalStateEnum,
   PageRequestParamsDto,
   PageRevertParamsDto,
   RelatedPagesQueryDto,
+  RoleEnum,
   UpdatePageDto,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
@@ -24,7 +30,7 @@ import { PrismaService } from 'nestjs-prisma';
 import { resolveWorkspaceId } from 'common/workspace-access';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
-import { UserId, Workspace } from 'modules/auth/session.decorator';
+import { Role, UserId, Workspace } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
 import PageLinksService, {
@@ -97,7 +103,9 @@ export class PagesController {
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async getPage(
     @Param() params: PageRequestParamsDto,
-  ): Promise<PageResponse & { ancestors: Array<{ id: string; title: string }> }> {
+  ): Promise<
+    PageResponse & { ancestors: Array<{ id: string; title: string }> }
+  > {
     const [page, ancestors] = await Promise.all([
       this.pagesService.getPage(params.pageId),
       this.pagesService.getAncestors(params.pageId),
@@ -187,20 +195,87 @@ export class PagesController {
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updatePage(
     @UserId() userId: string,
+    @Role() role: string,
     @Param() params: PageRequestParamsDto,
     @Body() pageData: UpdatePageDto,
   ): Promise<PageResponse> {
+    // Taking a generated page over by hand is for a person; on a page
+    // people write already it changes nothing an agent needs to send.
+    if (pageData.kind === PageKindEnum.AUTHORED) {
+      forPeople(
+        role,
+        'A generated page is taken over by a person, who then writes it.',
+      );
+    }
+
     return this.pagesService.updatePage(params.pageId, userId, pageData);
   }
 
+  /**
+   * Proposes folding standing entries into the page body. Nothing changes
+   * until a person accepts the proposal.
+   */
   @Post(':pageId/consolidate')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async consolidatePage(
     @UserId() userId: string,
     @Param() params: PageRequestParamsDto,
     @Body() input: ConsolidatePageDto,
-  ): Promise<PageResponse> {
+  ): Promise<PageProposal> {
     return this.pagesService.consolidate(params.pageId, userId, input);
+  }
+
+  /** The page's open proposals; `?state=ALL` for every one. */
+  @Get(':pageId/proposals')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async getProposals(
+    @Param() params: PageRequestParamsDto,
+    @Query('state') state?: string,
+  ): Promise<PageProposal[]> {
+    return this.pagesService.getProposals(
+      params.pageId,
+      state === 'ALL'
+        ? 'ALL'
+        : Object.values(PageProposalStateEnum).includes(
+              state as PageProposalStateEnum,
+            )
+          ? (state as PageProposalStateEnum)
+          : PageProposalStateEnum.OPEN,
+    );
+  }
+
+  /** A person accepts a proposed change to the body. */
+  @Post(':pageId/proposals/:proposalId/accept')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async acceptProposal(
+    @UserId() userId: string,
+    @Role() role: string,
+    @Param() params: PageProposalParamsDto,
+  ): Promise<PageResponse> {
+    forPeople(role);
+
+    return this.pagesService.acceptProposal(
+      params.pageId,
+      params.proposalId,
+      userId,
+    );
+  }
+
+  /** A person declines a proposed change to the body. */
+  @Post(':pageId/proposals/:proposalId/decline')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async declineProposal(
+    @UserId() userId: string,
+    @Role() role: string,
+    @Param() params: PageProposalParamsDto,
+  ): Promise<PageProposal> {
+    forPeople(role);
+
+    return this.pagesService.declineProposal(
+      params.pageId,
+      params.proposalId,
+      userId,
+    );
   }
 
   @Post(':pageId/links')
@@ -269,5 +344,18 @@ export class PagesController {
     @Param() params: PageRequestParamsDto,
   ): Promise<PageResponse> {
     return this.pagesService.deletePage(params.pageId, userId);
+  }
+}
+
+/**
+ * A change to a page people maintain is theirs to accept. An agent proposes
+ * it and is refused the answer, as it is refused the review queue.
+ */
+function forPeople(
+  role: string,
+  message = 'A proposed change to a page is accepted or declined by a person.',
+) {
+  if (role === RoleEnum.AGENT) {
+    throw new ForbiddenException({ message });
   }
 }

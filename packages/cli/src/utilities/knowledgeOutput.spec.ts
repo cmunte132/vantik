@@ -5,8 +5,10 @@ import type {
 } from '@vantikhq/agent-core';
 
 import {
+  renderConsolidateProposal,
   renderEntries,
   renderHits,
+  renderPage,
   renderProof,
   renderRemember,
 } from './knowledgeOutput';
@@ -67,6 +69,42 @@ describe('knowledge as a terminal shows it', () => {
     );
   });
 
+  it('[KG-7.4] says which page an entry is the evidence for', () => {
+    const hit: KnowledgeHit = {
+      kind: 'entry',
+      entryKind: 'FACT',
+      page: { id: 'page-1', title: 'Runbook' },
+      entryId: 'entry-1',
+      content: 'The worker drains its queue before it restarts.',
+      scope: null,
+      verified: false,
+      retrievalCount: 0,
+      evidenceFor: { id: 'page-1', title: 'Runbook' },
+      ...proof,
+    };
+
+    expect(renderHits([hit])).toContain(
+      'Runbook fact · grounded · evidence for Runbook',
+    );
+    expect(renderHits([{ ...hit, evidenceFor: null }])).not.toContain(
+      'evidence for',
+    );
+  });
+
+  it('[KG-7.4] says a consolidation is proposed, not applied', () => {
+    const text = renderConsolidateProposal({
+      status: 'proposed',
+      proposalId: 'proposal-1',
+      page: { id: 'page-1', title: 'Runbook' },
+      entryIds: ['entry-1', 'entry-2'],
+      guidance: 'Proposed, not applied.',
+    });
+
+    expect(text).toContain('Proposed folding 2 entries into Runbook');
+    expect(text).toContain('proposal-1');
+    expect(text).toContain('until a person accepts it');
+  });
+
   function entry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
     return {
       id: '1a2b3c4d-0000-0000-0000-000000000000',
@@ -102,6 +140,35 @@ describe('knowledge as a terminal shows it', () => {
       '1a2b3c4d  cites src/cache.ts:12-30 (moved), pull request https://github.com/acme/api/pull/5 (holds) · checked 2026-09-20 at 9f8e7d6c5b4a',
     );
     expect(text).not.toMatch(/5e6f7a8b {2}cites/);
+  });
+
+  it('[KG-7.1] shows a generated page with its question, and what each section was written from', () => {
+    const cited = entry();
+    const text = renderPage({
+      id: 'page-gen',
+      title: 'Deploying',
+      body: '## Deploying\n\nMerge to main.',
+      parentId: null,
+      entryPolicy: 'OPEN',
+      ancestors: [],
+      standing: [],
+      kind: 'GENERATED',
+      question: 'How do we deploy the server?',
+      sections: [
+        {
+          id: 'sec_deploy',
+          heading: 'Deploying',
+          entryIds: [cited.id, '9d8c7b6a-0000-0000-0000-000000000000'],
+        },
+      ],
+      cited: [cited],
+      updatedAt: '2026-09-20T10:00:00.000Z',
+    });
+
+    expect(text).toContain('Generated: answers "How do we deploy the server?"');
+    expect(text).toContain('Deploying: 1a2b3c4d, 9d8c7b6a (out of use)');
+    expect(text).toContain('Cited facts (1)');
+    expect(text).toContain('1a2b3c4d  cites src/cache.ts:12-30 (moved)');
   });
 
   it('[KG-2.8] tells the writer what its citations came to once the fact is written', () => {

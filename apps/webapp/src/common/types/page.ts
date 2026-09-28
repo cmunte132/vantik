@@ -5,12 +5,18 @@ export enum PageEntryPolicy {
   LOCKED = 'LOCKED',
 }
 
+/** Who writes a page's body: people, or the gardener from cited entries. */
+export enum PageKind {
+  AUTHORED = 'AUTHORED',
+  GENERATED = 'GENERATED',
+}
+
 export enum PageEntryStatus {
   /** Awaiting review. The inbox — served to nobody. */
   PROPOSED = 'PROPOSED',
   /** Accepted and currently being served to agents. */
   STANDING = 'STANDING',
-  /** Folded into the page body; no longer served on its own. */
+  /** Folded into the page body; kept, and served as the page's evidence. */
   CONSOLIDATED = 'CONSOLIDATED',
   /** Replaced by a newer entry. Kept for audit. */
   SUPERSEDED = 'SUPERSEDED',
@@ -38,6 +44,10 @@ export interface PageType {
    */
   entryPolicy: string;
   visibility: string;
+  /** One of PageKind; AUTHORED when absent. */
+  kind?: string;
+  /** For a generated page, the question it answers. */
+  question?: string | null;
 
   workspaceId: string;
   createdById?: string | null;

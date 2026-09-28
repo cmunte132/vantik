@@ -10,6 +10,14 @@
  * layer beneath it applies: a mistake in a setting is never read as "none" or
  * "all".
  */
+
+/**
+ * Whether triage decides about new entries, and whether it acts on what it
+ * decides. `shadow` decides and records, and changes nothing: the decisions
+ * can be compared with what people decided before anyone lets it act.
+ */
+export type KnowledgeAutoTriage = 'off' | 'shadow' | 'on';
+
 export interface KnowledgeSettings {
   /**
    * The share of runs held out from the workspace's knowledge, from 0 (every
@@ -25,12 +33,82 @@ export interface KnowledgeSettings {
   contextTopK: number;
   /** The tokens a run's knowledge may take. `KNOWLEDGE_CONTEXT_TOKEN_BUDGET`. */
   contextTokenBudget: number;
+  /** `KNOWLEDGE_AUTO_TRIAGE`: off, shadow or on. */
+  autoTriage: KnowledgeAutoTriage;
+  /**
+   * How alike two entries must be, from 0 to 1 (1 minus the index's vector
+   * distance), before a model is asked how they relate. Below it they are
+   * taken to be different facts without asking. The default is the distance
+   * the write-time near-match check uses. `KNOWLEDGE_SIMILARITY_THRESHOLD`.
+   */
+  similarityThreshold: number;
+  /**
+   * The share of decisions triage acted on that a person is asked to check,
+   * from 0 to 1. `KNOWLEDGE_AUDIT_RATE`.
+   */
+  auditRate: number;
+  /**
+   * The agreement, as Cohen's kappa from 0 to 1, below which a decision type
+   * stops acting and escalates instead. `KNOWLEDGE_KAPPA_FLOOR`.
+   */
+  kappaFloor: number;
+  /**
+   * How many verdicts a decision type needs in the window before the floor
+   * applies to it. `KNOWLEDGE_KAPPA_MIN_SAMPLES`.
+   */
+  kappaMinSamples: number;
+  /** How many days of verdicts agreement is measured over. `KNOWLEDGE_KAPPA_WINDOW_DAYS`. */
+  kappaWindowDays: number;
+  /**
+   * How many separate runs must be given the same review finding in a module
+   * before the gardener proposes it as a convention there.
+   * `KNOWLEDGE_CONVENTION_MIN_RUNS`.
+   */
+  conventionMinRuns: number;
+  /**
+   * How far a convention the gardener wrote may be behind, harmful outcomes
+   * over helpful ones, before it is taken out of use.
+   * `KNOWLEDGE_CONVENTION_HARM_MARGIN`.
+   */
+  conventionHarmMargin: number;
+  /**
+   * How many times a question the knowledge could not answer must have been
+   * asked before the gardener opens an issue asking a person to answer it.
+   * `KNOWLEDGE_GAP_ISSUE_MIN_COUNT`.
+   */
+  gapIssueMinCount: number;
+  /**
+   * Whether the gardener opens issues for the workspace's knowledge gaps. The
+   * job runs on the deployment's schedule, `KNOWLEDGE_GAP_ISSUES_CRON`, and
+   * `off` there switches it off everywhere. A workspace can switch it off for
+   * itself with `gapIssuesCron: 'off'`; it cannot move the schedule, as one
+   * job serves every workspace, so any other value leaves it on.
+   */
+  gapIssues: boolean;
+  /**
+   * The least time between two builds of one generated page, in
+   * milliseconds. Written as a duration: `90m`, `6h`, `1d`. A page is rebuilt
+   * only when its evidence has changed, and then no sooner than this after
+   * its last build. `KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL`.
+   */
+  pageRefreshMinIntervalMs: number;
 }
 
 export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
   holdoutRate: 0.1,
   contextTopK: 5,
   contextTokenBudget: 1_500,
+  autoTriage: 'shadow',
+  similarityThreshold: 0.25,
+  auditRate: 0.1,
+  kappaFloor: 0.6,
+  kappaMinSamples: 20,
+  kappaWindowDays: 30,
+  conventionMinRuns: 3,
+  conventionHarmMargin: 3,
+  gapIssueMinCount: 5,
+  gapIssues: true,
+  pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
 };
 
 /** The most tokens any knowledge budget allows, whatever is configured. */
@@ -58,7 +136,93 @@ export function knowledgeSettings(
         DEFAULT_KNOWLEDGE_SETTINGS.contextTokenBudget,
       MAX_KNOWLEDGE_TOKEN_BUDGET,
     ),
+    autoTriage:
+      modeOf(stored.autoTriage) ??
+      modeOf(env.KNOWLEDGE_AUTO_TRIAGE?.trim().toLowerCase()) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.autoTriage,
+    similarityThreshold:
+      shareOf(stored.similarityThreshold) ??
+      shareOf(fromEnv(env.KNOWLEDGE_SIMILARITY_THRESHOLD)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.similarityThreshold,
+    auditRate:
+      shareOf(stored.auditRate) ??
+      shareOf(fromEnv(env.KNOWLEDGE_AUDIT_RATE)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.auditRate,
+    kappaFloor:
+      shareOf(stored.kappaFloor) ??
+      shareOf(fromEnv(env.KNOWLEDGE_KAPPA_FLOOR)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.kappaFloor,
+    kappaMinSamples:
+      countOf(stored.kappaMinSamples) ??
+      countOf(fromEnv(env.KNOWLEDGE_KAPPA_MIN_SAMPLES)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.kappaMinSamples,
+    kappaWindowDays:
+      countOf(stored.kappaWindowDays) ??
+      countOf(fromEnv(env.KNOWLEDGE_KAPPA_WINDOW_DAYS)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.kappaWindowDays,
+    conventionMinRuns:
+      countOf(stored.conventionMinRuns) ??
+      countOf(fromEnv(env.KNOWLEDGE_CONVENTION_MIN_RUNS)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.conventionMinRuns,
+    conventionHarmMargin:
+      countOf(stored.conventionHarmMargin) ??
+      countOf(fromEnv(env.KNOWLEDGE_CONVENTION_HARM_MARGIN)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.conventionHarmMargin,
+    gapIssueMinCount:
+      countOf(stored.gapIssueMinCount) ??
+      countOf(fromEnv(env.KNOWLEDGE_GAP_ISSUE_MIN_COUNT)) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.gapIssueMinCount,
+    gapIssues:
+      scheduleOf(stored.gapIssuesCron) ??
+      scheduleOf(env.KNOWLEDGE_GAP_ISSUES_CRON?.trim().toLowerCase()) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.gapIssues,
+    pageRefreshMinIntervalMs:
+      durationOf(stored.pageRefreshMinInterval) ??
+      durationOf(env.KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.pageRefreshMinIntervalMs,
   };
+}
+
+const DURATION_UNITS: Record<string, number> = {
+  m: 60 * 1000,
+  h: 60 * 60 * 1000,
+  d: 24 * 60 * 60 * 1000,
+};
+
+/**
+ * A duration such as `90m`, `6h` or `1d`, in milliseconds, or nothing. A bare
+ * number says nothing about its unit, so it is dropped rather than guessed
+ * at, as is zero: a page rebuilt on every change is not an interval.
+ */
+function durationOf(value: unknown): number | undefined {
+  const match =
+    typeof value === 'string' ? /^(\d+)\s*([mhd])$/i.exec(value.trim()) : null;
+  const amount = match ? Number(match[1]) : 0;
+
+  return match && amount > 0
+    ? amount * DURATION_UNITS[match[2].toLowerCase()]
+    : undefined;
+}
+
+/**
+ * Whether a schedule runs: `off` does not, and any other schedule does. An
+ * empty one, or one that is not text, says nothing.
+ */
+function scheduleOf(value: unknown): boolean | undefined {
+  return typeof value === 'string' && value.trim()
+    ? value.trim() !== 'off'
+    : undefined;
+}
+
+const MODES: readonly KnowledgeAutoTriage[] = ['off', 'shadow', 'on'];
+
+/**
+ * A triage mode, or nothing. A stored mode is read as written, as the other
+ * stored settings are; the environment's is read case-insensitively, as an
+ * operator types it.
+ */
+function modeOf(value: unknown): KnowledgeAutoTriage | undefined {
+  return MODES.find((mode) => mode === value);
 }
 
 function storedSettings(preferences: unknown): Record<string, unknown> {

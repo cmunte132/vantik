@@ -11,6 +11,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
@@ -21,14 +22,20 @@ import {
   PageEntryPolicyEnum,
   PageEntryStatusEnum,
 } from '@vantikhq/types';
+import type { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
 import type { VectorService } from 'modules/vector/vector.service';
 
 import type EntryCitationsService from './entry-citations.service';
 import type KnowledgeIndexService from './knowledge-index.service';
-import PageEntriesService from './page-entries.service';
-import { PROPOSED_ENTRY_BUDGET, WriterIdentity } from './pages.interface';
+import PageEntriesService, { contentHashOf } from './page-entries.service';
+import {
+  PROPOSED_ENTRY_BUDGET,
+  TRIAGE_ENTRY_JOB,
+  triageEntryJobOptions,
+  WriterIdentity,
+} from './pages.interface';
 
 const AGENT: WriterIdentity = { userId: 'agent-1', tokenId: 'token-1' };
 const HUMAN: WriterIdentity = { userId: 'human-1', tokenId: null };
@@ -36,7 +43,7 @@ const HUMAN: WriterIdentity = { userId: 'human-1', tokenId: null };
 interface Options {
   policy?: PageEntryPolicyEnum;
   outstanding?: number;
-  userType?: 'Agent' | 'User';
+  userType?: 'Agent' | 'User' | 'System';
   entryStatus?: PageEntryStatusEnum;
   /** Who wrote the entry `updateEntry` finds. */
   entrySource?: string;
@@ -47,6 +54,10 @@ interface Options {
   existing?: Array<{ id: string; content: string; status?: string }>;
   /** What the near-match search returns, or an error it throws. */
   nearMatches?: Array<{ entryId: string; content: string }> | Error;
+  /** The pages queue, when the test wants to see what is queued on it. */
+  queue?: { add: jest.Mock };
+  /** What each live page cites. */
+  cited?: string[][];
 }
 
 function buildService({
@@ -59,6 +70,8 @@ function buildService({
   supersededBy = null,
   existing = [],
   nearMatches = [],
+  queue,
+  cited = [],
 }: Options = {}) {
   const created: unknown[] = [];
 
@@ -71,6 +84,9 @@ function buildService({
           entryPolicy: policy,
           workspaceId: 'workspace-1',
         }),
+      ),
+      findMany: jest.fn(() =>
+        Promise.resolve(cited.map((citedEntryIds) => ({ citedEntryIds }))),
       ),
     },
     user: {
@@ -89,14 +105,19 @@ function buildService({
                 content: `a fact ${index}`,
                 status: PageEntryStatusEnum.PROPOSED,
               }))
-            : existing.map((entry) => ({
-                scope: null as string | null,
-                status: PageEntryStatusEnum.STANDING as string,
-                sourceUserId: 'someone',
-                verifiedAt: null as Date | null,
-                retrievalCount: 0,
-                ...entry,
-              })),
+            : existing
+                .map((entry) => ({
+                  scope: null as string | null,
+                  status: PageEntryStatusEnum.STANDING as string,
+                  sourceUserId: 'someone',
+                  verifiedAt: null as Date | null,
+                  retrievalCount: 0,
+                  ...entry,
+                }))
+                .filter(
+                  (entry) =>
+                    !where.status?.in || where.status.in.includes(entry.status),
+                ),
         ),
       ),
       findFirst: jest.fn(() =>
@@ -140,6 +161,12 @@ function buildService({
         Promise.resolve({ count: data.length }),
       ),
     },
+    // What an accepted entry cites, read to answer the knowledge gaps it
+    // answers: nothing, unless a test says otherwise.
+    pageEntryCitation: { findMany: jest.fn(() => Promise.resolve([])) },
+    pageKnowledgeGap: {
+      updateMany: jest.fn(() => Promise.resolve({ count: 0 })),
+    },
     // The transaction double runs whatever the service handed it, so a create
     // that was never reached stays absent from `created`.
     $transaction: jest.fn((operations: unknown[]) =>
@@ -170,7 +197,13 @@ function buildService({
   } as unknown as VectorService;
 
   return {
-    service: new PageEntriesService(prisma, undefined, vectorService),
+    service: new PageEntriesService(
+      prisma,
+      undefined,
+      vectorService,
+      undefined,
+      queue as unknown as Queue | undefined,
+    ),
     prisma,
     created,
     vectorService,
@@ -188,6 +221,34 @@ describe('entry policy', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('[KG-6.3] refuses the gardener, a system bot, on a LOCKED page too, and never puts its entry straight into use', async () => {
+    const locked = buildService({
+      policy: PageEntryPolicyEnum.LOCKED,
+      userType: 'System',
+    });
+
+    await expect(
+      locked.service.createEntry('page-1', AGENT, { content: 'a fact' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(locked.prisma.pageEntry.create).not.toHaveBeenCalled();
+
+    const open = buildService({
+      policy: PageEntryPolicyEnum.OPEN,
+      userType: 'System',
+    });
+
+    await open.service.createEntry('page-1', AGENT, {
+      content: 'a fact',
+      standing: true,
+    });
+
+    expect(open.prisma.pageEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: PageEntryStatusEnum.PROPOSED }),
+      }),
+    );
   });
 
   it('still lets a human append to a LOCKED page', async () => {
@@ -210,6 +271,110 @@ describe('entry policy', () => {
     await expect(
       service.createEntry('page-1', AGENT, { content: 'a fact' }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('triage of a new entry', () => {
+  it('[KG-4.3] queues one triage job on the pages queue for an entry that lands in the inbox', async () => {
+    const queue = { add: jest.fn(async () => ({})) };
+    const { service } = buildService({ queue });
+
+    await service.createEntry('page-1', AGENT, { content: 'a fact' });
+
+    expect(queue.add).toHaveBeenCalledTimes(1);
+    expect(queue.add).toHaveBeenCalledWith(
+      TRIAGE_ENTRY_JOB,
+      { entryId: 'entry-new' },
+      triageEntryJobOptions('entry-new'),
+    );
+    // One job per entry, whoever queues it, tried again when it fails.
+    expect(triageEntryJobOptions('entry-new')).toMatchObject({
+      jobId: `${TRIAGE_ENTRY_JOB}:entry-new`,
+      attempts: 3,
+    });
+  });
+
+  it('[KG-4.3] queues nothing for a person writing standing knowledge, which is already triaged', async () => {
+    const queue = { add: jest.fn(async () => ({})) };
+    const { service } = buildService({ queue, userType: 'User' });
+
+    await service.createEntry('page-1', HUMAN, {
+      content: 'a fact',
+      standing: true,
+    });
+
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('[KG-4.3] keeps the entry when the queue cannot take the job', async () => {
+    const queue = {
+      add: jest.fn(async () => {
+        throw new Error('redis is down');
+      }),
+    };
+    const { service, created } = buildService({ queue });
+
+    await expect(
+      service.createEntry('page-1', AGENT, { content: 'a fact' }),
+    ).resolves.toMatchObject({ id: 'entry-new' });
+    expect(created).toHaveLength(1);
+  });
+
+  it('[KG-4.1] stores the hash an exact repeat is found by', async () => {
+    const { service, created } = buildService();
+
+    await service.createEntry('page-1', AGENT, {
+      content: '  Webhooks   retry THREE times. ',
+    });
+
+    expect(created[0]).toMatchObject({
+      contentHash: contentHashOf('webhooks retry three times.'),
+    });
+  });
+});
+
+describe('a credential in an entry', () => {
+  // Built at run time and plainly fake, so no scanner mistakes this file for
+  // a leak.
+  const fakeKey = ['AK', 'IA', 'X'.repeat(16)].join('');
+
+  it('[KG-4.8] refuses to store it, from an agent or a person, and does not repeat it back', async () => {
+    for (const [userType, writer] of [
+      ['Agent', AGENT],
+      ['User', HUMAN],
+    ] as const) {
+      const queue = { add: jest.fn(async () => ({})) };
+      const { service, prisma } = buildService({ userType, queue });
+
+      const refusal = await service
+        .createEntry('page-1', writer, {
+          content: `The deploy role uses ${fakeKey}.`,
+          standing: true,
+        })
+        .catch((error: unknown) => error);
+
+      expect(refusal).toBeInstanceOf(UnprocessableEntityException);
+      expect(
+        (refusal as UnprocessableEntityException).getResponse(),
+      ).toMatchObject({ status: 'secret-refused' });
+      expect(JSON.stringify((refusal as Error).message)).not.toContain(fakeKey);
+      expect(
+        JSON.stringify((refusal as UnprocessableEntityException).getResponse()),
+      ).not.toContain(fakeKey);
+      expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+      expect(queue.add).not.toHaveBeenCalled();
+    }
+  });
+
+  it('[KG-4.8] refuses an edit that would put one in', async () => {
+    const { service, prisma } = buildService({ userType: 'User' });
+
+    await expect(
+      service.updateEntry('entry-1', 'human-1', {
+        content: `The deploy role uses ${fakeKey}.`,
+      }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(prisma.pageEntry.update).not.toHaveBeenCalled();
   });
 });
 
@@ -536,6 +701,8 @@ describe('what an agent may change on an entry', () => {
     const calls = (prisma.pageEntry.update as jest.Mock).mock.calls;
     expect(calls[0][0].data).toEqual({
       content: 'clearer words',
+      // New words are a new hash, which is what repeats are found by.
+      contentHash: contentHashOf('clearer words'),
       scope: 'apps/server',
       // A new scope is resolved to modules again; this workspace has none.
       moduleIds: [],
@@ -620,6 +787,43 @@ describe('a write the page already holds', () => {
       expect.objectContaining({ entryId: 'entry-9' }),
     ]);
     expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('[KG-7.4] refuses an exact repeat of a consolidated entry, which is still served, but not of one out of use', async () => {
+    const folded = buildService({
+      userType: 'User',
+      existing: [
+        {
+          id: 'entry-9',
+          content: 'Redis holds only cache here.',
+          status: PageEntryStatusEnum.CONSOLIDATED,
+        },
+      ],
+    });
+
+    await expect(
+      folded.service.createEntry('page-1', HUMAN, {
+        content: 'Redis holds only cache here.',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(folded.prisma.pageEntry.create).not.toHaveBeenCalled();
+
+    const archived = buildService({
+      userType: 'User',
+      existing: [
+        {
+          id: 'entry-9',
+          content: 'Redis holds only cache here.',
+          status: PageEntryStatusEnum.ARCHIVED,
+        },
+      ],
+    });
+
+    await expect(
+      archived.service.createEntry('page-1', HUMAN, {
+        content: 'Redis holds only cache here.',
+      }),
+    ).resolves.toBeDefined();
   });
 
   it('[KG-0.3] refuses a near match found by the index, and writes nothing', async () => {
@@ -708,6 +912,12 @@ describe('decay', () => {
   const DAY = 24 * 60 * 60 * 1000;
   const daysAgo = (days: number) => new Date(Date.now() - days * DAY);
 
+  interface Citation {
+    checkedAt: Date | null;
+    checkResult: string | null;
+    judgment: string | null;
+  }
+
   interface Row {
     name: string;
     status: PageEntryStatusEnum;
@@ -715,14 +925,18 @@ describe('decay', () => {
     lastServedAt: Date | null;
     retrievalCount: number;
     verifiedAt: Date | null;
+    citations: Citation[];
   }
 
   /**
-   * Applies the fields of a Prisma `where` that the standing pass filters on,
-   * so the test can say which entries it archives rather than only what the
-   * query looks like.
+   * Applies the fields of a Prisma `where` that the passes filter on, so the
+   * test can say which entries they archive rather than only what the query
+   * looks like. A relation list is matched with `none` against its rows.
    */
-  function matches(where: Record<string, unknown>, row: Row): boolean {
+  function matches(
+    where: Record<string, unknown>,
+    row: Row | Citation,
+  ): boolean {
     return Object.entries(where).every(([field, condition]) => {
       if (field === 'page' || field === 'deleted') {
         return true;
@@ -732,23 +946,54 @@ describe('decay', () => {
           matches(branch, row),
         );
       }
-      const value = row[field as keyof Row];
+      // A row's name stands in for its id.
+      const value =
+        field === 'id'
+          ? (row as Row).name
+          : (row as unknown as Record<string, unknown>)[field];
       if (condition !== null && typeof condition === 'object') {
-        const { lt } = condition as { lt?: Date };
-        return value instanceof Date && lt !== undefined && value < lt;
+        const { lt, gte, none, notIn } = condition as {
+          lt?: Date;
+          gte?: Date;
+          none?: Record<string, unknown>;
+          in?: unknown[];
+          notIn?: unknown[];
+        };
+        const within = (condition as { in?: unknown[] }).in;
+        if (none !== undefined) {
+          return !(value as Citation[]).some((each) => matches(none, each));
+        }
+        if (within !== undefined) {
+          return within.includes(value);
+        }
+        if (notIn !== undefined) {
+          return !notIn.includes(value);
+        }
+        return (
+          value instanceof Date &&
+          (lt === undefined || value < lt) &&
+          (gte === undefined || value >= gte) &&
+          (lt !== undefined || gte !== undefined)
+        );
       }
       return value === condition;
     });
   }
 
-  async function archivedBy(rows: Row[]): Promise<string[]> {
-    const { service, prisma } = buildService();
+  /** The rows a pass archives: the standing pass, or the inbox pass (0). */
+  async function archivedBy(
+    rows: Row[],
+    pass = 1,
+    cited: string[][] = [],
+  ): Promise<string[]> {
+    const { service, prisma } = buildService({ cited });
     await service.runDecay('workspace-1');
-    const standingPass = (prisma.pageEntry.updateMany as jest.Mock).mock
-      .calls[1][0];
+    const { where } = (prisma.pageEntry.updateMany as jest.Mock).mock.calls[
+      pass
+    ][0];
 
     return rows
-      .filter((row) => matches(standingPass.where, row))
+      .filter((row) => row.status === where.status && matches(where, row))
       .map((row) => row.name);
   }
 
@@ -758,6 +1003,7 @@ describe('decay', () => {
     lastServedAt: null,
     retrievalCount: 0,
     verifiedAt: null,
+    citations: [],
     ...row,
   });
 
@@ -778,6 +1024,89 @@ describe('decay', () => {
     ).resolves.toEqual(['served once, long ago']);
   });
 
+  const checked = (
+    daysBack: number,
+    checkResult: string,
+    judgment: string | null = null,
+  ): Citation => ({ checkedAt: daysAgo(daysBack), checkResult, judgment });
+
+  it('[KG-6.5] keeps an entry a check found to hold within the window, though nobody served it', async () => {
+    await expect(
+      archivedBy([
+        standing({ name: 'held', citations: [checked(10, 'HOLDS')] }),
+        standing({ name: 'moved', citations: [checked(10, 'MOVED')] }),
+        standing({
+          name: 'changed, judged to hold',
+          citations: [checked(10, 'CHANGED', 'HOLDS')],
+        }),
+        standing({
+          name: 'one of two held',
+          citations: [checked(10, 'MISSING'), checked(20, 'HOLDS')],
+        }),
+        standing({ name: 'held long ago', citations: [checked(200, 'HOLDS')] }),
+        standing({
+          name: 'contradicted',
+          citations: [checked(10, 'CHANGED', 'CONTRADICTED')],
+        }),
+        standing({
+          name: 'unjudged',
+          citations: [checked(10, 'CHANGED', 'UNCLEAR')],
+        }),
+        standing({ name: 'missing', citations: [checked(10, 'MISSING')] }),
+        standing({ name: 'unread', citations: [checked(10, 'UNKNOWN')] }),
+      ]),
+    ).resolves.toEqual([
+      'held long ago',
+      'contradicted',
+      'unjudged',
+      'missing',
+      'unread',
+    ]);
+  });
+
+  it('[KG-6.5] expires an untriaged entry only when no check found it to hold, and leaves a verified one to the person', async () => {
+    const waiting = (row: Partial<Row> & { name: string }): Row =>
+      standing({
+        status: PageEntryStatusEnum.PROPOSED,
+        createdAt: daysAgo(40),
+        ...row,
+      });
+
+    await expect(
+      archivedBy(
+        [
+          waiting({ name: 'stale' }),
+          waiting({ name: 'held', citations: [checked(5, 'HOLDS')] }),
+          waiting({ name: 'held before', citations: [checked(35, 'HOLDS')] }),
+          waiting({ name: 'verified', verifiedAt: daysAgo(3) }),
+          waiting({ name: 'new', createdAt: daysAgo(5) }),
+        ],
+        0,
+      ),
+    ).resolves.toEqual(['stale', 'held before']);
+  });
+
+  it('[KG-6.5] archives on use and checks, never on outcomes', async () => {
+    const { service, prisma } = buildService();
+    await service.runDecay('workspace-1');
+    const passes = (prisma.pageEntry.updateMany as jest.Mock).mock.calls.map(
+      ([{ where }]) => JSON.stringify(where),
+    );
+
+    // A harmful signal has the entry checked again, and what the check finds
+    // is what counts; the counts themselves archive nothing.
+    expect(passes).toHaveLength(2);
+    for (const where of passes) {
+      expect(where).not.toMatch(/harmful|helpful/i);
+    }
+    await expect(
+      archivedBy([
+        standing({ name: 'harmed, served', lastServedAt: daysAgo(1) }),
+        standing({ name: 'harmed, held', citations: [checked(1, 'HOLDS')] }),
+      ]),
+    ).resolves.toEqual([]);
+  });
+
   it('[KG-0.6] archives an old entry nobody ever served, and spares a verified one', async () => {
     await expect(
       archivedBy([
@@ -786,6 +1115,38 @@ describe('decay', () => {
         standing({ name: 'new', createdAt: daysAgo(5) }),
       ]),
     ).resolves.toEqual(['never served']);
+  });
+
+  it('[KG-7.4] never archives an entry a live page cites, which is read through the page', async () => {
+    await expect(
+      archivedBy(
+        [
+          standing({ name: 'cited by a generated page' }),
+          standing({ name: 'cited twice' }),
+          standing({ name: 'cited by no page' }),
+        ],
+        1,
+        [['cited by a generated page', 'cited twice'], ['cited twice'], []],
+      ),
+    ).resolves.toEqual(['cited by no page']);
+
+    const { service, prisma } = buildService();
+    await service.runDecay('workspace-1');
+    expect((prisma.page.findMany as jest.Mock).mock.calls[0][0].where).toEqual({
+      deleted: null,
+      workspaceId: 'workspace-1',
+      citedEntryIds: { isEmpty: false },
+    });
+    // Nothing cited, nothing kept for it.
+    expect(
+      (prisma.pageEntry.updateMany as jest.Mock).mock.calls[1][0].where,
+    ).not.toHaveProperty('id');
+
+    const everywhere = buildService();
+    await everywhere.service.runDecay();
+    expect(
+      (everywhere.prisma.page.findMany as jest.Mock).mock.calls[0][0].where,
+    ).toEqual({ deleted: null, citedEntryIds: { isEmpty: false } });
   });
 });
 
@@ -971,6 +1332,10 @@ describe('corrections', () => {
             return { count: hit.length };
           }),
         ),
+      },
+      // Nothing the gardener did to these entries, so nothing to undo.
+      pageEntryMaintenance: {
+        updateMany: jest.fn(() => deferred(() => ({ count: 0 }))),
       },
       // Like Prisma, nothing runs until the transaction does, and then in the
       // order of the array, not the order the service happened to build it.
@@ -1170,22 +1535,32 @@ describe('corrections', () => {
     expect(status(b.id)).toBe(PageEntryStatusEnum.STANDING);
   });
 
-  it('[KG-0.1] sends a correction of text folded into the page body to the body', async () => {
-    const { correct } = bank([
+  it('[KG-0.1] [KG-7.4] keeps a consolidated entry in use while its correction waits, and retires it once a person accepts the correction', async () => {
+    // A consolidated entry is served, as the evidence its page's body was
+    // written from, so it is corrected like a standing one.
+    const { service, status, pointer, correct } = bank([
       { id: 'A', status: PageEntryStatusEnum.CONSOLIDATED },
+      { id: 'C', status: PageEntryStatusEnum.CONSOLIDATED },
     ]);
 
-    await expect(correct(BOT, 'A')).rejects.toThrow(
-      /folded into the page body/,
-    );
-    await expect(correct(PERSON, 'A', true)).rejects.toThrow(
-      /folded into the page body/,
-    );
+    const b = await correct(BOT, 'A');
+    expect(pointer(b.id)).toBe('A');
+    expect(status(b.id)).toBe(PageEntryStatusEnum.PROPOSED);
+    expect(status('A')).toBe(PageEntryStatusEnum.CONSOLIDATED);
+
+    await service.updateEntry(b.id, PERSON, {
+      status: PageEntryStatusEnum.STANDING,
+    });
+    expect(status('A')).toBe(PageEntryStatusEnum.SUPERSEDED);
+
+    // A person's own correction is their acceptance.
+    await correct(PERSON, 'C', true);
+    expect(status('C')).toBe(PageEntryStatusEnum.SUPERSEDED);
   });
 
   it('[KG-0.1] never moves an entry out of a decided state', async () => {
     const { service, status } = bank([
-      { id: 'A', status: PageEntryStatusEnum.CONSOLIDATED },
+      { id: 'A', status: PageEntryStatusEnum.SUPERSEDED },
       {
         id: 'B',
         status: PageEntryStatusEnum.PROPOSED,
@@ -1198,7 +1573,45 @@ describe('corrections', () => {
       status: PageEntryStatusEnum.STANDING,
     });
 
+    expect(status('A')).toBe(PageEntryStatusEnum.SUPERSEDED);
+    await expect(
+      service.updateEntry('A', PERSON, {
+        status: PageEntryStatusEnum.STANDING,
+      }),
+    ).rejects.toThrow(/SUPERSEDED is terminal/);
+  });
+
+  it('[KG-7.4] lets a person take a consolidated entry out of use, and puts it back as standing', async () => {
+    const { service, status } = bank([
+      { id: 'A', status: PageEntryStatusEnum.CONSOLIDATED },
+      { id: 'B', status: PageEntryStatusEnum.CONSOLIDATED },
+    ]);
+
+    // Not straight back to standing: it is in use already.
+    await expect(
+      service.updateEntry('A', PERSON, {
+        status: PageEntryStatusEnum.STANDING,
+      }),
+    ).rejects.toThrow(/From CONSOLIDATED the options are DISPUTED, ARCHIVED/);
+    // Nor by an agent, which does not triage.
+    await expect(
+      service.updateEntry('A', BOT, { status: PageEntryStatusEnum.ARCHIVED }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(status('A')).toBe(PageEntryStatusEnum.CONSOLIDATED);
+
+    await service.updateEntry('A', PERSON, {
+      status: PageEntryStatusEnum.DISPUTED,
+    });
+    await service.updateEntry('B', PERSON, {
+      status: PageEntryStatusEnum.ARCHIVED,
+    });
+    expect(status('A')).toBe(PageEntryStatusEnum.DISPUTED);
+    expect(status('B')).toBe(PageEntryStatusEnum.ARCHIVED);
+
+    await service.updateEntry('A', PERSON, {
+      status: PageEntryStatusEnum.STANDING,
+    });
+    expect(status('A')).toBe(PageEntryStatusEnum.STANDING);
   });
 });
 
@@ -1349,6 +1762,25 @@ describe('entries about modules', () => {
       page: { workspaceId: 'workspace-1', deleted: null },
       status: { in: [PageEntryStatusEnum.STANDING] },
       moduleIds: { hasSome: ['server', 'webapp'] },
+    });
+  });
+
+  it('[KG-7.1] lists the entries a page cites, by id, in the workspace only', async () => {
+    const { service, prisma } = buildService();
+
+    await service.getEntries('workspace-1', {
+      ids: ['e-1', 'e-2'],
+      status: [PageEntryStatusEnum.STANDING, PageEntryStatusEnum.CONSOLIDATED],
+    });
+
+    const { where } = (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0];
+    expect(where).toMatchObject({
+      deleted: null,
+      page: { workspaceId: 'workspace-1', deleted: null },
+      id: { in: ['e-1', 'e-2'] },
+      status: {
+        in: [PageEntryStatusEnum.STANDING, PageEntryStatusEnum.CONSOLIDATED],
+      },
     });
   });
 
@@ -1639,5 +2071,196 @@ describe('entries as they are read', () => {
     expect(
       (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0].include,
     ).toEqual({ citations: { select: expect.any(Object) } });
+  });
+});
+
+describe('answering a knowledge gap', () => {
+  const issueDraft = {
+    kind: PageEntryCitationKindEnum.ISSUE,
+    targetId: 'issue-1',
+    targetLabel: 'ENG-12',
+    checkedAt: new Date(),
+    checkResult: PageEntryCitationCheckEnum.HOLDS,
+  };
+  const citing = (entryId: string) => [
+    {
+      entryId,
+      targetId: 'issue-1',
+      entry: { page: { workspaceId: 'workspace-1' } },
+    },
+  ];
+
+  function withGaps(
+    options: Options = {},
+    drafts: Array<Record<string, unknown>> = [issueDraft],
+  ) {
+    const built = buildService(options);
+    const citations = {
+      checkForWrite: jest.fn(async () => drafts),
+      retryLater: jest.fn(async (): Promise<void> => undefined),
+    };
+    const service = new PageEntriesService(
+      built.prisma,
+      undefined,
+      built.vectorService,
+      citations as unknown as EntryCitationsService,
+    );
+    const prisma = built.prisma as unknown as {
+      pageEntryCitation: { findMany: jest.Mock };
+      pageKnowledgeGap: { updateMany: jest.Mock };
+    };
+
+    return {
+      ...built,
+      service,
+      cited: prisma.pageEntryCitation.findMany,
+      answered: prisma.pageKnowledgeGap.updateMany,
+    };
+  }
+
+  const ACCEPTED_FILTER = {
+    kind: 'ISSUE',
+    entry: expect.objectContaining({
+      deleted: null,
+      status: { in: ['STANDING', 'CONSOLIDATED'] },
+    }),
+  };
+
+  it('[KG-6.4] answers the gap whose issue a person’s standing entry cites', async () => {
+    const { service, cited, answered } = withGaps({ userType: 'User' });
+    cited.mockResolvedValueOnce(citing('entry-new'));
+
+    await service.createEntry('page-1', HUMAN, {
+      content: 'Refunds round half to even, to the cent.',
+      standing: true,
+      citations: [{ issue: 'ENG-12' }],
+    });
+
+    expect(cited).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          entryId: { in: ['entry-new'] },
+          ...ACCEPTED_FILTER,
+        }),
+      }),
+    );
+    expect(answered).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace-1',
+        issueId: 'issue-1',
+        answeredAt: null,
+      },
+      data: { answeredAt: expect.any(Date), answeredByEntryId: 'entry-new' },
+    });
+  });
+
+  it('[KG-6.4] answers nothing for an entry waiting in the inbox, or one citing no issue', async () => {
+    const agent = withGaps({ userType: 'Agent' });
+
+    await agent.service.createEntry('page-1', AGENT, {
+      content: 'Refunds round half to even, to the cent.',
+      citations: [{ issue: 'ENG-12' }],
+    });
+
+    const person = withGaps({ userType: 'User' }, [
+      { ...issueDraft, kind: PageEntryCitationKindEnum.PULL_REQUEST },
+    ]);
+
+    await person.service.createEntry('page-1', HUMAN, {
+      content: 'Refunds round half to even, to the cent.',
+      standing: true,
+      citations: [{ pullRequest: 'https://github.com/acme/app/pull/1' }],
+    });
+
+    expect(agent.cited).not.toHaveBeenCalled();
+    expect(person.cited).not.toHaveBeenCalled();
+  });
+
+  it('[KG-6.4] answers the gap when a person accepts an entry citing its issue, and not when they archive it', async () => {
+    const accept = withGaps({ userType: 'User' });
+    accept.cited.mockResolvedValueOnce(citing('entry-1'));
+
+    await accept.service.updateEntry('entry-1', 'human-1', {
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    expect(accept.cited).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ entryId: { in: ['entry-1'] } }),
+      }),
+    );
+    expect(accept.answered).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ answeredByEntryId: 'entry-1' }),
+      }),
+    );
+
+    const archive = withGaps({ userType: 'User' });
+
+    await archive.service.updateEntry('entry-1', 'human-1', {
+      status: PageEntryStatusEnum.ARCHIVED,
+    });
+    // A reword leaves the status as it is, and answers nothing new.
+    await archive.service.updateEntry('entry-1', 'human-1', {
+      content: 'Refunds round half to even.',
+    });
+
+    expect(archive.cited).not.toHaveBeenCalled();
+  });
+
+  it('[KG-6.4] answers the gaps of entries accepted in bulk', async () => {
+    const { service, prisma, cited, answered } = withGaps({
+      userType: 'User',
+    });
+    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValue([
+      { id: 'entry-1', status: PageEntryStatusEnum.PROPOSED },
+      { id: 'entry-2', status: PageEntryStatusEnum.PROPOSED },
+    ]);
+    cited.mockResolvedValueOnce(citing('entry-2'));
+
+    await service.bulkUpdate('workspace-1', 'human-1', {
+      entryIds: ['entry-1', 'entry-2'],
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    expect(cited).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          entryId: { in: ['entry-1', 'entry-2'] },
+        }),
+      }),
+    );
+    expect(answered).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ answeredByEntryId: 'entry-2' }),
+      }),
+    );
+
+    cited.mockClear();
+    await service.bulkUpdate('workspace-1', 'human-1', {
+      entryIds: ['entry-1', 'entry-2'],
+      status: PageEntryStatusEnum.DISPUTED,
+    });
+
+    expect(cited).not.toHaveBeenCalled();
+  });
+
+  it('[KG-6.4] accepts the entry even when its gap cannot be marked, which the gap job does later', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const { service, cited } = withGaps({ userType: 'User' });
+    cited.mockRejectedValueOnce(new Error('connection reset'));
+
+    await expect(
+      service.updateEntry('entry-1', 'human-1', {
+        status: PageEntryStatusEnum.STANDING,
+      }),
+    ).resolves.toMatchObject({ status: PageEntryStatusEnum.STANDING });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('connection reset'),
+    );
+
+    warn.mockRestore();
   });
 });

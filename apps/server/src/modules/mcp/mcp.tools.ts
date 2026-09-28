@@ -876,7 +876,11 @@ export function registerVantikTools(
         'One page in full: its body as markdown, where it sits in the tree, ' +
         'and the facts currently being served from it. Read the page before ' +
         'adding to it — the thing you are about to assert may already be in ' +
-        'the body, in which case there is nothing to add.',
+        'the body, in which case there is nothing to add. A generated page ' +
+        'also gives the question it answers and each section with the entry ' +
+        'ids it cites; `cited` holds those entries, still in use, with their ' +
+        'proof. An id a section cites that is missing from `cited` is no ' +
+        'longer in use, and the next refresh rewrites that section.',
       inputSchema: {
         page: z.string().describe('Page title or id.'),
       },
@@ -1057,15 +1061,18 @@ export function registerVantikTools(
   server.registerTool(
     'consolidate_knowledge',
     {
-      title: 'Consolidate knowledge into a page',
+      title: 'Propose consolidating knowledge into a page',
       description:
-        'Fold standing facts into a page body and mark them consolidated, so ' +
-        'the same thing is not served twice — once as narrative and once as ' +
-        'the entry it was written from. This is how the bank stays small ' +
-        'enough to stay useful; do it when a page has accumulated facts that ' +
-        'now read as a paragraph. You supply the rewritten body, because ' +
-        'deciding how a set of facts reads as prose is the judgment being ' +
-        'asked for.',
+        'Propose folding standing facts into a page body, for when a page has ' +
+        'accumulated facts that now read as a paragraph. You supply the ' +
+        'rewritten body, because deciding how a set of facts reads as prose ' +
+        'is the judgment being asked for. Nothing changes until a person ' +
+        'accepts the proposal in the review queue. Once they do, the facts ' +
+        'are marked consolidated and kept as the evidence the body cites: ' +
+        'still served, but marked evidenceFor the page and ranked below it, ' +
+        'so the page and its facts are not read as two confirmations of one ' +
+        'thing. A generated page cannot be consolidated into; correct or add ' +
+        'entries in its scope instead.',
       inputSchema: {
         page: z.string().describe('Page title or id.'),
         body: z.string().describe('The rewritten page body, in markdown.'),

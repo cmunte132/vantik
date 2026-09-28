@@ -263,6 +263,16 @@ export class ListPageEntriesQueryDto {
   @IsUUID(undefined, { each: true })
   moduleIds?: string[];
 
+  /**
+   * These entries only: what a page cites, read with their proof, so a
+   * reader can see what each section of a generated page rests on.
+   */
+  @IsOptional()
+  @Transform(toIdArray)
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  ids?: string[];
+
   /** At most this many entries, newest first. */
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
@@ -284,7 +294,10 @@ export class BulkUpdatePageEntriesDto {
   status: PageEntryStatusEnum;
 }
 
-/** Folds standing entries into the page body and marks them CONSOLIDATED. */
+/**
+ * Proposes folding standing entries into the page body. A person accepting
+ * the proposal writes the body and marks them CONSOLIDATED.
+ */
 export class ConsolidatePageDto {
   /** Entries to fold. Omit to fold every standing entry on the page. */
   @IsOptional()

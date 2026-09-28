@@ -1,3 +1,4 @@
+import { InjectQueue } from '@nestjs/bull';
 import {
   BadRequestException,
   ConflictException,
@@ -5,17 +6,22 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   BulkUpdatePageEntriesDto,
   CreatePageEntryDto,
   PageEntry,
+  PageEntryCitationKindEnum,
   PageEntryPolicyEnum,
   PageEntryStatusEnum,
   UpdatePageEntryDto,
   UserTypeEnum,
 } from '@vantikhq/types';
-import { Prisma } from '@prisma/client';
+import { PageEntryProposalState, Prisma } from '@prisma/client';
+import type { Queue } from 'bull';
+import { createHash } from 'node:crypto';
 import { PrismaService } from 'nestjs-prisma';
 
 import { modulesForScope } from 'modules/modules/module-routing';
@@ -33,12 +39,24 @@ import {
 } from './knowledge-proof';
 import {
   ALLOWED_STATUS_TRANSITIONS,
+  PAGES_QUEUE,
   PROPOSED_ENTRY_BUDGET,
   PROPOSED_ENTRY_EXPIRY_DAYS,
   STANDING_ENTRY_DECAY_DAYS,
   type ServedTo,
+  TRIAGE_ENTRY_JOB,
+  triageEntryJobOptions,
   WriterIdentity,
 } from './pages.interface';
+import KnowledgeAgreementService from './triage/knowledge-agreement.service';
+import { secretIn } from './triage/triage-policy';
+import { answerGaps, isAccepted } from './upkeep/gap-answers';
+import {
+  citedByLivePages,
+  heldSince,
+  reversalsFor,
+  unusedSince,
+} from './upkeep/maintenance';
 
 @Injectable()
 export default class PageEntriesService {
@@ -49,13 +67,18 @@ export default class PageEntriesService {
    * indexer is on PagesService: the index is a cache. A write that finds
    * Typesense down still gets the exact-duplicate check, which is postgres.
    * The citation checker is not a cache, so a write that names citations is
-   * refused rather than stored unchecked when it is absent.
+   * refused rather than stored unchecked when it is absent. Without the queue
+   * an entry is not triaged, and waits in the inbox for a person as before;
+   * without the agreement service, what people decide about triaged entries
+   * is not recorded as verdicts on triage.
    */
   constructor(
     private prisma: PrismaService,
     private indexer?: KnowledgeIndexService,
     private vectorService?: VectorService,
     private citations?: EntryCitationsService,
+    @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
+    @Optional() private agreement?: KnowledgeAgreementService,
   ) {}
 
   // ----------------------------------------------------------------- reading
@@ -67,6 +90,8 @@ export default class PageEntriesService {
       status?: PageEntryStatusEnum[];
       /** Entries resolved to any of these modules. */
       moduleIds?: string[];
+      /** These entries only, as a page cites them. */
+      ids?: string[];
       /** At most this many, newest first. */
       limit?: number;
     } = {},
@@ -76,6 +101,7 @@ export default class PageEntriesService {
         deleted: null,
         page: { workspaceId, deleted: null },
         ...(filters.pageId ? { pageId: filters.pageId } : {}),
+        ...(filters.ids?.length ? { id: { in: filters.ids } } : {}),
         ...(filters.status?.length ? { status: { in: filters.status } } : {}),
         ...(filters.moduleIds?.length
           ? { moduleIds: { hasSome: filters.moduleIds } }
@@ -119,7 +145,9 @@ export default class PageEntriesService {
       throw new NotFoundException({ message: `Page ${pageId} not found` });
     }
 
-    const isAgent = await this.isAgent(writer.userId);
+    assertNoSecret(entryData.content);
+
+    const isAgent = await this.isAutomated(writer.userId);
 
     if (page.entryPolicy === PageEntryPolicyEnum.LOCKED && isAgent) {
       throw new ForbiddenException({
@@ -199,6 +227,7 @@ export default class PageEntriesService {
       this.prisma.pageEntry.create({
         data: {
           content: entryData.content,
+          contentHash: contentHashOf(entryData.content),
           scope: entryData.scope ?? null,
           moduleIds,
           ...(entryData.kind && { kind: entryData.kind }),
@@ -243,7 +272,51 @@ export default class PageEntriesService {
     // then the entry is written, and simply not grounded.
     await this.citations?.retryLater(entry.id, citations);
 
+    if (status === PageEntryStatusEnum.PROPOSED) {
+      await this.triageLater(entry.id);
+    } else if (
+      citations.some(
+        (citation) => citation.kind === PageEntryCitationKindEnum.ISSUE,
+      )
+    ) {
+      await this.answerGapsQuietly([entry.id]);
+    }
+
     return { ...entry, ...entryProof(entry) } as unknown as PageEntry;
+  }
+
+  /**
+   * Queues the triage of a new entry in the inbox. The write has happened
+   * whether or not the queue takes it: an entry that is not triaged waits
+   * for a person, which is where every entry waited before triage existed.
+   */
+  private async triageLater(entryId: string): Promise<void> {
+    try {
+      await this.pagesQueue?.add(
+        TRIAGE_ENTRY_JOB,
+        { entryId },
+        triageEntryJobOptions(entryId),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not queue triage for entry ${entryId}: ${error}; it waits for a person`,
+      );
+    }
+  }
+
+  /**
+   * Marks answered the knowledge gaps these newly accepted entries answer, by
+   * citing the issue opened for them. Best effort: the acceptance stands
+   * either way, and the gap job marks any this misses on its next run.
+   */
+  private async answerGapsQuietly(entryIds: string[]): Promise<void> {
+    try {
+      await answerGaps(this.prisma, entryIds);
+    } catch (error) {
+      this.logger.warn(
+        `Could not mark the knowledge gaps answered by ${entryIds.join(', ')}: ${error}; the gap job will`,
+      );
+    }
   }
 
   private async checkCitations(
@@ -261,15 +334,24 @@ export default class PageEntriesService {
     return this.citations.checkForWrite(workspaceId, inputs);
   }
 
+  /**
+   * `audit` names a decision drawn for audit that this change answers: the
+   * change then lands only with that decision's verdict, and is refused when
+   * someone else's verdict landed first.
+   */
   async updateEntry(
     entryId: string,
     userId: string,
     entryData: UpdatePageEntryDto,
+    options: { audit?: string; proposal?: string } = {},
   ): Promise<PageEntry> {
     const current = await this.prisma.pageEntry.findFirst({
       where: { id: entryId, deleted: null },
       select: {
         status: true,
+        content: true,
+        scope: true,
+        kind: true,
         sourceUserId: true,
         supersedesId: true,
         supersedes: { select: { status: true } },
@@ -281,8 +363,14 @@ export default class PageEntriesService {
       throw new NotFoundException({ message: `Entry ${entryId} not found` });
     }
 
-    if (await this.isAgent(userId)) {
+    const agent = await this.isAutomated(userId);
+
+    if (agent) {
       this.assertAgentMayEdit(current, userId, entryData);
+    }
+
+    if (entryData.content !== undefined) {
+      assertNoSecret(entryData.content);
     }
 
     if (entryData.status !== undefined) {
@@ -304,12 +392,73 @@ export default class PageEntriesService {
           )
         : { operations: [], retired: [] };
 
+    // A person acting on an entry triage sent them gives triage a verdict,
+    // written with the change. An agent withdrawing or rewording its own
+    // entry is not a verdict on anything.
+    const verdicts =
+      agent || !this.agreement
+        ? { operations: [], decisionIds: [], workspaceIds: [] }
+        : await this.agreement.verdictsFor(
+            [{ id: entryId, status: current.status }],
+            {
+              status: entryData.status,
+              edited:
+                (entryData.content !== undefined &&
+                  entryData.content !== current.content) ||
+                (entryData.scope !== undefined &&
+                  entryData.scope !== current.scope) ||
+                (entryData.kind !== undefined &&
+                  entryData.kind !== current.kind),
+            },
+            userId,
+            { strict: options.audit },
+          );
+
+    if (options.audit && !verdicts.decisionIds.includes(options.audit)) {
+      throw new ConflictException({
+        message:
+          'This audit can no longer be answered: it has a verdict, or a later decision replaced it.',
+      });
+    }
+
+    // A person putting back what the gardener took out of use undoes it, and
+    // says so on the record the gardener reads before acting again.
+    const reversals =
+      agent || entryData.status === undefined
+        ? []
+        : reversalsFor(
+            this.prisma,
+            [{ id: entryId, status: current.status }],
+            entryData.status,
+            userId,
+          );
+    // A proposal answered by this change is resolved with it, and only while
+    // it is still open: of two people answering at once, the second's change
+    // fails with its answer.
+    const proposal = options.proposal
+      ? [
+          this.prisma.pageEntryMaintenance.update({
+            where: {
+              id: options.proposal,
+              entryId,
+              proposalState: PageEntryProposalState.OPEN,
+            },
+            data: {
+              proposalState: PageEntryProposalState.ACCEPTED,
+              resolvedById: userId,
+              resolvedAt: new Date(),
+            },
+          }),
+        ]
+      : [];
+
     const [entry] = await this.prisma.$transaction([
       this.prisma.pageEntry.update({
         where: { id: entryId },
         data: {
           ...(entryData.content !== undefined && {
             content: entryData.content,
+            contentHash: contentHashOf(entryData.content),
           }),
           ...(entryData.scope !== undefined && {
             scope: entryData.scope,
@@ -328,9 +477,21 @@ export default class PageEntriesService {
         include: { citations: { select: PROOF_CITATION_SELECT } },
       }),
       ...settled.operations,
+      ...verdicts.operations,
+      ...reversals,
+      ...proposal,
     ]);
     await this.indexer?.entryChanged(entryId);
     await this.indexer?.entriesChanged(settled.retired);
+    await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
+
+    if (
+      entryData.status !== undefined &&
+      entryData.status !== current.status &&
+      isAccepted(entryData.status)
+    ) {
+      await this.answerGapsQuietly([entryId]);
+    }
 
     return {
       ...entry,
@@ -352,7 +513,7 @@ export default class PageEntriesService {
     // Every bulk request is a triage decision — it only sets a status — and
     // triage is the review step an agent's writes wait for. An agent able to
     // make it would be its own reviewer.
-    if (await this.isAgent(userId)) {
+    if (await this.isAutomated(userId)) {
       throw new ForbiddenException({
         message:
           'Triage is for people: accepting, disputing or archiving entries in ' +
@@ -388,6 +549,13 @@ export default class PageEntriesService {
         eligibleEntries,
         input.status,
       );
+      const verdicts = this.agreement
+        ? await this.agreement.verdictsFor(
+            eligibleEntries,
+            { status: input.status, edited: false },
+            userId,
+          )
+        : { operations: [], decisionIds: [], workspaceIds: [] };
 
       await this.prisma.$transaction([
         this.prisma.pageEntry.updateMany({
@@ -395,8 +563,15 @@ export default class PageEntriesService {
           data: { status: input.status },
         }),
         ...settled.operations,
+        ...verdicts.operations,
+        ...reversalsFor(this.prisma, eligibleEntries, input.status, userId),
       ]);
       await this.indexer?.entriesChanged([...eligible, ...settled.retired]);
+      await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
+
+      if (isAccepted(input.status)) {
+        await this.answerGapsQuietly(eligible);
+      }
     }
 
     return {
@@ -518,6 +693,16 @@ export default class PageEntriesService {
    * Nothing is deleted either way — archived entries stay readable and can be
    * revived.
    *
+   * Either way, an entry a check found to hold within the window stays: its
+   * citations were read against the code and still support it, which says it
+   * is true whether or not anyone asked. And an entry a person verified is
+   * never archived by decay: the gardener asks a person instead
+   * (`KnowledgeUpkeepService.proposeUnused`), and an untriaged one is already
+   * waiting on a person. Outcomes do not archive either: a harmful signal
+   * re-checks the entry's citations, and what that check finds is what
+   * counts. Nor is an entry a live page cites archived: the page is read in
+   * its place, and the entry is the page's evidence.
+   *
    * Called nightly by `PagesProcessor` on the `pages` queue, on the schedule in
    * `DECAY_CRON`. Setting `PAGE_DECAY_CRON=off` disables the pass, which leaves
    * both windows dormant and the inbox bounded only by the per-token budget on
@@ -540,17 +725,20 @@ export default class PageEntriesService {
         deleted: null,
         status: PageEntryStatusEnum.PROPOSED,
         createdAt: { lt: proposedCutoff },
+        citations: { none: heldSince(proposedCutoff) },
+        verifiedAt: null,
       },
       data: { status: PageEntryStatusEnum.ARCHIVED },
     });
 
+    const cited = await citedByLivePages(this.prisma, workspaceId);
     const archivedStanding = await this.prisma.pageEntry.updateMany({
       where: {
         ...scope,
         deleted: null,
         status: PageEntryStatusEnum.STANDING,
-        createdAt: { lt: standingCutoff },
-        OR: [{ lastServedAt: { lt: standingCutoff } }, { lastServedAt: null }],
+        ...unusedSince(standingCutoff),
+        ...(cited.length ? { id: { notIn: cited } } : {}),
         // A human vouched for it. Demonstrated usefulness is a proxy for
         // "worth keeping"; an explicit human confirmation is the real thing,
         // and it outranks the proxy.
@@ -706,8 +894,9 @@ export default class PageEntriesService {
    * person accepting the latest link has accepted a replacement for the
    * original, and leaving the original in use would serve both truths. The
    * walk passes only through corrections still undecided (PROPOSED or
-   * DISPUTED), and never touches anything decided (SUPERSEDED or
-   * CONSOLIDATED).
+   * DISPUTED), and never touches anything already replaced (SUPERSEDED). A
+   * consolidated entry is retired like a standing one: it is served as its
+   * page's evidence, and the correction is what is served from then on.
    * Pointers are set only when an entry is written and always name an older
    * entry, so the chain cannot loop; the visited set is belt and braces.
    */
@@ -834,8 +1023,13 @@ export default class PageEntriesService {
       where: {
         pageId: page.id,
         deleted: null,
+        // Consolidated too: it is still served, as the page's evidence.
         status: {
-          in: [PageEntryStatusEnum.PROPOSED, PageEntryStatusEnum.STANDING],
+          in: [
+            PageEntryStatusEnum.PROPOSED,
+            PageEntryStatusEnum.STANDING,
+            PageEntryStatusEnum.CONSOLIDATED,
+          ],
         },
       },
       select: {
@@ -940,18 +1134,6 @@ export default class PageEntriesService {
       });
     }
 
-    if (target.status === PageEntryStatusEnum.CONSOLIDATED) {
-      throw new BadRequestException({
-        message:
-          `Entry ${supersedesId} has been folded into the page body, so the ` +
-          'body is what carries it now, and a correction standing beside it ' +
-          'would serve the old text and the new one together. Nothing was ' +
-          'written. Write the correction as a new entry without ' +
-          '`supersedesId`: it goes to review like any other claim, and ' +
-          'whoever accepts it fixes the body.',
-      });
-    }
-
     if (target.status === PageEntryStatusEnum.SUPERSEDED) {
       throw new BadRequestException({
         message:
@@ -1007,13 +1189,21 @@ export default class PageEntriesService {
     }
   }
 
-  private async isAgent(userId: string): Promise<boolean> {
+  /**
+   * Whether a writer is automated: an agent, or a system bot such as the
+   * knowledge gardener. Neither is a person, so both are held to what an
+   * agent is: no writing to a locked page, no entry straight into use, and
+   * no decision that stands for a person's.
+   */
+  private async isAutomated(userId: string): Promise<boolean> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { type: true },
     });
 
-    return user?.type === UserTypeEnum.Agent;
+    return (
+      user?.type === UserTypeEnum.Agent || user?.type === UserTypeEnum.System
+    );
   }
 }
 
@@ -1023,14 +1213,11 @@ function sameMembers(a: string[], b: string[]): boolean {
 }
 
 /**
- * A status the workspace has finished deciding about. Nothing moves an entry
- * out of these, so a correction never touches one.
+ * A status the workspace has finished deciding about: replaced already.
+ * Nothing moves an entry out of it, so a correction never touches one.
  */
 function isDecided(status: string): boolean {
-  return (
-    status === PageEntryStatusEnum.SUPERSEDED ||
-    status === PageEntryStatusEnum.CONSOLIDATED
-  );
+  return status === PageEntryStatusEnum.SUPERSEDED;
 }
 
 /**
@@ -1041,6 +1228,36 @@ function isDecided(status: string): boolean {
  */
 export function normaliseContent(content: string): string {
   return content.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * The hash exact repeats are found by: sha256 of the normalised content. The
+ * migration that added it computes the same for existing entries in SQL.
+ */
+export function contentHashOf(content: string): string {
+  return createHash('sha256').update(normaliseContent(content)).digest('hex');
+}
+
+/**
+ * Refuses content that looks like it holds a credential, before anything is
+ * stored. Entries are replicated to every member's browser and handed to
+ * agents, so a key written into one has been shared with all of them; a
+ * refusal at the door is the only point at which that can still be stopped.
+ * Said without echoing the content back, so the refusal does not repeat it.
+ */
+function assertNoSecret(content: string): void {
+  const secret = secretIn(content);
+
+  if (secret) {
+    throw new UnprocessableEntityException({
+      status: 'secret-refused',
+      message:
+        `Nothing was written: the content looks like it holds a ${secret}. ` +
+        'Knowledge is shared with every member and every agent of the ' +
+        'workspace, so credentials never belong in it. Describe where the ' +
+        'secret is kept and how it is used instead of writing it down.',
+    });
+  }
 }
 
 function firstLine(content: string): string {

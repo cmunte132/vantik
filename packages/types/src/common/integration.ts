@@ -77,6 +77,20 @@ export interface CodeChangeEvent {
    * matches no issue.
    */
   issueKeys: string[];
+  /**
+   * The commit the change landed as: the merge commit of a merged pull
+   * request, or the new head of a push to the default branch. Absent for a
+   * change that has not landed, such as an open pull request.
+   */
+  mergeSha?: string;
+  /**
+   * Whether the change landed on the repository's default branch. Knowledge
+   * that cites the changed files is checked against the commit then. A pull
+   * request merged into another branch, such as a release branch or the
+   * branch of a stacked pull request, has this false: its change reaches the
+   * default branch when that branch is merged, and is checked then.
+   */
+  onDefaultBranch?: boolean;
 }
 
 export interface IntegrationEventPayload {

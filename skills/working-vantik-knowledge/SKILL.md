@@ -4,7 +4,7 @@ description: >-
   How to use the Vantik knowledge bank as an agent over MCP: load context
   before starting work, remember one fact at a time with citations for what
   it rests on, supersede rather than contradict, and consolidate instead of
-  piling up. Use before starting work
+  piling up (consolidating is a proposal a person accepts). Use before starting work
   on any unfamiliar area, and whenever recalling or recording what a workspace
   knows.
 ---
@@ -154,6 +154,16 @@ age of each citation's last check. Weigh them when you read:
   gone. Check it against the code before you rely on it; if it is wrong,
   supersede it with a cited correction.
 
+Citations are checked again as the code changes. When a change lands on the
+default branch, every entry citing a file it touched is read against the new
+code. Lines that read the same, or have only moved, keep the entry as it is.
+Where a judge finds the changed code now contradicts the claim, the entry is
+taken out of use as `DISPUTED` and a correction issue, labelled `knowledge`,
+goes to the team that owns the module; a person corrects it and puts it back,
+or archives it. A cited file that is gone, or changed code no judge could
+read, only asks a person. So cite the lines that show the claim, not the file
+around them: a citation is checked against exactly what it points at.
+
 ## Prefer appending to an existing page
 
 Check `list_pages` before you write anything down, and `read_page` the page you
@@ -189,9 +199,9 @@ acting on it. Superseding keeps the old entry for audit and stops serving it
 once a person accepts your correction. Until then the old entry stays in use,
 so a correction nobody has reviewed cannot take accepted knowledge away, and a
 second correction to the same entry waits until the first is decided. An entry
-that has been folded into the page body cannot be superseded: write the
-correction as a new entry, without `supersedes`, and it goes to review like any
-other claim.
+folded into a page body (`CONSOLIDATED`, served with `evidenceFor`) is
+superseded the same way; the page body still says the old thing until a person
+rewrites it, so say in your correction which page it is written into.
 
 `remember` searches before it writes. When near matches come back **nothing was
 written**: read them, then either supersede one or pass `distinct: true` to say
@@ -200,13 +210,33 @@ the one move that turns this whole design into a rubber stamp.
 
 ## Consolidate when a page grows facts that read as a paragraph
 
-`consolidate_knowledge` folds standing facts into the page body and marks them
-folded, so the same thing is not served twice — once as narrative and once as
-the entry it was written from.
+`consolidate_knowledge` proposes folding a page's standing facts into its body.
+You supply the rewritten body — deciding how a set of facts reads as prose is
+the judgment being asked for — and the server stores it as a **proposal**. The
+page does not change: a person accepts or declines it in the review queue. Until
+then the page and its facts read exactly as before, so do not carry on as if the
+new body had landed. Read the page right before you propose: accepting is
+refused if the page is edited after your proposal, or one of the facts is no
+longer standing.
 
-You supply the rewritten body. Deciding how a set of facts reads as prose is the
-judgment being asked for; the tool only makes sure the folded entries stop
-being served separately.
+Once a person accepts, the facts are marked `CONSOLIDATED` and are still served,
+as evidence for the page: a search shows each one just below its page, with
+`evidenceFor` naming the page, and it keeps its trust tier. Read the page for the
+narrative; the entry under it is what the sentence rests on, and its citations
+are what get checked when the code changes.
+
+## Generated pages
+
+A **generated** page answers a question it states, and the server writes it from
+the entries in its scope: each section cites the entries it was written from,
+and when those change, the page is rebuilt one section at a time. `read_page`
+reads it like any other page, and also gives its `question`, its `sections`
+with the entry ids each cites, and `cited`: those entries still in use, with
+their proof. Weigh the page by them: an id a section cites that is missing
+from `cited` is out of use. You cannot edit its body or consolidate it. To
+change what it says, change its evidence: `remember` the fact under its scope,
+or supersede the entry that is wrong. Once a person accepts the entry, the next
+refresh writes it up.
 
 ## Limits you will meet, and what they mean
 
@@ -230,6 +260,9 @@ you call the API.
   genuinely does not matter.
 - **Citations are checked on write.** Up to ten per entry. One that does not
   hold refuses the write with its number and the reason.
+- **No credentials.** A write whose content looks like a key, a token, a
+  private key or a password in a URL is refused with `secret-refused`, and the
+  refusal does not repeat it. Say where the secret is kept instead.
 
 ## Improving the bank
 
@@ -239,11 +272,46 @@ I document next" — it says what people actually needed, rather than what
 somebody thought to write down. If you just spent an hour answering one of
 those questions, that hour is worth an entry.
 
+A question asked often enough gets an issue asking a person to answer it,
+titled `Knowledge gap: ` and the question. To answer one, write the entry and
+cite that issue: `citations: [{ issue: "ENG-57" }]`, beside the code or
+decision the answer rests on. Once the entry is accepted, the question counts
+as answered and agents asking it are given the entry.
+
 ## Your entries are reviewed
 
-Everything you write lands as `PROPOSED` and is served to nobody until a human
-accepts it. That is not a formality — it is what makes the bank trustworthy
+Everything you write lands as `PROPOSED` and is served to nobody until it is
+accepted. That is not a formality — it is what makes the bank trustworthy
 enough to be worth reading.
+
+Each new entry is triaged by the server first. Where a workspace has switched
+triage on, an entry is accepted without a person only when every check holds:
+it says one thing, every citation holds (an entry citing nothing is not
+grounded), it contradicts nothing a person verified or keeps on a locked page,
+it is not a convention (those are handed to every run, so a person decides),
+it has a scope of three modules or fewer (an unscoped entry is served to every
+query), and two separate judgments accept it, shown the lines, issue or comment
+it cites. An entry that says exactly what an existing one says is folded into
+it as a corroboration rather than kept beside it. Anything else waits for a
+person, with the reasons attached. For now that includes every new claim an
+agent writes: the server cannot yet tell what an agent read, so it accepts
+nothing of yours on its own, though it still folds your repeats into what
+they repeat and rejects what breaks policy. Anything that rests on text from
+outside the workspace also waits for a person, and is not even folded in:
+written while you had a run open on an issue that came from outside, or one
+carrying comments mirrored from outside, or citing such an issue or comment.
+The session you name is kept for tracing and decides nothing. Triage is off
+or only recording by default, so do not count on it: cite what you claim,
+and it helps the person and the check alike.
+
+People check triage in turn. A share of what it does alone, a repeat folded
+in or an entry refused on a policy, is put in front of a person to confirm or
+undo, and every verdict a person gives on something triage decided counts
+towards how far the two agree. A kind of decision people keep disagreeing
+with stops being made alone: those entries wait for a person, with the reason
+`LOW_AGREEMENT`, until agreement recovers. So an entry of yours that triage
+folded in or refused can still be put into use by a person. The review queue
+and the agreement figures are for people, and refuse an agent.
 
 Write for the reviewer, and for the stranger after them. A claim they cannot
 evaluate is a claim they will archive.

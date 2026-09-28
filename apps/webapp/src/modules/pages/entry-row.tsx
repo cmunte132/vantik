@@ -23,6 +23,8 @@ import { useAllUsers } from 'hooks/users';
 
 import { useUpdatePageEntryMutation } from 'services/pages';
 
+import { entryActions } from './entry-actions';
+
 /**
  * One fact, and where it came from.
  *
@@ -48,6 +50,22 @@ interface EntryRowProps {
   onToggle?: (id: string) => void;
   /** True once anything is selected, so the rest of the boxes come out to meet it. */
   selecting?: boolean;
+  /** Why triage held it back for a person, each said as a reviewer would say it. */
+  reasons?: string[];
+  /** For an audit, what triage did asked as a question, in place of the usual choices. */
+  audit?: AuditQuestion;
+}
+
+/**
+ * An audit's question and its two answers. Agreeing keeps what triage did and
+ * not agreeing undoes it, so each answer is worded as its consequence, the
+ * way the ordinary choices are.
+ */
+export interface AuditQuestion {
+  question: string;
+  agree: string;
+  disagree: string;
+  onAnswer: (agree: boolean) => void;
 }
 
 export const EntryRow = observer((props: EntryRowProps) =>
@@ -60,7 +78,14 @@ export const EntryRow = observer((props: EntryRowProps) =>
 
 /** A decision. Reads as one, and states what each choice does. */
 const ReviewRow = observer(
-  ({ entry, selected = false, onToggle, selecting = false }: EntryRowProps) => {
+  ({
+    entry,
+    selected = false,
+    onToggle,
+    selecting = false,
+    reasons = [],
+    audit,
+  }: EntryRowProps) => {
     const { mutate: update } = useUpdatePageEntryMutation();
 
     const set = (status: PageEntryStatus) =>
@@ -93,24 +118,55 @@ const ReviewRow = observer(
 
           <Meta entry={entry} />
 
-          <div className="flex gap-1 flex-wrap -ml-2 pt-0.5">
-            <Choice
-              primary
-              label="Use it"
-              hint="Agents asking about this page start being given this fact"
-              onClick={() => set(PageEntryStatus.STANDING)}
-            />
-            <Choice
-              label="Set aside"
-              hint="Kept on the record, never given to an agent. You can undo this"
-              onClick={() => set(PageEntryStatus.ARCHIVED)}
-            />
-            <Choice
-              label="Not true"
-              hint="Flags it as wrong or contradicted, and stops it being given to agents"
-              onClick={() => set(PageEntryStatus.DISPUTED)}
-            />
-          </div>
+          {/* The reason is most of what says where to look, so it sits with
+              the fact rather than behind a hover. */}
+          {reasons.length > 0 && (
+            <div className="flex gap-1 flex-wrap">
+              {reasons.map((reason) => (
+                <Badge key={reason} variant="outline">
+                  {reason}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {audit ? (
+            <>
+              <p className="text-muted-foreground">{audit.question}</p>
+              <div className="flex gap-1 flex-wrap -ml-2 pt-0.5">
+                <Choice
+                  primary
+                  label={audit.agree}
+                  hint="Triage was right. Counts towards how far it can be trusted to act alone"
+                  onClick={() => audit.onAnswer(true)}
+                />
+                <Choice
+                  label={audit.disagree}
+                  hint="Triage was wrong. Reverses what it did to this fact, and counts against it"
+                  onClick={() => audit.onAnswer(false)}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="flex gap-1 flex-wrap -ml-2 pt-0.5">
+              <Choice
+                primary
+                label="Use it"
+                hint="Agents asking about this page start being given this fact"
+                onClick={() => set(PageEntryStatus.STANDING)}
+              />
+              <Choice
+                label="Set aside"
+                hint="Kept on the record, never given to an agent. You can undo this"
+                onClick={() => set(PageEntryStatus.ARCHIVED)}
+              />
+              <Choice
+                label="Not true"
+                hint="Flags it as wrong or contradicted, and stops it being given to agents"
+                onClick={() => set(PageEntryStatus.DISPUTED)}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -214,31 +270,10 @@ const RowMenu = observer(({ entry }: { entry: PageEntryType }) => {
   const { mutate: update } = useUpdatePageEntryMutation();
   const [open, setOpen] = React.useState(false);
 
-  const items = [
-    !entry.verifiedAt && {
-      label: 'Confirm',
-      hint: 'Vouch for it. Confirmed facts are never retired automatically',
-      run: () => update({ pageEntryId: entry.id, verified: true }),
-    },
-    entry.status !== PageEntryStatus.STANDING && {
-      label: 'Use it',
-      hint: 'Agents asking about this page start being given this fact',
-      run: () =>
-        update({ pageEntryId: entry.id, status: PageEntryStatus.STANDING }),
-    },
-    entry.status !== PageEntryStatus.ARCHIVED && {
-      label: 'Stop using it',
-      hint: 'Kept on the record, but no longer given to agents',
-      run: () =>
-        update({ pageEntryId: entry.id, status: PageEntryStatus.ARCHIVED }),
-    },
-    entry.status !== PageEntryStatus.DISPUTED && {
-      label: 'Mark as wrong',
-      hint: 'Flags it as contradicted and stops it being given to agents',
-      run: () =>
-        update({ pageEntryId: entry.id, status: PageEntryStatus.DISPUTED }),
-    },
-  ].filter(Boolean) as Array<{ label: string; hint: string; run: () => void }>;
+  const items = entryActions(entry).map((action) => ({
+    ...action,
+    run: () => update({ pageEntryId: entry.id, ...action.change }),
+  }));
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>

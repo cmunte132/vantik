@@ -69,11 +69,13 @@ export default class KnowledgeIndexService {
         include: ENTRY_INDEX_INCLUDE,
       });
 
-      // Standing and proposed entries are indexed; everything else is removed.
-      // Only STANDING is ever *served* — the read filter defaults to it and
-      // only the near-match query widens past it — but a proposed entry has to
-      // be findable by that query or the duplicate check cannot see the claims
-      // most likely to be duplicates: the ones still sitting in the inbox.
+      // Standing, consolidated and proposed entries are indexed; everything
+      // else is removed. Only the first two are ever *served* — the read
+      // filter defaults to them, a consolidated one as the evidence for its
+      // page, and only the near-match query widens past it — but a proposed
+      // entry has to be findable by that query or the duplicate check cannot
+      // see the claims most likely to be duplicates: the ones still sitting
+      // in the inbox.
       if (
         !entry ||
         entry.deleted ||
@@ -92,6 +94,56 @@ export default class KnowledgeIndexService {
   /** Applies one index decision per entry, for the bulk triage path. */
   async entriesChanged(entryIds: string[]): Promise<void> {
     await Promise.all(entryIds.map((id) => this.entryChanged(id)));
+  }
+
+  /**
+   * Indexes every consolidated entry, on a page not deleted, that the index
+   * does not hold, and says how many. Entries consolidated before a
+   * consolidated entry was served were taken out of the index then, so they
+   * could not be found as their page's evidence; this puts them back, and
+   * any other the index lost. One export of ids when there is nothing to do.
+   */
+  async indexMissingConsolidated(): Promise<number> {
+    try {
+      const entries = await this.prisma.pageEntry.findMany({
+        where: {
+          deleted: null,
+          status: PageEntryStatusEnum.CONSOLIDATED,
+          page: { deleted: null },
+        },
+        select: { id: true },
+      });
+
+      if (entries.length === 0) {
+        return 0;
+      }
+
+      const indexed = await this.vectorService.indexedEntryIds(
+        PageEntryStatusEnum.CONSOLIDATED,
+      );
+      const missing = entries
+        .map((entry) => entry.id)
+        .filter((id) => !indexed.has(id));
+
+      for (const id of missing) {
+        await this.entryChanged(id);
+      }
+
+      if (missing.length) {
+        this.logger.info({
+          message: `Indexed ${missing.length} consolidated entr${
+            missing.length === 1 ? 'y' : 'ies'
+          } the index did not hold`,
+          where: 'KnowledgeIndexService.indexMissingConsolidated',
+        });
+      }
+
+      return missing.length;
+    } catch (error) {
+      this.log('indexMissingConsolidated', 'consolidated entries', error);
+
+      return 0;
+    }
   }
 
   async pageDeleted(pageIds: string[], entryIds: string[]): Promise<void> {

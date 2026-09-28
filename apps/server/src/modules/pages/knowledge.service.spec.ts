@@ -76,7 +76,10 @@ function buildService(documents: unknown[] = [entryDocument()]) {
 
   const prisma = {
     page: {
-      findMany: jest.fn(() => Promise.resolve([{ id: 'page-1' }])),
+      // The page every hit is on is live, and no page cites an entry.
+      findMany: jest.fn(({ where }: { where: { citedEntryIds?: unknown } }) =>
+        Promise.resolve(where.citedEntryIds ? [] : [{ id: 'page-1' }]),
+      ),
     },
     pageEntry: {
       // Echoes back whatever ids were asked about, so by default every hit is
@@ -121,15 +124,20 @@ const searchParams = (typesense: ReturnType<typeof buildTypesense>) =>
   typesense.multiSearch.perform.mock.calls[0][0].searches[0];
 
 describe('KnowledgeService.search', () => {
-  it('serves standing entries only', async () => {
+  it('[KG-7.4] serves standing entries, and consolidated ones as evidence, and nothing else', async () => {
     const { service, typesense } = buildService();
 
     await service.search(WORKSPACE, 'redis');
 
-    // The read-side half of the status guarantee. Serving a CONSOLIDATED entry
-    // duplicates a fact already in the body; serving a SUPERSEDED one hands
-    // back something the workspace has explicitly replaced.
-    expect(searchParams(typesense).filter_by).toContain('status:=[`STANDING`]');
+    // The read-side half of the status guarantee. A CONSOLIDATED entry is
+    // the evidence a page body rests on, served marked as that and below the
+    // page; serving a SUPERSEDED one hands back something the workspace has
+    // explicitly replaced, and a PROPOSED one something it has not accepted.
+    const filter = searchParams(typesense).filter_by as string;
+    expect(filter).toContain('status:=[`STANDING`,`CONSOLIDATED`]');
+    for (const status of ['PROPOSED', 'SUPERSEDED', 'DISPUTED', 'ARCHIVED']) {
+      expect(filter).not.toContain(status);
+    }
   });
 
   it('scopes to the caller’s workspace and rejects a malformed one', async () => {
@@ -692,8 +700,14 @@ describe('the knowledge a run is handed', () => {
       pageEntry: {
         findMany: jest.fn(async ({ where }) =>
           where.kind === 'CONVENTION'
-            ? (options.conventions ?? [])
-            : entries.filter((entry) => where.id.in.includes(entry.id)),
+            ? (options.conventions ?? []).filter((entry) =>
+                where.status.in.includes(entry.status),
+              )
+            : entries.filter(
+                (entry) =>
+                  where.id.in.includes(entry.id) &&
+                  where.status.in.includes(entry.status),
+              ),
         ),
       },
     } as unknown as PrismaService;
@@ -751,18 +765,22 @@ describe('the knowledge a run is handed', () => {
       KnowledgeTrustEnum.GROUNDED,
     ]);
 
-    // Conventions are the issue's modules', accepted, in this workspace.
+    // Conventions are the issue's modules', served (standing, or
+    // consolidated as a page's evidence), in this workspace.
     const conventionQuery = (prisma.pageEntry.findMany as jest.Mock).mock
       .calls[0][0];
     expect(conventionQuery.where).toMatchObject({
       kind: 'CONVENTION',
-      status: PageEntryStatusEnum.STANDING,
+      status: {
+        in: [PageEntryStatusEnum.STANDING, PageEntryStatusEnum.CONSOLIDATED],
+      },
       deleted: null,
       moduleIds: { hasSome: [MODULE] },
       page: { workspaceId: WORKSPACE, deleted: null },
     });
     // The relevant ones are asked of the search by the issue's title, seeded
-    // by its modules, and read back from postgres only while still accepted.
+    // by its modules, and read back from postgres only while still accepted:
+    // standing, or consolidated into a page body, which runs are not handed.
     expect(vector.searchKnowledge).toHaveBeenCalledWith(
       WORKSPACE,
       'Search omits deleted issues',
@@ -770,7 +788,116 @@ describe('the knowledge a run is handed', () => {
     );
     expect(
       (prisma.pageEntry.findMany as jest.Mock).mock.calls[1][0].where,
-    ).toMatchObject({ status: PageEntryStatusEnum.STANDING, deleted: null });
+    ).toMatchObject({
+      status: {
+        in: [PageEntryStatusEnum.STANDING, PageEntryStatusEnum.CONSOLIDATED],
+      },
+      deleted: null,
+    });
+  });
+
+  it('[KG-3.2] [KG-7.4] pins a convention folded into its page’s body to its modules’ runs, as a standing one, and none retired', async () => {
+    const convention = (id: string, status: PageEntryStatusEnum) =>
+      row(id, { kind: 'CONVENTION', citations: [], status });
+    const { service } = forRun({
+      conventions: [
+        convention('folded', PageEntryStatusEnum.CONSOLIDATED),
+        convention('standing', PageEntryStatusEnum.STANDING),
+        convention('retired', PageEntryStatusEnum.ARCHIVED),
+        convention('disputed', PageEntryStatusEnum.DISPUTED),
+      ],
+      // Not found by the search for this run: pinned all the same.
+      ranked: [],
+    });
+
+    const packed = await service.knowledgeForRun(WORKSPACE, ask, LIMITS);
+
+    expect(packed.map((entry) => entry.entryId)).toEqual([
+      'folded',
+      'standing',
+    ]);
+  });
+
+  it('[KG-7.4] hands a run an entry folded into a page body, which the run is not handed, and nothing retired', async () => {
+    const { service } = forRun({
+      entries: [
+        row('folded', { status: PageEntryStatusEnum.CONSOLIDATED }),
+        row('retired', { status: PageEntryStatusEnum.ARCHIVED }),
+        row('replaced', { status: PageEntryStatusEnum.SUPERSEDED }),
+        row('standing'),
+      ],
+      ranked: ['folded', 'retired', 'replaced', 'standing'],
+    });
+
+    const packed = await service.knowledgeForRun(WORKSPACE, ask, LIMITS);
+
+    expect(packed.map((entry) => entry.entryId)).toEqual([
+      'folded',
+      'standing',
+    ]);
+  });
+
+  it('[KG-6.3] hands an accepted convention from review to every run in its modules, and to others a search finds it relevant to', async () => {
+    const fromReview = row('from-review', {
+      kind: 'CONVENTION',
+      content:
+        'Review found this in 3 separate agent runs on Server: use the logger, not console.log',
+      citations: [
+        {
+          ...holding,
+          kind: 'RUN',
+          path: null,
+          startLine: null,
+          endLine: null,
+          targetLabel: 'run run-a',
+        },
+        holding,
+      ],
+    });
+
+    // A run in its module is handed it whatever the issue is about.
+    const inModule = forRun({ conventions: [fromReview], ranked: [] });
+    expect(
+      (await inModule.service.knowledgeForRun(WORKSPACE, ask, LIMITS)).map(
+        (entry) => entry.entryId,
+      ),
+    ).toEqual(['from-review']);
+
+    // A run elsewhere is handed it when the search ranks it, as any
+    // grounded entry is.
+    const elsewhere = forRun({
+      issue: { moduleIds: ['module-other'] },
+      conventions: [],
+      entries: [fromReview],
+      ranked: ['from-review'],
+    });
+    const packed = await elsewhere.service.knowledgeForRun(
+      WORKSPACE,
+      ask,
+      LIMITS,
+    );
+    expect(packed.map((entry) => entry.entryId)).toEqual(['from-review']);
+    expect(packed[0]).toMatchObject({
+      kind: 'CONVENTION',
+      trust: KnowledgeTrustEnum.GROUNDED,
+    });
+
+    // Only once accepted: the conventions read asks for standing entries,
+    // the ranked one for those in use, and neither for a proposed one.
+    for (const t of [inModule, elsewhere]) {
+      for (const [query] of (t.prisma.pageEntry.findMany as jest.Mock).mock
+        .calls) {
+        expect([
+          PageEntryStatusEnum.STANDING,
+          {
+            in: [
+              PageEntryStatusEnum.STANDING,
+              PageEntryStatusEnum.CONSOLIDATED,
+            ],
+          },
+        ]).toContainEqual(query.where.status);
+      }
+    }
   });
 
   it('[KG-3.2] packs each entry with its citations, its age and what it is', async () => {

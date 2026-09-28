@@ -8,6 +8,7 @@ import {
 } from './errors';
 import {
   ConsolidateInput,
+  ConsolidateProposal,
   ContextPack,
   EntryPolicy,
   EntryStatus,
@@ -18,10 +19,12 @@ import {
   KnowledgeHit,
   KnowledgePage,
   KnowledgePageRef,
+  KnowledgePageSection,
   KnowledgeProof,
   KnowledgeTrust,
   LinkPageInput,
   LoadContextInput,
+  PageKind,
   PageLink,
   PagesForInput,
   RecallInput,
@@ -1062,7 +1065,12 @@ export class VantikAgent {
     }));
   }
 
-  /** One page: its body as markdown, its place in the tree, its standing facts. */
+  /**
+   * One page: its body as markdown, its place in the tree, its standing
+   * facts. For a generated page, the question it answers and its sections;
+   * for any page, the entries it cites that are still in use, with their
+   * proof, so what it says can be checked against what it rests on.
+   */
   async readPage(reference: string): Promise<KnowledgePage> {
     const { id } = await this.resolvePage(reference);
 
@@ -1074,6 +1082,12 @@ export class VantikAgent {
         query: { pageId: id, status: 'STANDING' },
       }),
     ]);
+    const cited = [...new Set(page.citedEntryIds ?? [])];
+    const citedEntries = cited.length
+      ? await this.client.get<RawEntry[]>('/page_entries', {
+          query: { ids: cited.join(','), status: 'STANDING,CONSOLIDATED' },
+        })
+      : [];
 
     return {
       id: page.id,
@@ -1083,6 +1097,10 @@ export class VantikAgent {
       entryPolicy: page.entryPolicy,
       ancestors: page.ancestors ?? [],
       standing: (entries ?? []).map((entry) => toEntry(entry)),
+      kind: page.kind ?? 'AUTHORED',
+      question: page.question ?? null,
+      sections: toSections(page.sections),
+      cited: (citedEntries ?? []).map((entry) => toEntry(entry)),
       updatedAt: page.updatedAt,
     };
   }
@@ -1266,14 +1284,15 @@ export class VantikAgent {
   }
 
   /**
-   * Folds standing entries into a page body and marks them CONSOLIDATED, so the
-   * same fact is not served twice — once as narrative and once as the entry it
-   * was written from.
+   * Proposes folding standing entries into a page body. A page people write
+   * is theirs, so nothing changes until a person accepts the proposal; the
+   * entries are then marked CONSOLIDATED and kept as the evidence the body
+   * cites, served below it, rather than retired.
    */
-  async consolidate(input: ConsolidateInput): Promise<KnowledgePageRef> {
+  async consolidate(input: ConsolidateInput): Promise<ConsolidateProposal> {
     const page = await this.resolvePage(input.page);
 
-    const updated = await this.client.post<RawPage>(
+    const proposal = await this.client.post<RawPageProposal>(
       `/pages/${page.id}/consolidate`,
       {
         body: {
@@ -1283,7 +1302,16 @@ export class VantikAgent {
       },
     );
 
-    return { id: updated.id, title: updated.title };
+    return {
+      status: 'proposed',
+      proposalId: proposal.id,
+      page: { id: proposal.pageId, title: proposal.pageTitle },
+      entryIds: proposal.entryIds,
+      guidance:
+        'Proposed, not applied: the page and its entries are unchanged until ' +
+        'a person accepts this in the review queue. Carry on reading the ' +
+        'entries as they are.',
+    };
   }
 
   /** Entries on a page, optionally narrowed to a status. */
@@ -1656,6 +1684,10 @@ interface RawPage {
   parentId?: string | null;
   entryPolicy: EntryPolicy;
   updatedAt: string;
+  kind?: PageKind;
+  question?: string | null;
+  sections?: unknown;
+  citedEntryIds?: string[];
 }
 
 interface RawEntry {
@@ -1676,6 +1708,13 @@ interface RawEntry {
   lastCheckedSha?: string | null;
 }
 
+interface RawPageProposal {
+  id: string;
+  pageId: string;
+  pageTitle: string;
+  entryIds: string[];
+}
+
 interface RawKnowledgeHit {
   kind: 'page' | 'entry';
   entryKind?: string | null;
@@ -1691,6 +1730,7 @@ interface RawKnowledgeHit {
   citations?: KnowledgeCitation[];
   lastCheckedAt?: string | null;
   lastCheckedSha?: string | null;
+  evidenceFor?: { pageId: string; pageTitle: string } | null;
 }
 
 /** The proof the server served with an entry or hit, passed on unchanged. */
@@ -1717,6 +1757,30 @@ interface RawContextPack {
   estimatedTokens: number;
   tokenBudget: number;
   omitted: number;
+}
+
+/** A generated page's sections, without their bodies, which `body` holds. */
+function toSections(stored: unknown): KnowledgePageSection[] {
+  if (!Array.isArray(stored)) {
+    return [];
+  }
+
+  return stored.flatMap((section) =>
+    section &&
+    typeof section.id === 'string' &&
+    typeof section.heading === 'string' &&
+    Array.isArray(section.entryIds)
+      ? [
+          {
+            id: section.id,
+            heading: section.heading,
+            entryIds: section.entryIds.filter(
+              (id: unknown): id is string => typeof id === 'string',
+            ),
+          },
+        ]
+      : [],
+  );
 }
 
 function toEntry(entry: RawEntry): KnowledgeEntry {
@@ -1802,6 +1866,9 @@ function toHit(hit: RawKnowledgeHit): KnowledgeHit {
     verified: Boolean(hit.verified),
     retrievalCount: hit.retrievalCount ?? 0,
     ...(hit.relevanceScore === undefined ? {} : { score: hit.relevanceScore }),
+    evidenceFor: hit.evidenceFor
+      ? { id: hit.evidenceFor.pageId, title: hit.evidenceFor.pageTitle }
+      : null,
     ...toProof(hit),
   };
 }

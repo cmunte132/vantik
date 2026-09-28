@@ -3,7 +3,6 @@ import {
   KnowledgeProof,
   KnowledgeTrustEnum,
   PageEntryKindEnum,
-  PageEntryStatusEnum,
 } from '@vantikhq/types';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'nestjs-prisma';
@@ -11,6 +10,7 @@ import { PrismaService } from 'nestjs-prisma';
 import {
   KnowledgeSearchHit,
   KnowledgeSearchResult,
+  SERVED_STATUSES,
 } from 'modules/vector/vector.interface';
 import { VectorService } from 'modules/vector/vector.service';
 
@@ -269,8 +269,12 @@ export default class KnowledgeService {
       return [];
     }
 
+    // Served entries: standing, or consolidated as a page's evidence. A
+    // consolidated entry is packed too, conventions pinned included: its fact
+    // is in a page body, and page bodies are not packed, so leaving it out
+    // would retire it for runs.
     const live: Prisma.PageEntryWhereInput = {
-      status: PageEntryStatusEnum.STANDING,
+      status: { in: SERVED_STATUSES },
       deleted: null,
       page: { workspaceId, deleted: null },
     };

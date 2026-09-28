@@ -1,0 +1,264 @@
+import {
+  PageEntryCitationCheck,
+  PageEntryCitationJudgment,
+  PageEntryMaintenanceAction,
+  PageEntryMaintenanceReason,
+  PageEntryStatus,
+  type Prisma,
+} from '@prisma/client';
+import { KnowledgeReviewReasonEnum } from '@vantikhq/types';
+import { PrismaService } from 'nestjs-prisma';
+
+/**
+ * The entries in use: the ones served. A consolidated entry is served as its
+ * page's evidence, so the gardener holds it to its citations, and a person
+ * answers what it asks about it, as for a standing one.
+ */
+export const IN_USE: PageEntryStatus[] = [
+  PageEntryStatus.STANDING,
+  PageEntryStatus.CONSOLIDATED,
+];
+
+/** One citation a change was checked against, as a maintenance row keeps it. */
+export interface CitationEvidence {
+  citationId: string;
+  path: string;
+  /** The lines it cited, as `10-14`. */
+  lines: string;
+  /** The commit it was read at; null when nothing could be read. */
+  readSha: string | null;
+  result: string;
+  judgment: string | null;
+  judgeModel: string | null;
+  judgeReason: string | null;
+  /** A hash of the code the judge read, so a ruling on it is known again. */
+  judgedCodeHash?: string | null;
+}
+
+/**
+ * What a maintenance row rested on. Each kind of change fills its own part:
+ * a change to the code the commit and the citations, decay the window and
+ * when the entry was last served or held, a disabled convention its counts.
+ */
+export interface MaintenanceEvidence {
+  change?: {
+    sha: string;
+    externalRepoId: string;
+    repo: string | null;
+    /** For a citation handed on after its first reading: the commit read. */
+    since?: string;
+  };
+  citations?: CitationEvidence[];
+  windowDays?: number;
+  lastServedAt?: string | null;
+  harmful?: number;
+  helpful?: number;
+  margin?: number;
+  /** Counted from here: the last time a person put the entry back. */
+  since?: string | null;
+  /**
+   * For a dispute: the disputed entry's content hash, so a person correcting
+   * the entry is told from a person putting the same claim back.
+   */
+  claim?: string | null;
+  /**
+   * For a contradiction asked about rather than acted on, why: a person
+   * verified the entry, its page is locked, or a person put it back, saying
+   * the same thing, after an earlier dispute.
+   */
+  askedBecause?: 'VERIFIED' | 'LOCKED' | 'RESTORED' | null;
+  /**
+   * For a dispute: the entry was folded into its page's body, which still
+   * says what it said.
+   */
+  consolidated?: boolean;
+}
+
+/** Why the gardener asked about a contradiction instead of disputing it. */
+export function askedBecauseText(
+  why: MaintenanceEvidence['askedBecause'],
+): string {
+  switch (why) {
+    case 'VERIFIED':
+      return 'A person verified it';
+    case 'LOCKED':
+      return 'Its page is locked';
+    case 'RESTORED':
+      return 'A person put it back after it was last disputed';
+    default:
+      return 'A person verified it, its page is locked, or a person put it back';
+  }
+}
+
+/** The review queue's name for why the gardener asks. */
+export function reviewReasonOf(
+  reason: PageEntryMaintenanceReason,
+): KnowledgeReviewReasonEnum {
+  switch (reason) {
+    case PageEntryMaintenanceReason.CITATION_CONTRADICTED:
+      return KnowledgeReviewReasonEnum.CITATION_CONTRADICTED;
+    case PageEntryMaintenanceReason.CITATION_MISSING:
+      return KnowledgeReviewReasonEnum.CITATION_MISSING;
+    case PageEntryMaintenanceReason.CITATION_UNJUDGED:
+      return KnowledgeReviewReasonEnum.CITATION_UNJUDGED;
+    case PageEntryMaintenanceReason.UNUSED:
+      return KnowledgeReviewReasonEnum.UNUSED;
+    case PageEntryMaintenanceReason.HARMFUL_SIGNALS:
+      return KnowledgeReviewReasonEnum.HARMFUL_SIGNAL;
+  }
+}
+
+/** A proposal as a reviewer reads it: what was found, where, and on what. */
+export function proposalSummary(
+  reason: PageEntryMaintenanceReason,
+  evidence: MaintenanceEvidence | null,
+): string {
+  const citation = evidence?.citations?.[0];
+  const where = citation
+    ? `${citation.path} lines ${citation.lines}`
+    : 'The code it cites';
+  const at = citation?.readSha
+    ? ` at ${citation.readSha.slice(0, 7)}`
+    : evidence?.change
+      ? ` after ${evidence.change.sha.slice(0, 7)}`
+      : '';
+  const repo = evidence?.change?.repo ? ` (${evidence.change.repo})` : '';
+  const more =
+    (evidence?.citations?.length ?? 0) > 1
+      ? `, and ${(evidence?.citations?.length ?? 1) - 1} more`
+      : '';
+  const judge = citation?.judgeReason
+    ? ` The judge said: ${citation.judgeReason}`
+    : '';
+
+  switch (reason) {
+    case PageEntryMaintenanceReason.CITATION_MISSING:
+      return `${where}${more} is gone${at}${repo}. Nothing it cited is there to hold it.`;
+    case PageEntryMaintenanceReason.CITATION_UNJUDGED:
+      return (
+        `${where}${more} changed${at}${repo}, and no judge could say ` +
+        `whether this still holds.${judge}`
+      );
+    case PageEntryMaintenanceReason.CITATION_CONTRADICTED:
+      return (
+        `${where}${more} changed${at}${repo}, and a judge found the code now ` +
+        `contradicts this. ${askedBecauseText(evidence?.askedBecause)}, so ` +
+        `it stays in use until you say.${judge}`
+      );
+    case PageEntryMaintenanceReason.UNUSED:
+      return (
+        `Neither served nor found to hold by a check in ` +
+        `${evidence?.windowDays ?? 'the last'} days. A person verified it, so ` +
+        `it is not archived without one.`
+      );
+    case PageEntryMaintenanceReason.HARMFUL_SIGNALS:
+      return (
+        `Runs that were given it went wrong ${evidence?.harmful ?? 0} times ` +
+        `and right ${evidence?.helpful ?? 0}.`
+      );
+  }
+}
+
+/**
+ * What a person undoes by putting an entry back into use, as standing or as
+ * its page's consolidated evidence: the changes the gardener made alone that
+ * took it out, a dispute for a disputed entry and an archive for an archived
+ * one. Written with the person's change, so the
+ * record never says an entry is out of use while it is served. The gardener
+ * reads these to ask, rather than act, the next time.
+ */
+export function reversalsFor(
+  prisma: PrismaService,
+  entries: ReadonlyArray<{ id: string; status: string }>,
+  to: string,
+  userId: string,
+): Array<Prisma.PrismaPromise<unknown>> {
+  if (!(IN_USE as string[]).includes(to)) {
+    return [];
+  }
+
+  const undone = [
+    [PageEntryStatus.DISPUTED, PageEntryMaintenanceAction.DISPUTED],
+    [PageEntryStatus.ARCHIVED, PageEntryMaintenanceAction.ARCHIVED],
+  ] as const;
+  const now = new Date();
+
+  return undone.flatMap(([status, action]) => {
+    const ids = entries
+      .filter((entry) => entry.status === status)
+      .map((entry) => entry.id);
+
+    return ids.length
+      ? [
+          prisma.pageEntryMaintenance.updateMany({
+            where: {
+              entryId: { in: ids },
+              action,
+              proposalState: null,
+              reversedAt: null,
+            },
+            data: { reversedAt: now, reversedById: userId },
+          }),
+        ]
+      : [];
+  });
+}
+
+/**
+ * A citation found to hold by a check since `since`: the cited code is where
+ * it was, or has moved and still reads the same, or changed and a judge read
+ * it as still supporting the claim.
+ */
+export function heldSince(since: Date): Prisma.PageEntryCitationWhereInput {
+  return {
+    checkedAt: { gte: since },
+    OR: [
+      {
+        checkResult: {
+          in: [PageEntryCitationCheck.HOLDS, PageEntryCitationCheck.MOVED],
+        },
+      },
+      {
+        checkResult: PageEntryCitationCheck.CHANGED,
+        judgment: PageEntryCitationJudgment.HOLDS,
+      },
+    ],
+  };
+}
+
+/**
+ * An entry decay may take out of use: older than the window, and within it
+ * neither served nor found to hold by a check. Being checked and found to
+ * hold is evidence the entry is still true, even if nobody asked for it;
+ * being served is evidence it is still wanted. Either keeps it.
+ */
+export function unusedSince(cutoff: Date): Prisma.PageEntryWhereInput {
+  return {
+    createdAt: { lt: cutoff },
+    OR: [{ lastServedAt: { lt: cutoff } }, { lastServedAt: null }],
+    citations: { none: heldSince(cutoff) },
+  };
+}
+
+/**
+ * The entries a live page cites, in one workspace or in every one. A page
+ * that cites an entry is what gets read in its place, so the entry going
+ * unserved says nothing about whether it is wanted: decay, and the gardener
+ * asking about a verified entry, leave these alone. Bounded by what pages
+ * cite, which their sections keep small.
+ */
+export async function citedByLivePages(
+  prisma: PrismaService,
+  workspaceId?: string,
+): Promise<string[]> {
+  const pages = await prisma.page.findMany({
+    where: {
+      deleted: null,
+      ...(workspaceId && { workspaceId }),
+      citedEntryIds: { isEmpty: false },
+    },
+    select: { citedEntryIds: true },
+  });
+
+  return [...new Set(pages.flatMap((page) => page.citedEntryIds))];
+}

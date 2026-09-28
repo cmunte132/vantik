@@ -15,6 +15,17 @@ describe('the knowledge settings of a workspace', () => {
       holdoutRate: 0.1,
       contextTopK: 5,
       contextTokenBudget: 1_500,
+      autoTriage: 'shadow',
+      similarityThreshold: 0.25,
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
+      gapIssueMinCount: 5,
+      gapIssues: true,
+      pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
     });
     expect(DEFAULT_KNOWLEDGE_SETTINGS).toEqual(knowledgeSettings({}, {}));
   });
@@ -26,7 +37,22 @@ describe('the knowledge settings of a workspace', () => {
         KNOWLEDGE_CONTEXT_TOP_K: '2',
         KNOWLEDGE_CONTEXT_TOKEN_BUDGET: '800',
       }),
-    ).toEqual({ holdoutRate: 0.25, contextTopK: 2, contextTokenBudget: 800 });
+    ).toEqual({
+      holdoutRate: 0.25,
+      contextTopK: 2,
+      contextTokenBudget: 800,
+      autoTriage: 'shadow',
+      similarityThreshold: 0.25,
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
+      gapIssueMinCount: 5,
+      gapIssues: true,
+      pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
+    });
     // The ends of a share are shares.
     expect(
       knowledgeSettings(null, { KNOWLEDGE_HOLDOUT_RATE: '0' }),
@@ -54,12 +80,38 @@ describe('the knowledge settings of a workspace', () => {
         },
         env,
       ),
-    ).toEqual({ holdoutRate: 0, contextTopK: 3, contextTokenBudget: 600 });
+    ).toEqual({
+      holdoutRate: 0,
+      contextTopK: 3,
+      contextTokenBudget: 600,
+      autoTriage: 'shadow',
+      similarityThreshold: 0.25,
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
+      gapIssueMinCount: 5,
+      gapIssues: true,
+      pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
+    });
     // One setting stored leaves the others to the deployment.
     expect(knowledgeSettings({ knowledge: { contextTopK: 3 } }, env)).toEqual({
       holdoutRate: 0.25,
       contextTopK: 3,
       contextTokenBudget: 800,
+      autoTriage: 'shadow',
+      similarityThreshold: 0.25,
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
+      gapIssueMinCount: 5,
+      gapIssues: true,
+      pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
     });
     // Other preferences are not knowledge settings.
     expect(
@@ -100,7 +152,22 @@ describe('the knowledge settings of a workspace', () => {
         },
         { KNOWLEDGE_HOLDOUT_RATE: '0.3' },
       ),
-    ).toEqual({ holdoutRate: 0.3, contextTopK: 5, contextTokenBudget: 1_500 });
+    ).toEqual({
+      holdoutRate: 0.3,
+      contextTopK: 5,
+      contextTokenBudget: 1_500,
+      autoTriage: 'shadow',
+      similarityThreshold: 0.25,
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
+      gapIssueMinCount: 5,
+      gapIssues: true,
+      pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
+    });
     expect(
       knowledgeSettings({ knowledge: { holdoutRate: 1.5 } }, {}).holdoutRate,
     ).toBe(0.1);
@@ -115,6 +182,260 @@ describe('the knowledge settings of a workspace', () => {
         DEFAULT_KNOWLEDGE_SETTINGS,
       );
     }
+  });
+
+  it('[KG-4.5] starts triage in shadow mode, and reads off, shadow or on from the deployment and the workspace', () => {
+    expect(knowledgeSettings(null, {}).autoTriage).toBe('shadow');
+    expect(DEFAULT_KNOWLEDGE_SETTINGS.autoTriage).toBe('shadow');
+
+    for (const mode of ['off', 'shadow', 'on'] as const) {
+      expect(
+        knowledgeSettings(null, { KNOWLEDGE_AUTO_TRIAGE: mode }).autoTriage,
+      ).toBe(mode);
+      // The workspace's choice wins over the deployment's, both ways.
+      expect(
+        knowledgeSettings(
+          { knowledge: { autoTriage: mode } },
+          { KNOWLEDGE_AUTO_TRIAGE: mode === 'on' ? 'off' : 'on' },
+        ).autoTriage,
+      ).toBe(mode);
+    }
+
+    // An operator's casing and spacing are forgiven; a typo is not a mode,
+    // and never switches triage on.
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_AUTO_TRIAGE: ' ON ' }).autoTriage,
+    ).toBe('on');
+    for (const wrong of ['yes', 'true', '1', 'enabled', '']) {
+      expect(
+        knowledgeSettings(null, { KNOWLEDGE_AUTO_TRIAGE: wrong }).autoTriage,
+      ).toBe('shadow');
+    }
+    // A stored value that is not one of the three leaves the deployment's.
+    for (const wrong of ['ON', true, 1, null, { mode: 'on' }]) {
+      expect(
+        knowledgeSettings(
+          { knowledge: { autoTriage: wrong } },
+          { KNOWLEDGE_AUTO_TRIAGE: 'off' },
+        ).autoTriage,
+      ).toBe('off');
+    }
+  });
+
+  it('[KG-4.2] reads the similarity threshold as a share, from the deployment and the workspace', () => {
+    expect(knowledgeSettings(null, {}).similarityThreshold).toBe(0.25);
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_SIMILARITY_THRESHOLD: '0.6' })
+        .similarityThreshold,
+    ).toBe(0.6);
+    expect(
+      knowledgeSettings(
+        { knowledge: { similarityThreshold: 0.4 } },
+        { KNOWLEDGE_SIMILARITY_THRESHOLD: '0.6' },
+      ).similarityThreshold,
+    ).toBe(0.4);
+    for (const wrong of ['1.5', '-0.2', 'close', ' ']) {
+      expect(
+        knowledgeSettings(null, { KNOWLEDGE_SIMILARITY_THRESHOLD: wrong })
+          .similarityThreshold,
+      ).toBe(0.25);
+    }
+  });
+
+  it('[KG-5.2] [KG-5.4] audits a tenth, and backs off below 0.6 over 20 verdicts in 30 days, unless told otherwise', () => {
+    expect(knowledgeSettings(null, {})).toMatchObject({
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
+    });
+
+    const env = {
+      KNOWLEDGE_AUDIT_RATE: '0.5',
+      KNOWLEDGE_KAPPA_FLOOR: '0.7',
+      KNOWLEDGE_KAPPA_MIN_SAMPLES: '40',
+      KNOWLEDGE_KAPPA_WINDOW_DAYS: '14',
+    };
+
+    expect(knowledgeSettings(null, env)).toMatchObject({
+      auditRate: 0.5,
+      kappaFloor: 0.7,
+      kappaMinSamples: 40,
+      kappaWindowDays: 14,
+    });
+    // The workspace's own over the deployment's.
+    expect(
+      knowledgeSettings(
+        {
+          knowledge: {
+            auditRate: 1,
+            kappaFloor: 0,
+            kappaMinSamples: 5,
+            kappaWindowDays: 7,
+          },
+        },
+        env,
+      ),
+    ).toMatchObject({
+      auditRate: 1,
+      kappaFloor: 0,
+      kappaMinSamples: 5,
+      kappaWindowDays: 7,
+    });
+    // What cannot be read falls to the layer beneath.
+    expect(
+      knowledgeSettings(
+        {
+          knowledge: {
+            auditRate: 2,
+            kappaFloor: '0.9',
+            kappaMinSamples: 0,
+            kappaWindowDays: 1.5,
+          },
+        },
+        {
+          KNOWLEDGE_AUDIT_RATE: 'some',
+          KNOWLEDGE_KAPPA_FLOOR: '-0.2',
+          KNOWLEDGE_KAPPA_MIN_SAMPLES: 'many',
+          KNOWLEDGE_KAPPA_WINDOW_DAYS: '-3',
+        },
+      ),
+    ).toMatchObject({
+      auditRate: 0.1,
+      kappaFloor: 0.6,
+      kappaMinSamples: 20,
+      kappaWindowDays: 30,
+    });
+  });
+
+  it('[KG-6.3] proposes a convention after 3 runs, and switches one off 3 outcomes behind, unless told otherwise', () => {
+    expect(knowledgeSettings(null, {})).toMatchObject({
+      conventionMinRuns: 3,
+      conventionHarmMargin: 3,
+    });
+
+    const env = {
+      KNOWLEDGE_CONVENTION_MIN_RUNS: '5',
+      KNOWLEDGE_CONVENTION_HARM_MARGIN: '4',
+    };
+
+    expect(knowledgeSettings(null, env)).toMatchObject({
+      conventionMinRuns: 5,
+      conventionHarmMargin: 4,
+    });
+    // The workspace's own over the deployment's.
+    expect(
+      knowledgeSettings(
+        { knowledge: { conventionMinRuns: 2, conventionHarmMargin: 6 } },
+        env,
+      ),
+    ).toMatchObject({ conventionMinRuns: 2, conventionHarmMargin: 6 });
+    // A count that cannot be read falls to the layer beneath: never none,
+    // which would propose every finding or switch off every convention.
+    expect(
+      knowledgeSettings(
+        { knowledge: { conventionMinRuns: 0, conventionHarmMargin: 2.5 } },
+        {
+          KNOWLEDGE_CONVENTION_MIN_RUNS: 'few',
+          KNOWLEDGE_CONVENTION_HARM_MARGIN: '-1',
+        },
+      ),
+    ).toMatchObject({ conventionMinRuns: 3, conventionHarmMargin: 3 });
+  });
+
+  it('[KG-6.4] opens an issue for a gap asked 5 times, unless told otherwise', () => {
+    expect(knowledgeSettings(null, {}).gapIssueMinCount).toBe(5);
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_GAP_ISSUE_MIN_COUNT: '12' })
+        .gapIssueMinCount,
+    ).toBe(12);
+    // The workspace's own over the deployment's.
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssueMinCount: 2 } },
+        { KNOWLEDGE_GAP_ISSUE_MIN_COUNT: '12' },
+      ).gapIssueMinCount,
+    ).toBe(2);
+    // A count that cannot be read falls to the layer beneath: never none,
+    // which would open an issue for every question asked once.
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssueMinCount: 0 } },
+        { KNOWLEDGE_GAP_ISSUE_MIN_COUNT: '1.5' },
+      ).gapIssueMinCount,
+    ).toBe(5);
+  });
+
+  it('[KG-6.4] opens gap issues unless the deployment, or the workspace for itself, switches them off', () => {
+    expect(knowledgeSettings(null, {}).gapIssues).toBe(true);
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_GAP_ISSUES_CRON: ' OFF ' }).gapIssues,
+    ).toBe(false);
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssuesCron: 'off' } },
+        { KNOWLEDGE_GAP_ISSUES_CRON: '0 4 * * 1' },
+      ).gapIssues,
+    ).toBe(false);
+    // A schedule of its own leaves it on, on the deployment's schedule; one
+    // that cannot be read falls to the deployment's.
+    expect(
+      knowledgeSettings({ knowledge: { gapIssuesCron: '0 9 * * *' } }, {})
+        .gapIssues,
+    ).toBe(true);
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssuesCron: 7 } },
+        { KNOWLEDGE_GAP_ISSUES_CRON: 'off' },
+      ).gapIssues,
+    ).toBe(false);
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssuesCron: '  ' } },
+        { KNOWLEDGE_GAP_ISSUES_CRON: 'off' },
+      ).gapIssues,
+    ).toBe(false);
+    expect(
+      knowledgeSettings(
+        { knowledge: { gapIssuesCron: '  ' } },
+        { KNOWLEDGE_GAP_ISSUES_CRON: '' },
+      ).gapIssues,
+    ).toBe(true);
+  });
+
+  it('[KG-7.2] refreshes a generated page at most every six hours, unless the deployment or the workspace says otherwise', () => {
+    const hour = 60 * 60 * 1000;
+
+    expect(knowledgeSettings(null, {}).pageRefreshMinIntervalMs).toBe(6 * hour);
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL: '2h' })
+        .pageRefreshMinIntervalMs,
+    ).toBe(2 * hour);
+    expect(
+      knowledgeSettings(
+        { knowledge: { pageRefreshMinInterval: '30m' } },
+        { KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL: '2h' },
+      ).pageRefreshMinIntervalMs,
+    ).toBe(hour / 2);
+    expect(
+      knowledgeSettings({ knowledge: { pageRefreshMinInterval: '1d' } }, {})
+        .pageRefreshMinIntervalMs,
+    ).toBe(24 * hour);
+
+    // No interval, a number with no unit, or a unit it does not know, is a
+    // mistake, and the layer beneath stands: never "refresh on every run".
+    for (const wrong of ['0h', '6', 'soon', '-1h', '1.5h', 6 * hour, '']) {
+      expect(
+        knowledgeSettings(
+          { knowledge: { pageRefreshMinInterval: wrong } },
+          { KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL: '2h' },
+        ).pageRefreshMinIntervalMs,
+      ).toBe(2 * hour);
+    }
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL: '0m' })
+        .pageRefreshMinIntervalMs,
+    ).toBe(6 * hour);
   });
 
   it('[KG-3.2] caps the budget, so a budget cannot mean everything', () => {

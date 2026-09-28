@@ -1,4 +1,5 @@
 import type {
+  ConsolidateProposal,
   ContextPack,
   KnowledgeEntry,
   KnowledgeProof,
@@ -101,6 +102,9 @@ export function renderPage(page: KnowledgePage): string {
   const parts = [
     chalkGreen(breadcrumb),
     chalkGrey(`${page.id} · entries ${page.entryPolicy}`),
+    ...(page.kind === 'GENERATED'
+      ? [chalkGrey(`Generated: answers "${page.question ?? ''}"`)]
+      : []),
     '',
     page.body || chalkGrey('(no body yet)'),
   ];
@@ -108,6 +112,28 @@ export function renderPage(page: KnowledgePage): string {
   if (page.standing.length > 0) {
     parts.push('', chalkGreen(`Standing facts (${page.standing.length})`));
     parts.push(renderEntries(page.standing));
+  }
+
+  // What a generated page's sections rest on, section by section: the
+  // prose above is a model's, and this is what it was written from.
+  if (page.sections.length > 0) {
+    const inUse = new Set(page.cited.map((entry) => entry.id));
+
+    parts.push('', chalkGreen('Written from'));
+    for (const section of page.sections) {
+      parts.push(
+        `${section.heading}: ${section.entryIds
+          .map((id) =>
+            inUse.has(id) ? id.slice(0, 8) : `${id.slice(0, 8)} (out of use)`,
+          )
+          .join(', ')}`,
+      );
+    }
+  }
+
+  if (page.cited.length > 0) {
+    parts.push('', chalkGreen(`Cited facts (${page.cited.length})`));
+    parts.push(renderEntries(page.cited));
   }
 
   return parts.join('\n');
@@ -157,6 +183,7 @@ export function renderHits(hits: KnowledgeHit[]): string {
         hit.kind === 'page' ? 'page' : 'fact',
         hit.scope ?? null,
         hit.trust ? TRUST[hit.trust] : hit.verified ? 'verified' : null,
+        hit.evidenceFor ? `evidence for ${hit.evidenceFor.title}` : null,
       ]
         .filter(Boolean)
         .join(' · ');
@@ -224,6 +251,17 @@ export function renderGaps(gaps: KnowledgeGap[]): string {
 
 export function renderPageRef(page: KnowledgePageRef, verb: string): string {
   return `${chalkGreen(verb)} ${page.title} ${chalkGrey(page.id)}`;
+}
+
+export function renderConsolidateProposal(
+  proposal: ConsolidateProposal,
+): string {
+  return [
+    `${chalkGreen('Proposed')} folding ${proposal.entryIds.length} ` +
+      `entr${proposal.entryIds.length === 1 ? 'y' : 'ies'} into ` +
+      `${proposal.page.title} ${chalkGrey(proposal.proposalId)}`,
+    chalkGrey('Nothing changes until a person accepts it in the review queue.'),
+  ].join('\n');
 }
 
 export function renderTriage(result: {

@@ -19,9 +19,10 @@ export class UpdateWorkspacePreferencesDto {
   agentRuns?: Record<string, unknown>;
 
   /**
-   * Knowledge settings: holdoutRate, contextTopK, contextTokenBudget. Free-form
-   * for the same reason: the server's `knowledgeSettings` reads each field
-   * back, and one it cannot read falls to the deployment's setting.
+   * Knowledge settings: holdoutRate, autoTriage, auditRate and the rest of
+   * the keys the server's `knowledgeSettings` names. Free-form for the same
+   * reason: it reads each field back, and one it cannot read falls to the
+   * deployment's setting.
    */
   @IsOptional()
   @IsObject()

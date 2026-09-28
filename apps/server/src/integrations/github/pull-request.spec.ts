@@ -13,10 +13,63 @@ import {
   codeChangeOf,
   issueKeysIn,
   parsePullRequestEvent,
+  parsePushEvent,
 } from './pull-request';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+const MERGE_SHA = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
+
+/** A pull request merged into the default branch, naming no issue. */
+function mergedBody(overrides: Record<string, unknown> = {}) {
+  return {
+    action: 'closed',
+    repository: {
+      id: 123456,
+      full_name: 'vantikhq/vantik',
+      default_branch: 'main',
+    },
+    pull_request: {
+      number: 8,
+      title: 'Tidy the sync log',
+      body: 'No issue for this',
+      head: { ref: 'chore/tidy' },
+      base: { ref: 'main' },
+      merged: true,
+      merge_commit_sha: MERGE_SHA,
+    },
+    ...overrides,
+  };
+}
+
+/** A push to the default branch. */
+function pushBody(overrides: Record<string, unknown> = {}) {
+  return {
+    ref: 'refs/heads/main',
+    before: '1111111111111111111111111111111111111111',
+    after: MERGE_SHA,
+    repository: {
+      id: 123456,
+      full_name: 'vantikhq/vantik',
+      default_branch: 'main',
+    },
+    pusher: { name: 'someone' },
+    commits: [
+      {
+        added: ['apps/server/src/new.ts'],
+        modified: ['apps/server/src/main.ts'],
+        removed: [] as string[],
+      },
+      {
+        added: [] as string[],
+        modified: ['apps/server/src/main.ts'],
+        removed: ['apps/server/src/old.ts'],
+      },
+    ],
+    ...overrides,
+  };
+}
 
 function pullRequestBody(overrides: Record<string, unknown> = {}) {
   return {
@@ -151,6 +204,170 @@ describe('parsePullRequestEvent', () => {
         pullRequestBody({ repository: { full_name: 'vantikhq/vantik' } }),
       ),
     ).toBeNull();
+  });
+});
+
+describe('landed changes', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('[KG-6.1] reads a pull request merged into the default branch with no issue key as a change with its merge SHA', async () => {
+    expect(parsePullRequestEvent(mergedBody())).toEqual({
+      externalRepoId: '123456',
+      fullName: 'vantikhq/vantik',
+      pullNumber: 8,
+      issueKeys: [],
+      mergeSha: MERGE_SHA,
+      onDefaultBranch: true,
+    });
+
+    mockedAxios.get.mockResolvedValueOnce({
+      data: [{ filename: 'apps/server/src/main.ts' }],
+    });
+
+    expect(await codeChangeOf(mergedBody(), 'a-token')).toEqual({
+      externalRepoId: '123456',
+      changedPaths: ['apps/server/src/main.ts'],
+      issueKeys: [],
+      mergeSha: MERGE_SHA,
+      onDefaultBranch: true,
+    });
+  });
+
+  it('[KG-6.1] reads a keyed pull request merged into another branch with its merge SHA, as not on the default branch, and keeps the files it could read', async () => {
+    const body = mergedBody();
+    body.pull_request.base = { ref: 'release/1.2' };
+    body.pull_request.body = 'Closes ENG-42';
+
+    expect(parsePullRequestEvent(body)).toMatchObject({
+      issueKeys: ['ENG-42'],
+      mergeSha: MERGE_SHA,
+      onDefaultBranch: false,
+    });
+
+    // Only routed, so a page that fails keeps the pages before it, as an
+    // open pull request does.
+    const full = Array.from({ length: 100 }, (_unused, index) => ({
+      filename: `file-${index}.ts`,
+    }));
+    mockedAxios.get
+      .mockResolvedValueOnce({ data: full })
+      .mockRejectedValueOnce(new Error('rate limited'));
+
+    const change = await codeChangeOf(body, 'a-token');
+
+    expect(change).toMatchObject({
+      mergeSha: MERGE_SHA,
+      onDefaultBranch: false,
+    });
+    expect(change?.changedPaths).toHaveLength(100);
+  });
+
+  it('[KG-6.1] reads nothing of a pull request merged into another branch that names no issue', async () => {
+    const body = mergedBody();
+    body.pull_request.base = { ref: 'release/1.2' };
+
+    expect(parsePullRequestEvent(body)).toBeNull();
+    expect(await codeChangeOf(body, 'a-token')).toBeNull();
+    expect(mockedAxios.get).not.toHaveBeenCalled();
+  });
+
+  it('[KG-6.1] fails, to be tried again, when the files of a merged pull request cannot all be read', async () => {
+    const full = Array.from({ length: 100 }, (_unused, index) => ({
+      filename: `file-${index}.ts`,
+    }));
+    mockedAxios.get
+      .mockResolvedValueOnce({ data: full })
+      .mockRejectedValueOnce(new Error('rate limited'));
+
+    await expect(codeChangeOf(mergedBody(), 'a-token')).rejects.toThrow(
+      'page 2',
+    );
+
+    // An open pull request keeps the pages it read, as before.
+    mockedAxios.get
+      .mockResolvedValueOnce({ data: full })
+      .mockRejectedValueOnce(new Error('rate limited'));
+
+    expect(
+      (await codeChangeOf(pullRequestBody(), 'a-token'))?.changedPaths,
+    ).toHaveLength(100);
+  });
+
+  it('[KG-6.1] carries the merge SHA beside the keys of a keyed pull request, which routes as before', () => {
+    const body = mergedBody();
+    body.pull_request.body = 'Closes ENG-42';
+
+    expect(parsePullRequestEvent(body)).toMatchObject({
+      issueKeys: ['ENG-42'],
+      mergeSha: MERGE_SHA,
+    });
+    // Open, it routes exactly as it did, with nothing landed.
+    expect(parsePullRequestEvent(pullRequestBody())).not.toHaveProperty(
+      'mergeSha',
+    );
+  });
+
+  it.each([
+    ['closed without merging', { merged: false }],
+    ['merged with no commit id', { merge_commit_sha: null }],
+  ])('[KG-6.1] lands nothing for a pull request %s', (_, pullRequest) => {
+    const body = mergedBody();
+    Object.assign(body.pull_request, pullRequest);
+
+    // It names no issue either, so there is nothing to do at all.
+    expect(parsePullRequestEvent(body)).toBeNull();
+  });
+
+  it('[KG-6.1] reads a push to the default branch as a change with its new head and every path it touched', async () => {
+    expect(parsePushEvent(pushBody())).toEqual({
+      externalRepoId: '123456',
+      mergeSha: MERGE_SHA,
+      onDefaultBranch: true,
+      changedPaths: [
+        'apps/server/src/new.ts',
+        'apps/server/src/main.ts',
+        'apps/server/src/old.ts',
+      ],
+    });
+
+    // A push lists its own files, so GitHub is asked for nothing.
+    expect(await codeChangeOf(pushBody(), 'a-token')).toEqual({
+      externalRepoId: '123456',
+      mergeSha: MERGE_SHA,
+      onDefaultBranch: true,
+      changedPaths: [
+        'apps/server/src/new.ts',
+        'apps/server/src/main.ts',
+        'apps/server/src/old.ts',
+      ],
+      issueKeys: [],
+    });
+    expect(mockedAxios.get).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['to another branch', { ref: 'refs/heads/feature/x' }],
+    ['of a tag', { ref: 'refs/tags/v1.0.0' }],
+    ['that deleted the branch', { deleted: true, after: '0'.repeat(40) }],
+    ['with no files', { commits: [] }],
+  ])('[KG-6.1] lands nothing for a push %s', (_, overrides) => {
+    expect(parsePushEvent(pushBody(overrides))).toBeNull();
+  });
+
+  it('[KG-6.1] reads the head commit of a push that lists no commits', () => {
+    const body = pushBody({
+      commits: [],
+      head_commit: { added: [], modified: ['README.md'], removed: [] },
+    });
+
+    expect(parsePushEvent(body)?.changedPaths).toEqual(['README.md']);
+  });
+
+  it('[KG-6.1] does not read a pull request or an issue event as a push', () => {
+    expect(parsePushEvent(pullRequestBody())).toBeNull();
+    expect(parsePushEvent(mergedBody())).toBeNull();
+    expect(parsePushEvent({ action: 'created', issue: {} })).toBeNull();
+    expect(parsePushEvent(null)).toBeNull();
   });
 });
 

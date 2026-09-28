@@ -17,6 +17,7 @@ const sidebars: SidebarsConfig = {
         'fundamentals/cycles',
         'fundamentals/projects',
         'fundamentals/views',
+        'fundamentals/knowledge',
       ],
     },
     {

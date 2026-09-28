@@ -5,14 +5,23 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 3 done; phases 4 and 5 are next, in a new pull request once
-  PR #44 (phase 1's review fixes, phase 2 and phase 3) is merged.
+- Phases 4 to 7 are done. Phase 7: KG-7.1 to KG-7.6 implemented and
+  mutation-checked, and its review passed after three rounds with no
+  finding left (see "Phase 7 review: PASS" below); round 1 found three
+  blocking and eight non-blocking findings (F1-F11), round 2 two
+  non-blocking (F12, F13), all fixed with tagged, mutation-checked tests.
+  Phase 6 is done: KG-6.1 to KG-6.5 implemented and mutation-checked, and
+  its review passed after eight rounds with no finding left (see "Phase 6
+  review: PASS" below). PR #45 is open from this branch, so the phase 6
+  and 7 commits are in it too; phases 4 and 5 are in it as well.
 - Pull requests: the maintainer asked for the remaining phases in two or three
-  pull requests rather than one each. PR #44 carries phase 1's review fixes,
-  phase 2 and phase 3; a second carries phases 4 and 5; a third phases 6
-  and 7.
-- Last verify: phases 0-3 PASS, 30/30 (server 1519 with the 15 database-only skipped, agent-core 67, cli 10,
-  webapp 621 with its 2 expected failures; typecheck and lint ok).
+  pull requests rather than one each. PR #44 carried phase 1's review fixes,
+  phase 2 and phase 3. PR #45 was opened for phases 4 and 5; it is still
+  open from this branch, so it carries phases 6 and 7 as well, and its
+  title and description are to say so once phase 7's review passes.
+- Last verify: phases 0-7, every criterion passing once the phase 7
+  review's PASS is recorded (server 1948, agent-core 71, cli 13, webapp
+  655; typecheck ok); the final run is in the log below.
 - Spec hash: `8409159da053` since KG-2.1's file check was moved to
   `skills/working-vantik-knowledge/SKILL.md` at the maintainer's request
   (the guides moved there on `main` in e7b9c44). GOAL.md carries the new
@@ -401,6 +410,831 @@ next session starts by reading it.
   as not kept, with reasons: the arm and outcome are read per arm from the
   endpoint, and nothing shows the counts yet.
 
+### Phase 4
+
+- **The pipeline (KG-4.3).** `pages/triage/knowledge-triage.service.ts`, one
+  pass per entry on the `pages` queue (`triageEntry:<entryId>`, three
+  attempts with backoff). `createEntry` queues it for every entry that lands
+  PROPOSED; a person's STANDING write is already triaged and queues nothing.
+  A queue that refuses the job leaves the entry in the inbox, as before. The
+  pass skips an entry that is gone, no longer PROPOSED, already decided about
+  (one decision per entry), or whose workspace has triage off. Stages, in
+  order: policy, exact repeat, near neighbours, grounding, decision.
+- **Policy (KG-4.8).** `triage/triage-policy.ts`. A credential pattern (key
+  armour, provider key prefixes with their lengths, a password in a URL, a
+  JWT, a Vantik token) rejects with policy SECRET before any model or the
+  index sees the content, and the decision records the pattern's name, never
+  the content. A list of two or more items, or over 1000 characters, rejects
+  with ONE_FACT. Credentials are also refused at write (422
+  `secret-refused`, content not echoed) on create and on edit, for a person
+  too: entries are replicated to every member's browser, so triage finding
+  one afterwards is too late. **An agent's entry is never accepted without
+  a person, for now.** Runs do not write with a credential of their own
+  (ENG-84): every agent writes through an MCP, CLI or REST client that names
+  its own session, and a run of the same agent open at the time may have
+  nothing to do with the entry (a self-assigned issue starts a hosted run
+  for that agent; a shared agent account has many). So nothing the server
+  holds says what an agent read, and every entry not written by a person
+  (an agent, a System account, or no user record) gets UNKNOWN_SOURCE, a
+  new reason, when it would otherwise be accepted. It does not stop a
+  repeat from being folded in: that puts no new claim in front of anyone,
+  and at worst archives a copy. Once runs write with a run-bound credential
+  the server stamps, a run can vouch for what it wrote, and this can be
+  narrowed. Outside input can still be found, and only ever makes the
+  decision stricter. The writer's runs, from the server's record (`AgentRun`
+  rows in the workspace whose `agentUserId` is the writer, not deleted,
+  created at or before the entry and not finished before it), and every
+  issue or comment the entry cites, are read for it. An issue is outside
+  input when an integration filed it (`sourceMetadata.type`), it is a
+  support issue or on a support team, a non-PR linked issue carries a
+  source type or syncs, or its thread holds a comment mirrored from outside
+  (`sourceMetadata.type`) written before the entry, deleted or not, since
+  the comment stays after the link goes. A cited comment is outside input by
+  its own `sourceMetadata.type`. Any of these escalates with EXTERNAL_INPUT,
+  which applies even to a repeat, so text known to come from outside cannot
+  raise another entry's corroboration count. The session is recorded as
+  given, for tracing, and decides nothing. A person's entry is not read for
+  runs.
+- **Exact repeats (KG-4.1).** `PageEntry.contentHash` is sha256 of
+  `normaliseContent`, written on create and on every content edit, and
+  backfilled by the migration in SQL. The neighbourhood is PROPOSED and
+  STANDING entries, not deleted, in the same workspace, sharing a module
+  (`moduleIds hasSome`), or on the same page when the entry has no modules;
+  and only entries written before it, ordered by `createdAt` then `id`, so of
+  two identical entries written at once exactly one corroborates the other.
+  A repeat corroborates the STANDING match if there is one, else the oldest.
+  In `on` mode the target's `corroborationCount` goes up by one and the
+  repeat is ARCHIVED, so no second row is ever served; a DUPLICATE relation
+  (decided by HASH) from the repeat records who said it again and when.
+- **Near neighbours (KG-4.2).** `VectorService.findNearEntries` asks the
+  index for PROPOSED and STANDING entries in the entry's modules (a new
+  `moduleIds` filter) or on its page, with the similarity threshold as the
+  vector distance ceiling, and keeps only hits the embedding matched at or
+  above it. Postgres then narrows them to the neighbourhood above, and the
+  nearest three are compared. `KNOWLEDGE_SIMILARITY_THRESHOLD` (0.25, i.e.
+  distance 0.75, the write-time near-match distance; overridable per
+  workspace as `similarityThreshold`) is deliberately loose, since the
+  vector distance is not calibrated (`SIMILARITY_MEASUREMENT_NOTE`) and at
+  most three pairs are asked about. For each pair, `relation-guard.ts`
+  first: a different number, month or weekday, negation parity or set of
+  condition words makes it DISTINCT (decided by RULE) with no model asked.
+  Otherwise two judgments classify it; only two readable, identical answers
+  are a relation (decided by MODEL). Anything else is stored as DISTINCT and
+  escalates with JUDGES_DISAGREE, so two unreadable answers never count as
+  agreeing. An agreed DUPLICATE corroborates as an exact repeat does.
+  Relations are upserted rows (`@@unique([fromId, toId])`); no entry's text
+  is changed. An index that cannot be asked fails the pass, which Bull
+  retries: a pass that cannot look for contradictions does not decide.
+- **Two judgments (KG-4.4).** `triage/triage-judges.ts`: the `fast` and
+  `smart` roles at temperature 0, or, when both roles resolve to the same
+  model id, `smart` twice at 0.7. Prompts treat the entries as data, not
+  instructions. The acceptance judgment is shown the claim and each
+  citation as the server read it: path, lines, result and snippet; a cited
+  issue's title and description or a comment's body, as plain text, in this
+  workspace only, cut to 1500 characters; for a pull request or a run, its
+  label and that its text is not shown. Any credential in what a model is
+  shown (a neighbour's content, a snippet, a cited text) is replaced by
+  `[withheld: <kind>]`, redacted before any cut. Plain text rather than
+  markdown, because markdown escapes a token's underscores and an escaped
+  token no longer matches. An answer that cannot be read, or a model that
+  cannot be reached, counts as not accepting.
+- **Auto-accept conditions (KG-4.4).** Reasons are collected, every one that
+  applies: EXTERNAL_INPUT; SUPERSEDE_REQUEST (added to the plan's list: a
+  declared correction retires accepted knowledge only on a person's
+  acceptance, as phase 0 decided); CONTRADICTS_VERIFIED and
+  CONTRADICTS_LOCKED for an agreed CONTRADICTS or SUPERSEDES against a
+  verified entry or one on a LOCKED page; JUDGES_DISAGREE; NO_LLM; and, for
+  an entry that is not a repeat, UNGROUNDED (no citations), CITATION_FAILED
+  (any citation not HOLDS or MOVED, UNKNOWN included), UNKNOWN_SOURCE (not
+  written by a person, as above), PIN_REQUEST (every
+  CONVENTION, since standing conventions are packed into every run in their
+  modules), BROAD_SCOPE (more than three modules, or no scope, since an
+  unscoped entry is served to every query). The acceptance judgment
+  is asked only when no reason applies. Decision: a broken policy rejects;
+  any reason escalates; else a repeat corroborates; else it is accepted.
+  HARMFUL_SIGNAL and AUDIT are in the enum for phase 5.
+- **Precedence (KG-4.6).** `triage/precedence.ts`: HUMAN_VERIFIED over
+  GROUNDED over UNGROUNDED, then the newer. The new entry is ranked as it
+  would stand if accepted (STANDING with its citations). The relation stores
+  `preferredId`. When an accepted entry wins against a STANDING one in `on`
+  mode, that one becomes DISPUTED (reversible, withheld until a person
+  looks), in the same transaction. Precedence can only rule against the new
+  entry when a reason already escalates it (a verified neighbour, or the
+  entry ungrounded), so nothing precedence ruled against is accepted. A
+  PROPOSED entry it outranks is left for its own triage.
+- **Shadow and on (KG-4.5).** `KNOWLEDGE_AUTO_TRIAGE` off | shadow | on,
+  default shadow, per workspace as `autoTriage`, read through
+  `knowledgeSettings`; the environment's value is read case-insensitively,
+  a stored one only as written. Shadow records the decision and the
+  relations and changes no status or count. `on` applies the decision in the
+  transaction that records it: accept sets STANDING, a repeat or a reject
+  sets ARCHIVED, an escalation changes nothing. Applying is conditional on
+  everything it touches being as it was read: the entry PROPOSED with the
+  `updatedAt` it was read with; the entry it repeats live, PROPOSED or
+  STANDING, on a live page, with the same hash (an exact repeat) or content
+  (a near duplicate); each entry it disputes STANDING, unverified, with the
+  content it was compared with, on a page that is not LOCKED. Any of these
+  failing throws inside the interactive transaction, which rolls back what
+  was already changed; the decision and relations are then recorded in a
+  second transaction with `applied: false` and `outputs.notApplied` saying
+  which entry changed. Changed entries are re-indexed.
+- **The record (KG-4.3).** `KnowledgeTriageDecision`: decision, reasons,
+  policy, mode, applied, the corroborated entry, `inputs` (content hash,
+  kind, scope, modules, citations and their results, the writer (user,
+  type, session as given, each run with its model, issue and outside
+  source, and whether the source was unknown), each cited issue or comment
+  with its outside source, the threshold, the repeat found, each neighbour with
+  its similarity, status, trust, relation and preferred entry),
+  `inputsDigest` (sha256 of the inputs as sorted JSON), every model asked in
+  order, and the judges' raw answers. The content is not copied into it.
+  The human verdict column arrives with phase 5, which writes it.
+- **No LLM (KG-4.7).** With none configured the policy, the hash, the rules
+  and grounding still run; a pair that needed a model has no relation and
+  adds NO_LLM, and so does an entry that reached the acceptance judgment.
+- **Migration** `20260927040000_knowledge_triage`: `prisma migrate diff`'s
+  output verbatim (two tables, six enums, two PageEntry columns and an
+  index) plus the hash backfill. The backfill trims and folds with
+  `regexp_replace` over JavaScript's `\s` spelled out as a class, not
+  `btrim`'s character list (no `\v` escape in postgres, so it trimmed the
+  letter v) nor postgres's `\s` (which follows the locale and leaves out
+  U+00A0, U+2007, U+202F and U+FEFF). The class matches JavaScript's `\s`
+  on every code point from 1 to 65535, checked on postgres 16. The
+  migration's own UPDATE, run over 20 sample rows, agrees with
+  `contentHashOf` on each: text starting or ending in v, tabs, vertical
+  tabs, form feeds and newlines, no-break and ideographic spaces, accented
+  and Japanese text. Lower-casing outside ASCII follows the database's
+  locale; an entry where it differs from JavaScript's is not found by hash,
+  and the near-match stage still compares it.
+- **Webapp sync contract.** `contentHash` and `corroborationCount` are
+  listed as not kept; nothing on screen reads them yet.
+
+### Phase 5
+
+- **Verdicts (KG-5.5).** `KnowledgeTriageDecision` gains `verdict`
+  (ACCEPTED, REJECTED, EDITED), `agreed`, `verdictById` and `verdictAt`. A
+  verdict is recorded when a person (never an agent) acts on an entry whose
+  latest decision has none yet, and the entry was PROPOSED before the change
+  or the decision was drawn for audit and the entry was still where it left
+  it (review round 3). Setting STANDING or CONSOLIDATED is
+  ACCEPTED; ARCHIVED or DISPUTED is REJECTED; changing the content, scope or
+  kind (compared with what they were) is EDITED, whatever the status. Confirming
+  alone gives no verdict: it says nothing about whether the entry stays.
+  A person consolidating a page gives ACCEPTED on each audited entry folded
+  into it, in the same transaction; an agent consolidating gives none.
+  `updateEntry` and `bulkUpdate` put a conditional `updateMany` (`verdict:
+  null`) in the same transaction as the change, so the verdict and the
+  change commit together and of two people acting at once only the first
+  gives one. Entries a person happens to act on later, not audited and no
+  longer waiting, give none: they are not a sample of anything, and would
+  tilt agreement towards whatever people go looking for.
+- **What agreement rates (KG-5.3).** `triage/agreement.ts`, pure. Triage's
+  label is its decision, or, for a decision held back by a back-off, the
+  decision it reached (so a backed-off type can be seen to recover). An
+  escalation is rated only when every reason is JUDGES_DISAGREE: every
+  other reason is a rule that sends the entry to a person whatever they make
+  of it, so a person accepting it does not say triage should have. A SECRET
+  rejection is not rated: a credential is refused whatever agreement says.
+  The person's decision: ACCEPTED is AUTO_ACCEPT; REJECTED agrees with a
+  CORROBORATE or REJECT (taking it out of use is what those did), and is
+  otherwise ESCALATE (triage has no way to drop an entry for being wrong);
+  EDITED is ESCALATE (as written it was neither to keep nor to drop).
+- **Kappa (KG-5.3).** Cohen's kappa per decision type, that type against
+  the rest, over verdicts whose `verdictAt` is inside
+  `KNOWLEDGE_KAPPA_WINDOW_DAYS` (30): the three acting types (AUTO_ACCEPT,
+  CORROBORATE, REJECT), and ESCALATE, which is reported (whether what triage
+  sent people needed them) but never backs off. Each verdict counts once.
+  The report also gives the cells with each audit weighted by `1 /
+  auditRate` (the rate recorded on the decision), which say how the
+  verdicts stand for everything triage decided, for reading only: kappa
+  over the weighted cells made acting so nearly universal that nineteen
+  agreements in twenty audits came to 0.27 and backed acceptance off, and a
+  type would stop and resume as audits entered and left the window (review
+  round 2). A type's `samples` is
+  the count of verdicts about it (triage decided it, or the verdict says it
+  should have), unweighted, and is what the minimum is checked against.
+  Verdicts on which neither side said it still enter its kappa, as the
+  other class, but are no evidence about it: counted, they let a type pass
+  the minimum on verdicts about the others (review round 1). With verdicts
+  about the type, kappa is null only when both sides said it on every one,
+  which back-off reads as complete agreement. Tested against hand-worked
+  values (1, 0, 0.4, -1, a per-type table).
+- **Audits (KG-5.2).** `KNOWLEDGE_AUDIT_RATE` (0.1, per workspace
+  `auditRate`). The decision id is generated before the row is written, and
+  the draw is the first 52 bits of sha256(id) over 2^52: seeded by the id,
+  so whether a decision was audited can be worked out again from the id
+  alone. Every applied acting decision is drawn (AUTO_ACCEPT, CORROBORATE,
+  REJECT ONE_FACT), a superset of "auto-accepted", because in `on` mode a
+  corroboration or a refusal never reaches a person otherwise and its kappa
+  would never have samples. SECRET is never drawn: a person would be shown a
+  credential. Shadow decisions are not drawn: they reach a person anyway.
+  `auditRate` is recorded whenever the decision was drawable, for the
+  weights. An open audit is listed while its entry is still in the status
+  the decision left it (STANDING for an acceptance, ARCHIVED otherwise).
+- **Answering an audit.** `POST /api/v1/knowledge/review/:decisionId/audit`
+  `{agree}`. Agreeing keeps what triage did, not agreeing undoes it through
+  the ordinary `updateEntry` (an acceptance is archived; a repeat or a
+  refusal is put into use), and that change records the verdict like any
+  other. 404 outside the workspace, 400 for a decision not drawn for audit,
+  409 once it has a verdict. The answer's verdict write is strict (an
+  `update` filtered on `verdict: null`, which fails when another verdict
+  landed first and rolls back the answer's change with it), so two people
+  answering at once cannot leave the entry as the second left it and the
+  verdict as the first gave it; the second gets 409. Disagreeing with a
+  folded repeat takes its corroboration back off the entry it repeated.
+  Any other action on an audited entry (setting it aside from the rail,
+  editing it, folding it into the page) gives the verdict too, while the
+  entry is still where the decision left it: once decay, a person or a
+  consolidation has moved it on, the audit is closed on every route, since
+  acting on the entry then judges what moved it, not triage (review
+  round 3).
+- **Back-off (KG-5.4).** `KNOWLEDGE_KAPPA_FLOOR` (0.6) and
+  `KNOWLEDGE_KAPPA_MIN_SAMPLES` (20), per workspace. A type with at least
+  the minimum verdicts about it and a kappa under the floor backs off; a
+  backed-off type resumes only with at least the minimum and a kappa at the
+  floor or above. Under the minimum, or with none about it whatever the
+  minimum, the state holds either way, so a type resumes on evidence, not
+  on its verdicts ageing out of the window. State is the
+  append-only `KnowledgeBackoffChange` table (the latest row per type),
+  which is also the record of each change with the kappa, samples, floor,
+  minimum and window it was made on, and each change is logged once
+  committed. Re-evaluated after every verdict, inside a transaction holding
+  a per-workspace advisory lock, so two verdicts landing together cannot
+  both record the same change; a failure is logged and never fails the
+  person's action. A backed-off decision (never a SECRET refusal) is
+  recorded as ESCALATE with reason `LOW_AGREEMENT` and `backedOffFrom`, in
+  shadow and in on, so it is still rated as what triage reached. Changing
+  the floor or minimum takes effect at the next verdict.
+- **The queue (KG-5.1).** `GET /api/v1/knowledge/review[?pageId][&reason]`:
+  every PROPOSED entry, as the inbox always listed, each with the reasons of
+  its open escalation; then the open audits, with reason AUDIT. Counts per
+  reason are over the whole queue; `reason` narrows the items. With triage
+  off it is the inbox alone, no reasons and no audits. The webapp keeps
+  reading waiting entries from the synced store and takes reasons and audits
+  from the endpoint, so the queue stays live and, until the endpoint
+  answers, is exactly the inbox. Reason chips filter it; audits carry a
+  question and two answers and are never selected in bulk. `GET
+  /api/v1/knowledge/agreement` gives the kappa, counts, weighted counts and
+  state per type, shown on Settings > Agents. All three routes refuse
+  agents: an agent reads every entry through the knowledge routes, and is
+  refused only the reviewer's view of why each was held back.
+- **Migration** `20260927050000_knowledge_audit`: `prisma migrate diff`'s
+  output (an enum, a value added to `KnowledgeEscalationReason`, seven
+  columns, a table, two indexes). Replayed on postgres 16 over the earlier
+  migrations; the diff against the schema is then empty. The new table is
+  not replicated.
+
+### Phase 6
+
+- **Landed changes (KG-6.1).** `CodeChangeEvent` gains `mergeSha`, the
+  merge commit of any merged pull request or the new head of a push to the
+  default branch, and `onDefaultBranch`, whether it landed there. A merge
+  into another branch carries its merge commit with `onDefaultBranch:
+  false` and is not checked: its code is not what agents are told about,
+  and it is checked when that branch is merged. A push is
+  recognised by its shape (a `ref`, an `after` and a `commits` list, no
+  `pull_request`), must be to `refs/heads/<default_branch>`, not a deletion,
+  and its paths come from the commits' added, modified and removed lists
+  (the head commit's when the list is empty); it names no issue keys, so
+  routing is unchanged. For a pull request merged into the default branch,
+  a page of its files that fails fails the webhook's job, which Bull tries
+  again (three attempts): a list cut short would leave knowledge citing the
+  rest unchecked, with nothing to check it later. Any other pull request,
+  open or merged elsewhere, keeps the pages it read, as before, since its
+  files are only routed; and one merged elsewhere that names no issue is
+  not read at all. `ModuleRoutingProcessor` routes keyed changes
+  as before, and queues `recheckLandedChange` on the `pages` queue for any
+  change with a `mergeSha` on the default branch and paths, with the job id
+  `recheckLandedChange:<workspace>:<repo>:<sha>`, so a merged pull request
+  and the push of its merge commit queue one job while either is waiting.
+- **Re-checking a landed change (KG-6.2).** `EntryCitationsService.recheckLanded`
+  finds CODE citations by `(moduleRepoId, path)`: every module repository
+  row with the change's `externalRepoId` in the workspace, deleted rows
+  included (a citation keeps the row it was written against), and the
+  changed paths, cleaned as citation paths are. Only live STANDING or
+  PROPOSED entries, only citations that held once (they have a snippet), and
+  not UNKNOWN ones, which their retry reads at the commit they cite.
+  - **The commit read.** Each is read at the head of the default branch,
+    not at the merge SHA itself. The head contains the change, and is the
+    merge SHA unless more has landed since; jobs run on several workers and
+    not always in the order changes landed, so reading an older commit than
+    the newest could put back a result a later change had already
+    corrected. The merge SHA names the job and is cited in the evidence.
+  - **Newest reading wins.** A reading is stamped with when its head was
+    asked for (`RepoReads.headAskedAt`), not when the file was read: every
+    change that had landed by then is in it, so a reading stamped later
+    never read less. A reading is stored only over an older one
+    (`readBefore`), by a landed change's check and by the re-check after a
+    harmful signal alike, each under the entry's advisory lock
+    (`knowledge-entry:<id>`). What is acted on is what is stored once the
+    lock is held: the check's own reading, or a newer one stored first,
+    whose head was asked for after this change landed, so it contains it
+    (a re-check stores what it finds without acting on it). A stored
+    reading the check found when it queried is read again under the lock
+    too. A reading of the commit a citation cites (the retry of an unread
+    citation, or the re-check of one) is stored only while the citation is
+    still unread, under the lock, and is stamped with when the citation was
+    written: it is older than any head read since, and never outranks one,
+    however close the two finish. An unread citation that names no commit
+    is read at the head, and stamped with when that was asked for. Stamps
+    come from the servers' clocks; two readings of heads could be misordered
+    only if the heads were asked for within the servers' skew of each other
+    with a change landing between, which is noted at `readBefore`. Before
+    acting, `settle` also holds the entry's row (`SELECT ... FOR NO KEY
+    UPDATE`), so a person's change to it waits rather than landing between
+    reading the entry and acting on it, while rows referring to it (its uses
+    as it is served) are still written.
+  - **Read once.** A citation already read at the change's own commit is
+    not read or judged again: that reading comes back as stored and is
+    acted on like any other. So while the change is still the head, the
+    duplicate report (a merged pull request and the push of its merge
+    commit) is read and judged once and a retry reads only what is left;
+    once more has landed, the second report reads the newer head. A
+    contradiction a re-check stored at that commit is acted on here. The
+    first version also skipped anything checked since the job was queued;
+    round 1 of the review found that unsound (below), and it is gone.
+  - **Passed over while unread.** A landed change's check leaves an unread
+    citation to its retry, which reads the commit the citation cites (or
+    the head, when it names none). When that first reading finds the claim
+    held and the default branch is no longer at the commit read, asked for
+    again once the reading is stored, the citation is handed to the
+    landed-change check at the head (`checkSinceCited`: a
+    `CODE_LANDED_JOB` for the head and the cited path, carrying the commit
+    read as `since` and the citation as `citationIds`, under a job id of
+    its own), so the changes that landed meanwhile are checked against it
+    after all. The job checks that citation alone: the other citations of
+    its file were checked by the changes' own jobs. Asking again, rather
+    than reusing the head the reading's own job asked for, covers a change
+    that landed while the citation was read. A reading that lost to a
+    newer one has already been acted on, and is not handed on. The
+    correction issue of a handed-on check says it was checked at the head
+    against the changes since the commit read, naming none of them as the
+    change; the citation's own line gives the commit the head was.
+  - **A person's word is newer.** A reading taken before a person last put
+    the entry back (the newest `reversedAt` of its maintenance rows), or a
+    judgment of words the entry no longer has (`judgedContentHash`, a new
+    column holding the entry's content hash the judge read), is not acted
+    on: the job counts it as stale and is retried, and the retry reads and
+    judges it again rather than reusing it. A contradiction a person has
+    already put back, of the same citation's same code (`judgedCodeHash`, a
+    hash of the snippet and the lines the judge read) for the same words,
+    is not raised again, however far unrelated commits have moved the head.
+  - **Nothing is written by the check.** Each result comes back with what to
+    store, and the upkeep stores it in the same transaction as what it does
+    about it, so a crash cannot leave a result stored and not acted on.
+    Unread citations fail the job after
+    everything read was acted on; Bull retries with its backoff.
+  - **What is done (`upkeep/knowledge-upkeep.service.ts`).** HOLDS and MOVED
+    are stored (check time and sha; MOVED also the lines). For an entry in
+    use: CHANGED with a CONTRADICTED judgment moves it to DISPUTED (a
+    conditional `updateMany` on STANDING and unverified) with a
+    `PageEntryMaintenance` row (DISPUTED, CITATION_CONTRADICTED, evidence:
+    the change and each citation's path, lines, sha read and judgment) and a
+    correction issue. MISSING gives an archive proposal
+    (ARCHIVE_PROPOSED, CITATION_MISSING). CHANGED with no judgment either
+    way (UNCLEAR, as without an LLM) gives a proposal with
+    CITATION_UNJUDGED: the no-LLM escalation. Contradicted beats missing
+    beats unjudged, one row per entry per change. A PROPOSED entry is only
+    checked: triage reads the fresh results.
+  - **When it asks instead of acting.** A verified entry, one on a LOCKED
+    page, or one a person put back, saying the same thing, after a dispute
+    in the last 90 days (`STANDING_ENTRY_DECAY_DAYS`) gets an archive
+    proposal with CITATION_CONTRADICTED and the same issue, not a dispute:
+    a person has read the claim or the code, and the judge is a model. The
+    evidence says which (`askedBecause`: VERIFIED, LOCKED or RESTORED), and
+    the issue and the queue's summary say it in words. A dispute records the
+    entry's content hash (`claim`); an entry a person corrected before
+    putting it back has another, makes a new claim, and is disputed like
+    any other. A proposal is not made while one for the same reason is
+    open for the entry, nor for 90 days after a person declined one for the
+    same reason, so the queue does not ask again on every change to the
+    file; a proposal for another reason (an unused verified entry) does not
+    stand in for a contradiction and its issue. Proposals are made under
+    the entry's lock, so two callers never both ask.
+  - **The correction issue (`upkeep/knowledge-issues.ts`).** Opened through
+    `IssuesService.createIssueAPI` (numbering, history, notifications and
+    the team's triage suggestions all apply) by a System bot member
+    (`ensureIntegrationBot`, slug `vantik-knowledge`), with no assignee: a
+    person or the team's own automation decides. The team: the module's
+    owning team; a module a product owns has none and a product has no
+    default team, so the first live team it links stands in, then the team
+    with the most issues in the modules, then the workspace's oldest team.
+    The modules: the cited file's module and the entry's modules. The state:
+    the team's TRIAGE state, else BACKLOG, else UNSTARTED, else its first.
+    The label `knowledge`, made on first use (revived if deleted). The
+    title quotes the entry; the body cites the entry id and page, the
+    change's sha and repository, each citation's lines as cited and the
+    judge's reason, all through `redactSecrets`, since cited code can hold a
+    credential the entry never could. The issue is opened after the dispute
+    commits; one a run failed to open is opened by the next run in the
+    workspace, or by the nightly decay pass in every workspace, once the
+    row is ten minutes old, claimed by a compare-and-set on `updatedAt` so
+    two runs never open two.
+  - **Proposals in the review queue.** `GET /api/v1/knowledge/review` lists
+    open proposals whose entry is still STANDING, with or without triage,
+    with the reason (`CITATION_MISSING`, `CITATION_UNJUDGED`,
+    `CITATION_CONTRADICTED`, and later `UNUSED`) and a summary built from
+    the evidence. `POST /api/v1/knowledge/review/proposals/:id {accept}`:
+    accepting archives the entry through `updateEntry`, with the proposal
+    resolved (`update` where OPEN) in the same transaction, so of two
+    answers the second fails with its change (409); declining marks it
+    DECLINED with a conditional update. People only. The webapp shows each
+    as a question with "Archive it" and "Keep it", never in bulk.
+  - **Undo.** A person setting STANDING on a DISPUTED or ARCHIVED entry
+    (`updateEntry` or bulk) marks the gardener's unreversed DISPUTED or
+    ARCHIVED rows for it reversed, in the same transaction. Archiving a
+    disputed entry is agreeing with it, not an undo.
+  - **Tests.** The fakes of two existing suites gained a
+    `pageEntryMaintenance` table (the undo write goes through it); no
+    assertion changed. The citation suite's double gained the re-check's
+    compare-and-set store and a transaction.
+- **Decay (KG-6.5).** Both passes keep an entry any of whose citations a
+  check found to hold within the pass's window (`checkedAt` in the window,
+  and HOLDS, MOVED, or CHANGED with a HOLDS judgment: MOVED is the same code
+  on other lines). The standing pass's rule is `unusedSince(cutoff)` in
+  `upkeep/maintenance.ts`: older than the window, not served within it, and
+  no citation held within it. The inbox pass, which has no serving to go
+  by, uses the check alone. Contradicted, unjudged, missing or unread
+  results keep nothing. A verified entry is never archived: the standing
+  pass kept `verifiedAt: null`, the inbox pass now has it too (a verified
+  entry still waiting is already in front of a person), and after each pass
+  `KnowledgeUpkeepService.proposeUnused` gives each verified entry the
+  standing rule would take an archive proposal with reason UNUSED and the
+  window as evidence, not repeated while open or for 90 days after a
+  decline. Outcomes archive nothing: the passes read no signal counts, and
+  a harmful signal still queues a re-check of the entry (KG-3.4), whose
+  result is what decay reads. The one place outcomes take an entry out of
+  use is KG-6.3's disabling of a candidate convention, which the plan asks
+  for and a person can reverse. The existing decay tests' matcher was
+  taught `none`, `in` and `gte`, and rows got an empty citation list; their
+  assertions are unchanged (and now also require the row's status to match
+  the pass's).
+- **Conventions from review (KG-6.3).**
+  - **Recording findings.** When a run ends, `AgentRunsService` queues
+    `recordRunFindings` (one job per run, retried), after attributing its
+    outcome and whether or not that worked. The job reads every pass's
+    findings of a run that ended SUCCEEDED, NEEDS_REVIEW or FAILED, not
+    only the last pass's as signals do: a finding fixed on the next pass is
+    still something the reviewer had to say. Each is placed in a module by
+    the first path its evidence names (`evidencePaths`), among the modules
+    of the repository the run worked in (a checkout's only when the
+    workspace has one repository), the deepest module holding the file
+    winning. A finding with no module, or no words left to compare, is not
+    recorded. Stored in `KnowledgeFinding`: the message through
+    `redactSecrets` (600 characters), its words, the evidence (redacted,
+    500 characters), the file and line. The key, sha256 of the module and
+    the sorted words, is unique per run, so a run gives a finding once
+    however many passes or findings repeat it.
+  - **Grouping, with no model.** Words are the message lower-cased, split
+    on anything not a letter, digit or underscore, without common words,
+    numbers and words under three letters. Two findings are the same when
+    they share at least half of all their words (Jaccard 0.5, a constant in
+    `upkeep/findings.ts`, not a setting: it compares a reviewer's words,
+    not the index's vectors). Findings join the first group whose first
+    finding they are like, oldest first, so a group cannot drift. Only a
+    module's findings not yet written up are grouped, the newest 500, and
+    only of runs not deleted.
+  - **Writing a candidate.** A group spanning `conventionMinRuns`
+    separate runs (`KNOWLEDGE_CONVENTION_MIN_RUNS`, default 3, workspace
+    `conventionMinRuns`) is written through `createEntry` as the
+    gardener's System bot, kind CONVENTION, never `standing`, so it lands
+    PROPOSED and is queued for triage like an agent's entry. The entry
+    service holds a System bot to an agent's gates (`isAutomated`): no
+    writing to a LOCKED page, no entry straight into use. Content:
+    "Review found this in N separate agent runs on <module>: <the finding
+    most like the rest>", deterministic, one line. Scope: the repository
+    and module folder most of the findings are in (the repository alone
+    for a whole-repository module), which resolves to the module.
+    Citations: the six newest runs, and up to four distinct `file:line`s
+    from the findings, each read at its run's `headCommit` (omitted when
+    that is not a commit id), each checked alone first so one that does
+    not hold there is left out rather than refusing the candidate. The
+    page: the oldest unlocked page linked to the module, else one
+    "Conventions from review" page the bot makes through `createPage`.
+    The group's findings are then linked to it (`candidateId`) and never
+    counted again.
+  - **Never twice.** Written under a workspace advisory lock
+    (`pg_advisory_xact_lock`, as back-off does), after a lock-free look
+    that finds most runs have nothing to write, with the groups read again
+    once the lock is held. A group like (Jaccard 0.5) a finding already
+    linked to a candidate that is waiting, standing, or was taken out of
+    use within the decay window joins that candidate instead: a person has
+    it or has said no. A write refused as a repeat links the group to the
+    entry the page already holds. Any other refusal (the bot's inbox
+    budget on the page) leaves the findings for the next run in the
+    module; any other error fails the job.
+  - **Pinning.** A standing CONVENTION is handed to every run in its
+    modules (KG-3.2), so accepting one is pinning it; triage escalates
+    every convention with PIN_REQUEST, and the bot's entries also with
+    UNKNOWN_SOURCE, so nothing proposed from review is accepted without a
+    person. Once accepted it is served to its modules' runs and, as any
+    grounded entry, to searches it matches.
+  - **Switching one off.** Only a standing CONVENTION the gardener's bot
+    wrote. The harmful-signal re-check job (`recheckEntryCitations`) first
+    calls `weigh`: harmful minus helpful signal weight (a closed pull
+    request counts half), counted from the last time a person put the
+    entry back or declined to archive it for its outcomes, reaching
+    `conventionHarmMargin` (`KNOWLEDGE_CONVENTION_HARM_MARGIN`, default 3)
+    archives it with a maintenance row (ARCHIVED, HARMFUL_SIGNALS, the
+    counts, margin and start) and reindexes it. An issue labelled
+    `knowledge` tells the module's team, with the counts and what the
+    harmful outcomes pointed at, best effort. A verified entry, or one on a
+    locked page, gets an archive proposal instead (KG-6.5's rule). A person
+    setting it back to STANDING marks the row reversed (KG-6.2's undo), and
+    counting starts again from then.
+  - **Tests.** The settings suite's full-object expectations gained the
+    two new settings; the processor suite's constructions gained the
+    conventions service (the harmful-signal test's with a `weigh` that
+    does nothing); the agent-runs suite's construction gained it. No
+    assertion changed.
+- **Knowledge gaps become issues (KG-6.4).**
+  - **The job.** `openKnowledgeGapIssues`, a repeatable job on
+    `KNOWLEDGE_GAP_ISSUES_CRON` (default `0 4 * * 1`, Monday 04:00; empty
+    or `off` disables it), registered at boot by `KnowledgeGapsScheduler`
+    under the fixed id `knowledge-gap-issues`, after clearing the job's
+    earlier schedules. The clearing and registering are the decay pass's,
+    moved into one helper both schedulers call, so the decay schedule is
+    registered exactly as before.
+  - **Which gaps.** In each workspace with an unanswered gap: those with no
+    issue yet, asked at least `gapIssueMinCount` times
+    (`KNOWLEDGE_GAP_ISSUE_MIN_COUNT`, default 5, workspace
+    `gapIssueMinCount`), the most asked first, at most ten a run; the rest
+    wait for the next run. One workspace failing does not stop the others,
+    and the run fails at the end so Bull records it. A workspace can switch
+    the issues off for itself with `gapIssuesCron: 'off'` (setting
+    `gapIssues`); it cannot move the schedule, since one job serves every
+    workspace, so any other value leaves them on. Its gaps are still
+    counted and answered.
+  - **The module.** A question names a module by a path in it, held by the
+    deepest module whose folder holds it (a path starting with a
+    repository's full name is read in that repository; a whole-repository
+    module holds a bare path only when the workspace has one repository),
+    or by a module's name or short name written as whole words, paths
+    aside. Exactly one module named puts the issue on it, through
+    `KnowledgeIssues.open` (the owning team, labelled `knowledge`, no
+    assignee), and stores it on the gap; none or several, and the issue has
+    no module and goes where `owningTeam` sends it.
+  - **Never twice.** The issue is opened, and its id stored on the gap,
+    while the gap's advisory lock is held, with the gap read again once the
+    lock is held, so a second run waiting on it finds the id; a gap with an
+    issue is never picked again, even if a person deletes the issue. The title is fixed by the
+    question ("Knowledge gap: <question>", secrets withheld, cut at 100
+    characters) and the body carries the gap's id, so an issue a run opened
+    and could not store is found by both before another is opened. A gap
+    already answered is never given an issue however often it is asked.
+  - **Answered.** An entry citing the gap's issue (an ISSUE citation) that
+    is accepted, STANDING or CONSOLIDATED, on a live page in the gap's
+    workspace, answers it: `answeredAt` and `answeredByEntryId`, the first
+    citation's entry winning and an answered gap kept as it is. Marked as
+    soon as the entry is accepted, from each place that happens: a
+    person's standing write citing an issue, `updateEntry` and `bulkUpdate`
+    to an accepted status, and triage acting on AUTO_ACCEPT. Best effort
+    there, after the acceptance is written, and again by the job at the
+    start of each run, which marks any that were missed.
+  - **Tests.** The settings suite's full-object expectations gained the new
+    settings; the processor suite's constructions gained the gap service;
+    the entry service suite's database double gained the two tables
+    answering reads (empty); the triage suite's store gained them too. No
+    assertion changed.
+- **Migration** `20260927060000_knowledge_upkeep`: `prisma migrate diff`'s
+  output for all of phase 6 (three enums, `PageEntryMaintenance`,
+  `KnowledgeFinding`, and four nullable columns on `PageKnowledgeGap`).
+  Replayed on postgres 16 over the earlier migrations; the diff against
+  the schema is then empty. The new tables are not replicated.
+
+### Phase 7
+
+- **Kinds (KG-7.1).** `Page.kind` is AUTHORED (the column default) or
+  GENERATED. A generated page is made with a `question` (trimmed, at most
+  500 characters) and no body: one sent with it is refused, as is a
+  question for a page people write. Its body is `Page.sections` (JSON, a
+  list of `{id, heading, body, entryIds}`), rendered into `description` as
+  `## heading` blocks so search, `get_page` and the editor read it as any
+  other page, and `Page.citedEntryIds` is every entry the sections cite.
+  A page people wrote never becomes generated (the gardener would replace
+  its body); a generated page can be taken over by hand (`kind: AUTHORED`
+  in an update), which is recorded in its history, and until then an edit
+  to its body is refused. Only a person takes a page over: the controller
+  refuses an agent token and the service an Agent or System user, so no
+  agent turns a generated page into one people write with its own text in
+  it. A page taken over keeps its `citedEntryIds`: the body it keeps was
+  written from them, so they stay its evidence. Making a generated page
+  queues `refreshGeneratedPage` for it at once (best effort: the hourly
+  look builds it anyway).
+- **A new question is a new page (KG-7.1, KG-7.2).** A new question clears
+  the watermark and the evidence hash, is recorded, and queues a build for
+  a second after the minimum interval since the last build has passed, or
+  at once when it has; the same question again changes nothing. The
+  question is part of every section's fingerprint (below), so that build
+  may rewrite every section. It is a refresh with no entry changed, which
+  KG-7.2's "only when an entry changed" does not name: a page asked
+  something else is read as a new page, whose first build is the same.
+  Queuing it for when the interval has passed, rather than at once, keeps
+  the gate: a question changed back and forth builds once an interval, and
+  the build happens even with the hourly look off. Each making and each
+  question change is a job of its own (its id carries the page's
+  `updatedAt` then), since Bull ignores an id it already holds: a job
+  still waiting, running or kept after failing would otherwise swallow the
+  new one. A build that fails twice (index or model unreachable) is left
+  to the hourly look.
+- **The gate (KG-7.2).** Hourly (`refreshGeneratedPages`, cron
+  `KNOWLEDGE_PAGE_REFRESH_CRON`, default `23 * * * *`, `off` disables; the
+  PAGE_DECAY_CRON pattern with a fixed job id), each generated page is
+  looked at in order, cheapest check first:
+  - the minimum interval, `KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL` (default
+    `6h`; `preferences.knowledge.pageRefreshMinInterval` per workspace;
+    `90m`, `6h`, `1d` forms; zero, a bare number or another unit is
+    dropped to the layer beneath), since `refreshedAt`;
+  - the watermark: the latest `updatedAt` among the entries in the page's
+    scope (in any status, deleted or not) and among its links, against the
+    stored `watermark`;
+  - the evidence hash, over each entry in scope by id, status, kind,
+    content and whether it is deleted. Serving an entry stamps it and so
+    moves its `updatedAt` without changing any of these; without the hash
+    every page would be rebuilt after every run that was handed its
+    evidence. Links are not hashed: they decide the scope, and a link that
+    changes no entry in scope changes nothing the page could say.
+  A page not due is not written to, and neither the index nor a model is
+  asked. The scope is the page's own entries and the entries of the
+  modules its links name: a module, a product's owned and linked modules,
+  a capability's modules.
+- **Edits, not rewrites (KG-7.3).** The writer (role `smart`, temperature
+  0) is shown the question, the sections with their ids and what they
+  cite (marked when no longer in use), and the entries read, all quoted
+  as data, and answers `{"operations": [...]}` with `replace_section`,
+  `insert_section` (after a section id, or null for the top) and
+  `remove_section`. They are applied in code, in order: a section no
+  operation names is the same object afterwards, so it is stored byte for
+  byte; an id the page does not have (including one an earlier operation
+  removed) drops that operation; a written section cites only entries the
+  refresh read, and one left citing none is dropped; at most 30
+  operations; a new section's id is made in code (`sec_` and 12 hex).
+  - **Only what changed is rewritten.** Every section written stores
+    `evidence`, a fingerprint (sha256, 32 hex) of the page's question and,
+    for each entry it cites, by id, its kind and content, or that it is
+    out of use or out of scope. Before the writer is asked, the kept
+    sections whose fingerprint no longer matches are the editable ones; the
+    writer is shown each section marked "evidence changed" or "evidence
+    unchanged", and in code a replace or remove of a section not editable
+    is dropped ("the evidence of section X has not changed"). Inserting is
+    allowed anywhere. So a model that answers with removals for the whole
+    page cannot collapse it: only the sections whose evidence moved can
+    go. A section written before fingerprints has none, so is editable
+    once.
+  - **What is read.** The index, searched for the question with the page's
+    id and with its modules, for STANDING and CONSOLIDATED entries,
+    ungrouped (everyone else is served at most three documents a page; a
+    refresh reads every entry of its scope the index finds), each hit
+    confirmed in use and in scope in postgres, in the order the index
+    ranked them, at most 40; then the entries the kept sections cite, if
+    the search missed them, so a section can be rewritten from what it
+    still rests on.
+  - **Nothing written** when the index cannot be reached, when the search
+    finds nothing that postgres confirms, or when the writer throws or
+    answers with something other than operations. The watermark does not
+    move either, so the next look tries again. A refresh job that ends so
+    fails, and Bull tries it once more.
+  - **In code first.** A section whose every cited entry is out of use or
+    out of scope is removed before the writer is asked. Without a model
+    (`isLLMConfigured` false) this is all that runs: those sections are
+    removed, and the watermark stays where it was, so new evidence is
+    written up once there is a model. With a model the removal is part of
+    the refresh, so an empty retrieval writes nothing, removals included:
+    the criterion says so, and the page then keeps those sections until a
+    refresh finds evidence.
+  - **Races.** A refresh stores only over the page as it read it
+    (`updatedAt` and kind unchanged), so two refreshes, a person's edit, a
+    takeover or a revert in the meantime each make it write nothing.
+- **History (KG-7.5).** Every refresh stored writes a `PageHistory` row,
+  with no user, `previousBody` (an empty document for the first build) and
+  the new `previousSections`, and `changes.refreshed` counting the
+  operations applied and dropped; `changes.body` only when the body
+  changed. A refresh that changed nothing is recorded too, so the edits it
+  dropped can be seen. The existing `revertBody` puts a generated page's
+  sections and `citedEntryIds` back with its body, and records the
+  sections it replaced, so a revert can itself be undone. The watermark
+  and hash are left as they were, so a revert stays until the evidence
+  changes again.
+- **Consolidation keeps the evidence (KG-7.4).**
+  - **Served as evidence.** STANDING and CONSOLIDATED are the statuses
+    served (`SERVED_STATUSES`): the search's default filter, the entries a
+    refresh reads, and the ranked read of a run's context pack. Leaving a
+    consolidated entry out of the run pack would retire it for runs, which
+    are not handed page bodies. Conventions stay STANDING.
+  - **Marked, and below its page.** A search hit for an entry a live page
+    in the workspace cites (`citedEntryIds`), or a consolidated entry
+    (whose own page is its page, for entries consolidated before pages
+    kept what they cite), carries `evidenceFor: {pageId, pageTitle}`. When
+    one of its pages is found after it, it is moved to just after that
+    page's hit and marked as that page's; otherwise it stays where it was,
+    marked as a page already shown, else its first page. Agent-core, the
+    CLI and the webapp search show it.
+  - **Trust.** A consolidated entry is accepted, so it is GROUNDED when
+    its citations hold, as a standing one is (`entryTrust`); the run pack
+    packs only grounded or verified entries.
+  - **Held to its citations, and correctable.** A consolidated entry is
+    served, so it is treated as a served entry everywhere else too: a
+    landed change re-checks its citations, and a contradiction disputes
+    it, with the correction issue saying the page's body carries it as
+    well; the review queue lists and answers what the gardener asks about
+    it; triage and the near-match checks compare new entries with it, so a
+    repeat corroborates it and an accepted contradiction withholds it; a
+    correction can supersede it; and a person can dispute or archive it
+    (CONSOLIDATED now leads to DISPUTED and ARCHIVED), from the page's
+    rail too. Putting it back makes it standing, and records the undo. A
+    consolidated convention is still pinned to its modules' runs, still
+    weighed on its outcomes, and still the candidate later findings join;
+    harm past the margin asks a person rather than archiving it alone,
+    since the page's body says it too.
+  - **Put back in the index.** Entries consolidated before consolidated
+    entries were served were taken out of the index then. Once at boot
+    (`indexConsolidatedEntries`, a job id per minute so several instances
+    queue one), the consolidated entries of live pages the index does not
+    hold are indexed again; nothing else is written, and an index that
+    cannot be reached is logged and tried at the next boot.
+  - **Not decayed.** Decay does not archive, and the gardener does not
+    ask a person about, an entry a live page cites: the page is read in
+    its place (`citedByLivePages`, scoped to the workspace when one is
+    given).
+  - **Every consolidation is a proposal.** Consolidating an AUTHORED page,
+    by an agent or a person, stores a `PageProposal` (the body, the
+    standing entries it folds in) and changes nothing else. A generated
+    page, or a page with no standing entry to fold, is refused (400). The
+    webapp's consolidate dialog proposes and then accepts at once, since
+    the person asking is the person who accepts; the MCP tool, agent-core
+    (`ConsolidateProposal`) and the CLI say it is proposed, not applied.
+  - **Accepted or declined by people.** The controller refuses an agent
+    token (403) and the service refuses an Agent or System user, so no
+    token reaches around it. Accepting refuses (409) a proposal already
+    answered, a page that is generated now, a page changed after the
+    proposal was written (its `updatedAt` is later: the prose would undo
+    that edit), or an entry it folds in that is no longer standing. It
+    then, in one transaction: marks the proposal accepted only while still
+    open (so two people accepting at once fold it in once), writes the
+    body only over the page as it was checked (its `updatedAt` and kind
+    unchanged, so an edit saved meanwhile is not overwritten: the
+    acceptance is refused and changes nothing), adds the entries to `citedEntryIds`, marks them CONSOLIDATED,
+    and writes a `PageHistory` row with `previousBody` and
+    `changes.proposal`, with the agreement verdicts for audited entries.
+    Declining changes only the proposal, and also only while open.
+  - **Undone by the existing revert.** Reverting the accepting change puts
+    the body back, and puts the entries it folded in, where still
+    CONSOLIDATED, back in use as STANDING and out of `citedEntryIds`
+    (`changes.unconsolidated`). Undoing that revert puts the consolidated
+    body back and folds the entries it put back, where still STANDING, in
+    again: CONSOLIDATED and cited (`changes.reconsolidated`), so no fact
+    is served beside the page that carries it without being marked as its
+    evidence.
+  - **In front of a person.** The review queue lists open page proposals
+    (`pageProposals`, newest first, 50 at most, scoped to the page when
+    asked), apart from the entries and not narrowed by reason; the webapp
+    shows them with Accept and Decline. `GET /pages/:id/proposals` lists a
+    page's.
+  - **Generated pages in the webapp.** Synced with their kind and
+    question, shown read-only with the question they answer, and taken
+    over by hand from the page menu; the rest of the refresh bookkeeping
+    is not synced. Under the body, each section lists the entries it was
+    written from, marking those out of use.
+  - **What a section cites, for agents.** `read_page` (agent-core, the MCP
+    tool and the CLI) returns a page's kind and question, its sections
+    with the entries each cites, and those entries with their proof, read
+    through `GET /page_entries?ids=` (in the workspace, in use). The page
+    search's hits carry no citations; the entries they cite are served
+    beside them, marked `evidenceFor`.
+- **Tests.** The settings suite's full-object expectations gained
+  `pageRefreshMinIntervalMs`; the processor suite's constructions gained
+  the refresh service. For KG-7.4, the tests that said consolidated
+  entries are not served now say they are served as evidence (the search
+  filter, the run pack's ranked read), and the KG-5.5 consolidation test
+  now proposes, and has a person accept. The webapp sync contract lists
+  the refresh columns it does not keep.
+- **Migration** `20260927080000_generated_pages`: two enums, seven columns
+  on `Page`, `previousSections` on `PageHistory`, and `PageProposal`.
+  Replayed on postgres 16 over the earlier migrations; the diff against
+  the schema is then empty.
+- **Documentation (KG-7.6).** `apps/docs/docs/fundamentals/knowledge.mdx`,
+  listed under Fundamentals in `sidebars.ts`, in the plain style of the
+  other fundamentals pages: pages and entry policies, entries (kinds,
+  scope, statuses, supersede, search before write), citations and trust
+  (the check at write, the tiers, the re-check on landed changes, decay),
+  what agents get, triage and escalation (the pipeline, the modes, every
+  escalation reason, the review queue), audits and agreement (audits,
+  verdicts, kappa, back-off), the holdout, upkeep (conventions from
+  review, gap issues), generated pages, consolidation, and every setting
+  with its default and workspace key: all fifteen `KNOWLEDGE_*` variables
+  (the plan's table and the six this plan added beside it) and, apart, the
+  four `PAGE_*` variables that were there before. How a workspace sets its
+  own values is given as the route admins call; the `knowledge` object
+  replaces the stored one, since preferences merge one level deep, and the
+  page says so. The docs build passes with the page in it. The agent
+  guides (`skills/working-vantik-knowledge/SKILL.md` and its
+  always-in-context form) now say consolidation is a proposal a person
+  accepts, that consolidated entries are still served as evidence with
+  `evidenceFor`, and what a generated page is and how to correct one.
+  Three comments that still said a consolidated entry is not served (the
+  schema's and the types' status enums, `ConsolidatePageDto`) and the
+  preferences DTO's list of knowledge keys were brought up to date;
+  comments only, so no migration.
+
 ## Phase reviews
 
 ### Phase 0, round 1 (fresh reviewer subagent)
@@ -733,13 +1567,853 @@ and a per-workspace override that can be saved, read through one function;
 a hand-written migration matching `prisma migrate diff`; mutation checks on
 each fix; no skipped or loosened tests, checklist and verifier untouched.
 
+### Phase 4, round 1 (fresh reviewer subagent)
+
+The reviewer read the phase diff (3daa793..87579fb) against PLAN.md and the
+KG-4 criteria, ran the seven affected suites (194 tests), replayed
+`prisma migrate diff` against the migration (it matches), and tested one
+SQL expression on the container's postgres. Three blocking findings and
+five non-blocking, all fixed:
+
+1. **Blocking: EXTERNAL_INPUT rested on the session the writer names.** The
+   run was found only by `sourceSession`, which any MCP, CLI or REST client
+   sets or leaves out, so an agent on a GitHub-synced issue could write
+   without a session and be accepted. Now established by the server
+   (`writerOf`, `knowledge-triage.service.ts:642`): the writer's own runs
+   open when the entry was written, as under Decisions; an agent's entry in
+   no run escalates with the new UNKNOWN_SOURCE; comments mirrored from
+   outside count, including after their link is gone (`triage-policy.ts`,
+   `commentSourceOf`). SKILL.md's wording now says what the check does.
+   Tests: "[KG-4.8] finds the runs the writer was in from its own record,
+   never from the session it names" (a session naming another agent's
+   internal run, a harness id, none), "counts the runs of the writer that
+   were open when the entry was written, and no others" (finished before,
+   started after, another agent, deleted, another workspace; the two edges
+   count), "escalates an agent's entry written outside any run the server
+   knows of" (its repeat too, and a writer with no user record), "holds a
+   person to what they wrote, not to a run", "reads a comment mirrored from
+   outside as outside input, after its link is gone too".
+2. **Blocking: applying acted on neighbours as read before the model
+   calls.** A neighbour verified, reworded or locked while the judges
+   answered was still disputed, and a repeat was archived against a target
+   deleted or archived meanwhile. Each update is now conditional as under
+   Decisions, and any miss rolls the whole application back and records the
+   decision as not applied (`apply` and `record`). The spec's store now rolls
+   back a transaction that throws, as postgres does. Tests: "[KG-4.6]
+   disputes nothing, and accepts nothing, when what it contradicts was
+   verified by a person / reworded / on a page that was locked / archived
+   while it decided", "undoes every change it made when one entry it
+   contradicts changed", "[KG-4.1] leaves the repeat in the inbox when what
+   it repeats was archived / deleted / reworded after it was found",
+   "[KG-4.2] folds in nothing when the near duplicate was reworded while
+   the judges answered"; the KG-4.3 stale-entry test now checks the recorded
+   reason.
+3. **Blocking: the backfill hashed differently from `contentHashOf` for
+   text starting or ending in v.** Fixed as under Decisions (migration).
+   Checking the fix on non-ASCII samples found a second difference, the
+   no-break space, which postgres's `\s` leaves out; the backfill now spells
+   out JavaScript's whitespace, and all 20 samples agree. All migrations
+   replayed on postgres 16, with `migrate diff` against the schema empty.
+4. **Credentials could reach the models** through a citation's snippet or
+   an older neighbour's content. Both, and cited issue and comment text, are
+   now redacted (`redactSecrets`). Tests: "[KG-4.8] withholds a credential
+   in anything it shows a model" (each route, both prompts) and "withholds
+   every credential in text it shows a model, and leaves the rest as
+   written". Writing that test found that markdown escaping hid a token from
+   the patterns, hence plain text for cited issues and comments.
+5. **Unscoped entries were never BROAD_SCOPE**, though served everywhere
+   and compared with one page. Now BROAD_SCOPE, and the constant's comment
+   says "more than three". Tests: a KG-4.4 case for no scope, and "[KG-4.4]
+   reads a scope over three modules as broad, and three as not".
+6. **A non-code citation that held only said its target existed**, and the
+   judges saw just its label. The judges now see a cited issue's and a
+   comment's text, and one from outside escalates with EXTERNAL_INPUT.
+   Tests: "[KG-4.4] the text of a cited issue or comment, not only that it
+   exists" (another workspace's issue and a pull request are not shown),
+   "no more of a cited issue than one screen of it", and "[KG-4.8] never
+   accepts an entry that rests on an issue or comment from outside".
+7. **The production wiring of "is a model configured" was untested.** New
+   test "[KG-4.7] read the deployment: no model until all four settings are
+   there", on `new TriageJudges()` with the `LLM_*` variables cleared and
+   restored.
+8. **Any member or write-scoped agent token could overwrite workspace
+   preferences** through `POST /workspaces`, which passed its body to
+   Prisma; with triage settings there, that could switch triage on and set a
+   threshold at which nothing is compared. Fixed here rather than split off,
+   because this phase is what made it matter: `updateWorkspace` now writes
+   only `name` and `icon`. Test: `update-workspace.spec.ts` "[KG-4.5]
+   changes its name and icon, and never its preferences".
+
+35 mutations over the fixes, each a change that compiles, all caught.
+
+### Phase 4, round 2 (same reviewer, on the round 1 fixes)
+
+Seven of the eight round 1 findings confirmed fixed (B2, B3, N1 to N5), the
+backfill re-checked on postgres. One blocking finding left, and one new
+non-blocking one, both fixed:
+
+1. **Blocking: a run that happened to be open cleared an agent's entry (B1,
+   narrower).** Round 1 took the writer's open runs as the context the entry
+   was written in, and cleared UNKNOWN_SOURCE when there was one. But runs
+   do not write (ENG-84), so a match is always a coincidence: an agent that
+   picks up an internal issue for itself starts a hosted run as itself, and
+   can then write from a GitHub-synced issue it only read, citing code, and
+   be accepted. Now every entry not written by a person gets UNKNOWN_SOURCE
+   when it would be accepted (`writerOf` returns `unknownSource: !person`),
+   as described under Decisions; open runs are still read, and can only add
+   EXTERNAL_INPUT. UNKNOWN_SOURCE is added in the acceptance stage, so an
+   agent's repeat is still folded in (a positively outside one is not).
+   The pipeline's tests now write as a person by default (`fresh()`), and
+   the agent's cases say so (`agentEntry()`). SKILL.md and the
+   always-in-context summary now say that nothing an agent writes is
+   accepted without a person. Tests: "[KG-4.8] never accepts an agent's
+   entry, whatever run it had open, since what it read cannot be told" (an
+   internal run, a handback run, none; no user record, an unknown user, a
+   System account), "[KG-4.1] still folds an agent's repeat into the entry
+   it repeats" (exact and near), and the run-reading tests now expect
+   UNKNOWN_SOURCE beside any EXTERNAL_INPUT they find.
+2. **A cited issue was not read for mirrored comments,** though these notes
+   said it was. The cited-issue query now reads its comments written before
+   the entry, as the run's does. Tests: a case in "[KG-4.8] never accepts an
+   entry that rests on an issue or comment from outside", and a comment
+   mirrored after the entry that does not count.
+
+39 mutations over rounds 1 and 2, all caught, among them clearing
+UNKNOWN_SOURCE for an agent with an open run (the finding itself) and
+adding it before the repeat stage.
+
+### Phase 4, round 3 (same reviewer, on the round 2 fixes, and a final pass)
+
+No unresolved findings. The reviewer re-ran its round 2 scenario (a
+self-assigned internal issue's hosted run, then an entry drawn from a
+GitHub-synced issue the agent only read) and the shared-account and
+`delegate_task` variants: each now escalates with UNKNOWN_SOURCE. N6
+confirmed, with the date filter exercised. It agreed with folding an
+agent's repeat in despite UNKNOWN_SOURCE, finding no failure scenario:
+folding only archives the new row and counts it on a target that is still
+live and unchanged; nothing outside triage reads `corroborationCount` or
+`PageEntryRelation`; displacement needs AUTO_ACCEPT, which an agent's entry
+cannot reach; and stopping it would leave KG-4.1 unmet for the writer of
+nearly every proposed entry. A caution it raised, recorded under Observed:
+a later phase that reads `corroborationCount` as a signal must tell
+unknown-source increments apart. Final pass: KG-4.1 to KG-4.8 met as
+written, UNKNOWN_SOURCE recorded under Decisions as an addition, and every
+round 1 fix still in place.
+
+Phase 4 review: PASS - three rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-4 criteria: a triage job per new entry
+on the `pages` queue, once per entry, recording every decision with its
+inputs, digest, models and raw answers; exact repeats found by a hash the
+migration backfills exactly as the server computes it, and near neighbours
+related by rule first and by two agreeing judgments otherwise, as links;
+auto-acceptance only when every condition holds, with an agent's entry
+never accepted without a person while runs have no credential of their own,
+and outside input (a run's issue, its mirrored comments, a cited issue or
+comment) escalating even a repeat; precedence decided in code; acting only
+in `on` mode, only on what was compared, rolled back and recorded as not
+applied when anything changed; credentials refused at write and withheld
+from every model; shadow by default with a per-workspace override only an
+admin can change; a hand-written migration matching `prisma migrate diff`;
+mutation checks on every fix; no skipped or loosened tests, checklist and
+verifier untouched.
+
+### Phase 5, round 1 (fresh reviewer subagent)
+
+The reviewer read the phase diff (52eef46..HEAD) against PLAN.md and the
+KG-5 criteria, ran the affected server suites (238 tests) and the two webapp
+specs, ran `pnpm typecheck`, replayed `prisma migrate diff` against the
+migration (it matches) and ran the advisory lock on postgres in a
+rolled-back transaction. One blocking finding and five non-blocking, all
+fixed or answered:
+
+1. **Blocking: a backed-off type resumed on no evidence about itself.**
+   Each type's `samples` was every rated verdict in the window, and for
+   CORROBORATE and REJECT a window with none about them is all "neither",
+   whose kappa is null and read as agreement: REJECT backed off 31 days ago
+   resumed on the twentieth AUTO_ACCEPT verdict. Now a type's samples are
+   the verdicts about it (`agreement.ts`, `agreementByType`), and no
+   verdicts about a type changes nothing whatever the minimum
+   (`shouldBackOff`). Tests: "[KG-5.4] resumes or backs off a type only on
+   verdicts about that type" (the reviewer's case end to end, and the next
+   finding's), "[KG-5.4] counts as evidence about a type only the verdicts
+   where it was said", "[KG-5.4] changes nothing on no verdicts about the
+   type, whatever the minimum". The settings panel counts the same way.
+2. **The minimum was not per type,** so one audited repeat answered "not a
+   repeat" among nineteen other verdicts backed CORROBORATE off. Fixed by
+   the same change; covered by the first test above.
+3. **ESCALATE was not measured.** Now reported beside the acting types, in
+   the endpoint and on Settings, and never backed off (`MEASURED_DECISIONS`;
+   `reevaluate` skips it). Tests: "[KG-5.3] measures each type against the
+   rest, with the counts" (ESCALATE at 5/9 by hand), the endpoint test, and
+   "[KG-5.3] reports sending to a person beside the rest, never as held
+   back" in the webapp.
+4. **Disagreeing with an audit only partly undid it,** though the button's
+   hint said "Undoes what it did". A folded repeat's corroboration is now
+   taken back ("[KG-5.2] disagreeing with a folded repeat takes back the
+   corroboration it counted"), and the hint says what it does: "Reverses
+   what it did to this fact". What an audited acceptance displaced stays
+   DISPUTED: setting the acceptance aside does not say the neighbour was
+   right (it may have been set aside as not worth serving, not as false),
+   so restoring it would be a second decision nobody made. Recorded under
+   Observed.
+5. **Two people answering one audit at once** left the verdict as the first
+   gave it and the entry as the second left it. The answer's verdict write
+   is now strict and rolls the answer back when another landed first, and
+   an answer that finds the audit already answered changes nothing (409).
+   Test: "[KG-5.2] of two answers at once, keeps the first and refuses the
+   second with its change" (a verdict landing before the change commits,
+   and before the verdict is read).
+6. **Folding an audited entry into its page dropped the audit.**
+   `PagesService.consolidate` now records ACCEPTED on audited entries when
+   a person consolidates, in its transaction, and re-evaluates. Test:
+   "[KG-5.5] a person folding an audited entry into its page keeps it; an
+   agent decides nothing".
+
+Mutation-checked: 16 mutants over the fixes, all killed (two reworded to
+compile; one survived at first because a test's two scenarios shared
+fixture rows, now separate).
+
+### Phase 5, round 2 (same reviewer, on the round 1 fixes, and a final pass)
+
+The reviewer checked the three fix commits and made a final pass over the
+phase: the pages suites (376 tests) and the webapp specs, `pnpm typecheck
+--force`, and the strict audit write against Prisma 6 and postgres (the
+non-unique filter is accepted and throws P2025, rolling back the batch).
+All six round 1 findings resolved, including the answer on displaced
+neighbours. No blocking findings; three non-blocking, now fixed or
+answered:
+
+- **A. Weighting audits backed acceptance off at 95% agreement.** Twenty
+  audited acceptances, one set aside, beside two escalations set aside,
+  came to kappa 0.27 weighted (0.78 unweighted), and a type would stop and
+  resume as audits came and went. Kappa is now over the verdicts as given,
+  as KG-5.3 reads; the weighted cells stay in the report for reading.
+  Tests: "[KG-5.4] keeps acceptance acting at nineteen agreements in twenty
+  audits" (76/98 by hand), "[KG-5.3] counts each verdict once, and shows
+  what the audits stand for".
+- **B. The corroboration decrement is not tied to the verdict landing,** so
+  two people un-folding one audited repeat at once from the rail or in bulk
+  take two off its count. Answered under Observed: the queue's own answer
+  is strict, the count cannot go negative and is unread, and making every
+  un-fold strict would make the race an error for the second person.
+- **C. An audit the queue had stopped listing could still be answered.**
+  `resolveAudit` now refuses (409) once the entry is no longer in the
+  status the decision left it, as the queue does. Test: "[KG-5.2] closes an
+  audit whose entry has moved on since".
+
+### Phase 5, round 3 (same reviewer, on the round 2 fixes)
+
+The reviewer checked d1688df and 500a859: the pages suites (377 tests), the
+webapp specs, `pnpm typecheck --force`, and 76/98 by hand. A and C fixed, B's
+answer accepted, every earlier finding still resolved, no blocking findings.
+Verdict PASS, with two new non-blocking points, both now fixed:
+
+- **1. PROGRESS still listed the weighted 0.625 test** removed in d1688df.
+  The Kappa bullet no longer lists it.
+- **2. Acting on an audited entry by hand still gave a verdict once the
+  audit was closed** (decay archives an audited acceptance, and a person
+  bringing it back was counted against AUTO_ACCEPT). `verdictsFor` now
+  takes a verdict on an audit only while the entry is in the status the
+  decision left it, the rule the queue and `resolveAudit` use
+  (`statusLeftBy` moved to `triage/agreement.ts` so all three share it).
+  Test: "[KG-5.5] acting by hand on an audited entry that has moved on
+  gives no verdict", which fails against the old condition.
+
+### Phase 5, round 4 (same reviewer, on the round 3 fixes)
+
+No unresolved findings, blocking or not, from any round. The reviewer read
+05e696a, ran the pages suites (378 tests), `pnpm typecheck --force` and
+eslint on the changed files. Both round 3 points resolved: the Kappa bullet
+lists only the tests that exist, and `verdictsFor` takes a verdict on an
+audit only while its entry is where the decision left it, the rule the
+queue and `resolveAudit` share through `statusLeftBy`. It checked the other
+callers still meet it (bulk triage on an audited repeat or refusal sees
+ARCHIVED; consolidation passes STANDING) and that the earlier by-hand and
+consolidation tests still pass.
+
+Phase 5 review: PASS - four rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-5 criteria: a review queue that is the
+inbox with each escalation's reasons, plus open audits, and exactly the
+inbox with triage off; audits drawn by a hash of the decision id over every
+applied acting decision but a SECRET refusal, answered strictly (the second
+answer, and an answer on an entry that moved on, get 409) and undone
+through the ordinary entry update, a folded repeat's corroboration taken
+back; Cohen's kappa per decision type, one type against the rest, each
+verdict counted once, ESCALATE reported but never backing off, the weighted
+cells for reading only; back-off and resumption only on enough verdicts
+about the type, as append-only rows under a per-workspace advisory lock;
+verdicts recorded in the change's own transaction, the first of two people
+kept, never from an agent, on audits only while their entry is where triage
+left it; a hand-written migration matching `prisma migrate diff`; mutation
+checks on every fix; no skipped or loosened tests, checklist and verifier
+untouched.
+
+### Phase 6, round 1 (fresh reviewer subagent)
+
+The reviewer read the phase diff (fb60560..8e3d8db) against PLAN.md and the
+KG-6 criteria and ran the affected suites. Verdict FAIL: two blocking
+findings, both in KG-6.2, and nine non-blocking. All are fixed or answered:
+
+1. **Blocking: skipping citations "checked since the job was queued" was
+   unsound.** A job's head is resolved once and cached, so a job that asked
+   for it before a change landed could store its result after the change's
+   job was queued, and that job then skipped it (A); an older job could
+   overwrite a newer job's result (B); and a re-check after a harmful
+   signal, which acts on nothing, could store a contradiction the landed
+   job then skipped, so nobody disputed (C). Now: the queued-time skip is
+   gone, and with it the `since` argument; a reading is stamped with when
+   its head was asked for; every reading is stored only over an older one,
+   under the entry's advisory lock, by the landed check and the re-check
+   alike; the landed check acts on a newer stored reading where there is
+   one; and a citation already read at the change's own commit is acted on
+   as stored rather than skipped. Tests: "[KG-6.2] reads again a citation
+   last read at another commit, however recently" (A), "[KG-6.2] stamps a
+   reading with when the head was asked for, not when the file was read",
+   "[KG-6.2] never stores an older reading over a newer one, and acts on the
+   newer one instead" and "[KG-6.2] leaves a newer reading in place when a
+   later change already acted on it" (B), "[KG-6.2] acts on a contradiction
+   a re-check found at the change's commit and only stored" (C, through the
+   real re-check), "[KG-6.2] a re-check never stores an older reading over a
+   newer one", "[KG-6.2] stores and acts on an entry's readings under its
+   lock", and the reworked "[KG-6.2] reads and judges one commit once,
+   however often it is reported".
+2. **Blocking: an open proposal for any reason suppressed a contradiction**
+   and its correction issue. The open check is now for the same reason, so
+   an open UNUSED proposal no longer stands in for CITATION_CONTRADICTED.
+   Tests: "[KG-6.2] is still asked about, with its correction issue" (an
+   open UNUSED proposal on a verified entry) and the open-for-another-reason
+   case in "[KG-6.2] does not ask twice".
+3. **Only default-branch merges carried `mergeSha`.** Every merged pull
+   request now carries it, with `onDefaultBranch`; only a change on the
+   default branch is checked. Tests: "[KG-6.1] reads a pull request merged
+   into another branch with its merge SHA, as not on the default branch",
+   "[KG-6.1] checks nothing for a pull request merged into another branch,
+   which lands on the default branch later".
+4. **A failed files request on a merged pull request was dropped.** A page
+   that fails now fails the webhook's job for a merged pull request, which
+   Bull tries again; an open one keeps the pages it read. Test: "[KG-6.1]
+   fails, to be tried again, when the files of a merged pull request cannot
+   all be read".
+5. **Owed correction issues were retried only when a change landed** in the
+   workspace. The nightly decay pass now opens them in every workspace
+   (`openOwedIssues()` with no workspace). Tests: "[KG-6.2] opens the
+   correction issues failed runs owed, in every workspace" (processor) and
+   "[KG-6.2] opens owed correction issues in the workspace a change landed
+   in, or in every one from the nightly pass".
+6. **Two callers could both propose** (count, then create). `propose` takes
+   the entry's advisory lock, as `settle` does. Tests: the lock is asserted
+   in the ordering test above and in "[KG-6.5] asks a person about a
+   verified entry nobody used or found to hold in the window, once".
+7. **A failed `weigh` lost the re-check** (one attempt, removed on failure).
+   The re-check now runs whether or not weighing fails, and the failure is
+   raised after it. Test: "[KG-6.5] still checks the citations when weighing
+   fails, and fails the job after".
+8. **The overruled case said "a person verified it, or its page is
+   locked"**, and a corrected entry put back counted as overruled for 90
+   days. The proposal now records why it asks (`askedBecause`: VERIFIED,
+   LOCKED or RESTORED) and the issue and the queue say that; a dispute
+   records the entry's content hash, and only an entry put back with the
+   same content counts as overruled. Tests: the reasons in "[KG-6.2] asks
+   instead of disputing an entry a person verified or on a locked page",
+   "[KG-6.2] asks rather than disputing again once a person has put the
+   entry back", and "[KG-6.2] disputes again an entry a person corrected
+   before putting it back, and asks about one put back unchanged".
+9. **No per-workspace override of `KNOWLEDGE_GAP_ISSUES_CRON`** (section
+   5). A workspace can switch the issues off with `gapIssuesCron: 'off'`
+   (setting `gapIssues`); it cannot move the schedule, since one job serves
+   every workspace, which is recorded with the job's decisions and in
+   `.env.example`. Tests: "[KG-6.4] opens gap issues unless the deployment,
+   or the workspace for itself, switches them off", "[KG-6.4] opens no
+   issue in a workspace that switched them off for itself".
+10. **The gardener, a System bot, was not refused on a LOCKED page.** The
+    entry service now holds a System bot to an agent's gates. Test:
+    "[KG-6.3] refuses the gardener, a system bot, on a LOCKED page too, and
+    never puts its entry straight into use".
+11. **The agent guide said nothing of answering a gap or of automatic
+    disputes.** Both guides now say how to answer a gap (cite its issue)
+    and that a change contradicting an entry disputes it.
+
+The two weaker tests the reviewer named were accepted as they are; the
+first is now "[KG-6.2] reads and judges one commit once", on a verified
+entry so the second report meets a live entry.
+
+Mutation-checked: 39 mutants over the fixes, all killed. Six did not
+compile or matched twice at first and were reworded; one (a blank
+per-workspace schedule read as a schedule) survived and a new case killed
+it. Full server suite: 1817 passed, 15 skipped.
+
+### Phase 6, round 2 (same reviewer, on the round 1 fixes)
+
+The reviewer read 8e3d8db..e17beb7 and the answers above, re-ran the
+phase 6 suites, tsc and the full server suite, checked on Postgres that
+the entry lock can be taken twice in one transaction, and reproduced each
+new finding with the real services in scratch specs. All eleven round 1
+findings resolved. Verdict PASS, with five non-blocking findings and a
+doc nit, all fixed:
+
+- **N1. A stored reading the check found when it queried was acted on as
+  found**, so a fix stored meanwhile was missed. `settle` now reads every
+  reading it did not store itself again under the lock. Test: "[KG-6.2]
+  acts on what is stored once it holds the lock, not on a stored reading
+  it found before".
+- **N2. A reading of the commit a citation cites could replace a newer
+  reading of a head** (`readUnread` stamps when it finishes; the retry
+  stored unconditionally and without the lock). Both the retry and the
+  re-check now store such a reading only while the citation is still
+  unread, under the entry's lock. The servers'-clock remark is answered at
+  `readBefore`: a misorder needs two head asks within the servers' skew
+  and a change landing between them, and taking stamps from the database
+  would mean taking every stamp compared with them from there too
+  (write-time checks, reversals). Test: "[KG-6.2] never lets a reading of
+  the commit a citation cites replace a reading of a head" (retry and
+  re-check).
+- **N3. A stored reading at the change's commit was acted on again after
+  a person acted on it** (B1 corrected and put back: re-disputed on the old
+  words' judgment; B2 put back unchanged: asked again about the reading
+  they overruled). A reading taken before the entry was last put back, or
+  judging other words (new column `judgedContentHash`, migration
+  `20260927070000_citation_judged_claim`, cross-checked with
+  `prisma migrate diff`), is no longer reused or acted on; the job is
+  retried and reads and judges again. And a contradiction a person put
+  back for the same words, citation and commit is not raised again. Tests
+  in "a person acting on an entry after its citations were read": B2
+  ("reads again on its retry, and does not raise again, a contradiction a
+  person overruled"), B1 ("judges the words a person corrected an entry to
+  on its retry, not the words disputed"), a rewording without a dispute,
+  a rewording while the judge reads, and a reading stored before a
+  put-back found under the lock; plus the evidence of "disputes again an
+  entry a person corrected before putting it back, and asks about one put
+  back unchanged" now names other citations and commits, which must not
+  count.
+- **N4. Merges into another branch were fetched and could fail for
+  nothing.** Only a merge into the default branch fails on a refused page;
+  a merge elsewhere that names no issue is not read; `codeChangeOf`'s doc
+  says so. Tests: "[KG-6.1] reads a keyed pull request merged into another
+  branch ..., and keeps the files it could read", "[KG-6.1] reads nothing
+  of a pull request merged into another branch that names no issue".
+- **N5. "Judged once" held only while the change is the head.** The doc
+  and the test now say so, and the test shows the second report reading a
+  newer head. Reusing any reading stamped after the job was queued was not
+  taken: a reading of the commit a citation cites is stored over an unread
+  citation later than that and says nothing about the change.
+- **Doc nit.** The `CITATION_CONTRADICTED` review reason's comment names
+  all three reasons it is asked about.
+
+Mutation-checked: 21 mutants over these fixes, all killed (two did not
+compile at first and were reworded). Full server suite: 1825 passed, 15
+skipped.
+
+### Phase 6, round 3 (same reviewer, on the round 2 fixes)
+
+The reviewer read e17beb7..a9f909d and the round 2 answers, compared the
+schema change with `prisma migrate diff`, ran tsc and the full server
+suite (1825 passed), and re-ran their round 2 probes against the new code.
+N1 to N5 and the doc nit resolved; their three questions answered (the
+stale retry cannot loop, as one retry reads after the put-back; it drops a
+check only in the windows an unread citation already could; `settle`
+suppresses a contradiction for one attempt at most). Verdict PASS, with
+four non-blocking findings, all fixed:
+
+- **R1. `ruledOn` matched on the repository's head commit,** so any commit
+  landing before the retry, even one leaving the cited file alone, made
+  the gardener ask again about code the person had overruled. A judgment
+  now records a hash of the code it read (`judgedCodeHash`: the snippet,
+  and the lines shown to the judge), carried in the dispute's evidence,
+  and `ruledOn` matches citation and that hash. The migration is now
+  `20260927070000_citation_judgment_inputs`, with both columns (renamed
+  from round 2's, which is unmerged and unreleased); `prisma migrate diff`
+  finds no difference. Tests: "[KG-6.2] does not raise again a
+  contradiction a person overruled once unrelated commits moved the head,
+  and asks when the code judged changed"; "[KG-6.2] does not raise again a
+  stored judgment a person overruled, read again after they put the entry
+  back"; and "disputes again an entry a person corrected before putting it
+  back, and asks about one put back unchanged", whose evidence now names
+  another citation over this code and this citation over other code.
+- **R2. A rewording committed between `settle` reading the entry and
+  writing the dispute was disputed on the old words' judgment.**
+  `updateEntry` takes no advisory lock, so `settle` now holds the entry's
+  row before reading it (`lockEntryRow`, `SELECT ... FOR UPDATE`, checked
+  on Postgres: a concurrent update waits until the transaction commits).
+  This covers the proposals too, not only the dispute. Test: "[KG-6.2]
+  holds the entry's row before reading it, so a person rewording it
+  meanwhile is read, not disputed over".
+- **R3. A reading of a cited commit could outrank a head reading taken in
+  the same millisecond.** It is now stamped with when the citation was
+  written. Tests: "[KG-6.2] ranks a reading of the commit a citation cites
+  below a reading of a head, even in the same millisecond" (frozen clock),
+  and the retry test in entry-citations.service.spec asserts the stamp.
+- **R4. Job docs** (`handleCodeLanded`, `codeLandedJobOptions`) now say a
+  retry also follows a person acting on an entry after it was read, and
+  when a citation checked at the commit is read again.
+
+Mutation-checked: 16 mutants over these fixes. The code-hash null guard in
+`ruledOn` survived as equivalent (a judged contradiction always carries a
+hash) and was removed; a stored reading's hash survived until the stored
+judgment test above killed it; two did not compile at first and were
+reworded; all others killed. Full server suite: 1829 passed, 15 skipped.
+
+### Phase 6, round 4 (same reviewer, on the round 3 fixes)
+
+The reviewer read a9f909d..2601458, compared the schema change with
+`prisma migrate diff`, ran tsc and the full server suite (1829 passed),
+re-ran their earlier probes (R1, R5 five times out of five, B1, B2, C), and
+checked the row lock's reach on Postgres. R1 to R4 resolved: the code hash
+is stable over the judged region, the removed guard was equivalent, and
+the lock order admits no cycle (citation rows are written only under the
+entry's advisory lock, so nothing holding the entry's row waits on it).
+Verdict PASS, with two low findings, both fixed:
+
+- **S1. `FOR UPDATE` also held off rows referring to the entry** (a
+  foreign-key check's key-share lock), so serving it waited on `settle`.
+  Now `FOR NO KEY UPDATE`, which still holds off a person's update of the
+  entry; checked on Postgres (an update waited 906 ms on the held row, an
+  insert referring to it did not wait). Test: the row-lock test's harness
+  now answers only to this statement.
+- **S2. An unread citation that names no commit is read at the head, not
+  a cited commit,** yet was stamped with when it was written, so it was
+  served as old and never counted as found to hold. It is now stamped with
+  when the head was asked for, as any head reading is; a reading of a
+  cited commit keeps the citation's written time. Test: "[KG-6.2] stamps
+  an unread citation that names no commit, read at the head, with when the
+  head was asked for".
+
+Mutation-checked: 3 mutants over these fixes, all killed. Full server
+suite: 1830 passed, 15 skipped.
+
+### Phase 6, round 5 (same reviewer, on the round 4 fixes, and a final pass)
+
+The reviewer confirmed S1 and S2 resolved and made a final pass over the
+phase. Verdict PASS, with one non-blocking finding, fixed:
+
+- **F1. A citation unread when changes landed was never checked against
+  them.** A landed change's check leaves an unread citation to its retry,
+  and the retry reads the commit the citation cites, not the head; a
+  citation found to hold there was then checked only by the next change
+  to its file. Now a first reading that finds the claim held at the
+  commit it cites, once the default branch has moved past that commit,
+  queues the landed-change check for the head and the cited path
+  (`checkSinceCited`, from the retry and from the re-check's unread path),
+  under a job id of its own. The skip is keyed on the commit read, so a
+  citation that named no commit (read at the head) is not handed on.
+  Tests: "[KG-6.2] hands a citation first found to hold at the commit it
+  cites to the landed check, once the default branch has moved past that
+  commit" (retry and re-check, then the queued check disputes the entry),
+  "[KG-6.2] hands the landed check nothing for a first reading that no
+  change since could have been checked against" (head at the cited
+  commit, never held, no commit named, head unreadable), "[KG-6.2] keeps a
+  first reading when the landed check cannot be queued", and "never lets
+  a reading of the commit a citation cites replace a reading of a head"
+  now asserts nothing is queued for a reading that lost.
+
+Mutation-checked: 14 mutants over the fix, all killed (a first version
+keyed the skip on the citation's `commitSha`; its mutant survived because
+the test store updates rows in place, so the skip now uses the commit the
+reading read). Full server suite: 1833 passed, 15 skipped.
+
+### Phase 6, round 6 (same reviewer, on the round 5 fix)
+
+The reviewer read b5236e5..ca142cd, ran tsc and the full server suite
+(1833 passed), and probed the handoff against the real services. F1
+resolved; the handoff cannot loop (the queued check stores only head
+readings, never a first reading), its job id cannot collide with a
+change's, and a citation is handed on at most once. Verdict PASS, with two
+non-blocking findings, both fixed:
+
+- **U1 (low). The handoff compared with the head its own job had asked
+  for.** A change landing between that ask and the store was missed: its
+  check found the citation unread, and the handoff saw the old head (an
+  unread citation naming no commit, read at the head; or one naming the
+  head, in a re-check that had asked for the head for another citation).
+  `checkSinceCited` now asks for the head again, once the reading is
+  stored, and hands on any holding first reading of another commit,
+  whether or not it named one. Test: "[KG-6.2] asks for the head again
+  once a first reading is stored, so a change landing while it was read is
+  checked against it" (retry of a citation naming no commit; re-check of
+  one naming the head, with the head asked for another citation first).
+- **U2 (cosmetic). A handed-on check's issue named the head as the
+  change.** The job now carries the commit read (`CodeLandedJob.since`),
+  kept in the evidence (`change.since`), and the correction issue says it
+  was checked at the head against the changes after that commit. Tests:
+  the handoff test asserts the wording; the correction-issue test asserts
+  "The change landed as" for an ordinary change.
+
+Mutation-checked: 6 mutants over these fixes, all killed (the cached head
+passed back in, from both callers and from the re-check alone; `since`
+dropped from the job, from the evidence and from the wording; the
+repository dropped from it). Full server suite: 1834 passed, 15 skipped.
+
+### Phase 6, round 7 (same reviewer, on the round 6 fixes)
+
+The reviewer read ca142cd..0fdfc7d, ran tsc and the full server suite
+(1834 passed), and re-ran the round 6 probes: both now queue one job, at
+the new head, with `since` the commit read. The extra head ask costs one
+request per repository per retry or re-check that stored a holding first
+reading; a retried job keeps its `since`. Verdict PASS, with two
+non-blocking findings, both fixed:
+
+- **W1 (low). The handed-on job checked every citation of its file.** Its
+  `since` then went into the evidence and correction issue of other
+  entries, whose citations were not read at that commit, and their
+  citations were read and judged again. The job now carries
+  `citationIds: [the citation]`, and `recheckLanded` checks only those.
+  Test: "[KG-6.2] checks only the citation it hands on, not the other
+  citations of its file" (a second entry citing the file, read at an older
+  commit, is neither read nor acted on; one issue, one dispute).
+- **W2 (cosmetic). The issue named the head at the handoff,** which can be
+  older than the head the job read. It now says "checked at the head of
+  the default branch", and the citation's line gives the commit read;
+  the handoff test asserts both.
+
+Mutation-checked: 3 mutants over these fixes, all killed. Full server
+suite: 1835 passed, 15 skipped.
+
+### Phase 6, round 8 (same reviewer, on the round 7 fixes)
+
+The reviewer read 0fdfc7d..de6f920, ran tsc, the pages suites (505 tests)
+and the full server suite (1835 passed), and probed the handed-on job:
+only its citation is read and judged, and another entry citing the file
+gets no `since`. The `citationIds` filter hides nothing that should be
+checked: a citation's path is never rewritten (a move changes its lines),
+an entry out of use is rightly skipped, and every change's own job still
+carries no `citationIds` and checks every citation of its files, with the
+query unchanged. Verdict PASS, no findings; every finding of rounds 1 to 7
+resolved.
+
+Phase 6 review: PASS - eight rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-6 criteria: merged pull requests and
+pushes to the default branch reach the server with their commit (merges
+into other branches neither fail nor fetch for nothing, a page of files
+that fails fails the job); the citations a landed change touches are read
+once at the head, newest reading wins by the time the head was asked for
+and is stored only over an older one under the entry's lock, readings of
+a cited commit never outrank a head's, the entry's row is held while it is
+acted on, readings taken before a person acted on the entry are read
+again and an overruled contradiction is not raised again; a citation
+first read after changes passed it over is handed back to the check,
+alone; contradictions dispute the entry with a correction issue and the
+rest become proposals; recurring reviewer findings become candidate
+conventions, knowledge gaps become issues, and decay weighs checks and
+outcomes. Every finding (N1-N5, R1-R4, S1-S2, F1, U1-U2, W1-W2) fixed with
+a tagged, mutation-checked test.
+
+### Phase 7, round 1 (fresh reviewer subagent)
+
+The reviewer read 5eccd0c..dd1f572 against PLAN.md and the KG-7 criteria,
+without reading this file. It ran the verify through phase 7 (every KG-7
+criterion but the review passing; server 1924, agent-core 69, cli 12,
+webapp 651; typecheck ok) and `prisma migrate diff` from the old schema
+(matches the migration), and found the new queries scoped to the
+workspace, accept and decline refused to agents in the controller and the
+service, and the tagged tests over fakes. Verdict FAIL, with three
+blocking and eight non-blocking findings, all fixed:
+
+- **F1 (blocking). Consolidated entries were served but never checked
+  again.** `recheckLanded` read only STANDING and PROPOSED entries'
+  citations, and upkeep disputed or asked about STANDING entries only, so
+  a consolidated entry whose code was deleted went on being served as
+  GROUNDED. The landed-change check now reads consolidated entries' citations
+  too, upkeep acts on every entry in use (`IN_USE`), and the correction
+  issue for a consolidated entry says the page's body carries it as well
+  (37651a8). Tests: "[KG-7.4] re-checks a consolidated entry, which is
+  served as its page's evidence, and disputes it when the code contradicts
+  it"; "[KG-7.4] lists and answers what the gardener asks about a
+  consolidated entry, which is served as its page's evidence".
+- **F2 (blocking). Nothing could correct, retire or deduplicate a
+  consolidated entry.** CONSOLIDATED was terminal, a supersede of one was
+  refused, and triage and the near-match checks did not look at it.
+  CONSOLIDATED now leads to DISPUTED and ARCHIVED (a person, from the
+  page's rail too), a correction can supersede it, and triage and the
+  write-time and triage near-match checks compare new entries with it
+  (37651a8). Tests: "[KG-7.4] lets a person take a consolidated entry out
+  of use, and puts it back as standing"; "[KG-0.1] [KG-7.4] keeps a
+  consolidated entry in use while its correction waits, and retires it
+  once a person accepts the correction"; "[KG-7.4] refuses an exact repeat
+  of a consolidated entry, which is still served, but not of one out of
+  use"; "[KG-7.4] corroborates a consolidated entry it repeats, which is
+  served as its page's evidence"; "[KG-7.4] withholds a consolidated entry
+  an accepted one wins against, as it would a standing one"; "[KG-7.4]
+  finds consolidated entries too, which are served as their page's
+  evidence, for triage and for the write-time check"; webapp "[KG-7.4]
+  offers to take a fact written into the page out of use, and not to put
+  it in use again".
+- **F3 (blocking). An agent could take a generated page over and rewrite
+  its body in one call.** Taking over is now refused to agent tokens in the
+  controller and to Agent and System users in the service, and the
+  refusal to an agent's `write_page` no longer tells it to take the page
+  over (37651a8). The page keeps its `citedEntryIds` (see "Kinds" above).
+  Test: "[KG-7.1] leaves taking a generated page over to a person: an
+  agent cannot, by its token or as its user".
+- **F4. Nothing in code limited how much of a page a refresh rewrote.**
+  Each section now stores a fingerprint of the question and what its
+  entries say; a replace or remove of a section whose fingerprint still
+  matches is dropped in code, and the writer is told which sections it may
+  edit (253e1f2). Tests: "[KG-7.3] rewrites or removes only a section
+  whose evidence changed, and adds to the rest"; "[KG-7.3] fingerprints
+  what a section rests on: its question and what its entries say";
+  "[KG-7.3] rewrites or removes only the sections whose evidence changed,
+  whatever the model asks".
+- **F5. A question change did not get the rebuild the docs promised.** The
+  queued job found the page too soon, and with the hourly look off it
+  never ran. The build is now queued with a delay of a second past the
+  minimum interval (at once when that has passed), and the question is in
+  the fingerprint, so the rebuild may rewrite every section; the choice
+  is recorded above ("A new question is a new page"). The docs now say a
+  section is removed without a model when its entries are out of use or
+  out of the page's scope (253e1f2). Tests: "[KG-7.2] [KG-7.3] rebuilds a
+  page asked a new question once the interval has passed, and may rewrite
+  all of it"; the KG-7.1 question-change test asserts the delay.
+- **F6. Accepting a proposal could overwrite a concurrent edit.** The body
+  is now written only where the page's `updatedAt` and kind are those
+  checked; otherwise nothing is changed and the person is told why, apart
+  from a proposal answered meanwhile (7603bb0). Test: the racing case in
+  "[KG-7.4] is refused once the page or an entry it folds in has moved on,
+  and writes nothing".
+- **F7. A refresh read at most three entries a page.** `searchKnowledge`
+  takes `ungrouped`, which the refresh's two searches pass (738000f).
+  Tests: "[KG-7.3] reads every entry in its scope that the index finds,
+  not three a page"; "[KG-7.3] reads every entry a page holds for a
+  generated page's refresh, and serves three a page to everyone else"; the
+  refresh suite's fake index now groups as Typesense does.
+- **F8. Entries consolidated before this phase were not in the index.**
+  Once at boot, the consolidated entries of live pages the index does not
+  hold are indexed again (`indexConsolidatedEntries`,
+  `VectorService.indexedEntryIds`) (3945c89). Tests: "[KG-7.4] puts back
+  the consolidated entries the index lost, and touches nothing else";
+  "[KG-7.4] asks the index nothing when no entry is consolidated, and
+  survives an index that cannot be reached"; "[KG-7.4] queues one pass at
+  boot, which indexes the consolidated entries the index lost".
+- **F9. No reader could see what a section cites.** `read_page` returns
+  the kind, question, sections with their citations and the cited entries
+  with their proof, through a new `ids` filter on the entry list; the CLI
+  prints them; the webapp lists each section's sources under a generated
+  page (8bcbf8f). Search hits carry no citations; the entries they cite are
+  served beside them as `evidenceFor`. Tests: "[KG-7.1] hands the entries
+  a page cites to the list, and refuses an id that is not one"; "[KG-7.1]
+  lists the entries a page cites, by id, in the workspace only";
+  "[KG-7.1] reads a generated page with its question, what each section
+  cites, and those entries with their proof"; "[KG-7.1] reads a page
+  people write as authored, citing nothing, without asking for what it
+  cites"; "[KG-7.1] shows a generated page with its question, and what
+  each section was written from"; webapp "[KG-7.1] asks for the entries
+  its sections cite, once each, in use only" and "[KG-7.1] shows each
+  section with what it cites, and which of it is out of use".
+- **F10. The PageEntryPolicy doc comment sat above `enum PageKind`.** Moved
+  back (4b61132); a comment only, so no migration.
+- **F11. Undoing the revert of an accepted consolidation served each fact
+  twice.** The revert of a revert now folds the entries the first revert
+  put back, where still standing, in again, and cites them
+  (`changes.reconsolidated`); the webapp's history says so (ae42296).
+  Test: "[KG-7.4] undoing that revert folds the entries still standing
+  back in, so no fact is served twice", which replaces the assertion that
+  they stayed standing.
+
+Mutation-checked: 45 mutants over these fixes, all killed (12 over F1-F3:
+consolidated entries left out of the re-check, of upkeep, of the
+supersede, of triage and of the near-match check, CONSOLIDATED made
+terminal again, the body line left out of the issue, a takeover let
+through in the service or the controller; 33 over F4-F8 and F11). Verify
+through phase 7: 57/58, every criterion but KG-7.R (server 1944,
+agent-core 71, cli 13, webapp 655).
+
+### Phase 7, round 2 (same reviewer, on the round 1 fixes)
+
+The reviewer read dd1f572..ae42296 (HEAD by then 7a1c6f0, a merge of
+`main` that touches none of the reviewed files), ran the verify through
+phase 7 (57/58, only KG-7.R failing; server 1944, agent-core 71, cli 13,
+webapp 655; typecheck ok), and found F1 to F11 resolved: F5 as designed,
+accepting that a new question is a new page; F4's unstamped sections exist
+only on pages built before the fix, which exist only on this branch.
+Verdict FAIL, with two non-blocking findings, both fixed:
+
+- **F12. A question change's build could be swallowed.** The refresh job's
+  id was fixed per page, and Bull 4 ignores an id it holds (waiting,
+  delayed, running, or kept after failing: `removeOnFail: 20`), so a
+  failed first build, or one still running when the question was edited,
+  swallowed the rebuild; with the hourly look off the page was then never
+  built, against what the docs promised. The id now carries the page's
+  `updatedAt` as the making or the question change left it; the docs say
+  a build that fails twice is left to the hourly look (3dfb2da). Test:
+  "[KG-7.1] [KG-7.2] queues a build of its own each time a page is made or
+  asked anew, which no job held for it swallows" (over a queue that
+  ignores an id it holds); the processor and first-build tests assert the
+  new id.
+- **F13. A consolidated convention lost what a standing one gets.** The
+  pinned conventions of a run, the harm weighing and the dedupe of new
+  candidates read STANDING only. They now read the statuses in use; harm
+  past the margin on a consolidated convention asks a person rather than
+  archiving it alone, since the page's body says it too (30ceafc). The
+  sweep of every other STANDING-only read in the server found none left
+  that concerns a served entry: decay leaves consolidated entries alone by
+  design, and the rest are new-entry statuses and verdict mapping. Tests:
+  "[KG-3.2] [KG-7.4] pins a convention folded into its page's body to its
+  modules' runs, as a standing one, and none retired"; "[KG-6.3] [KG-7.4]
+  weighs a convention folded into its page's body, which is still served,
+  and asks a person rather than archive it alone"; "[KG-6.3] [KG-7.4]
+  joins findings to a convention folded into its page's body however long
+  ago, which is still served". The KG-3.2 test's assertion on the
+  conventions query now expects the served statuses, and its fake filters
+  conventions by status.
+
+Mutation-checked: 6 mutants over these fixes, all killed (the job id
+without the time, or keyed by the page before the change; pinned, weighed
+and deduped conventions standing only; a consolidated convention archived
+alone). Full server suite: 1933 passed, 15 skipped.
+
+### Phase 7, round 3 (same reviewer, on the round 2 fixes)
+
+The reviewer read 7a1c6f0..30ceafc, ran the verify through phase 7
+(57/58, only KG-7.R failing; server 1948, agent-core 71, cli 13, webapp
+655; typecheck ok), and found F12 and F13 resolved. F12: `asked` is the
+stored row's own `updatedAt` on both paths; two jobs for one page are
+safe (the later one reads the latest question, and the write is
+conditional on `updatedAt`, so an overlap ends `raced` and a later one
+`too-soon`); the test models Bull's rule. F13: pinning, weighing and the
+candidate dedupe read the statuses in use; accepting the harm proposal
+about a consolidated convention archives it (CONSOLIDATED to ARCHIVED is
+allowed); the archive without a person still matches STANDING only,
+which is consistent. The reviewer checked every STANDING-only read left
+in the server and agreed with each. Verdict PASS, no findings.
+
+Checked by the reviewer and not counted as a finding: with the hourly
+look off (not the default), a build that is running when a person
+renames, moves or reorders the page, or changes its entry policy, ends
+`raced` and is not queued again; the page is then built at its next
+question change. The webapp does not edit the question.
+
+Phase 7 review: PASS - three rounds by one fresh reviewer subagent over the
+phase diff against PLAN.md and the KG-7 criteria: pages are authored or
+generated, a generated page answers a question with sections that each
+cite the entries they were written from, shown to agents (`read_page`, the
+CLI) and people (the webapp); it is rebuilt only when an entry in its
+scope changed and no sooner than the minimum interval, or once due after a
+new question, which is a new page, each such build a job of its own; a
+refresh reads every entry of its scope the index finds and applies section
+edits in code, rewriting or removing only sections whose evidence changed;
+every refresh is recorded and undone by the revert; consolidation of an
+authored page is a proposal a person accepts over the page as it was
+checked, its entries stay served as evidence below the page, re-checked,
+correctable, compared with new entries, pinned and weighed when
+conventions, put back in the index once at boot, and folded back in when
+a revert of the acceptance is undone; only a person takes a generated page
+over; the knowledge page documents every setting. Every finding (F1-F13)
+fixed with a tagged, mutation-checked test.
+
 ## Needs a decision
 
 Anything that blocks the plan: a criterion that is wrong or cannot be met, or
 an environment problem such as Prisma being unable to download its engines.
 Give the evidence, and stop until the maintainer answers.
 
-(Nothing blocking.)
+(Nothing blocking the work.)
+
+- **The goal's spec hash.** The goal set for phases 4-7 asks for a verify
+  line containing `spec-hash 069a84bf6612`, the hash of the original
+  `checklist.json` and `verify.mjs` (885adff). They now hash to
+  `8409159da053`, because KG-2.1's file check was moved to `skills/` at the
+  maintainer's request (60f5db7; GOAL.md carries the new hash). Going back
+  would mean editing `checklist.json`, which the plan forbids, and would
+  fail KG-2.1 against `main`. So the verify line will read
+  `8409159da053`; the maintainer should confirm that hash as the goal's.
 
 ## Observed, outside the current phase
 
@@ -754,7 +2428,8 @@ Give the evidence, and stop until the maintainer answers.
   their place. Phase 7 (KG-7.4) turns consolidation of an AUTHORED page into a
   proposal; `write_page` on a new page stays as designed.
 - **Concurrent identical writes** both pass the duplicate check (read, then
-  write). KG-4.1's content hash is the place to add a uniqueness guarantee.
+  write). Since phase 4, triage orders them by time and id, so exactly one
+  corroborates the other; the write itself still admits both.
 - **Consolidating an entry that has a pending correction** leaves the old text
   in the body if the correction is later accepted. For KG-7.4.
 - **`IntegrationsService.loadIntegration` does not catch async plugin
@@ -765,8 +2440,9 @@ Give the evidence, and stop until the maintainer answers.
   behaviour, so changing it is a separate fix.
 - **The webapp shows no supersede links** (nothing under
   `apps/webapp/src/modules` reads `supersedesId`), so a reviewer accepting a
-  correction cannot see what it retires. Predates phase 0; worth surfacing in
-  the review queue, which phase 5 reworks (KG-5.1).
+  correction cannot see what it retires. Predates phase 0. Phase 5's queue
+  shows why an entry waits (SUPERSEDE_REQUEST among the reasons) but still
+  not what it would retire.
 
 - **`PageEntryUse` grows one row per entry per serve** and nothing prunes
   it. It is indexed for the reads phase 3 makes (by run, by entry and time,
@@ -774,6 +2450,40 @@ Give the evidence, and stop until the maintainer answers.
 - **Pull request outcomes come only from GitHub.** Another source that opens
   pull requests would call the same `agentRuns.pullRequestChanged`
   capability.
+- **`corroborationCount` counts repeats from unknown sources too.** An
+  agent's repeat is folded in although what it read is unknown (phase 4,
+  round 3). Nothing reads the count yet; a phase that starts using it as a
+  signal should tell those increments apart, from the decision rows (writer
+  and `corroboratedEntryId`).
+- **Undoing a folded repeat that was not audited leaves the count.** A
+  verdict on an audited repeat that puts it back into use takes the
+  corroboration back; a repeat that was not audited, put back into use by
+  hand, gives no verdict (it is not a sample) and nothing takes its
+  corroboration back. Nothing reads the count yet.
+- **Kappa's prevalence paradox.** In a window where people agreed with
+  every verdict about a type but one, and never said anything else, kappa
+  is 0 (one rater used one class throughout) and the type backs off once
+  it has the minimum. Escalations people set aside and shadow decisions
+  usually give it both classes (nineteen of twenty audits kept, beside two
+  escalations set aside, is 0.78); where they do not, it fails safe,
+  towards a person deciding. Worth watching in the first weeks of `on`.
+- **Un-folding one audited repeat twice at once takes two off its count.**
+  Two people putting the same audited repeat back into use at the same
+  moment from the rail or in bulk (not from the queue, whose answer is
+  strict) each commit the decrement, while only one verdict lands. The
+  count cannot go below zero and nothing reads it yet. Making every
+  un-fold strict would turn that harmless race into an error for the
+  second person, so it is left.
+- **An audited acceptance that is undone leaves what it displaced
+  DISPUTED.** When an accepted entry won against a STANDING neighbour,
+  that neighbour was disputed in the same transaction; a person setting
+  the accepted entry aside afterwards does not restore it. DISPUTED is
+  reversible and withheld until a person looks, so nothing wrong is
+  served, but the neighbour waits on someone finding it.
+- **Runs write with no credential of their own (ENG-84).** Until they do,
+  triage cannot vouch for what an agent read, so no agent's entry is
+  auto-accepted. A run-bound credential stamped by the server would let a
+  run vouch for what it wrote.
 
 ## Log
 
@@ -832,3 +2542,170 @@ Give the evidence, and stop until the maintainer answers.
 - 2026-09-27: Review round 3 (cc25aa1): no unresolved findings. Phase 3
   review: PASS. Verify through phase 3: PASS. Phase 3 done; PR #44 ready for
   review.
+- 2026-09-27: Phase 4 implemented (KG-4.1 to KG-4.8) with tagged tests
+  against an in-memory store; 27 mutations over the new code, all caught.
+  The goal's spec hash differs from the checklist's current one; recorded
+  under Needs a decision. Verify through phase 4: 38/39, only the review
+  open; all suites and typecheck green.
+- 2026-09-27: Phase 4 review round 1: three blocking findings (external
+  input rested on the writer's session, applying acted on stale neighbours,
+  the backfill trimmed the letter v) and five non-blocking; all fixed with
+  tagged tests, 35 mutations caught. Server suite 1625 passed.
+- 2026-09-27: Phase 4 review round 2: B1 still open in a narrower form (an
+  open run of the same agent cleared its entry); every entry not written by
+  a person now waits for one. N6 (a cited issue's comments) fixed. 39
+  mutations caught.
+- 2026-09-27: Phase 4 review round 3: no unresolved findings. Phase 4
+  review: PASS. Verify through phase 4: PASS, 39/39. Phase 4 done; starting
+  phase 5.
+- 2026-09-27: Phase 5 implemented (KG-5.1 to KG-5.5) with tagged tests:
+  verdicts recorded with the change, weighted kappa per acting type, audits
+  drawn by decision id, back-off with hysteresis under an advisory lock, the
+  review and agreement endpoints, the queue's reasons and audits, and the
+  Settings panel. Mutation-checked: of 55 server mutants, 46 were killed at
+  once; four survivors were killed by new tests (the verdict race, a verdict
+  already given, audit weights in the report, the latest decision in the
+  queue); four that did not compile or whose pattern missed were reworded
+  and killed; one was equivalent (only an escalation carries reasons) and
+  was removed by simplifying the code. 13 webapp mutants, all killed after
+  two tests were tightened. Verify through phase 5: 44/45, only
+  KG-5.R left. Review round 1 started.
+- 2026-09-27: Phase 5 review round 1: one blocking finding (a backed-off
+  type resumed on verdicts about other types) and five non-blocking (the
+  minimum not per type, ESCALATE not measured, an audit only partly undone,
+  two answers to one audit at once, consolidation dropping an audit). All
+  fixed or answered, with tagged tests; round 2 started.
+- 2026-09-27: Phase 5 review round 2: all round 1 findings resolved, no
+  blocking findings, three non-blocking (audit weights backing acceptance
+  off at 95% agreement, a decrement race, stale audits answerable): two
+  fixed with tagged tests, one answered. Round 3 started.
+- 2026-09-27: Phase 5 review round 3: verdict PASS, round 2's points
+  resolved, two new non-blocking points (a stale line in PROGRESS, a
+  verdict on a closed audit through a by-hand action), both fixed, the
+  second with a tagged test that the old condition fails. Round 4 started
+  to confirm them.
+
+- 2026-09-27: Phase 5 review round 4: both round 3 points resolved, no
+  unresolved findings from any round. Phase 5 review: PASS. Verify through
+  phase 5: PASS, 45/45. Phase 5 done; starting phase 6.
+- 2026-09-27: KG-6.1 (merged pull requests and default-branch pushes carry
+  the commit they landed as; one re-check job per commit) and KG-6.2
+  (landed changes re-check the citations they touch; disputes with a
+  correction issue labelled knowledge; archive proposals in the review
+  queue; undo recorded) implemented with tagged tests. Mutation-checked:
+  19 server mutants for KG-6.2, 15 killed at once, three survivors and one
+  that did not compile killed by new tests or a compiling rewording.
+- 2026-09-27: KG-6.5 (decay keeps what a check found to hold; verified
+  entries are proposed, never archived; outcomes archive nothing)
+  implemented with tagged tests. Mutation-checked: nine mutants, eight
+  killed at once, one that did not compile reworded and killed.
+- 2026-09-27: KG-6.3 (review findings recorded per module at each run's
+  end; a candidate CONVENTION at three runs, through triage; a gardener
+  convention switched off on its outcomes) implemented with tagged tests.
+  Mutation-checked: 44 mutants over the service, the grouping helpers and
+  the wiring. 34 were killed at once, and six did not compile and were
+  reworded and killed. Four survived (the likeness formula, a zero line,
+  numbers among a finding's words, and counting from a decline, which the
+  queue's quiet period masked); new tests killed them. The scope was found to count a whole-repository
+  module of another repository; fixed by scoping on each finding's run's
+  repository.
+- 2026-09-27: KG-6.4 (gaps asked five times get one issue each, weekly, on
+  the module the question names; answered when an entry citing the issue
+  is accepted) implemented with tagged tests. Mutation-checked: 57 mutants
+  over the gap service, the answer helper, the acceptance hooks and the
+  scheduler's inputs. 44 were killed at once; four did not compile and
+  were reworded and killed; six survived (answered gaps taking the run's
+  places, the workspace of an issue left behind, a deleted workspace, the
+  title's cut, part of a word read as a module's name, a short name alone)
+  and new tests killed them. Of three more, one showed a check the
+  answered guard already made, now removed; two are equivalent (a status
+  set to what it was, and a decision triage records without acting on:
+  neither entry is newly accepted, so neither answers a gap). Found while
+  testing: a path's folders were read as module names too (`apps/api/...`
+  naming the API); paths are now read only as paths. Full server suite:
+  1800 passed, 15 skipped.
+- 2026-09-27: Phase 6 review round 1: FAIL, two blocking findings in KG-6.2
+  (the skip of citations checked since the job was queued was unsound; an
+  open proposal for any reason suppressed a contradiction) and nine
+  non-blocking. All fixed or answered with tagged tests: readings stamped
+  with when their head was asked for, stored newest-first under the
+  entry's lock, the newest acted on; proposals per reason, under the lock;
+  merged pull requests into any branch carry their commit; a merged pull
+  request's failed file read retried; owed issues opened nightly; the
+  re-check survives a failed weigh; why a contradiction is asked about
+  recorded, and a corrected entry disputed again; gap issues switchable
+  per workspace; the gardener refused on locked pages; the agent guides
+  updated. 39 mutants, all killed.
+- 2026-09-27: Phase 6 review round 2: PASS, with five non-blocking
+  findings, all fixed with tagged tests: `settle` acts on what is stored
+  under the lock; a reading of a cited commit is stored only over an
+  unread citation, under the lock; a reading taken before a person put the
+  entry back, or judging words it no longer has (new `judgedContentHash`),
+  is read again, and an overruled contradiction is not raised again; merges
+  into other branches neither fail nor fetch for nothing; "judged once"
+  documented as while the change is the head. 21 mutants, all killed.
+- 2026-09-27: Phase 6 review round 3: PASS, with four non-blocking
+  findings, all fixed with tagged tests: an overruled contradiction is
+  known by the code judged (`judgedCodeHash`), not the head commit;
+  `settle` holds the entry's row before reading it; a reading of a cited
+  commit is stamped with when the citation was written; job docs updated.
+- 2026-09-27: Phase 6 review round 4: PASS, with two low findings, both
+  fixed with tests: the entry row is held `FOR NO KEY UPDATE`, so serving
+  it never waits; an unread citation read at the head is stamped as a head
+  reading.
+- 2026-09-27: Phase 6 review round 5: PASS, with one non-blocking finding,
+  fixed with tagged tests: a citation first found to hold at the commit it
+  cites, once the default branch has moved past it, is handed to the
+  landed-change check at the head. 14 mutants, all killed.
+- 2026-09-27: Phase 6 review round 6: PASS, with two non-blocking
+  findings, both fixed with tagged tests: the handoff asks for the head
+  again after the store, so a change landing while a citation was read is
+  checked against it; a handed-on check's correction issue names the
+  commit read rather than a single change. 6 mutants, all killed.
+- 2026-09-27: Phase 6 review round 7: PASS, with two non-blocking
+  findings, both fixed with tagged tests: a handed-on job checks only its
+  citation (`citationIds`), and its issue names the head only through the
+  citation's line. 3 mutants, all killed.
+- 2026-09-27: Phase 6 review round 8: PASS, no findings. Phase 6 review:
+  PASS. Phase 6 done; starting phase 7. Verify through phase 6: PASS, 51/51.
+- 2026-09-28: Phase 7: generated pages (kind, question, sections citing
+  entries), the gated hourly refresh as section edits applied in code,
+  and a history row for every refresh that the existing revert undoes
+  (KG-7.1, 7.2, 7.3, 7.5). 43 mutants: all killed once the tests they
+  showed missing were added (a status change, a deletion, the index's
+  order, an unlinked module, the page's own entries), except the one
+  that stopped hashing the links, which showed the links were redundant
+  in the hash; they were taken out of it.
+- 2026-09-28: KG-7.4: entries a page cites stay served, marked as its
+  evidence and ranked below it; they keep their trust tier and are not
+  decayed; every consolidation of an authored page is a proposal a person
+  accepts or declines, recorded in the page's history and undone by the
+  revert; open proposals are in the review queue. 60 mutants: all killed
+  once the tests they showed missing were added (a decline read before an
+  acceptance landed, the answers' messages, the proposals' order, a
+  deleted or foreign citing page, an entry found after its page), except
+  the filter that looked for an accepted proposal when reverting, which
+  only an acceptance can name; it was taken out.
+- 2026-09-28: KG-7.6: the knowledge page in apps/docs, with every setting
+  and its default, the page in the docs sidebar, and the agent guides
+  brought up to date for proposals, evidence and generated pages. The docs
+  build passes.
+- 2026-09-28: Phase 7 review round 1: FAIL, with three blocking findings
+  (consolidated entries not re-checked, not correctable or compared with
+  new entries; an agent could take a generated page over) and eight
+  non-blocking (no code limit on how much a refresh rewrites, a new
+  question's rebuild, a racing acceptance, a refresh reading three
+  entries a page, consolidated entries missing from the index, sections'
+  citations not shown, a misplaced schema comment, undoing a revert
+  serving facts twice). All fixed with tagged tests; 45 mutants, all
+  killed. Verify through phase 7: 57/58, KG-7.R pending.
+- 2026-09-28: Merged `main` (the landing site's Worker config, #46) into
+  the branch, which the Workers build needs. Phase 7 review round 2: FAIL,
+  F1-F11 resolved, two non-blocking findings, both fixed with tagged
+  tests: a refresh job per request, so a held job never swallows a
+  question change's build; consolidated conventions pinned and weighed as
+  standing ones. 6 mutants, all killed.
+- 2026-09-28: Phase 7 review round 3: PASS, no findings. Phase 7 review:
+  PASS. Phases 4-7 done. Verify through phase 7: PASS, 58/58 (server
+  1948, agent-core 71, cli 13, webapp 655; typecheck ok; spec-hash
+  8409159da053).

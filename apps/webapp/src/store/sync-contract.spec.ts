@@ -77,10 +77,20 @@ const NOT_KEPT: Record<string, Record<string, string>> = {
     pullRequestOutcome: 'read per arm, through the knowledge arms endpoint',
     pullRequestClosedAt: NOT_READ,
   },
+  Page: {
+    // A generated page's sections are rendered into its body, which is kept.
+    sections: 'rendered into the body, which is kept',
+    citedEntryIds: NOT_READ,
+    watermark: 'refresh bookkeeping',
+    evidenceHash: 'refresh bookkeeping',
+    refreshedAt: 'refresh bookkeeping',
+  },
   PageEntry: {
     sourceTokenId: NOT_READ,
     helpfulCount: NOT_READ,
     harmfulCount: NOT_READ,
+    contentHash: 'triage bookkeeping',
+    corroborationCount: NOT_READ,
   },
   IntegrationAccount: {
     integrationConfiguration: NOT_READ,

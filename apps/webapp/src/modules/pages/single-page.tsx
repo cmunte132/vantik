@@ -29,7 +29,7 @@ import { AiWritingExtension } from 'common/editor';
 import { vantikIssueExtension } from 'common/editor/vantik-issue-extension';
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
-import { PageEntryPolicy, type PageType } from 'common/types';
+import { PageEntryPolicy, PageKind, type PageType } from 'common/types';
 
 import { useEditorPasteHandler } from 'hooks/use-editor-paste-handler';
 
@@ -46,6 +46,7 @@ import { Header } from './header';
 import { MemoryRail } from './memory-rail';
 import { PageHistory } from './page-history';
 import { PageNav } from './page-nav';
+import { PageSources } from './page-sources';
 import { PageTitle } from './page-title';
 import { RelatedLinks } from './related-links';
 import { SaveIndicator, type SaveState } from './save-indicator';
@@ -163,6 +164,9 @@ const SinglePageView = observer(() => {
   const markDirty = () => setSaveState('pending');
 
   const ancestors: PageType[] = page ? pagesStore.getAncestors(page.id) : [];
+  // The gardener writes a generated page from the facts its sections cite,
+  // and the server refuses a hand edit to its body until it is taken over.
+  const generated = page?.kind === PageKind.GENERATED;
 
   const actions = page ? (
     <DropdownMenu>
@@ -238,6 +242,16 @@ const SinglePageView = observer(() => {
           Page history
         </DropdownMenuItem>
 
+        {generated && (
+          <DropdownMenuItem
+            onClick={() =>
+              updatePage({ pageId: page.id, kind: PageKind.AUTHORED })
+            }
+          >
+            Take over by hand
+          </DropdownMenuItem>
+        )}
+
         <DropdownMenuItem onClick={() => deletePage({ pageId: page.id })}>
           Delete page
         </DropdownMenuItem>
@@ -283,12 +297,27 @@ const SinglePageView = observer(() => {
                   }}
                 />
 
-                {/* Above the content and sticky, so it is still reachable
-                    partway down a long page. */}
-                <EditorRibbon editor={editorInstance} />
+                {generated ? (
+                  <div className="mt-2 flex flex-col gap-1">
+                    <p>
+                      <span className="text-muted-foreground">Answers </span>
+                      {page.question}
+                    </p>
+                    <p className="text-muted-foreground">
+                      Generated: written from the facts its sections cite, and
+                      edited as they change. Take it over from the menu to edit
+                      it by hand.
+                    </p>
+                  </div>
+                ) : (
+                  /* Above the content and sticky, so it is still reachable
+                     partway down a long page. */
+                  <EditorRibbon editor={editorInstance} />
+                )}
 
                 <Editor
-                  key={`${page.id}-${externalRevision}`}
+                  key={`${page.id}-${externalRevision}-${page.kind}`}
+                  editable={!generated}
                   value={page.description}
                   onCreate={setEditorInstance}
                   onChange={(content: string) => {
@@ -306,6 +335,10 @@ const SinglePageView = observer(() => {
                 >
                   <EditorExtensions suggestionItems={suggestionItems} />
                 </Editor>
+
+                {generated && (
+                  <PageSources pageId={page.id} revision={page.updatedAt} />
+                )}
 
                 <RelatedLinks pageId={page.id} />
 

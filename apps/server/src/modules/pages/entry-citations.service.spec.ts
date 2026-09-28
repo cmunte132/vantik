@@ -36,6 +36,8 @@ const uuid = (n: number) =>
 
 const SHA1 = '1111111111111111111111111111111111111111';
 const SHA2 = '2222222222222222222222222222222222222222';
+/** When the stored citations were written. */
+const WRITTEN = new Date('2026-01-01T00:00:00Z');
 
 const PAGES_TS = [
   "import { archive } from './archive';", // 1
@@ -248,8 +250,36 @@ function world() {
         Object.assign(row, data);
         return row;
       }),
+      // Stored only over an older reading, as a re-check stores a reading
+      // of a head, or only over no reading, as a reading of the commit a
+      // citation cites is stored.
+      updateMany: jest.fn(async ({ where, data }: Row) => {
+        const row = citations.find((c) => c.id === where.id);
+        const older =
+          where.OR === undefined ||
+          (where.OR as Row[]).some((part) =>
+            part.checkedAt === null
+              ? row?.checkedAt == null
+              : row?.checkedAt instanceof Date &&
+                row.checkedAt < (part.checkedAt as { lt: Date }).lt,
+          );
+        const unread =
+          where.checkResult === undefined ||
+          row?.checkResult === where.checkResult;
+
+        if (!row || !older || !unread) {
+          return { count: 0 };
+        }
+
+        Object.assign(row, data);
+        return { count: 1 };
+      }),
     },
+    $executeRaw: jest.fn(async () => 1),
   } as unknown as PrismaService;
+  (prisma as unknown as Row).$transaction = async (
+    work: (tx: PrismaService) => unknown,
+  ) => work(prisma);
 
   return { prisma, issues, citations, entries, moduleRepos };
 }
@@ -336,6 +366,7 @@ function store(
     db.citations.push({
       id: `${id}-c${index}`,
       entryId: id,
+      createdAt: WRITTEN,
       moduleRepoId: null,
       path: null,
       commitSha: null,
@@ -562,10 +593,13 @@ describe('a repository that cannot be reached', () => {
       stillUnknown: 1,
     });
 
+    // Stamped with when it was written: it says whether the claim held at
+    // the commit it was written against.
     expect(db.citations[0]).toMatchObject({
       checkResult: 'HOLDS',
       snippet: 'export function removePage(page) {\narchive(page.entries);\n}',
       checkedSha: SHA1,
+      checkedAt: WRITTEN,
     });
     expect(db.citations[1].checkResult).toBe('UNKNOWN');
     expect(indexer.entryChanged).toHaveBeenCalledWith(entryId);

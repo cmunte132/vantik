@@ -12,6 +12,8 @@ export const Page = types.model({
 
   entryPolicy: types.string,
   visibility: types.string,
+  kind: types.optional(types.string, 'AUTHORED'),
+  question: types.union(types.string, types.null, types.undefined),
 
   workspaceId: types.string,
   createdById: types.union(types.string, types.null, types.undefined),

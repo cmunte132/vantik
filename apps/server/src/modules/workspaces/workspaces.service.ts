@@ -161,8 +161,12 @@ export default class WorkspacesService {
     workspaceId: string,
     workspaceData: UpdateWorkspaceInput,
   ): Promise<Workspace> {
+    // Named, not passed through: the body keeps keys the input does not
+    // declare, and any member may call this. Preferences, which hold the
+    // workspace's knowledge triage settings, are changed only through the
+    // admin route.
     return await this.prisma.workspace.update({
-      data: workspaceData,
+      data: { name: workspaceData.name, icon: workspaceData.icon },
       where: {
         id: workspaceId,
       },

@@ -32,6 +32,7 @@ import { CredentialBlock } from './credential-block';
 import { KnowledgeHoldout } from './knowledge-holdout';
 import { ModelAccess } from './model-access';
 import { ReviewCycle } from './review-cycle';
+import { TriageAgreement } from './triage-agreement';
 
 /**
  * What agent work in this workspace runs on, and who may act here.
@@ -69,7 +70,9 @@ export const Agents = observer(() => {
     'all',
   );
   const { data: credentials } = useWorkspaceCredentials(enabled);
-  const { data: record } = useWorkspaceRecord(enabled ? workspace?.id : undefined);
+  const { data: record } = useWorkspaceRecord(
+    enabled ? workspace?.id : undefined,
+  );
   const queryClient = useQueryClient();
 
   const { mutate: clearRevoked, isPending: isClearing } =
@@ -186,6 +189,13 @@ export const Agents = observer(() => {
         description="Runs are handed what this workspace knows about the issue's code, except a share held out that get nothing. Side by side, the two show whether the knowledge earns its place in the prompt. Each figure says how many runs it is over; a few runs prove nothing either way."
       >
         <KnowledgeHoldout enabled={enabled} />
+      </SettingSection>
+
+      <SettingSection
+        title="Can triage decide alone?"
+        description="Triage accepts, folds in and refuses new facts without a person. What people make of the same facts measures it: every verdict on something triage decided counts, and a sample of what it did alone is put in front of a person to check. A kind of decision people keep disagreeing with goes back to them until agreement recovers."
+      >
+        <TriageAgreement enabled={enabled} />
       </SettingSection>
 
       <SettingSection

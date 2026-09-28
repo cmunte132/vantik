@@ -25,10 +25,13 @@ import { useConsolidatePageMutation, usePageMarkdown } from 'services/pages';
  *
  * The prose is written here rather than generated, because deciding how a set
  * of facts reads as a narrative is the judgment being asked for. The notes are
- * appended verbatim as a starting point and the text is yours to rewrite; what
- * the server guarantees is only that whatever you fold in stops being served
- * separately, so a reader is never handed the same fact twice — once as prose
- * and once as the note it was written from.
+ * appended verbatim as a starting point and the text is yours to rewrite.
+ *
+ * The server makes every consolidation a proposal a person accepts; you are
+ * that person, so saving proposes and accepts in one step. What you fold in
+ * is kept as the evidence the page cites: still served, but marked as the
+ * page's evidence and ranked below it, so a reader does not take the prose
+ * and the note it was written from for two confirmations of one fact.
  */
 export const ConsolidateDialog = observer(
   ({
@@ -44,9 +47,12 @@ export const ConsolidateDialog = observer(
   }) => {
     const { data: page } = usePageMarkdown(pageId, open);
     const [markdown, setMarkdown] = React.useState('');
+    const [error, setError] = React.useState<string | null>(null);
 
     const { mutate: consolidate, isPending } = useConsolidatePageMutation({
+      onMutate: () => setError(null),
       onSuccess: () => onOpenChange(false),
+      onError: setError,
     });
 
     // Reset each time it opens: the body may have moved on since last time, and
@@ -72,8 +78,9 @@ export const ConsolidateDialog = observer(
             </DialogTitle>
             <p className="text-muted-foreground">
               Appended at the end — edit them into the page however it should
-              read. Once saved they are part of the document and stop being
-              given to agents separately, so nothing is said twice.
+              read. Once saved they are part of the document, and the notes are
+              kept as the evidence it cites, given to agents under the page
+              rather than as separate facts.
             </p>
           </DialogHeader>
 
@@ -89,8 +96,10 @@ export const ConsolidateDialog = observer(
           </div>
 
           <div className="px-6 py-3 border-t border-border flex items-center gap-2">
-            <span className="text-muted-foreground">
-              You can undo this from the page history.
+            <span
+              className={error ? 'text-destructive' : 'text-muted-foreground'}
+            >
+              {error ?? 'You can undo this from the page history.'}
             </span>
             <div className="ml-auto flex items-center gap-2">
               <Button

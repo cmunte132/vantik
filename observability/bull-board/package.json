@@ -1,0 +1,13 @@
+{
+  "name": "vantik-bull-board",
+  "private": true,
+  "description": "Local dashboard for the Bull queues of the server. Part of docker-compose.observability.yaml.",
+  "main": "server.js",
+  "dependencies": {
+    "@bull-board/api": "6.21.3",
+    "@bull-board/express": "6.21.3",
+    "bull": "4.16.5",
+    "express": "4.22.3",
+    "ioredis": "5.11.1"
+  }
+}

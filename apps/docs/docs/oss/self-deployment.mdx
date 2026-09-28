@@ -446,6 +446,16 @@ The logs arrive in Loki over the same connection. A slow trace and its log lines
 are therefore two clicks apart, in both directions. No service reads the
 containers to make this work. See [Logs](#logs) above.
 
+The overlay also starts Bull Board on
+[http://localhost:3003](http://localhost:3003). The server does its background
+work in Bull queues in Redis: triage, citation checks, page refreshes, agent
+runs, and cycles. Bull Board shows the waiting, active, delayed, and failed jobs
+of each queue. For a failed job, it shows the error, the stack trace, and the
+payload, and you can retry the job. Most jobs set `removeOnComplete`, so Bull
+deletes a job when it completes, and the dashboard does not show it. Bull Board
+has no login, and it can delete jobs. Its port is bound to `127.0.0.1` for that
+reason.
+
 Do not use this overlay in production. The upstream image is for development and
 for a demonstration. It has no authentication, no policy
 for retention, and all four components in one container. For a real deployment,

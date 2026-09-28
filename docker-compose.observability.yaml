@@ -83,5 +83,28 @@ services:
       retries: 30
       start_period: 30s
 
+  # A dashboard for the Bull queues on http://localhost:3003. It shows the
+  # waiting, active, delayed and failed jobs of each queue, with the error and
+  # the payload of each failed job. Most jobs set removeOnComplete, so the
+  # dashboard does not show a job after it completes.
+  #
+  # The dashboard has no login, and it can retry and delete jobs. For that
+  # reason, its port is bound to 127.0.0.1, as the Grafana port is.
+  bull-board:
+    container_name: vantik-bull-board
+    build: ./observability/bull-board
+    image: localhost/vantik-bull-board:latest
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "127.0.0.1:3003:3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - vantik
+
 volumes:
   lgtm-data:

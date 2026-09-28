@@ -202,6 +202,11 @@ holds its `traceId`, so you can go from a slow trace to the log lines of that
 trace, and back again. The logs use the same OTLP connection as the other data.
 No service reads your containers directly.
 
+The overlay also starts Bull Board on [localhost:3003](http://localhost:3003).
+It shows the background jobs of the server for each queue, and the error of
+each failed job. Bull deletes most jobs when they complete, so the dashboard
+does not show a job after it completes.
+
 If you run the apps on the host, start the observability stack together with the
 service containers. Then set the exporter to the published port, and not to the
 container:

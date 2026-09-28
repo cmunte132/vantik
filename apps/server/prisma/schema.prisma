@@ -813,9 +813,37 @@ model Page {
   /// workspace membership is enforced.
   visibility PageVisibility @default(WORKSPACE)
 
-  entries PageEntry[]
-  history PageHistory[]
-  links   PageLink[]
+  /// Who writes the body. People write an AUTHORED page, and an agent can
+  /// only propose a change to it; the gardener builds a GENERATED page from
+  /// the entries it cites, one section at a time.
+  kind     PageKind @default(AUTHORED)
+  /// The question a generated page answers. It is what the page's evidence
+  /// is gathered for, and what a reader checks the page against.
+  question String?
+  /// A generated page's body, as `[{ id, heading, body, entryIds }]`: each
+  /// section in markdown, with a stable id that a refresh edits by, and the
+  /// entries it was written from. `description` holds the same sections
+  /// rendered, so every reader of a page body reads a generated one too.
+  sections Json?
+  /// The entries the page cites: those its sections were written from, and
+  /// those folded into it by a consolidation a person accepted. They stay in
+  /// use as its evidence, served below it, and decay does not retire them.
+  citedEntryIds String[] @default([])
+  /// For a generated page: the newest change among its evidence when it was
+  /// last built. A refresh runs only once the evidence has moved past it.
+  watermark     DateTime?
+  /// For a generated page: what its evidence was when it was last built (its
+  /// entries' ids, statuses and content, and its links), as a hash. Serving
+  /// an entry moves its `updatedAt` too, so the watermark alone would rebuild
+  /// a page whose evidence was only read; this says whether it changed.
+  evidenceHash  String?
+  /// For a generated page: when it was last built.
+  refreshedAt   DateTime?
+
+  entries   PageEntry[]
+  history   PageHistory[]
+  links     PageLink[]
+  proposals PageProposal[]
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
@@ -1323,7 +1351,38 @@ model PageHistory {
   /// tiptap JSON `Page.description` holds, so a revert is a straight write.
   previousBody String?
 
+  /// A generated page's sections as they stood before this change, beside
+  /// `previousBody`: a revert puts both back, or the next refresh would edit
+  /// sections the body no longer shows.
+  previousSections Json?
+
   @@index([pageId])
+}
+
+/// A change to a page body that waits on a person.
+///
+/// An agent consolidating entries into a page people maintain does not edit
+/// it: the rewrite is proposed here, and changes nothing until a person
+/// accepts it, when it is applied and recorded in the page's history.
+model PageProposal {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  page   Page   @relation(fields: [pageId], references: [id])
+  pageId String
+
+  /// The body proposed, as the tiptap JSON `Page.description` holds.
+  body     String
+  /// The entries the body folds in, which the page cites once it is accepted.
+  entryIds String[]
+
+  proposedById String?
+  state        PageProposalState @default(OPEN)
+  decidedById  String?
+  decidedAt    DateTime?
+
+  @@index([pageId, state])
 }
 
 /// A Product is a thing that the company ships. A Product holds no code and no
@@ -2066,6 +2125,21 @@ model PageLink {
 /// be tidy in a tool description is the weakest control available — it fails
 /// precisely when a cheaper or unfamiliar model is pointed at the endpoint,
 /// which is the cross-harness case this feature exists to serve.
+/// Who writes a page's body.
+enum PageKind {
+  /// People. An agent's consolidation into it is a proposal. The default.
+  AUTHORED
+  /// The gardener, from the entries each section cites, when they change.
+  GENERATED
+}
+
+/// Where a proposed change to a page body stands.
+enum PageProposalState {
+  OPEN
+  ACCEPTED
+  DECLINED
+}
+
 enum PageEntryPolicy {
   /// Append freely. Scratch pages, where volume does not matter.
   OPEN

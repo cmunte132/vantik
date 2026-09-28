@@ -5,7 +5,9 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 7, not started. Phase 6 is done: KG-6.1 to KG-6.5
+- Current phase: 7, in progress. KG-7.1, KG-7.2, KG-7.3 and KG-7.5 are
+  implemented and mutation-checked; KG-7.4 and KG-7.6 are next. Phase 6
+  is done: KG-6.1 to KG-6.5
   implemented and mutation-checked, and its review passed after eight
   rounds with no finding left (see "Phase 6 review: PASS" below). PR #45
   is open from this branch, so the phase 6 commits are in it too; its
@@ -995,6 +997,95 @@ next session starts by reading it.
   `KnowledgeFinding`, and four nullable columns on `PageKnowledgeGap`).
   Replayed on postgres 16 over the earlier migrations; the diff against
   the schema is then empty. The new tables are not replicated.
+
+### Phase 7
+
+- **Kinds (KG-7.1).** `Page.kind` is AUTHORED (the column default) or
+  GENERATED. A generated page is made with a `question` (trimmed, at most
+  500 characters) and no body: one sent with it is refused, as is a
+  question for a page people write. Its body is `Page.sections` (JSON, a
+  list of `{id, heading, body, entryIds}`), rendered into `description` as
+  `## heading` blocks so search, `get_page` and the editor read it as any
+  other page, and `Page.citedEntryIds` is every entry the sections cite.
+  A page people wrote never becomes generated (the gardener would replace
+  its body); a generated page can be taken over by hand (`kind: AUTHORED`
+  in an update), which is recorded in its history, and until then an edit
+  to its body is refused. A new question clears the watermark and the
+  evidence hash, is recorded, and queues a build; the same question again
+  changes nothing. Making a generated page, or asking it a new question,
+  queues `refreshGeneratedPage` for it (best effort: the hourly look
+  builds it anyway).
+- **The gate (KG-7.2).** Hourly (`refreshGeneratedPages`, cron
+  `KNOWLEDGE_PAGE_REFRESH_CRON`, default `23 * * * *`, `off` disables; the
+  PAGE_DECAY_CRON pattern with a fixed job id), each generated page is
+  looked at in order, cheapest check first:
+  - the minimum interval, `KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL` (default
+    `6h`; `preferences.knowledge.pageRefreshMinInterval` per workspace;
+    `90m`, `6h`, `1d` forms; zero, a bare number or another unit is
+    dropped to the layer beneath), since `refreshedAt`;
+  - the watermark: the latest `updatedAt` among the entries in the page's
+    scope (in any status, deleted or not) and among its links, against the
+    stored `watermark`;
+  - the evidence hash, over each entry in scope by id, status, kind,
+    content and whether it is deleted. Serving an entry stamps it and so
+    moves its `updatedAt` without changing any of these; without the hash
+    every page would be rebuilt after every run that was handed its
+    evidence. Links are not hashed: they decide the scope, and a link that
+    changes no entry in scope changes nothing the page could say.
+  A page not due is not written to, and neither the index nor a model is
+  asked. The scope is the page's own entries and the entries of the
+  modules its links name: a module, a product's owned and linked modules,
+  a capability's modules.
+- **Edits, not rewrites (KG-7.3).** The writer (role `smart`, temperature
+  0) is shown the question, the sections with their ids and what they
+  cite (marked when no longer in use), and the entries read, all quoted
+  as data, and answers `{"operations": [...]}` with `replace_section`,
+  `insert_section` (after a section id, or null for the top) and
+  `remove_section`. They are applied in code, in order: a section no
+  operation names is the same object afterwards, so it is stored byte for
+  byte; an id the page does not have (including one an earlier operation
+  removed) drops that operation; a written section cites only entries the
+  refresh read, and one left citing none is dropped; at most 30
+  operations; a new section's id is made in code (`sec_` and 12 hex).
+  - **What is read.** The index, searched for the question with the page's
+    id and with its modules, for STANDING and CONSOLIDATED entries, each
+    hit confirmed in use and in scope in postgres, in the order the index
+    ranked them, at most 40; then the entries the kept sections cite, if
+    the search missed them, so a section can be rewritten from what it
+    still rests on.
+  - **Nothing written** when the index cannot be reached, when the search
+    finds nothing that postgres confirms, or when the writer throws or
+    answers with something other than operations. The watermark does not
+    move either, so the next look tries again. A refresh job that ends so
+    fails, and Bull tries it once more.
+  - **In code first.** A section whose every cited entry is out of use or
+    out of scope is removed before the writer is asked. Without a model
+    (`isLLMConfigured` false) this is all that runs: those sections are
+    removed, and the watermark stays where it was, so new evidence is
+    written up once there is a model. With a model the removal is part of
+    the refresh, so an empty retrieval writes nothing, removals included:
+    the criterion says so, and the page then keeps those sections until a
+    refresh finds evidence.
+  - **Races.** A refresh stores only over the page as it read it
+    (`updatedAt` and kind unchanged), so two refreshes, a person's edit, a
+    takeover or a revert in the meantime each make it write nothing.
+- **History (KG-7.5).** Every refresh stored writes a `PageHistory` row,
+  with no user, `previousBody` (an empty document for the first build) and
+  the new `previousSections`, and `changes.refreshed` counting the
+  operations applied and dropped; `changes.body` only when the body
+  changed. A refresh that changed nothing is recorded too, so the edits it
+  dropped can be seen. The existing `revertBody` puts a generated page's
+  sections and `citedEntryIds` back with its body, and records the
+  sections it replaced, so a revert can itself be undone. The watermark
+  and hash are left as they were, so a revert stays until the evidence
+  changes again.
+- **Tests.** The settings suite's full-object expectations gained
+  `pageRefreshMinIntervalMs`; the processor suite's constructions gained
+  the refresh service. No assertion changed.
+- **Migration** `20260927080000_generated_pages`: two enums, seven columns
+  on `Page`, `previousSections` on `PageHistory`, and `PageProposal`.
+  Replayed on postgres 16 over the earlier migrations; the diff against
+  the schema is then empty.
 
 ## Phase reviews
 
@@ -2227,3 +2318,11 @@ Give the evidence, and stop until the maintainer answers.
   citation's line. 3 mutants, all killed.
 - 2026-09-27: Phase 6 review round 8: PASS, no findings. Phase 6 review:
   PASS. Phase 6 done; starting phase 7. Verify through phase 6: PASS, 51/51.
+- 2026-09-28: Phase 7: generated pages (kind, question, sections citing
+  entries), the gated hourly refresh as section edits applied in code,
+  and a history row for every refresh that the existing revert undoes
+  (KG-7.1, 7.2, 7.3, 7.5). 43 mutants: all killed once the tests they
+  showed missing were added (a status change, a deletion, the index's
+  order, an unlinked module, the page's own entries), except the one
+  that stopped hashing the links, which showed the links were redundant
+  in the hash; they were taken out of it.

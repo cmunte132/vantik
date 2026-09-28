@@ -85,6 +85,13 @@ export interface KnowledgeSettings {
    * job serves every workspace, so any other value leaves it on.
    */
   gapIssues: boolean;
+  /**
+   * The least time between two builds of one generated page, in
+   * milliseconds. Written as a duration: `90m`, `6h`, `1d`. A page is rebuilt
+   * only when its evidence has changed, and then no sooner than this after
+   * its last build. `KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL`.
+   */
+  pageRefreshMinIntervalMs: number;
 }
 
 export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
@@ -101,6 +108,7 @@ export const DEFAULT_KNOWLEDGE_SETTINGS: Readonly<KnowledgeSettings> = {
   conventionHarmMargin: 3,
   gapIssueMinCount: 5,
   gapIssues: true,
+  pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
 };
 
 /** The most tokens any knowledge budget allows, whatever is configured. */
@@ -168,7 +176,32 @@ export function knowledgeSettings(
       scheduleOf(stored.gapIssuesCron) ??
       scheduleOf(env.KNOWLEDGE_GAP_ISSUES_CRON?.trim().toLowerCase()) ??
       DEFAULT_KNOWLEDGE_SETTINGS.gapIssues,
+    pageRefreshMinIntervalMs:
+      durationOf(stored.pageRefreshMinInterval) ??
+      durationOf(env.KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL) ??
+      DEFAULT_KNOWLEDGE_SETTINGS.pageRefreshMinIntervalMs,
   };
+}
+
+const DURATION_UNITS: Record<string, number> = {
+  m: 60 * 1000,
+  h: 60 * 60 * 1000,
+  d: 24 * 60 * 60 * 1000,
+};
+
+/**
+ * A duration such as `90m`, `6h` or `1d`, in milliseconds, or nothing. A bare
+ * number says nothing about its unit, so it is dropped rather than guessed
+ * at, as is zero: a page rebuilt on every change is not an interval.
+ */
+function durationOf(value: unknown): number | undefined {
+  const match =
+    typeof value === 'string' ? /^(\d+)\s*([mhd])$/i.exec(value.trim()) : null;
+  const amount = match ? Number(match[1]) : 0;
+
+  return match && amount > 0
+    ? amount * DURATION_UNITS[match[2].toLowerCase()]
+    : undefined;
 }
 
 /**

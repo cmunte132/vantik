@@ -10,18 +10,25 @@
 import { Queue } from 'bull';
 
 import EntryCitationsService from './entry-citations.service';
+import PageRefreshService, {
+  type RefreshOutcome,
+} from './generated/page-refresh.service';
 import PageEntriesService from './page-entries.service';
 import {
   DECAY_JOB,
   DECAY_JOB_ID,
   GAP_ISSUES_JOB,
   GAP_ISSUES_JOB_ID,
+  PAGE_REFRESH_JOB,
+  PAGE_REFRESH_JOB_ID,
   RECHECK_ENTRY_JOB,
   recheckEntryJobOptions,
   RECOMPUTE_MODULES_GRACE_MS,
   RECOMPUTE_MODULES_JOB,
   RECOMPUTE_MODULES_WINDOW_MS,
   recomputeModulesJobOptions,
+  REFRESH_PAGE_JOB,
+  refreshPageJobOptions,
   RETRY_CITATIONS_ATTEMPTS,
   RETRY_CITATIONS_BACKOFF_MS,
   RETRY_CITATIONS_JOB,
@@ -32,6 +39,7 @@ import {
 import {
   EntryModulesScheduler,
   KnowledgeGapsScheduler,
+  PageRefreshScheduler,
   PagesProcessor,
   PagesScheduler,
 } from './pages.processor';
@@ -111,6 +119,7 @@ describe('PagesProcessor', () => {
       } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     ).handleDecay();
 
     // Unscoped deliberately: the windows are a property of the deployment, not
@@ -171,6 +180,7 @@ describe('re-resolving entry modules', () => {
       {} as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     );
 
     await processor.handleRecomputeModules({ data: { workspaceId: 'ws-1' } });
@@ -190,6 +200,7 @@ describe('retrying citations that could not be read', () => {
       {} as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     );
 
     return { processor, retryUnknown };
@@ -237,6 +248,7 @@ describe('checking an entry again after a harmful signal', () => {
         weigh: async (): Promise<null> => null,
       } as unknown as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     );
 
     await expect(
@@ -276,6 +288,7 @@ describe('triaging a new entry', () => {
       {} as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     );
 
     await expect(
@@ -296,6 +309,7 @@ describe('triaging a new entry', () => {
       {} as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     );
 
     await expect(
@@ -396,6 +410,7 @@ describe('knowledge gap issues', () => {
       {} as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       { openIssues } as unknown as KnowledgeGapsService,
+      {} as PageRefreshService,
     );
 
     await processor.handleGapIssues();
@@ -426,6 +441,7 @@ describe('conventions from review', () => {
       {} as KnowledgeUpkeepService,
       { weigh } as unknown as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     );
 
     await processor.handleRecheckEntry({ data: { entryId: 'entry-1' } });
@@ -447,6 +463,7 @@ describe('conventions from review', () => {
       {} as KnowledgeUpkeepService,
       { weigh } as unknown as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     );
 
     await expect(
@@ -467,6 +484,7 @@ describe('conventions from review', () => {
       {} as KnowledgeUpkeepService,
       { runFinished } as unknown as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     );
 
     await processor.handleRunFindings({ data: { runId: 'run-1' } });
@@ -500,6 +518,7 @@ describe('a change that landed', () => {
       { codeLanded } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     );
     const data = {
       workspaceId: 'workspace-1',
@@ -542,6 +561,7 @@ describe('the decay pass', () => {
       { proposeUnused, openOwedIssues } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     ).handleDecay();
 
     expect(order).toEqual(['archive', 'ask', 'owed']);
@@ -563,8 +583,133 @@ describe('the decay pass', () => {
       } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
+      {} as PageRefreshService,
     ).handleDecay();
 
     expect(openOwedIssues).toHaveBeenCalledWith();
+  });
+});
+
+describe('refreshing generated pages', () => {
+  const refreshScheduler = (cron: string | undefined) => {
+    let scheduler: typeof PageRefreshScheduler = PageRefreshScheduler;
+    let interfaceCron = '';
+    const saved = process.env.KNOWLEDGE_PAGE_REFRESH_CRON;
+
+    if (cron === undefined) {
+      delete process.env.KNOWLEDGE_PAGE_REFRESH_CRON;
+    } else {
+      process.env.KNOWLEDGE_PAGE_REFRESH_CRON = cron;
+    }
+
+    jest.isolateModules(() => {
+      scheduler = jest.requireActual('./pages.processor').PageRefreshScheduler;
+      interfaceCron = jest.requireActual('./pages.interface').PAGE_REFRESH_CRON;
+    });
+
+    if (saved === undefined) {
+      delete process.env.KNOWLEDGE_PAGE_REFRESH_CRON;
+    } else {
+      process.env.KNOWLEDGE_PAGE_REFRESH_CRON = saved;
+    }
+
+    return { scheduler, interfaceCron };
+  };
+  const processorWith = (pageRefresh: Partial<PageRefreshService>) =>
+    new PagesProcessor(
+      {} as PageEntriesService,
+      {} as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
+      pageRefresh as PageRefreshService,
+    );
+
+  it('[KG-7.2] looks for pages due a rebuild hourly under a fixed id, replacing its earlier schedule', async () => {
+    const { scheduler, interfaceCron } = refreshScheduler(undefined);
+    const queue = buildQueue([
+      { name: PAGE_REFRESH_JOB, key: 'old-refresh-key' },
+      { name: DECAY_JOB, key: 'decay-key' },
+    ]);
+
+    await new scheduler(queue).onModuleInit();
+
+    expect(interfaceCron).toBe('23 * * * *');
+    expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('old-refresh-key');
+    expect(queue.removeRepeatableByKey).not.toHaveBeenCalledWith('decay-key');
+    expect(queue.add).toHaveBeenCalledWith(
+      PAGE_REFRESH_JOB,
+      {},
+      expect.objectContaining({
+        jobId: PAGE_REFRESH_JOB_ID,
+        repeat: { cron: '23 * * * *' },
+      }),
+    );
+  });
+
+  it('[KG-7.2] runs on the cron KNOWLEDGE_PAGE_REFRESH_CRON gives, and not at all when it is off', async () => {
+    const often = refreshScheduler('*/10 * * * *');
+    const queue = buildQueue();
+
+    await new often.scheduler(queue).onModuleInit();
+    expect(queue.add.mock.calls[0][2].repeat).toEqual({
+      cron: '*/10 * * * *',
+    });
+
+    const { scheduler } = refreshScheduler('off');
+    const stale = buildQueue([{ name: PAGE_REFRESH_JOB, key: 'stale-key' }]);
+
+    await new scheduler(stale).onModuleInit();
+    expect(stale.removeRepeatableByKey).toHaveBeenCalledWith('stale-key');
+    expect(stale.add).not.toHaveBeenCalled();
+
+    const down = buildQueue();
+    down.getRepeatableJobs.mockRejectedValue(new Error('redis is down'));
+    await expect(
+      new PageRefreshScheduler(down).onModuleInit(),
+    ).resolves.toBeUndefined();
+  });
+
+  it('[KG-7.2] hands the look to the refresh service', async () => {
+    const refreshDue = jest.fn(async () => ({ checked: 3, written: 1 }));
+
+    await processorWith({ refreshDue }).handlePageRefresh();
+
+    expect(refreshDue).toHaveBeenCalledWith();
+  });
+
+  it('[KG-7.2] [KG-7.3] builds the page a job names, and fails the job only when the evidence or the answer could not be read', async () => {
+    const outcomes: Array<[RefreshOutcome, boolean]> = [
+      ['written', false],
+      ['no-change', false],
+      ['too-soon', false],
+      ['unchanged', false],
+      ['no-evidence', false],
+      ['not-generated', false],
+      ['raced', false],
+      ['retrieval-failed', true],
+      ['writer-failed', true],
+    ];
+
+    for (const [outcome, fails] of outcomes) {
+      const refresh = jest.fn(async () => ({ outcome }));
+      const run = processorWith({ refresh }).handleRefreshPage({
+        data: { pageId: 'page-1' },
+      });
+
+      if (fails) {
+        await expect(run).rejects.toThrow(outcome);
+      } else {
+        await expect(run).resolves.toBeUndefined();
+      }
+      expect(refresh).toHaveBeenCalledWith('page-1');
+    }
+
+    // One job per page at a time.
+    expect(refreshPageJobOptions('page-1')).toMatchObject({
+      jobId: `${REFRESH_PAGE_JOB}:page-1`,
+      attempts: 2,
+    });
   });
 });

@@ -25,6 +25,7 @@ describe('the knowledge settings of a workspace', () => {
       conventionHarmMargin: 3,
       gapIssueMinCount: 5,
       gapIssues: true,
+      pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
     });
     expect(DEFAULT_KNOWLEDGE_SETTINGS).toEqual(knowledgeSettings({}, {}));
   });
@@ -50,6 +51,7 @@ describe('the knowledge settings of a workspace', () => {
       conventionHarmMargin: 3,
       gapIssueMinCount: 5,
       gapIssues: true,
+      pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
     });
     // The ends of a share are shares.
     expect(
@@ -92,6 +94,7 @@ describe('the knowledge settings of a workspace', () => {
       conventionHarmMargin: 3,
       gapIssueMinCount: 5,
       gapIssues: true,
+      pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
     });
     // One setting stored leaves the others to the deployment.
     expect(knowledgeSettings({ knowledge: { contextTopK: 3 } }, env)).toEqual({
@@ -108,6 +111,7 @@ describe('the knowledge settings of a workspace', () => {
       conventionHarmMargin: 3,
       gapIssueMinCount: 5,
       gapIssues: true,
+      pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
     });
     // Other preferences are not knowledge settings.
     expect(
@@ -162,6 +166,7 @@ describe('the knowledge settings of a workspace', () => {
       conventionHarmMargin: 3,
       gapIssueMinCount: 5,
       gapIssues: true,
+      pageRefreshMinIntervalMs: 6 * 60 * 60 * 1000,
     });
     expect(
       knowledgeSettings({ knowledge: { holdoutRate: 1.5 } }, {}).holdoutRate,
@@ -396,6 +401,41 @@ describe('the knowledge settings of a workspace', () => {
         { KNOWLEDGE_GAP_ISSUES_CRON: '' },
       ).gapIssues,
     ).toBe(true);
+  });
+
+  it('[KG-7.2] refreshes a generated page at most every six hours, unless the deployment or the workspace says otherwise', () => {
+    const hour = 60 * 60 * 1000;
+
+    expect(knowledgeSettings(null, {}).pageRefreshMinIntervalMs).toBe(6 * hour);
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL: '2h' })
+        .pageRefreshMinIntervalMs,
+    ).toBe(2 * hour);
+    expect(
+      knowledgeSettings(
+        { knowledge: { pageRefreshMinInterval: '30m' } },
+        { KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL: '2h' },
+      ).pageRefreshMinIntervalMs,
+    ).toBe(hour / 2);
+    expect(
+      knowledgeSettings({ knowledge: { pageRefreshMinInterval: '1d' } }, {})
+        .pageRefreshMinIntervalMs,
+    ).toBe(24 * hour);
+
+    // No interval, a number with no unit, or a unit it does not know, is a
+    // mistake, and the layer beneath stands: never "refresh on every run".
+    for (const wrong of ['0h', '6', 'soon', '-1h', '1.5h', 6 * hour, '']) {
+      expect(
+        knowledgeSettings(
+          { knowledge: { pageRefreshMinInterval: wrong } },
+          { KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL: '2h' },
+        ).pageRefreshMinIntervalMs,
+      ).toBe(2 * hour);
+    }
+    expect(
+      knowledgeSettings(null, { KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL: '0m' })
+        .pageRefreshMinIntervalMs,
+    ).toBe(6 * hour);
   });
 
   it('[KG-3.2] caps the budget, so a budget cannot mean everything', () => {

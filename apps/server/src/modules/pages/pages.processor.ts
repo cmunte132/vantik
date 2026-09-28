@@ -5,6 +5,7 @@ import { Queue } from 'bull';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import EntryCitationsService from './entry-citations.service';
+import PageRefreshService from './generated/page-refresh.service';
 import PageEntriesService from './page-entries.service';
 import {
   CODE_LANDED_JOB,
@@ -15,11 +16,15 @@ import {
   GAP_ISSUES_CRON,
   GAP_ISSUES_JOB,
   GAP_ISSUES_JOB_ID,
+  PAGE_REFRESH_CRON,
+  PAGE_REFRESH_JOB,
+  PAGE_REFRESH_JOB_ID,
   PAGES_QUEUE,
   PROPOSED_ENTRY_EXPIRY_DAYS,
   RECHECK_ENTRY_JOB,
   RECOMPUTE_MODULES_JOB,
   recomputeModulesJobOptions,
+  REFRESH_PAGE_JOB,
   RETRY_CITATIONS_JOB,
   RUN_FINDINGS_JOB,
   STANDING_ENTRY_DECAY_DAYS,
@@ -126,6 +131,46 @@ export class KnowledgeGapsScheduler implements OnModuleInit {
 }
 
 /**
+ * The scheduler for the look for generated pages due a rebuild. A look finds
+ * nothing to do far more often than not: each page is rebuilt only when its
+ * evidence changed, and no sooner than its workspace's interval.
+ */
+@Injectable()
+export class PageRefreshScheduler implements OnModuleInit {
+  private readonly logger: LoggerService = new LoggerService(
+    'PageRefreshScheduler',
+  );
+
+  constructor(@InjectQueue(PAGES_QUEUE) private pagesQueue: Queue) {}
+
+  async onModuleInit() {
+    try {
+      const cron = await scheduleRepeatable(
+        this.pagesQueue,
+        PAGE_REFRESH_JOB,
+        PAGE_REFRESH_JOB_ID,
+        PAGE_REFRESH_CRON,
+      );
+
+      this.logger.info({
+        message: cron
+          ? `Generated page refreshes scheduled (${cron})`
+          : 'Generated page refreshes are disabled (KNOWLEDGE_PAGE_REFRESH_CRON ' +
+            'is off); a generated page is built only when it is made or its ' +
+            'question changes',
+        where: 'PageRefreshScheduler.onModuleInit',
+      });
+    } catch (error) {
+      this.logger.error({
+        message: `Could not schedule generated page refreshes: ${error}`,
+        where: 'PageRefreshScheduler.onModuleInit',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
+  }
+}
+
+/**
  * Registers a repeatable job on its cron, and returns the cron, or null when
  * it is empty or `off` and the job is left unscheduled.
  *
@@ -214,7 +259,33 @@ export class PagesProcessor {
     private upkeep: KnowledgeUpkeepService,
     private conventions: KnowledgeConventionsService,
     private gaps: KnowledgeGapsService,
+    private pageRefresh: PageRefreshService,
   ) {}
+
+  /** Rebuilds every generated page that is due. See `PageRefreshService`. */
+  @Process(PAGE_REFRESH_JOB)
+  async handlePageRefresh() {
+    const { checked, written } = await this.pageRefresh.refreshDue();
+
+    this.logger.info({
+      message: `Looked at ${checked} generated page(s); rebuilt ${written}`,
+      where: 'PagesProcessor.handlePageRefresh',
+    });
+  }
+
+  /** Builds one generated page, if it is due: when made, or asked anew. */
+  @Process(REFRESH_PAGE_JOB)
+  async handleRefreshPage(job: { data: { pageId: string } }) {
+    const { outcome } = await this.pageRefresh.refresh(job.data.pageId);
+
+    // A refresh that could not read its evidence or its writer's answer is
+    // tried again; the next look would get to it too, but later.
+    if (outcome === 'retrieval-failed' || outcome === 'writer-failed') {
+      throw new Error(
+        `Generated page ${job.data.pageId} was not built (${outcome})`,
+      );
+    }
+  }
 
   /**
    * Triages one new entry. A pass that throws is tried again by Bull; one

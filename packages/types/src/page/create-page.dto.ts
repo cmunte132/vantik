@@ -6,7 +6,11 @@ import {
   IsUUID,
 } from 'class-validator';
 
-import { PageEntryPolicyEnum, PageLinkTypeEnum } from './page.entity';
+import {
+  PageEntryPolicyEnum,
+  PageKindEnum,
+  PageLinkTypeEnum,
+} from './page.entity';
 
 export class CreatePageDto {
   @IsString()
@@ -41,6 +45,19 @@ export class CreatePageDto {
   @IsOptional()
   @IsEnum(PageEntryPolicyEnum)
   entryPolicy?: PageEntryPolicyEnum;
+
+  /**
+   * GENERATED for a page the gardener builds from the knowledge in its scope,
+   * which then needs a `question`. AUTHORED, the default, otherwise.
+   */
+  @IsOptional()
+  @IsEnum(PageKindEnum)
+  kind?: PageKindEnum;
+
+  /** The question a generated page answers. */
+  @IsOptional()
+  @IsString()
+  question?: string;
 }
 
 export class UpdatePageDto {
@@ -72,11 +89,35 @@ export class UpdatePageDto {
   @IsOptional()
   @IsEnum(PageEntryPolicyEnum)
   entryPolicy?: PageEntryPolicyEnum;
+
+  /**
+   * AUTHORED takes a generated page over by hand: the gardener stops
+   * building it, and its body is edited like any other. A page people wrote
+   * is never handed to the gardener, which would rewrite it whole; a
+   * generated page is made as one.
+   */
+  @IsOptional()
+  @IsEnum(PageKindEnum)
+  kind?: PageKindEnum;
+
+  /** A generated page's question. Changing it rebuilds the page. */
+  @IsOptional()
+  @IsString()
+  question?: string;
 }
 
 export class PageRequestParamsDto {
   @IsUUID()
   pageId: string;
+}
+
+/** Accepting or declining a proposed change to a page body. */
+export class PageProposalParamsDto {
+  @IsUUID()
+  pageId: string;
+
+  @IsUUID()
+  proposalId: string;
 }
 
 /** Undoing one recorded change to a page body. */

@@ -1,12 +1,21 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   ConsolidatePageDto,
   CreatePageDto,
   Page,
   PageEntryStatusEnum,
+  PageKindEnum,
   UpdatePageDto,
   UserTypeEnum,
 } from '@vantikhq/types';
+import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
 import {
@@ -14,8 +23,41 @@ import {
   convertTiptapJsonToMarkdown,
 } from 'common/utils/tiptap.utils';
 
+import { citedBy, readSections } from './generated/sections';
 import KnowledgeIndexService from './knowledge-index.service';
+import {
+  PAGES_QUEUE,
+  REFRESH_PAGE_JOB,
+  refreshPageJobOptions,
+} from './pages.interface';
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
+
+/** The longest question a generated page may answer. */
+const MAX_QUESTION_LENGTH = 500;
+
+/**
+ * A generated page's question, trimmed, or a refusal. A generated page with
+ * no question has nothing to gather its evidence for.
+ */
+function questionOf(question: string | undefined): string {
+  const trimmed = question?.trim() ?? '';
+
+  if (!trimmed) {
+    throw new BadRequestException({
+      message:
+        'A generated page needs a question: it is what the page answers, and ' +
+        'what its evidence is gathered for.',
+    });
+  }
+
+  if (trimmed.length > MAX_QUESTION_LENGTH) {
+    throw new BadRequestException({
+      message: `A page's question is at most ${MAX_QUESTION_LENGTH} characters.`,
+    });
+  }
+
+  return trimmed;
+}
 
 /**
  * The body to store, from whichever form the caller sent.
@@ -56,6 +98,8 @@ const SUMMARY_FIELDS = {
   sortOrder: true,
   entryPolicy: true,
   visibility: true,
+  kind: true,
+  question: true,
   workspaceId: true,
   createdById: true,
   updatedById: true,
@@ -89,6 +133,7 @@ export default class PagesService {
     private prisma: PrismaService,
     private indexer?: KnowledgeIndexService,
     private agreement?: KnowledgeAgreementService,
+    @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
   ) {}
 
   // ----------------------------------------------------------------- reading
@@ -123,6 +168,7 @@ export default class PagesService {
             ...page,
             description: null,
             descriptionMarkdown: '',
+            sections: null,
           } as PageResponse)
         : this.withMarkdown(page),
     );
@@ -141,7 +187,9 @@ export default class PagesService {
   }
 
   /** A page's ancestors, root first — the breadcrumb the page view renders. */
-  async getAncestors(pageId: string): Promise<Array<Pick<Page, 'id' | 'title'>>> {
+  async getAncestors(
+    pageId: string,
+  ): Promise<Array<Pick<Page, 'id' | 'title'>>> {
     const ancestors: Array<{ id: string; title: string }> = [];
 
     let cursor = await this.prisma.page.findFirst({
@@ -188,7 +236,9 @@ export default class PagesService {
   async getBacklinks(
     pageId: string,
     workspaceId: string,
-  ): Promise<Array<{ id: string; title: string; number: number; teamId: string }>> {
+  ): Promise<
+    Array<{ id: string; title: string; number: number; teamId: string }>
+  > {
     const issues = await this.prisma.issue.findMany({
       where: {
         deleted: null,
@@ -214,6 +264,27 @@ export default class PagesService {
       await this.assertSameWorkspace(pageData.parentId, workspaceId);
     }
 
+    const generated = pageData.kind === PageKindEnum.GENERATED;
+
+    // The gardener writes a generated page, from the entries each section
+    // cites; a body sent with it would be a section citing nothing.
+    if (generated && toStoredBody(pageData) !== undefined) {
+      throw new BadRequestException({
+        message:
+          'A generated page is written from the knowledge in its scope, not ' +
+          'given a body. Make it with a question, and link it to what it is ' +
+          'about.',
+      });
+    }
+
+    if (!generated && pageData.question !== undefined) {
+      throw new BadRequestException({
+        message: 'Only a generated page answers a question.',
+      });
+    }
+
+    const question = generated ? questionOf(pageData.question) : null;
+
     const last = await this.prisma.page.findFirst({
       where: {
         workspaceId,
@@ -231,6 +302,9 @@ export default class PagesService {
         parentId: pageData.parentId ?? null,
         sortOrder: pageData.sortOrder ?? (last?.sortOrder ?? 0) + 1,
         ...(pageData.entryPolicy ? { entryPolicy: pageData.entryPolicy } : {}),
+        ...(generated
+          ? { kind: PageKindEnum.GENERATED, question, sections: [] }
+          : {}),
         workspaceId,
         createdById: userId,
         updatedById: userId,
@@ -239,6 +313,10 @@ export default class PagesService {
 
     await this.recordHistory(page.id, userId, { created: { to: page.title } });
     await this.indexer?.pageChanged(page.id);
+
+    if (generated) {
+      await this.queueRefresh(page.id);
+    }
 
     return this.withMarkdown(page);
   }
@@ -256,12 +334,48 @@ export default class PagesService {
         parentId: true,
         entryPolicy: true,
         workspaceId: true,
+        kind: true,
+        question: true,
       },
     });
 
     if (!current) {
       throw new NotFoundException({ message: `Page ${pageId} not found` });
     }
+
+    const wasGenerated = current.kind === PageKindEnum.GENERATED;
+    const takenOver = wasGenerated && pageData.kind === PageKindEnum.AUTHORED;
+
+    // A page people wrote is never handed to the gardener, which would
+    // rewrite it whole: a generated page is made as one.
+    if (!wasGenerated && pageData.kind === PageKindEnum.GENERATED) {
+      throw new BadRequestException({
+        message:
+          'A page people wrote cannot become generated, which would replace ' +
+          'its body. Make a generated page for the question instead.',
+      });
+    }
+
+    // Its body is its sections, rendered; an edit to the body alone would be
+    // undone by the next refresh, or edit sections nothing records. Taking
+    // the page over by hand makes it an authored page, edited like any other.
+    if (wasGenerated && !takenOver && toStoredBody(pageData) !== undefined) {
+      throw new BadRequestException({
+        message:
+          'A generated page is written from its entries: correct those, or ' +
+          'take the page over by hand (kind AUTHORED) to edit its body.',
+      });
+    }
+
+    if (pageData.question !== undefined && (!wasGenerated || takenOver)) {
+      throw new BadRequestException({
+        message: 'Only a generated page answers a question.',
+      });
+    }
+
+    const question =
+      pageData.question !== undefined ? questionOf(pageData.question) : null;
+    const questionChanged = question !== null && question !== current.question;
 
     if (pageData.parentId !== undefined && pageData.parentId !== null) {
       await this.assertSameWorkspace(pageData.parentId, current.workspaceId);
@@ -292,32 +406,74 @@ export default class PagesService {
         ...(pageData.entryPolicy !== undefined && {
           entryPolicy: pageData.entryPolicy,
         }),
+        ...(takenOver && { kind: PageKindEnum.AUTHORED }),
+        // A new question is a new page to build: the watermark goes, so the
+        // next refresh does not wait for the evidence to change.
+        ...(questionChanged && {
+          question,
+          watermark: null,
+          evidenceHash: null,
+        }),
         updatedById: userId,
       },
     });
 
-    await this.recordHistory(pageId, userId, {
-      ...(titleChanged
-        ? { title: { from: current.title, to: pageData.title } }
-        : {}),
-      ...(pageData.parentId !== undefined &&
-      pageData.parentId !== current.parentId
-        ? { parentId: { from: current.parentId, to: pageData.parentId } }
-        : {}),
-      ...(pageData.entryPolicy !== undefined &&
-      pageData.entryPolicy !== current.entryPolicy
-        ? { entryPolicy: { from: current.entryPolicy, to: pageData.entryPolicy } }
-        : {}),
-      ...(toStoredBody(pageData) !== undefined ? { body: true } : {}),
-    },
-    // Only when the body actually moved. Storing it on a title-only change
-    // would fill the table with copies of an unchanged document and make the
-    // history read as though every edit rewrote the page.
-    toStoredBody(pageData) !== undefined ? current.description : undefined,
+    await this.recordHistory(
+      pageId,
+      userId,
+      {
+        ...(titleChanged
+          ? { title: { from: current.title, to: pageData.title } }
+          : {}),
+        ...(pageData.parentId !== undefined &&
+        pageData.parentId !== current.parentId
+          ? { parentId: { from: current.parentId, to: pageData.parentId } }
+          : {}),
+        ...(pageData.entryPolicy !== undefined &&
+        pageData.entryPolicy !== current.entryPolicy
+          ? {
+              entryPolicy: {
+                from: current.entryPolicy,
+                to: pageData.entryPolicy,
+              },
+            }
+          : {}),
+        ...(takenOver
+          ? { kind: { from: current.kind, to: PageKindEnum.AUTHORED } }
+          : {}),
+        ...(questionChanged
+          ? { question: { from: current.question, to: question } }
+          : {}),
+        ...(toStoredBody(pageData) !== undefined ? { body: true } : {}),
+      },
+      // Only when the body actually moved. Storing it on a title-only change
+      // would fill the table with copies of an unchanged document and make the
+      // history read as though every edit rewrote the page.
+      toStoredBody(pageData) !== undefined ? current.description : undefined,
     );
     await this.indexer?.pageChanged(pageId, { titleChanged });
 
+    if (questionChanged) {
+      await this.queueRefresh(pageId);
+    }
+
     return this.withMarkdown(page);
+  }
+
+  /**
+   * Asks for a generated page to be built now rather than at the next look.
+   * Best effort: the scheduled look builds it anyway.
+   */
+  private async queueRefresh(pageId: string): Promise<void> {
+    try {
+      await this.pagesQueue?.add(
+        REFRESH_PAGE_JOB,
+        { pageId },
+        refreshPageJobOptions(pageId),
+      );
+    } catch {
+      // The next scheduled look finds it.
+    }
   }
 
   /**
@@ -487,7 +643,7 @@ export default class PagesService {
   ): Promise<PageResponse> {
     const revision = await this.prisma.pageHistory.findFirst({
       where: { id: historyId, pageId, deleted: null },
-      select: { previousBody: true },
+      select: { previousBody: true, previousSections: true },
     });
 
     if (!revision) {
@@ -506,16 +662,30 @@ export default class PagesService {
 
     const current = await this.prisma.page.findFirst({
       where: { id: pageId, deleted: null },
-      select: { description: true },
+      select: { description: true, kind: true, sections: true },
     });
 
     if (!current) {
       throw new NotFoundException({ message: `Page ${pageId} not found` });
     }
 
+    // A generated page's sections go back with its body, or the next refresh
+    // would edit sections the body no longer shows. What it cites follows.
+    const generated = current.kind === PageKindEnum.GENERATED;
+    const sections = generated ? readSections(revision.previousSections) : [];
+
     const page = await this.prisma.page.update({
       where: { id: pageId },
-      data: { description: revision.previousBody, updatedById: userId },
+      data: {
+        description: revision.previousBody,
+        ...(generated
+          ? {
+              sections: sections as unknown as Prisma.InputJsonValue,
+              citedEntryIds: citedBy(sections),
+            }
+          : {}),
+        updatedById: userId,
+      },
     });
 
     await this.recordHistory(
@@ -523,6 +693,7 @@ export default class PagesService {
       userId,
       { body: true, revertedTo: { to: historyId } },
       current.description,
+      generated ? current.sections : undefined,
     );
     await this.indexer?.pageChanged(pageId);
 
@@ -610,13 +781,22 @@ export default class PagesService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     changes: Record<string, any>,
     previousBody?: string | null,
+    previousSections?: Prisma.JsonValue,
   ): Promise<void> {
     if (Object.keys(changes).length === 0) {
       return;
     }
 
     await this.prisma.pageHistory.create({
-      data: { pageId, userId, changes, previousBody: previousBody ?? null },
+      data: {
+        pageId,
+        userId,
+        changes,
+        previousBody: previousBody ?? null,
+        ...(previousSections !== undefined && previousSections !== null
+          ? { previousSections: previousSections as Prisma.InputJsonValue }
+          : {}),
+      },
     });
   }
 

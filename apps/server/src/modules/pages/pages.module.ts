@@ -9,6 +9,8 @@ import { VectorModule } from 'modules/vector/vector.module';
 
 import CitationJudge from './citation-judge';
 import EntryCitationsService from './entry-citations.service';
+import PageRefreshService from './generated/page-refresh.service';
+import PageWriter from './generated/page-writer';
 import KnowledgeIndexService from './knowledge-index.service';
 import { KnowledgeReviewController } from './knowledge-review.controller';
 import KnowledgeReviewService from './knowledge-review.service';
@@ -22,6 +24,7 @@ import { PAGES_QUEUE } from './pages.interface';
 import {
   EntryModulesScheduler,
   KnowledgeGapsScheduler,
+  PageRefreshScheduler,
   PagesProcessor,
   PagesScheduler,
 } from './pages.processor';
@@ -68,8 +71,11 @@ import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
     KnowledgeUpkeepService,
     KnowledgeConventionsService,
     KnowledgeGapsService,
+    PageWriter,
+    PageRefreshService,
     PagesScheduler,
     KnowledgeGapsScheduler,
+    PageRefreshScheduler,
     EntryModulesScheduler,
     PagesProcessor,
     UsersService,

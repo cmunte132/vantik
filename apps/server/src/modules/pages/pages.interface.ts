@@ -84,6 +84,37 @@ export const GAP_ISSUES_JOB = 'openKnowledgeGapIssues';
 export const GAP_ISSUES_JOB_ID = 'knowledge-gap-issues';
 
 /**
+ * Looks for generated pages whose evidence has changed, and rebuilds each
+ * one due: see `generated/page-refresh.service.ts`. Hourly by default, as a
+ * page is rebuilt no sooner than its workspace's minimum interval anyway;
+ * `off` disables it, and a generated page is then built only when it is made
+ * or its question changes.
+ */
+export const PAGE_REFRESH_CRON =
+  process.env.KNOWLEDGE_PAGE_REFRESH_CRON ?? '23 * * * *';
+
+/** The job that looks, with a fixed id for the reason decay has one. */
+export const PAGE_REFRESH_JOB = 'refreshGeneratedPages';
+export const PAGE_REFRESH_JOB_ID = 'generated-page-refresh';
+
+/**
+ * Builds one generated page, when it is made or its question changes, so it
+ * is not left empty until the next look. The gate still applies.
+ */
+export const REFRESH_PAGE_JOB = 'refreshGeneratedPage';
+
+/** One job per page at a time; a request while one waits is the same request. */
+export function refreshPageJobOptions(pageId: string): JobOptions {
+  return {
+    jobId: `${REFRESH_PAGE_JOB}:${pageId}`,
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 60_000 },
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
+
+/**
  * Re-resolves entries' scopes to modules. Queued with a workspace id when a
  * module's repositories change, and once at boot with none, which covers every
  * workspace and fills in entries written before modules were resolved.

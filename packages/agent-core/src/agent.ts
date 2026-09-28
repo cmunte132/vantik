@@ -37,7 +37,6 @@ import {
   AgentRunSummary,
   Capability,
   DefinitionOfDone,
-  DelegateTaskInput,
   Module,
   Paginated,
   PriorityName,
@@ -669,33 +668,6 @@ export class VantikAgent {
     await this.directory.cacheProject(project);
 
     return project;
-  }
-
-  /**
-   * Hands a task to an agent to work in the background.
-   *
-   * The server assembles what the agent is told and picks the backend, so this
-   * carries no opinion about either. It returns as soon as the run is queued —
-   * the work happens elsewhere, and `listAgentRuns` is how you find out how it
-   * went.
-   */
-  async delegateTask(
-    reference: string,
-    input: DelegateTaskInput = {},
-  ): Promise<AgentRunSummary> {
-    const { id } = await this.resolveTask(reference);
-
-    const run = await this.client.post<RawAgentRun>('/agent_runs', {
-      body: {
-        issueId: id,
-        ...(input.agent ? { agentUserId: input.agent } : {}),
-        ...(input.executor ? { executor: input.executor } : {}),
-        ...(input.repo ? { config: input.repo } : {}),
-        ...(input.force ? { force: true } : {}),
-      },
-    });
-
-    return toAgentRunSummary(run);
   }
 
   /** Runs for one task, newest first — every attempt, not just the live one. */

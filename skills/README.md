@@ -1,6 +1,6 @@
 # Vantik agent skills
 
-Three guides teach an LLM agent to use Vantik well. Each guide is an
+Two guides teach an LLM agent to use Vantik well. Each guide is an
 [agent skill](https://agentskills.io). Claude Code, Codex, Cursor, and many other
 agents load a skill on demand, so it costs no context until the work starts.
 
@@ -8,7 +8,6 @@ agents load a skill on demand, so it costs no context until the work starts.
 | --- | --- |
 | `working-vantik-issues` | Keep the tracker current while the work happens, and keep the issues few and large. |
 | `working-vantik-knowledge` | Load the context before the work starts, record one fact at a time, and supersede an old fact and do not contradict it. |
-| `delegating-vantik-work` | Hand an issue to the agent of Vantik only when the issue is ready, and read the result of the run correctly. |
 
 ## How to install
 
@@ -152,14 +151,6 @@ issues are the work, and the bank is what the work taught you.
 The bank records each entry against the agent that wrote it. This provenance is
 the purpose of the bank, because the text of a claim from an agent and the text
 of a claim from a person are the same.
-
-## delegating-vantik-work
-
-This guide says when an issue is ready to give to the agent of Vantik: it has a
-Definition of Done that a stranger can check, it is one contained change, the
-checks of the repository can verify it, and no run is already in progress. It
-also explains the loop of implementation, verification, and review, and the
-meaning of each status that `list_agent_runs` gives.
 
 ## How to change the guidance
 

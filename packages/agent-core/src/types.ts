@@ -267,28 +267,6 @@ export interface AgentRunSummary {
   finishedAt: string | null;
 }
 
-/** Options for handing a task to an agent. */
-export interface DelegateTaskInput {
-  /** The agent account to attribute the work to. Optional when there is one. */
-  agent?: string;
-  /** Executor key. Resolved from the agent and the workspace when omitted. */
-  executor?: string;
-  /** Repo, branch and the commands that verify a change. */
-  repo?: {
-    repoUrl?: string;
-    repoPath?: string;
-    baseBranch?: string;
-    delivery?: 'pull_request' | 'worktree';
-    setupCommands?: string[];
-    testCommand?: string;
-    lintCommand?: string;
-    typecheckCommand?: string;
-    buildCommand?: string;
-  };
-  /** Start a run even though the task already has one in flight. */
-  force?: boolean;
-}
-
 export interface Paginated<T> {
   items: T[];
   page: number;

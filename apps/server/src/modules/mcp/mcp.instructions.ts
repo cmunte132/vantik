@@ -18,8 +18,7 @@ export const MCP_INSTRUCTIONS = `Vantik is this workspace's issue tracker and kn
 - When it is done: close_task with a resolution. Not done? Leave it open and note what remains.
 - File few, substantial issues. A step of existing work is a note or a sub-task, not a new issue; always search first.
 - Before reading code in an area new to you: load_context with that area. Record what you learn with remember, one fact per call.
-- To hand an issue to Vantik's own agent: list_agent_runs, then delegate_task.
 
 The hook_* tools (hook_session_start, hook_prompt_submit, hook_tool_use, hook_stop) are called by the hooks installed in your harness. Do not call them yourself.
 
-The skills working-vantik-issues, working-vantik-knowledge and delegating-vantik-work hold the full guidance, where they are installed.`;
+The skills working-vantik-issues and working-vantik-knowledge hold the full guidance, where they are installed.`;

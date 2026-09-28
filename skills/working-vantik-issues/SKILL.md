@@ -86,8 +86,9 @@ only view they have of their agents.
    or blocked state, and `add_note` with what remains. A closed issue that is
    not finished is worse than an open one.
 
-Handing the issue to Vantik's own agent instead of working it yourself is its
-own decision, with its own bar — see the `delegating-vantik-work` skill.
+Only a person can give an issue to the agent of Vantik. The person does this
+from the issue in Vantik. You cannot start an agent run. To see the status of a
+run that a person started, use `list_agent_runs`.
 
 ## Put the work on the map
 

@@ -45,7 +45,6 @@ function buildService(transaction: jest.Mock) {
     null,
     null,
     null,
-    null,
   );
   jest
     .spyOn(

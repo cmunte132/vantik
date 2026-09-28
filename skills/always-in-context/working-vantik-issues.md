@@ -73,8 +73,8 @@ over *many and thin*.
 Always `search_tasks` first, including `COMPLETED` — it may already be fixed,
 and you should reference or reopen that instead of duplicating it.
 `find_similar_tasks` gives the earlier issues like one and how each was
-resolved. Handing an issue to Vantik's own agent (`delegate_task`) has its own
-bar: a Definition of Done a stranger could check, and `list_agent_runs` first.
+resolved. Only a person can give an issue to the agent of Vantik, from the
+issue in Vantik. `list_agent_runs` shows the status of those runs.
 
 **A good issue has** a one-line title, a description of the problem and *where it
 lives*, and acceptance criteria — concrete checks for "done", which become the

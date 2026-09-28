@@ -7,7 +7,6 @@
  * requirements. None of those throw on their own.
  */
 import { BadRequestException } from '@nestjs/common';
-import { RoleEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { AgentDelegationService } from './agent-delegation.service';
@@ -45,8 +44,6 @@ function build(options: {
   liveCount?: number;
   agentSettings?: unknown;
   preferences?: unknown;
-  queuedRuns?: Array<{ id: string; workspaceId: string }>;
-  membershipRole?: string;
 } = {}) {
   const registry = new ExecutorRegistry();
   for (const executor of options.executors ?? [fakeExecutor('hosted')]) {
@@ -66,13 +63,11 @@ function build(options: {
     },
     agentRun: {
       findFirst: jest.fn(async () => options.liveRuns?.[0] ?? null),
-      findMany: jest.fn(async () => options.queuedRuns ?? []),
       count: jest.fn(async () => options.liveCount ?? 0),
     },
     usersOnWorkspaces: {
       findFirst: jest.fn(async () => ({
         settings: options.agentSettings ?? null,
-        role: options.membershipRole ?? RoleEnum.AGENT,
         status: 'ACTIVE',
       })),
     },
@@ -457,57 +452,6 @@ describe('AgentDelegationService knowledge arm', () => {
   });
 });
 
-describe('AgentDelegationService assignment trigger', () => {
-  it('enqueues a run when an issue is assigned to an agent', async () => {
-    const { service, agentRuns } = build();
-
-    await service.onAssigneeChanged(ISSUE, WORKSPACE, null, AGENT, 'user-1');
-
-    expect(agentRuns.createRun).toHaveBeenCalled();
-  });
-
-  it('does nothing when the assignee did not actually change', async () => {
-    const { service, agentRuns } = build();
-
-    await service.onAssigneeChanged(ISSUE, WORKSPACE, AGENT, AGENT, 'user-1');
-
-    expect(agentRuns.createRun).not.toHaveBeenCalled();
-  });
-
-  it('ignores assignment to a human', async () => {
-    const { service, agentRuns } = build({ membershipRole: RoleEnum.USER });
-
-    await service.onAssigneeChanged(ISSUE, WORKSPACE, null, 'user-2', 'user-1');
-
-    expect(agentRuns.createRun).not.toHaveBeenCalled();
-  });
-
-  it('withdraws queued work when the issue moves back to a human', async () => {
-    const { service, agentRuns } = build({
-      queuedRuns: [{ id: 'run-queued', workspaceId: WORKSPACE }],
-      membershipRole: RoleEnum.AGENT,
-    });
-
-    await service.onAssigneeChanged(ISSUE, WORKSPACE, AGENT, null, 'user-1');
-
-    expect(agentRuns.cancelRun).toHaveBeenCalledWith(
-      'run-queued',
-      { workspaceId: WORKSPACE },
-      expect.stringContaining('reassigned'),
-    );
-  });
-
-  it('never fails the assignment when delegation cannot start', async () => {
-    // A thin issue assigned to an agent is a normal thing to do. It must not
-    // make the assignment itself fail.
-    const { service } = build({ description: 'fix' });
-
-    await expect(
-      service.onAssigneeChanged(ISSUE, WORKSPACE, null, AGENT, 'user-1'),
-    ).resolves.toBeUndefined();
-  });
-});
-
 /**
  * A run that exists and was never handed to a backend is the worst of both
  * worlds: it holds a slot against the concurrency cap, blocks its own issue
@@ -599,20 +543,6 @@ describe('AgentDelegationService cancel', () => {
     await expect(
       service.cancel('run-1', { workspaceId: WORKSPACE }),
     ).resolves.toMatchObject({ status: 'CANCELED' });
-  });
-
-  it('stops queued work when the issue goes back to a human', async () => {
-    const executor = fakeExecutor('hosted');
-    const { service } = build({
-      executors: [executor],
-      queuedRuns: [{ id: 'run-queued', workspaceId: WORKSPACE }],
-    });
-
-    await service.onAssigneeChanged(ISSUE, WORKSPACE, AGENT, null, 'user-1');
-
-    expect(executor.cancel).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'run-queued' }),
-    );
   });
 });
 

@@ -58,7 +58,6 @@ function buildService(overrides: Record<string, unknown> = {}) {
     null,
     null,
     null,
-    null,
   );
 
   return { service, prisma };

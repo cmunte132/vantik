@@ -7,7 +7,6 @@ import {
   AgentRunFailure,
   AgentRunStatus,
   type ModelChoice,
-  RoleEnum,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -227,78 +226,6 @@ export class AgentDelegationService {
     return run;
   }
 
-  /**
-   * The assignment trigger.
-   *
-   * Assigning an issue to an AGENT user is the natural gesture for "you do
-   * this", so it enqueues a run. Moving it back to a human cancels one that
-   * has not started — but deliberately not one already RUNNING, because
-   * killing work in flight is a decision someone should make explicitly
-   * rather than a side effect of tidying the board.
-   *
-   * Never throws into the caller. This runs off the back of a normal issue
-   * update, and a delegation that cannot start must not fail the assignment
-   * the user actually asked for.
-   */
-  async onAssigneeChanged(
-    issueId: string,
-    workspaceId: string,
-    previousAssigneeId: string | null,
-    nextAssigneeId: string | null,
-    actorId: string,
-  ): Promise<void> {
-    if (previousAssigneeId === nextAssigneeId) {
-      return;
-    }
-
-    try {
-      if (nextAssigneeId && (await this.isAgent(nextAssigneeId, workspaceId))) {
-        await this.delegate({
-          issueId,
-          workspaceId,
-          agentUserId: nextAssigneeId,
-          createdById: actorId,
-        });
-        return;
-      }
-
-      // Moved off an agent: withdraw work that has not begun.
-      if (
-        previousAssigneeId &&
-        (await this.isAgent(previousAssigneeId, workspaceId))
-      ) {
-        await this.cancelUnstarted(issueId, previousAssigneeId);
-      }
-    } catch (error) {
-      this.logger.info({
-        message: `Assignment on issue ${issueId} did not change agent work: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-        where: 'AgentDelegationService.onAssigneeChanged',
-      });
-    }
-  }
-
-  private async cancelUnstarted(issueId: string, agentUserId: string) {
-    const queued = await this.prisma.agentRun.findMany({
-      where: {
-        issueId,
-        agentUserId,
-        status: 'QUEUED',
-        deleted: null,
-      },
-      select: { id: true, workspaceId: true },
-    });
-
-    for (const run of queued) {
-      await this.cancel(
-        run.id,
-        { workspaceId: run.workspaceId },
-        'The issue was reassigned away from the agent.',
-      ).catch((): undefined => undefined);
-    }
-  }
-
   // ----------------------------------------------------------------- guards
 
   /**
@@ -443,15 +370,6 @@ export class AgentDelegationService {
       ...(Object.keys(phases).length ? { phases } : {}),
       ...(Object.keys(limits).length ? { limits } : {}),
     };
-  }
-
-  private async isAgent(userId: string, workspaceId: string) {
-    const membership = await this.prisma.usersOnWorkspaces.findFirst({
-      where: { userId, workspaceId, status: 'ACTIVE' },
-      select: { role: true },
-    });
-
-    return membership?.role === RoleEnum.AGENT;
   }
 }
 

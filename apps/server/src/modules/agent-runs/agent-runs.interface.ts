@@ -69,14 +69,3 @@ export const AGENT_RUN_LEASE_SWEEP_JOB = 'sweepAgentRunLeases';
  * at boot ends up with one copy rather than one each.
  */
 export const AGENT_RUN_LEASE_SWEEP_JOB_ID = 'agent-run-lease-sweep';
-
-/**
- * Injection token for the delegation service.
- *
- * A string rather than the class, so `issues.service.ts` can resolve it
- * without importing the class as a *value*. That import would create a
- * file-level require cycle — issues → delegation → issue-comments → issues —
- * and one of the three evaluates to undefined, which surfaces as Nest failing
- * to resolve a dependency that is plainly declared.
- */
-export const AGENT_DELEGATION_SERVICE = 'AGENT_DELEGATION_SERVICE';

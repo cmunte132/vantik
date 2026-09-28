@@ -134,7 +134,6 @@ describe('vantik MCP tools', () => {
       'consolidate_knowledge',
       'create_project',
       'create_task',
-      'delegate_task',
       'find_similar_tasks',
       'get_task',
       'knowledge_gaps',

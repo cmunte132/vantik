@@ -48,7 +48,6 @@ function buildService(memberOf: string[] = [SESSION_WORKSPACE]) {
     null,
     null,
     null,
-    null,
   );
 
   return { service, prisma };

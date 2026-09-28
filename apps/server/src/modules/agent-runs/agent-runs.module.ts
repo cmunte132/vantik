@@ -16,10 +16,7 @@ import { GitProxyService } from './sandbox/git-proxy.service';
 import { GondolinRuntime } from './sandbox/gondolin.runtime';
 import { HostedExecutor } from './executors/hosted.executor';
 import { AgentRunsController } from './agent-runs.controller';
-import {
-  AGENT_DELEGATION_SERVICE,
-  AGENT_RUNS_QUEUE,
-} from './agent-runs.interface';
+import { AGENT_RUNS_QUEUE } from './agent-runs.interface';
 import { AgentRunsProcessor, AgentRunsScheduler } from './agent-runs.processor';
 import { AgentRunsService } from './agent-runs.service';
 import { ContextPackService } from './context-pack.service';
@@ -44,9 +41,6 @@ import { ExecutorRegistry } from './executors/executor.registry';
   providers: [
     AgentRunsService,
     AgentDelegationService,
-    // Also published under a string token, so IssuesService can reach it
-    // without a value import back into this module.
-    { provide: AGENT_DELEGATION_SERVICE, useExisting: AgentDelegationService },
     ContextPackService,
     KnowledgeArmsService,
     RunHandbackService,
@@ -64,7 +58,6 @@ import { ExecutorRegistry } from './executors/executor.registry';
   exports: [
     AgentRunsService,
     AgentDelegationService,
-    AGENT_DELEGATION_SERVICE,
     ExecutorRegistry,
     CredentialsService,
   ],

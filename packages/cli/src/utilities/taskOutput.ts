@@ -219,26 +219,6 @@ export function renderCapabilities(capabilities: Capability[]): string {
   return table.toString();
 }
 
-/**
- * A run's outcome in one line.
- *
- * Delivery is the interesting bit and it varies: a pull request where a git
- * host is connected, otherwise a path to `cd` into. Printing whichever exists
- * saves the reader working out which kind of run this was.
- */
-export function renderAgentRun(run: AgentRunSummary): string {
-  const head = `${chalkGreen('✓')} Delegated  ${chalkGrey(run.id)}`;
-  const where = run.prUrl
-    ? `\n  ${chalkGrey('pull request:')} ${run.prUrl}`
-    : run.worktreePath
-      ? `\n  ${chalkGrey('worktree:')} ${run.worktreePath}`
-      : '';
-
-  return `${head}\n  ${chalkGrey('status:')} ${run.status}  ${chalkGrey(
-    'executor:',
-  )} ${run.executor}${where}`;
-}
-
 export function renderAgentRuns(runs: AgentRunSummary[]): string {
   if (runs.length === 0) {
     return chalkGrey('No agent runs for this task.');

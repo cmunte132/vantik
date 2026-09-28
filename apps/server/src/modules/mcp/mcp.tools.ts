@@ -431,55 +431,13 @@ export function registerVantikTools(
   );
 
   server.registerTool(
-    'delegate_task',
-    {
-      title: 'Delegate a task to an agent',
-      description:
-        'Hand a task to an agent to work in the background: it takes the ' +
-        'issue, its Definition of Done and the repo’s own verification ' +
-        'commands, does the work, and comes back with a branch — a pull ' +
-        'request where a git host is connected, otherwise a worktree to ' +
-        'review locally. Delegate work that is genuinely specified: the ' +
-        'Definition of Done is what the result is judged against, so a task ' +
-        'without one gets an agent inventing the requirements it was not ' +
-        'given. If the task is thin, write it up properly first — that is ' +
-        'cheaper than reviewing a confident diff against imagined ' +
-        'requirements. One run per task at a time; check list_agent_runs ' +
-        'before starting another.',
-      inputSchema: {
-        task: taskRef,
-        agent: z
-          .string()
-          .optional()
-          .describe(
-            'Attribute the run to an existing agent account. Omit and the ' +
-              'run gets an identity of its own, which is the normal case.',
-          ),
-        executor: z
-          .string()
-          .optional()
-          .describe(
-            'Backend key. Omit unless this deployment registers more than ' +
-              'one backend and the work belongs on a particular one.',
-          ),
-        force: z
-          .boolean()
-          .optional()
-          .describe('Start even though this task already has a live run.'),
-      },
-    },
-    handler(({ task, ...options }) => agent.delegateTask(task, options)),
-  );
-
-  server.registerTool(
     'list_agent_runs',
     {
       title: 'List agent runs for a task',
       description:
-        'Every attempt an agent has made at one task, newest first, with ' +
-        'status, what it produced and why it stopped. Check this before ' +
-        'delegating, so you do not start a second run beside one already ' +
-        'working, and after, to see how it went.',
+        'Every attempt Vantik’s agent has made at one task, newest first, ' +
+        'with status, what it produced and why it stopped. Read-only: only ' +
+        'a person starts a run, by delegating the issue in Vantik.',
       inputSchema: { task: taskRef },
     },
     handler(({ task }) => agent.listAgentRuns(task)),

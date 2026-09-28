@@ -21,7 +21,6 @@ describe('WellKnownSkillsController', () => {
     expect(index.skills.map((entry) => entry.name)).toEqual([
       'working-vantik-issues',
       'working-vantik-knowledge',
-      'delegating-vantik-work',
     ]);
   });
 

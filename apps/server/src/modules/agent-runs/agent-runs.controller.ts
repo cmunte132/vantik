@@ -45,8 +45,12 @@ import { runIdentityName } from './run-identity';
  * moves the run through `AgentRunsService` directly, so the claim, heartbeat,
  * start, report, event and iteration endpoints that existed for a runner
  * polling from someone else's machine are gone with it. What survives is what
- * a person or an agent asks about a run from outside: read it, start one, stop
- * one, try again.
+ * is asked about a run from outside: read it, start one, stop one, try again.
+ *
+ * Only a person starts one. Delegating is the delegate control on the issue,
+ * used by a member; an agent token — a Claude Code session, a script, a run's
+ * own identity — may read runs but never open or retry them, so no agent can
+ * put work on the workspace's model key.
  */
 @Controller({
   version: '1',
@@ -82,15 +86,20 @@ export class AgentRunsController {
    * derived from issue content. The threat model for this feature is that the
    * adversary is content the agent reads — the issue body, its comments, the
    * repository — so if anything in that content could start a run, prompt
-   * injection would get an execution primitive for free.
+   * injection would get an execution primitive for free. For the same reason
+   * the member has to be a person: an agent is exactly the thing that reads
+   * that content.
    */
   @Post()
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createRun(
     @Workspace() workspace: string,
     @UserId() userId: string,
+    @Role() role: string,
     @Body() body: CreateAgentRunDto,
   ) {
+    forPeople(role);
+
     const agentUserId = await this.resolveAgent(
       workspace,
       body.issueId,
@@ -215,7 +224,7 @@ export class AgentRunsController {
    * A cancel, not a delete.
    *
    * Declared as a write rather than a deletion so an agent granted `write` can
-   * stop a run it started. Nothing is destroyed — the record and its log stay
+   * stop a run it is working. Nothing is destroyed — the record and its log stay
    * exactly as they were, which is the point of asking why it stopped later.
    */
   @Post(':agentRunId/cancel')
@@ -252,6 +261,8 @@ export class AgentRunsController {
     @Role() role: string,
     @Param() params: AgentRunRequestParamsDto,
   ) {
+    forPeople(role);
+
     return this.delegation.retry(
       params.agentRunId,
       this.scope(workspace, userId, role),
@@ -326,5 +337,15 @@ export class AgentRunsController {
     );
 
     return minted.id;
+  }
+}
+
+/** Starting agent work is a person's decision; see the class comment. */
+function forPeople(role: string) {
+  if (role === RoleEnum.AGENT) {
+    throw new ForbiddenException({
+      message:
+        'Only a person can delegate an issue to an agent, from the issue in Vantik.',
+    });
   }
 }

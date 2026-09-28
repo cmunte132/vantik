@@ -19,12 +19,11 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
-import { UsersService } from 'modules/users/users.service';
-
-import { AuthGuard } from 'modules/auth/auth.guard';
 import { RequiresScope } from 'modules/auth/agent-scope';
+import { AuthGuard } from 'modules/auth/auth.guard';
 import { Role, UserId, Workspace } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
+import { UsersService } from 'modules/users/users.service';
 
 import { AgentDelegationService } from './agent-delegation.service';
 import { AgentRunsService, type AgentRunScope } from './agent-runs.service';
@@ -180,10 +179,10 @@ export class AgentRunsController {
     const repo = await this.contextPacks.plan(issueId, workspace);
 
     return {
-      repoUrl: repo.repoUrl ?? null,
-      repoPath: repo.repoPath ?? null,
+      repository: repo.source?.fullName ?? null,
+      location: repo.location ?? null,
       baseBranch: repo.baseBranch ?? null,
-      delivery: repo.delivery ?? null,
+      delivery: repo.delivery,
       limits: AGENT_RUN_DEFAULT_LIMITS,
     };
   }

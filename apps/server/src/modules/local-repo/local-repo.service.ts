@@ -1,27 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import {
-  listRepositoryFolders,
-  RepositoryFolder,
-} from 'integrations/local-repo/folders';
-import {
   addRepository,
   listRepositories,
   LocalRepository,
   removeRepository,
-  resolveRepositoryPath,
 } from 'integrations/local-repo/repositories';
 import { PrismaService } from 'nestjs-prisma';
+import { PluginContextFactory } from 'plugins/plugin-context.factory';
 
 import { resolveAdminWorkspaceId } from 'common/workspace-access';
-
-import { PluginContextFactory } from 'plugins/plugin-context.factory';
 
 /**
  * The repositories that a workspace has on the disk of this machine.
  *
  * The list is the `settings` of one integration account. That account is the
  * same kind of record that GitHub makes, so the repository picker of a module
- * reads a local repository and a remote repository in the same way.
+ * reads a local repository and a remote repository in the same way, and the
+ * git sources (`modules/git`) reach it the same way too: the directory is a
+ * remote the server fetches from and pushes to, never a working tree it reads.
  *
  * Adding and removing are for an admin, and reading is for any member. A path
  * names a directory on the machine that runs the server, not something inside
@@ -89,37 +85,5 @@ export class LocalRepoService {
       userId,
       repositoryId,
     });
-  }
-
-  /**
-   * This method returns the folders that a module can claim inside one
-   * repository.
-   */
-  async folders(
-    workspaceId: string,
-    repositoryId: string,
-  ): Promise<RepositoryFolder[]> {
-    return await listRepositoryFolders(
-      this.ctx(workspaceId),
-      workspaceId,
-      repositoryId,
-    );
-  }
-
-  /**
-   * This method returns the path of one repository, or null.
-   *
-   * A `ModuleRepo` row holds the identifier and not the path. An agent that
-   * must open the checkout of a module reads the path here.
-   */
-  async pathOf(
-    workspaceId: string,
-    repositoryId: string,
-  ): Promise<string | null> {
-    return await resolveRepositoryPath(
-      this.ctx(workspaceId),
-      workspaceId,
-      repositoryId,
-    );
   }
 }

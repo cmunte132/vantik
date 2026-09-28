@@ -8,9 +8,12 @@
  */
 import { PrismaService } from 'nestjs-prisma';
 
+import type {
+  GitSourcesService,
+  RepoRef,
+} from 'modules/git/git-sources.service';
 import type { IssueContext } from 'modules/issues/issue-context.interface';
 import type IssueContextService from 'modules/issues/issue-context.service';
-import type { LocalRepoService } from 'modules/local-repo/local-repo.service';
 import type KnowledgeService from 'modules/pages/knowledge.service';
 
 import { ContextPackService } from './context-pack.service';
@@ -34,16 +37,39 @@ const issueContext = {
   cycle: null,
   parent: null,
   subIssues: [
-    { id: 'issue-2', key: 'ENG-43', title: 'Add the regression test', stateCategory: 'COMPLETED' },
-    { id: 'issue-3', key: 'ENG-44', title: 'Backfill the index', stateCategory: 'BACKLOG' },
+    {
+      id: 'issue-2',
+      key: 'ENG-43',
+      title: 'Add the regression test',
+      stateCategory: 'COMPLETED',
+    },
+    {
+      id: 'issue-3',
+      key: 'ENG-44',
+      title: 'Backfill the index',
+      stateCategory: 'BACKLOG',
+    },
   ],
   relations: [
-    { type: 'BLOCKS', issue: { id: 'issue-9', key: 'ENG-50', title: 'Ship search v2' } },
+    {
+      type: 'BLOCKS',
+      issue: { id: 'issue-9', key: 'ENG-50', title: 'Ship search v2' },
+    },
   ],
-  linkedIssues: [{ url: 'https://example.test/pr/1', title: 'Earlier attempt' }],
+  linkedIssues: [
+    { url: 'https://example.test/pr/1', title: 'Earlier attempt' },
+  ],
   criteria: [
-    { id: 'c1', body: 'Deleted issues never appear in filter results', completed: false },
-    { id: 'c2', body: 'A regression test covers the soft-delete case', completed: true },
+    {
+      id: 'c1',
+      body: 'Deleted issues never appear in filter results',
+      completed: false,
+    },
+    {
+      id: 'c2',
+      body: 'A regression test covers the soft-delete case',
+      completed: true,
+    },
   ],
   comments: [
     {
@@ -69,10 +95,10 @@ interface Routing {
     integrationAccountId: string | null;
     pathPrefixes: string[];
   }>;
-  /** Catalogue slug of the integration those repositories came from. */
-  slug?: string | null;
-  /** What `LocalRepoService.pathOf` answers. */
-  localPath?: string | null;
+  /** Which kind of source resolves the repository. */
+  source?: 'github' | 'local-repo';
+  /** Why the repository does not resolve, when it does not. */
+  unresolved?: string;
   /** The verification blob each of those modules carries. */
   moduleVerification?: Array<{ verification: unknown }>;
 }
@@ -95,24 +121,41 @@ function buildService(preferences: unknown = null, routing: Routing = {}) {
         Promise.resolve(routing.moduleVerification ?? []),
       ),
     },
-    integrationAccount: {
-      findUnique: jest.fn(() =>
-        Promise.resolve({
-          integrationDefinition: { slug: routing.slug ?? null },
-        }),
-      ),
-    },
   } as unknown as PrismaService;
 
   const context = {
     getIssueContext: jest.fn(() => Promise.resolve(issueContext)),
   } as unknown as IssueContextService;
 
-  const localRepo = {
-    pathOf: jest.fn(() => Promise.resolve(routing.localPath ?? null)),
-  } as unknown as LocalRepoService;
+  const gitSources = {
+    resolve: jest.fn(async (ref: RepoRef) => {
+      if (routing.unresolved) {
+        return { unresolved: routing.unresolved };
+      }
 
-  return new ContextPackService(prisma, context, localRepo, knowledgeDouble());
+      const row = routing.moduleRepos?.find(
+        (candidate) => candidate.externalRepoId === ref.externalRepoId,
+      );
+      const github = routing.source === 'github';
+
+      return {
+        source: {
+          location: () =>
+            github
+              ? `https://github.com/${row?.fullName}`
+              : `/Users/dev/code/${row?.fullName}`,
+          ...(github ? { openChangeRequest: jest.fn() } : {}),
+        },
+        repo: {
+          integrationAccountId: ref.integrationAccountId,
+          externalRepoId: ref.externalRepoId,
+          fullName: row?.fullName,
+        },
+      };
+    }),
+  } as unknown as GitSourcesService;
+
+  return new ContextPackService(prisma, context, gitSources, knowledgeDouble());
 }
 
 const PACKED = {
@@ -142,6 +185,25 @@ function withKnowledge() {
   return { service, knowledge };
 }
 
+const LOCAL: Routing = {
+  moduleIds: ['module-server'],
+  moduleRepos: [
+    {
+      externalRepoId: 'repo-1',
+      fullName: 'vantik',
+      integrationAccountId: 'account-1',
+      pathPrefixes: ['apps/server/'],
+    },
+  ],
+  source: 'local-repo',
+};
+
+const VANTIK_SOURCE = {
+  integrationAccountId: 'account-1',
+  externalRepoId: 'repo-1',
+  fullName: 'vantik',
+};
+
 describe('ContextPackService', () => {
   const originalHost = process.env.FRONTEND_HOST;
 
@@ -154,18 +216,20 @@ describe('ContextPackService', () => {
   });
 
   it('hands every executor the same pack', async () => {
-    const service = buildService({
-      agentRuns: {
-        repo: {
-          repoUrl: 'git@example.test:acme/app.git',
-          baseBranch: 'main',
-          setupCommands: ['pnpm install --frozen-lockfile'],
-          testCommand: 'pnpm test',
-          lintCommand: 'pnpm lint',
-          typecheckCommand: 'pnpm typecheck',
+    const service = buildService(
+      {
+        agentRuns: {
+          repo: {
+            baseBranch: 'main',
+            setupCommands: ['pnpm install --frozen-lockfile'],
+            testCommand: 'pnpm test',
+            lintCommand: 'pnpm lint',
+            typecheckCommand: 'pnpm typecheck',
+          },
         },
       },
-    });
+      LOCAL,
+    );
 
     await expect(service.build('issue-1', WORKSPACE)).resolves
       .toMatchInlineSnapshot(`
@@ -230,12 +294,19 @@ issues come back in results.",
   ],
   "repo": {
     "baseBranch": "main",
-    "delivery": "pull_request",
     "lintCommand": "pnpm lint",
-    "repoUrl": "git@example.test:acme/app.git",
+    "location": "/Users/dev/code/vantik",
+    "pathPrefixes": [
+      "apps/server/",
+    ],
     "setupCommands": [
       "pnpm install --frozen-lockfile",
     ],
+    "source": {
+      "externalRepoId": "repo-1",
+      "fullName": "vantik",
+      "integrationAccountId": "account-1",
+    },
     "testCommand": "pnpm test",
     "typecheckCommand": "pnpm typecheck",
   },
@@ -281,16 +352,17 @@ issues come back in results.",
 
     // A blank string becomes a blank heading in the prompt, which reads to a
     // model as an instruction it failed to receive.
-    expect((await service.build('issue-1', WORKSPACE, undefined, '   ')).guidance)
-      .toBeUndefined();
-    expect((await service.build('issue-1', WORKSPACE)).guidance).toBeUndefined();
+    expect(
+      (await service.build('issue-1', WORKSPACE, undefined, '   ')).guidance,
+    ).toBeUndefined();
+    expect(
+      (await service.build('issue-1', WORKSPACE)).guidance,
+    ).toBeUndefined();
   });
 
   it('carries the repo’s verification commands, not just its address', async () => {
     const service = buildService({
-      agentRuns: {
-        repo: { repoUrl: 'git@example.test:acme/app.git', testCommand: 'pnpm test' },
-      },
+      agentRuns: { repo: { testCommand: 'pnpm test' } },
     });
 
     const pack = await service.build('issue-1', WORKSPACE);
@@ -301,45 +373,19 @@ issues come back in results.",
     expect(pack.repo.testCommand).toBe('pnpm test');
   });
 
-  it('delivers a worktree when the workspace has no remote', async () => {
-    const service = buildService({
-      agentRuns: { repo: { repoPath: '/srv/app' } },
-    });
-
-    const pack = await service.build('issue-1', WORKSPACE);
-
-    // Derived, not configured: a local-only install needs no setup at all to
-    // get something reviewable back.
-    expect(pack.repo.delivery).toBe('worktree');
-  });
-
-  it('delivers a pull request when there is somewhere to push', async () => {
-    const service = buildService({
-      agentRuns: { repo: { repoUrl: 'git@example.test:acme/app.git' } },
-    });
-
-    await expect(service.build('issue-1', WORKSPACE)).resolves.toMatchObject({
-      repo: { delivery: 'pull_request' },
-    });
-  });
-
   it('lets the delegating caller override the workspace default', async () => {
     const service = buildService({
-      agentRuns: {
-        repo: { repoUrl: 'git@example.test:acme/app.git', baseBranch: 'main' },
-      },
+      agentRuns: { repo: { baseBranch: 'main', testCommand: 'pnpm test' } },
     });
 
     const pack = await service.build('issue-1', WORKSPACE, {
       baseBranch: 'release/2026-07',
-      delivery: 'worktree',
     });
 
     expect(pack.repo).toMatchObject({
       baseBranch: 'release/2026-07',
-      delivery: 'worktree',
       // Untouched fields survive the override rather than being blanked.
-      repoUrl: 'git@example.test:acme/app.git',
+      testCommand: 'pnpm test',
     });
   });
 
@@ -363,7 +409,7 @@ issues come back in results.",
     const service = buildService(null);
 
     await expect(service.build('issue-1', WORKSPACE)).resolves.toMatchObject({
-      repo: { delivery: 'worktree' },
+      repo: {},
     });
   });
 
@@ -379,59 +425,46 @@ issues come back in results.",
 
   /**
    * Routing by module is what makes a workspace with several repositories
-   * usable. Without it every run opens whichever checkout the workspace
-   * default happens to name, which is right for one repository and wrong for
-   * the rest.
+   * usable, and it is now the only way a run gets a repository at all: a
+   * repository is something a workspace connects, not a string a caller types.
    */
   describe('the repository an issue points at', () => {
-    const LOCAL = {
-      moduleIds: ['module-server'],
-      moduleRepos: [
-        {
-          externalRepoId: 'repo-1',
-          fullName: 'vantik',
-          integrationAccountId: 'account-1',
-          pathPrefixes: ['apps/server/'],
-        },
-      ],
-      slug: 'local-repo',
-      localPath: '/Users/dev/code/vantik',
-    };
-
-    it('opens the checkout the issue’s module names', async () => {
+    it('opens the repository the issue’s module names, as a source reference', async () => {
       const service = buildService(null, LOCAL);
 
       await expect(service.build('issue-1', WORKSPACE)).resolves.toMatchObject({
         repo: {
-          repoPath: '/Users/dev/code/vantik',
+          source: VANTIK_SOURCE,
+          location: '/Users/dev/code/vantik',
           pathPrefixes: ['apps/server/'],
-          delivery: 'worktree',
         },
       });
     });
 
-    it('beats the workspace default, which is the answer for an issue that names nothing', async () => {
-      const configured = { agentRuns: { repo: { repoPath: '/srv/fallback' } } };
+    it('takes no repository from a workspace default or a request', async () => {
+      const smuggled = {
+        source: {
+          integrationAccountId: 'x',
+          externalRepoId: 'y',
+          fullName: 'evil',
+        },
+        location: '/etc',
+        repoUrl: 'https://attacker.test/repo.git',
+        repoPath: '/etc',
+      };
+      const service = buildService({ agentRuns: { repo: smuggled } }, {});
 
-      await expect(
-        buildService(configured, LOCAL).build('issue-1', WORKSPACE),
-      ).resolves.toMatchObject({ repo: { repoPath: '/Users/dev/code/vantik' } });
+      const pack = await service.build(
+        'issue-1',
+        WORKSPACE,
+        smuggled as unknown as Parameters<ContextPackService['build']>[2],
+      );
 
-      await expect(
-        buildService(configured, {}).build('issue-1', WORKSPACE),
-      ).resolves.toMatchObject({ repo: { repoPath: '/srv/fallback' } });
+      expect(pack.repo).toEqual({});
     });
 
-    it('loses to an explicit request, because a person knows what the map does not', async () => {
-      const service = buildService(null, LOCAL);
-
-      await expect(
-        service.build('issue-1', WORKSPACE, { repoPath: '/tmp/somewhere-else' }),
-      ).resolves.toMatchObject({ repo: { repoPath: '/tmp/somewhere-else' } });
-    });
-
-    it('clones a remote when the module’s repository is not on this disk', async () => {
-      const service = buildService(null, {
+    it('names a GitHub repository by its page, and plans a pull request for it', async () => {
+      const routing: Routing = {
         moduleIds: ['module-server'],
         moduleRepos: [
           {
@@ -441,17 +474,30 @@ issues come back in results.",
             pathPrefixes: [],
           },
         ],
-        slug: 'github',
-      });
+        source: 'github',
+      };
 
-      await expect(service.build('issue-1', WORKSPACE)).resolves.toMatchObject({
+      await expect(
+        buildService(null, routing).build('issue-1', WORKSPACE),
+      ).resolves.toMatchObject({
         repo: {
-          repoUrl: 'https://github.com/acme/app.git',
-          // A remote to push to is what makes a pull request possible, so the
-          // delivery follows from the routing rather than from configuration.
-          delivery: 'pull_request',
+          source: {
+            integrationAccountId: 'account-2',
+            externalRepoId: '123',
+            fullName: 'acme/app',
+          },
+          location: 'https://github.com/acme/app',
         },
       });
+      await expect(
+        buildService(null, routing).plan('issue-1', WORKSPACE),
+      ).resolves.toMatchObject({ delivery: 'pull_request' });
+    });
+
+    it('plans a pushed branch for a source with no pull requests', async () => {
+      await expect(
+        buildService(null, LOCAL).plan('issue-1', WORKSPACE),
+      ).resolves.toMatchObject({ delivery: 'branch' });
     });
 
     it('keeps the prefixes of every module on one repository', async () => {
@@ -476,7 +522,7 @@ issues come back in results.",
 
       await expect(service.build('issue-1', WORKSPACE)).resolves.toMatchObject({
         repo: {
-          repoPath: '/Users/dev/code/vantik',
+          source: VANTIK_SOURCE,
           pathPrefixes: ['apps/server/', 'apps/webapp/', 'packages/ui/'],
         },
       });
@@ -488,43 +534,43 @@ issues come back in results.",
      * them must not resolve to whichever came back first.
      */
     it('refuses to guess when the modules are in different repositories', async () => {
-      const service = buildService(
-        { agentRuns: { repo: { repoPath: '/srv/fallback' } } },
-        {
-          moduleIds: ['module-server', 'module-other'],
-          moduleRepos: [
-            {
-              externalRepoId: 'repo-1',
-              fullName: 'vantik',
-              integrationAccountId: 'account-1',
-              pathPrefixes: [],
-            },
-            {
-              externalRepoId: 'repo-2',
-              fullName: 'other',
-              integrationAccountId: 'account-1',
-              pathPrefixes: [],
-            },
-          ],
-          slug: 'local-repo',
-          localPath: '/Users/dev/code/vantik',
-        },
-      );
+      const service = buildService(null, {
+        ...LOCAL,
+        moduleIds: ['module-server', 'module-other'],
+        moduleRepos: [
+          {
+            externalRepoId: 'repo-1',
+            fullName: 'vantik',
+            integrationAccountId: 'account-1',
+            pathPrefixes: [],
+          },
+          {
+            externalRepoId: 'repo-2',
+            fullName: 'other',
+            integrationAccountId: 'account-1',
+            pathPrefixes: [],
+          },
+        ],
+      });
 
       const pack = await service.build('issue-1', WORKSPACE);
 
-      expect(pack.repo.repoPath).toBe('/srv/fallback');
+      expect(pack.repo.source).toBeUndefined();
       expect(pack.repo.pathPrefixes).toBeUndefined();
     });
 
-    it('falls back rather than half-routing when the path cannot be read back', async () => {
-      const service = buildService(
-        { agentRuns: { repo: { repoPath: '/srv/fallback' } } },
-        { ...LOCAL, localPath: null },
-      );
+    it('gives no repository, rather than half a route, when the source no longer offers it', async () => {
+      const service = buildService(null, {
+        ...LOCAL,
+        unresolved: 'the connected source no longer offers this repository',
+      });
 
-      await expect(service.build('issue-1', WORKSPACE)).resolves.toMatchObject({
-        repo: { repoPath: '/srv/fallback' },
+      const pack = await service.build('issue-1', WORKSPACE);
+
+      expect(pack.repo.source).toBeUndefined();
+      expect(pack.repo.pathPrefixes).toBeUndefined();
+      await expect(service.plan('issue-1', WORKSPACE)).resolves.toMatchObject({
+        delivery: null,
       });
     });
   });
@@ -539,20 +585,8 @@ issues come back in results.",
    * cover that the answer actually reaches the pack, and how it layers.
    */
   describe('how the run verifies its work', () => {
-    const WITH_COMMANDS = {
-      ...{
-        moduleIds: ['module-server'],
-        moduleRepos: [
-          {
-            externalRepoId: 'repo-1',
-            fullName: 'vantik',
-            integrationAccountId: 'account-1',
-            pathPrefixes: ['apps/server/'],
-          },
-        ],
-        slug: 'local-repo',
-        localPath: '/Users/dev/code/vantik',
-      },
+    const WITH_COMMANDS: Routing = {
+      ...LOCAL,
       moduleVerification: [
         { verification: { testCommand: 'pnpm --filter server test' } },
       ],
@@ -591,6 +625,7 @@ issues come back in results.",
       // still often agree on how to run the tests, and throwing the commands
       // away along with the route would lose that for nothing.
       const pack = await buildService(null, {
+        ...LOCAL,
         moduleIds: ['module-server', 'module-other'],
         moduleRepos: [
           {
@@ -612,14 +647,14 @@ issues come back in results.",
         ],
       }).build('issue-1', WORKSPACE);
 
-      expect(pack.repo.repoPath).toBeUndefined();
+      expect(pack.repo.source).toBeUndefined();
       expect(pack.repo.testCommand).toBe('make test');
     });
   });
 });
 
 describe('the knowledge in a pack', () => {
-  it("[KG-3.2] hands a run in the treatment arm what the workspace knows about its issue", async () => {
+  it('[KG-3.2] hands a run in the treatment arm what the workspace knows about its issue', async () => {
     const { service, knowledge } = withKnowledge();
 
     const pack = await service.build(

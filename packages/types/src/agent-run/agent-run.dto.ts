@@ -13,10 +13,8 @@ import {
 } from 'class-validator';
 
 import {
-  AGENT_RUN_DELIVERIES,
   AGENT_RUN_EVENT_LEVELS,
   AGENT_RUN_STATUSES,
-  type AgentRunDelivery,
   type AgentRunEventLevel,
   type AgentRunPhases,
   type AgentRunStatus,
@@ -57,22 +55,6 @@ export class AgentRunPhasesDto implements AgentRunPhases {
 }
 
 export class AgentRunConfigDto {
-  @IsOptional()
-  @IsString()
-  repoUrl?: string;
-
-  @IsOptional()
-  @IsString()
-  repoPath?: string;
-
-  @IsOptional()
-  @IsIn(AGENT_RUN_DELIVERIES)
-  delivery?: AgentRunDelivery;
-
-  @IsOptional()
-  @IsString()
-  worktreeRoot?: string;
-
   @IsOptional()
   @IsString()
   baseBranch?: string;

@@ -30,9 +30,9 @@ export class CreateModuleRepoDto {
   @IsString()
   fullName: string;
 
-  @IsOptional()
+  /** The connected source that offers the repository. Required. */
   @IsString()
-  integrationAccountId?: string;
+  integrationAccountId: string;
 
   /**
    * The paths in the repository that belong to this module. Leave it empty when

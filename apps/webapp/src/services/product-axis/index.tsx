@@ -4,15 +4,24 @@ import type {
   CreateModuleRepoDto,
   CreateProductDto,
   ModuleRepo,
+  RepositoryFolder,
   UpdateCapabilityDto,
   UpdateModuleDto,
   UpdateModuleRepoDto,
   UpdateProductDto,
 } from '@vantikhq/types';
 
+import { type UseQueryResult, useQuery } from '@tanstack/react-query';
+
 import type { CapabilityType, ModuleType, ProductType } from 'common/types';
 
-import { ajaxDelete, ajaxGet, ajaxPost, mutationHook } from 'services/utils';
+import {
+  ajaxDelete,
+  ajaxGet,
+  ajaxPost,
+  mutationHook,
+  type XHRErrorResponse,
+} from 'services/utils';
 
 export function createProduct(
   createProductDto: CreateProductDto,
@@ -108,6 +117,43 @@ export function updateModuleRepo({
   return ajaxPost({
     url: `/api/v1/modules/${moduleId}/repos/${moduleRepoId}`,
     data: updateModuleRepoDto,
+  });
+}
+
+/**
+ * The folders of a linked repository that a module can claim.
+ *
+ * The server reads them from its own copy of the repository, so a repository
+ * from any source offers them. The answer describes the repository, and every
+ * module that links it shares it.
+ */
+export function getModuleRepoFolders({
+  moduleId,
+  moduleRepoId,
+}: {
+  moduleId: string;
+  moduleRepoId: string;
+}): Promise<RepositoryFolder[]> {
+  return ajaxGet({
+    url: `/api/v1/modules/${moduleId}/repos/${moduleRepoId}/folders`,
+  });
+}
+
+export const GetModuleRepoFolders = 'getModuleRepoFolders';
+
+/** Asked for only when somebody opens the picker. */
+export function useGetModuleRepoFolders(
+  moduleId: string,
+  moduleRepoId: string,
+  enabled: boolean,
+): UseQueryResult<RepositoryFolder[], XHRErrorResponse> {
+  return useQuery({
+    queryKey: [GetModuleRepoFolders, moduleId, moduleRepoId],
+    queryFn: () => getModuleRepoFolders({ moduleId, moduleRepoId }),
+    enabled,
+    retry: 1,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
   });
 }
 

@@ -276,14 +276,14 @@ export const DelegateControl = observer(() => {
                 )}
                 <span className="truncate">
                   Where it runs — a Vantik sandbox
-                  {plan?.repoUrl || plan?.repoPath ? `, ${repoName(plan)}` : ''}
+                  {plan?.repository ? `, ${plan.repository}` : ''}
                   {plan?.baseBranch ? `, from ${plan.baseBranch}` : ''}
                 </span>
               </button>
 
               {showWhere && (
                 <p className="truncate pl-5 font-mono text-xs text-muted-foreground">
-                  {plan?.repoUrl ?? plan?.repoPath ?? 'No repository resolved.'}
+                  {plan?.location ?? 'No repository resolved.'}
                 </p>
               )}
             </>
@@ -323,25 +323,13 @@ const HOSTED = 'hosted';
 /** Pi's `--thinking`, which the server already carries as `ModelChoice`. */
 const THINKING = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
-/** The repository, from the end that identifies it. */
-function repoName(plan: { repoUrl: string | null; repoPath: string | null }) {
-  const value = plan.repoUrl ?? plan.repoPath ?? '';
-  return (
-    value
-      .replace(/\.git$/, '')
-      .split('/')
-      .filter(Boolean)
-      .pop() ?? value
-  );
-}
-
 /** What will exist when it finishes, which is what a reader is agreeing to. */
 function outcome(plan?: { delivery: string | null }): string {
   if (plan?.delivery === 'pull_request') {
     return 'Opens a branch and a pull request.';
   }
-  if (plan?.delivery === 'worktree') {
-    return 'Leaves the work on a branch for review.';
+  if (plan?.delivery === 'branch') {
+    return 'Pushes a branch into the repository for review.';
   }
   return 'Hands back a branch when it is done.';
 }

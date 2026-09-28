@@ -62,10 +62,7 @@ export class ModulesController {
     @Param() moduleParams: ModuleRequestParamsDto,
     @Body() repoData: CreateModuleRepoDto,
   ) {
-    return await this.modules.createModuleRepo(
-      repoData,
-      moduleParams.moduleId,
-    );
+    return await this.modules.createModuleRepo(repoData, moduleParams.moduleId);
   }
 
   @Post(':moduleId/repos/:moduleRepoId')
@@ -76,6 +73,16 @@ export class ModulesController {
   ) {
     return await this.modules.updateModuleRepo(
       repoData,
+      repoParams.moduleRepoId,
+    );
+  }
+
+  /** The folders of a linked repository, from any source. */
+  @Get(':moduleId/repos/:moduleRepoId/folders')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async moduleRepoFolders(@Param() repoParams: ModuleRepoRequestParamsDto) {
+    return await this.modules.moduleRepoFolders(
+      repoParams.moduleId,
       repoParams.moduleRepoId,
     );
   }

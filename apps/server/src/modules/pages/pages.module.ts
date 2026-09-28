@@ -1,9 +1,8 @@
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
-import { IntegrationsModule } from 'modules/integrations/integrations.module';
+import { GitModule } from 'modules/git/git.module';
 import { IssuesModule } from 'modules/issues/issues.module';
-import { LocalRepoModule } from 'modules/local-repo/local-repo.module';
 import { UsersService } from 'modules/users/users.service';
 import { VectorModule } from 'modules/vector/vector.module';
 
@@ -16,9 +15,9 @@ import { KnowledgeReviewController } from './knowledge-review.controller';
 import KnowledgeReviewService from './knowledge-review.service';
 import { KnowledgeController } from './knowledge.controller';
 import KnowledgeService from './knowledge.service';
-import PageLinksService from './page-links.service';
 import { PageEntriesController } from './page-entries.controller';
 import PageEntriesService from './page-entries.service';
+import PageLinksService from './page-links.service';
 import { PagesController } from './pages.controller';
 import { PAGES_QUEUE } from './pages.interface';
 import {
@@ -42,9 +41,8 @@ import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
 @Module({
   imports: [
     VectorModule,
-    // For reading the code a citation names, from whichever source holds it.
-    IntegrationsModule,
-    LocalRepoModule,
+    // For reading the code a citation names, from the server's mirror of it.
+    GitModule,
     // The gardener opens issues for knowledge that needs a person.
     IssuesModule,
     BullModule.registerQueue({ name: PAGES_QUEUE }),

@@ -230,6 +230,7 @@ function build(
       : {
           branch: 'agent/eng-42',
           headCommit: 'head111',
+          delivery: 'pull_request',
           prUrl: 'https://example.test/pr/1',
         };
   });
@@ -253,6 +254,7 @@ function build(
       materializeCheckout: jest.fn(async () => ({
         archiveBase64: 'YXJjaGl2ZQ==',
         baseCommit: 'base000',
+        baseBranch: 'main',
       })),
       pushWorkTree,
     } as never,
@@ -271,7 +273,11 @@ function build(
     agentUserId: 'agent-1',
     attempt: 1,
     config: {
-      repoUrl: 'https://git.test/acme/app.git',
+      source: {
+        integrationAccountId: 'account-1',
+        externalRepoId: '123',
+        fullName: 'acme/app',
+      },
       testCommand: 'pnpm test',
       harnessCommand: 'fake-harness',
       ...config,

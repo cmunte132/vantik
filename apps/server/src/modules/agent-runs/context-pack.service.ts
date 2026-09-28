@@ -1,17 +1,22 @@
 import type { AgentRun, KnowledgeArm } from '@prisma/client';
+import type {
+  AgentRunConfig,
+  AgentRunDelivery,
+  AgentRunRepoConfig,
+} from '@vantikhq/types';
+
 import { Injectable, Logger } from '@nestjs/common';
-import type { AgentRunConfig, AgentRunRepoConfig } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { GitSourcesService } from 'modules/git/git-sources.service';
 import IssueContextService from 'modules/issues/issue-context.service';
-import { LocalRepoService } from 'modules/local-repo/local-repo.service';
 import KnowledgeService, {
   type PackedEntry,
 } from 'modules/pages/knowledge.service';
 
 import { workspaceAgentDefaults } from './agent-run-settings';
 import { chooseVerification } from './module-verification';
-import { chooseRepo, isLocalSource, remoteUrlFor } from './repo-routing';
+import { chooseRepo } from './repo-routing';
 
 /**
  * What an agent is handed when it picks up a run.
@@ -97,7 +102,7 @@ export class ContextPackService {
   constructor(
     private prisma: PrismaService,
     private issueContext: IssueContextService,
-    private localRepo: LocalRepoService,
+    private gitSources: GitSourcesService,
     private knowledge: KnowledgeService,
   ) {}
 
@@ -230,8 +235,27 @@ export class ContextPackService {
   async plan(
     issueId: string,
     workspaceId: string,
-  ): Promise<AgentRunRepoConfig> {
-    return this.resolveRepo(issueId, workspaceId);
+  ): Promise<AgentRunRepoConfig & { delivery: AgentRunDelivery | null }> {
+    const repo = await this.resolveRepo(issueId, workspaceId);
+
+    if (!repo.source) {
+      return { ...repo, delivery: null };
+    }
+
+    const resolved = await this.gitSources.resolve({
+      workspaceId,
+      ...repo.source,
+    });
+
+    return {
+      ...repo,
+      delivery:
+        'unresolved' in resolved
+          ? null
+          : resolved.source.openChangeRequest
+            ? 'pull_request'
+            : 'branch',
+    };
   }
 
   /**
@@ -246,10 +270,10 @@ export class ContextPackService {
    * names no module; an explicit request still wins over both, because a
    * person naming a repository knows something the map does not.
    *
-   * Delivery is derived rather than defaulted to a constant. A workspace with
-   * no remote configured has nowhere to push and no PR to open, so it gets a
-   * worktree — which means a local-only install needs no configuration at all
-   * to get something reviewable back.
+   * The repository itself comes only from the modules. A workspace default
+   * or a request can set the branch and the checks, never where the code is:
+   * a repository is something a workspace connects, not a string a caller
+   * types.
    */
   private async resolveRepo(
     issueId: string,
@@ -271,15 +295,11 @@ export class ContextPackService {
     // the bottom layer, so nothing that worked stops working — but a module
     // that says how to check its own code wins, because it is the one that
     // knows.
-    const merged: AgentRunRepoConfig = {
-      ...defaults.repo,
+    return {
+      ...stripUndefined(repoFieldsOf(defaults.repo)),
       ...routed,
       ...stripUndefined(repoFieldsOf(overrides)),
     };
-
-    merged.delivery ??= merged.repoUrl ? 'pull_request' : 'worktree';
-
-    return merged;
   }
 
   /**
@@ -352,42 +372,32 @@ export class ContextPackService {
       return verification;
     }
 
-    const slug = await this.sourceSlug(choice.repo.integrationAccountId);
-    const pathPrefixes = choice.prefixes;
-
-    // A repository on this disk is opened where it already is. The path lives
-    // in the settings of the integration account and not on the ModuleRepo
-    // row, so it is read back rather than stored twice.
-    if (isLocalSource(slug)) {
-      const path = await this.localRepo.pathOf(
-        workspaceId,
-        choice.repo.externalRepoId,
-      );
-
-      return path
-        ? { ...verification, repoPath: path, pathPrefixes }
-        : verification;
-    }
-
-    const repoUrl = remoteUrlFor(slug, choice.repo.fullName);
-
-    return repoUrl ? { ...verification, repoUrl, pathPrefixes } : verification;
-  }
-
-  /** The integration a repository came from, as its catalogue slug. */
-  private async sourceSlug(
-    integrationAccountId: string | null,
-  ): Promise<string | null> {
-    if (!integrationAccountId) {
-      return null;
-    }
-
-    const account = await this.prisma.integrationAccount.findUnique({
-      where: { id: integrationAccountId },
-      select: { integrationDefinition: { select: { slug: true } } },
+    const resolved = await this.gitSources.resolve({
+      workspaceId,
+      integrationAccountId: choice.repo.integrationAccountId,
+      externalRepoId: choice.repo.externalRepoId,
     });
 
-    return account?.integrationDefinition?.slug ?? null;
+    if ('unresolved' in resolved) {
+      this.logger.warn({
+        message: `The repository of this issue's modules cannot be used: ${resolved.unresolved}`,
+        where: `${ContextPackService.name}.repoForModules`,
+        issueId,
+      });
+
+      return verification;
+    }
+
+    return {
+      ...verification,
+      source: {
+        integrationAccountId: resolved.repo.integrationAccountId,
+        externalRepoId: resolved.repo.externalRepoId,
+        fullName: resolved.repo.fullName,
+      },
+      location: resolved.source.location(resolved.repo),
+      pathPrefixes: choice.prefixes,
+    };
   }
 }
 
@@ -408,7 +418,9 @@ function issueUrl(key: string): string | null {
 }
 
 /**
- * The repository fields of a delegation request, and nothing else.
+ * The branch and verification fields of a delegation request or a workspace
+ * default, and nothing else. Never `source` or `location`: the repository
+ * comes from the issue's modules only.
  *
  * `AgentRunConfig` is a superset of the repo config — it also carries limits, a
  * harness command and a dry-run flag, which are the runner's business and not
@@ -416,13 +428,11 @@ function issueUrl(key: string): string | null {
  * `pack.repo`, where they mean nothing and read as though the repo had a
  * budget.
  */
-function repoFieldsOf(config: AgentRunConfig | undefined): AgentRunRepoConfig {
+function repoFieldsOf(
+  config: AgentRunConfig | AgentRunRepoConfig | undefined,
+): AgentRunRepoConfig {
   const {
-    repoUrl,
-    repoPath,
     pathPrefixes,
-    delivery,
-    worktreeRoot,
     baseBranch,
     branchPrefix,
     setupCommands,
@@ -434,11 +444,7 @@ function repoFieldsOf(config: AgentRunConfig | undefined): AgentRunRepoConfig {
   } = config ?? {};
 
   return {
-    repoUrl,
-    repoPath,
     pathPrefixes,
-    delivery,
-    worktreeRoot,
     baseBranch,
     branchPrefix,
     setupCommands,

@@ -542,14 +542,26 @@ export function isUnder(
 }
 
 /**
- * The `owner/name` of the repository a run worked in, lower-cased, from its
- * remote; null for a checkout on disk, which names no repository.
+ * The name of the repository a run worked in, lower-cased: the source's full
+ * name (`owner/name` on a git host). A run from before the source reference
+ * named only its remote, so that is read when there is no source.
  */
 export function repoNameOf(config: Prisma.JsonValue): string | null {
-  const repoUrl =
+  const fields =
     config && typeof config === 'object' && !Array.isArray(config)
-      ? config.repoUrl
+      ? config
       : null;
+  const source = fields?.source;
+  const fullName =
+    source && typeof source === 'object' && !Array.isArray(source)
+      ? source.fullName
+      : null;
+
+  if (typeof fullName === 'string' && fullName.trim()) {
+    return fullName.trim().toLowerCase();
+  }
+
+  const repoUrl = fields?.repoUrl;
 
   if (typeof repoUrl !== 'string') {
     return null;

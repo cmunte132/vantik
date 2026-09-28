@@ -186,18 +186,24 @@ them up, read [apps/e2e/README.md](apps/e2e/README.md).
 
 ### Local repositories
 
-The local-repo integration reads code from a git checkout on your disk. The
-knowledge bank uses it to check code citations. The server container cannot
-read your disk unless you add the local repositories overlay:
+A git repository on your disk can be a source of code, the same as a GitHub
+repository. The server uses it as a git remote: it fetches the repository into
+its own copy (under `REPO_MIRROR_ROOT`), and reads code, checks citations, and
+starts agent runs from that copy. When an agent run finishes, the server pushes
+its branch back into your repository, for example `agent/eng-42`. The server
+never reads or changes your working tree or the branch you have checked out.
+
+Set the directory that holds your checkouts, then start the stack as usual:
 
 ```bash
 echo 'LOCAL_REPO_ROOT=/Users/you/Code' >> .env
-docker compose -f docker-compose.yaml -f docker-compose.local-repos.yaml up -d
+docker compose up -d
 ```
 
-The overlay mounts `LOCAL_REPO_ROOT` read-only at the same path in the
-container. A repository must be inside that directory. Do not set it to your
-home directory, because the server can then read every file in it.
+`docker-compose.yaml` mounts `LOCAL_REPO_ROOT` read-write at the same path in
+the container, so a path that works on your machine works in the server. A
+repository must be inside that directory. Do not set it to your home directory,
+because the server can then reach every file in it.
 
 ### Observability
 

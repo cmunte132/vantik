@@ -41,23 +41,6 @@ export enum IntegrationPayloadEventType {
    * meet at this type.
    */
   GET_CODE_CHANGE = 'get_code_change',
-
-  /**
-   * This asks an integration for one file of a repository at a commit.
-   *
-   * The payload's `data` holds `fullName`, `path` and `ref`. The answer is
-   * `{ content }`, `{ missing: true }` when the repository answers and the file
-   * is not there, or `{ unknown: true, reason }` when the repository cannot be
-   * reached. Knowledge citations are checked against the code this way.
-   */
-  READ_REPO_FILE = 'read_repo_file',
-
-  /**
-   * This asks an integration for the commit at the head of a repository's
-   * default branch. The payload's `data` holds `fullName`; the answer is
-   * `{ sha }` or `{ unknown: true, reason }`.
-   */
-  RESOLVE_REPO_HEAD = 'resolve_repo_head',
 }
 
 /**

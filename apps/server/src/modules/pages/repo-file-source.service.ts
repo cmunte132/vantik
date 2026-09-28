@@ -1,17 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { IntegrationPayloadEventType } from '@vantikhq/types';
-import { localHead, readLocalFile } from 'integrations/local-repo/git-files';
-import { LOCAL_REPO_SLUG } from 'integrations/local-repo/repositories';
 import {
-  COMMIT_SHA,
   REPO_SOURCE_TIMEOUT_MS,
   type RepoFileRead,
   type RepoHead,
 } from 'integrations/repo-files';
-import { PrismaService } from 'nestjs-prisma';
 
-import { IntegrationsService } from 'modules/integrations/integrations.service';
-import { LocalRepoService } from 'modules/local-repo/local-repo.service';
+import {
+  GitSourcesService,
+  type ResolvedRepo,
+} from 'modules/git/git-sources.service';
+import { RepoMirrorService } from 'modules/git/repo-mirror.service';
 
 /** A module's repository, as much of the `ModuleRepo` row as reading needs. */
 export interface CitedRepo {
@@ -37,109 +35,66 @@ export interface RepoFileSource {
   head(repo: CitedRepo): Promise<RepoHead>;
 }
 
-const GITHUB_SLUG = 'github';
-
+/**
+ * Every read goes to the server's mirror of the repository, for every source.
+ * The source is asked only to fetch, so a citation of a GitHub repository and
+ * of a directory on this machine are checked by the same git commands.
+ */
 @Injectable()
 export default class RepoFileSourceService implements RepoFileSource {
   constructor(
-    private prisma: PrismaService,
-    private integrations: IntegrationsService,
-    private localRepo: LocalRepoService,
+    private gitSources: GitSourcesService,
+    private mirrors: RepoMirrorService,
   ) {}
 
   read(repo: CitedRepo, path: string, ref: string): Promise<RepoFileRead> {
-    return bounded(this.readFrom(repo, path, ref));
+    return bounded(
+      this.withRepo(repo, (resolved) =>
+        this.mirrors.readFile(resolved, path, ref),
+      ),
+    );
   }
 
   head(repo: CitedRepo): Promise<RepoHead> {
-    return bounded(this.headOf(repo));
-  }
-
-  private async readFrom(
-    repo: CitedRepo,
-    path: string,
-    ref: string,
-  ): Promise<RepoFileRead> {
-    try {
-      const slug = await this.sourceOf(repo);
-
-      if (slug === GITHUB_SLUG) {
-        return asFileRead(
-          await this.integrations.loadIntegration(GITHUB_SLUG, {
-            event: IntegrationPayloadEventType.READ_REPO_FILE,
-            integrationAccountId: repo.integrationAccountId,
-            workspaceId: repo.workspaceId,
-            data: { fullName: repo.fullName, path, ref },
-          }),
-        );
-      }
-
-      if (slug === LOCAL_REPO_SLUG) {
-        return await readLocalFile(await this.checkoutOf(repo), path, ref);
-      }
-
-      return noSource(repo);
-    } catch (error) {
-      return failed(error);
-    }
-  }
-
-  private async headOf(repo: CitedRepo): Promise<RepoHead> {
-    try {
-      const slug = await this.sourceOf(repo);
-
-      if (slug === GITHUB_SLUG) {
-        return asHead(
-          await this.integrations.loadIntegration(GITHUB_SLUG, {
-            event: IntegrationPayloadEventType.RESOLVE_REPO_HEAD,
-            integrationAccountId: repo.integrationAccountId,
-            workspaceId: repo.workspaceId,
-            data: { fullName: repo.fullName },
-          }),
-        );
-      }
-
-      if (slug === LOCAL_REPO_SLUG) {
-        return await localHead(await this.checkoutOf(repo));
-      }
-
-      return noSource(repo);
-    } catch (error) {
-      return failed(error);
-    }
+    return bounded(
+      this.withRepo(repo, (resolved) => this.mirrors.head(resolved)),
+    );
   }
 
   /**
-   * The source of a repository, from the integration account that holds it.
-   * Only an account in the repository's own workspace counts, so a row naming
-   * another workspace's account reads nothing.
+   * Resolves the repository through its integration account. Only an account
+   * in the repository's own workspace counts, so a row naming another
+   * workspace's account reads nothing.
    */
-  private async sourceOf(repo: CitedRepo): Promise<string | null> {
-    if (!repo.integrationAccountId) {
-      return null;
+  private async withRepo<T extends RepoFileRead | RepoHead>(
+    repo: CitedRepo,
+    read: (resolved: ResolvedRepo) => Promise<T>,
+  ): Promise<T | { unknown: true; reason: string }> {
+    try {
+      const resolved = await this.gitSources.resolve(repo);
+
+      if ('unresolved' in resolved) {
+        return {
+          unknown: true,
+          reason: `${repo.fullName} cannot be read: ${resolved.unresolved}`,
+        };
+      }
+
+      return await read(resolved);
+    } catch (error) {
+      return {
+        unknown: true,
+        reason: `the repository could not be read: ${(error as Error)?.message ?? error}`,
+      };
     }
-
-    const account = await this.prisma.integrationAccount.findFirst({
-      where: {
-        id: repo.integrationAccountId,
-        workspaceId: repo.workspaceId,
-        deleted: null,
-      },
-      select: { integrationDefinition: { select: { slug: true } } },
-    });
-
-    return account?.integrationDefinition?.slug ?? null;
-  }
-
-  private checkoutOf(repo: CitedRepo): Promise<string | null> {
-    return this.localRepo.pathOf(repo.workspaceId, repo.externalRepoId);
   }
 }
 
 /**
- * A read that has not answered in time is unread. Each call inside a source
- * has its own timeout, but a read makes several (a token, the file, the check
- * that a 404 came from the repository), and a write waits on every citation.
+ * A read that has not answered in time is unread. Each git command has its
+ * own timeout, but a read can make several (a token, a fetch, the file), and a
+ * write waits on every citation. A first fetch of a large repository runs on
+ * past this and fills the mirror; the citation is read on the retry.
  */
 async function bounded<T>(
   work: Promise<T>,
@@ -161,70 +116,4 @@ async function bounded<T>(
   } finally {
     clearTimeout(timer);
   }
-}
-
-function noSource(repo: CitedRepo): { unknown: true; reason: string } {
-  return {
-    unknown: true,
-    reason: `${repo.fullName} has no source this server can read files from`,
-  };
-}
-
-/**
- * A source that threw. `loadIntegration` does not catch a plugin's rejected
- * promise, so a GitHub that cannot be reached while a token is refreshed
- * arrives here as a throw. It is the source failing, not the file, and a write
- * must not fail with it.
- */
-function failed(error: unknown): { unknown: true; reason: string } {
-  return {
-    unknown: true,
-    reason: `the repository could not be read: ${(error as Error)?.message ?? error}`,
-  };
-}
-
-/**
- * A plugin's answer, trusted only for its shape. `loadIntegration` returns
- * undefined when it caught the plugin failing, which is not the file either.
- */
-function asFileRead(answer: unknown): RepoFileRead {
-  const value = answer as Partial<{
-    content: unknown;
-    missing: unknown;
-    reason: unknown;
-    thisFileOnly: unknown;
-  }>;
-
-  if (typeof value?.content === 'string') {
-    return { content: value.content };
-  }
-
-  if (value?.missing === true) {
-    return { missing: true };
-  }
-
-  return {
-    unknown: true,
-    reason:
-      typeof value?.reason === 'string'
-        ? value.reason
-        : 'the integration did not answer',
-    ...(value?.thisFileOnly === true && { thisFileOnly: true as const }),
-  };
-}
-
-function asHead(answer: unknown): RepoHead {
-  const value = answer as Partial<{ sha: unknown; reason: unknown }>;
-
-  if (typeof value?.sha === 'string' && COMMIT_SHA.test(value.sha)) {
-    return { sha: value.sha };
-  }
-
-  return {
-    unknown: true,
-    reason:
-      typeof value?.reason === 'string'
-        ? value.reason
-        : 'the integration did not answer',
-  };
 }

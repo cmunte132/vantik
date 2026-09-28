@@ -24,7 +24,10 @@ export interface LocalRepository {
   /** The name of the directory. The picker shows it. */
   fullName: string;
 
-  /** The absolute path. An agent opens the checkout here. */
+  /**
+   * The absolute path. The server fetches from it into its mirror, and pushes
+   * an agent's branch back into it.
+   */
   path: string;
 
   addedAt: string;
@@ -129,25 +132,6 @@ export async function removeRepository(
   });
 
   return repository;
-}
-
-/**
- * This function returns the path of one local repository, or null.
- *
- * A `ModuleRepo` row holds the identifier of the repository and not its path.
- * Anything that needs the checkout reads the path here.
- */
-export async function resolveRepositoryPath(
-  ctx: PluginContext,
-  workspaceId: string,
-  repositoryId: string,
-): Promise<string | null> {
-  const repositories = await listRepositories(ctx, workspaceId);
-  const repository = repositories.find(
-    (candidate) => candidate.id === repositoryId,
-  );
-
-  return repository ? repository.path : null;
 }
 
 /**

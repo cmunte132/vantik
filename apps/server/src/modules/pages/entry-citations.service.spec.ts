@@ -19,8 +19,8 @@ import {
 import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
-import { IntegrationsService } from 'modules/integrations/integrations.service';
-import { LocalRepoService } from 'modules/local-repo/local-repo.service';
+import { GitSourcesService } from 'modules/git/git-sources.service';
+import { RepoMirrorService } from 'modules/git/repo-mirror.service';
 
 import CitationJudge, { JudgeRequest } from './citation-judge';
 import { hashSnippet } from './citation-matching';
@@ -629,17 +629,16 @@ describe('a repository that cannot be reached', () => {
 describe('a repository that throws instead of answering', () => {
   it('[KG-2.3] still lets the write through with an UNKNOWN citation', async () => {
     const { db, judge, queue, indexer } = setup();
-    // The real file source, over an integration whose plugin rejects, as
-    // loadIntegration passes on an async plugin's failure (here a token
+    // The real file source, over a mirror whose fetch rejects (here a token
     // refresh that cannot reach GitHub).
+    const failing = jest.fn(async () => {
+      throw new Error('getaddrinfo ENOTFOUND github.com');
+    });
     const source = new RepoFileSourceService(
-      db.prisma,
       {
-        loadIntegration: jest.fn(async () => {
-          throw new Error('getaddrinfo ENOTFOUND github.com');
-        }),
-      } as unknown as IntegrationsService,
-      { pathOf: jest.fn() } as unknown as LocalRepoService,
+        resolve: jest.fn(async () => ({ source: {}, repo: {} })),
+      } as unknown as GitSourcesService,
+      { readFile: failing, head: failing } as unknown as RepoMirrorService,
     );
     const service = new EntryCitationsService(
       db.prisma,

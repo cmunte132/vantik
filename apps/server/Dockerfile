@@ -88,7 +88,7 @@ COPY --chown=node:node skills ./apps/server/skills
 # cannot write its URL-signing secret, and it crash-loops on every fresh
 # install. Rootless podman hands the volume to the container user either way,
 # which is why this only showed up under Docker.
-RUN mkdir -p /data/attachments && chown node:node /data/attachments
+RUN mkdir -p /data/attachments /data/repos && chown node:node /data/attachments /data/repos
 
 EXPOSE 3001
 

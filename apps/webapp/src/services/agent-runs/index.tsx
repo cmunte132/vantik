@@ -61,9 +61,12 @@ export function useExecutors() {
 }
 
 export interface RunPlan {
-  repoUrl: string | null;
-  repoPath: string | null;
+  /** The repository's name, as its source gives it. */
+  repository: string | null;
+  /** Where it is: a URL or a path on the server's machine. */
+  location: string | null;
   baseBranch: string | null;
+  /** `pull_request` or `branch`, from what the source can do. */
   delivery: string | null;
   limits: { maxIterations: number; maxCostUsd: number };
 }

@@ -8,10 +8,10 @@
  */
 import { PrismaService } from 'nestjs-prisma';
 
-import { CredentialsService } from '../credentials/credentials.service';
-import { egressAllowlistForTest } from '../executors/hosted.executor';
 import { GondolinRuntime } from './gondolin.runtime';
 import { scrubSecrets } from './scrub';
+import { CredentialsService } from '../credentials/credentials.service';
+import { egressAllowlistForTest } from '../executors/hosted.executor';
 
 const WORKSPACE = 'workspace-1';
 
@@ -332,7 +332,11 @@ describe('the git token never enters the guest', () => {
       // A model, because a run without one is refused before it reaches a
       // sandbox — there is no spec to capture on a run that never starts.
       config: {
-        repoUrl: 'https://github.com/acme/app.git',
+        source: {
+          integrationAccountId: 'account-1',
+          externalRepoId: '123',
+          fullName: 'acme/app',
+        },
         model: 'google/gemini-3.7-flash',
       },
       contextPack: { issue: { key: 'ENG-1', title: 'Thing' } },

@@ -12,6 +12,7 @@ import type { AgentRun } from '@prisma/client';
 
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
+  type AgentRunRepoSource,
   PI_PACKAGE,
   PI_REQUIRED_FLAGS,
   THINKING_LEVELS,
@@ -483,20 +484,17 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       // repository check below used to run after a boot.
       await note('Fetching the repository', 'setup');
 
-      // A path is as good a remote as a URL. `git clone` takes either, the
-      // proxy already declines to demand a credential for one, and its own
-      // reasoning says the local and self-hosted setups are the ones hosted
-      // execution should serve first. Insisting on a URL here contradicted
-      // that: a workspace whose modules point at a repository on this disk —
-      // which is what the local-repo integration produces — could not run a
-      // single issue in the sandbox.
-      const cloneUrl = config.repoUrl ?? config.repoPath;
-      if (!cloneUrl) {
+      // The repository comes from the issue's modules, as a reference the
+      // server resolves through the connected source. There is no URL or path
+      // to fall back on, so an issue whose modules name no repository stops
+      // here and says so.
+      const source = config.source as AgentRunRepoSource | undefined;
+      if (!source?.integrationAccountId || !source.externalRepoId) {
         await this.fail(
           run,
           'ENVIRONMENT_SETUP_FAILED',
-          'This run has no repository to open. Point the issue’s modules at ' +
-            'one, or set a default in Settings → Agents.',
+          'This run has no repository to open. Link the issue’s modules to a ' +
+            'repository in Settings → Modules.',
         );
         return;
       }
@@ -505,8 +503,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       try {
         checkout = await this.gitProxy.materializeCheckout({
           workspaceId: run.workspaceId,
-          repoUrl: cloneUrl,
-          baseBranch: config.baseBranch ?? 'main',
+          source,
+          baseBranch: config.baseBranch,
         });
       } catch (error) {
         await this.fail(
@@ -640,10 +638,9 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       }
 
       for (const command of config.setupCommands ?? []) {
-        const result = await sandbox.exec(
-          `cd /workspace/repo && ${command}`,
-          { timeoutMs: limits.deadlineAt - Date.now() },
-        );
+        const result = await sandbox.exec(`cd /workspace/repo && ${command}`, {
+          timeoutMs: limits.deadlineAt - Date.now(),
+        });
         egressDenied += result.egressDenied;
 
         if (result.exitCode !== 0) {
@@ -756,7 +753,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
 
       const pushed = await this.gitProxy.pushWorkTree({
         workspaceId: run.workspaceId,
-        repoUrl: cloneUrl,
+        source,
+        baseBranch: checkout.baseBranch,
         branch: `agent/${String(pack.issue?.key ?? run.issueId).toLowerCase()}`,
         treeBase64,
         baseCommit,
@@ -802,7 +800,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           report: Date.now() - reportStart,
         },
         result: {
-          delivery: 'pull_request',
+          delivery: pushed.delivery,
           branch: pushed.branch,
           prUrl: pushed.prUrl,
           headCommit: pushed.headCommit,
@@ -1171,7 +1169,9 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       // then spends its budget on passes that cannot do anything and ends up
       // blaming the reviewer for not producing a verdict.
       exitCode:
-        result.exitCode === 0 && parsed.failure ? MODEL_FAILED : result.exitCode,
+        result.exitCode === 0 && parsed.failure
+          ? MODEL_FAILED
+          : result.exitCode,
       stderr: scrubSecrets(
         parsed.failure
           ? `The model did not answer: ${parsed.failure.message}`

@@ -98,19 +98,16 @@ export const RETRYABLE_AGENT_RUN_STATUSES: AgentRunStatus[] = [
 /**
  * How finished work is handed back.
  *
- * A pull request is only available when the workspace has a remote SCM
- * connected. Without one — a local checkout, a self-hosted install with no
- * GitHub integration, an air-gapped repo — there is nowhere to push and no PR
- * to open, and a feature that only works with GitHub attached is a feature
- * most self-hosters cannot use.
+ * The source decides, not the run. A host that has pull requests (GitHub, and
+ * the git hosts of the remote tier) gets `pull_request`: the branch is pushed
+ * and a pull request is opened for it. A host without them, such as a
+ * directory on the server's machine, gets `branch`: the pushed branch is the
+ * handback, and the person reviews it with their own tools.
  *
- * So `worktree` is a first-class delivery, not a degraded one: the run commits
- * to a branch and leaves it checked out in a `git worktree` beside the repo,
- * and the user reviews it with the diff tooling they already have. Same
- * lifecycle, same summary comment, same counters — only the artifact at the
- * end differs.
+ * `worktree` is retired. The runner that left a `git worktree` beside the
+ * repository is gone, and only past runs carry it.
  */
-export const AGENT_RUN_DELIVERIES = ['pull_request', 'worktree'] as const;
+export const AGENT_RUN_DELIVERIES = ['pull_request', 'branch', 'worktree'] as const;
 
 export type AgentRunDelivery = (typeof AGENT_RUN_DELIVERIES)[number];
 
@@ -209,19 +206,31 @@ export interface AgentRunVerification {
 }
 
 /**
- * Where the code is, how to deliver the work, and how to verify it.
+ * The repository a run works in, as the connected source names it.
  *
- * Verification arrives from the issue's modules; everything else is the
- * workspace's default or the delegating caller's override.
+ * A reference and never an address. The server resolves it through the
+ * integration account each time it is used, so a run cannot be pointed at a
+ * URL or a path that no source in the workspace offers.
+ */
+export interface AgentRunRepoSource {
+  integrationAccountId: string;
+  /** The source's identifier for the repository, as `ModuleRepo` keeps it. */
+  externalRepoId: string;
+  fullName: string;
+}
+
+/**
+ * Where the code is, and how to verify work in it.
+ *
+ * The repository and verification arrive from the issue's modules; the
+ * branch settings are the workspace's default or the delegating caller's
+ * override.
  */
 export interface AgentRunRepoConfig extends AgentRunVerification {
-  /** Remote to clone. Absent for a run against a local checkout. */
-  repoUrl?: string;
-  /**
-   * Local repository the runner works in, when there is no remote to clone.
-   * The runner's own path; the server only stores it.
-   */
-  repoPath?: string;
+  /** The repository, from the modules the issue names. */
+  source?: AgentRunRepoSource;
+  /** Where the repository is, for a person: a URL or a path. Display only. */
+  location?: string;
   /**
    * The part of the repository this run is about, from the modules the issue
    * names. Empty or absent means the whole of it.
@@ -232,19 +241,6 @@ export interface AgentRunRepoConfig extends AgentRunVerification {
    * be able to make.
    */
   pathPrefixes?: string[];
-  /**
-   * Where to hand the work back. Defaults to `pull_request` when the
-   * workspace has an SCM connected and `worktree` when it does not, so a
-   * local-only install needs no configuration to get something reviewable.
-   */
-  delivery?: AgentRunDelivery;
-  /**
-   * Where worktrees are created for `worktree` delivery. Defaults to a
-   * sibling of the repo, so it is next to the work but never inside it —
-   * a worktree under the repo would show up in the agent's own file listings
-   * and in its diffs.
-   */
-  worktreeRoot?: string;
   baseBranch?: string;
   /** Where the runner should put the work. Templated with the issue key. */
   branchPrefix?: string;

@@ -1,28 +1,28 @@
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
+import { GitModule } from 'modules/git/git.module';
 import { IssueCommentsModule } from 'modules/issue-comments/issue-comments.module';
 import { IssuesModule } from 'modules/issues/issues.module';
 import { KnowledgeSignalsModule } from 'modules/knowledge-signals/knowledge-signals.module';
 import { LinkedIssueModule } from 'modules/linked-issue/linked-issue.module';
-import { LocalRepoModule } from 'modules/local-repo/local-repo.module';
 import { PagesModule } from 'modules/pages/pages.module';
 import { UsersService } from 'modules/users/users.service';
 
 import { AgentDelegationService } from './agent-delegation.service';
-import { CredentialsController } from './credentials/credentials.controller';
-import { CredentialsService } from './credentials/credentials.service';
-import { GitProxyService } from './sandbox/git-proxy.service';
-import { GondolinRuntime } from './sandbox/gondolin.runtime';
-import { HostedExecutor } from './executors/hosted.executor';
 import { AgentRunsController } from './agent-runs.controller';
 import { AGENT_RUNS_QUEUE } from './agent-runs.interface';
 import { AgentRunsProcessor, AgentRunsScheduler } from './agent-runs.processor';
 import { AgentRunsService } from './agent-runs.service';
 import { ContextPackService } from './context-pack.service';
+import { CredentialsController } from './credentials/credentials.controller';
+import { CredentialsModule } from './credentials/credentials.module';
+import { ExecutorRegistry } from './executors/executor.registry';
+import { HostedExecutor } from './executors/hosted.executor';
 import { KnowledgeArmsService } from './knowledge-arms.service';
 import { RunHandbackService } from './run-handback.service';
-import { ExecutorRegistry } from './executors/executor.registry';
+import { GitProxyService } from './sandbox/git-proxy.service';
+import { GondolinRuntime } from './sandbox/gondolin.runtime';
 
 @Module({
   imports: [
@@ -30,12 +30,12 @@ import { ExecutorRegistry } from './executors/executor.registry';
     IssuesModule,
     IssueCommentsModule,
     LinkedIssueModule,
-    // The issue's modules say which repository a run opens, and a repository on
-    // this disk keeps its path here.
-    LocalRepoModule,
     // What the workspace knows, for the run's pack, and what came of it.
     PagesModule,
     KnowledgeSignalsModule,
+    CredentialsModule,
+    // Where a run's code comes from and where its branch goes.
+    GitModule,
   ],
   controllers: [AgentRunsController, CredentialsController],
   providers: [
@@ -46,7 +46,6 @@ import { ExecutorRegistry } from './executors/executor.registry';
     RunHandbackService,
     ExecutorRegistry,
     HostedExecutor,
-    CredentialsService,
     GondolinRuntime,
     GitProxyService,
     AgentRunsScheduler,
@@ -59,7 +58,7 @@ import { ExecutorRegistry } from './executors/executor.registry';
     AgentRunsService,
     AgentDelegationService,
     ExecutorRegistry,
-    CredentialsService,
+    CredentialsModule,
   ],
 })
 export class AgentRunsModule {}

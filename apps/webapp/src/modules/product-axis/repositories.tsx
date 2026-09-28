@@ -26,11 +26,11 @@ import { workspaceHref } from 'common/workspace-href';
 
 import { useScope } from 'hooks';
 
-import { useGetLocalRepositoryFolders } from 'services/local-repo';
 import { getModuleRepos } from 'services/product-axis';
 import {
   useCreateModuleRepoMutation,
   useDeleteModuleRepoMutation,
+  useGetModuleRepoFolders,
   useUpdateModuleRepoMutation,
 } from 'services/product-axis';
 
@@ -127,11 +127,6 @@ export const Repositories = observer(({ moduleId }: { moduleId: string }) => {
             moduleId={moduleId}
             moduleRepoId={repo.id}
             prefixes={repo.pathPrefixes}
-            localRepositoryId={
-              pathById.get(repo.externalRepoId)
-                ? repo.externalRepoId
-                : undefined
-            }
             onSaved={() => refetch()}
           />
 
@@ -308,31 +303,30 @@ function RepoPickerContent({
  * The choice belongs to this module and to no other. Two modules can connect
  * the same repository, and each one keeps its own folders here.
  *
- * The server reads the folders from the disk when the repository is on this
- * machine. A repository from a remote source has none to offer yet, and the
- * field at the end of the list is what that person uses.
+ * The server reads the folders from its own copy of the repository, whatever
+ * the source. The field at the end of the list takes a path the list does not
+ * show, such as one deeper than two levels.
  */
 function ScopeEditor({
   moduleId,
   moduleRepoId,
   prefixes,
-  localRepositoryId,
   onSaved,
 }: {
   moduleId: string;
   moduleRepoId: string;
   prefixes: string[];
-  localRepositoryId?: string;
   onSaved: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<string[]>(prefixes);
   const [typed, setTyped] = React.useState('');
 
-  const { data: folders = [], isLoading } = useGetLocalRepositoryFolders(
-    localRepositoryId,
-    open,
-  );
+  const {
+    data: folders = [],
+    isLoading,
+    isError,
+  } = useGetModuleRepoFolders(moduleId, moduleRepoId, open);
 
   const { mutate: updateRepo } = useUpdateModuleRepoMutation({
     onSuccess: onSaved,
@@ -436,9 +430,9 @@ function ScopeEditor({
 
           {!isLoading && folders.length === 0 && (
             <div className="px-3 py-2 text-muted-foreground">
-              {localRepositoryId
-                ? 'This repository keeps its code at the root, so there is no folder to pick.'
-                : 'This repository is not on this machine, so its folders are unknown. Type a path below.'}
+              {isError
+                ? 'The server could not read this repository, so its folders are unknown. Type a path below.'
+                : 'This repository keeps its code at the root, so there is no folder to pick.'}
             </div>
           )}
         </div>

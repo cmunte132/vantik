@@ -106,6 +106,7 @@ services:
       SUPERTOKEN_CONNECTION_URI: http://supertokens:3567
       DATABASE_URL: postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${POSTGRES_DB:-vantik}?schema=${DB_SCHEMA:-vantik}&sslmode=prefer
       OAUTH_CALLBACK_URL: ${FRONTEND_HOST:-http://localhost:3000}/api/v1/oauth/callback
+      REPO_MIRROR_ROOT: /data/repos
     ports:
       - "3001:3001"
     volumes:
@@ -114,6 +115,20 @@ services:
       # attachment URLs, which the server makes on first start. Remove the
       # volume and the files go with it.
       - attachment-data:/data/attachments
+      # The server's own bare copy of every repository it works with, from any
+      # source. Safe to remove: the server fetches each repository again.
+      - repo-mirrors:/data/repos
+      # Local repositories: LOCAL_REPO_ROOT in .env names the directory that
+      # holds your checkouts, and it is mounted at the same path, so a path
+      # that works on the host works here. The server fetches from those
+      # repositories and pushes an agent's branch back into them, so the mount
+      # is read-write. It never reads or changes a working tree. Do not set
+      # LOCAL_REPO_ROOT to your home directory: the server could then reach
+      # every file in it, for example ~/.ssh.
+      #
+      # With LOCAL_REPO_ROOT unset, an empty volume takes its place and no
+      # local repository can be added.
+      - ${LOCAL_REPO_ROOT:-no-local-repos}:${LOCAL_REPO_ROOT:-/data/no-local-repos}
     networks:
       - vantik
     healthcheck:
@@ -284,4 +299,6 @@ volumes:
   redis-data:
   typesense-data:
   attachment-data:
+  repo-mirrors:
+  no-local-repos:
   minio-data:

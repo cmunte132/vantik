@@ -17,6 +17,8 @@ import {
   uniqueKey,
 } from 'common/product-axis';
 
+import { GitSourcesService } from 'modules/git/git-sources.service';
+import { RepoMirrorService } from 'modules/git/repo-mirror.service';
 import { LoggerService } from 'modules/logger/logger.service';
 import {
   PAGES_QUEUE,
@@ -32,6 +34,8 @@ export class ModulesService {
 
   constructor(
     private prisma: PrismaService,
+    private gitSources: GitSourcesService,
+    private mirrors: RepoMirrorService,
     // Optional so the service still stands up where no queue is registered.
     @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
   ) {}
@@ -191,13 +195,39 @@ export class ModulesService {
     });
   }
 
+  /**
+   * Links a repository to a module.
+   *
+   * Only a repository that a connected source in the module's workspace
+   * offers. A link to nothing used to be accepted, and it looked like a
+   * working repository until an agent run or a citation tried to open it. The
+   * full name is taken from the source rather than from the request, so the
+   * row names the repository the way the source does.
+   */
   async createModuleRepo(
     createModuleRepoDto: CreateModuleRepoDto,
     moduleId: string,
   ) {
+    const module = await this.prisma.module.findFirst({
+      where: { id: moduleId, deleted: null },
+      select: { workspaceId: true },
+    });
+
+    if (!module) {
+      throw new NotFoundException('There is no module with that id.');
+    }
+
+    const { repo: linked } = await this.gitSources.require({
+      workspaceId: module.workspaceId,
+      integrationAccountId: createModuleRepoDto.integrationAccountId,
+      externalRepoId: createModuleRepoDto.externalRepoId,
+    });
+
     const repo = await this.prisma.moduleRepo.create({
       data: {
         ...createModuleRepoDto,
+        integrationAccountId: linked.integrationAccountId,
+        fullName: linked.fullName,
         // An empty list is the ordinary case: the module is all of the
         // repository, which is what a small repository looks like.
         pathPrefixes: normalisePrefixes(createModuleRepoDto.pathPrefixes),
@@ -229,6 +259,33 @@ export class ModulesService {
     await this.repositoriesMoved(repo.module.workspaceId);
 
     return repo;
+  }
+
+  /**
+   * The folders of a linked repository that the module can claim, read from
+   * the server's mirror, so a repository from any source offers them.
+   */
+  async moduleRepoFolders(moduleId: string, moduleRepoId: string) {
+    const row = await this.prisma.moduleRepo.findFirst({
+      where: { id: moduleRepoId, moduleId, deleted: null },
+      select: {
+        externalRepoId: true,
+        integrationAccountId: true,
+        module: { select: { workspaceId: true } },
+      },
+    });
+
+    if (!row) {
+      throw new NotFoundException('This module has no such repository.');
+    }
+
+    const resolved = await this.gitSources.require({
+      workspaceId: row.module.workspaceId,
+      integrationAccountId: row.integrationAccountId,
+      externalRepoId: row.externalRepoId,
+    });
+
+    return await this.mirrors.folders(resolved);
   }
 
   async deleteModuleRepo(moduleRepoId: string) {

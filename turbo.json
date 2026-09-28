@@ -108,6 +108,7 @@
     // The directory that holds every local repository. It is empty on a
     // machine that one person runs, and then any absolute path is allowed.
     "LOCAL_REPO_ROOT",
+    "REPO_MIRROR_ROOT",
     // The seed of the integration definitions reads these pairs. A pair that
     // the environment does not hold leaves its integration without
     // credentials, and the settings page says so.

@@ -3,9 +3,15 @@
  * edit to that has to reach the entries, or "what do we know about this
  * module" answers from the repositories as they were.
  */
+import { BadRequestException } from '@nestjs/common';
 import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
+import {
+  GitSourcesService,
+  type RepoRef,
+} from 'modules/git/git-sources.service';
+import { RepoMirrorService } from 'modules/git/repo-mirror.service';
 import { RECOMPUTE_MODULES_JOB } from 'modules/pages/pages.interface';
 
 import { ModulesService } from './modules.service';
@@ -25,6 +31,7 @@ function build(
       updateMany: jest.fn(async () => ({ count: 1 })),
     },
     module: {
+      findFirst: jest.fn(async () => ({ workspaceId: 'workspace-1' })),
       update: jest.fn(async () => ({
         id: 'module-1',
         workspaceId: 'workspace-1',
@@ -35,8 +42,35 @@ function build(
     capability: { findMany: jest.fn(async (): Promise<unknown[]> => []) },
   } as unknown as PrismaService;
   const queue = { add: queueAdd } as unknown as Queue;
+  const require = jest.fn(async (ref: RepoRef) => {
+    if (ref.integrationAccountId !== 'account-1') {
+      throw new BadRequestException(
+        'This repository cannot be used: the source of the repository is no longer connected.',
+      );
+    }
 
-  return { service: new ModulesService(prisma, queue), queueAdd };
+    return {
+      source: {},
+      repo: {
+        integrationAccountId: 'account-1',
+        fullName: 'acme/app',
+        externalRepoId: ref.externalRepoId,
+      },
+    };
+  });
+  const gitSources = { require } as unknown as GitSourcesService;
+
+  return {
+    service: new ModulesService(
+      prisma,
+      gitSources,
+      {} as RepoMirrorService,
+      queue,
+    ),
+    queueAdd,
+    prisma,
+    require,
+  };
 }
 
 describe('ModulesService and knowledge scopes', () => {
@@ -44,7 +78,12 @@ describe('ModulesService and knowledge scopes', () => {
     const { service, queueAdd } = build();
 
     await service.createModuleRepo(
-      { externalRepoId: 'r1', fullName: 'acme/app', pathPrefixes: ['apps/x'] },
+      {
+        externalRepoId: 'r1',
+        fullName: 'acme/app',
+        integrationAccountId: 'account-1',
+        pathPrefixes: ['apps/x'],
+      },
       'module-1',
     );
     await service.updateModuleRepo({ pathPrefixes: ['apps/y'] }, 'repo-1');
@@ -73,5 +112,45 @@ describe('ModulesService and knowledge scopes', () => {
     await expect(
       service.updateModuleRepo({ pathPrefixes: ['apps/y'] }, 'repo-1'),
     ).resolves.toMatchObject({ id: 'repo-1' });
+  });
+});
+
+describe('ModulesService repository links', () => {
+  it('refuses a link to a repository no connected source offers, and writes nothing', async () => {
+    const { service, prisma } = build();
+
+    await expect(
+      service.createModuleRepo(
+        {
+          externalRepoId: '3',
+          fullName: 'cmunte/perk-pilot',
+          integrationAccountId: 'not-an-account',
+        },
+        'module-1',
+      ),
+    ).rejects.toThrow(/cannot be used/);
+    expect(prisma.moduleRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('names the repository the way the source does', async () => {
+    const { service, prisma } = build();
+
+    await service.createModuleRepo(
+      {
+        externalRepoId: 'r1',
+        fullName: 'typed by hand',
+        integrationAccountId: 'account-1',
+      },
+      'module-1',
+    );
+
+    expect(prisma.moduleRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          fullName: 'acme/app',
+          integrationAccountId: 'account-1',
+        }),
+      }),
+    );
   });
 });

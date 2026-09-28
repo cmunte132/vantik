@@ -1,5 +1,3 @@
-import { LOCAL_REPO_SLUG } from 'integrations/local-repo/repositories';
-
 /**
  * A `ModuleRepo` row, reduced to what the choice below needs.
  */
@@ -62,28 +60,4 @@ export function chooseRepo(repos: RoutableRepo[]): RepoChoice | null {
       ? []
       : [...new Set(live.flatMap((repo) => repo.pathPrefixes))].sort(),
   };
-}
-
-/**
- * This function returns the remote to clone for a repository that is not on
- * this disk, or null.
- *
- * Only the sources that this server knows how to name are answered. A source
- * whose URL cannot be built from a full name gets null rather than a guess,
- * and the run then falls back to whatever the workspace configured.
- */
-export function remoteUrlFor(
-  definitionSlug: string | null,
-  fullName: string,
-): string | null {
-  if (definitionSlug === 'github') {
-    return `https://github.com/${fullName}.git`;
-  }
-
-  return null;
-}
-
-/** True when an integration account holds repositories on this machine. */
-export function isLocalSource(definitionSlug: string | null): boolean {
-  return definitionSlug === LOCAL_REPO_SLUG;
 }

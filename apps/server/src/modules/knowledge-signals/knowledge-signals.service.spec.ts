@@ -950,6 +950,16 @@ describe('what places a path under an entry', () => {
       'acme/api',
     );
     expect(repoNameOf({ repoPath: '/srv/checkouts/api' })).toBeNull();
+    expect(
+      repoNameOf({
+        source: {
+          integrationAccountId: 'a',
+          externalRepoId: '1',
+          fullName: 'Acme/API',
+        },
+        repoUrl: 'https://github.com/other/thing.git',
+      }),
+    ).toBe('acme/api');
     expect(repoNameOf(null)).toBeNull();
   });
 });

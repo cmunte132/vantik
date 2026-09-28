@@ -51,21 +51,6 @@ export class LocalRepoController {
     return await this.localRepo.add(workspaceId, userId, body.path);
   }
 
-  /**
-   * The folders inside one repository that a module can claim.
-   *
-   * This route comes before the bare `:repositoryId` routes. Nest matches in
-   * the order it is given.
-   */
-  @Get(':repositoryId/folders')
-  @UseGuards(AuthGuard)
-  async folders(
-    @Workspace() workspaceId: string,
-    @Param() params: LocalRepositoryIdDto,
-  ) {
-    return await this.localRepo.folders(workspaceId, params.repositoryId);
-  }
-
   @Delete(':repositoryId')
   @UseGuards(AuthGuard)
   async remove(

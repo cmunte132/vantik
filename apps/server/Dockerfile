@@ -57,7 +57,9 @@ RUN --mount=type=cache,id=turbo,target=/app/.turbo,sharing=locked \
 # Runner. No pnpm: the entrypoint calls prisma and node directly, which drops a
 # 33MB layer from the runtime image.
 FROM node:24-alpine AS runner
-RUN apk add --no-cache openssl dumb-init bash
+# The local-repo integration reads the files of a knowledge citation with git.
+# Without git, every code citation in a local repository stays unread.
+RUN apk add --no-cache openssl dumb-init bash git
 WORKDIR /app
 ENV NODE_ENV=production
 

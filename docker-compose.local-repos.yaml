@@ -1,0 +1,25 @@
+# Local repositories for the server container. Opt-in overlay on top of
+# docker-compose.yaml:
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.local-repos.yaml up -d
+#
+# The local-repo integration reads code with git, at the path that a person
+# gave when they added the repository. The server container has no access to
+# the disk of the host. Without this overlay, every code citation in a local
+# repository stays unread, and triage escalates the entry with CITATION_FAILED.
+#
+# Set LOCAL_REPO_ROOT in .env to the directory that holds your checkouts, for
+# example /Users/you/Code. This overlay mounts that directory read-only at the
+# same path in the container, so a repository path that works on the host also
+# works in the container. The server also uses LOCAL_REPO_ROOT as the fence: it
+# refuses a repository path outside it.
+#
+# Do not set LOCAL_REPO_ROOT to your home directory. The server can then read
+# every file in it, for example ~/.ssh.
+
+name: vantik
+
+services:
+  server:
+    volumes:
+      - ${LOCAL_REPO_ROOT:?set LOCAL_REPO_ROOT in .env to the directory that holds your checkouts}:${LOCAL_REPO_ROOT}:ro

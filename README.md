@@ -184,6 +184,21 @@ The end-to-end tests drive a running stack from the outside, with the
 `docker-compose.e2e.yaml` overlay. CI runs them on every pull request. To set
 them up, read [apps/e2e/README.md](apps/e2e/README.md).
 
+### Local repositories
+
+The local-repo integration reads code from a git checkout on your disk. The
+knowledge bank uses it to check code citations. The server container cannot
+read your disk unless you add the local repositories overlay:
+
+```bash
+echo 'LOCAL_REPO_ROOT=/Users/you/Code' >> .env
+docker compose -f docker-compose.yaml -f docker-compose.local-repos.yaml up -d
+```
+
+The overlay mounts `LOCAL_REPO_ROOT` read-only at the same path in the
+container. A repository must be inside that directory. Do not set it to your
+home directory, because the server can then read every file in it.
+
 ### Observability
 
 The server has OpenTelemetry instrumentation, but it exports no data until you

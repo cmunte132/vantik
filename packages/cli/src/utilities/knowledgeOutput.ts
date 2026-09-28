@@ -1,4 +1,5 @@
 import type {
+  ConsolidateProposal,
   ContextPack,
   KnowledgeEntry,
   KnowledgeProof,
@@ -157,6 +158,7 @@ export function renderHits(hits: KnowledgeHit[]): string {
         hit.kind === 'page' ? 'page' : 'fact',
         hit.scope ?? null,
         hit.trust ? TRUST[hit.trust] : hit.verified ? 'verified' : null,
+        hit.evidenceFor ? `evidence for ${hit.evidenceFor.title}` : null,
       ]
         .filter(Boolean)
         .join(' · ');
@@ -224,6 +226,17 @@ export function renderGaps(gaps: KnowledgeGap[]): string {
 
 export function renderPageRef(page: KnowledgePageRef, verb: string): string {
   return `${chalkGreen(verb)} ${page.title} ${chalkGrey(page.id)}`;
+}
+
+export function renderConsolidateProposal(
+  proposal: ConsolidateProposal,
+): string {
+  return [
+    `${chalkGreen('Proposed')} folding ${proposal.entryIds.length} ` +
+      `entr${proposal.entryIds.length === 1 ? 'y' : 'ies'} into ` +
+      `${proposal.page.title} ${chalkGrey(proposal.proposalId)}`,
+    chalkGrey('Nothing changes until a person accepts it in the review queue.'),
+  ].join('\n');
 }
 
 export function renderTriage(result: {

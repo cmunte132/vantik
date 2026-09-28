@@ -69,7 +69,7 @@ function queue(
   items: KnowledgeReviewItem[],
   autoTriage: KnowledgeReviewQueue['autoTriage'] = 'on',
 ): KnowledgeReviewQueue {
-  return { autoTriage, items, reasons: [] };
+  return { autoTriage, items, reasons: [], pageProposals: [] };
 }
 
 const nowhere = (): PageEntryType | undefined => undefined;

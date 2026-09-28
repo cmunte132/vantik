@@ -48,6 +48,30 @@ describe('trust', () => {
     ).toBe(KnowledgeTrustEnum.GROUNDED);
   });
 
+  it('[KG-2.7] [KG-7.4] stays GROUNDED once folded into a page body, which keeps it as evidence', () => {
+    expect(
+      entryTrust({
+        status: PageEntryStatusEnum.CONSOLIDATED,
+        verifiedAt: null,
+        citations: [{ checkResult: 'HOLDS' }],
+      }),
+    ).toBe(KnowledgeTrustEnum.GROUNDED);
+
+    for (const status of [
+      PageEntryStatusEnum.SUPERSEDED,
+      PageEntryStatusEnum.ARCHIVED,
+      PageEntryStatusEnum.DISPUTED,
+    ]) {
+      expect(
+        entryTrust({
+          status,
+          verifiedAt: null,
+          citations: [{ checkResult: 'HOLDS' }],
+        }),
+      ).toBe(KnowledgeTrustEnum.UNGROUNDED);
+    }
+  });
+
   it('[KG-2.7] is UNGROUNDED with no citations, one that failed or went unread, or before acceptance', () => {
     const ungrounded = [
       { status: STANDING, citations: [] },

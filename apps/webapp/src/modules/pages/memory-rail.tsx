@@ -23,7 +23,7 @@ import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
-import { PageEntryStatus, type PageEntryType } from 'common/types';
+import { PageEntryStatus, PageKind, type PageEntryType } from 'common/types';
 
 import { useLocalCommonState } from 'hooks/use-local-state';
 
@@ -51,7 +51,11 @@ import { ReviewQueue } from './review-queue';
  * away until asked for.
  */
 export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
-  const { pageEntriesStore } = useContextStore();
+  const { pageEntriesStore, pagesStore } = useContextStore();
+  // A generated page is written from its facts already; there is nothing to
+  // fold into it by hand.
+  const generated =
+    pagesStore.getPageWithId(pageId)?.kind === PageKind.GENERATED;
 
   // Collapsed until asked for, and the choice sticks across pages — a rail you
   // have to close on every document is worse than one that was never there.
@@ -178,7 +182,9 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
             empty="Nothing yet"
           >
             <p className="text-muted-foreground mb-1">
-              Pick any that have earned a place in the page itself.
+              {generated
+                ? 'The page is written from these as they change.'
+                : 'Pick any that have earned a place in the page itself.'}
             </p>
 
             {standing.map((entry) => (
@@ -192,7 +198,7 @@ export const MemoryRail = observer(({ pageId }: { pageId: string }) => {
               />
             ))}
 
-            {picked.size > 0 && (
+            {picked.size > 0 && !generated && (
               <div className="flex items-center gap-1 pt-1">
                 <Button
                   variant="secondary"

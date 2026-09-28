@@ -20,6 +20,8 @@ import {
   useRevertPageMutation,
 } from 'services/pages';
 
+import { summarize } from './history-summary';
+
 /**
  * What has happened to this page, and a way back.
  *
@@ -154,7 +156,10 @@ const Revision = observer(
         </div>
 
         {showDiff && revision.previousBodyMarkdown !== null && (
-          <Diff before={revision.previousBodyMarkdown} after={currentMarkdown} />
+          <Diff
+            before={revision.previousBodyMarkdown}
+            after={currentMarkdown}
+          />
         )}
       </div>
     );
@@ -170,7 +175,10 @@ const Revision = observer(
  */
 const Diff = observer(
   ({ before, after }: { before: string; after: string }) => {
-    const lines = React.useMemo(() => diffLines(before, after), [before, after]);
+    const lines = React.useMemo(
+      () => diffLines(before, after),
+      [before, after],
+    );
 
     // Happens whenever the change has already been undone, which is exactly
     // when someone is most likely to be checking. A block of unmarked grey
@@ -196,7 +204,11 @@ const Diff = observer(
             )}
           >
             <span className="select-none mr-2">
-              {line.kind === 'added' ? '+' : line.kind === 'removed' ? '−' : ' '}
+              {line.kind === 'added'
+                ? '+'
+                : line.kind === 'removed'
+                  ? '−'
+                  : ' '}
             </span>
             {line.value || ' '}
           </div>
@@ -266,42 +278,4 @@ function diffLines(before: string, after: string): DiffLine[] {
   }
 
   return result;
-}
-
-/** The patch, in words. `{ title: { from, to } }` is not a sentence. */
-function summarize(changes: Record<string, unknown>): string {
-  if (changes.created) {
-    return 'Created the page';
-  }
-
-  if (changes.revertedTo) {
-    return 'Restored an earlier version';
-  }
-
-  if (changes.consolidated) {
-    const count = (changes.consolidated as { to: number }).to;
-    return `Wrote ${count} ${count === 1 ? 'note' : 'notes'} into the page`;
-  }
-
-  const parts: string[] = [];
-
-  if (changes.title) {
-    const { from, to } = changes.title as { from: string; to: string };
-    parts.push(`Renamed “${from}” to “${to}”`);
-  }
-
-  if (changes.body) {
-    parts.push('Edited the body');
-  }
-
-  if (changes.parentId) {
-    parts.push('Moved the page');
-  }
-
-  if (changes.entryPolicy) {
-    const { to } = changes.entryPolicy as { to: string };
-    parts.push(`Set who may add facts to ${to.toLowerCase()}`);
-  }
-
-  return parts.length > 0 ? parts.join(' · ') : 'Changed the page';
 }

@@ -56,6 +56,15 @@ export interface ProofRow {
   citations?: ProofCitationRow[] | null;
 }
 
+/**
+ * Statuses of an accepted entry: standing, or folded into a page body by a
+ * person accepting the consolidation, and kept as that body's evidence.
+ */
+const ACCEPTED: string[] = [
+  PageEntryStatusEnum.STANDING,
+  PageEntryStatusEnum.CONSOLIDATED,
+];
+
 /** Results under which a citation still supports its claim. */
 const HOLDING: string[] = [
   PageEntryCitationCheckEnum.HOLDS,
@@ -66,7 +75,9 @@ const HOLDING: string[] = [
  * An entry's trust tier.
  *
  * A person's confirmation outranks everything. Otherwise an entry is grounded
- * when it was accepted, cites something, and every citation still reads the
+ * when it was accepted (standing, or consolidated into a page body, which
+ * does not make its citations any less checked), cites something, and every
+ * citation still reads the
  * same, in place or moved. A changed citation is not grounded even when a
  * judge thought the new code still supports the claim: the judge is a model's
  * opinion, and grounded means the text itself was checked. An unread
@@ -86,7 +97,7 @@ export function entryTrust(entry: {
   const citations = entry.citations ?? [];
 
   if (
-    entry.status === PageEntryStatusEnum.STANDING &&
+    ACCEPTED.includes(entry.status) &&
     citations.length > 0 &&
     citations.every((citation) => HOLDING.includes(citation.checkResult ?? ''))
   ) {

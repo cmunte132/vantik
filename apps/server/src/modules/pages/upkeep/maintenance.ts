@@ -223,3 +223,26 @@ export function unusedSince(cutoff: Date): Prisma.PageEntryWhereInput {
     citations: { none: heldSince(cutoff) },
   };
 }
+
+/**
+ * The entries a live page cites, in one workspace or in every one. A page
+ * that cites an entry is what gets read in its place, so the entry going
+ * unserved says nothing about whether it is wanted: decay, and the gardener
+ * asking about a verified entry, leave these alone. Bounded by what pages
+ * cite, which their sections keep small.
+ */
+export async function citedByLivePages(
+  prisma: PrismaService,
+  workspaceId?: string,
+): Promise<string[]> {
+  const pages = await prisma.page.findMany({
+    where: {
+      deleted: null,
+      ...(workspaceId && { workspaceId }),
+      citedEntryIds: { isEmpty: false },
+    },
+    select: { citedEntryIds: true },
+  });
+
+  return [...new Set(pages.flatMap((page) => page.citedEntryIds))];
+}

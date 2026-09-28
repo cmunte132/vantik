@@ -11,6 +11,7 @@ import { configureKnowledgeSyncCommands } from './knowledge-sync';
 import { collectCitation } from '../utilities/citations';
 import { chalkError } from '../utilities/cliOutput';
 import {
+  renderConsolidateProposal,
   renderContextPack,
   renderEntries,
   renderGaps,
@@ -329,7 +330,9 @@ export function configureKnowledgeCommands(program: Command) {
 
   knowledge
     .command('consolidate')
-    .description('Fold standing facts into a page body and mark them folded')
+    .description(
+      'Propose folding standing facts into a page body, for a person to accept',
+    )
     .argument('<page>', 'Page title or id')
     .requiredOption('-b, --body <markdown>', 'The rewritten page body')
     .option(
@@ -346,7 +349,7 @@ export function configureKnowledgeCommands(program: Command) {
             body: options.body,
             entryIds: options.entry,
           }),
-        (result) => renderPageRef(result, 'Consolidated into'),
+        renderConsolidateProposal,
       );
     });
 

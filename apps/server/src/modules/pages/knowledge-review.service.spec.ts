@@ -7,6 +7,7 @@
  * when the transaction runs it, and a transaction that throws is undone, so
  * a verdict is seen to land with the change it was given for.
  */
+import { ForbiddenException } from '@nestjs/common';
 import {
   KnowledgeEscalationReason as Reason,
   KnowledgeTriageDecisionType as Decision,
@@ -153,14 +154,22 @@ function store(seed: Seed) {
       { id: OTHER_WORKSPACE, preferences: seed.preferences ?? {} },
     ],
   ]);
+  const page = (id: string, workspaceId: string): Row => ({
+    id,
+    workspaceId,
+    deleted: null,
+    title: `Page ${id}`,
+    kind: 'AUTHORED',
+    description: null,
+    citedEntryIds: [],
+    updatedAt: new Date(NOW - 60_000),
+  });
   const pages = new Map<string, Row>([
-    [PAGE, { id: PAGE, workspaceId: WORKSPACE, deleted: null }],
-    [OTHER_PAGE, { id: OTHER_PAGE, workspaceId: WORKSPACE, deleted: null }],
-    [
-      FOREIGN_PAGE,
-      { id: FOREIGN_PAGE, workspaceId: OTHER_WORKSPACE, deleted: null },
-    ],
+    [PAGE, page(PAGE, WORKSPACE)],
+    [OTHER_PAGE, page(OTHER_PAGE, WORKSPACE)],
+    [FOREIGN_PAGE, page(FOREIGN_PAGE, OTHER_WORKSPACE)],
   ]);
+  const proposals: Row[] = [];
   const entries = new Map(seed.entries.map((row) => [row.id as string, row]));
   const decisions = [...(seed.decisions ?? [])];
   const backoff = [...(seed.backoff ?? [])];
@@ -192,10 +201,19 @@ function store(seed: Seed) {
     }
   };
 
+  const proposalView = (row: Row): Row => ({
+    ...row,
+    page: pages.get(row.pageId as string),
+  });
   const client = {
     page: {
       findUnique: jest.fn(({ where }: { where: { id: string } }) =>
         lazy(() => pages.get(where.id) ?? null),
+      ),
+      findFirst: jest.fn(({ where }: { where: Where }) =>
+        lazy(
+          () => [...pages.values()].find((row) => matches(row, where)) ?? null,
+        ),
       ),
       update: jest.fn(({ where, data }: { where: { id: string }; data: Row }) =>
         lazy(() => {
@@ -207,6 +225,70 @@ function store(seed: Seed) {
       ),
     },
     pageHistory: { create: jest.fn(() => lazy(() => ({}))) },
+    pageProposal: {
+      create: jest.fn(({ data }: { data: Row }) =>
+        lazy(() => {
+          const row = {
+            id: `proposal-${proposals.length + 1}`,
+            createdAt: new Date(++clock),
+            state: 'OPEN',
+            decidedById: null as string | null,
+            decidedAt: null as Date | null,
+            ...data,
+          };
+          proposals.push(row);
+
+          return proposalView(row);
+        }),
+      ),
+      findFirst: jest.fn(({ where }: { where: Where }) =>
+        lazy(
+          () =>
+            proposals.map(proposalView).find((row) => matches(row, where)) ??
+            null,
+        ),
+      ),
+      findMany: jest.fn(({ where, orderBy }: { where: Where; orderBy?: Row }) =>
+        lazy(() =>
+          proposals
+            .map(proposalView)
+            .filter((row) => matches(row, where))
+            .sort(
+              (a, b) =>
+                ((a.createdAt as Date).getTime() -
+                  (b.createdAt as Date).getTime()) *
+                (orderBy?.createdAt === 'desc' ? -1 : 1),
+            ),
+        ),
+      ),
+      updateMany: jest.fn(({ where, data }: { where: Where; data: Row }) =>
+        lazy(() => {
+          const hit = proposals.filter((row) => matches(row, where));
+          hit.forEach((row) => apply(row, data));
+
+          return { count: hit.length };
+        }),
+      ),
+      findUniqueOrThrow: jest.fn(({ where }: { where: { id: string } }) =>
+        lazy(() =>
+          proposalView(proposals.find((row) => row.id === where.id) as Row),
+        ),
+      ),
+      // As Prisma's: a row the filter no longer matches is an error.
+      update: jest.fn(({ where, data }: { where: Where; data: Row }) =>
+        lazy(() => {
+          const row = proposals.find((candidate) => matches(candidate, where));
+
+          if (!row) {
+            throw new Error('Record to update not found.');
+          }
+
+          apply(row, data);
+
+          return row;
+        }),
+      ),
+    },
     workspace: {
       findUnique: jest.fn(({ where }: { where: { id: string } }) =>
         lazy(() => workspaces.get(where.id) ?? null),
@@ -681,6 +763,64 @@ describe('the review queue', () => {
     ).toEqual([]);
   });
 
+  it('[KG-7.4] lists consolidations of pages people write apart from the entries, for the page asked for', async () => {
+    const standing = { status: PageEntryStatusEnum.STANDING };
+    const t = harness({
+      entries: [
+        entry('on-page', standing),
+        entry('on-other', { ...standing, pageId: OTHER_PAGE }),
+        entry('foreign', { ...standing, pageId: FOREIGN_PAGE }),
+        entry('waiting'),
+      ],
+    });
+    const propose = (pageId: string) =>
+      t.pagesService.consolidate(pageId, 'agent-1', {
+        descriptionMarkdown: 'Folded in.',
+      });
+    const first = await propose(PAGE);
+    const second = await propose(OTHER_PAGE);
+    await propose(FOREIGN_PAGE);
+    const declined = await propose(PAGE);
+    await t.pagesService.declineProposal(PAGE, declined.id, 'person-1');
+
+    const queue = await t.review.queue(WORKSPACE);
+    expect(queue.pageProposals.map((row) => row.id)).toEqual([
+      second.id,
+      first.id,
+    ]);
+    expect(queue.pageProposals[1]).toMatchObject({
+      pageId: PAGE,
+      pageTitle: `Page ${PAGE}`,
+      entryIds: ['on-page'],
+      proposedById: 'agent-1',
+      state: 'OPEN',
+    });
+    expect(queue.pageProposals[1].bodyMarkdown).toContain('Folded in.');
+    // Beside the entries, not among them, and not counted as reasons.
+    expect(queue.items.map((item) => item.entry.id)).toEqual(['waiting']);
+    expect(queue.reasons).toEqual([]);
+
+    expect(
+      (await t.review.queue(WORKSPACE, { pageId: OTHER_PAGE })).pageProposals,
+    ).toEqual([expect.objectContaining({ id: second.id })]);
+    expect(
+      (
+        await t.review.queue(WORKSPACE, {
+          reasons: [KnowledgeReviewReasonEnum.AUDIT],
+        })
+      ).pageProposals,
+    ).toHaveLength(2);
+    expect(
+      (await t.review.queue(WORKSPACE, { pageId: FOREIGN_PAGE })).pageProposals,
+    ).toEqual([]);
+
+    // Answered, it leaves the queue.
+    await t.pagesService.acceptProposal(PAGE, first.id, 'person-1');
+    expect(
+      (await t.review.queue(WORKSPACE)).pageProposals.map((row) => row.id),
+    ).toEqual([second.id]);
+  });
+
   it('[KG-5.1] drops what a person has ruled on, and audits of entries that moved on', async () => {
     const stale = audited('decayed', Decision.AUTO_ACCEPT);
     stale.entry.status = PageEntryStatusEnum.ARCHIVED;
@@ -1067,7 +1207,7 @@ describe('verdicts from what people do', () => {
     });
   });
 
-  it('[KG-5.5] a person folding an audited entry into its page keeps it; an agent decides nothing', async () => {
+  it('[KG-5.5] [KG-7.4] a person accepting an audited entry folded into its page keeps it; proposing decides nothing', async () => {
     const kept = audited('kept', Decision.AUTO_ACCEPT);
     const byAgent = audited('by-agent', Decision.AUTO_ACCEPT, {
       id: 'decision-by-agent',
@@ -1078,23 +1218,43 @@ describe('verdicts from what people do', () => {
       decisions: [kept.decision, byAgent.decision],
     });
 
-    await t.pagesService.consolidate(PAGE, 'person-1', {
+    const byPerson = await t.pagesService.consolidate(PAGE, 'person-1', {
       descriptionMarkdown: 'Fact kept.',
     });
-    await t.pagesService.consolidate(OTHER_PAGE, 'agent-1', {
+    const fromAgent = await t.pagesService.consolidate(OTHER_PAGE, 'agent-1', {
       descriptionMarkdown: 'Fact by-agent.',
     });
 
+    // A proposal changes nothing, and is no verdict, whoever makes it.
+    for (const id of ['kept', 'by-agent']) {
+      expect(t.entries.get(id)?.status).toBe('STANDING');
+      expect(decided(t, id)).toMatchObject({ verdict: null });
+    }
+
+    await t.pagesService.acceptProposal(PAGE, byPerson.id, 'person-1');
     expect(t.entries.get('kept')?.status).toBe('CONSOLIDATED');
     expect(decided(t, 'kept')).toMatchObject({
       verdict: Verdict.ACCEPTED,
       agreed: true,
       verdictById: 'person-1',
     });
-    expect(t.entries.get('by-agent')?.status).toBe('CONSOLIDATED');
+
+    // An agent cannot accept one, its own included; a person can, and the
+    // verdict is theirs.
+    await expect(
+      t.pagesService.acceptProposal(OTHER_PAGE, fromAgent.id, 'agent-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(t.entries.get('by-agent')?.status).toBe('STANDING');
     expect(decided(t, 'by-agent')).toMatchObject({ verdict: null });
-    // Agreement was measured again once, after the person's verdict.
-    expect(t.prisma.$executeRaw).toHaveBeenCalledTimes(1);
+
+    await t.pagesService.acceptProposal(OTHER_PAGE, fromAgent.id, 'person-2');
+    expect(t.entries.get('by-agent')?.status).toBe('CONSOLIDATED');
+    expect(decided(t, 'by-agent')).toMatchObject({
+      verdict: Verdict.ACCEPTED,
+      verdictById: 'person-2',
+    });
+    // Agreement was measured again after each person's verdict.
+    expect(t.prisma.$executeRaw).toHaveBeenCalledTimes(2);
   });
 
   it('[KG-5.5] lands with the change or not at all', async () => {

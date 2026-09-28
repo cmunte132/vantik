@@ -1361,9 +1361,9 @@ model PageHistory {
 
 /// A change to a page body that waits on a person.
 ///
-/// An agent consolidating entries into a page people maintain does not edit
-/// it: the rewrite is proposed here, and changes nothing until a person
-/// accepts it, when it is applied and recorded in the page's history.
+/// Consolidating entries into a page people maintain does not edit it,
+/// whoever asks: the rewrite is proposed here, and changes nothing until a
+/// person accepts it, when it is applied and recorded in the page's history.
 model PageProposal {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())

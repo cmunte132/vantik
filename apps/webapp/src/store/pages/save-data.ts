@@ -22,6 +22,8 @@ export async function savePageData(
 
         entryPolicy: record.data.entryPolicy,
         visibility: record.data.visibility,
+        kind: record.data.kind ?? 'AUTHORED',
+        question: record.data.question ?? null,
 
         workspaceId: record.data.workspaceId,
         createdById: record.data.createdById,

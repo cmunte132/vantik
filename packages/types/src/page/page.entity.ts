@@ -38,9 +38,10 @@ export enum PageVisibilityEnum {
 }
 
 /**
- * Who writes a page's body. People write an AUTHORED page, and an agent can
- * only propose a change to it. The gardener builds a GENERATED page from the
- * entries each of its sections cites, and edits it as those entries change.
+ * Who writes a page's body. People write an AUTHORED page, and entries are
+ * folded into it only by a proposal a person accepts. The gardener builds a
+ * GENERATED page from the entries each of its sections cites, and edits it
+ * as those entries change.
  */
 export enum PageKindEnum {
   AUTHORED = 'AUTHORED',
@@ -138,9 +139,10 @@ export class Page {
 }
 
 /**
- * A change to a page body waiting on a person: an agent's consolidation into
- * a page people maintain. The body is markdown here, as every page body the
- * API returns is.
+ * A change to a page body waiting on a person: a consolidation of entries
+ * into a page people maintain, whoever asked for it. A person consolidating
+ * in the webapp accepts their own at once. The body is markdown here, as
+ * every page body the API returns is.
  */
 export interface PageProposal {
   id: string;

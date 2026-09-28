@@ -1479,3 +1479,83 @@ describe('citations and proof', () => {
     });
   });
 });
+
+describe('consolidating a page', () => {
+  const pages = [{ id: 'page-1', title: 'Runbook' }];
+  const proposal = {
+    id: 'proposal-1',
+    createdAt: '2026-09-28T10:00:00.000Z',
+    pageId: 'page-1',
+    pageTitle: 'Runbook',
+    bodyMarkdown: '## Runbook\n\nRestart the worker.',
+    entryIds: ['entry-1', 'entry-2'],
+    proposedById: 'agent-1',
+    state: 'OPEN',
+    decidedById: null as string | null,
+    decidedAt: null as string | null,
+  };
+
+  it('[KG-7.4] proposes the body and says nothing has changed until a person accepts it', async () => {
+    const { agent, calls } = makeAgent({
+      'GET /pages': pages,
+      'POST /pages/page-1/consolidate': proposal,
+    });
+
+    const result = await agent.consolidate({
+      page: 'Runbook',
+      body: '## Runbook\n\nRestart the worker.',
+      entryIds: ['entry-1', 'entry-2'],
+    });
+
+    expect(result).toEqual({
+      status: 'proposed',
+      proposalId: 'proposal-1',
+      page: { id: 'page-1', title: 'Runbook' },
+      entryIds: ['entry-1', 'entry-2'],
+      guidance: expect.stringContaining('until a person accepts'),
+    });
+    expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
+      descriptionMarkdown: '## Runbook\n\nRestart the worker.',
+      entryIds: ['entry-1', 'entry-2'],
+    });
+  });
+
+  it('[KG-7.4] passes on which page an entry is the evidence for', async () => {
+    const entry = {
+      kind: 'entry',
+      pageId: 'page-1',
+      pageTitle: 'Runbook',
+      entryId: 'entry-1',
+      content: 'The worker drains its queue before it restarts.',
+      scope: null as string | null,
+      verified: false,
+      retrievalCount: 0,
+      trust: 'GROUNDED',
+      citations: [] as unknown[],
+      lastCheckedAt: null as string | null,
+      lastCheckedSha: null as string | null,
+    };
+    const { agent } = makeAgent({
+      'GET /knowledge/search': {
+        hits: [
+          { ...entry, evidenceFor: { pageId: 'page-1', pageTitle: 'Runbook' } },
+          { ...entry, entryId: 'entry-2', evidenceFor: null },
+        ],
+      },
+      'POST /knowledge/context': {
+        items: [{ ...entry, entryId: 'entry-3' }],
+        estimatedTokens: 10,
+        tokenBudget: 100,
+        omitted: 0,
+      },
+    });
+
+    const hits = await agent.recallKnowledge({ query: 'worker restart' });
+    expect(hits.map((hit) => hit.evidenceFor)).toEqual([
+      { id: 'page-1', title: 'Runbook' },
+      null,
+    ]);
+    const pack = await agent.loadContext({ task: 'restart the worker' });
+    expect(pack.items[0].evidenceFor).toBeNull();
+  });
+});

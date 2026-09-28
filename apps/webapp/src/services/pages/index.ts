@@ -1,6 +1,7 @@
 import type {
   KnowledgeAgreementReport,
   KnowledgeReviewQueue,
+  PageProposal,
 } from '@vantikhq/types';
 
 import { useQuery } from '@tanstack/react-query';
@@ -10,14 +11,21 @@ import type {
   PageEntryStatus,
   PageEntryPolicy,
   PageEntryType,
+  PageKind,
   PageType,
 } from 'common/types';
 
 import { ajaxDelete, ajaxGet, ajaxPost, mutationHook } from 'services/utils';
 
 import { moduleKnowledgeUrl } from './module-knowledge';
+import {
+  type PageProposalRef,
+  proposalAnswerUrl,
+  proposeAndAccept,
+} from './page-proposals';
 
 export { MODULE_KNOWLEDGE_LIMIT } from './module-knowledge';
+export { pageProposalSummary } from './page-proposals';
 
 /**
  * The page and entry API, as react-query hooks.
@@ -49,6 +57,8 @@ export interface UpdatePageParams {
   parentId?: string | null;
   sortOrder?: number;
   entryPolicy?: PageEntryPolicy;
+  /** AUTHORED takes a generated page over by hand. */
+  kind?: PageKind;
 }
 
 export function updatePage({
@@ -68,11 +78,39 @@ export interface ConsolidatePageParams {
   entryIds?: string[];
 }
 
+/** Proposes folding standing entries into a page body; nothing changes yet. */
 export function consolidatePage({
   pageId,
   ...data
-}: ConsolidatePageParams): Promise<PageType> {
+}: ConsolidatePageParams): Promise<PageProposal> {
   return ajaxPost({ url: `/api/v1/pages/${pageId}/consolidate`, data });
+}
+
+export function acceptPageProposal(ref: PageProposalRef): Promise<PageType> {
+  return ajaxPost({ url: proposalAnswerUrl(ref, 'accept') });
+}
+
+export function declinePageProposal(
+  ref: PageProposalRef,
+): Promise<PageProposal> {
+  return ajaxPost({ url: proposalAnswerUrl(ref, 'decline') });
+}
+
+export function answerPageProposal({
+  accept,
+  ...ref
+}: PageProposalRef & { accept: boolean }): Promise<unknown> {
+  return accept ? acceptPageProposal(ref) : declinePageProposal(ref);
+}
+
+/**
+ * A person folding facts into the page they are reading: proposed, and
+ * accepted by them at once, since accepting is what a person does.
+ */
+export function consolidateAndAccept(
+  params: ConsolidatePageParams,
+): Promise<PageType> {
+  return proposeAndAccept(() => consolidatePage(params), acceptPageProposal);
 }
 
 export interface UpdateEntryParams {
@@ -126,7 +164,15 @@ export const useUpdatePageMutation = mutationHook(updatePage);
 
 export const useDeletePageMutation = mutationHook(deletePage);
 
-export const useConsolidatePageMutation = mutationHook(consolidatePage);
+// Accepting marks the facts folded in and records the change in the page's
+// history, and can answer an audit, so each is asked for again.
+export const useConsolidatePageMutation = mutationHook(consolidateAndAccept, {
+  invalidates: ['knowledge-review', 'knowledge-agreement', 'page-history'],
+});
+
+export const useAnswerPageProposalMutation = mutationHook(answerPageProposal, {
+  invalidates: ['knowledge-review', 'knowledge-agreement', 'page-history'],
+});
 
 // Either can resolve an escalation or an audit, so the queue's reasons and
 // the agreement figures are asked for again.
@@ -345,6 +391,8 @@ export interface KnowledgeHit {
   content: string;
   scope: string | null;
   verified: boolean;
+  /** For an entry a page cites, that page: the entry is its evidence. */
+  evidenceFor?: { pageId: string; pageTitle: string } | null;
 }
 
 /**

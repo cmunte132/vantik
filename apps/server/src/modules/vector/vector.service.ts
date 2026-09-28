@@ -38,6 +38,7 @@ import {
   MAX_TYPESENSE_PER_PAGE,
   PAGE_QUERY_BY,
   RESOLUTION_SNIPPET_LENGTH,
+  SERVED_STATUSES,
   SIMILAR_ISSUE_DISTANCE_THRESHOLD,
   issueSchema,
   pageEmbedding,
@@ -669,7 +670,105 @@ export class VectorService implements OnModuleInit {
 
     const result = mapKnowledgeResults(searchResults);
 
-    return { ...result, hits: await this.liveWithProof(result.hits) };
+    return {
+      ...result,
+      hits: await this.asEvidence(
+        workspaceId,
+        await this.liveWithProof(result.hits),
+      ),
+    };
+  }
+
+  /**
+   * Marks each entry a page cites as the evidence for that page, and ranks
+   * it below the page when both were found.
+   *
+   * A page cites the entries consolidated into its body, and a generated
+   * page the entries its sections were written from (`Page.citedEntryIds`);
+   * an entry CONSOLIDATED before pages kept that list is its own page's.
+   * Such an entry is served, since it is what the page's words rest on, but
+   * never above the page for the same match, and never as a second source
+   * for what the page says. Nothing else is reordered.
+   */
+  private async asEvidence(
+    workspaceId: string,
+    hits: KnowledgeSearchHit[],
+  ): Promise<KnowledgeSearchHit[]> {
+    const entryIds = hits
+      .map((hit) => hit.entryId)
+      .filter((id): id is string => Boolean(id));
+
+    if (entryIds.length === 0) {
+      return hits;
+    }
+
+    const citing = await this.prisma.page.findMany({
+      where: {
+        workspaceId,
+        deleted: null,
+        citedEntryIds: { hasSome: entryIds },
+      },
+      select: { id: true, title: true, citedEntryIds: true },
+    });
+    const pagesFor = (hit: KnowledgeSearchHit) => {
+      const pages =
+        hit.status === PageEntryStatusEnum.CONSOLIDATED
+          ? [{ pageId: hit.pageId, pageTitle: hit.pageTitle }]
+          : [];
+
+      for (const page of citing) {
+        if (
+          page.citedEntryIds.includes(hit.entryId as string) &&
+          !pages.some((known) => known.pageId === page.id)
+        ) {
+          pages.push({ pageId: page.id, pageTitle: page.title });
+        }
+      }
+
+      return pages;
+    };
+
+    const ranked: KnowledgeSearchHit[] = [];
+    const below = new Map<string, KnowledgeSearchHit[]>();
+
+    hits.forEach((hit, index) => {
+      if (!hit.entryId) {
+        ranked.push(hit, ...(below.get(hit.pageId) ?? []));
+        below.delete(hit.pageId);
+        return;
+      }
+
+      const pages = pagesFor(hit);
+
+      if (pages.length === 0) {
+        ranked.push(hit);
+        return;
+      }
+
+      // Held back until the first of its pages found after it, if any.
+      const later = pages.find((page) =>
+        hits
+          .slice(index + 1)
+          .some((other) => !other.entryId && other.pageId === page.pageId),
+      );
+      const shown =
+        later ??
+        pages.find((page) =>
+          ranked.some(
+            (other) => !other.entryId && other.pageId === page.pageId,
+          ),
+        ) ??
+        pages[0];
+      const marked = { ...hit, evidenceFor: shown };
+
+      if (later) {
+        below.set(later.pageId, [...(below.get(later.pageId) ?? []), marked]);
+      } else {
+        ranked.push(marked);
+      }
+    });
+
+    return ranked;
   }
 
   /**
@@ -915,11 +1014,12 @@ function buildFilterBy(
 /**
  * The read-side half of the status guarantee.
  *
- * `PROPOSED`, `CONSOLIDATED`, `SUPERSEDED`, `DISPUTED` and `ARCHIVED` must
- * never reach a caller: getting this wrong means agents are served facts the
- * workspace has already rejected, replaced, or folded into a page body — and
- * the duplicate is as damaging as the retraction, because two copies of one
- * fact read as two independent confirmations of it.
+ * `PROPOSED`, `SUPERSEDED`, `DISPUTED` and `ARCHIVED` must never reach a
+ * caller: getting this wrong means agents are served facts the workspace has
+ * not accepted, or has rejected or replaced. `CONSOLIDATED` is served, as the
+ * evidence for the page it was folded into, and `asEvidence` marks it so and
+ * ranks it below that page: two copies of one fact read as two independent
+ * confirmations of it otherwise.
  *
  * Callers may widen the status set for triage surfaces, but never past the
  * workspace filter, and the same `UUID_REGEX` guard that stops filter injection
@@ -944,9 +1044,7 @@ function buildKnowledgeFilterBy(
   }
 
   const statuses = (
-    options.includeStatuses?.length
-      ? options.includeStatuses
-      : [PageEntryStatusEnum.STANDING]
+    options.includeStatuses?.length ? options.includeStatuses : SERVED_STATUSES
   ).filter((status) =>
     Object.values(PageEntryStatusEnum).includes(status as PageEntryStatusEnum),
   );

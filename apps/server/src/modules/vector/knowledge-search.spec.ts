@@ -149,7 +149,16 @@ function sortKey(key: string, query: string): (doc: Doc) => number {
  * is what postgres holds for an entry beyond its id: its status,
  * verification and citations, which the proof is read from.
  */
-function fakeIndex(entries: Record<string, Doc> = {}) {
+function fakeIndex(
+  entries: Record<string, Doc> = {},
+  citing: Array<{
+    id: string;
+    title: string;
+    citedEntryIds: string[];
+    deleted?: Date | null;
+    workspaceId?: string;
+  }> = [],
+) {
   const docs = new Map<string, Doc>();
   const searches: Array<Record<string, unknown>> = [];
 
@@ -223,11 +232,30 @@ function fakeIndex(entries: Record<string, Doc> = {}) {
     },
   } as unknown as TypesenseClient;
 
-  // Everything indexed still exists, so the stale-hit filter keeps it all.
-  const alive = async ({ where }: { where: { id: { in: string[] } } }) =>
-    where.id.in.map((id) => ({ id }));
+  // Everything indexed still exists, so the stale-hit filter keeps it all;
+  // the pages that cite entries are `citing`.
+  const pages = async ({
+    where,
+  }: {
+    where: {
+      id?: { in: string[] };
+      citedEntryIds?: { hasSome: string[] };
+      deleted?: null;
+      workspaceId?: string;
+    };
+  }) =>
+    where.citedEntryIds
+      ? citing.filter(
+          (page) =>
+            (page.workspaceId ?? WORKSPACE) === where.workspaceId &&
+            (where.deleted !== null || !page.deleted) &&
+            page.citedEntryIds.some((id) =>
+              where.citedEntryIds?.hasSome.includes(id),
+            ),
+        )
+      : (where.id?.in ?? []).map((id) => ({ id }));
   const prisma = {
-    page: { findMany: alive },
+    page: { findMany: pages },
     pageEntry: {
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
         where.id.in.map((id) => ({ id, ...entries[id] })),
@@ -695,8 +723,9 @@ describe('near entries, for triage', () => {
         },
       },
     } as unknown as TypesenseClient;
-    const alive = async ({ where }: { where: { id: { in: string[] } } }) =>
-      where.id.in.map((id) => ({ id }));
+    // No page cites an entry here.
+    const alive = async ({ where }: { where: { id?: { in: string[] } } }) =>
+      (where.id?.in ?? []).map((id) => ({ id }));
     const prisma = {
       page: { findMany: alive },
       pageEntry: {
@@ -772,5 +801,159 @@ describe('near entries, for triage', () => {
 
     expect(near.map((hit) => hit.entryId)).toEqual(['same-page']);
     expect(searches[0].filter_by).not.toContain('moduleIds');
+  });
+});
+
+describe('entries a page cites', () => {
+  const at = new Date('2026-09-01');
+  const index = async (
+    service: VectorService,
+    id: string,
+    content: string,
+    extra: Doc = {},
+  ) =>
+    service.indexEntry({
+      id,
+      content,
+      scope: null,
+      status: PageEntryStatusEnum.STANDING,
+      sourceUserId: 'agent-1',
+      verifiedAt: null,
+      retrievalCount: 0,
+      updatedAt: at,
+      pageId: 'notes',
+      moduleIds: [],
+      kind: PageEntryKindEnum.FACT,
+      page: { title: 'Server notes', workspaceId: WORKSPACE },
+      ...extra,
+    } as Parameters<VectorService['indexEntry']>[0]);
+  const page = (service: VectorService, id: string, title: string) =>
+    service.indexPage({
+      id,
+      title,
+      description: null,
+      workspaceId: WORKSPACE,
+      updatedAt: at,
+    });
+
+  it('[KG-7.4] serves an entry folded into a page, as evidence for it, ranked below it', async () => {
+    const { service, searches } = fakeIndex({}, [
+      { id: 'deploys', title: 'Deploys', citedEntryIds: ['folded'] },
+    ]);
+    await page(service, 'deploys', 'Deploys');
+    await index(service, 'folded', 'deploys deploys deploys go out on merge', {
+      status: PageEntryStatusEnum.CONSOLIDATED,
+      pageId: 'deploys',
+      page: { title: 'Deploys', workspaceId: WORKSPACE },
+    });
+    await index(service, 'replaced', 'deploys deploys deploys deploys', {
+      status: PageEntryStatusEnum.SUPERSEDED,
+    });
+    await index(service, 'waiting', 'deploys deploys deploys deploys', {
+      status: PageEntryStatusEnum.PROPOSED,
+    });
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'deploys');
+
+    // The index ranked the entry above the page's body, on more matches.
+    expect(searches[0].filter_by).toContain(
+      'status:=[`STANDING`,`CONSOLIDATED`]',
+    );
+    expect(ids(hits)).toEqual(['page:deploys', 'folded']);
+    expect(hits[1]).toMatchObject({
+      status: PageEntryStatusEnum.CONSOLIDATED,
+      evidenceFor: { pageId: 'deploys', pageTitle: 'Deploys' },
+    });
+    expect(hits[0].evidenceFor).toBeUndefined();
+  });
+
+  it('[KG-7.4] ranks what a generated page cites below the page, and leaves the rest where it was', async () => {
+    const { service } = fakeIndex({}, [
+      // Cited by a page the search did not find, first: it is ranked under
+      // the one it did, and marked as that one's.
+      { id: 'other-guide', title: 'Rolling back', citedEntryIds: ['cited'] },
+      { id: 'guide', title: 'Deploying', citedEntryIds: ['cited'] },
+      // Neither a deleted page nor another workspace's is its page.
+      {
+        id: 'gone',
+        title: 'Gone',
+        citedEntryIds: ['loud'],
+        deleted: new Date(),
+      },
+      {
+        id: 'foreign',
+        title: 'Foreign',
+        citedEntryIds: ['loud'],
+        workspaceId: 'workspace-2',
+      },
+    ]);
+    await index(service, 'loud', 'deploying deploying deploying deploying', {
+      pageId: 'elsewhere',
+    });
+    await index(service, 'cited', 'deploying deploying deploying');
+    await page(service, 'guide', 'Deploying');
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'deploying');
+
+    expect(ids(hits)).toEqual(['loud', 'page:guide', 'cited']);
+    expect(hits[2].evidenceFor).toEqual({
+      pageId: 'guide',
+      pageTitle: 'Deploying',
+    });
+    expect(hits[0].evidenceFor).toBeUndefined();
+  });
+
+  it('[KG-7.4] marks evidence found after a page it is cited by as that page’s, where it was ranked', async () => {
+    const { service } = fakeIndex({}, [
+      { id: 'unseen', title: 'Rolling back', citedEntryIds: ['cited'] },
+      { id: 'guide', title: 'Deploying', citedEntryIds: ['cited'] },
+    ]);
+    await page(service, 'guide', 'Deploying deploying deploying deploying');
+    await index(service, 'loud', 'deploying deploying deploying', {
+      pageId: 'elsewhere',
+    });
+    await index(service, 'cited', 'deploying deploying');
+
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'deploying');
+
+    expect(ids(hits)).toEqual(['page:guide', 'loud', 'cited']);
+    expect(hits[2].evidenceFor).toEqual({
+      pageId: 'guide',
+      pageTitle: 'Deploying',
+    });
+  });
+
+  it('[KG-7.4] still serves the evidence when its page was not found, marked as its page’s', async () => {
+    const { service } = fakeIndex({}, [
+      { id: 'deploys', title: 'Deploys', citedEntryIds: ['folded'] },
+    ]);
+    await page(service, 'deploys', 'Deploys');
+    await index(service, 'folded', 'Deploys go out on merge.', {
+      status: PageEntryStatusEnum.CONSOLIDATED,
+      pageId: 'deploys',
+      page: { title: 'Deploys', workspaceId: WORKSPACE },
+    });
+    // Consolidated before pages kept what they cite: its own page's still.
+    await index(service, 'older', 'Merges deploy on their own.', {
+      status: PageEntryStatusEnum.CONSOLIDATED,
+      pageId: 'runbook',
+      page: { title: 'Runbook', workspaceId: WORKSPACE },
+    });
+
+    // Asking for facts leaves page bodies out.
+    const { hits } = await service.searchKnowledge(WORKSPACE, 'merge', {
+      kinds: [PageEntryKindEnum.FACT],
+    });
+
+    expect(ids(hits).sort()).toEqual(['folded', 'older']);
+    const byId = new Map(hits.map((hit) => [hit.entryId, hit]));
+    expect(byId.get('folded')?.evidenceFor).toEqual({
+      pageId: 'deploys',
+      pageTitle: 'Deploys',
+    });
+    expect(byId.get('older')?.evidenceFor).toEqual({
+      pageId: 'runbook',
+      pageTitle: 'Runbook',
+    });
   });
 });

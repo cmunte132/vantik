@@ -77,10 +77,16 @@ function matches(row: Row, where: Where): boolean {
       }
 
       if (
-        ['in', 'not', 'lt', 'gte', 'hasSome'].some((operator) => operator in c)
+        ['in', 'notIn', 'not', 'lt', 'gte', 'hasSome', 'isEmpty'].some(
+          (operator) => operator in c,
+        )
       ) {
         return (
           (!('in' in c) || (c.in as unknown[]).includes(value)) &&
+          (!('notIn' in c) || !(c.notIn as unknown[]).includes(value)) &&
+          (!('isEmpty' in c) ||
+            (((value as unknown[] | undefined) ?? []).length === 0) ===
+              c.isEmpty) &&
           (!('not' in c) || (value ?? null) !== c.not) &&
           (!('lt' in c) || (value !== null && compare(value, c.lt) < 0)) &&
           (!('gte' in c) || (value != null && compare(value, c.gte) >= 0)) &&
@@ -225,6 +231,11 @@ function harness(seed: Seed = {}) {
   });
 
   const client = {
+    page: {
+      findMany: jest.fn(async ({ where }: { where: Where }) =>
+        [...pages.values()].filter((row) => matches(row, where)),
+      ),
+    },
     $executeRaw: jest.fn(
       async (sql: TemplateStringsArray, ...values: unknown[]) => {
         if (sql.join('?').includes('FOR NO KEY UPDATE')) {
@@ -2385,5 +2396,47 @@ describe('decay asks rather than archives what a person verified', () => {
     ]);
     // Asked, not archived.
     expect(t.entries.get('unused')?.status).toBe(Status.STANDING);
+  });
+
+  it('[KG-7.4] does not ask about a verified entry a live page cites, which is read through the page', async () => {
+    const old = new Date(Date.now() - 400 * DAY);
+    const unused = {
+      verifiedAt: old,
+      createdAt: old,
+      lastServedAt: null as Date | null,
+    };
+    const t = harness({
+      pages: [
+        {
+          id: 'page-generated',
+          workspaceId: WORKSPACE,
+          deleted: null,
+          citedEntryIds: ['cited'],
+        },
+        {
+          id: 'page-gone',
+          workspaceId: WORKSPACE,
+          deleted: new Date(),
+          citedEntryIds: ['cited by a deleted page'],
+        },
+        {
+          id: 'page-elsewhere',
+          workspaceId: 'workspace-2',
+          deleted: null,
+          citedEntryIds: ['cited in another workspace'],
+        },
+      ],
+      entries: [
+        entry('cited', unused),
+        entry('cited by a deleted page', unused),
+        entry('cited in another workspace', unused),
+      ],
+    });
+
+    expect(await t.upkeep.proposeUnused(WORKSPACE)).toBe(2);
+    expect(t.maintenance.map((row) => row.entryId).sort()).toEqual([
+      'cited by a deleted page',
+      'cited in another workspace',
+    ]);
   });
 });

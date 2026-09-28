@@ -35,6 +35,7 @@ import {
   askedBecauseText,
   type CitationEvidence,
   type MaintenanceEvidence,
+  citedByLivePages,
   unusedSince,
 } from './maintenance';
 import { redactSecrets } from '../triage/triage-policy';
@@ -458,10 +459,12 @@ export default class KnowledgeUpkeepService {
    * in use, older than the window, and within it neither served nor found to
    * hold by a check. A person vouched for it, so decay never archives it
    * alone; the proposal waits in the review queue, and is not repeated while
-   * open or soon after a person declined it. Run after each decay pass.
+   * open or soon after a person declined it. Nor about one a live page
+   * cites, which is read through the page. Run after each decay pass.
    */
   async proposeUnused(workspaceId?: string): Promise<number> {
     const cutoff = daysAgo(STANDING_ENTRY_DECAY_DAYS);
+    const cited = await citedByLivePages(this.prisma, workspaceId);
     const candidates = await this.prisma.pageEntry.findMany({
       where: {
         deleted: null,
@@ -469,6 +472,7 @@ export default class KnowledgeUpkeepService {
         verifiedAt: { not: null },
         page: workspaceId ? { workspaceId, deleted: null } : { deleted: null },
         ...unusedSince(cutoff),
+        ...(cited.length ? { id: { notIn: cited } } : {}),
       },
       select: {
         id: true,

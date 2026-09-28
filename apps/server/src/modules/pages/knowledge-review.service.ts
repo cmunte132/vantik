@@ -9,6 +9,7 @@ import {
   PageEntryMaintenanceAction,
   PageEntryProposalState,
   PageEntryStatus,
+  PageProposalState,
   Prisma,
 } from '@prisma/client';
 import {
@@ -22,6 +23,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { knowledgeSettings } from './knowledge-settings';
 import PageEntriesService from './page-entries.service';
+import { PROPOSAL_SELECT, proposalResponse } from './pages.service';
 import { statusLeftBy } from './triage/agreement';
 import {
   type MaintenanceEvidence,
@@ -56,14 +58,18 @@ type Decision = Prisma.KnowledgeTriageDecisionGetPayload<{
   select: typeof DECISION_SELECT;
 }>;
 
+/** The most proposed page consolidations the queue lists at once. */
+const MAX_PAGE_PROPOSALS = 50;
+
 /**
  * The review queue: what waits on a person, and why.
  *
  * Every entry still in the inbox, as before, with the reasons triage
  * escalated it when it did; beside them, decisions triage acted on that were
- * drawn for audit; and entries in use the gardener asks a person to archive.
- * Where triage is off, the queue is the inbox and the gardener's proposals,
- * with nothing of triage's added.
+ * drawn for audit; entries in use the gardener asks a person to archive;
+ * and, apart from the entries, consolidations of pages people write that
+ * wait on a person's accepting them. Where triage is off, the queue is the
+ * inbox and the proposals, with nothing of triage's added.
  */
 @Injectable()
 export default class KnowledgeReviewService {
@@ -164,6 +170,14 @@ export default class KnowledgeReviewService {
       },
     });
 
+    // Consolidations of pages people write, waiting on a person.
+    const pageProposals = await this.prisma.pageProposal.findMany({
+      where: { state: PageProposalState.OPEN, page },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_PAGE_PROPOSALS,
+      select: PROPOSAL_SELECT,
+    });
+
     const all: KnowledgeReviewItem[] = [
       ...waiting.map((entry) => {
         const decision = open.get(entry.id) ?? null;
@@ -213,6 +227,7 @@ export default class KnowledgeReviewService {
       reasons: [...counts.entries()]
         .map(([reason, count]) => ({ reason, count }))
         .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason)),
+      pageProposals: pageProposals.map(proposalResponse),
     };
   }
 

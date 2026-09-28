@@ -157,6 +157,13 @@ export interface KnowledgeHit extends KnowledgeProof {
   verified: boolean;
   retrievalCount: number;
   score?: number;
+  /**
+   * For an entry a page cites (a generated page's section, or a body it was
+   * consolidated into), that page: the entry is the page's evidence, not a
+   * second confirmation of what the page says. It comes after the page when
+   * both match.
+   */
+  evidenceFor?: KnowledgePageRef | null;
 }
 
 export interface ContextPack {
@@ -306,6 +313,21 @@ export interface ConsolidateInput {
   body: string;
   /** Entries folded in. Omit to fold every standing entry on the page. */
   entryIds?: string[];
+}
+
+/**
+ * A consolidation proposed and waiting on a person. Nothing about the page or
+ * its entries changes until a person accepts it; the entries then stay
+ * served, as the evidence the body cites.
+ */
+export interface ConsolidateProposal {
+  status: 'proposed';
+  proposalId: string;
+  page: KnowledgePageRef;
+  /** The standing entries the body folds in. */
+  entryIds: string[];
+  /** What happens next. */
+  guidance: string;
 }
 
 export interface TriageInput {

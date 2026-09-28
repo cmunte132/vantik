@@ -8,6 +8,7 @@ import {
 } from './errors';
 import {
   ConsolidateInput,
+  ConsolidateProposal,
   ContextPack,
   EntryPolicy,
   EntryStatus,
@@ -1266,14 +1267,15 @@ export class VantikAgent {
   }
 
   /**
-   * Folds standing entries into a page body and marks them CONSOLIDATED, so the
-   * same fact is not served twice — once as narrative and once as the entry it
-   * was written from.
+   * Proposes folding standing entries into a page body. A page people write
+   * is theirs, so nothing changes until a person accepts the proposal; the
+   * entries are then marked CONSOLIDATED and kept as the evidence the body
+   * cites, served below it, rather than retired.
    */
-  async consolidate(input: ConsolidateInput): Promise<KnowledgePageRef> {
+  async consolidate(input: ConsolidateInput): Promise<ConsolidateProposal> {
     const page = await this.resolvePage(input.page);
 
-    const updated = await this.client.post<RawPage>(
+    const proposal = await this.client.post<RawPageProposal>(
       `/pages/${page.id}/consolidate`,
       {
         body: {
@@ -1283,7 +1285,16 @@ export class VantikAgent {
       },
     );
 
-    return { id: updated.id, title: updated.title };
+    return {
+      status: 'proposed',
+      proposalId: proposal.id,
+      page: { id: proposal.pageId, title: proposal.pageTitle },
+      entryIds: proposal.entryIds,
+      guidance:
+        'Proposed, not applied: the page and its entries are unchanged until ' +
+        'a person accepts this in the review queue. Carry on reading the ' +
+        'entries as they are.',
+    };
   }
 
   /** Entries on a page, optionally narrowed to a status. */
@@ -1676,6 +1687,13 @@ interface RawEntry {
   lastCheckedSha?: string | null;
 }
 
+interface RawPageProposal {
+  id: string;
+  pageId: string;
+  pageTitle: string;
+  entryIds: string[];
+}
+
 interface RawKnowledgeHit {
   kind: 'page' | 'entry';
   entryKind?: string | null;
@@ -1691,6 +1709,7 @@ interface RawKnowledgeHit {
   citations?: KnowledgeCitation[];
   lastCheckedAt?: string | null;
   lastCheckedSha?: string | null;
+  evidenceFor?: { pageId: string; pageTitle: string } | null;
 }
 
 /** The proof the server served with an entry or hit, passed on unchanged. */
@@ -1802,6 +1821,9 @@ function toHit(hit: RawKnowledgeHit): KnowledgeHit {
     verified: Boolean(hit.verified),
     retrievalCount: hit.retrievalCount ?? 0,
     ...(hit.relevanceScore === undefined ? {} : { score: hit.relevanceScore }),
+    evidenceFor: hit.evidenceFor
+      ? { id: hit.evidenceFor.pageId, title: hit.evidenceFor.pageTitle }
+      : null,
     ...toProof(hit),
   };
 }

@@ -12,6 +12,7 @@ import { PrismaService } from 'nestjs-prisma';
 import { convertMarkdownToTiptapJson } from 'common/utils/tiptap.utils';
 
 import { LoggerService } from 'modules/logger/logger.service';
+import { SERVED_STATUSES } from 'modules/vector/vector.interface';
 import { VectorService } from 'modules/vector/vector.service';
 
 import KnowledgeIndexService from '../knowledge-index.service';
@@ -48,10 +49,7 @@ import {
  */
 
 /** The statuses whose entries a page may rest on: those still served. */
-export const IN_USE: PageEntryStatusEnum[] = [
-  PageEntryStatusEnum.STANDING,
-  PageEntryStatusEnum.CONSOLIDATED,
-];
+export const IN_USE: PageEntryStatusEnum[] = SERVED_STATUSES;
 
 /** How many entries one refresh reads: enough for a page, few enough to read. */
 const EVIDENCE_LIMIT = 40;

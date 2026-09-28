@@ -69,11 +69,13 @@ export default class KnowledgeIndexService {
         include: ENTRY_INDEX_INCLUDE,
       });
 
-      // Standing and proposed entries are indexed; everything else is removed.
-      // Only STANDING is ever *served* — the read filter defaults to it and
-      // only the near-match query widens past it — but a proposed entry has to
-      // be findable by that query or the duplicate check cannot see the claims
-      // most likely to be duplicates: the ones still sitting in the inbox.
+      // Standing, consolidated and proposed entries are indexed; everything
+      // else is removed. Only the first two are ever *served* — the read
+      // filter defaults to them, a consolidated one as the evidence for its
+      // page, and only the near-match query widens past it — but a proposed
+      // entry has to be findable by that query or the duplicate check cannot
+      // see the claims most likely to be duplicates: the ones still sitting
+      // in the inbox.
       if (
         !entry ||
         entry.deleted ||

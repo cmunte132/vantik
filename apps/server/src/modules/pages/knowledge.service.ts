@@ -11,6 +11,7 @@ import { PrismaService } from 'nestjs-prisma';
 import {
   KnowledgeSearchHit,
   KnowledgeSearchResult,
+  SERVED_STATUSES,
 } from 'modules/vector/vector.interface';
 import { VectorService } from 'modules/vector/vector.service';
 
@@ -296,9 +297,15 @@ export default class KnowledgeService {
       (id) => !conventionIds.has(id),
     );
 
+    // A consolidated entry is packed too: its fact is in a page body, and
+    // page bodies are not packed, so leaving it out would retire it for runs.
     const rows = ranked.length
       ? await this.prisma.pageEntry.findMany({
-          where: { ...live, id: { in: ranked } },
+          where: {
+            ...live,
+            status: { in: SERVED_STATUSES },
+            id: { in: ranked },
+          },
           select: PACKED_ENTRY_SELECT,
         })
       : [];

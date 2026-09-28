@@ -51,7 +51,12 @@ import {
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 import { secretIn } from './triage/triage-policy';
 import { answerGaps, isAccepted } from './upkeep/gap-answers';
-import { heldSince, reversalsFor, unusedSince } from './upkeep/maintenance';
+import {
+  citedByLivePages,
+  heldSince,
+  reversalsFor,
+  unusedSince,
+} from './upkeep/maintenance';
 
 @Injectable()
 export default class PageEntriesService {
@@ -692,7 +697,8 @@ export default class PageEntriesService {
    * (`KnowledgeUpkeepService.proposeUnused`), and an untriaged one is already
    * waiting on a person. Outcomes do not archive either: a harmful signal
    * re-checks the entry's citations, and what that check finds is what
-   * counts.
+   * counts. Nor is an entry a live page cites archived: the page is read in
+   * its place, and the entry is the page's evidence.
    *
    * Called nightly by `PagesProcessor` on the `pages` queue, on the schedule in
    * `DECAY_CRON`. Setting `PAGE_DECAY_CRON=off` disables the pass, which leaves
@@ -722,12 +728,14 @@ export default class PageEntriesService {
       data: { status: PageEntryStatusEnum.ARCHIVED },
     });
 
+    const cited = await citedByLivePages(this.prisma, workspaceId);
     const archivedStanding = await this.prisma.pageEntry.updateMany({
       where: {
         ...scope,
         deleted: null,
         status: PageEntryStatusEnum.STANDING,
         ...unusedSince(standingCutoff),
+        ...(cited.length ? { id: { notIn: cited } } : {}),
         // A human vouched for it. Demonstrated usefulness is a proxy for
         // "worth keeping"; an explicit human confirmation is the real thing,
         // and it outranks the proxy.

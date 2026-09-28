@@ -296,6 +296,9 @@ function setup(
           .filter((row) => matchesEntry(row, where))
           .map((row) => pick(row, select)),
       ),
+      updateMany: jest.fn(async (): Promise<{ count: number }> => ({
+        count: 0,
+      })),
     },
     pageLink: {
       aggregate: jest.fn(async ({ where }: Where) => ({
@@ -321,8 +324,13 @@ function setup(
           : [],
       ),
     },
-    $transaction: jest.fn(async (run: (tx: unknown) => Promise<unknown>) =>
-      run({ page: pageApi, pageHistory: historyApi }),
+    $transaction: jest.fn(
+      async (
+        run: ((tx: unknown) => Promise<unknown>) | Array<Promise<unknown>>,
+      ): Promise<unknown> =>
+        Array.isArray(run)
+          ? Promise.all(run)
+          : run({ page: pageApi, pageHistory: historyApi }),
     ),
   };
 

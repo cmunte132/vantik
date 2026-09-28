@@ -56,6 +56,8 @@ interface Options {
   nearMatches?: Array<{ entryId: string; content: string }> | Error;
   /** The pages queue, when the test wants to see what is queued on it. */
   queue?: { add: jest.Mock };
+  /** What each live page cites. */
+  cited?: string[][];
 }
 
 function buildService({
@@ -69,6 +71,7 @@ function buildService({
   existing = [],
   nearMatches = [],
   queue,
+  cited = [],
 }: Options = {}) {
   const created: unknown[] = [];
 
@@ -81,6 +84,9 @@ function buildService({
           entryPolicy: policy,
           workspaceId: 'workspace-1',
         }),
+      ),
+      findMany: jest.fn(() =>
+        Promise.resolve(cited.map((citedEntryIds) => ({ citedEntryIds }))),
       ),
     },
     user: {
@@ -898,13 +904,18 @@ describe('decay', () => {
           matches(branch, row),
         );
       }
-      const value = (row as unknown as Record<string, unknown>)[field];
+      // A row's name stands in for its id.
+      const value =
+        field === 'id'
+          ? (row as Row).name
+          : (row as unknown as Record<string, unknown>)[field];
       if (condition !== null && typeof condition === 'object') {
-        const { lt, gte, none } = condition as {
+        const { lt, gte, none, notIn } = condition as {
           lt?: Date;
           gte?: Date;
           none?: Record<string, unknown>;
           in?: unknown[];
+          notIn?: unknown[];
         };
         const within = (condition as { in?: unknown[] }).in;
         if (none !== undefined) {
@@ -912,6 +923,9 @@ describe('decay', () => {
         }
         if (within !== undefined) {
           return within.includes(value);
+        }
+        if (notIn !== undefined) {
+          return !notIn.includes(value);
         }
         return (
           value instanceof Date &&
@@ -925,8 +939,12 @@ describe('decay', () => {
   }
 
   /** The rows a pass archives: the standing pass, or the inbox pass (0). */
-  async function archivedBy(rows: Row[], pass = 1): Promise<string[]> {
-    const { service, prisma } = buildService();
+  async function archivedBy(
+    rows: Row[],
+    pass = 1,
+    cited: string[][] = [],
+  ): Promise<string[]> {
+    const { service, prisma } = buildService({ cited });
     await service.runDecay('workspace-1');
     const { where } = (prisma.pageEntry.updateMany as jest.Mock).mock.calls[
       pass
@@ -1055,6 +1073,38 @@ describe('decay', () => {
         standing({ name: 'new', createdAt: daysAgo(5) }),
       ]),
     ).resolves.toEqual(['never served']);
+  });
+
+  it('[KG-7.4] never archives an entry a live page cites, which is read through the page', async () => {
+    await expect(
+      archivedBy(
+        [
+          standing({ name: 'cited by a generated page' }),
+          standing({ name: 'cited twice' }),
+          standing({ name: 'cited by no page' }),
+        ],
+        1,
+        [['cited by a generated page', 'cited twice'], ['cited twice'], []],
+      ),
+    ).resolves.toEqual(['cited by no page']);
+
+    const { service, prisma } = buildService();
+    await service.runDecay('workspace-1');
+    expect((prisma.page.findMany as jest.Mock).mock.calls[0][0].where).toEqual({
+      deleted: null,
+      workspaceId: 'workspace-1',
+      citedEntryIds: { isEmpty: false },
+    });
+    // Nothing cited, nothing kept for it.
+    expect(
+      (prisma.pageEntry.updateMany as jest.Mock).mock.calls[1][0].where,
+    ).not.toHaveProperty('id');
+
+    const everywhere = buildService();
+    await everywhere.service.runDecay();
+    expect(
+      (everywhere.prisma.page.findMany as jest.Mock).mock.calls[0][0].where,
+    ).toEqual({ deleted: null, citedEntryIds: { isEmpty: false } });
   });
 });
 

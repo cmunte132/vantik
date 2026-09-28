@@ -7,7 +7,11 @@ import {
   IsUUID,
 } from 'class-validator';
 
-import { PageEntryKindEnum, PageEntryStatusEnum } from './page.entity';
+import {
+  PageEntryKindEnum,
+  PageEntryStatusEnum,
+  type PageProposal,
+} from './page.entity';
 
 /** What triage decided about an entry. */
 export enum KnowledgeTriageDecisionEnum {
@@ -111,6 +115,12 @@ export interface KnowledgeReviewQueue {
   items: KnowledgeReviewItem[];
   /** How many items carry each reason, over the whole queue. */
   reasons: Array<{ reason: KnowledgeReviewReasonEnum; count: number }>;
+  /**
+   * Proposed consolidations of pages people write, waiting on a person to
+   * accept or decline, newest first. Not narrowed by reason: they are about
+   * a page body, not an entry.
+   */
+  pageProposals: PageProposal[];
 }
 
 /**

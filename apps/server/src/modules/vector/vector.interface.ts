@@ -181,18 +181,32 @@ export const SIMILARITY_MEASUREMENT_NOTE =
 export const KNOWLEDGE_NEAR_MATCH_DISTANCE = 0.75;
 
 /**
+ * Entry statuses served unless a caller asks for others: those in use.
+ *
+ * A CONSOLIDATED entry is one a person folded into a page body. It is kept
+ * as the evidence that body was written from rather than retired, and is
+ * served as that: marked as evidence for its page (`evidenceFor`), and ranked
+ * below the page when both match, so a reader does not take the entry and
+ * the body for two confirmations of one fact.
+ */
+export const SERVED_STATUSES: PageEntryStatusEnum[] = [
+  PageEntryStatusEnum.STANDING,
+  PageEntryStatusEnum.CONSOLIDATED,
+];
+
+/**
  * Entry statuses that get a document at all.
  *
  * Narrower than "everything" and wider than "what is served". Retrieval filters
- * to STANDING on the way out — see `buildKnowledgeFilterBy`, whose default is
- * that and nothing else — and the near-match check on a write is the single
- * caller allowed past it. That one has to see the inbox: a claim somebody
- * proposed an hour ago is the likeliest thing a new claim duplicates, and the
- * flood this whole gate exists for is ten agents asserting the same untriaged
- * fact.
+ * to SERVED_STATUSES on the way out — see `buildKnowledgeFilterBy`, whose
+ * default is that and nothing else — and the near-match check on a write is
+ * the single caller allowed past it. That one has to see the inbox: a claim
+ * somebody proposed an hour ago is the likeliest thing a new claim
+ * duplicates, and the flood this whole gate exists for is ten agents
+ * asserting the same untriaged fact.
  */
 export const INDEXED_STATUSES: PageEntryStatusEnum[] = [
-  PageEntryStatusEnum.STANDING,
+  ...SERVED_STATUSES,
   PageEntryStatusEnum.PROPOSED,
 ];
 
@@ -218,6 +232,13 @@ export interface KnowledgeSearchHit extends KnowledgeProof {
   entryKind?: string | null;
   /** The modules the entry's scope resolves to. */
   moduleIds?: string[];
+  /**
+   * For an entry a page cites (one consolidated into its body, or one a
+   * generated page's sections were written from): that page. The entry is
+   * the evidence for what the page says, not a second source for it, and is
+   * ranked below the page when both are served.
+   */
+  evidenceFor?: { pageId: string; pageTitle: string } | null;
   distance?: number;
   relevanceScore?: number;
 }

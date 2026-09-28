@@ -1,4 +1,4 @@
-import type { KnowledgeReviewReasonEnum } from '@vantikhq/types';
+import type { KnowledgeReviewReasonEnum, PageProposal } from '@vantikhq/types';
 
 import { Button } from '@vantikhq/ui/components/button';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
@@ -8,6 +8,8 @@ import * as React from 'react';
 import { PageEntryStatus, type PageEntryType } from 'common/types';
 
 import {
+  pageProposalSummary,
+  useAnswerPageProposalMutation,
   useBulkTriageMutation,
   useKnowledgeReview,
   useResolveAuditMutation,
@@ -79,6 +81,7 @@ export const ReviewQueue = observer(({ scope }: { scope: ReviewScope }) => {
     ? reason
     : null;
   const rows = withReason(all, chosen);
+  const pageProposals = review?.pageProposals ?? [];
 
   // Dropped when the scope changes, so a bulk action can never land on rows the
   // reviewer is no longer looking at.
@@ -105,12 +108,14 @@ export const ReviewQueue = observer(({ scope }: { scope: ReviewScope }) => {
       return next;
     });
 
-  if (all.length === 0) {
+  if (all.length === 0 && pageProposals.length === 0) {
     return <EmptyQueue scope={scope} />;
   }
 
   return (
     <div className="flex flex-col gap-4 h-full">
+      <PageProposals proposals={pageProposals} />
+
       {facets.length > 0 && (
         <ReasonFilter facets={facets} chosen={chosen} onChoose={setReason} />
       )}
@@ -160,6 +165,77 @@ const EmptyQueue = observer(({ scope }: { scope: ReviewScope }) => (
     </p>
   </div>
 ));
+
+/**
+ * Rewrites of pages people write, proposed by an agent folding the page's
+ * facts into its body. Nothing about the page changes until a person accepts
+ * one; accepting applies it, keeps the facts as the evidence the page cites,
+ * and can be undone from the page history. Each is answered on its own.
+ */
+const PageProposals = observer(
+  ({ proposals }: { proposals: PageProposal[] }) => {
+    if (proposals.length === 0) {
+      return null;
+    }
+
+    return (
+      <section className="flex flex-col gap-1">
+        <h3>Page rewrites</h3>
+        {proposals.map((proposal) => (
+          <PageProposalRow key={proposal.id} proposal={proposal} />
+        ))}
+      </section>
+    );
+  },
+);
+
+const PageProposalRow = observer(({ proposal }: { proposal: PageProposal }) => {
+  const [reading, setReading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const { mutate: answer, isPending } = useAnswerPageProposalMutation({
+    onMutate: () => setError(null),
+    onError: setError,
+  });
+  const reply = (accept: boolean) =>
+    answer({ pageId: proposal.pageId, proposalId: proposal.id, accept });
+
+  return (
+    <div className="flex flex-col gap-1 py-2 border-b border-border">
+      <div className="flex items-center gap-2">
+        <span className="grow truncate">{pageProposalSummary(proposal)}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setReading((current: boolean) => !current)}
+        >
+          {reading ? 'Hide' : 'Read'}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isPending}
+          onClick={() => reply(true)}
+        >
+          Accept
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isPending}
+          onClick={() => reply(false)}
+        >
+          Decline
+        </Button>
+      </div>
+      {reading && (
+        <pre className="whitespace-pre-wrap font-mono text-muted-foreground">
+          {proposal.bodyMarkdown}
+        </pre>
+      )}
+      {error && <p className="text-destructive">{error}</p>}
+    </div>
+  );
+});
 
 /**
  * Narrows the queue to one reason, with how many rows carry each, so a

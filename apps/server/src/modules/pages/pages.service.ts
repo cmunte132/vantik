@@ -1,6 +1,8 @@
 import { InjectQueue } from '@nestjs/bull';
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   Optional,
@@ -12,6 +14,8 @@ import {
   Page,
   PageEntryStatusEnum,
   PageKindEnum,
+  type PageProposal,
+  PageProposalStateEnum,
   UpdatePageDto,
   UserTypeEnum,
 } from '@vantikhq/types';
@@ -86,6 +90,37 @@ function toStoredBody(pageData: {
 
 /** A page as the API hands it back: storage shape plus the markdown boundary. */
 export type PageResponse = Page & { descriptionMarkdown: string };
+
+export const PROPOSAL_SELECT = {
+  id: true,
+  createdAt: true,
+  pageId: true,
+  page: { select: { title: true } },
+  body: true,
+  entryIds: true,
+  proposedById: true,
+  state: true,
+  decidedById: true,
+  decidedAt: true,
+} as const;
+
+/** A proposal as the API returns it: its body as markdown. */
+export function proposalResponse(
+  row: Prisma.PageProposalGetPayload<{ select: typeof PROPOSAL_SELECT }>,
+): PageProposal {
+  return {
+    id: row.id,
+    createdAt: row.createdAt.toISOString(),
+    pageId: row.pageId,
+    pageTitle: row.page.title,
+    bodyMarkdown: convertTiptapJsonToMarkdown(row.body),
+    entryIds: row.entryIds,
+    proposedById: row.proposedById,
+    state: row.state as PageProposalStateEnum,
+    decidedById: row.decidedById,
+    decidedAt: row.decidedAt?.toISOString() ?? null,
+  };
+}
 
 /** Everything on a page except its body — see `getPages`. */
 const SUMMARY_FIELDS = {
@@ -514,19 +549,41 @@ export default class PagesService {
   }
 
   /**
-   * Folds standing entries into the page body and marks them CONSOLIDATED.
+   * Proposes folding standing entries into a page body, for a person to
+   * accept.
    *
    * This is the action that keeps the bank small. The caller supplies the
-   * rewritten prose, because deciding how a set of facts reads as a narrative is
-   * the judgment being asked for — the server's job is only to make sure the
-   * folded entries stop being served separately, or the same fact comes back
-   * twice: once from the body and once from the entry it was written into.
+   * rewritten prose, because deciding how a set of facts reads as a
+   * narrative is the judgment being asked for. It rewrites a body people
+   * maintain wholesale, so nothing changes until a person accepts it
+   * (`acceptProposal`): whoever asks, agent or person, gets a proposal, and a
+   * person consolidating in the webapp accepts their own at once. A
+   * generated page is refused: it is written from the entries it cites
+   * already, and edited as they change.
    */
   async consolidate(
     pageId: string,
     userId: string,
     input: ConsolidatePageDto,
-  ): Promise<PageResponse> {
+  ): Promise<PageProposal> {
+    const page = await this.prisma.page.findFirst({
+      where: { id: pageId, deleted: null },
+      select: { id: true, title: true, kind: true },
+    });
+
+    if (!page) {
+      throw new NotFoundException({ message: `Page ${pageId} not found` });
+    }
+
+    if (page.kind === PageKindEnum.GENERATED) {
+      throw new BadRequestException({
+        message:
+          'A generated page is written from the entries it cites, and edited ' +
+          'as they change: there is nothing to consolidate into it. Correct ' +
+          'or add entries in its scope instead.',
+      });
+    }
+
     const entries = await this.prisma.pageEntry.findMany({
       where: {
         pageId,
@@ -537,19 +594,121 @@ export default class PagesService {
       select: { id: true },
     });
 
-    // Folding notes into prose rewrites the body wholesale, which is the one
-    // change most likely to want undoing — it is where a person finds out how
-    // the narrative reads only after it has replaced what was there.
-    const before = await this.prisma.page.findUnique({
-      where: { id: pageId },
-      select: { description: true },
+    if (entries.length === 0) {
+      throw new BadRequestException({
+        message:
+          'No standing entries on this page to consolidate. To change the ' +
+          'body alone, edit the page.',
+      });
+    }
+
+    const proposal = await this.prisma.pageProposal.create({
+      data: {
+        pageId,
+        body: JSON.stringify(
+          convertMarkdownToTiptapJson(input.descriptionMarkdown),
+        ),
+        entryIds: entries.map((entry) => entry.id),
+        proposedById: userId,
+      },
+      select: PROPOSAL_SELECT,
     });
 
+    return proposalResponse(proposal);
+  }
+
+  /** A page's proposals, newest first: the open ones unless told otherwise. */
+  async getProposals(
+    pageId: string,
+    state: PageProposalStateEnum | 'ALL' = PageProposalStateEnum.OPEN,
+  ): Promise<PageProposal[]> {
+    const rows = await this.prisma.pageProposal.findMany({
+      where: {
+        pageId,
+        page: { deleted: null },
+        ...(state === 'ALL' ? {} : { state }),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: PROPOSAL_SELECT,
+    });
+
+    return rows.map(proposalResponse);
+  }
+
+  /**
+   * A person accepts a proposed consolidation: the body becomes the one
+   * proposed, the entries it folds in are marked CONSOLIDATED and cited by
+   * the page, and the body it replaced is recorded in the page's history,
+   * where the existing revert undoes it. The entries stay served, as
+   * evidence ranked below the page.
+   *
+   * Refused when an entry it folds in is no longer standing, or the page
+   * changed after it was proposed: the prose was written against both as
+   * they were, and accepting it would state what an entry no longer says,
+   * or undo an edit made since. Ask for it again instead.
+   */
+  async acceptProposal(
+    pageId: string,
+    proposalId: string,
+    userId: string,
+  ): Promise<PageResponse> {
+    await this.assertPerson(userId);
+
+    const proposal = await this.openProposal(pageId, proposalId);
+    const page = await this.prisma.page.findFirst({
+      where: { id: pageId, deleted: null },
+      select: {
+        description: true,
+        kind: true,
+        updatedAt: true,
+        citedEntryIds: true,
+      },
+    });
+
+    if (!page) {
+      throw new NotFoundException({ message: `Page ${pageId} not found` });
+    }
+
+    if (page.kind !== PageKindEnum.AUTHORED) {
+      throw new ConflictException({
+        message: 'This page is generated now; its body is not proposed to.',
+      });
+    }
+
+    if (page.updatedAt > proposal.createdAt) {
+      throw new ConflictException({
+        message:
+          'The page changed after this was proposed, so accepting it would ' +
+          'undo that change. Decline it and ask for it again.',
+      });
+    }
+
+    const entries = await this.prisma.pageEntry.findMany({
+      where: {
+        id: { in: proposal.entryIds },
+        pageId,
+        deleted: null,
+        status: PageEntryStatusEnum.STANDING,
+      },
+      select: { id: true },
+    });
+
+    if (entries.length !== proposal.entryIds.length) {
+      const standing = new Set(entries.map((entry) => entry.id));
+
+      throw new ConflictException({
+        message:
+          'Entries this folds in are no longer standing: ' +
+          `${proposal.entryIds.filter((id) => !standing.has(id)).join(', ')}. ` +
+          'Decline it and ask for it again.',
+      });
+    }
+
     // A person folding an entry drawn for audit into the page keeps it,
-    // which answers the audit as keeping it by hand would. An agent
-    // consolidating is not a verdict on anything.
+    // which answers the audit as keeping it by hand would.
     const verdicts =
-      this.agreement && entries.length && !(await this.isAgent(userId))
+      this.agreement && entries.length
         ? await this.agreement.verdictsFor(
             entries.map((entry) => ({
               id: entry.id,
@@ -560,46 +719,153 @@ export default class PagesService {
           )
         : { operations: [], decisionIds: [], workspaceIds: [] };
 
-    const [page] = await this.prisma.$transaction([
-      this.prisma.page.update({
-        where: { id: pageId },
-        data: {
-          description: JSON.stringify(
-            convertMarkdownToTiptapJson(input.descriptionMarkdown),
-          ),
-          updatedById: userId,
-        },
-      }),
-      this.prisma.pageEntry.updateMany({
-        where: { id: { in: entries.map((entry) => entry.id) } },
-        data: { status: PageEntryStatusEnum.CONSOLIDATED },
-      }),
-      ...verdicts.operations,
-    ]);
+    let updated: Awaited<ReturnType<typeof this.prisma.page.update>>;
 
-    await this.recordHistory(
-      pageId,
-      userId,
-      { consolidated: { to: entries.length }, body: true },
-      before?.description,
-    );
-    // The folded entries have to stop being served the moment the body carries
-    // them, or the same fact comes back twice — once as narrative and once as
-    // the entry it was written from, reading as two confirmations of one thing.
+    try {
+      [, updated] = await this.prisma.$transaction([
+        // Only while still open, and an error otherwise, which undoes the
+        // rest: two people accepting at once fold it in once.
+        this.prisma.pageProposal.update({
+          where: { id: proposalId, state: PageProposalStateEnum.OPEN },
+          data: {
+            state: PageProposalStateEnum.ACCEPTED,
+            decidedById: userId,
+            decidedAt: new Date(),
+          },
+        }),
+        this.prisma.page.update({
+          where: { id: pageId },
+          data: {
+            description: proposal.body,
+            citedEntryIds: [
+              ...new Set([...page.citedEntryIds, ...proposal.entryIds]),
+            ],
+            updatedById: userId,
+          },
+        }),
+        this.prisma.pageEntry.updateMany({
+          where: {
+            id: { in: proposal.entryIds },
+            status: PageEntryStatusEnum.STANDING,
+          },
+          data: { status: PageEntryStatusEnum.CONSOLIDATED },
+        }),
+        this.prisma.pageHistory.create({
+          data: {
+            pageId,
+            userId,
+            changes: {
+              body: true,
+              consolidated: { to: proposal.entryIds.length },
+              proposal: { to: proposalId },
+            },
+            previousBody: page.description ?? null,
+          },
+        }),
+        ...verdicts.operations,
+      ]);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new ConflictException({
+          message: 'This proposal was answered meanwhile.',
+        });
+      }
+
+      throw error;
+    }
+
     await this.indexer?.pageChanged(pageId);
-    await this.indexer?.entriesChanged(entries.map((entry) => entry.id));
+    await this.indexer?.entriesChanged(proposal.entryIds);
     await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
 
-    return this.withMarkdown(page);
+    return this.withMarkdown(updated);
   }
 
-  private async isAgent(userId: string): Promise<boolean> {
+  /** A person declines a proposed consolidation. Nothing else changes. */
+  async declineProposal(
+    pageId: string,
+    proposalId: string,
+    userId: string,
+  ): Promise<PageProposal> {
+    await this.assertPerson(userId);
+    await this.openProposal(pageId, proposalId);
+
+    const { count } = await this.prisma.pageProposal.updateMany({
+      where: { id: proposalId, pageId, state: PageProposalStateEnum.OPEN },
+      data: {
+        state: PageProposalStateEnum.DECLINED,
+        decidedById: userId,
+        decidedAt: new Date(),
+      },
+    });
+
+    if (count === 0) {
+      throw new ConflictException({
+        message: 'This proposal was answered meanwhile.',
+      });
+    }
+
+    const row = await this.prisma.pageProposal.findUniqueOrThrow({
+      where: { id: proposalId },
+      select: PROPOSAL_SELECT,
+    });
+
+    return proposalResponse(row);
+  }
+
+  /** An open proposal on a live page, or why not. */
+  private async openProposal(pageId: string, proposalId: string) {
+    const proposal = await this.prisma.pageProposal.findFirst({
+      where: { id: proposalId, pageId, page: { deleted: null } },
+      select: {
+        id: true,
+        body: true,
+        entryIds: true,
+        state: true,
+        createdAt: true,
+      },
+    });
+
+    if (!proposal) {
+      throw new NotFoundException({
+        message: `No proposal ${proposalId} on page ${pageId}`,
+      });
+    }
+
+    if (proposal.state !== PageProposalStateEnum.OPEN) {
+      throw new ConflictException({
+        message: `This proposal was already answered: ${proposal.state.toLowerCase()}.`,
+      });
+    }
+
+    return proposal;
+  }
+
+  /**
+   * Accepting or declining a change to a page people maintain is for
+   * people. The controller refuses agent tokens first; this holds for any
+   * other caller.
+   */
+  private async assertPerson(userId: string): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { type: true },
     });
 
-    return user?.type === UserTypeEnum.Agent;
+    if (
+      !user ||
+      user.type === UserTypeEnum.Agent ||
+      user.type === UserTypeEnum.System
+    ) {
+      throw new ForbiddenException({
+        message:
+          'A change to a page people maintain is accepted or declined by a ' +
+          'person.',
+      });
+    }
   }
 
   /**
@@ -635,6 +901,11 @@ export default class PagesService {
    * body it replaced — so undoing an agent's rewrite is not a hole in the trail
    * and can in turn be undone. A revert that erased its own evidence would make
    * the history lie about what the page has been.
+   *
+   * Reverting the acceptance of a consolidation undoes it: the entries it
+   * folded in, where still CONSOLIDATED, are put back in use as standing
+   * entries and are no longer cited by the page, whose body no longer says
+   * them.
    */
   async revertBody(
     pageId: string,
@@ -643,7 +914,7 @@ export default class PagesService {
   ): Promise<PageResponse> {
     const revision = await this.prisma.pageHistory.findFirst({
       where: { id: historyId, pageId, deleted: null },
-      select: { previousBody: true, previousSections: true },
+      select: { previousBody: true, previousSections: true, changes: true },
     });
 
     if (!revision) {
@@ -662,7 +933,12 @@ export default class PagesService {
 
     const current = await this.prisma.page.findFirst({
       where: { id: pageId, deleted: null },
-      select: { description: true, kind: true, sections: true },
+      select: {
+        description: true,
+        kind: true,
+        sections: true,
+        citedEntryIds: true,
+      },
     });
 
     if (!current) {
@@ -673,31 +949,80 @@ export default class PagesService {
     // would edit sections the body no longer shows. What it cites follows.
     const generated = current.kind === PageKindEnum.GENERATED;
     const sections = generated ? readSections(revision.previousSections) : [];
+    const unfolded = generated ? [] : await this.acceptedEntries(revision);
+    const folded = new Set(unfolded);
 
-    const page = await this.prisma.page.update({
-      where: { id: pageId },
-      data: {
-        description: revision.previousBody,
-        ...(generated
-          ? {
-              sections: sections as unknown as Prisma.InputJsonValue,
-              citedEntryIds: citedBy(sections),
-            }
-          : {}),
-        updatedById: userId,
-      },
-    });
+    const [page, restored] = await this.prisma.$transaction([
+      this.prisma.page.update({
+        where: { id: pageId },
+        data: {
+          description: revision.previousBody,
+          ...(generated
+            ? {
+                sections: sections as unknown as Prisma.InputJsonValue,
+                citedEntryIds: citedBy(sections),
+              }
+            : folded.size
+              ? {
+                  citedEntryIds: current.citedEntryIds.filter(
+                    (id) => !folded.has(id),
+                  ),
+                }
+              : {}),
+          updatedById: userId,
+        },
+      }),
+      this.prisma.pageEntry.updateMany({
+        where: {
+          id: { in: unfolded },
+          pageId,
+          deleted: null,
+          status: PageEntryStatusEnum.CONSOLIDATED,
+        },
+        data: { status: PageEntryStatusEnum.STANDING },
+      }),
+    ]);
 
     await this.recordHistory(
       pageId,
       userId,
-      { body: true, revertedTo: { to: historyId } },
+      {
+        body: true,
+        revertedTo: { to: historyId },
+        ...(restored.count ? { unconsolidated: { to: restored.count } } : {}),
+      },
       current.description,
       generated ? current.sections : undefined,
     );
     await this.indexer?.pageChanged(pageId);
 
+    if (unfolded.length) {
+      await this.indexer?.entriesChanged(unfolded);
+    }
+
     return this.withMarkdown(page);
+  }
+
+  /** The entries an accepted consolidation, recorded as this change, folded in. */
+  private async acceptedEntries(revision: {
+    changes: Prisma.JsonValue;
+  }): Promise<string[]> {
+    const changes = revision.changes as {
+      proposal?: { to?: unknown };
+    } | null;
+    const proposalId = changes?.proposal?.to;
+
+    if (typeof proposalId !== 'string') {
+      return [];
+    }
+
+    // Only accepting writes a change naming its proposal.
+    const proposal = await this.prisma.pageProposal.findFirst({
+      where: { id: proposalId },
+      select: { entryIds: true },
+    });
+
+    return proposal?.entryIds ?? [];
   }
 
   // --------------------------------------------------------------- internals

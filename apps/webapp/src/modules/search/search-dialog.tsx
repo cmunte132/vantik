@@ -107,7 +107,11 @@ export function SearchDialog({ open, setOpen }: SearchDialogProps) {
               <div className="flex flex-col gap-0.5 w-full">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">
-                    {hit.kind === 'page' ? 'Page' : 'Fact'}
+                    {hit.kind === 'page'
+                      ? 'Page'
+                      : hit.evidenceFor
+                        ? 'Evidence'
+                        : 'Fact'}
                   </span>
                   <span className="truncate">{hit.pageTitle}</span>
                 </div>

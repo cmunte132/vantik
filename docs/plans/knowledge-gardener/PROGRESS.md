@@ -5,8 +5,8 @@ next session starts by reading it.
 
 ## Status
 
-- Current phase: 7, in progress. KG-7.1, KG-7.2, KG-7.3 and KG-7.5 are
-  implemented and mutation-checked; KG-7.4 and KG-7.6 are next. Phase 6
+- Current phase: 7, in progress. KG-7.1 to KG-7.5 are implemented and
+  mutation-checked; KG-7.6 is next. Phase 6
   is done: KG-6.1 to KG-6.5
   implemented and mutation-checked, and its review passed after eight
   rounds with no finding left (see "Phase 6 review: PASS" below). PR #45
@@ -1079,9 +1079,66 @@ next session starts by reading it.
   sections it replaced, so a revert can itself be undone. The watermark
   and hash are left as they were, so a revert stays until the evidence
   changes again.
+- **Consolidation keeps the evidence (KG-7.4).**
+  - **Served as evidence.** STANDING and CONSOLIDATED are the statuses
+    served (`SERVED_STATUSES`): the search's default filter, the entries a
+    refresh reads, and the ranked read of a run's context pack. Leaving a
+    consolidated entry out of the run pack would retire it for runs, which
+    are not handed page bodies. Conventions stay STANDING.
+  - **Marked, and below its page.** A search hit for an entry a live page
+    in the workspace cites (`citedEntryIds`), or a consolidated entry
+    (whose own page is its page, for entries consolidated before pages
+    kept what they cite), carries `evidenceFor: {pageId, pageTitle}`. When
+    one of its pages is found after it, it is moved to just after that
+    page's hit and marked as that page's; otherwise it stays where it was,
+    marked as a page already shown, else its first page. Agent-core, the
+    CLI and the webapp search show it.
+  - **Trust.** A consolidated entry is accepted, so it is GROUNDED when
+    its citations hold, as a standing one is (`entryTrust`); the run pack
+    packs only grounded or verified entries.
+  - **Not decayed.** Decay does not archive, and the gardener does not
+    ask a person about, an entry a live page cites: the page is read in
+    its place (`citedByLivePages`, scoped to the workspace when one is
+    given).
+  - **Every consolidation is a proposal.** Consolidating an AUTHORED page,
+    by an agent or a person, stores a `PageProposal` (the body, the
+    standing entries it folds in) and changes nothing else. A generated
+    page, or a page with no standing entry to fold, is refused (400). The
+    webapp's consolidate dialog proposes and then accepts at once, since
+    the person asking is the person who accepts; the MCP tool, agent-core
+    (`ConsolidateProposal`) and the CLI say it is proposed, not applied.
+  - **Accepted or declined by people.** The controller refuses an agent
+    token (403) and the service refuses an Agent or System user, so no
+    token reaches around it. Accepting refuses (409) a proposal already
+    answered, a page that is generated now, a page changed after the
+    proposal was written (its `updatedAt` is later: the prose would undo
+    that edit), or an entry it folds in that is no longer standing. It
+    then, in one transaction: marks the proposal accepted only while still
+    open (so two people accepting at once fold it in once), writes the
+    body, adds the entries to `citedEntryIds`, marks them CONSOLIDATED,
+    and writes a `PageHistory` row with `previousBody` and
+    `changes.proposal`, with the agreement verdicts for audited entries.
+    Declining changes only the proposal, and also only while open.
+  - **Undone by the existing revert.** Reverting the accepting change puts
+    the body back, and puts the entries it folded in, where still
+    CONSOLIDATED, back in use as STANDING and out of `citedEntryIds`
+    (`changes.unconsolidated`).
+  - **In front of a person.** The review queue lists open page proposals
+    (`pageProposals`, newest first, 50 at most, scoped to the page when
+    asked), apart from the entries and not narrowed by reason; the webapp
+    shows them with Accept and Decline. `GET /pages/:id/proposals` lists a
+    page's.
+  - **Generated pages in the webapp.** Synced with their kind and
+    question, shown read-only with the question they answer, and taken
+    over by hand from the page menu; the rest of the refresh bookkeeping
+    is not synced.
 - **Tests.** The settings suite's full-object expectations gained
   `pageRefreshMinIntervalMs`; the processor suite's constructions gained
-  the refresh service. No assertion changed.
+  the refresh service. For KG-7.4, the tests that said consolidated
+  entries are not served now say they are served as evidence (the search
+  filter, the run pack's ranked read), and the KG-5.5 consolidation test
+  now proposes, and has a person accept. The webapp sync contract lists
+  the refresh columns it does not keep.
 - **Migration** `20260927080000_generated_pages`: two enums, seven columns
   on `Page`, `previousSections` on `PageHistory`, and `PageProposal`.
   Replayed on postgres 16 over the earlier migrations; the diff against
@@ -2326,3 +2383,13 @@ Give the evidence, and stop until the maintainer answers.
   order, an unlinked module, the page's own entries), except the one
   that stopped hashing the links, which showed the links were redundant
   in the hash; they were taken out of it.
+- 2026-09-28: KG-7.4: entries a page cites stay served, marked as its
+  evidence and ranked below it; they keep their trust tier and are not
+  decayed; every consolidation of an authored page is a proposal a person
+  accepts or declines, recorded in the page's history and undone by the
+  revert; open proposals are in the review queue. 60 mutants: all killed
+  once the tests they showed missing were added (a decline read before an
+  acceptance landed, the answers' messages, the proposals' order, a
+  deleted or foreign citing page, an entry found after its page), except
+  the filter that looked for an accepted proposal when reverting, which
+  only an acceptance can name; it was taken out.

@@ -5,6 +5,7 @@ import type {
 } from '@vantikhq/agent-core';
 
 import {
+  renderConsolidateProposal,
   renderEntries,
   renderHits,
   renderProof,
@@ -65,6 +66,42 @@ describe('knowledge as a terminal shows it', () => {
     expect(text).toContain(
       'cites src/cache.ts:12-30 (moved), pull request https://github.com/acme/api/pull/5 (holds) · checked 2026-09-20 at 9f8e7d6c5b4a',
     );
+  });
+
+  it('[KG-7.4] says which page an entry is the evidence for', () => {
+    const hit: KnowledgeHit = {
+      kind: 'entry',
+      entryKind: 'FACT',
+      page: { id: 'page-1', title: 'Runbook' },
+      entryId: 'entry-1',
+      content: 'The worker drains its queue before it restarts.',
+      scope: null,
+      verified: false,
+      retrievalCount: 0,
+      evidenceFor: { id: 'page-1', title: 'Runbook' },
+      ...proof,
+    };
+
+    expect(renderHits([hit])).toContain(
+      'Runbook fact · grounded · evidence for Runbook',
+    );
+    expect(renderHits([{ ...hit, evidenceFor: null }])).not.toContain(
+      'evidence for',
+    );
+  });
+
+  it('[KG-7.4] says a consolidation is proposed, not applied', () => {
+    const text = renderConsolidateProposal({
+      status: 'proposed',
+      proposalId: 'proposal-1',
+      page: { id: 'page-1', title: 'Runbook' },
+      entryIds: ['entry-1', 'entry-2'],
+      guidance: 'Proposed, not applied.',
+    });
+
+    expect(text).toContain('Proposed folding 2 entries into Runbook');
+    expect(text).toContain('proposal-1');
+    expect(text).toContain('until a person accepts it');
   });
 
   function entry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {

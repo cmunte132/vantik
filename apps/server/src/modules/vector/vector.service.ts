@@ -594,6 +594,32 @@ export class VectorService implements OnModuleInit {
   }
 
   /**
+   * The ids of the entries the index holds in one status: what a repair
+   * compares postgres against, to find the entries the index lost.
+   */
+  async indexedEntryIds(status: PageEntryStatusEnum): Promise<Set<string>> {
+    if (!Object.values(PageEntryStatusEnum).includes(status)) {
+      throw new Error(`Unknown entry status ${status}`);
+    }
+
+    const exported = await this.typesenseClient
+      .collections('pages')
+      .documents()
+      .export({
+        filter_by: `kind:=entry && status:=\`${status}\``,
+        include_fields: 'entryId',
+      });
+
+    return new Set(
+      exported
+        .split('\n')
+        .filter((line) => line.trim())
+        .map((line) => (JSON.parse(line) as { entryId?: string }).entryId)
+        .filter((id): id is string => Boolean(id)),
+    );
+  }
+
+  /**
    * Removes a page or entry from the index.
    *
    * Pages and entries are soft-deleted in postgres and the index has no notion

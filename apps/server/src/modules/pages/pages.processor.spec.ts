@@ -13,12 +13,15 @@ import EntryCitationsService from './entry-citations.service';
 import PageRefreshService, {
   type RefreshOutcome,
 } from './generated/page-refresh.service';
+import KnowledgeIndexService from './knowledge-index.service';
 import PageEntriesService from './page-entries.service';
 import {
   DECAY_JOB,
   DECAY_JOB_ID,
   GAP_ISSUES_JOB,
   GAP_ISSUES_JOB_ID,
+  INDEX_CONSOLIDATED_JOB,
+  indexConsolidatedJobOptions,
   PAGE_REFRESH_JOB,
   PAGE_REFRESH_JOB_ID,
   RECHECK_ENTRY_JOB,
@@ -39,6 +42,7 @@ import {
 import {
   EntryModulesScheduler,
   KnowledgeGapsScheduler,
+  KnowledgeIndexScheduler,
   PageRefreshScheduler,
   PagesProcessor,
   PagesScheduler,
@@ -125,6 +129,45 @@ describe('PagesProcessor', () => {
     // Unscoped deliberately: the windows are a property of the deployment, not
     // of any one workspace.
     expect(runDecay).toHaveBeenCalledWith();
+  });
+});
+
+describe('putting consolidated entries back in the index', () => {
+  it('[KG-7.4] queues one pass at boot, which indexes the consolidated entries the index lost', async () => {
+    const queue = buildQueue();
+
+    await new KnowledgeIndexScheduler(queue).onModuleInit();
+
+    expect(queue.add).toHaveBeenCalledWith(
+      INDEX_CONSOLIDATED_JOB,
+      {},
+      expect.objectContaining({
+        jobId: expect.stringMatching(`^${INDEX_CONSOLIDATED_JOB}:`),
+      }),
+    );
+
+    // Replicas booting in the same minute queue one pass; a later boot
+    // gets its own, as does one after a failed pass kept for inspection.
+    const minute = 60_000 * 1_000;
+    expect(indexConsolidatedJobOptions(minute + 1).jobId).toBe(
+      indexConsolidatedJobOptions(minute + 59_999).jobId,
+    );
+    expect(indexConsolidatedJobOptions(minute + 60_000).jobId).not.toBe(
+      indexConsolidatedJobOptions(minute).jobId,
+    );
+
+    const indexMissingConsolidated = jest.fn(async () => 2);
+    await new PagesProcessor(
+      {} as PageEntriesService,
+      {} as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
+      {} as PageRefreshService,
+      { indexMissingConsolidated } as unknown as KnowledgeIndexService,
+    ).handleIndexConsolidated();
+    expect(indexMissingConsolidated).toHaveBeenCalledTimes(1);
   });
 });
 

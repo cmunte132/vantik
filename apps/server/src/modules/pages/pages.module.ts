@@ -24,6 +24,7 @@ import { PAGES_QUEUE } from './pages.interface';
 import {
   EntryModulesScheduler,
   KnowledgeGapsScheduler,
+  KnowledgeIndexScheduler,
   PageRefreshScheduler,
   PagesProcessor,
   PagesScheduler,
@@ -77,6 +78,7 @@ import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
     KnowledgeGapsScheduler,
     PageRefreshScheduler,
     EntryModulesScheduler,
+    KnowledgeIndexScheduler,
     PagesProcessor,
     UsersService,
   ],

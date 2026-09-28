@@ -332,6 +332,8 @@ fold them into the page's body.
 - **The entries stay as evidence.** Accepted, the entries become
   `CONSOLIDATED`. They are still served, marked as evidence for the page and
   ranked below it. They keep their trust tier, and decay does not archive them.
+  Entries consolidated by an earlier version of Vantik, which the search index
+  used to drop, are indexed again the next time the server starts.
 - **They are still checked and corrected.** A consolidated entry is checked
   again when the code changes, and triage compares new entries with it, as for
   a standing entry. A correction can supersede it, and a person can dispute or

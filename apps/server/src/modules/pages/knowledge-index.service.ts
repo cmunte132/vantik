@@ -96,6 +96,56 @@ export default class KnowledgeIndexService {
     await Promise.all(entryIds.map((id) => this.entryChanged(id)));
   }
 
+  /**
+   * Indexes every consolidated entry, on a page not deleted, that the index
+   * does not hold, and says how many. Entries consolidated before a
+   * consolidated entry was served were taken out of the index then, so they
+   * could not be found as their page's evidence; this puts them back, and
+   * any other the index lost. One export of ids when there is nothing to do.
+   */
+  async indexMissingConsolidated(): Promise<number> {
+    try {
+      const entries = await this.prisma.pageEntry.findMany({
+        where: {
+          deleted: null,
+          status: PageEntryStatusEnum.CONSOLIDATED,
+          page: { deleted: null },
+        },
+        select: { id: true },
+      });
+
+      if (entries.length === 0) {
+        return 0;
+      }
+
+      const indexed = await this.vectorService.indexedEntryIds(
+        PageEntryStatusEnum.CONSOLIDATED,
+      );
+      const missing = entries
+        .map((entry) => entry.id)
+        .filter((id) => !indexed.has(id));
+
+      for (const id of missing) {
+        await this.entryChanged(id);
+      }
+
+      if (missing.length) {
+        this.logger.info({
+          message: `Indexed ${missing.length} consolidated entr${
+            missing.length === 1 ? 'y' : 'ies'
+          } the index did not hold`,
+          where: 'KnowledgeIndexService.indexMissingConsolidated',
+        });
+      }
+
+      return missing.length;
+    } catch (error) {
+      this.log('indexMissingConsolidated', 'consolidated entries', error);
+
+      return 0;
+    }
+  }
+
   async pageDeleted(pageIds: string[], entryIds: string[]): Promise<void> {
     try {
       await Promise.all([

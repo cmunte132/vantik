@@ -1,11 +1,12 @@
 import { InjectQueue, Process, Processor } from '@nestjs/bull';
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { Queue } from 'bull';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
 import EntryCitationsService from './entry-citations.service';
 import PageRefreshService from './generated/page-refresh.service';
+import KnowledgeIndexService from './knowledge-index.service';
 import PageEntriesService from './page-entries.service';
 import {
   CODE_LANDED_JOB,
@@ -16,6 +17,8 @@ import {
   GAP_ISSUES_CRON,
   GAP_ISSUES_JOB,
   GAP_ISSUES_JOB_ID,
+  INDEX_CONSOLIDATED_JOB,
+  indexConsolidatedJobOptions,
   PAGE_REFRESH_CRON,
   PAGE_REFRESH_JOB,
   PAGE_REFRESH_JOB_ID,
@@ -248,6 +251,35 @@ export class EntryModulesScheduler implements OnModuleInit {
   }
 }
 
+/**
+ * Puts back in the search index, once at boot, the consolidated entries it
+ * does not hold. Queued rather than run here, so boot never waits on it.
+ */
+@Injectable()
+export class KnowledgeIndexScheduler implements OnModuleInit {
+  private readonly logger: LoggerService = new LoggerService(
+    'KnowledgeIndexScheduler',
+  );
+
+  constructor(@InjectQueue(PAGES_QUEUE) private pagesQueue: Queue) {}
+
+  async onModuleInit() {
+    try {
+      await this.pagesQueue.add(
+        INDEX_CONSOLIDATED_JOB,
+        {},
+        indexConsolidatedJobOptions(),
+      );
+    } catch (error) {
+      this.logger.error({
+        message: `Could not queue the consolidated entry index pass: ${error}`,
+        where: 'KnowledgeIndexScheduler.onModuleInit',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
+  }
+}
+
 @Processor(PAGES_QUEUE)
 export class PagesProcessor {
   private readonly logger: LoggerService = new LoggerService('PagesProcessor');
@@ -260,7 +292,14 @@ export class PagesProcessor {
     private conventions: KnowledgeConventionsService,
     private gaps: KnowledgeGapsService,
     private pageRefresh: PageRefreshService,
+    @Optional() private knowledgeIndex?: KnowledgeIndexService,
   ) {}
+
+  /** Indexes the consolidated entries the index lost. */
+  @Process(INDEX_CONSOLIDATED_JOB)
+  async handleIndexConsolidated() {
+    await this.knowledgeIndex?.indexMissingConsolidated();
+  }
 
   /** Rebuilds every generated page that is due. See `PageRefreshService`. */
   @Process(PAGE_REFRESH_JOB)

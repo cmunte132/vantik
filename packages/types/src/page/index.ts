@@ -4,3 +4,4 @@ export * from './create-page-entry.dto';
 export * from './knowledge.dto';
 export * from './citation';
 export * from './knowledge-review';
+export * from './knowledge-overview';

@@ -289,6 +289,16 @@ describe('KnowledgeService.knowledgeGaps', () => {
     expect(where.workspaceId).toBe(WORKSPACE);
     expect(orderBy[0]).toEqual({ count: 'desc' });
   });
+
+  it('[ENG-225] leaves out a question that an accepted fact answered', async () => {
+    const { service, prisma } = buildService();
+
+    await service.knowledgeGaps(WORKSPACE);
+
+    const { where } = (prisma.pageKnowledgeGap.findMany as jest.Mock).mock
+      .calls[0][0];
+    expect(where.answeredAt).toBeNull();
+  });
 });
 
 describe('KnowledgeService.seedsFor', () => {

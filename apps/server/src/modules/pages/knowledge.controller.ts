@@ -13,6 +13,7 @@ import {
   KnowledgeSearchQueryDto,
   KnowledgeSimilarDto,
 } from '@vantikhq/types';
+import type { KnowledgeOverview } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { resolveWorkspaceId } from 'common/workspace-access';
@@ -26,6 +27,7 @@ import {
   KnowledgeSearchResult,
 } from 'modules/vector/vector.interface';
 
+import KnowledgeOverviewService from './knowledge-overview.service';
 import KnowledgeService, {
   ContextPack,
   KnowledgeGap,
@@ -48,6 +50,7 @@ export class KnowledgeController {
   constructor(
     private knowledgeService: KnowledgeService,
     private prisma: PrismaService,
+    private overviewService: KnowledgeOverviewService,
   ) {}
 
   @Get('search')
@@ -137,6 +140,26 @@ export class KnowledgeController {
     );
 
     return this.knowledgeService.knowledgeGaps(workspaceId);
+  }
+
+  /**
+   * The Pages home: the trust of the facts in use, each page with its
+   * product, and the gaps that agents could not close.
+   */
+  @Get('overview')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async overview(
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
+    @Query() query: KnowledgeGapsQueryDto,
+  ): Promise<KnowledgeOverview> {
+    const workspaceId = await this.workspace(
+      userId,
+      sessionWorkspaceId,
+      query.workspaceId,
+    );
+
+    return this.overviewService.overview(workspaceId);
   }
 
   private workspace(

@@ -532,8 +532,10 @@ export default class KnowledgeService {
     workspaceId: string,
     limit = 50,
   ): Promise<KnowledgeGap[]> {
+    // An answered gap is closed. It stays in the table so that a repeat of the
+    // question does not open a second issue.
     const gaps = await this.prisma.pageKnowledgeGap.findMany({
-      where: { workspaceId },
+      where: { workspaceId, answeredAt: null },
       orderBy: [{ count: 'desc' }, { updatedAt: 'desc' }],
       take: limit,
     });

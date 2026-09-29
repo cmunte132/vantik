@@ -11,6 +11,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { AgentScopeGuard } from 'modules/auth/agent-scope.guard';
 
+import KnowledgeOverviewService from './knowledge-overview.service';
 import { KnowledgeController } from './knowledge.controller';
 import { PageEntriesController } from './page-entries.controller';
 import type KnowledgeService from './knowledge.service';
@@ -42,6 +43,7 @@ describe('KnowledgeController', () => {
     const controller = new KnowledgeController(
       knowledgeService,
       {} as PrismaService,
+      {} as KnowledgeOverviewService,
     );
     const controllerWithWorkspace = controller as unknown as {
       workspace: (
@@ -75,6 +77,7 @@ describe('KnowledgeController', () => {
     const controller = new KnowledgeController(
       knowledgeService,
       {} as PrismaService,
+      {} as KnowledgeOverviewService,
     );
     jest
       .spyOn(
@@ -224,6 +227,7 @@ describe('KnowledgeController.search', () => {
     const controller = new KnowledgeController(
       knowledgeService,
       {} as PrismaService,
+      {} as KnowledgeOverviewService,
     );
     jest
       .spyOn(

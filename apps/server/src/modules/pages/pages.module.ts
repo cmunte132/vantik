@@ -12,6 +12,7 @@ import PageRefreshService from './generated/page-refresh.service';
 import PageWriter from './generated/page-writer';
 import KnowledgeIndexService from './knowledge-index.service';
 import { KnowledgeReviewController } from './knowledge-review.controller';
+import KnowledgeOverviewService from './knowledge-overview.service';
 import KnowledgeReviewService from './knowledge-review.service';
 import { KnowledgeController } from './knowledge.controller';
 import KnowledgeService from './knowledge.service';
@@ -70,6 +71,7 @@ import KnowledgeVerifierService from './verifier/knowledge-verifier.service';
     KnowledgeVerifierService,
     KnowledgeAgreementService,
     KnowledgeReviewService,
+    KnowledgeOverviewService,
     KnowledgeIssues,
     KnowledgeUpkeepService,
     KnowledgeConventionsService,

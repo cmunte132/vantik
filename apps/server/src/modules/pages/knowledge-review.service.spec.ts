@@ -18,6 +18,8 @@ import {
   PageEntryProposalState as ProposalState,
 } from '@prisma/client';
 import {
+  KnowledgeInboxChoiceEnum,
+  type KnowledgeInboxList,
   KnowledgeReviewReasonEnum,
   PageEntryStatusEnum,
   RoleEnum,
@@ -26,6 +28,10 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
+import KnowledgeInboxService, {
+  classify,
+  SETTLED_ELSEWHERE,
+} from './knowledge-inbox.service';
 import { KnowledgeReviewController } from './knowledge-review.controller';
 import KnowledgeReviewService from './knowledge-review.service';
 import PageEntriesService from './page-entries.service';
@@ -91,6 +97,13 @@ function matches(row: Row, where: Where): boolean {
       const c = condition as Record<string, unknown>;
 
       if (['in', 'not', 'gt', 'gte', 'lt', 'lte'].some((op) => op in c)) {
+        // As in SQL: null is neither before nor after anything.
+        const ranged = ['gt', 'gte', 'lt', 'lte'].some((op) => op in c);
+
+        if (ranged && (value === null || value === undefined)) {
+          return false;
+        }
+
         return (
           (!('in' in c) || (c.in as unknown[]).includes(value)) &&
           (!('not' in c) || value !== c.not) &&
@@ -167,6 +180,8 @@ interface Seed {
   decisions?: Row[];
   backoff?: Row[];
   maintenance?: Row[];
+  gaps?: Row[];
+  relations?: Row[];
   preferences?: Row;
 }
 
@@ -198,6 +213,10 @@ function store(seed: Seed) {
   const decisions = [...(seed.decisions ?? [])];
   const backoff = [...(seed.backoff ?? [])];
   const maintenance = [...(seed.maintenance ?? [])];
+  const gaps = [...(seed.gaps ?? [])];
+  const relations = [...(seed.relations ?? [])];
+  const inbox: Row[] = [];
+  const inboxEvents: Row[] = [];
   let clock = NOW;
 
   const entryView = (row: Row) => ({
@@ -240,6 +259,9 @@ function store(seed: Seed) {
         lazy(
           () => [...pages.values()].find((row) => matches(row, where)) ?? null,
         ),
+      ),
+      findMany: jest.fn(({ where }: { where: Where }) =>
+        lazy(() => [...pages.values()].filter((row) => matches(row, where))),
       ),
       update: jest.fn(({ where, data }: { where: { id: string }; data: Row }) =>
         lazy(() => {
@@ -326,6 +348,13 @@ function store(seed: Seed) {
       ),
     },
     usersOnWorkspaces: {
+      findFirst: jest.fn(({ where }: { where: Where }) =>
+        lazy(() =>
+          USERS[where.userId as string] && where.workspaceId === WORKSPACE
+            ? { id: `member-${String(where.userId)}` }
+            : null,
+        ),
+      ),
       findUnique: jest.fn(
         ({
           where,
@@ -383,6 +412,9 @@ function store(seed: Seed) {
       ),
     },
     knowledgeTriageDecision: {
+      count: jest.fn(({ where }: { where: Where }) =>
+        lazy(() => decisions.filter((row) => matches(row, where)).length),
+      ),
       findMany: jest.fn(
         ({ where, orderBy }: { where: Where; orderBy?: unknown }) =>
           lazy(() =>
@@ -494,6 +526,143 @@ function store(seed: Seed) {
         }),
       ),
     },
+    pageKnowledgeGap: {
+      findMany: jest.fn(
+        ({ where, orderBy }: { where: Where; orderBy?: unknown }) =>
+          lazy(() =>
+            ordered(
+              gaps.filter((row) => matches(row, where)),
+              orderBy,
+            ),
+          ),
+      ),
+      findFirst: jest.fn(({ where }: { where: Where }) =>
+        lazy(() => gaps.find((row) => matches(row, where)) ?? null),
+      ),
+      update: jest.fn(({ where, data }: { where: { id: string }; data: Row }) =>
+        lazy(() => {
+          const row = gaps.find(
+            (candidate) => candidate.id === where.id,
+          ) as Row;
+          apply(row, data);
+
+          return row;
+        }),
+      ),
+    },
+    pageEntryRelation: {
+      findMany: jest.fn(({ where }: { where: Where }) =>
+        lazy(() =>
+          relations
+            .map((row) => ({
+              ...row,
+              to: entryView(entries.get(row.toId as string) as Row),
+            }))
+            .filter((row) => matches(row, where)),
+        ),
+      ),
+    },
+    knowledgeInboxItem: {
+      findMany: jest.fn(
+        ({
+          where,
+          orderBy,
+          take,
+        }: {
+          where: Where;
+          orderBy?: unknown;
+          take?: number;
+        }) =>
+          lazy(() =>
+            ordered(
+              inbox.filter((row) => matches(row, where)),
+              orderBy,
+            ).slice(0, take ?? Infinity),
+          ),
+      ),
+      findFirst: jest.fn(({ where }: { where: Where }) =>
+        lazy(() => inbox.find((row) => matches(row, where)) ?? null),
+      ),
+      createMany: jest.fn(({ data }: { data: Row[] }) =>
+        lazy(() => {
+          let count = 0;
+
+          for (const row of data) {
+            // As the unique key on (workspaceId, kind, subjectId) does.
+            if (
+              inbox.some(
+                (held) =>
+                  held.workspaceId === row.workspaceId &&
+                  held.kind === row.kind &&
+                  held.subjectId === row.subjectId,
+              )
+            ) {
+              continue;
+            }
+
+            inbox.push({
+              id: `item-${inbox.length + 1}`,
+              createdAt: new Date(++clock),
+              assigneeId: null,
+              doneAt: null,
+              doneById: null,
+              resolution: null,
+              ...row,
+            });
+            count++;
+          }
+
+          return { count };
+        }),
+      ),
+      update: jest.fn(({ where, data }: { where: { id: string }; data: Row }) =>
+        lazy(() => {
+          const row = inbox.find((candidate) => candidate.id === where.id);
+
+          if (!row) {
+            throw new Error('Record to update not found.');
+          }
+
+          apply(row, data);
+
+          return row;
+        }),
+      ),
+      updateMany: jest.fn(({ where, data }: { where: Where; data: Row }) =>
+        lazy(() => {
+          const found = inbox.filter((row) => matches(row, where));
+          found.forEach((row) => apply(row, data));
+
+          return { count: found.length };
+        }),
+      ),
+    },
+    knowledgeInboxEvent: {
+      create: jest.fn(({ data }: { data: Row }) =>
+        lazy(() => {
+          const row: Row = {
+            id: `event-${inboxEvents.length + 1}`,
+            createdAt: new Date(++clock),
+            userId: null,
+            assigneeId: null,
+            body: null,
+            ...data,
+          };
+          inboxEvents.push(row);
+
+          return row;
+        }),
+      ),
+      findMany: jest.fn(
+        ({ where, orderBy }: { where: Where; orderBy?: unknown }) =>
+          lazy(() =>
+            ordered(
+              inboxEvents.filter((row) => matches(row, where)),
+              orderBy,
+            ),
+          ),
+      ),
+    },
     $executeRaw: jest.fn(() => lazy(() => 1)),
   };
 
@@ -537,7 +706,16 @@ function store(seed: Seed) {
     ),
   };
 
-  return { prisma, entries, decisions, backoff, maintenance };
+  return {
+    prisma,
+    entries,
+    decisions,
+    backoff,
+    maintenance,
+    gaps,
+    inbox,
+    inboxEvents,
+  };
 }
 
 // ------------------------------------------------------------------ fixtures
@@ -640,10 +818,30 @@ function harness(seed: Seed) {
     agreement,
   );
   const review = new KnowledgeReviewService(prisma, pageEntries);
-  const controller = new KnowledgeReviewController(review, agreement, prisma);
   const pagesService = new PagesService(prisma, undefined, agreement);
 
-  return { ...s, agreement, pageEntries, pagesService, review, controller };
+  const inbox = new KnowledgeInboxService(
+    prisma,
+    review,
+    pageEntries,
+    pagesService,
+  );
+  const controller = new KnowledgeReviewController(
+    review,
+    agreement,
+    prisma,
+    inbox,
+  );
+
+  return {
+    ...s,
+    agreement,
+    pageEntries,
+    pagesService,
+    review,
+    controller,
+    inboxService: inbox,
+  };
 }
 
 const decided = (t: ReturnType<typeof harness>, id: string) =>
@@ -2266,6 +2464,7 @@ describe('answering a gap', () => {
       review,
       undefined as unknown as KnowledgeAgreementService,
       prisma as unknown as PrismaService,
+      undefined as unknown as KnowledgeInboxService,
     );
 
     return { prisma, review, controller };
@@ -2304,5 +2503,333 @@ describe('answering a gap', () => {
     await expect(
       controller.answerGap(WORKSPACE, 'AGENT', 'gap-1', { entryId: 'entry-1' }),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('Needs you', () => {
+  const gap = (id: string, count: number): Row => ({
+    id,
+    workspaceId: WORKSPACE,
+    query: `question ${id}`,
+    count,
+    createdAt: daysAgo(1),
+    answeredAt: null,
+    answeredByEntryId: null,
+  });
+
+  /** A fact in use, a fact that contradicts it, a rule, a plain fact, an audit and two gaps. */
+  function seeded() {
+    const auditedAccept = audited('accepted', Decision.AUTO_ACCEPT);
+
+    return harness({
+      entries: [
+        entry('old', {
+          status: PageEntryStatusEnum.STANDING,
+          sourceUserId: 'person-2',
+        }),
+        entry('new', { createdAt: daysAgo(0.2) }),
+        entry('rule', { kind: 'DECISION', createdAt: daysAgo(0.3) }),
+        entry('plain', { createdAt: daysAgo(0.4) }),
+        entry('foreign', { pageId: FOREIGN_PAGE }),
+        auditedAccept.entry,
+      ],
+      decisions: [
+        decision('new', { reasons: [Reason.CONTRADICTS_VERIFIED] }),
+        decision('rule', { reasons: [Reason.UNGROUNDED] }),
+        auditedAccept.decision,
+      ],
+      relations: [{ fromId: 'new', toId: 'old', type: 'CONTRADICTS' }],
+      gaps: [gap('asked-often', 3), gap('asked-once', 1)],
+    });
+  }
+
+  const byEntry = (list: KnowledgeInboxList) =>
+    Object.fromEntries(
+      list.items.map((item) => [item.entry?.id ?? item.subjectId, item]),
+    );
+
+  it('lists every kind of decision that waits on a person, in one inbox', async () => {
+    const t = seeded();
+
+    const list = await t.inboxService.list(WORKSPACE, 'person-1');
+    const items = byEntry(list);
+
+    expect(items.new).toMatchObject({
+      kind: 'CONTRADICTION',
+      raisedBy: 'triage',
+      pageTitle: `Page ${PAGE}`,
+    });
+    expect(items.rule).toMatchObject({ kind: 'RULE' });
+    expect(items.plain).toMatchObject({ kind: 'FACT', raisedBy: 'an agent' });
+    expect(items.accepted).toMatchObject({
+      kind: 'AUDIT',
+      decision: { decision: Decision.AUTO_ACCEPT },
+    });
+    // A gap asked often enough is in it; one asked once is not yet.
+    expect(items['asked-often']).toMatchObject({
+      kind: 'GAP',
+      gap: { query: 'question asked-often', count: 3 },
+    });
+    expect(items['asked-once']).toBeUndefined();
+    // Another workspace's entries are not.
+    expect(items.foreign).toBeUndefined();
+    expect(list.counts).toEqual({ open: 5, mine: 0, unassigned: 5, done: 0 });
+
+    // Reading it again does not make a second row.
+    await t.inboxService.list(WORKSPACE, 'person-1');
+    expect(t.inbox).toHaveLength(5);
+  });
+
+  it('puts a person on an item, and counts it as theirs', async () => {
+    const t = seeded();
+    const { items } = await t.inboxService.list(WORKSPACE, 'person-1');
+    const item = items.find((candidate) => candidate.kind === 'RULE');
+
+    await t.inboxService.assign(WORKSPACE, 'person-1', item!.id, 'person-2');
+
+    const mine = await t.inboxService.list(WORKSPACE, 'person-2', {
+      view: 'mine',
+    });
+    expect(mine.items.map((candidate) => candidate.id)).toEqual([item!.id]);
+    expect(mine.counts).toMatchObject({ open: 5, mine: 1, unassigned: 4 });
+    expect(mine.assignees).toEqual([{ userId: 'person-2', count: 1 }]);
+
+    const detail = await t.inboxService.detail(WORKSPACE, item!.id);
+    expect(detail.events).toEqual([
+      expect.objectContaining({
+        type: 'ASSIGNED',
+        userId: 'person-1',
+        assigneeId: 'person-2',
+      }),
+    ]);
+  });
+
+  it('refuses to put someone outside the workspace on an item', async () => {
+    const t = seeded();
+    const { items } = await t.inboxService.list(WORKSPACE, 'person-1');
+
+    await expect(
+      t.inboxService.assign(WORKSPACE, 'person-1', items[0].id, 'stranger'),
+    ).rejects.toThrow('not a member');
+  });
+
+  it('keeps a thread of comments, and refuses an empty one', async () => {
+    const t = seeded();
+    const { items } = await t.inboxService.list(WORKSPACE, 'person-1');
+
+    await t.inboxService.comment(
+      WORKSPACE,
+      'person-2',
+      items[0].id,
+      '  Checking with infra.  ',
+    );
+    await expect(
+      t.inboxService.comment(WORKSPACE, 'person-2', items[0].id, '   '),
+    ).rejects.toThrow('needs some text');
+
+    const detail = await t.inboxService.detail(WORKSPACE, items[0].id);
+    expect(detail.events).toEqual([
+      expect.objectContaining({
+        type: 'COMMENTED',
+        userId: 'person-2',
+        body: 'Checking with infra.',
+      }),
+    ]);
+  });
+
+  it('shows a contradiction beside the fact it contradicts, and resolves it from there', async () => {
+    const t = seeded();
+    const { items } = await t.inboxService.list(WORKSPACE, 'person-1');
+    const item = items.find((candidate) => candidate.kind === 'CONTRADICTION')!;
+
+    const detail = await t.inboxService.detail(WORKSPACE, item.id);
+    expect(detail.fact).toMatchObject({ id: 'new' });
+    expect(detail.contradicts.map((fact) => fact.id)).toEqual(['old']);
+
+    const done = await t.inboxService.decide(
+      WORKSPACE,
+      'person-1',
+      item.id,
+      KnowledgeInboxChoiceEnum.USE_NEW,
+    );
+
+    expect(done.resolution).toBe('used the new fact and retired the old one');
+    expect(t.entries.get('new')?.status).toBe(PageEntryStatusEnum.STANDING);
+    expect(t.entries.get('old')?.status).toBe(PageEntryStatusEnum.ARCHIVED);
+    // The decision counts as the person's verdict on triage.
+    expect(decided(t, 'new')).toMatchObject({
+      verdict: Verdict.ACCEPTED,
+      verdictById: 'person-1',
+    });
+
+    const after = await t.inboxService.list(WORKSPACE, 'person-1', {
+      view: 'done',
+    });
+    expect(after.items).toEqual([
+      expect.objectContaining({
+        id: item.id,
+        doneById: 'person-1',
+        resolution: 'used the new fact and retired the old one',
+        entry: expect.objectContaining({ id: 'new' }),
+      }),
+    ]);
+    expect(after.counts).toMatchObject({ open: 4, done: 1 });
+
+    const thread = await t.inboxService.detail(WORKSPACE, item.id);
+    expect(thread.events.at(-1)).toMatchObject({
+      type: 'DECIDED',
+      userId: 'person-1',
+      body: 'used the new fact and retired the old one',
+    });
+  });
+
+  it('keeps the old fact when a person says the new one is wrong', async () => {
+    const t = seeded();
+    const { items } = await t.inboxService.list(WORKSPACE, 'person-1');
+    const item = items.find((candidate) => candidate.kind === 'CONTRADICTION')!;
+
+    await t.inboxService.decide(
+      WORKSPACE,
+      'person-1',
+      item.id,
+      KnowledgeInboxChoiceEnum.KEEP_OLD,
+    );
+
+    expect(t.entries.get('new')?.status).toBe(PageEntryStatusEnum.ARCHIVED);
+    expect(t.entries.get('old')?.status).toBe(PageEntryStatusEnum.STANDING);
+  });
+
+  it('answers an audit through the same change the review makes', async () => {
+    const t = seeded();
+    const { items } = await t.inboxService.list(WORKSPACE, 'person-1');
+    const item = items.find((candidate) => candidate.kind === 'AUDIT')!;
+
+    await t.inboxService.decide(
+      WORKSPACE,
+      'person-1',
+      item.id,
+      KnowledgeInboxChoiceEnum.UNDO,
+    );
+
+    expect(t.entries.get('accepted')?.status).toBe(
+      PageEntryStatusEnum.ARCHIVED,
+    );
+    expect(decided(t, 'accepted')).toMatchObject({ verdictById: 'person-1' });
+  });
+
+  it('refuses an answer the kind does not take, and a second decision', async () => {
+    const t = seeded();
+    const { items } = await t.inboxService.list(WORKSPACE, 'person-1');
+    const fact = items.find((candidate) => candidate.kind === 'FACT')!;
+
+    await expect(
+      t.inboxService.decide(
+        WORKSPACE,
+        'person-1',
+        fact.id,
+        KnowledgeInboxChoiceEnum.RETIRE,
+      ),
+    ).rejects.toThrow('not an answer to fact');
+
+    await t.inboxService.decide(
+      WORKSPACE,
+      'person-1',
+      fact.id,
+      KnowledgeInboxChoiceEnum.USE,
+    );
+    await expect(
+      t.inboxService.decide(
+        WORKSPACE,
+        'person-1',
+        fact.id,
+        KnowledgeInboxChoiceEnum.SET_ASIDE,
+      ),
+    ).rejects.toThrow('already decided: put it in use');
+  });
+
+  it('closes an item as settled when its subject is decided somewhere else', async () => {
+    const t = seeded();
+    const { items } = await t.inboxService.list(WORKSPACE, 'person-1');
+    const fact = items.find((candidate) => candidate.kind === 'FACT')!;
+
+    // A person accepts it on its page.
+    await t.pageEntries.updateEntry('plain', 'person-1', {
+      status: PageEntryStatusEnum.STANDING,
+    });
+
+    const after = await t.inboxService.list(WORKSPACE, 'person-1', {
+      view: 'done',
+    });
+    expect(after.items).toEqual([
+      expect.objectContaining({
+        id: fact.id,
+        doneById: null,
+        resolution: SETTLED_ELSEWHERE,
+      }),
+    ]);
+
+    const thread = await t.inboxService.detail(WORKSPACE, fact.id);
+    expect(thread.events).toEqual([
+      expect.objectContaining({ type: 'SETTLED' }),
+    ]);
+
+    // A second read does not settle it twice.
+    await t.inboxService.list(WORKSPACE, 'person-1');
+    expect(
+      t.inboxEvents.filter((event) => event.type === 'SETTLED'),
+    ).toHaveLength(1);
+  });
+
+  it('gives an item one row as its reasons change, with its thread kept', async () => {
+    const t = seeded();
+    const { items } = await t.inboxService.list(WORKSPACE, 'person-1');
+    const fact = items.find((candidate) => candidate.kind === 'FACT')!;
+
+    t.decisions.push(
+      decision('plain', { reasons: [Reason.CONTRADICTS_LOCKED] }),
+    );
+
+    const after = await t.inboxService.list(WORKSPACE, 'person-1');
+    expect(after.items.find((item) => item.id === fact.id)).toMatchObject({
+      kind: 'CONTRADICTION',
+    });
+    expect(t.inbox).toHaveLength(5);
+  });
+
+  it("does not show one workspace's item to another", async () => {
+    const t = seeded();
+    const { items } = await t.inboxService.list(WORKSPACE, 'person-1');
+
+    await expect(
+      t.inboxService.detail(OTHER_WORKSPACE, items[0].id),
+    ).rejects.toThrow('not found');
+    await expect(
+      t.inboxService.assign(OTHER_WORKSPACE, 'person-1', items[0].id, null),
+    ).rejects.toThrow('not found');
+  });
+
+  it('is for people: an agent is refused the inbox', async () => {
+    const t = seeded();
+
+    await expect(
+      t.controller.inboxList(WORKSPACE, 'agent-1', RoleEnum.AGENT, {}),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('classifying what a waiting fact asks', () => {
+  it.each([
+    ['FACT', [KnowledgeReviewReasonEnum.CONTRADICTS_VERIFIED], 'CONTRADICTION'],
+    [
+      'DECISION',
+      [KnowledgeReviewReasonEnum.CITATION_CONTRADICTED],
+      'CONTRADICTION',
+    ],
+    ['CONVENTION', [KnowledgeReviewReasonEnum.UNGROUNDED], 'RULE'],
+    ['DECISION', [], 'RULE'],
+    ['GOTCHA', [KnowledgeReviewReasonEnum.UNGROUNDED], 'FACT'],
+    ['FACT', [], 'FACT'],
+  ])('a %s waiting for %j is a %s', (kind, reasons, expected) => {
+    expect(classify({ kind } as never, reasons)).toBe(expected);
   });
 });

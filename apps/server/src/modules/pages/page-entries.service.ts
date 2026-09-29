@@ -121,6 +121,17 @@ export default class PageEntriesService {
         citations: { select: PROOF_CITATION_SELECT },
         // The fact's trail of moves between pages, oldest first.
         moves: { select: MOVE_SELECT, orderBy: { createdAt: 'asc' } },
+        // What people decided about it in Needs you, for the same trail.
+        inboxItems: {
+          where: { doneById: { not: null } },
+          select: {
+            kind: true,
+            doneAt: true,
+            doneById: true,
+            resolution: true,
+          },
+          orderBy: { doneAt: 'asc' },
+        },
       },
     });
 

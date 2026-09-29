@@ -947,7 +947,8 @@ model PageEntry {
   pageId String?
 
   /// Each time the fact moved between pages, oldest first.
-  moves PageEntryMove[]
+  moves      PageEntryMove[]
+  inboxItems KnowledgeInboxItem[]
 
   /// What the claim rests on: code at a commit, or where it was decided.
   citations PageEntryCitation[]
@@ -992,6 +993,90 @@ model PageEntryMove {
   suggested Boolean @default(false)
 
   @@index([entryId, createdAt])
+}
+
+/// What an item of the Needs you inbox asks a person to decide.
+enum KnowledgeInboxKind {
+  /// A waiting fact that contradicts a fact in use.
+  CONTRADICTION
+  /// A waiting decision or convention that cites no source.
+  RULE
+  /// Any other waiting fact.
+  FACT
+  /// A decision triage acted on, drawn for a person to check.
+  AUDIT
+  /// A fact in use that the gardener asks to stop using.
+  ARCHIVE
+  /// A rewrite of a page body that the gardener proposed.
+  REWRITE
+  /// A question agents asked more than once and could not answer.
+  GAP
+}
+
+enum KnowledgeInboxEventType {
+  ASSIGNED
+  COMMENTED
+  DECIDED
+  /// The subject left the queue without a decision in the inbox.
+  SETTLED
+}
+
+/// One item of the Needs you inbox, shared by the workspace. The queue of
+/// what waits on a person is derived from the entries, decisions, proposals
+/// and gaps; this row holds what people add to it: who is on it, the thread,
+/// and how it ended. An item is done when its subject leaves the queue.
+model KnowledgeInboxItem {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  kind      KnowledgeInboxKind
+  /// The id of what the item is about: the entry for CONTRADICTION, RULE and
+  /// FACT; the triage decision for AUDIT; the maintenance row for ARCHIVE;
+  /// the page proposal for REWRITE; the gap for GAP.
+  subjectId String
+  /// The fact the item is about, when it is about one. Its trail shows the
+  /// decision.
+  entry     PageEntry?         @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entryId   String?
+  /// When the subject started to wait on a person.
+  raisedAt  DateTime
+
+  assigneeId String?
+
+  doneAt     DateTime?
+  /// Null when the subject left the queue outside the inbox.
+  doneById   String?
+  /// What was decided, as a phrase: "used it", "kept the old fact".
+  resolution String?
+
+  events KnowledgeInboxEvent[]
+
+  @@unique([workspaceId, kind, subjectId])
+  @@index([workspaceId, doneAt])
+  @@index([entryId])
+}
+
+/// One line of an item's activity: an assignment, a comment, the decision.
+model KnowledgeInboxEvent {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  item   KnowledgeInboxItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId String
+
+  type       KnowledgeInboxEventType
+  /// Who did it. Null for SETTLED.
+  userId     String?
+  /// For ASSIGNED: the new assignee, or null when it was unassigned.
+  assigneeId String?
+  /// For COMMENTED: the comment. For DECIDED and SETTLED: the resolution.
+  body       String?
+
+  @@index([itemId, createdAt])
 }
 
 /// One piece of evidence for an entry, checked by the server.
@@ -1981,6 +2066,7 @@ model Workspace {
   capabilities          Capability[]
   pages                 Page[]
   pageEntries           PageEntry[]
+  knowledgeInboxItems   KnowledgeInboxItem[]
   agentRuns             AgentRun[]
   credentials           WorkspaceCredential[]
   webhookSubscription   WebhookSubscription[]

@@ -5,3 +5,4 @@ export * from './knowledge.dto';
 export * from './citation';
 export * from './knowledge-review';
 export * from './knowledge-overview';
+export * from './knowledge-inbox';

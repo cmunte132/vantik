@@ -67,7 +67,8 @@ export type KnowledgeAutoTriage = 'off' | 'shadow' | 'on';
 /** The entry a review item is about, as much of it as judging it needs. */
 export interface KnowledgeReviewEntry {
   id: string;
-  pageId: string;
+  /** Null for a fact outside any page. */
+  pageId: string | null;
   content: string;
   scope: string | null;
   kind: PageEntryKindEnum;

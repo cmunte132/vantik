@@ -10,6 +10,12 @@ import {
 } from '@nestjs/common';
 import {
   AnswerKnowledgeGapDto,
+  AssignKnowledgeInboxItemDto,
+  CommentKnowledgeInboxItemDto,
+  DecideKnowledgeInboxItemDto,
+  type KnowledgeInboxDetail,
+  type KnowledgeInboxList,
+  KnowledgeInboxQueryDto,
   type KnowledgeAgreementReport,
   type KnowledgeReviewQueue,
   KnowledgeReviewQueryDto,
@@ -26,6 +32,7 @@ import { AuthGuard } from 'modules/auth/auth.guard';
 import { Role, UserId, Workspace } from 'modules/auth/session.decorator';
 import { WorkspaceResourceGuard } from 'modules/auth/workspace-resource.guard';
 
+import KnowledgeInboxService from './knowledge-inbox.service';
 import KnowledgeReviewService from './knowledge-review.service';
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
 
@@ -47,6 +54,7 @@ export class KnowledgeReviewController {
     private review: KnowledgeReviewService,
     private agreement: KnowledgeAgreementService,
     private prisma: PrismaService,
+    private inbox: KnowledgeInboxService,
   ) {}
 
   /** What waits on a person, with why, narrowed by `?reason=` when given. */
@@ -126,6 +134,94 @@ export class KnowledgeReviewController {
       decisionId,
       userId,
       body.agree,
+    );
+  }
+
+  /**
+   * Needs you: every knowledge decision that waits on a person, as one
+   * inbox the workspace shares, with who is on each.
+   */
+  @Get('inbox')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async inboxList(
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
+    @Role() role: string,
+    @Query() query: KnowledgeInboxQueryDto,
+  ): Promise<KnowledgeInboxList> {
+    forPeople(role);
+
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      query.workspaceId,
+    );
+
+    return this.inbox.list(workspaceId, userId, {
+      view: query.view,
+      pageId: query.pageId,
+    });
+  }
+
+  /** One item of Needs you, with its thread and what deciding it needs. */
+  @Get('inbox/:id')
+  @UseGuards(AuthGuard)
+  async inboxDetail(
+    @Workspace() workspaceId: string,
+    @Role() role: string,
+    @Param('id') id: string,
+  ): Promise<KnowledgeInboxDetail> {
+    forPeople(role);
+
+    return this.inbox.detail(workspaceId, id);
+  }
+
+  @Post('inbox/:id/assign')
+  @UseGuards(AuthGuard)
+  async inboxAssign(
+    @Workspace() workspaceId: string,
+    @UserId() userId: string,
+    @Role() role: string,
+    @Param('id') id: string,
+    @Body() body: AssignKnowledgeInboxItemDto,
+  ) {
+    forPeople(role);
+
+    return this.inbox.assign(workspaceId, userId, id, body.assigneeId ?? null);
+  }
+
+  @Post('inbox/:id/comments')
+  @UseGuards(AuthGuard)
+  async inboxComment(
+    @Workspace() workspaceId: string,
+    @UserId() userId: string,
+    @Role() role: string,
+    @Param('id') id: string,
+    @Body() body: CommentKnowledgeInboxItemDto,
+  ) {
+    forPeople(role);
+
+    return this.inbox.comment(workspaceId, userId, id, body.body);
+  }
+
+  @Post('inbox/:id/decide')
+  @UseGuards(AuthGuard)
+  async inboxDecide(
+    @Workspace() workspaceId: string,
+    @UserId() userId: string,
+    @Role() role: string,
+    @Param('id') id: string,
+    @Body() body: DecideKnowledgeInboxItemDto,
+  ) {
+    forPeople(role);
+
+    return this.inbox.decide(
+      workspaceId,
+      userId,
+      id,
+      body.choice,
+      body.entryId,
     );
   }
 

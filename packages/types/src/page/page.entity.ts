@@ -165,6 +165,15 @@ export interface PageProposal {
   decidedAt: string | null;
 }
 
+/** A decision a person made about a fact in Needs you. */
+export interface PageEntryInboxDecision {
+  kind: string;
+  doneAt: string | Date;
+  doneById: string;
+  /** What was decided, as a phrase: "put it in use". */
+  resolution: string | null;
+}
+
 export class PageEntry {
   id: string;
   createdAt: Date;
@@ -205,6 +214,9 @@ export class PageEntry {
 
   /** Each move of the fact between pages, oldest first, when read. */
   moves?: PageEntryMove[];
+
+  /** What people decided about the fact in Needs you, oldest first, when read. */
+  inboxItems?: PageEntryInboxDecision[];
 
   /**
    * The proof, when the entry is served: trust tier, citations, and the last

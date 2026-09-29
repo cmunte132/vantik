@@ -6,6 +6,8 @@ import {
 import { RoleEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { liveEntryIn } from './page-entry-where';
+
 /**
  * Resolves the workspace a request should read, and proves the caller belongs
  * to it.
@@ -261,7 +263,8 @@ export async function assertPageInWorkspace(
 }
 
 /**
- * Proves an entry's page belongs to the given workspace.
+ * Proves an entry belongs to the given workspace, and that it is on a live
+ * page or on no page.
  *
  * Entry triage addresses the row by id alone — no page anywhere in the request
  * — so without this a caller could accept, archive or rewrite a fact asserted
@@ -276,7 +279,7 @@ export async function assertPageEntryInWorkspace(
     where: {
       id: pageEntryId,
       deleted: null,
-      page: { workspaceId, deleted: null },
+      ...liveEntryIn(workspaceId),
     },
     select: { id: true },
   });

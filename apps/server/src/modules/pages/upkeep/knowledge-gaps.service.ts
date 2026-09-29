@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PageEntryCitationKind } from '@prisma/client';
 import { PrismaService } from 'nestjs-prisma';
 
+import { liveEntryIn } from 'common/page-entry-where';
+
 import { LoggerService } from 'modules/logger/logger.service';
 
 import { knowledgeSettings } from '../knowledge-settings';
@@ -139,7 +141,7 @@ export default class KnowledgeGapsService {
         entry: {
           deleted: null,
           status: { in: ACCEPTED },
-          page: { workspaceId, deleted: null },
+          ...liveEntryIn(workspaceId),
         },
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],

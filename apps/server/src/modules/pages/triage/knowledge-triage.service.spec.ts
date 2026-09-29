@@ -70,7 +70,7 @@ interface Row {
   kind: string;
   status: string;
   moduleIds: string[];
-  pageId: string;
+  pageId: string | null;
   supersedesId: string | null;
   sourceUserId: string | null;
   sourceSession: string | null;
@@ -94,6 +94,10 @@ function matches(row: Record<string, unknown>, where: Where): boolean {
   return Object.entries(where).every(([key, condition]) => {
     if (key === 'OR') {
       return (condition as Where[]).some((part) => matches(row, part));
+    }
+
+    if (key === 'AND') {
+      return (condition as Where[]).every((part) => matches(row, part));
     }
 
     const value = row[key];
@@ -230,7 +234,17 @@ function store(
   const relations: Array<Record<string, unknown>> = [];
   const verifications: Array<Record<string, unknown>> = [];
 
-  const view = (row: Row) => ({ ...row, page: pages.get(row.pageId) });
+  // An entry carries its page's workspace, as a row in postgres does.
+  const view = (row: Row) => {
+    const page = row.pageId ? pages.get(row.pageId) : undefined;
+
+    return {
+      ...row,
+      workspaceId: page?.workspaceId ?? WORKSPACE,
+      workspace: page?.workspace ?? { preferences: options.preferences ?? {} },
+      page,
+    };
+  };
 
   const client = {
     pageEntry: {
@@ -843,6 +857,33 @@ describe('an exact repeat', () => {
     expect(unscoped.entries.get('off-page')?.corroborationCount).toBe(0);
   });
 
+  it('[ENG-227] looks for a loose fact with no modules among the loose facts of its scope', async () => {
+    const loose = (id: string, scope: string) =>
+      existing(id, {
+        content: NEW_CONTENT,
+        moduleIds: [],
+        pageId: null,
+        scope,
+      });
+    const t = triage({
+      rows: [
+        loose('other-scope', 'apps/webapp'),
+        existing('on-page', { content: NEW_CONTENT, moduleIds: [] }),
+        loose('same-scope', 'apps/server'),
+        fresh({ moduleIds: [], pageId: null, scope: 'apps/server' }),
+      ],
+    });
+
+    await t.service.triage('new', ON);
+
+    expect(t.decisions[0]).toMatchObject({
+      decision: Decision.CORROBORATE,
+      corroboratedEntryId: 'same-scope',
+    });
+    expect(t.entries.get('other-scope')?.corroborationCount).toBe(0);
+    expect(t.entries.get('on-page')?.corroborationCount).toBe(0);
+  });
+
   it('[KG-4.1] counts only entries that are still live, and prefers the accepted one', async () => {
     const t = triage({
       rows: [
@@ -1058,6 +1099,7 @@ describe('near neighbours', () => {
     expect(t.findNearEntries).toHaveBeenCalledWith(WORKSPACE, NEW_CONTENT, {
       moduleIds: [SERVER],
       pageId: PAGE,
+      scope: 'apps/server',
       minSimilarity: 0.6,
     });
     expect(t.relations).toEqual([

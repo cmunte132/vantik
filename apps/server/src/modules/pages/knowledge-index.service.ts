@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PageEntryStatusEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { onLivePageOrLoose } from 'common/page-entry-where';
+
 import { LoggerService } from 'modules/logger/logger.service';
 import {
   ENTRY_INDEX_INCLUDE,
@@ -109,7 +111,7 @@ export default class KnowledgeIndexService {
         where: {
           deleted: null,
           status: PageEntryStatusEnum.CONSOLIDATED,
-          page: { deleted: null },
+          ...onLivePageOrLoose(),
         },
         select: { id: true },
       });

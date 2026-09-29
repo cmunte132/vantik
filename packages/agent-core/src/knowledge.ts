@@ -171,7 +171,8 @@ export interface KnowledgeEntry extends KnowledgeProof {
   /** How often it has actually been served — demonstrated usefulness. */
   retrievalCount: number;
   supersedesId: string | null;
-  pageId: string;
+  /** The page it is filed under. Null for a loose fact, on no page. */
+  pageId: string | null;
   createdAt: string;
 }
 
@@ -183,7 +184,8 @@ export interface KnowledgeHit extends KnowledgeProof {
   kind: 'page' | 'entry';
   /** For an entry, what sort of knowledge it is. Null for a page body. */
   entryKind: EntryKind | null;
-  page: KnowledgePageRef;
+  /** The page it is on. Null for a loose fact, on no page. */
+  page: KnowledgePageRef | null;
   entryId: string | null;
   content: string;
   scope: string | null;
@@ -281,8 +283,11 @@ export interface PagesForInput {
 }
 
 export interface RememberInput {
-  /** Page title or id. The fact is appended to this page. */
-  page: string;
+  /**
+   * Page title or id. The fact is appended to this page. Without a page,
+   * the fact is loose: it is on no page, and it must have a scope.
+   */
+  page?: string;
   /** One self-contained claim, in markdown. */
   content: string;
   /** What sort of knowledge it is. FACT when omitted. */

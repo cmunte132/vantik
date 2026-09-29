@@ -85,7 +85,13 @@ function buildService(documents: unknown[] = [entryDocument()]) {
       // Echoes back whatever ids were asked about, so by default every hit is
       // live and the staleness check only bites when a test says so.
       findMany: jest.fn(({ where }) =>
-        Promise.resolve((where.id?.in ?? []).map((id: string) => ({ id }))),
+        Promise.resolve(
+          (where.id?.in ?? []).map((id: string) => ({
+            id,
+            pageId: 'page-1',
+            page: { deleted: null as Date | null },
+          })),
+        ),
       ),
       updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
     },
@@ -162,7 +168,7 @@ describe('KnowledgeService.search', () => {
 
     const params = searchParams(typesense);
     // The control that still holds when every other gate has failed.
-    expect(params.group_by).toBe('pageId');
+    expect(params.group_by).toBe('group');
     expect(params.group_limit).toBe(KNOWLEDGE_GROUP_LIMIT);
   });
 
@@ -524,6 +530,8 @@ describe('the proof served with recall and context', () => {
   const checkedAt = new Date('2026-09-20T10:00:00Z');
   const grounded = {
     id: 'entry-1',
+    pageId: 'page-1',
+    page: { deleted: null as Date | null },
     status: PageEntryStatusEnum.STANDING,
     verifiedAt: null as Date | null,
     citations: [
@@ -802,7 +810,8 @@ describe('the knowledge a run is handed', () => {
       },
       deleted: null,
       moduleIds: { hasSome: [MODULE] },
-      page: { workspaceId: WORKSPACE, deleted: null },
+      workspaceId: WORKSPACE,
+      AND: [{ OR: [{ pageId: null }, { page: { deleted: null } }] }],
     });
     // The relevant ones are asked of the search by the issue's title, seeded
     // by its modules, and read back from postgres only while still accepted:

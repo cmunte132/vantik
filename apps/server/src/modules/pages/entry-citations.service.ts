@@ -20,6 +20,8 @@ import {
 } from 'integrations/repo-files';
 import { PrismaService } from 'nestjs-prisma';
 
+import { liveEntryIn } from 'common/page-entry-where';
+
 import { pathBelongsToModule } from 'modules/modules/module-routing';
 
 import CitationJudge from './citation-judge';
@@ -355,7 +357,7 @@ interface CheckedEntry {
   content: string;
   contentHash: string | null;
   sourceSession: string | null;
-  page: { workspaceId: string };
+  workspaceId: string;
 }
 
 /** A citation read for the first time: what was read, and what was found. */
@@ -947,7 +949,7 @@ export default class EntryCitationsService {
         // Never read, and the retries may have run out: read it now, at the
         // commit it cites, as the retry would have.
         const update = await this.readUnread(
-          entry.page.workspaceId,
+          entry.workspaceId,
           citation,
           reads,
         );
@@ -968,7 +970,7 @@ export default class EntryCitationsService {
         citation.kind === PageEntryCitationKindEnum.URL
           ? await this.recheckUrl(citation)
           : citation.kind !== PageEntryCitationKindEnum.CODE
-            ? await this.recheckTarget(entry.page.workspaceId, citation)
+            ? await this.recheckTarget(entry.workspaceId, citation)
             : await this.recheckCode(entry, citation, reads);
 
       if (update) {
@@ -1006,7 +1008,7 @@ export default class EntryCitationsService {
       await this.indexer?.entryChanged(entryId);
     }
 
-    await this.checkSinceCited(entry.page.workspaceId, firstReads);
+    await this.checkSinceCited(entry.workspaceId, firstReads);
 
     return { checked };
   }
@@ -1091,7 +1093,7 @@ export default class EntryCitationsService {
               PageEntryStatus.PROPOSED,
             ],
           },
-          page: { workspaceId: change.workspaceId, deleted: null },
+          ...liveEntryIn(change.workspaceId),
         },
       },
       orderBy: { id: 'asc' },
@@ -1105,7 +1107,7 @@ export default class EntryCitationsService {
             content: true,
             contentHash: true,
             sourceSession: true,
-            page: { select: { workspaceId: true } },
+            workspaceId: true,
           },
         },
       },
@@ -1235,7 +1237,7 @@ export default class EntryCitationsService {
       }
 
       const update = await this.readUnread(
-        entry.page.workspaceId,
+        entry.workspaceId,
         citation,
         reads,
       );
@@ -1282,7 +1284,7 @@ export default class EntryCitationsService {
       await this.indexer?.entryChanged(entryId);
     }
 
-    await this.checkSinceCited(entry.page.workspaceId, firstReads);
+    await this.checkSinceCited(entry.workspaceId, firstReads);
 
     return { stillUnknown, read: firstReads.length + pagesRead };
   }
@@ -1433,7 +1435,7 @@ export default class EntryCitationsService {
     const range = rangeOf(citation);
     const repo = await this.citedRepo(
       citation.moduleRepoId,
-      entry.page.workspaceId,
+      entry.workspaceId,
     );
 
     // Gone from the workspace, as the retry treats it: the cited code is no
@@ -1581,14 +1583,14 @@ export default class EntryCitationsService {
    */
   private async writerModel(entry: {
     sourceSession: string | null;
-    page: { workspaceId: string };
+    workspaceId: string;
   }) {
     if (!entry.sourceSession || !UUID.test(entry.sourceSession)) {
       return null;
     }
 
     const run = await this.prisma.agentRun.findFirst({
-      where: { id: entry.sourceSession, workspaceId: entry.page.workspaceId },
+      where: { id: entry.sourceSession, workspaceId: entry.workspaceId },
       select: { modelId: true },
     });
 
@@ -1603,7 +1605,7 @@ export default class EntryCitationsService {
         content: true,
         contentHash: true,
         sourceSession: true,
-        page: { select: { workspaceId: true } },
+        workspaceId: true,
         citations: { select: CITATION_SELECT },
       },
     });

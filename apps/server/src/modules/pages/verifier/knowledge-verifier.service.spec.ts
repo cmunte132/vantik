@@ -70,11 +70,10 @@ function setup(
     scope: 'apps/server',
     status: options.status ?? 'PROPOSED',
     moduleIds: ['m1'],
-    page: {
-      title: 'Deployment',
-      workspaceId: WORKSPACE,
-      workspace: { preferences: options.preferences ?? {} },
-    },
+    workspaceId: WORKSPACE,
+    workspace: { preferences: options.preferences ?? {} },
+    pageId: 'page-1' as string | null,
+    page: { title: 'Deployment' } as { title: string } | null,
     get citations() {
       return failing();
     },

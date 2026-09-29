@@ -34,6 +34,7 @@ function setup(held: string[] = [], options: { exportFails?: boolean } = {}) {
     kind: 'FACT',
     citations: [],
     deleted: null,
+    workspaceId: WORKSPACE,
     page: { title: 'Runbook', workspaceId: WORKSPACE, deleted: null },
     ...overrides,
   });
@@ -105,7 +106,8 @@ function setup(held: string[] = [], options: { exportFails?: boolean } = {}) {
   const matches = (row: Row, where: Row) =>
     (!('deleted' in where) || row.deleted === null) &&
     (!where.status || row.status === where.status) &&
-    (!where.page || row.page.deleted === null);
+    // The live-page filter: on a page not deleted, or on no page.
+    (!where.AND || row.pageId === null || row.page?.deleted === null);
   const prisma = {
     pageEntry: {
       findMany: jest.fn(async ({ where }: Row) =>

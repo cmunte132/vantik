@@ -127,6 +127,8 @@ function buildService({
           supersededBy,
           supersedesId: pointsAt?.id ?? null,
           supersedes: pointsAt ? { status: pointsAt.status } : null,
+          workspaceId: 'workspace-1',
+          pageId: 'page-1',
           page: { workspaceId: 'workspace-1' },
         }),
       ),
@@ -155,6 +157,11 @@ function buildService({
         ...(include?.citations && { citations: [] }),
       })),
       updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
+    },
+    pageEntryMove: {
+      createMany: jest.fn(({ data }) =>
+        Promise.resolve({ count: data.length }),
+      ),
     },
     pageEntryUse: {
       createMany: jest.fn(({ data }) =>
@@ -459,6 +466,246 @@ describe('provenance and supersede', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('[ENG-227] a fact on no page', () => {
+  const LOOSE = { content: 'Migrations run from the server image.' };
+
+  it('refuses a loose fact with no scope, and writes nothing', async () => {
+    const { service, prisma } = buildService();
+
+    await expect(
+      service.createEntry(null, AGENT, LOOSE, 'workspace-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createEntry(null, AGENT, { ...LOOSE, scope: '  ' }, 'workspace-1'),
+    ).rejects.toThrow(/needs a scope/);
+
+    expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('writes it into the workspace it names, on no page, with its scope', async () => {
+    const { service, prisma, created } = buildService();
+
+    await service.createEntry(
+      null,
+      AGENT,
+      { ...LOOSE, scope: ' apps/server/prisma ' },
+      'workspace-1',
+    );
+
+    expect(prisma.page.findFirst).not.toHaveBeenCalled();
+    expect(created[0]).toMatchObject({
+      workspaceId: 'workspace-1',
+      pageId: null,
+      scope: 'apps/server/prisma',
+      status: PageEntryStatusEnum.PROPOSED,
+    });
+  });
+
+  it('gives a fact on a page the workspace of its page', async () => {
+    const { service, created } = buildService();
+
+    await service.createEntry('page-1', AGENT, LOOSE, 'workspace-other');
+
+    expect(created[0]).toMatchObject({
+      workspaceId: 'workspace-1',
+      pageId: 'page-1',
+    });
+  });
+
+  it('holds it to the curated budget, per token, among the loose facts of its scope', async () => {
+    const { service, prisma } = buildService({
+      outstanding: PROPOSED_ENTRY_BUDGET,
+    });
+
+    await expect(
+      service.createEntry(
+        null,
+        AGENT,
+        { ...LOOSE, scope: 'apps/server' },
+        'workspace-1',
+      ),
+    ).rejects.toThrow(/outside any page scoped to "apps\/server"/);
+
+    const { where } = (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0];
+    expect(where).toMatchObject({
+      workspaceId: 'workspace-1',
+      pageId: null,
+      scope: 'apps/server',
+      sourceTokenId: 'token-1',
+    });
+    expect(prisma.pageEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses an exact repeat anywhere in the workspace', async () => {
+    const { service, prisma } = buildService({
+      existing: [{ id: 'entry-9', content: LOOSE.content }],
+    });
+
+    await expect(
+      service.createEntry(
+        null,
+        AGENT,
+        { ...LOOSE, scope: 'apps/server' },
+        'workspace-1',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    const { where } = (prisma.pageEntry.findMany as jest.Mock).mock.calls[1][0];
+    expect(where.workspaceId).toBe('workspace-1');
+    expect(where.pageId).toBeUndefined();
+    expect(where.contentHash).toBe(contentHashOf(LOOSE.content));
+  });
+
+  it('looks for near matches across the workspace', async () => {
+    const { service, vectorService } = buildService();
+
+    await service.createEntry(
+      null,
+      AGENT,
+      { ...LOOSE, scope: 'apps/server' },
+      'workspace-1',
+    );
+
+    expect(vectorService.findSimilarEntries).toHaveBeenCalledWith(
+      'workspace-1',
+      null,
+      LOOSE.content,
+    );
+  });
+
+  it('may supersede a fact on any page of its workspace, and a page fact may supersede a loose one', async () => {
+    const loose = buildService({
+      entryStatus: PageEntryStatusEnum.STANDING,
+    });
+
+    await loose.service.createEntry(
+      null,
+      AGENT,
+      { ...LOOSE, scope: 'apps/server', supersedesId: 'entry-old' },
+      'workspace-1',
+    );
+
+    const looseWhere = (loose.prisma.pageEntry.findFirst as jest.Mock).mock
+      .calls[0][0].where;
+    expect(looseWhere).toMatchObject({
+      id: 'entry-old',
+      workspaceId: 'workspace-1',
+    });
+    expect(looseWhere.OR).toBeUndefined();
+
+    const onPage = buildService({ entryStatus: PageEntryStatusEnum.STANDING });
+
+    await onPage.service.createEntry('page-1', AGENT, {
+      ...LOOSE,
+      supersedesId: 'entry-old',
+    });
+
+    expect(
+      (onPage.prisma.pageEntry.findFirst as jest.Mock).mock.calls[0][0].where,
+    ).toMatchObject({
+      workspaceId: 'workspace-1',
+      OR: [{ pageId: 'page-1' }, { pageId: null }],
+    });
+  });
+
+  it('refuses to clear the scope of a loose fact', async () => {
+    const { service, prisma } = buildService({ userType: 'User' });
+
+    (prisma.pageEntry.findFirst as jest.Mock).mockResolvedValueOnce({
+      status: PageEntryStatusEnum.PROPOSED,
+      sourceUserId: 'human-1',
+      supersededBy: null,
+      supersedesId: null,
+      supersedes: null,
+      workspaceId: 'workspace-1',
+      pageId: null,
+      scope: 'apps/server',
+    });
+
+    await expect(
+      service.updateEntry('entry-1', 'human-1', { scope: '' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.pageEntry.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('[ENG-227] moving facts under a page', () => {
+  it('is for people: an agent moves nothing', async () => {
+    const { service, prisma } = buildService({ userType: 'Agent' });
+
+    await expect(
+      service.moveEntries('workspace-1', 'agent-1', {
+        entryIds: ['loose-1'],
+        pageId: 'page-1',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.pageEntry.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('files each fact under the page, and records the move on its trail', async () => {
+    const { service, prisma } = buildService({
+      userType: 'User',
+      existing: [
+        { id: 'loose-1', content: 'a', pageId: null } as never,
+        { id: 'other-page', content: 'b', pageId: 'page-2' } as never,
+      ],
+    });
+
+    const result = await service.moveEntries('workspace-1', 'human-1', {
+      entryIds: ['loose-1', 'other-page', 'missing'],
+      pageId: 'page-1',
+      suggested: true,
+    });
+
+    expect(result).toEqual({ moved: ['loose-1', 'other-page'], skipped: 1 });
+
+    const { where } = (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0];
+    expect(where).toMatchObject({
+      workspaceId: 'workspace-1',
+      status: { not: PageEntryStatusEnum.CONSOLIDATED },
+      NOT: { pageId: 'page-1' },
+    });
+    expect(prisma.pageEntry.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['loose-1', 'other-page'] } },
+      data: { pageId: 'page-1' },
+    });
+    expect(prisma.pageEntryMove.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          workspaceId: 'workspace-1',
+          entryId: 'loose-1',
+          fromPageId: null,
+          toPageId: 'page-1',
+          movedById: 'human-1',
+          suggested: true,
+        },
+        {
+          workspaceId: 'workspace-1',
+          entryId: 'other-page',
+          fromPageId: 'page-2',
+          toPageId: 'page-1',
+          movedById: 'human-1',
+          suggested: true,
+        },
+      ],
+    });
+  });
+
+  it('refuses a page outside the workspace', async () => {
+    const { service, prisma } = buildService({ userType: 'User' });
+
+    (prisma.page.findFirst as jest.Mock).mockResolvedValueOnce(null);
+
+    await expect(
+      service.moveEntries('workspace-1', 'human-1', {
+        entryIds: ['loose-1'],
+        pageId: 'page-x',
+      }),
+    ).rejects.toThrow(/not found/);
+    expect(prisma.pageEntry.updateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -938,7 +1185,9 @@ describe('decay', () => {
     row: Row | Citation,
   ): boolean {
     return Object.entries(where).every(([field, condition]) => {
-      if (field === 'page' || field === 'deleted') {
+      // The rows here are all live and in the workspace, so the filters on
+      // the page and the workspace hold for each of them.
+      if (['page', 'deleted', 'workspaceId', 'AND'].includes(field)) {
         return true;
       }
       if (field === 'OR') {
@@ -1759,7 +2008,8 @@ describe('entries about modules', () => {
 
     const { where } = (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0];
     expect(where).toMatchObject({
-      page: { workspaceId: 'workspace-1', deleted: null },
+      workspaceId: 'workspace-1',
+      AND: [{ OR: [{ pageId: null }, { page: { deleted: null } }] }],
       status: { in: [PageEntryStatusEnum.STANDING] },
       moduleIds: { hasSome: ['server', 'webapp'] },
     });
@@ -1776,7 +2026,7 @@ describe('entries about modules', () => {
     const { where } = (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0];
     expect(where).toMatchObject({
       deleted: null,
-      page: { workspaceId: 'workspace-1', deleted: null },
+      workspaceId: 'workspace-1',
       id: { in: ['e-1', 'e-2'] },
       status: {
         in: [PageEntryStatusEnum.STANDING, PageEntryStatusEnum.CONSOLIDATED],
@@ -2070,7 +2320,10 @@ describe('entries as they are read', () => {
     });
     expect(
       (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0].include,
-    ).toEqual({ citations: { select: expect.any(Object) } });
+    ).toEqual({
+      citations: { select: expect.any(Object) },
+      moves: { select: expect.any(Object), orderBy: { createdAt: 'asc' } },
+    });
   });
 });
 
@@ -2086,7 +2339,7 @@ describe('answering a knowledge gap', () => {
     {
       entryId,
       targetId: 'issue-1',
-      entry: { page: { workspaceId: 'workspace-1' } },
+      entry: { workspaceId: 'workspace-1' },
     },
   ];
 

@@ -7,6 +7,8 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { liveEntryIn } from 'common/page-entry-where';
+
 import {
   KnowledgeSearchHit,
   KnowledgeSearchResult,
@@ -278,7 +280,7 @@ export default class KnowledgeService {
     const live: Prisma.PageEntryWhereInput = {
       status: { in: SERVED_STATUSES },
       deleted: null,
-      page: { workspaceId, deleted: null },
+      ...liveEntryIn(workspaceId),
     };
 
     const conventions = issue.moduleIds.length
@@ -515,7 +517,7 @@ export default class KnowledgeService {
   /** Near matches for a fact about to be written. Hints, never a veto. */
   async similarEntries(
     workspaceId: string,
-    pageId: string,
+    pageId: string | null,
     content: string,
   ): Promise<KnowledgeSearchHit[]> {
     return this.vectorService.findSimilarEntries(workspaceId, pageId, content);

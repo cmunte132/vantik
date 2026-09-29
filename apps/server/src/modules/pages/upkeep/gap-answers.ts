@@ -5,6 +5,8 @@ import {
 } from '@prisma/client';
 import { type PrismaService } from 'nestjs-prisma';
 
+import { onLivePageOrLoose } from 'common/page-entry-where';
+
 /**
  * How a knowledge gap comes to be answered: an entry citing the issue opened
  * for it is accepted. Kept apart from the job that opens the issues, so that
@@ -57,21 +59,21 @@ export async function answerGaps(
       entry: {
         deleted: null,
         status: { in: ACCEPTED },
-        page: { deleted: null },
+        ...onLivePageOrLoose(),
       },
     },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
       entryId: true,
       targetId: true,
-      entry: { select: { page: { select: { workspaceId: true } } } },
+      entry: { select: { workspaceId: true } },
     },
   });
 
   return markAnswered(
     prisma,
     citations.map((citation) => ({
-      workspaceId: citation.entry.page.workspaceId,
+      workspaceId: citation.entry.workspaceId,
       issueId: citation.targetId as string,
       entryId: citation.entryId,
     })),

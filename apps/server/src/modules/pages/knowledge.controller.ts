@@ -1,4 +1,4 @@
-import type { KnowledgeOverview } from '@vantikhq/types';
+import type { KnowledgeOverview, LooseFactGroup } from '@vantikhq/types';
 
 import {
   Body,
@@ -12,6 +12,7 @@ import {
 import {
   KnowledgeContextDto,
   KnowledgeGapsQueryDto,
+  KnowledgeLooseQueryDto,
   KnowledgeSearchQueryDto,
   KnowledgeSimilarDto,
 } from '@vantikhq/types';
@@ -29,6 +30,7 @@ import {
 } from 'modules/vector/vector.interface';
 
 import KnowledgeOverviewService from './knowledge-overview.service';
+import LooseFactsService from './loose-facts.service';
 import KnowledgeService, {
   ContextPack,
   KnowledgeGap,
@@ -52,6 +54,7 @@ export class KnowledgeController {
     private knowledgeService: KnowledgeService,
     private prisma: PrismaService,
     private overviewService: KnowledgeOverviewService,
+    private looseFactsService: LooseFactsService,
   ) {}
 
   @Get('search')
@@ -122,7 +125,7 @@ export class KnowledgeController {
 
     return this.knowledgeService.similarEntries(
       workspaceId,
-      query.pageId,
+      query.pageId ?? null,
       query.content,
     );
   }
@@ -161,6 +164,28 @@ export class KnowledgeController {
     );
 
     return this.overviewService.overview(workspaceId);
+  }
+
+  /**
+   * The facts on no page, in groups by scope, each with the gardener's
+   * suggestion. With a page, only the groups that fit that page.
+   */
+  @Get('loose')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async loose(
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
+    @Query() query: KnowledgeLooseQueryDto,
+  ): Promise<LooseFactGroup[]> {
+    const workspaceId = await this.workspace(
+      userId,
+      sessionWorkspaceId,
+      query.workspaceId,
+    );
+
+    return query.pageId
+      ? this.looseFactsService.fitting(workspaceId, query.pageId)
+      : (await this.looseFactsService.loose(workspaceId)).groups;
   }
 
   private workspace(

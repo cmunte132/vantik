@@ -21,6 +21,8 @@ import { KnowledgeTrustEnum } from '@vantikhq/types';
 import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
+import { liveEntryIn, onLivePageOrLoose, onUnlockedPageOrLoose } from 'common/page-entry-where';
+
 import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
 
 import { LoggerService } from 'modules/logger/logger.service';
@@ -209,12 +211,8 @@ const ENTRY_SELECT = {
   sourceUserId: true,
   sourceSession: true,
   verifiedAt: true,
-  page: {
-    select: {
-      workspaceId: true,
-      workspace: { select: { preferences: true } },
-    },
-  },
+  workspaceId: true,
+  workspace: { select: { preferences: true } },
   citations: {
     select: {
       kind: true,
@@ -274,7 +272,7 @@ export default class KnowledgeTriageService {
     trigger: KnowledgeTriageTrigger = KnowledgeTriageTrigger.WRITTEN,
   ): Promise<TriageOutcome | null> {
     const entry = await this.prisma.pageEntry.findFirst({
-      where: { id: entryId, deleted: null, page: { deleted: null } },
+      where: { id: entryId, deleted: null, ...onLivePageOrLoose() },
       select: ENTRY_SELECT,
     });
 
@@ -285,8 +283,8 @@ export default class KnowledgeTriageService {
       return null;
     }
 
-    const workspaceId = entry.page.workspaceId;
-    const settings = knowledgeSettings(entry.page.workspace?.preferences, env);
+    const workspaceId = entry.workspaceId;
+    const settings = knowledgeSettings(entry.workspace?.preferences, env);
 
     if (settings.autoTriage === 'off') {
       return null;
@@ -397,24 +395,27 @@ export default class KnowledgeTriageService {
         reasons.add(KnowledgeEscalationReason.SUPERSEDE_REQUEST);
       } else if (supersedes.verifiedAt) {
         reasons.add(KnowledgeEscalationReason.CONTRADICTS_VERIFIED);
-      } else if (supersedes.page.entryPolicy === PageEntryPolicy.LOCKED) {
+      } else if (supersedes.page?.entryPolicy === PageEntryPolicy.LOCKED) {
         reasons.add(KnowledgeEscalationReason.CONTRADICTS_LOCKED);
       }
     }
 
     // Entries that were there before this one, in its modules, or on its
     // page when it has none: waiting, or served (a consolidated entry is
-    // served as its page's evidence). "Before" is a total order, by time and
-    // then id, so of two identical entries written at once exactly one
-    // corroborates the other.
+    // served as its page's evidence). A loose entry with no modules has no
+    // page either, so its neighbours are the loose entries of its scope.
+    // "Before" is a total order, by time and then id, so of two identical
+    // entries written at once exactly one corroborates the other.
     const neighbourhood: Prisma.PageEntryWhereInput = {
       id: { not: entry.id },
       deleted: null,
       status: { in: NEIGHBOUR_STATUSES },
-      page: { workspaceId, deleted: null },
+      ...liveEntryIn(workspaceId),
       ...(entry.moduleIds.length
         ? { moduleIds: { hasSome: entry.moduleIds } }
-        : { pageId: entry.pageId }),
+        : entry.pageId
+          ? { pageId: entry.pageId }
+          : { pageId: null, scope: entry.scope }),
       OR: [
         { createdAt: { lt: entry.createdAt } },
         { createdAt: entry.createdAt, id: { lt: entry.id } },
@@ -776,7 +777,7 @@ export default class KnowledgeTriageService {
         from: {
           deleted: null,
           status: { in: SERVED },
-          page: { workspaceId, deleted: null },
+          ...liveEntryIn(workspaceId),
         },
       },
       select: {
@@ -804,11 +805,12 @@ export default class KnowledgeTriageService {
     minSimilarity: number,
   ): Promise<Neighbour[]> {
     const near = await this.vector.findNearEntries(
-      entry.page.workspaceId,
+      entry.workspaceId,
       entry.content,
       {
         moduleIds: entry.moduleIds,
         pageId: entry.pageId,
+        scope: entry.scope,
         minSimilarity,
       },
     );
@@ -844,7 +846,7 @@ export default class KnowledgeTriageService {
         similarity: similarity.get(row.id) ?? 0,
         status: row.status,
         trust: entryTrust(row),
-        locked: row.page.entryPolicy === PageEntryPolicy.LOCKED,
+        locked: row.page?.entryPolicy === PageEntryPolicy.LOCKED,
         createdAt: row.createdAt,
         relation: null,
         decidedBy: null,
@@ -1103,7 +1105,7 @@ export default class KnowledgeTriageService {
             ? (
                 await tx.knowledgeVerification.createMany({
                   data: [
-                    { entryId: entry.id, workspaceId: entry.page.workspaceId },
+                    { entryId: entry.id, workspaceId: entry.workspaceId },
                   ],
                   skipDuplicates: true,
                 })
@@ -1114,7 +1116,7 @@ export default class KnowledgeTriageService {
           data: {
             id,
             entryId: entry.id,
-            workspaceId: entry.page.workspaceId,
+            workspaceId: entry.workspaceId,
             decision: found.decision,
             reasons: found.reasons,
             policy: found.policy,
@@ -1291,7 +1293,7 @@ export default class KnowledgeTriageService {
           id: found.corroborates,
           deleted: null,
           status: { in: NEIGHBOUR_STATUSES },
-          page: { deleted: null },
+          ...onLivePageOrLoose(),
           ...found.corroboratesAsRead,
         },
         data: { corroborationCount: { increment: 1 } },
@@ -1319,10 +1321,7 @@ export default class KnowledgeTriageService {
             status: displaced.status,
             verifiedAt: null,
             content: displaced.content,
-            page: {
-              deleted: null,
-              entryPolicy: { not: PageEntryPolicy.LOCKED },
-            },
+            ...onUnlockedPageOrLoose(),
           },
           data: { status: PageEntryStatus.DISPUTED },
         });
@@ -1346,10 +1345,7 @@ export default class KnowledgeTriageService {
             status: found.retires.status,
             verifiedAt: null,
             content: found.retires.content,
-            page: {
-              deleted: null,
-              entryPolicy: { not: PageEntryPolicy.LOCKED },
-            },
+            ...onUnlockedPageOrLoose(),
           },
           data: { status: PageEntryStatus.SUPERSEDED },
         });

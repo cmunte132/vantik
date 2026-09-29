@@ -48,12 +48,12 @@ model AgentRun {
 
   /// 1 for the first try. A lease that expires re-queues the work as a fresh
   /// row with attempt + 1, up to a cap.
-  attempt Int @default(1)
+  attempt       Int       @default(1)
   /// The run this one retries, so a chain of attempts is walkable in both
   /// directions without scanning by issue.
-  previousRun   AgentRun?  @relation("AgentRunAttempts", fields: [previousRunId], references: [id])
-  previousRunId String?    @unique
-  nextRun       AgentRun?  @relation("AgentRunAttempts")
+  previousRun   AgentRun? @relation("AgentRunAttempts", fields: [previousRunId], references: [id])
+  previousRunId String?   @unique
+  nextRun       AgentRun? @relation("AgentRunAttempts")
 
   /// Held by whoever claimed the run; renewed by heartbeat. Past it, the run is
   /// expired by the sweeper regardless of what the runner believes.
@@ -66,15 +66,15 @@ model AgentRun {
   /// executor never writes the comment itself.
   summary String?
   /// The operator-facing message behind a terminal failure.
-  error String?
+  error   String?
   /// Typed, so failures are countable. A free-text error field answers "what
   /// happened here" and never "how often does setup break".
   failure AgentRunFailure?
 
   /// Branch, PR url, linked issue id, token and cost counters.
-  result Json?
+  result      Json?
   /// Repo, base branch, harness command, verification commands, limits.
-  config Json?
+  config      Json?
   /// What the agent was handed, snapshotted at dispatch. Kept so a run stays
   /// reproducible after the issue it came from has been edited.
   contextPack Json?
@@ -87,25 +87,25 @@ model AgentRun {
   /// Pinned harness build, e.g. `pi@0.82.1`.
   harnessVersion String?
   /// The model the harness actually ran, as the provider names it.
-  modelId String?
+  modelId        String?
   /// Hash over the effective config — harness, limits, phase flags. Two runs
   /// with the same hash were asked the same question.
-  configHash String?
+  configHash     String?
   /// How many implement/score cycles ran. 0 until the ENG-62 loop is enabled.
-  iterationCount Int @default(0)
+  iterationCount Int     @default(0)
   /// Milliseconds per phase: `{ setup, specify, implement, score, review }`.
   /// One blob rather than a column each, because the phase set is exactly what
   /// ENG-62 is expected to change.
-  phaseTimings Json?
+  phaseTimings   Json?
   /// The commit the patch is computed against. Authoritative: the diff is
   /// `git diff` versus this, never a model-emitted patch.
-  baseCommit String?
+  baseCommit     String?
 
   /// Whether this run was handed the workspace's knowledge (TREATMENT) or held
   /// out from it (HOLDOUT), so the two can be compared. Chosen from the run's
   /// id when it is delegated, and kept by its retries, which are handed the
   /// same pack. Null for runs delegated before the holdout existed.
-  knowledgeArm KnowledgeArm?
+  knowledgeArm        KnowledgeArm?
   /// What became of the pull request this run opened: null while it is open,
   /// and for a run that opened none.
   pullRequestOutcome  AgentRunPullRequestOutcome?
@@ -133,13 +133,13 @@ model AgentRunEvent {
   createdAt DateTime @default(now())
 
   /// When the executor says it happened, which is not when we stored it.
-  at      DateTime          @default(now())
+  at      DateTime           @default(now())
   level   AgentRunEventLevel @default(INFO)
   message String
   /// Phase this line belongs to, when the harness knows: only it can see the
   /// boundaries.
-  phase String?
-  data  Json?
+  phase   String?
+  data    Json?
 
   run   AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
   runId String
@@ -165,28 +165,28 @@ model AgentRunIteration {
   /// Pass rate over the suite the implementer could see.
   validationPassRate Float?
   /// Pass rate over the suite it never saw.
-  heldOutPassRate Float?
+  heldOutPassRate    Float?
   /// validation − held-out. The reward-hacking metric: numeric, per-iteration,
   /// no model asked for an opinion. Widening while validation climbs is the
   /// signature of optimising the proxy, and aborts the loop.
-  delta Float?
+  delta              Float?
 
   /// Whether the repo's own verification commands passed this pass.
   verificationPassed Boolean?
   /// Review findings, each carrying a `file:line` or a failing command.
   /// Findings without evidence are discarded before they get here.
-  findings Json?
+  findings           Json?
   /// The reviewer's verdict on this pass: accepted, not accepted, or null when
   /// no review ran or none could be read.
-  accepted Boolean?
+  accepted           Boolean?
   /// The verification commands that failed this pass, each with the file
   /// paths its output named: `[{ label, command, paths }]`. The output itself
   /// is not kept; the paths are what a failure is attributed by.
-  failedChecks Json?
+  failedChecks       Json?
   /// Hash of the patch this iteration produced, for detecting the oscillation
   /// case where two passes change nothing.
-  diffHash String?
-  phaseTimings Json?
+  diffHash           String?
+  phaseTimings       Json?
 
   @@unique([runId, index])
   @@index([runId])
@@ -241,7 +241,7 @@ model WorkspaceCredential {
   /// What the key could reach when it was last checked, and when. Cached so
   /// the settings screen can name the models a key offers without calling the
   /// provider on every render.
-  models        Json?
+  models          Json?
   modelsCheckedAt DateTime?
 
   createdById String?
@@ -816,19 +816,19 @@ model Page {
   /// Who writes the body. People write an AUTHORED page, and an agent can
   /// only propose a change to it; the gardener builds a GENERATED page from
   /// the entries it cites, one section at a time.
-  kind     PageKind @default(AUTHORED)
+  kind          PageKind  @default(AUTHORED)
   /// The question a generated page answers. It is what the page's evidence
   /// is gathered for, and what a reader checks the page against.
-  question String?
+  question      String?
   /// A generated page's body, as `[{ id, heading, body, entryIds }]`: each
   /// section in markdown, with a stable id that a refresh edits by, and the
   /// entries it was written from. `description` holds the same sections
   /// rendered, so every reader of a page body reads a generated one too.
-  sections Json?
+  sections      Json?
   /// The entries the page cites: those its sections were written from, and
   /// those folded into it by a consolidation a person accepted. They stay in
   /// use as its evidence, served below it, and decay does not retire them.
-  citedEntryIds String[] @default([])
+  citedEntryIds String[]  @default([])
   /// For a generated page: the newest change among its evidence when it was
   /// last built. A refresh runs only once the evidence has moved past it.
   watermark     DateTime?
@@ -871,8 +871,9 @@ model PageEntry {
   /// Markdown, short. One claim per row.
   content String
 
-  /// Where the fact applies — a repo path glob, a team, a project. Null means
-  /// it applies to the page as a whole.
+  /// Where the fact applies: a repo path glob, a team, a project. On a page,
+  /// null means that the fact applies to the page as a whole. A fact on no
+  /// page must have a scope, because the scope is then its only home.
   scope String?
 
   /// The modules the scope falls in, resolved against `ModuleRepo.pathPrefixes`
@@ -933,8 +934,20 @@ model PageEntry {
   /// a DUPLICATE relation from the repeat, which records who said it and when.
   corroborationCount Int @default(0)
 
-  page   Page   @relation(fields: [pageId], references: [id])
-  pageId String
+  /// The workspace of the fact. It is stored on the entry, because a fact on
+  /// no page has no page to find its workspace through.
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+
+  /// The page the fact is filed under. Null for a loose fact: an agent found
+  /// no page that fits, so the fact lives by its scope until a person or the
+  /// gardener moves it under one. Retrieval serves a loose fact exactly like a
+  /// fact on a page.
+  page   Page?   @relation(fields: [pageId], references: [id])
+  pageId String?
+
+  /// Each time the fact moved between pages, oldest first.
+  moves PageEntryMove[]
 
   /// What the claim rests on: code at a commit, or where it was decided.
   citations PageEntryCitation[]
@@ -951,8 +964,34 @@ model PageEntry {
   findings        KnowledgeFinding[]
 
   @@index([pageId])
+  @@index([workspaceId, pageId])
   @@index([status])
   @@index([contentHash])
+}
+
+/// One step on a fact's trail: it moved from one page to another, or from no
+/// page to a page. A loose fact moves under a page when one fits, and the
+/// trail keeps where it lived before.
+model PageEntryMove {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  workspaceId String
+
+  entry   PageEntry @relation(fields: [entryId], references: [id])
+  entryId String
+
+  /// Null when the fact was loose before the move.
+  fromPageId String?
+  /// Null when the fact became loose.
+  toPageId   String?
+
+  /// The person who moved it.
+  movedById String?
+  /// True when the person took the gardener's suggestion.
+  suggested Boolean @default(false)
+
+  @@index([entryId, createdAt])
 }
 
 /// One piece of evidence for an entry, checked by the server.
@@ -1007,10 +1046,10 @@ model PageEntryCitation {
 
   /// For a CHANGED check only: whether the current code still supports the
   /// claim, as a model other than the writer's judged it, and which model.
-  judgment    PageEntryCitationJudgment?
-  judgeModel  String?
-  judgeLines  String?
-  judgeReason String?
+  judgment          PageEntryCitationJudgment?
+  judgeModel        String?
+  judgeLines        String?
+  judgeReason       String?
   /// The entry's `contentHash` when the judge read it. A person may reword
   /// the entry afterwards, and a judgment of the old words says nothing
   /// about the new ones, so the gardener never acts on it for them.
@@ -1073,10 +1112,10 @@ model PageEntrySignal {
   agentRun   AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
   agentRunId String
 
-  source PageEntrySignalSource
-  kind   PageEntrySignalKind
+  source   PageEntrySignalSource
+  kind     PageEntrySignalKind
   /// 1 for a full signal, 0.5 for a weak one.
-  weight Float
+  weight   Float
   /// What pointed at the entry, for a harmful signal: the finding's
   /// `file:line`, or the failing command and the path its output named.
   evidence String?
@@ -1254,8 +1293,8 @@ model PageEntryMaintenance {
   entry   PageEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   entryId String
 
-  action PageEntryMaintenanceAction
-  reason PageEntryMaintenanceReason
+  action   PageEntryMaintenanceAction
+  reason   PageEntryMaintenanceReason
   /// What it rested on: the citation and the commit it was read at, the
   /// judge's reason, the counts and the margin, the window.
   evidence Json?
@@ -1374,9 +1413,9 @@ model PageKnowledgeGap {
 
   /// The issue opened to answer it, once one is. A gap has at most one, so
   /// the job that opens them never opens a second for the same question.
-  issueId    String?
+  issueId           String?
   /// The module the question resolved to when its issue was opened, if one.
-  moduleId   String?
+  moduleId          String?
   /// When an entry citing that issue was accepted, and which.
   answeredAt        DateTime?
   answeredByEntryId String?
@@ -1941,6 +1980,7 @@ model Workspace {
   modules               Module[]
   capabilities          Capability[]
   pages                 Page[]
+  pageEntries           PageEntry[]
   agentRuns             AgentRun[]
   credentials           WorkspaceCredential[]
   webhookSubscription   WebhookSubscription[]

@@ -212,6 +212,9 @@ function harness(seed: Seed = {}) {
     module: moduleView(row.moduleId),
   });
   const entryView = (row: Row): Row => ({
+    // An entry carries its page's workspace, as a row in postgres does.
+    workspaceId: (pages.get(row.pageId as string) as Row | undefined)
+      ?.workspaceId,
     ...row,
     page: pages.get(row.pageId as string),
     citations: citations.filter((c) => c.entryId === row.id),

@@ -52,7 +52,7 @@ function buildPrisma(rows: Array<{ id: string; workspaceId: string }>) {
     pageEntry: {
       findFirst: jest.fn(({ where }) =>
         Promise.resolve(
-          where.page?.workspaceId === MY_WORKSPACE && where.id === 'entry-mine'
+          where.workspaceId === MY_WORKSPACE && where.id === 'entry-mine'
             ? { id: 'entry-mine' }
             : null,
         ),

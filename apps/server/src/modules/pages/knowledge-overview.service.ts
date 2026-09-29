@@ -15,8 +15,11 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { liveEntryIn } from 'common/page-entry-where';
+
 import { entryTrust } from './knowledge-proof';
 import KnowledgeReviewService from './knowledge-review.service';
+import LooseFactsService from './loose-facts.service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
@@ -55,6 +58,7 @@ export default class KnowledgeOverviewService {
   constructor(
     private prisma: PrismaService,
     private review: KnowledgeReviewService,
+    private looseFacts: LooseFactsService,
   ) {}
 
   async overview(
@@ -81,7 +85,7 @@ export default class KnowledgeOverviewService {
         where: {
           deleted: null,
           status: { in: IN_USE },
-          page: { workspaceId, deleted: null },
+          ...liveEntryIn(workspaceId),
         },
         select: {
           id: true,
@@ -123,13 +127,19 @@ export default class KnowledgeOverviewService {
     const total = emptyCounts();
 
     for (const entry of entries) {
+      const trust = entryTrust(entry, now);
+
+      countTrust(total, trust);
+
+      // A loose fact counts in the workspace, and on no page.
+      if (!entry.pageId) {
+        continue;
+      }
+
       const counts = perPage.get(entry.pageId) ?? emptyCounts();
 
       perPage.set(entry.pageId, counts);
-      const trust = entryTrust(entry, now);
-
       countTrust(counts, trust);
-      countTrust(total, trust);
       given.set(
         entry.pageId,
         (given.get(entry.pageId) ?? 0) + (uses.get(entry.id) ?? 0),
@@ -146,11 +156,16 @@ export default class KnowledgeOverviewService {
     }
 
     for (const item of queue.items) {
+      total.needYou++;
+
+      if (!item.entry.pageId) {
+        continue;
+      }
+
       const counts = perPage.get(item.entry.pageId) ?? emptyCounts();
 
       perPage.set(item.entry.pageId, counts);
       counts.needYou++;
-      total.needYou++;
     }
 
     const rewriting = new Set(proposals.map((proposal) => proposal.pageId));
@@ -163,7 +178,7 @@ export default class KnowledgeOverviewService {
       total.needYou++;
     }
 
-    const [week, gardenerAt, gaps, research] = await Promise.all([
+    const [week, gardenerAt, gaps, research, loose] = await Promise.all([
       this.week(workspaceId, weekAgo),
       this.gardenerAt(workspaceId),
       this.prisma.pageKnowledgeGap.findMany({
@@ -177,6 +192,7 @@ export default class KnowledgeOverviewService {
         select: { id: true, query: true, count: true, updatedAt: true },
       }),
       this.research(workspaceId),
+      this.looseFacts.loose(workspaceId),
     ]);
     // A gap that an agent researches now shows in the background list only.
     const researched = new Set(research.map((item) => item.gapId));
@@ -210,6 +226,7 @@ export default class KnowledgeOverviewService {
           lastAskedAt: gap.updatedAt.toISOString(),
         })),
       research,
+      loose,
     };
   }
 
@@ -237,7 +254,7 @@ export default class KnowledgeOverviewService {
   private async productsOf(
     workspaceId: string,
     pages: Array<{ id: string; parentId: string | null }>,
-    entries: Array<{ pageId: string; moduleIds: string[] }>,
+    entries: Array<{ pageId: string | null; moduleIds: string[] }>,
     products: Set<string>,
   ): Promise<Map<string, string>> {
     const links = await this.prisma.pageLink.findMany({
@@ -311,7 +328,9 @@ export default class KnowledgeOverviewService {
     }
 
     for (const entry of entries) {
-      vote(entry.pageId, entry.moduleIds);
+      if (entry.pageId) {
+        vote(entry.pageId, entry.moduleIds);
+      }
     }
 
     return resolveProducts(pages, votes);
@@ -327,7 +346,7 @@ export default class KnowledgeOverviewService {
         where: {
           deleted: null,
           createdAt: { gte: since },
-          page: { workspaceId, deleted: null },
+          ...liveEntryIn(workspaceId),
           sourceUserId: { not: null },
         },
         select: { id: true, sourceUserId: true },

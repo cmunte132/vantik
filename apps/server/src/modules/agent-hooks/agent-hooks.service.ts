@@ -5,7 +5,10 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { CacheService } from 'modules/cache/cache.service';
 import { LoggerService } from 'modules/logger/logger.service';
-import { KnowledgeSearchHit } from 'modules/vector/vector.interface';
+import {
+  KnowledgeSearchHit,
+  entryGroup,
+} from 'modules/vector/vector.interface';
 import { VectorService } from 'modules/vector/vector.service';
 
 import { HookEvent, HookInput } from './agent-hooks.harness';
@@ -364,25 +367,31 @@ export class AgentHooksService {
     const pages = new Map<string, KnowledgePointer & { pageId: string }>();
 
     for (const hit of hits) {
+      // A loose fact has no page. Its pointer is the group of loose facts
+      // with its scope, so that the session gets that group one time.
+      const key = entryGroup(hit);
+
       // A hit that matched only by its words has no distance. Such a match is
       // too weak to interrupt the agent.
       if (
         hit.distance === undefined ||
         hit.distance > POINTER_DISTANCE ||
-        pointed.includes(hit.pageId)
+        pointed.includes(key)
       ) {
         continue;
       }
 
-      const page = pages.get(hit.pageId);
+      const page = pages.get(key);
 
       if (page) {
         page.matches += 1;
         page.scope ??= hit.scope;
       } else {
-        pages.set(hit.pageId, {
-          pageId: hit.pageId,
-          title: hit.pageTitle || hit.title,
+        pages.set(key, {
+          pageId: key,
+          title: hit.pageId
+            ? hit.pageTitle || hit.title
+            : 'Facts outside any page',
           matches: 1,
           scope: hit.scope,
         });
@@ -527,8 +536,9 @@ export class AgentHooksService {
 
     try {
       const writes = await Promise.all([
+        // A fact on no page counts too, so the entry carries the workspace.
         this.prisma.pageEntry.findFirst({
-          where: { sourceUserId: userId, createdAt: after, page },
+          where: { sourceUserId: userId, createdAt: after, workspaceId },
           select: { id: true },
         }),
         this.prisma.pageHistory.findFirst({

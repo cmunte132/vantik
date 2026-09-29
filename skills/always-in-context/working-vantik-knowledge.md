@@ -62,7 +62,10 @@ it with `link_page`; not to every issue that happened to touch it.
 `read_page` before adding: the fact may already be in the body. Pages are
 few, broad and long-lived; the facts under them are many. A bank of forty thin
 pages is one nobody can navigate, and navigability is the whole product. Use
-`write_page` only when no existing page fits, and give it a real body.
+`write_page` only when no existing page fits, and give it a real body. If no
+page fits and you have no body for a new one, leave `page` out of `remember`:
+the fact is then loose. It must have a scope, it is served like any other
+fact, and a person moves it under a page when one fits.
 
 **Contradictions: supersede, never stack.** If what you learned contradicts
 something in the bank, pass `supersedes` with the id of the entry it replaces.

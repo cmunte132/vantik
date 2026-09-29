@@ -221,11 +221,12 @@ export async function getWorkspaceId(
       return page.workspaceId;
 
     case ModelName.PageEntry:
+      // A loose entry has no page, so the entry carries its own workspace.
       const pageEntry = await prisma.pageEntry.findUnique({
         where: { id: modelId },
-        include: { page: true },
+        select: { workspaceId: true },
       });
-      return pageEntry.page.workspaceId;
+      return pageEntry.workspaceId;
 
     case ModelName.PageHistory:
       const pageHistory = await prisma.pageHistory.findUnique({

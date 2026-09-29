@@ -1171,11 +1171,11 @@ export class VantikAgent {
    * one skipped it. It lives on the server now, and this relays its answer.
    */
   async remember(input: RememberInput): Promise<RememberResult> {
-    const page = await this.resolvePage(input.page);
+    const page = input.page ? await this.resolvePage(input.page) : null;
 
     try {
       const entry = await this.client.post<RawEntry>('/page_entries', {
-        query: { pageId: page.id },
+        query: page ? { pageId: page.id } : {},
         body: {
           content: input.content,
           ...(input.scope ? { scope: input.scope } : {}),
@@ -1205,7 +1205,8 @@ export class VantikAgent {
         status: 'needs-decision',
         nearMatches: near.map(toHit),
         guidance:
-          `"${page.title}" already holds ${near.length} similar ` +
+          `${page ? `"${page.title}"` : 'The workspace'} already holds ` +
+          `${near.length} similar ` +
           `${near.length === 1 ? 'entry' : 'entries'}. Either pass ` +
           '`supersedes` with the id of the one this replaces, or pass ' +
           '`distinct: true` to say this is a separate fact. Nothing was ' +
@@ -1672,7 +1673,7 @@ interface RawEntry {
   verifiedAt: string | null;
   retrievalCount: number;
   supersedesId: string | null;
-  pageId: string;
+  pageId: string | null;
   createdAt: string;
   trust?: KnowledgeTrust | null;
   citations?: KnowledgeCitation[];
@@ -1690,7 +1691,8 @@ interface RawPageProposal {
 interface RawKnowledgeHit {
   kind: 'page' | 'entry';
   entryKind?: string | null;
-  pageId: string;
+  /** Null, or empty in older servers, for a loose fact. */
+  pageId: string | null;
   pageTitle: string;
   entryId: string | null;
   content: string;
@@ -1831,7 +1833,7 @@ function toHit(hit: RawKnowledgeHit): KnowledgeHit {
   return {
     kind: hit.kind,
     entryKind: (hit.entryKind as EntryKind | null | undefined) ?? null,
-    page: { id: hit.pageId, title: hit.pageTitle },
+    page: hit.pageId ? { id: hit.pageId, title: hit.pageTitle } : null,
     entryId: hit.entryId ?? null,
     content: hit.content,
     scope: hit.scope ?? null,

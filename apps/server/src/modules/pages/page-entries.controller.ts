@@ -12,6 +12,7 @@ import {
   CreatePageEntryDto,
   CreatePageEntryQueryDto,
   ListPageEntriesQueryDto,
+  MovePageEntriesDto,
   PageEntry,
   PageEntryRequestParamsDto,
   UpdatePageEntryDto,
@@ -55,6 +56,7 @@ export class PageEntriesController {
 
     return this.pageEntriesService.getEntries(workspaceId, {
       pageId: query.pageId,
+      loose: query.loose,
       // A query string has no way to say "array of one", so `?status=STANDING`
       // reaches the handler as a bare string however the DTO validated it —
       // and a string would reach Prisma as `status: { in: 'STANDING' }`.
@@ -68,23 +70,41 @@ export class PageEntriesController {
   }
 
   /**
-   * `pageId` is required here, and the DTO is what enforces it. The guard reads
-   * the page out of the query to prove it belongs to the caller's workspace, so
-   * a request that names no page is one the guard cannot check — and the service
-   * would then resolve whichever page came back first, in any workspace.
+   * With `pageId`, the guard reads the page out of the query and proves it
+   * belongs to the caller's workspace. Without it, the fact is loose, and it
+   * goes into the workspace of the caller's session or token, resolved the
+   * same way as every workspace-wide route. It is never taken from a page,
+   * so a request that names no page cannot land in another workspace.
    */
   @Post()
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createEntry(
+    @Workspace() sessionWorkspaceId: string,
     @UserId() userId: string,
     @TokenId() tokenId: string | null,
     @Query() query: CreatePageEntryQueryDto,
     @Body() entryData: CreatePageEntryDto,
   ): Promise<PageEntry> {
+    if (query.pageId) {
+      return this.pageEntriesService.createEntry(
+        query.pageId,
+        { userId, tokenId },
+        entryData,
+      );
+    }
+
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      query.workspaceId,
+    );
+
     return this.pageEntriesService.createEntry(
-      query.pageId,
+      null,
       { userId, tokenId },
       entryData,
+      workspaceId,
     );
   }
 
@@ -104,6 +124,25 @@ export class PageEntriesController {
     );
 
     return this.pageEntriesService.bulkUpdate(workspaceId, userId, input);
+  }
+
+  /** Files facts under a page, and records each move on the fact's trail. */
+  @Post('move')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async moveEntries(
+    @Workspace() sessionWorkspaceId: string,
+    @UserId() userId: string,
+    @Query() query: ListPageEntriesQueryDto,
+    @Body() input: MovePageEntriesDto,
+  ): Promise<{ moved: string[]; skipped: number }> {
+    const workspaceId = await resolveWorkspaceId(
+      this.prisma,
+      userId,
+      sessionWorkspaceId,
+      query.workspaceId,
+    );
+
+    return this.pageEntriesService.moveEntries(workspaceId, userId, input);
   }
 
   @Post(':pageEntryId')

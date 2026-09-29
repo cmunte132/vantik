@@ -921,6 +921,33 @@ describe('knowledge tools and the product graph', () => {
     expect(requests.filter((r) => r.method === 'POST')).toEqual([]);
   });
 
+  it('[ENG-227] remember writes a scoped fact with no page, and refuses one with neither', async () => {
+    const { client, requests } = await connect({
+      'POST /page_entries': { id: 'entry-1', content: 'x', pageId: null },
+    });
+
+    const unscoped = await client.callTool({
+      name: 'remember',
+      arguments: { content: 'Migrations are hand-written SQL, never generated.' },
+    });
+
+    expect((unscoped as { isError?: boolean }).isError).toBe(true);
+    expect(requests).toEqual([]);
+
+    await client.callTool({
+      name: 'remember',
+      arguments: {
+        content: 'Migrations are hand-written SQL, never generated.',
+        scope: 'apps/server/prisma',
+      },
+    });
+
+    const write = requests.find((r) => r.method === 'POST');
+    expect(write?.path).toBe('/page_entries');
+    expect(new URLSearchParams(write?.query).get('pageId')).toBeNull();
+    expect(write?.body).toMatchObject({ scope: 'apps/server/prisma' });
+  });
+
   it('[KG-1.5] load_context passes the issue and modules the work is in', async () => {
     const { client, requests } = await connect({
       'POST /knowledge/context': { items: [], estimatedTokens: 0 },

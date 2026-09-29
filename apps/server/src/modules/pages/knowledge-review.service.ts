@@ -22,6 +22,8 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { liveEntryIn } from 'common/page-entry-where';
+
 import { knowledgeSettings } from './knowledge-settings';
 import PageEntriesService from './page-entries.service';
 import { VERIFIER_PENDING_MS } from './pages.interface';
@@ -96,6 +98,11 @@ export default class KnowledgeReviewService {
       deleted: null,
       ...(options.pageId ? { id: options.pageId } : {}),
     };
+    // The entries of the queue: on the page asked for, or, for the whole
+    // workspace, on any live page and on no page.
+    const onPage: Prisma.PageEntryWhereInput = options.pageId
+      ? { pageId: options.pageId, page }
+      : liveEntryIn(workspaceId);
 
     // Not an entry the verifier is looking at: a person sees it once the
     // verifier is done, or once the look has taken too long.
@@ -104,7 +111,7 @@ export default class KnowledgeReviewService {
       where: {
         deleted: null,
         status: PageEntryStatus.PROPOSED,
-        page,
+        ...onPage,
         NOT: {
           verification: {
             is: {
@@ -157,7 +164,7 @@ export default class KnowledgeReviewService {
               workspaceId,
               audit: true,
               verdict: null,
-              entry: { deleted: null, page },
+              entry: { deleted: null, ...onPage },
             },
             orderBy: { createdAt: 'desc' },
             select: { ...DECISION_SELECT, entry: { select: ENTRY_SELECT } },
@@ -176,7 +183,7 @@ export default class KnowledgeReviewService {
         workspaceId,
         action: PageEntryMaintenanceAction.ARCHIVE_PROPOSED,
         proposalState: PageEntryProposalState.OPEN,
-        entry: { deleted: null, status: { in: IN_USE }, page },
+        entry: { deleted: null, status: { in: IN_USE }, ...onPage },
       },
       orderBy: { createdAt: 'desc' },
       select: {
@@ -269,7 +276,7 @@ export default class KnowledgeReviewService {
         id: proposalId,
         workspaceId,
         action: PageEntryMaintenanceAction.ARCHIVE_PROPOSED,
-        entry: { deleted: null, page: { workspaceId, deleted: null } },
+        entry: { deleted: null, ...liveEntryIn(workspaceId) },
       },
       select: {
         id: true,
@@ -363,7 +370,7 @@ export default class KnowledgeReviewService {
           status: {
             in: [PageEntryStatus.STANDING, PageEntryStatus.CONSOLIDATED],
           },
-          page: { workspaceId, deleted: null },
+          ...liveEntryIn(workspaceId),
         },
         select: { id: true },
       }),
@@ -402,7 +409,7 @@ export default class KnowledgeReviewService {
       where: {
         id: decisionId,
         workspaceId,
-        entry: { deleted: null, page: { workspaceId, deleted: null } },
+        entry: { deleted: null, ...liveEntryIn(workspaceId) },
       },
       select: {
         id: true,

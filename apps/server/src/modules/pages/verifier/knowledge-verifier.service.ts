@@ -14,6 +14,8 @@ import { tool, type ToolSet } from 'ai';
 import { Queue } from 'bull';
 import { cleanRepoPath, cleanSearchQuery } from 'integrations/repo-files';
 import { PrismaService } from 'nestjs-prisma';
+
+import { onLivePageOrLoose } from 'common/page-entry-where';
 import { z } from 'zod';
 
 import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
@@ -224,7 +226,7 @@ export default class KnowledgeVerifierService {
     }
 
     const entry = await this.prisma.pageEntry.findFirst({
-      where: { id: entryId, deleted: null, page: { deleted: null } },
+      where: { id: entryId, deleted: null, ...onLivePageOrLoose() },
       select: {
         id: true,
         content: true,
@@ -232,13 +234,8 @@ export default class KnowledgeVerifierService {
         scope: true,
         status: true,
         moduleIds: true,
-        page: {
-          select: {
-            title: true,
-            workspaceId: true,
-            workspace: { select: { preferences: true } },
-          },
-        },
+        workspaceId: true,
+        page: { select: { title: true } },
         citations: {
           where: { checkResult: { in: FAILED_RESULTS } },
           select: { kind: true, path: true, targetLabel: true },
@@ -255,7 +252,7 @@ export default class KnowledgeVerifierService {
       return KnowledgeVerificationState.NOTHING;
     }
 
-    const workspaceId = entry.page.workspaceId;
+    const workspaceId = entry.workspaceId;
     const choice = await (this.modelOverride ?? ((id) => this.modelOf(id)))(
       workspaceId,
     );
@@ -275,7 +272,11 @@ export default class KnowledgeVerifierService {
     const prompt = [
       `Claim (${entry.kind.toLowerCase()}${
         entry.scope ? `, about ${entry.scope}` : ''
-      }, on the page "${entry.page.title}"):`,
+      }, ${
+        entry.page
+          ? `on the page "${entry.page.title}"`
+          : 'outside any page'
+      }):`,
       `"""\n${redactSecrets(entry.content)}\n"""`,
       repos.length
         ? `Repositories: ${repos.map((repo) => repo.fullName).join(', ')}`
@@ -383,7 +384,7 @@ export default class KnowledgeVerifierService {
           deleted: null,
           status: PageEntryStatus.PROPOSED,
           verification: { is: null },
-          page: { deleted: null },
+          ...onLivePageOrLoose(),
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -394,16 +395,14 @@ export default class KnowledgeVerifierService {
         workspaceId: true,
         entry: {
           select: {
-            page: {
-              select: { workspace: { select: { preferences: true } } },
-            },
+            workspace: { select: { preferences: true } },
           },
         },
       },
     });
     const wanted = unlooked.filter(
       (row) =>
-        knowledgeSettings(row.entry.page.workspace?.preferences, env)
+        knowledgeSettings(row.entry.workspace?.preferences, env)
           .autoTriage !== 'off',
     );
 

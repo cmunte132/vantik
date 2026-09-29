@@ -12,6 +12,8 @@ import {
   convertTiptapJsonToText,
 } from 'common/utils/tiptap.utils';
 
+import { liveEntryIn } from 'common/page-entry-where';
+
 import { IssueWithRelations } from 'modules/issues/issues.interface';
 import { LoggerService } from 'modules/logger/logger.service';
 import { scopeAncestors, scopePath } from 'modules/modules/module-routing';
@@ -25,6 +27,7 @@ import {
 import {
   AXIS_OVERFETCH,
   AxisFilter,
+  entryGroup,
   INDEXED_STATUSES,
   ISSUE_QUERY_BY,
   IssueSearchHit,
@@ -526,6 +529,7 @@ export class VectorService implements OnModuleInit {
         workspaceId: page.workspaceId,
         kind: 'page',
         pageId: page.id,
+        group: page.id,
         pageTitle: page.title,
         entryId: '',
         title: page.title,
@@ -558,7 +562,9 @@ export class VectorService implements OnModuleInit {
     verifiedAt: Date | null;
     retrievalCount: number;
     updatedAt: Date;
-    pageId: string;
+    workspaceId: string;
+    /** Null for a loose entry. */
+    pageId: string | null;
     moduleIds?: string[] | null;
     kind?: string | null;
     /** The last check of each citation, which decides whether it is grounded. */
@@ -567,19 +573,20 @@ export class VectorService implements OnModuleInit {
       checkResult: string | null;
       checkedAt: Date | null;
     }> | null;
-    page: { title: string; workspaceId: string };
+    page: { title: string } | null;
   }) {
     await this.typesenseClient
       .collections('pages')
       .documents()
       .upsert({
         id: `entry:${entry.id}`,
-        workspaceId: entry.page.workspaceId,
+        workspaceId: entry.workspaceId,
         kind: 'entry',
-        pageId: entry.pageId,
-        pageTitle: entry.page.title,
+        pageId: entry.pageId ?? '',
+        group: entryGroup(entry),
+        pageTitle: entry.page?.title ?? '',
         entryId: entry.id,
-        title: entry.page.title,
+        title: entry.page?.title ?? '',
         content: entry.content,
         scope: entry.scope ?? '',
         scopePath: scopePath(entry.scope) ?? '',
@@ -658,6 +665,8 @@ export class VectorService implements OnModuleInit {
       scope?: string;
       /** Restrict to one page. Filtered in the query, not after it. */
       pageId?: string;
+      /** Restrict to one group (see `entryGroup`), such as a loose scope. */
+      group?: string;
       /** Include statuses other than STANDING. Triage surfaces only. */
       includeStatuses?: string[];
       vectorDistance?: number;
@@ -691,7 +700,7 @@ export class VectorService implements OnModuleInit {
           // entries on one page contribute at most three documents.
           ...(options.ungrouped
             ? {}
-            : { group_by: 'pageId', group_limit: KNOWLEDGE_GROUP_LIMIT }),
+            : { group_by: 'group', group_limit: KNOWLEDGE_GROUP_LIMIT }),
           vector_query: `embeddings:([], distance_threshold:${
             options.vectorDistance ?? 0.8
           })`,
@@ -819,7 +828,11 @@ export class VectorService implements OnModuleInit {
    */
   async findSimilarEntries(
     workspaceId: string,
-    pageId: string,
+    /**
+     * The page the new entry goes on. Null for a loose entry, whose repeats
+     * are looked for across the workspace, because it is served there.
+     */
+    pageId: string | null,
     content: string,
   ): Promise<KnowledgeSearchHit[]> {
     const { hits } = await this.searchKnowledge(workspaceId, content, {
@@ -830,7 +843,7 @@ export class VectorService implements OnModuleInit {
       // filter applied in Node returns nothing at all whenever five other pages
       // happen to rank above the one being written to — which is silently no
       // dedup check on exactly the busiest workspaces.
-      pageId,
+      ...(pageId ? { pageId } : {}),
       // Proposed entries are indexed for this query and served by no other:
       // ten agents appending the same untriaged fact is the flood this exists
       // to catch, and every one of those claims is PROPOSED. Consolidated
@@ -854,7 +867,9 @@ export class VectorService implements OnModuleInit {
     content: string,
     options: {
       moduleIds?: string[];
-      pageId?: string;
+      pageId?: string | null;
+      /** The scope of a loose entry, used when it has no modules. */
+      scope?: string | null;
       minSimilarity: number;
       limit?: number;
     },
@@ -864,7 +879,11 @@ export class VectorService implements OnModuleInit {
       vectorDistance: 1 - options.minSimilarity,
       ...(options.moduleIds?.length
         ? { moduleIds: options.moduleIds }
-        : { pageId: options.pageId }),
+        : options.pageId
+          ? { pageId: options.pageId }
+          : {
+              group: entryGroup({ pageId: null, scope: options.scope ?? null }),
+            }),
       includeStatuses: [...SERVED_STATUSES, PageEntryStatusEnum.PROPOSED],
     });
 
@@ -901,7 +920,15 @@ export class VectorService implements OnModuleInit {
 
     const [livePages, liveEntries] = await Promise.all([
       this.prisma.page.findMany({
-        where: { id: { in: hits.map((hit) => hit.pageId) }, deleted: null },
+        where: {
+          id: {
+            in: hits
+              .filter((hit) => !hit.entryId)
+              .map((hit) => hit.pageId)
+              .filter(Boolean),
+          },
+          deleted: null,
+        },
         select: { id: true },
       }),
       this.prisma.pageEntry.findMany({
@@ -911,6 +938,8 @@ export class VectorService implements OnModuleInit {
         },
         select: {
           id: true,
+          pageId: true,
+          page: { select: { deleted: true } },
           status: true,
           verifiedAt: true,
           citations: { select: PROOF_CITATION_SELECT },
@@ -921,12 +950,21 @@ export class VectorService implements OnModuleInit {
     const livePageIds = new Set(livePages.map((page) => page.id));
     const entriesById = new Map(liveEntries.map((entry) => [entry.id, entry]));
 
+    // An entry is live when postgres has it and its page, if it has one, is
+    // live. The page is read from postgres, not from the index.
     const live = hits
-      .filter(
-        (hit) =>
-          livePageIds.has(hit.pageId) &&
-          (!hit.entryId || entriesById.has(hit.entryId)),
-      )
+      .filter((hit) => {
+        if (!hit.entryId) {
+          return livePageIds.has(hit.pageId);
+        }
+
+        const entry = entriesById.get(hit.entryId);
+
+        return (
+          entry !== undefined &&
+          (entry.pageId === null || entry.page?.deleted === null)
+        );
+      })
       .map((hit) => ({
         ...hit,
         ...(hit.entryId
@@ -959,7 +997,7 @@ export class VectorService implements OnModuleInit {
       where: {
         deleted: null,
         status: { in: INDEXED_STATUSES },
-        page: { workspaceId, deleted: null },
+        ...liveEntryIn(workspaceId),
       },
       include: ENTRY_INDEX_INCLUDE,
     });
@@ -1063,6 +1101,7 @@ function buildKnowledgeFilterBy(
   options: {
     scope?: string;
     pageId?: string;
+    group?: string;
     includeStatuses?: string[];
     kinds?: string[];
     moduleIds?: string[];
@@ -1089,6 +1128,10 @@ function buildKnowledgeFilterBy(
 
   if (options.pageId) {
     filters.push(`pageId:=\`${options.pageId}\``);
+  }
+
+  if (options.group) {
+    filters.push(`group:=${quoteFilterValue(options.group)}`);
   }
 
   const moduleIds = (options.moduleIds ?? []).filter((id) =>
@@ -1255,8 +1298,8 @@ function mapKnowledgeResults(searchResults: any): KnowledgeSearchResult {
       ({ document, vector_distance }: any): KnowledgeSearchHit => ({
         id: document.id,
         kind: document.kind,
-        pageId: document.pageId,
-        pageTitle: document.pageTitle,
+        pageId: document.pageId || null,
+        pageTitle: document.pageTitle ?? '',
         entryId: document.entryId || null,
         title: document.title,
         content: document.content,

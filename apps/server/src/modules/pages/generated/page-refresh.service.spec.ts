@@ -168,9 +168,10 @@ function setup(
       (!where.id?.in || where.id.in.includes(row.id)) &&
       (!('deleted' in where) || row.deleted === null) &&
       (!where.status?.in || where.status.in.includes(row.status)) &&
-      (!where.page ||
-        (page?.workspaceId === where.page.workspaceId &&
-          (!('deleted' in where.page) || page?.deleted === null))) &&
+      // An entry carries its page's workspace, as a row in postgres does.
+      (!where.workspaceId || page?.workspaceId === where.workspaceId) &&
+      // The live-page filter: on a page not deleted, or on no page.
+      (!where.AND || page?.deleted === null) &&
       (!where.OR ||
         where.OR.some((clause: Where) =>
           clause.pageId

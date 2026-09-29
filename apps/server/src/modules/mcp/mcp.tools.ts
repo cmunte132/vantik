@@ -185,6 +185,21 @@ function assertSubstantialIssue(
 const MAX_ENTRY_CONTENT_LENGTH = 600;
 const MIN_ENTRY_CONTENT_LENGTH = 15;
 
+/**
+ * A fact on no page is found only by its scope, so a loose fact without one
+ * is served to every agent in the workspace. The server refuses it too; this
+ * says why, in words for the model.
+ */
+function assertLooseFactScoped(input: { page?: string; scope?: string }): void {
+  if (!input.page && !input.scope?.trim()) {
+    throw new Error(
+      'A fact with no page needs a scope: the repo path, team or project it ' +
+        'is true of. Nothing was written. Check list_pages for a page it ' +
+        'belongs on, or pass a scope.',
+    );
+  }
+}
+
 function assertAtomicFact(content: string): void {
   const trimmed = content.trim();
 
@@ -916,7 +931,12 @@ export function registerVantikTools(
         'applies. Not a summary of what you did, not a list. If you learned ' +
         'six things, call this six times: each fact can then be scoped, ' +
         'confirmed and corrected on its own.\n\n' +
-        'Prefer an existing page. If the fact contradicts something already ' +
+        'Prefer an existing page: check list_pages first. Leave out the ' +
+        'page only when no page fits the fact. It is then a loose fact: it ' +
+        'must have a scope, it is served like any other fact, and a person ' +
+        'moves it under a page when one fits. Do not make a thin page to ' +
+        'hold one fact.\n\n' +
+        'If the fact contradicts something already ' +
         'in the bank, supersede that entry rather than leaving a second truth ' +
         'beside the first — two contradictory facts are worse than neither, ' +
         'because a reader cannot tell which one the workspace believes.\n\n' +
@@ -932,7 +952,13 @@ export function registerVantikTools(
         'nothing was written: read them, then either supersede one or say ' +
         'the fact is distinct.',
       inputSchema: {
-        page: z.string().describe('Page title or id to append to.'),
+        page: z
+          .string()
+          .optional()
+          .describe(
+            'Page title or id to append to. Leave it out only when no page ' +
+              'fits; the fact then needs a scope.',
+          ),
         content: z
           .string()
           .describe('One fact, in markdown. Write it for a stranger.'),
@@ -984,6 +1010,7 @@ export function registerVantikTools(
       // The editorial floor lives here and nowhere below: agent-core, the CLI
       // and the REST API accept whatever a caller sends.
       assertAtomicFact(input.content);
+      assertLooseFactScoped(input);
       return agent.remember(input);
     }),
   );

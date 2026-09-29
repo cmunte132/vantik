@@ -17,6 +17,8 @@ import {
 import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
+import { entryPlace } from 'common/page-entry-where';
+
 import { evidencePaths } from 'modules/agent-runs/evidence-paths';
 import {
   ensureIntegrationBot,
@@ -316,13 +318,9 @@ export default class KnowledgeConventionsService {
         status: true,
         verifiedAt: true,
         sourceUserId: true,
-        page: {
-          select: {
-            workspaceId: true,
-            entryPolicy: true,
-            workspace: { select: { preferences: true } },
-          },
-        },
+        workspaceId: true,
+        workspace: { select: { preferences: true } },
+        page: { select: { entryPolicy: true } },
       },
     });
 
@@ -330,7 +328,7 @@ export default class KnowledgeConventionsService {
       return null;
     }
 
-    const workspaceId = entry.page.workspaceId;
+    const workspaceId = entry.workspaceId;
     const gardener = await this.prisma.user.findUnique({
       where: { email: integrationBotEmail(KNOWLEDGE_BOT.slug, workspaceId) },
       select: { id: true },
@@ -341,7 +339,7 @@ export default class KnowledgeConventionsService {
     }
 
     const margin = knowledgeSettings(
-      entry.page.workspace.preferences,
+      entry.workspace.preferences,
     ).conventionHarmMargin;
     const since = await this.lastWeighedByPerson(entryId);
     const signals = await this.prisma.pageEntrySignal.findMany({
@@ -373,7 +371,7 @@ export default class KnowledgeConventionsService {
       if (
         entry.verifiedAt ||
         entry.status === PageEntryStatus.CONSOLIDATED ||
-        entry.page.entryPolicy === PageEntryPolicy.LOCKED
+        entry.page?.entryPolicy === PageEntryPolicy.LOCKED
       ) {
         const asked = await this.upkeep.propose(tx, {
           workspaceId,
@@ -819,7 +817,7 @@ export default class KnowledgeConventionsService {
         '',
         `> ${oneLine(redactSecrets(row.entry.content))}`,
         '',
-        `Entry \`${row.entry.id}\` on the page "${row.entry.page.title}". ` +
+        `Entry \`${row.entry.id}\` ${entryPlace(row.entry.page)}. ` +
           'It is no longer handed to runs. If the runs went wrong for another ' +
           'reason, set it back to standing on its page, and its outcomes are ' +
           'counted afresh from then.',

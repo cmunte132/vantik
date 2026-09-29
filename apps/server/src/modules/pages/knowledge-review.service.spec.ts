@@ -53,6 +53,10 @@ function matches(row: Row, where: Where): boolean {
       return (condition as Where[]).some((part) => matches(row, part));
     }
 
+    if (key === 'AND') {
+      return (condition as Where[]).every((part) => matches(row, part));
+    }
+
     if (key === 'NOT') {
       return !matches(row, condition as Where);
     }
@@ -197,6 +201,8 @@ function store(seed: Seed) {
   let clock = NOW;
 
   const entryView = (row: Row) => ({
+    // An entry carries its page's workspace, as a row in postgres does.
+    workspaceId: pages.get(row.pageId as string)?.workspaceId,
     ...row,
     page: pages.get(row.pageId as string),
     supersedes: row.supersedesId
@@ -2275,7 +2281,7 @@ describe('answering a gap', () => {
       workspaceId: WORKSPACE,
     });
     expect(
-      prisma.pageEntry.findFirst.mock.calls[0][0].where.page.workspaceId,
+      prisma.pageEntry.findFirst.mock.calls[0][0].where.workspaceId,
     ).toBe(WORKSPACE);
     expect(prisma.pageKnowledgeGap.update.mock.calls[0][0].data).toMatchObject({
       answeredByEntryId: 'entry-1',

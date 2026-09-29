@@ -191,7 +191,7 @@ export function renderHits(hits: KnowledgeHit[]): string {
       const proof = renderProof(hit);
 
       return [
-        `${chalkGreen(hit.page.title)} ${chalkGrey(badges)}`,
+        `${chalkGreen(hit.page?.title ?? 'Outside any page')} ${chalkGrey(badges)}`,
         truncate(hit.content, 300),
         ...(proof ? [chalkGrey(proof)] : []),
       ].join('\n');

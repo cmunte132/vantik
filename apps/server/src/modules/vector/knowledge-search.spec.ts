@@ -251,11 +251,12 @@ function fakeIndex(
 
         const groups = new Map<unknown, Doc[]>();
         for (const doc of ranked) {
-          const group = groups.get(doc.pageId) ?? [];
+          const key = doc[search.group_by as string];
+          const group = groups.get(key) ?? [];
           if (group.length < Number(search.group_limit)) {
             group.push(doc);
           }
-          groups.set(doc.pageId, group);
+          groups.set(key, group);
         }
 
         return {
@@ -300,7 +301,13 @@ function fakeIndex(
     page: { findMany: pages },
     pageEntry: {
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
-        where.id.in.map((id) => ({ id, ...entries[id] })),
+        // Each entry is on a live page unless the test says otherwise.
+        where.id.in.map((id) => ({
+          id,
+          pageId: 'page-1',
+          page: { deleted: null as Date | null },
+          ...entries[id],
+        })),
     },
   } as unknown as PrismaService;
 
@@ -338,7 +345,8 @@ async function seed(service: VectorService) {
       pageId: extra.pageId ?? `page-${id}`,
       moduleIds: [],
       kind: PageEntryKindEnum.FACT,
-      page: { title: 'Server notes', workspaceId: WORKSPACE },
+      workspaceId: WORKSPACE,
+      page: { title: 'Server notes' },
       ...extra,
     });
 
@@ -521,7 +529,8 @@ describe('retrieval seeded from the product graph', () => {
         pageId: `page-c${n}`,
         moduleIds: n === 17 || n === 1 ? [WEBAPP] : [],
         kind: PageEntryKindEnum.FACT,
-        page: { title: 'Notes', workspaceId: WORKSPACE },
+        workspaceId: WORKSPACE,
+        page: { title: 'Notes' },
       });
     }
 
@@ -585,7 +594,8 @@ describe('ranking by trust', () => {
           checkResult,
           checkedAt: null as Date | null,
         })),
-        page: { title: 'Deploys', workspaceId: WORKSPACE },
+        workspaceId: WORKSPACE,
+        page: { title: 'Deploys' },
         ...extra,
       });
 
@@ -658,7 +668,8 @@ describe('ranking by trust', () => {
       pageId: 'page-seeded',
       moduleIds: [SERVER],
       kind: PageEntryKindEnum.FACT,
-      page: { title: 'Deploys', workspaceId: WORKSPACE },
+      workspaceId: WORKSPACE,
+      page: { title: 'Deploys' },
     });
 
     const { hits } = await service.searchKnowledge(WORKSPACE, '*', {
@@ -778,6 +789,8 @@ describe('near entries, for triage', () => {
         findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
           where.id.in.map((id) => ({
             id,
+            pageId: 'page-1',
+            page: { deleted: null as Date | null },
             status: 'STANDING',
             verifiedAt: null as Date | null,
             citations: [] as unknown[],
@@ -894,7 +907,8 @@ describe('entries a page cites', () => {
       pageId: 'notes',
       moduleIds: [],
       kind: PageEntryKindEnum.FACT,
-      page: { title: 'Server notes', workspaceId: WORKSPACE },
+      workspaceId: WORKSPACE,
+      page: { title: 'Server notes' },
       ...extra,
     } as Parameters<VectorService['indexEntry']>[0]);
   const page = (service: VectorService, id: string, title: string) =>
@@ -920,11 +934,41 @@ describe('entries a page cites', () => {
     });
 
     expect(served.hits).toHaveLength(3);
-    expect(searches[0]).toMatchObject({ group_by: 'pageId', group_limit: 3 });
+    expect(searches[0]).toMatchObject({ group_by: 'group', group_limit: 3 });
     expect(ids(whole.hits).sort()).toEqual([...facts].sort());
     expect(searches[1]).not.toHaveProperty('group_by');
     expect(searches[1]).not.toHaveProperty('group_limit');
     expect(searches[1].per_page).toBe(40);
+  });
+
+  it('[ENG-227] serves a fact on no page, capped by its scope as a page caps its facts', async () => {
+    const { service, docs } = fakeIndex();
+    const loose = (id: string, scope: string) =>
+      index(service, id, `Deploys go out on merge, rule ${id}.`, {
+        pageId: null,
+        page: null,
+        scope,
+      } as unknown as Doc);
+
+    for (const id of ['s1', 's2', 's3', 's4']) {
+      await loose(id, 'apps/server');
+    }
+    await loose('w1', 'apps/webapp');
+
+    expect(docs.get('entry:s1')).toMatchObject({
+      pageId: '',
+      group: 'scope:apps/server',
+      pageTitle: '',
+      workspaceId: WORKSPACE,
+    });
+
+    const served = await service.searchKnowledge(WORKSPACE, 'deploys');
+
+    expect(ids(served.hits).filter((id) => id.startsWith('s'))).toHaveLength(
+      3,
+    );
+    expect(ids(served.hits)).toContain('w1');
+    expect(served.hits.find((hit) => hit.entryId === 'w1')?.pageId).toBeNull();
   });
 
   it('[KG-7.4] serves an entry folded into a page, as evidence for it, ranked below it', async () => {
@@ -935,7 +979,8 @@ describe('entries a page cites', () => {
     await index(service, 'folded', 'deploys deploys deploys go out on merge', {
       status: PageEntryStatusEnum.CONSOLIDATED,
       pageId: 'deploys',
-      page: { title: 'Deploys', workspaceId: WORKSPACE },
+      workspaceId: WORKSPACE,
+      page: { title: 'Deploys' },
     });
     await index(service, 'replaced', 'deploys deploys deploys deploys', {
       status: PageEntryStatusEnum.SUPERSEDED,
@@ -1022,13 +1067,15 @@ describe('entries a page cites', () => {
     await index(service, 'folded', 'Deploys go out on merge.', {
       status: PageEntryStatusEnum.CONSOLIDATED,
       pageId: 'deploys',
-      page: { title: 'Deploys', workspaceId: WORKSPACE },
+      workspaceId: WORKSPACE,
+      page: { title: 'Deploys' },
     });
     // Consolidated before pages kept what they cite: its own page's still.
     await index(service, 'older', 'Merges deploy on their own.', {
       status: PageEntryStatusEnum.CONSOLIDATED,
       pageId: 'runbook',
-      page: { title: 'Runbook', workspaceId: WORKSPACE },
+      workspaceId: WORKSPACE,
+      page: { title: 'Runbook' },
     });
 
     // Asking for facts leaves page bodies out.

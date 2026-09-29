@@ -58,6 +58,10 @@ function matches(row: Row, where: Where): boolean {
       return (condition as Where[]).some((part) => matches(row, part));
     }
 
+    if (key === 'AND') {
+      return (condition as Where[]).every((part) => matches(row, part));
+    }
+
     const value = row[key];
 
     if (condition === null) {
@@ -227,6 +231,10 @@ function harness(seed: Seed = {}) {
   const writes: string[] = [];
 
   const entryView = (row: Row): Row => ({
+    // An entry carries its page's workspace, as a row in postgres does.
+    workspaceId: (pages.get(row.pageId as string) as Row | undefined)
+      ?.workspaceId,
+    workspace: { preferences: seed.preferences ?? {} },
     ...row,
     page: {
       ...(pages.get(row.pageId as string) as Row),

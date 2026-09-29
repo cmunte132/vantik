@@ -13,6 +13,8 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { entryPlace, liveEntryIn, onLivePageOrLoose } from 'common/page-entry-where';
+
 import { LoggerService } from 'modules/logger/logger.service';
 
 import EntryCitationsService, {
@@ -273,7 +275,8 @@ export default class KnowledgeUpkeepService {
           status: true,
           verifiedAt: true,
           contentHash: true,
-          page: { select: { workspaceId: true, entryPolicy: true } },
+          workspaceId: true,
+          page: { select: { entryPolicy: true } },
         },
       });
 
@@ -299,7 +302,7 @@ export default class KnowledgeUpkeepService {
         change,
         citations: found.map(citationEvidence),
       };
-      const workspaceId = entry.page.workspaceId;
+      const workspaceId = entry.workspaceId;
 
       if (reason !== PageEntryMaintenanceReason.CITATION_CONTRADICTED) {
         return {
@@ -315,7 +318,7 @@ export default class KnowledgeUpkeepService {
 
       const askedBecause: MaintenanceEvidence['askedBecause'] = entry.verifiedAt
         ? 'VERIFIED'
-        : entry.page.entryPolicy === PageEntryPolicy.LOCKED
+        : entry.page?.entryPolicy === PageEntryPolicy.LOCKED
           ? 'LOCKED'
           : overruled.restored
             ? 'RESTORED'
@@ -488,14 +491,14 @@ export default class KnowledgeUpkeepService {
         deleted: null,
         status: PageEntryStatus.STANDING,
         verifiedAt: { not: null },
-        page: workspaceId ? { workspaceId, deleted: null } : { deleted: null },
+        ...(workspaceId ? liveEntryIn(workspaceId) : onLivePageOrLoose()),
         ...unusedSince(cutoff),
         ...(cited.length ? { id: { notIn: cited } } : {}),
       },
       select: {
         id: true,
         lastServedAt: true,
-        page: { select: { workspaceId: true } },
+        workspaceId: true,
       },
     });
     let proposed = 0;
@@ -503,7 +506,7 @@ export default class KnowledgeUpkeepService {
     for (const entry of candidates) {
       const row = await this.prisma.$transaction((tx) =>
         this.propose(tx, {
-          workspaceId: entry.page.workspaceId,
+          workspaceId: entry.workspaceId,
           entryId: entry.id,
           reason: PageEntryMaintenanceReason.UNUSED,
           evidence: {
@@ -702,7 +705,11 @@ function excerpt(content: string): string {
 function correctionMarkdown(
   row: {
     action: PageEntryMaintenanceAction;
-    entry: { id: string; content: string; page: { id: string; title: string } };
+    entry: {
+      id: string;
+      content: string;
+      page: { id: string; title: string } | null;
+    };
   },
   evidence: MaintenanceEvidence,
   cited: Array<{ id: string; snippet: string | null }>,
@@ -744,7 +751,7 @@ function correctionMarkdown(
     '',
     quoted,
     '',
-    `Entry \`${row.entry.id}\` on the page "${row.entry.page.title}".`,
+    `Entry \`${row.entry.id}\` ${entryPlace(row.entry.page)}.`,
     what,
     ...(evidence.consolidated
       ? [

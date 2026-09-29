@@ -66,9 +66,14 @@ export const pageSchema: CollectionCreateSchema = {
     // 'page' or 'entry'. A caller has to know whether it is reading agreed
     // narrative or one agent's assertion — they carry different authority.
     { name: 'kind', type: 'string', facet: true },
-    // The flood-control axis: group_by pageId caps how much of a result set a
-    // single busy page can occupy.
+    // The page of a page body or a filed entry. Empty for a loose entry,
+    // which is on no page.
     { name: 'pageId', type: 'string', facet: true },
+    // The flood-control axis: group_by caps how much of a result set a single
+    // busy page can occupy. It is the page for a page body and a filed entry,
+    // and the scope for a loose entry (see `entryGroup`), so fifty loose facts
+    // about one folder are capped the same way as fifty facts on one page.
+    { name: 'group', type: 'string', facet: true },
     { name: 'pageTitle', type: 'string' },
     { name: 'entryId', type: 'string' },
     { name: 'title', type: 'string' },
@@ -152,9 +157,21 @@ export const KNOWLEDGE_SORT_BY =
 
 /** The relations an entry's document is built from. */
 export const ENTRY_INDEX_INCLUDE = {
-  page: { select: { title: true, workspaceId: true } },
+  page: { select: { title: true } },
   citations: { select: { kind: true, checkResult: true, checkedAt: true } },
 } as const;
+
+/**
+ * The group of a document in the index. A page body and a filed entry are
+ * grouped by their page. A loose entry is grouped by its scope, because the
+ * scope is its only home.
+ */
+export function entryGroup(entry: {
+  pageId: string | null;
+  scope: string | null;
+}): string {
+  return entry.pageId ?? `scope:${entry.scope ?? ''}`;
+}
 
 /** Facets the review rail opens on, before it shows a single row. */
 export const KNOWLEDGE_FACET_BY = 'sourceUserId,scope,status,kind,entryKind';
@@ -218,7 +235,9 @@ export const INDEXED_STATUSES: PageEntryStatusEnum[] = [
 export interface KnowledgeSearchHit extends KnowledgeProof {
   id: string;
   kind: 'page' | 'entry';
-  pageId: string;
+  /** Null for a loose entry, which is on no page. */
+  pageId: string | null;
+  /** Empty for a loose entry. */
   pageTitle: string;
   entryId: string | null;
   title: string;

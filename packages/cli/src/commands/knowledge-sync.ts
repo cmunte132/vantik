@@ -281,7 +281,7 @@ export function configureKnowledgeSyncCommands(knowledge: Command) {
 
         const block = renderManagedBlock(
           pack.items.map((item) => ({
-            pageTitle: item.page.title,
+            pageTitle: item.page?.title ?? 'Outside any page',
             content: item.content,
             scope: item.scope,
           })),

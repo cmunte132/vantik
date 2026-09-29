@@ -6,6 +6,7 @@ import KnowledgeOverviewService, {
   resolveProducts,
 } from './knowledge-overview.service';
 import KnowledgeReviewService from './knowledge-review.service';
+import LooseFactsService from './loose-facts.service';
 
 const WORKSPACE = 'ws-1';
 const NOW = new Date('2026-09-28T12:00:00Z');
@@ -161,6 +162,15 @@ describe('KnowledgeOverviewService.overview', () => {
               moduleIds: [],
               citations: [observed],
             },
+            // A loose fact: it counts in the workspace, and on no page.
+            {
+              id: 'e6',
+              pageId: null,
+              status: 'STANDING',
+              verifiedAt: RECENT,
+              moduleIds: ['m1'],
+              citations: [],
+            },
           ])
           // The facts written this week.
           .mockResolvedValueOnce([
@@ -240,14 +250,18 @@ describe('KnowledgeOverviewService.overview', () => {
     const review = {
       queue: jest.fn().mockResolvedValue({
         autoTriage: 'shadow',
-        items: [{ entry: { pageId: 'deploy' } }],
+        items: [{ entry: { pageId: 'deploy' } }, { entry: { pageId: null } }],
         reasons: {},
         pageProposals: [],
       }),
     };
+    const looseFacts = {
+      loose: jest.fn().mockResolvedValue({ count: 1, groups: [] }),
+    };
     const service = new KnowledgeOverviewService(
       prisma as unknown as PrismaService,
       review as unknown as KnowledgeReviewService,
+      looseFacts as unknown as LooseFactsService,
     );
 
     return { service, prisma };
@@ -259,13 +273,25 @@ describe('KnowledgeOverviewService.overview', () => {
     const overview = await service.overview(WORKSPACE, NOW);
 
     expect(overview.facts).toEqual({
-      inUse: 4,
+      inUse: 5,
       code: 1,
-      people: 1,
+      people: 2,
       observed: 1,
       unconfirmed: 1,
-      needYou: 2,
+      needYou: 3,
     });
+  });
+
+  it('[ENG-227] counts a loose fact in the workspace and on no page, and serves the loose groups', async () => {
+    const { service } = build();
+
+    const overview = await service.overview(WORKSPACE, NOW);
+    const deploy = overview.pages.find((page) => page.id === 'deploy');
+
+    expect(overview.pages.map((page) => page.id)).toEqual(['deploy', 'empty']);
+    expect(deploy?.facts.inUse).toBe(4);
+    expect(deploy?.facts.needYou).toBe(1);
+    expect(overview.loose).toEqual({ count: 1, groups: [] });
   });
 
   it('[ENG-225] gives each page its product, its trust, its use and its state', async () => {

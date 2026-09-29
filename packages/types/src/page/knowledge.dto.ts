@@ -22,6 +22,20 @@ export class KnowledgeGapsQueryDto {
   workspaceId?: string;
 }
 
+export class KnowledgeLooseQueryDto {
+  @IsOptional()
+  @IsUUID()
+  workspaceId?: string;
+
+  /**
+   * A page. If the request has a page, the response holds only the groups
+   * of loose facts that the gardener suggests to move under that page.
+   */
+  @IsOptional()
+  @IsUUID()
+  pageId?: string;
+}
+
 export class KnowledgeSearchQueryDto {
   @IsOptional()
   @IsUUID()
@@ -114,8 +128,13 @@ export class KnowledgeSimilarDto {
   @IsUUID()
   workspaceId?: string;
 
+  /**
+   * The page that the fact goes on. If the request has no page, the fact is
+   * loose, and the server looks for near matches in the whole workspace.
+   */
+  @IsOptional()
   @IsUUID()
-  pageId: string;
+  pageId?: string;
 
   /** The fact about to be written, so near matches can be shown to the caller. */
   @IsString()

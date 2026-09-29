@@ -77,7 +77,8 @@ function fakeTracker() {
         (write) =>
           write.table === table &&
           write.userId === where[author] &&
-          write.workspaceId === where.page.workspaceId &&
+          write.workspaceId ===
+            (where.workspaceId ?? where.page?.workspaceId) &&
           write.at >= where.createdAt.gte.getTime(),
       );
       return row ? { id: `${table}-1` } : null;
@@ -827,6 +828,22 @@ describe('pointers to the knowledge bank', () => {
     expect(said).toContain('- "Auth" (1 match)');
     expect(said).toContain('load_context');
     expect(said).not.toContain('A claim.');
+  });
+
+  it('[ENG-227] names the facts outside any page by their scope, as one pointer', async () => {
+    const { hook, hits } = setup();
+    const loose = (scope: string, distance: number) => ({
+      ...hit('', '', distance, scope),
+      pageId: null as string | null,
+      entryId: `loose-${distance}`,
+    });
+    hits.push(loose('apps/server', 0.3), loose('apps/server', 0.4));
+
+    const said = await hook('prompt', { prompt: A_PROMPT });
+
+    expect(said).toContain(
+      '- "Facts outside any page" (2 matches, scope apps/server)',
+    );
   });
 
   it('points on later prompts too, without the brief', async () => {

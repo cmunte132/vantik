@@ -1223,6 +1223,31 @@ describe('knowledge by kind and by module', () => {
     });
   });
 
+  it('[ENG-227] writes a fact on no page when no page is given, and reads a loose hit as on no page', async () => {
+    const { agent, calls } = makeAgent({
+      'POST /page_entries': { id: 'entry-2', content: 'x', pageId: null },
+      'GET /knowledge/search': {
+        hits: [{ ...hit, pageId: null, pageTitle: '' }],
+      },
+    });
+
+    const written = await agent.remember({
+      content: 'Migrations are hand-written SQL.',
+      scope: 'apps/server/prisma',
+    });
+    const hits = await agent.recallKnowledge({ query: 'migrations' });
+
+    // No page lookup: the fact goes straight to the workspace.
+    expect(calls.map((call) => call.method)).toEqual(['POST', 'GET']);
+    expect(calls[0].query).toEqual({});
+    expect(calls[0].body).toMatchObject({ scope: 'apps/server/prisma' });
+    expect(written).toMatchObject({
+      status: 'written',
+      entry: { pageId: null },
+    });
+    expect(hits[0].page).toBeNull();
+  });
+
   it('[KG-1.4] asks for only the kinds wanted, and says which kind each hit is', async () => {
     const { agent, calls } = makeAgent({
       'GET /knowledge/search': { hits: [hit] },

@@ -28,6 +28,14 @@ type Where = Record<string, unknown>;
 
 function matches(row: Row, where: Where): boolean {
   return Object.entries(where).every(([key, condition]) => {
+    if (key === 'OR') {
+      return (condition as Where[]).some((part) => matches(row, part));
+    }
+
+    if (key === 'AND') {
+      return (condition as Where[]).every((part) => matches(row, part));
+    }
+
     const value = row[key];
 
     if (condition === null) {
@@ -121,11 +129,17 @@ function harness(seed: Seed = {}) {
     team: { workspaceId: WORKSPACE, deleted: null },
     ...issue,
   }));
-  const entries: Row[] = (seed.entries ?? []).map((entry): Row => ({
-    deleted: null,
-    page: { workspaceId: WORKSPACE, deleted: null },
-    ...entry,
-  }));
+  const entries: Row[] = (seed.entries ?? []).map((entry): Row => {
+    const row: Row = {
+      deleted: null,
+      pageId: 'page-1',
+      page: { workspaceId: WORKSPACE, deleted: null },
+      ...entry,
+    };
+
+    // An entry carries its page's workspace, as a row in postgres does.
+    return { workspaceId: (row.page as Row).workspaceId, ...row };
+  });
   const citations: Row[] = (seed.citations ?? []).map((citation): Row => ({
     id: `citation-${++next}`,
     kind: 'ISSUE',

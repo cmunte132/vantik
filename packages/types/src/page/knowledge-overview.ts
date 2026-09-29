@@ -72,6 +72,37 @@ export interface KnowledgeOverviewResearch {
   startedAt: string;
 }
 
+/**
+ * What the gardener suggests for a group of loose facts:
+ *
+ * - `MOVE`: a page fits them, and `pageId` and `title` name it.
+ * - `MAKE_PAGE`: no page fits, but enough facts share the scope for a page
+ *   of their own, and `title` is a name for it.
+ * - `NONE`: no page fits yet.
+ */
+export type LooseFactSuggestionKind = 'MOVE' | 'MAKE_PAGE' | 'NONE';
+
+export interface LooseFactSuggestion {
+  kind: LooseFactSuggestionKind;
+  pageId: string | null;
+  title: string | null;
+}
+
+/** The loose facts of one scope, and what the gardener suggests for them. */
+export interface LooseFactGroup {
+  /** The folder that the facts are scoped to. */
+  scope: string;
+  /** The facts, newest first. */
+  entryIds: string[];
+  suggestion: LooseFactSuggestion;
+}
+
+/** The facts on no page: in use, or waiting on a person. */
+export interface KnowledgeOverviewLoose {
+  count: number;
+  groups: LooseFactGroup[];
+}
+
 export interface KnowledgeOverviewWeek {
   /** Facts that agents wrote in the last 7 days. */
   written: number;
@@ -97,4 +128,5 @@ export interface KnowledgeOverview {
   products: KnowledgeOverviewProduct[];
   gaps: KnowledgeOverviewGap[];
   research: KnowledgeOverviewResearch[];
+  loose: KnowledgeOverviewLoose;
 }

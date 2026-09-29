@@ -233,9 +233,16 @@ export function configureKnowledgeCommands(program: Command) {
 
   knowledge
     .command('append')
-    .description('Append one asserted fact to a page')
-    .argument('<page>', 'Page title or id')
-    .argument('<content...>', 'The fact, in markdown')
+    .description(
+      'Append one asserted fact to a page, or with --loose write it on no page',
+    )
+    .argument('<page>', 'Page title or id. With --loose, the start of the fact')
+    .argument('[content...]', 'The fact, in markdown')
+    .option(
+      '--loose',
+      'Write the fact on no page. The fact then needs --scope, and every ' +
+        'argument is part of the fact.',
+    )
     .option('-s, --scope <scope>', 'Where the fact applies')
     .option(
       '-k, --kind <kind>',
@@ -256,13 +263,19 @@ export function configureKnowledgeCommands(program: Command) {
       collectCitation,
     )
     .option('--json', 'Output raw JSON')
-    .action(async (page, content, options) => {
+    .action(async (page: string, content: string[], options) => {
+      const words = options.loose ? [page, ...content] : content;
+
+      if (words.length === 0) {
+        program.error('Give the fact after the page, or pass --loose.');
+      }
+
       await run(
         options.json,
         () =>
           resolveAgent().remember({
-            page,
-            content: content.join(' '),
+            page: options.loose ? undefined : page,
+            content: words.join(' '),
             scope: options.scope,
             kind: options.kind,
             session: options.session,

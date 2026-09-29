@@ -12,6 +12,7 @@ import {
 import {
   BulkUpdatePageEntriesDto,
   CreatePageEntryDto,
+  MovePageEntriesDto,
   PageEntry,
   PageEntryCitationKindEnum,
   PageEntryPolicyEnum,
@@ -23,6 +24,8 @@ import { PageEntryProposalState, Prisma } from '@prisma/client';
 import type { Queue } from 'bull';
 import { createHash } from 'node:crypto';
 import { PrismaService } from 'nestjs-prisma';
+
+import { liveEntryIn, onLivePageOrLoose } from 'common/page-entry-where';
 
 import { modulesForScope } from 'modules/modules/module-routing';
 import { VectorService } from 'modules/vector/vector.service';
@@ -87,6 +90,8 @@ export default class PageEntriesService {
     workspaceId: string,
     filters: {
       pageId?: string;
+      /** Only the loose entries, which are on no page. */
+      loose?: boolean;
       status?: PageEntryStatusEnum[];
       /** Entries resolved to any of these modules. */
       moduleIds?: string[];
@@ -99,8 +104,9 @@ export default class PageEntriesService {
     const entries = await this.prisma.pageEntry.findMany({
       where: {
         deleted: null,
-        page: { workspaceId, deleted: null },
+        ...liveEntryIn(workspaceId),
         ...(filters.pageId ? { pageId: filters.pageId } : {}),
+        ...(filters.loose && !filters.pageId ? { pageId: null } : {}),
         ...(filters.ids?.length ? { id: { in: filters.ids } } : {}),
         ...(filters.status?.length ? { status: { in: filters.status } } : {}),
         ...(filters.moduleIds?.length
@@ -109,7 +115,11 @@ export default class PageEntriesService {
       },
       orderBy: { createdAt: 'desc' },
       ...(filters.limit ? { take: filters.limit } : {}),
-      include: { citations: { select: PROOF_CITATION_SELECT } },
+      include: {
+        citations: { select: PROOF_CITATION_SELECT },
+        // The fact's trail of moves between pages, oldest first.
+        moves: { select: MOVE_SELECT, orderBy: { createdAt: 'asc' } },
+      },
     });
 
     // Every entry read goes out with its proof, the same as a search hit, so
@@ -123,33 +133,74 @@ export default class PageEntriesService {
   // ----------------------------------------------------------------- writing
 
   /**
-   * Appends one asserted fact to a page.
+   * Appends one asserted fact to a page, or writes it loose, on no page.
    *
    * Three mechanical gates stand in front of this, all server-side because a
    * client that ignores tool descriptions must not be able to walk past them:
    * the page's entry policy, the per-token budget on untriaged entries, and the
    * supersede pointer that stops a correction sitting beside the thing it
    * corrects.
+   *
+   * A loose fact is written with `pageId` null and its workspace named. It
+   * must have a scope, because the scope is then the only place it is true.
+   * It is held to the rules of a curated page: its budget is counted per
+   * token within its scope (see `assertBudgetAvailable`), and it is checked
+   * for repeats across the workspace, where it is served.
    */
   async createEntry(
-    pageId: string,
+    pageId: string | null,
     writer: WriterIdentity,
     entryData: CreatePageEntryDto,
+    /** The workspace of a loose fact. A fact on a page takes the page's. */
+    looseWorkspaceId?: string,
   ): Promise<PageEntry> {
-    const page = await this.prisma.page.findFirst({
-      where: { id: pageId, deleted: null },
-      select: { id: true, title: true, entryPolicy: true, workspaceId: true },
-    });
+    const page = pageId
+      ? await this.prisma.page.findFirst({
+          where: { id: pageId, deleted: null },
+          select: {
+            id: true,
+            title: true,
+            entryPolicy: true,
+            workspaceId: true,
+          },
+        })
+      : null;
 
-    if (!page) {
+    if (pageId && !page) {
       throw new NotFoundException({ message: `Page ${pageId} not found` });
     }
+
+    const workspaceId = page?.workspaceId ?? looseWorkspaceId;
+
+    if (!workspaceId) {
+      throw new BadRequestException({
+        message: 'A fact goes on a page, or names its workspace.',
+      });
+    }
+
+    if (!page && !entryData.scope?.trim()) {
+      throw new BadRequestException({
+        message:
+          'A fact on no page needs a scope: the repo path, module or area it ' +
+          'is true of. Without a page or a scope it has nowhere to apply. ' +
+          'Nothing was written. Give a scope, or name the page it belongs on.',
+      });
+    }
+
+    const home: EntryHome = page
+      ? { pageId: page.id, workspaceId, label: `"${page.title}"` }
+      : {
+          pageId: null,
+          workspaceId,
+          scope: entryData.scope?.trim() ?? null,
+          label: `the facts outside any page scoped to "${entryData.scope?.trim()}"`,
+        };
 
     assertNoSecret(entryData.content);
 
     const isAgent = await this.isAutomated(writer.userId);
 
-    if (page.entryPolicy === PageEntryPolicyEnum.LOCKED && isAgent) {
+    if (page?.entryPolicy === PageEntryPolicyEnum.LOCKED && isAgent) {
       throw new ForbiddenException({
         message:
           `"${page.title}" is locked: it is maintained by hand. Reads are ` +
@@ -159,8 +210,10 @@ export default class PageEntriesService {
       });
     }
 
-    if (page.entryPolicy === PageEntryPolicyEnum.CURATED) {
-      await this.assertBudgetAvailable(page.id, page.title, writer);
+    // A loose fact has no page policy. It is held to the curated rules,
+    // because nobody has opened its scope to scratch work.
+    if (!page || page.entryPolicy === PageEntryPolicyEnum.CURATED) {
+      await this.assertBudgetAvailable(home, writer);
     }
 
     // An agent's writes always land in the inbox. A human reviewer working in
@@ -174,11 +227,11 @@ export default class PageEntriesService {
     let detach: string | null = null;
 
     if (entryData.supersedesId) {
-      detach = await this.assertSupersedable(entryData.supersedesId, pageId, {
+      detach = await this.assertSupersedable(entryData.supersedesId, home, {
         displacePending: status === PageEntryStatusEnum.STANDING,
       });
     } else if (!entryData.distinct) {
-      await this.assertNotAlreadyKnown(page, entryData, {
+      await this.assertNotAlreadyKnown(home, entryData, {
         // A person writing a standing fact in the webapp is the reviewer, with
         // the page open in front of them; asking them to confirm that a fact
         // merely resembling another is distinct would be asking the reviewer
@@ -194,13 +247,13 @@ export default class PageEntriesService {
     // it corrects keeps being served meanwhile: a claim nobody has reviewed
     // must not be able to take accepted knowledge out of use, and SUPERSEDED
     // cannot be undone.
-    const moduleIds = await this.modulesFor(page.workspaceId, entryData.scope);
+    const moduleIds = await this.modulesFor(workspaceId, entryData.scope);
 
     // Last of the gates, because it is the only one that reads from outside
     // the database: every citation is checked, and one that does not hold
     // refuses the write before anything is stored.
     const citations = await this.checkCitations(
-      page.workspaceId,
+      workspaceId,
       entryData.citations,
     );
 
@@ -228,7 +281,7 @@ export default class PageEntriesService {
         data: {
           content: entryData.content,
           contentHash: contentHashOf(entryData.content),
-          scope: entryData.scope ?? null,
+          scope: page ? (entryData.scope ?? null) : home.scope,
           moduleIds,
           ...(entryData.kind && { kind: entryData.kind }),
           status,
@@ -236,7 +289,8 @@ export default class PageEntriesService {
           sourceSession: entryData.sourceSession ?? null,
           sourceTokenId: writer.tokenId,
           supersedesId: entryData.supersedesId ?? null,
-          pageId,
+          workspaceId,
+          pageId: page?.id ?? null,
           ...(citations.length && { citations: { create: citations } }),
         },
         // Returned with its proof, so a writer sees what its citations came
@@ -355,12 +409,26 @@ export default class PageEntriesService {
         sourceUserId: true,
         supersedesId: true,
         supersedes: { select: { status: true } },
-        page: { select: { workspaceId: true } },
+        workspaceId: true,
+        pageId: true,
       },
     });
 
     if (!current) {
       throw new NotFoundException({ message: `Entry ${entryId} not found` });
+    }
+
+    // A loose fact's scope is its only home, so it cannot be cleared.
+    if (
+      current.pageId === null &&
+      entryData.scope !== undefined &&
+      !entryData.scope?.trim()
+    ) {
+      throw new BadRequestException({
+        message:
+          'A fact on no page needs a scope. Move it under a page first, or ' +
+          'give it another scope.',
+      });
     }
 
     const agent = await this.isAutomated(userId);
@@ -463,7 +531,7 @@ export default class PageEntriesService {
           ...(entryData.scope !== undefined && {
             scope: entryData.scope,
             moduleIds: await this.modulesFor(
-              current.page.workspaceId,
+              current.workspaceId,
               entryData.scope,
             ),
           }),
@@ -527,7 +595,7 @@ export default class PageEntriesService {
       where: {
         id: { in: input.entryIds },
         deleted: null,
-        page: { workspaceId, deleted: null },
+        ...liveEntryIn(workspaceId),
       },
       select: {
         id: true,
@@ -580,6 +648,78 @@ export default class PageEntriesService {
     };
   }
 
+  /**
+   * Files facts under a page. Each fact keeps its content, status, scope and
+   * proof. Only the page it is filed under changes, and each move is kept on
+   * the fact's trail as a `PageEntryMove`.
+   *
+   * Moving is for people. An agent that finds no page for a fact writes it
+   * loose, and a person, or the gardener's suggestion a person takes, decides
+   * where it goes. A fact already folded into a page's body stays on that
+   * page, because the body is written from it; such facts are skipped, as are
+   * facts already on the page.
+   */
+  async moveEntries(
+    workspaceId: string,
+    userId: string,
+    input: MovePageEntriesDto,
+  ): Promise<{ moved: string[]; skipped: number }> {
+    if (await this.isAutomated(userId)) {
+      throw new ForbiddenException({
+        message:
+          'Moving facts between pages is for people. Nothing was moved. ' +
+          'Write a new fact on the page it belongs on instead.',
+      });
+    }
+
+    const page = await this.prisma.page.findFirst({
+      where: { id: input.pageId, workspaceId, deleted: null },
+      select: { id: true },
+    });
+
+    if (!page) {
+      throw new NotFoundException({ message: `Page ${input.pageId} not found` });
+    }
+
+    const entries = await this.prisma.pageEntry.findMany({
+      where: {
+        id: { in: input.entryIds },
+        deleted: null,
+        ...liveEntryIn(workspaceId),
+        status: { not: PageEntryStatusEnum.CONSOLIDATED },
+        NOT: { pageId: page.id },
+      },
+      select: { id: true, pageId: true },
+    });
+
+    if (entries.length > 0) {
+      await this.prisma.$transaction([
+        this.prisma.pageEntry.updateMany({
+          where: { id: { in: entries.map((entry) => entry.id) } },
+          data: { pageId: page.id },
+        }),
+        this.prisma.pageEntryMove.createMany({
+          data: entries.map((entry) => ({
+            workspaceId,
+            entryId: entry.id,
+            fromPageId: entry.pageId,
+            toPageId: page.id,
+            movedById: userId,
+            suggested: Boolean(input.suggested),
+          })),
+        }),
+      ]);
+
+      // The index groups a fact by its page, and names the page in results.
+      await this.indexer?.entriesChanged(entries.map((entry) => entry.id));
+    }
+
+    return {
+      moved: entries.map((entry) => entry.id),
+      skipped: input.entryIds.length - entries.length,
+    };
+  }
+
   // ------------------------------------------------------ scope and modules
 
   /**
@@ -597,19 +737,19 @@ export default class PageEntriesService {
     const workspaceIds = workspaceId
       ? [workspaceId]
       : (
-          await this.prisma.page.findMany({
+          await this.prisma.pageEntry.findMany({
             where: { deleted: null },
             select: { workspaceId: true },
             distinct: ['workspaceId'],
           })
-        ).map((page) => page.workspaceId);
+        ).map((entry) => entry.workspaceId);
 
     let changed = 0;
 
     for (const id of workspaceIds) {
       const mappings = await this.moduleMappings(id);
       const entries = await this.prisma.pageEntry.findMany({
-        where: { deleted: null, page: { workspaceId: id, deleted: null } },
+        where: { deleted: null, ...liveEntryIn(id) },
         select: { id: true, scope: true, moduleIds: true },
       });
 
@@ -713,8 +853,8 @@ export default class PageEntriesService {
     archivedStanding: number;
   }> {
     const scope: Prisma.PageEntryWhereInput = workspaceId
-      ? { page: { workspaceId, deleted: null } }
-      : { page: { deleted: null } };
+      ? liveEntryIn(workspaceId)
+      : onLivePageOrLoose();
 
     const proposedCutoff = daysAgo(PROPOSED_ENTRY_EXPIRY_DAYS);
     const standingCutoff = daysAgo(STANDING_ENTRY_DECAY_DAYS);
@@ -776,7 +916,9 @@ export default class PageEntriesService {
 
   /**
    * Refuses an append once a token is holding too many untriaged entries on one
-   * curated page, and says what to do about it.
+   * curated page, and says what to do about it. For a loose fact, the page is
+   * its scope: a token can hold as many untriaged loose facts in one scope as
+   * it can on one page.
    *
    * The refusal names the entries in the way of the write, because a dead end
    * teaches an agent nothing and it will simply try the same append again. This
@@ -784,8 +926,7 @@ export default class PageEntriesService {
    * error is the instruction.
    */
   private async assertBudgetAvailable(
-    pageId: string,
-    pageTitle: string,
+    home: EntryHome,
     writer: WriterIdentity,
   ): Promise<void> {
     // A browser session carries no token, so the account stands in for one.
@@ -797,7 +938,9 @@ export default class PageEntriesService {
 
     const outstanding = await this.prisma.pageEntry.findMany({
       where: {
-        pageId,
+        ...(home.pageId
+          ? { pageId: home.pageId }
+          : { workspaceId: home.workspaceId, pageId: null, scope: home.scope }),
         deleted: null,
         status: PageEntryStatusEnum.PROPOSED,
         ...budgetKey,
@@ -817,8 +960,8 @@ export default class PageEntriesService {
 
     throw new ForbiddenException({
       message:
-        `You already have ${outstanding.length} untriaged entries on ` +
-        `"${pageTitle}", which is the limit for one token on a curated page. ` +
+        `You already have ${outstanding.length} untriaged entries in ` +
+        `${home.label}, which is the limit for one token on a curated page. ` +
         'Nothing was created. Consolidate what is there or supersede the entry ' +
         'this one replaces, then append again. Outstanding:\n' +
         `${listed}`,
@@ -1013,15 +1156,22 @@ export default class PageEntriesService {
    * cache being down is not a reason to stop recording knowledge.
    */
   private async assertNotAlreadyKnown(
-    page: { id: string; title: string; workspaceId: string },
+    home: EntryHome,
     entryData: CreatePageEntryDto,
     options: { nearMatches: boolean },
   ): Promise<void> {
     const normalised = normaliseContent(entryData.content);
 
+    // A fact on a page is compared with the page. A loose fact is served
+    // across the workspace, so an exact repeat anywhere in it is a repeat.
     const candidates = await this.prisma.pageEntry.findMany({
       where: {
-        pageId: page.id,
+        ...(home.pageId
+          ? { pageId: home.pageId }
+          : {
+              ...liveEntryIn(home.workspaceId),
+              contentHash: contentHashOf(entryData.content),
+            }),
         deleted: null,
         // Consolidated too: it is still served, as the page's evidence.
         status: {
@@ -1040,6 +1190,8 @@ export default class PageEntriesService {
         sourceUserId: true,
         verifiedAt: true,
         retrievalCount: true,
+        pageId: true,
+        page: { select: { title: true } },
         citations: { select: PROOF_CITATION_SELECT },
       },
     });
@@ -1049,10 +1201,10 @@ export default class PageEntriesService {
       .map((entry) => ({
         id: entry.id,
         kind: 'entry',
-        pageId: page.id,
-        pageTitle: page.title,
+        pageId: entry.pageId,
+        pageTitle: entry.page?.title ?? '',
         entryId: entry.id,
-        title: page.title,
+        title: entry.page?.title ?? '',
         content: entry.content,
         scope: entry.scope,
         status: entry.status,
@@ -1065,15 +1217,15 @@ export default class PageEntriesService {
     if (options.nearMatches && this.vectorService) {
       try {
         const near = await this.vectorService.findSimilarEntries(
-          page.workspaceId,
-          page.id,
+          home.workspaceId,
+          home.pageId,
           entryData.content,
         );
         const known = new Set(matches.map((match) => match.entryId));
         matches.push(...near.filter((hit) => !known.has(hit.entryId)));
       } catch (error) {
         this.logger.warn(
-          `Near-match check skipped for page ${page.id}: ` +
+          `Near-match check skipped for ${home.label}: ` +
             `${(error as Error).message}`,
         );
       }
@@ -1092,7 +1244,7 @@ export default class PageEntriesService {
       error: 'Conflict',
       status: 'needs-decision',
       message:
-        `"${page.title}" already has this: "${firstLine(first.content)}" ` +
+        `${home.pageId ? home.label : 'The workspace'} already has this: "${firstLine(first.content)}" ` +
         `(${first.status.toLowerCase()}` +
         `${matches.length > 1 ? `, and ${matches.length - 1} more like it` : ''}` +
         '). Nothing was written. To write it anyway, resend with ' +
@@ -1114,14 +1266,25 @@ export default class PageEntriesService {
    * ordinary claim. A correction held in dispute counts as waiting. One that
    * was rejected (archived) gives way to a new one. An entry already folded
    * into the page body is corrected in the body.
+   *
+   * A correction is written on the page of the entry it corrects. A loose
+   * fact is on no page, so either side of a correction may be loose, as long
+   * as both are in the same workspace.
    */
   private async assertSupersedable(
     supersedesId: string,
-    pageId: string,
+    home: EntryHome,
     options: { displacePending: boolean },
   ): Promise<string | null> {
     const target = await this.prisma.pageEntry.findFirst({
-      where: { id: supersedesId, deleted: null, pageId },
+      where: {
+        id: supersedesId,
+        deleted: null,
+        workspaceId: home.workspaceId,
+        ...(home.pageId
+          ? { OR: [{ pageId: home.pageId }, { pageId: null }] }
+          : {}),
+      },
       select: {
         status: true,
         supersededBy: { select: { id: true, status: true } },
@@ -1130,7 +1293,9 @@ export default class PageEntriesService {
 
     if (!target) {
       throw new NotFoundException({
-        message: `Entry ${supersedesId} is not on this page`,
+        message: home.pageId
+          ? `Entry ${supersedesId} is not on this page, nor outside any page`
+          : `Entry ${supersedesId} is not in this workspace`,
       });
     }
 
@@ -1268,3 +1433,25 @@ function firstLine(content: string): string {
 function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
+
+/**
+ * Where a new fact goes: a page, or its scope when it is on no page. The
+ * label names it in a refusal.
+ */
+interface EntryHome {
+  /** Null for a loose fact. */
+  pageId: string | null;
+  workspaceId: string;
+  /** The scope of a loose fact, which stands in for its page. */
+  scope?: string | null;
+  label: string;
+}
+
+/** What a reader is told about each move on a fact's trail. */
+const MOVE_SELECT = {
+  createdAt: true,
+  fromPageId: true,
+  toPageId: true,
+  movedById: true,
+  suggested: true,
+} as const;

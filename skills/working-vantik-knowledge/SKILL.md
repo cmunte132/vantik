@@ -176,6 +176,18 @@ Reach for `write_page` only when there is genuinely no page the knowledge
 belongs under. A page needs a real body — a title with nothing underneath it is
 a stub that makes the tree worse rather than better.
 
+When no page fits the fact, and you do not have a real body for a new page,
+leave `page` out. The fact is then **loose**: it is on no page, it must have a
+scope, and it is served like any other fact. A person moves it under a page
+when one fits, and the gardener suggests where:
+
+```
+remember(content: "…", scope: "apps/server/prisma")
+```
+
+A loose fact is better than a thin page made to hold it. It is not better than
+the page it belongs on, so check `list_pages` first.
+
 ## Link pages to the work they govern
 
 When a page durably governs a team, a project or an issue — this runbook covers

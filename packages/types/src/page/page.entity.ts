@@ -172,7 +172,10 @@ export class PageEntry {
 
   /** Markdown, short. One claim per row. */
   content: string;
-  /** Repo path glob, team or project the fact applies to; null is page-level. */
+  /**
+   * Repo path glob, team or project the fact applies to. On a page, null is
+   * page-level. A loose fact, on no page, always has one.
+   */
   scope: string | null;
   /** The modules the scope resolves to, kept by the server. */
   moduleIds: string[];
@@ -193,8 +196,14 @@ export class PageEntry {
   retrievalCount: number;
   lastServedAt: Date | null;
 
+  workspaceId: string;
+
   page?: Page;
-  pageId: string;
+  /** Null for a loose fact, which is on no page. */
+  pageId: string | null;
+
+  /** Each move of the fact between pages, oldest first, when read. */
+  moves?: PageEntryMove[];
 
   /**
    * The proof, when the entry is served: trust tier, citations, and the last
@@ -204,6 +213,17 @@ export class PageEntry {
   citations?: KnowledgeProof['citations'];
   lastCheckedAt?: KnowledgeProof['lastCheckedAt'];
   lastCheckedSha?: KnowledgeProof['lastCheckedSha'];
+}
+
+/** One step on a fact's trail: it was filed under another page. */
+export class PageEntryMove {
+  createdAt: Date;
+  /** Null when the fact was loose before the move. */
+  fromPageId: string | null;
+  toPageId: string | null;
+  movedById: string | null;
+  /** True when a person took the gardener's suggestion. */
+  suggested: boolean;
 }
 
 export class PageHistory {

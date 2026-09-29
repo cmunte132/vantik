@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -233,19 +234,20 @@ export class PageEntryRequestParamsDto {
 /**
  * The query an append arrives with.
  *
- * Separate from `ListPageEntriesQueryDto` because `pageId` is optional there —
- * a list with no page is the whole workspace — and required here. Optional on
- * the create path meant the request named no page at all: the route guard has
- * nothing to check, so it checks nothing, and the service then resolves
- * whichever page postgres returned first, in whatever workspace it sat in.
+ * With `pageId`, the fact goes on that page, and the route guard checks that
+ * the page is in the caller's workspace. Without it, the fact is loose: it
+ * goes on no page, in the workspace the caller's session or token belongs to,
+ * and it must have a scope. The workspace is never taken from the page table,
+ * so a request that names no page cannot land in another workspace.
  */
 export class CreatePageEntryQueryDto {
   @IsOptional()
   @IsUUID()
   workspaceId?: string;
 
+  @IsOptional()
   @IsUUID()
-  pageId: string;
+  pageId?: string;
 }
 
 export class ListPageEntriesQueryDto {
@@ -256,6 +258,12 @@ export class ListPageEntriesQueryDto {
   @IsOptional()
   @IsUUID()
   pageId?: string;
+
+  /** Only the loose entries, which are on no page. */
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  loose?: boolean;
 
   @IsOptional()
   @Transform(toStatusArray)
@@ -302,6 +310,28 @@ export class BulkUpdatePageEntriesDto {
 
   @IsEnum(PageEntryStatusEnum)
   status: PageEntryStatusEnum;
+}
+
+/**
+ * Files facts under a page: loose facts the gardener found a page for, or a
+ * fact a person moves from one page to another. Each move is kept on the
+ * fact's trail.
+ */
+export class MovePageEntriesDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @IsUUID(undefined, { each: true })
+  entryIds: string[];
+
+  /** The page the facts go under. */
+  @IsUUID()
+  pageId: string;
+
+  /** True when a person took the gardener's suggestion. */
+  @IsOptional()
+  @IsBoolean()
+  suggested?: boolean;
 }
 
 /**

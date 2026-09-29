@@ -9,6 +9,8 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { onLivePageOrLoose } from 'common/page-entry-where';
+
 import { convertMarkdownToTiptapJson } from 'common/utils/tiptap.utils';
 
 import { LoggerService } from 'modules/logger/logger.service';
@@ -436,8 +438,9 @@ export default class PageRefreshService {
   }
 
   /**
-   * The page's evidence: its own entries, and those of its modules. `live`
-   * narrows it to entries in use on pages not deleted; without it, an entry
+   * The page's evidence: its own entries, and those of its modules, loose
+   * or on any page. `live` narrows it to entries in use on pages not deleted
+   * and loose entries in use; without it, an entry
    * leaving use is still in scope, as a change.
    */
   private scopeWhere(
@@ -446,10 +449,8 @@ export default class PageRefreshService {
     live = false,
   ): Prisma.PageEntryWhereInput {
     return {
-      page: {
-        workspaceId: page.workspaceId,
-        ...(live ? { deleted: null } : {}),
-      },
+      workspaceId: page.workspaceId,
+      ...(live ? onLivePageOrLoose() : {}),
       ...(live ? { deleted: null, status: { in: IN_USE } } : {}),
       OR: [
         { pageId: page.id },

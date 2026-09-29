@@ -3,6 +3,8 @@ import type { KnowledgeFactCounts } from '@vantikhq/types';
 import { cn } from '@vantikhq/ui/lib/utils';
 import * as React from 'react';
 
+import { AxisIcon } from 'modules/product-axis/axis-icon';
+
 /**
  * The colours of the evidence behind a fact. Colour on the Pages views
  * means one of these things and nothing else: the code confirms it, a
@@ -221,48 +223,40 @@ export function ago(at: string | Date | null | undefined) {
   return short === 'now' ? 'just now' : short && `${short} ago`;
 }
 
-const PRODUCT_HUES = [90, 55, 300, 245, 154, 20, 200, 330];
-
 /**
- * A product's colour. A product with no colour set takes one from its id, so
- * that it keeps the same colour on every view.
+ * A product's mark, the same as in the sidebar. The pages of no product have
+ * a grey square.
  */
-export function productColor(product?: {
-  id: string;
-  color?: string | null;
-}): string {
-  if (!product) {
-    return 'oklch(0% 0 0 / 0.15)';
-  }
-  if (product.color) {
-    return product.color;
-  }
-
-  let hash = 0;
-
-  for (const char of product.id) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  }
-
-  return `oklch(62% 0.12 ${PRODUCT_HUES[hash % PRODUCT_HUES.length]})`;
-}
-
 export function ProductSwatch({
   product,
-  size = 14,
+  large = false,
 }: {
-  product?: { id: string; color?: string | null };
-  size?: number;
+  product?: {
+    name: string;
+    icon?: string | null;
+    color?: string | null;
+  };
+  large?: boolean;
 }) {
+  if (!product) {
+    return (
+      <span
+        className={cn(
+          'shrink-0 rounded-sm bg-grayAlpha-200',
+          large ? 'w-5 h-5' : 'w-3.5 h-3.5',
+        )}
+        aria-hidden
+      />
+    );
+  }
+
   return (
-    <span
-      className="shrink-0 rounded"
-      style={{
-        width: size,
-        height: size,
-        background: productColor(product),
-        borderRadius: size > 20 ? 8 : 4,
-      }}
+    <AxisIcon
+      kind="product"
+      name={product.name}
+      icon={product.icon ?? undefined}
+      color={product.color ?? undefined}
+      size={large ? 'lg' : 'sm'}
     />
   );
 }

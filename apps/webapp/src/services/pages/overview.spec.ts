@@ -143,7 +143,7 @@ describe('weekSentence', () => {
         }),
       ),
     ).toBe(
-      'This week agents wrote 2 facts. The gardener would have settled 1 of them without you.',
+      'This week agents wrote 2 facts. The gardener would have settled 1 of them without you: the code confirms 1.',
     );
   });
 });

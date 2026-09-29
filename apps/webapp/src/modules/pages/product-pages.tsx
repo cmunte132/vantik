@@ -110,8 +110,8 @@ const ProductPagesView = observer(() => {
       <div ref={ref} className="px-4 py-5 md:px-6 flex flex-col gap-4 min-w-0">
         <div className="flex items-center gap-3.5 flex-wrap">
           <ProductSwatch
-            product={product ?? (none ? undefined : { id: productId })}
-            size={34}
+            product={product ?? (none || !name ? undefined : { name })}
+            large
           />
           <div className="flex flex-col gap-0.5 grow min-w-[200px]">
             <span className="text-xl font-semibold">{name}</span>

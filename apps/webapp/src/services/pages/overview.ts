@@ -172,13 +172,19 @@ export function weekSentence(overview: KnowledgeOverview): string {
     parts.push('Agents wrote no facts this week.');
   } else {
     const code = week.settled - week.settledObserved;
+    const kinds = [
+      code ? `the code confirms ${code}` : null,
+      week.settledObserved
+        ? `${week.settledObserved} ${week.settledObserved === 1 ? 'is a dated observation' : 'are dated observations'} of outside services`
+        : null,
+    ].filter(Boolean);
+    const verb =
+      overview.autoTriage === 'on' ? 'settled' : 'would have settled';
     const settled =
       week.settled === 0
         ? ' The gardener settled none of them without you.'
-        : ` The gardener ${overview.autoTriage === 'on' ? 'settled' : 'would have settled'} ${week.settled} of them without you${
-            week.settledObserved
-              ? `: the code confirms ${code}, and ${week.settledObserved} ${week.settledObserved === 1 ? 'is a dated observation' : 'are dated observations'} of outside services.`
-              : '.'
+        : ` The gardener ${verb} ${week.settled} of them without you${
+            kinds.length ? `: ${kinds.join(', and ')}.` : '.'
           }`;
 
     parts.push(

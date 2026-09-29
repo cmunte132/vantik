@@ -6,16 +6,18 @@
  * loop delegating a whole backlog, an agent handed a one-line issue inventing
  * requirements. None of those throw on their own.
  */
+import type { AgentRunsService } from './agent-runs.service';
+import type { ContextPackService } from './context-pack.service';
+import type { AgentExecutor } from './executors/executor.interface';
+
 import { BadRequestException } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
-import { AgentDelegationService } from './agent-delegation.service';
-import type { AgentRunsService } from './agent-runs.service';
-import type { ContextPackService } from './context-pack.service';
-import { ExecutorRegistry } from './executors/executor.registry';
-import type { AgentExecutor } from './executors/executor.interface';
-import { knowledgeArmFor } from './knowledge-arm';
 import type { PackTraceDraft } from 'modules/pages/knowledge.service';
+
+import { AgentDelegationService } from './agent-delegation.service';
+import { ExecutorRegistry } from './executors/executor.registry';
+import { knowledgeArmFor } from './knowledge-arm';
 
 const WORKSPACE = 'workspace-1';
 const ISSUE = 'issue-1';
@@ -38,14 +40,16 @@ function fakeExecutor(
   };
 }
 
-function build(options: {
-  executors?: AgentExecutor[];
-  description?: string | null;
-  liveRuns?: Array<{ id: string; status: string }>;
-  liveCount?: number;
-  agentSettings?: unknown;
-  preferences?: unknown;
-} = {}) {
+function build(
+  options: {
+    executors?: AgentExecutor[];
+    description?: string | null;
+    liveRuns?: Array<{ id: string; status: string }>;
+    liveCount?: number;
+    agentSettings?: unknown;
+    preferences?: unknown;
+  } = {},
+) {
   const registry = new ExecutorRegistry();
   for (const executor of options.executors ?? [fakeExecutor('hosted')]) {
     registry.register(executor);
@@ -207,9 +211,7 @@ describe('AgentDelegationService guards', () => {
   it('refuses past the workspace concurrency cap', async () => {
     const { service } = build({ liveCount: 5 });
 
-    await expect(service.delegate(delegateInput)).rejects.toThrow(
-      /cap/,
-    );
+    await expect(service.delegate(delegateInput)).rejects.toThrow(/cap/);
   });
 
   it('refuses an issue from another workspace', async () => {
@@ -295,9 +297,7 @@ describe('AgentDelegationService routing', () => {
       executors: [fakeExecutor('hosted'), fakeExecutor('elsewhere')],
     });
 
-    await expect(service.delegate(delegateInput)).rejects.toThrow(
-      /name one/,
-    );
+    await expect(service.delegate(delegateInput)).rejects.toThrow(/name one/);
   });
 
   it('names what exists when an unknown executor is asked for', async () => {
@@ -385,9 +385,9 @@ describe('AgentDelegationService routing', () => {
 
     await service.delegate(delegateInput);
 
-    expect((created[0] as { config: Record<string, unknown> }).config).not.toHaveProperty(
-      'phases',
-    );
+    expect(
+      (created[0] as { config: Record<string, unknown> }).config,
+    ).not.toHaveProperty('phases');
   });
 
   it('stores a config hash that does not depend on key order', async () => {

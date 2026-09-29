@@ -10,6 +10,7 @@
 import { Queue } from 'bull';
 
 import EntryCitationsService from './entry-citations.service';
+import KnowledgeJobRunsService from './gardener/knowledge-job-runs.service';
 import PageRefreshService, {
   type RefreshOutcome,
 } from './generated/page-refresh.service';
@@ -39,7 +40,6 @@ import {
   RUN_FINDINGS_JOB,
   runFindingsJobOptions,
 } from './pages.interface';
-import KnowledgeJobRunsService from './gardener/knowledge-job-runs.service';
 import {
   EntryModulesScheduler,
   KnowledgeGapsScheduler,

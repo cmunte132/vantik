@@ -1,5 +1,3 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import type {
   KnowledgeBackoffRecord,
   KnowledgeMaintenanceRecord,
@@ -8,6 +6,9 @@ import type {
   KnowledgeSignalRecord,
   KnowledgeUseRecord,
 } from '@vantikhq/types';
+
+import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'nestjs-prisma';
 
 /** How many rows a read returns when the caller names no limit. */

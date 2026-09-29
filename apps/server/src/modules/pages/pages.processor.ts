@@ -6,6 +6,11 @@ import { Queue } from 'bull';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import EntryCitationsService from './entry-citations.service';
+import KnowledgeJobRunsService, {
+  type JobRunCounts,
+  type JobRunSubject,
+  type RecordedJob,
+} from './gardener/knowledge-job-runs.service';
 import PageRefreshService from './generated/page-refresh.service';
 import KnowledgeIndexService from './knowledge-index.service';
 import PageEntriesService from './page-entries.service';
@@ -44,11 +49,6 @@ import KnowledgeUpkeepService, {
   UnreadCitations,
 } from './upkeep/knowledge-upkeep.service';
 import KnowledgeVerifierService from './verifier/knowledge-verifier.service';
-import KnowledgeJobRunsService, {
-  type JobRunCounts,
-  type JobRunSubject,
-  type RecordedJob,
-} from './gardener/knowledge-job-runs.service';
 
 /**
  * The scheduler for the decay pass.

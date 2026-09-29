@@ -320,8 +320,7 @@ export default class KnowledgeService {
     input: { issueId: string; query: string },
     given?: RunKnowledgeLimits,
   ): Promise<PackedEntry[]> {
-    return (await this.tracedKnowledgeForRun(workspaceId, input, given))
-      .packed;
+    return (await this.tracedKnowledgeForRun(workspaceId, input, given)).packed;
   }
 
   /**

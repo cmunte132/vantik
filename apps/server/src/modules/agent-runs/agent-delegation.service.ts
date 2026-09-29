@@ -1,6 +1,7 @@
+import type { AgentRun } from '@prisma/client';
+
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { AgentRun } from '@prisma/client';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   AgentRunConfig,
@@ -21,10 +22,7 @@ import {
   type WorkspaceAgentDefaults,
 } from './agent-run-settings';
 import { AGENT_RUN_WORKSPACE_CONCURRENCY } from './agent-runs.interface';
-import {
-  AgentRunsService,
-  type AgentRunScope,
-} from './agent-runs.service';
+import { AgentRunsService, type AgentRunScope } from './agent-runs.service';
 import { ContextPackService } from './context-pack.service';
 import { ExecutorRegistry } from './executors/executor.registry';
 import { knowledgeArmFor } from './knowledge-arm';

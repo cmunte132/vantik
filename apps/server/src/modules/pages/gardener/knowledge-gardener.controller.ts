@@ -18,6 +18,7 @@ import {
   type KnowledgeRunTrace,
   type KnowledgeSignalRecord,
   type KnowledgeTracedRun,
+  KnowledgeTraceQueryDto,
   type KnowledgeUseRecord,
   RoleEnum,
 } from '@vantikhq/types';
@@ -177,11 +178,12 @@ export class KnowledgeGardenerController {
     @UserId() userId: string,
     @Role() role: string,
     @Param('runId') runId: string,
-    @Query() query: KnowledgeGapsQueryDto,
+    @Query() query: KnowledgeTraceQueryDto,
   ): Promise<KnowledgeRunTrace> {
     return this.gardener.trace(
       await this.workspace(role, userId, sessionWorkspaceId, query.workspaceId),
       runId,
+      query.traceId,
     );
   }
 

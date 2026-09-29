@@ -1,13 +1,17 @@
 import type {
   KnowledgeAgreementReport,
+  KnowledgeGardener,
   KnowledgeInboxChoiceEnum,
   KnowledgeInboxDetail,
   KnowledgeInboxList,
   KnowledgeInboxView,
+  KnowledgeMap,
   LooseFactGroup,
   KnowledgeOverview,
   KnowledgeProof,
   KnowledgeReviewQueue,
+  KnowledgeRunTrace,
+  KnowledgeTracedRun,
   PageProposal,
 } from '@vantikhq/types';
 
@@ -747,3 +751,52 @@ export const useDecideInboxItemMutation = mutationHook(decideInboxItem, {
     'loose-facts',
   ],
 });
+
+/** What the gardener did: its figures, the life of a fact, its log and jobs. */
+export function useKnowledgeGardener() {
+  return useQuery<KnowledgeGardener>({
+    queryKey: ['knowledge-gardener'],
+    staleTime: 60 * 1000,
+    queryFn: () =>
+      ajaxGet({
+        url: '/api/v1/knowledge/gardener',
+      }) as Promise<KnowledgeGardener>,
+  });
+}
+
+/** The graph of what the workspace knows, at the end of `asOf` or today. */
+export function useKnowledgeMap(asOf?: string) {
+  return useQuery<KnowledgeMap>({
+    queryKey: ['knowledge-map', asOf ?? 'today'],
+    placeholderData: keepPreviousData,
+    staleTime: 60 * 1000,
+    queryFn: () =>
+      ajaxGet({
+        url: `/api/v1/knowledge/map${asOf ? `?asOf=${asOf}` : ''}`,
+      }) as Promise<KnowledgeMap>,
+  });
+}
+
+/** The runs whose packs can be traced, newest first. */
+export function useKnowledgeTracedRuns() {
+  return useQuery<KnowledgeTracedRun[]>({
+    queryKey: ['knowledge-traces'],
+    queryFn: () =>
+      ajaxGet({ url: '/api/v1/knowledge/traces' }) as Promise<
+        KnowledgeTracedRun[]
+      >,
+  });
+}
+
+/** Why one run got the facts it got, for one of its packs. */
+export function useKnowledgeRunTrace(runId?: string, traceId?: string) {
+  return useQuery<KnowledgeRunTrace>({
+    queryKey: ['knowledge-trace', runId, traceId ?? 'start'],
+    enabled: Boolean(runId),
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      ajaxGet({
+        url: `/api/v1/knowledge/traces/${runId}${traceId ? `?traceId=${traceId}` : ''}`,
+      }) as Promise<KnowledgeRunTrace>,
+  });
+}

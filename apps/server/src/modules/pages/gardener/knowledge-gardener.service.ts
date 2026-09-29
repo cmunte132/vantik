@@ -283,12 +283,12 @@ export default class KnowledgeGardenerService {
       note:
         gone + changed === 0
           ? `All ${checked.length} citations checked still hold.`
-          : [
+          : `${[
               gone ? `${gone} cite files that are gone` : null,
               changed ? `${changed} cite code that changed` : null,
             ]
               .filter(Boolean)
-              .join('; ') + '.',
+              .join('; ')}.`,
     };
   }
 
@@ -1188,8 +1188,16 @@ export default class KnowledgeGardenerService {
    * Why one run got what it got: every fact its pack considered, why each
    * was given or dropped, what the run's outcome said about each, and the
    * model calls the run caused.
+   *
+   * A run gets a pack when it starts, and one more each time its agent
+   * calls load_context. `traceId` picks one of those; the pack it got at
+   * the start is the default.
    */
-  async trace(workspaceId: string, runId: string): Promise<KnowledgeRunTrace> {
+  async trace(
+    workspaceId: string,
+    runId: string,
+    traceId?: string,
+  ): Promise<KnowledgeRunTrace> {
     const run = await this.prisma.agentRun.findFirst({
       where: { id: runId, workspaceId, deleted: null },
       select: {
@@ -1232,8 +1240,23 @@ export default class KnowledgeGardenerService {
       select: { fullname: true, username: true },
     });
 
-    const candidates = candidatesOf(run.packTrace?.candidates);
-    const trace = run.packTrace;
+    // The packs its agent loaded while the run was going.
+    const loaded = await this.prisma.knowledgePackTrace.findMany({
+      where: {
+        workspaceId,
+        via: 'LOAD_CONTEXT',
+        userId: run.agentUserId,
+        createdAt: {
+          gte: run.startedAt ?? run.createdAt,
+          ...(run.finishedAt ? { lte: run.finishedAt } : {}),
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const packs = [...(run.packTrace ? [run.packTrace] : []), ...loaded];
+    const trace =
+      packs.find((pack) => pack.id === traceId) ?? run.packTrace ?? null;
+    const candidates = candidatesOf(trace?.candidates);
     const [entries, modules] = await Promise.all([
       this.prisma.pageEntry.findMany({
         where: {
@@ -1294,8 +1317,17 @@ export default class KnowledgeGardenerService {
         createdAt: run.createdAt,
         arm: run.knowledgeArm,
       },
+      packs: packs.map((pack) => ({
+        id: pack.id,
+        via: pack.via,
+        createdAt: pack.createdAt,
+        query: pack.query,
+        given: candidatesOf(pack.candidates).filter((row) => row.given).length,
+      })),
       trace: trace
         ? {
+            id: trace.id,
+            via: trace.via,
             createdAt: trace.createdAt,
             query: trace.query,
             seedModules: trace.seedModuleIds

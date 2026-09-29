@@ -85,6 +85,17 @@ export class KnowledgeMapQueryDto {
   asOf?: string;
 }
 
+export class KnowledgeTraceQueryDto {
+  @IsOptional()
+  @IsUUID()
+  workspaceId?: string;
+
+  /** One of the packs the run got. The pack it got at the start by default. */
+  @IsOptional()
+  @IsUUID()
+  traceId?: string;
+}
+
 export const KNOWLEDGE_MAP_LAYOUTS = ['module', 'page', 'product'] as const;
 
 export type KnowledgeMapLayout = (typeof KNOWLEDGE_MAP_LAYOUTS)[number];
@@ -322,8 +333,18 @@ export interface KnowledgeRunTrace {
     createdAt: string | Date;
     arm: string | null;
   };
+  /** Every pack the run got: at its start, then each load_context. */
+  packs: Array<{
+    id: string;
+    via: string;
+    createdAt: string | Date;
+    query: string;
+    given: number;
+  }>;
   /** Null for a run dispatched before packs were traced. */
   trace: {
+    id: string;
+    via: string;
     createdAt: string | Date;
     query: string;
     seedModules: Array<{ id: string; name: string }>;

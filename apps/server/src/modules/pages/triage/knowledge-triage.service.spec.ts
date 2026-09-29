@@ -3136,10 +3136,31 @@ describe('the verifier', () => {
     );
   });
 
-  it('[ENG-224] is not asked about an entry whose citations failed, or that was refused', async () => {
+  it('[ENG-224] is asked to look for new evidence when what the entry cited no longer holds', async () => {
     const t = triage({
       rows: [
         agentEntry({ citations: [{ ...holds(), checkResult: 'CHANGED' }] }),
+      ],
+    });
+
+    await expect(t.service.triage('new', SHADOW)).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: expect.arrayContaining([Reason.CITATION_FAILED]),
+    });
+    expect(t.verifications).toEqual([
+      expect.objectContaining({ entryId: 'new', state: 'PENDING' }),
+    ]);
+  });
+
+  it('[ENG-224] is not asked while a citation is still unread: the retry reads it first', async () => {
+    const t = triage({
+      rows: [
+        agentEntry({
+          citations: [
+            { ...holds(), checkResult: 'MISSING' },
+            { ...holds(), checkResult: 'UNKNOWN' },
+          ],
+        }),
       ],
     });
 

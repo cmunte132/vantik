@@ -50,13 +50,19 @@ function setup(
       | ((tools: Parameters<VerifierModel>[0]['tools']) => Promise<string>);
     throws?: Error;
     holds?: boolean;
+    /** Citations of the entry that no longer hold. */
+    failed?: Row[];
   } = {},
 ) {
   const verification: Row | null =
     options.verification === undefined
       ? { id: 'v1', entryId: 'e1', state: 'PENDING' }
       : options.verification;
-  const citations: Row[] = [];
+  const citations: Row[] = [...(options.failed ?? [])];
+  const failing = () =>
+    citations.filter((row) =>
+      ['CHANGED', 'MISSING'].includes(row.checkResult as string),
+    );
   const entry = {
     id: 'e1',
     content: 'Readiness is GET /health/ready.',
@@ -68,6 +74,9 @@ function setup(
       title: 'Deployment',
       workspaceId: WORKSPACE,
       workspace: { preferences: options.preferences ?? {} },
+    },
+    get citations() {
+      return failing();
     },
   };
   const client = {
@@ -87,6 +96,17 @@ function setup(
       createMany: jest.fn(async ({ data }: { data: Row[] }) => {
         citations.push(...data);
         return { count: data.length };
+      }),
+      findMany: jest.fn(async () => failing()),
+      deleteMany: jest.fn(async ({ where }: { where: Row }) => {
+        const ids = (where.id as { in: string[] }).in;
+        const before = citations.length;
+        citations.splice(
+          0,
+          citations.length,
+          ...citations.filter((row) => !ids.includes(row.id as string)),
+        );
+        return { count: before - citations.length };
       }),
     },
     workspace: {
@@ -223,6 +243,41 @@ describe('the verifier', () => {
         jobId: expect.stringMatching(/^triageEntry:e1:VERIFIER:/),
       }),
     );
+  });
+
+  it('[ENG-224] replaces citations that no longer hold with what it finds, and keeps them on the look', async () => {
+    const stale = {
+      id: 'c-old',
+      entryId: 'e1',
+      kind: 'CODE',
+      path: 'src/old-health.ts',
+      startLine: 1,
+      endLine: 2,
+      checkResult: 'MISSING',
+    };
+    const t = setup({ holds: true, failed: [stale] });
+
+    await expect(t.withModel().verify('e1')).resolves.toBe('FOUND');
+    expect(t.asked[0].prompt).toContain(
+      'It cited this before, and it no longer says the claim: src/old-health.ts',
+    );
+    expect(t.citations).toEqual([
+      expect.objectContaining({ checkResult: 'HOLDS', path: 'src/health.ts' }),
+    ]);
+    expect(t.verification).toMatchObject({
+      state: 'FOUND',
+      replaced: [
+        expect.objectContaining({ id: 'c-old', checkResult: 'MISSING' }),
+      ],
+    });
+  });
+
+  it('[ENG-224] leaves citations that no longer hold in place when it finds nothing', async () => {
+    const stale = { id: 'c-old', entryId: 'e1', checkResult: 'CHANGED' };
+    const t = setup({ holds: false, failed: [stale] });
+
+    await expect(t.withModel().verify('e1')).resolves.toBe('NOTHING');
+    expect(t.citations).toEqual([stale]);
   });
 
   it('[ENG-224] attaches nothing the server does not find to hold, and leaves the entry to a person', async () => {

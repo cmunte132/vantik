@@ -15,6 +15,7 @@ CREATE TABLE "KnowledgeVerification" (
     "outside" BOOLEAN NOT NULL DEFAULT false,
     "reason" TEXT,
     "steps" JSONB,
+    "replaced" JSONB,
     "finishedAt" TIMESTAMP(3),
 
     CONSTRAINT "KnowledgeVerification_pkey" PRIMARY KEY ("id")

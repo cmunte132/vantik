@@ -1184,6 +1184,10 @@ model KnowledgeVerification {
   reason     String?
   /// Each search and read, in order, with a short result; and the answer.
   steps      Json?
+  /// The citations that no longer held when the verifier found new
+  /// evidence. The server removes them from the entry when it attaches the
+  /// new citations, and keeps them here for the audit.
+  replaced   Json?
   finishedAt DateTime?
 
   @@index([workspaceId, createdAt])

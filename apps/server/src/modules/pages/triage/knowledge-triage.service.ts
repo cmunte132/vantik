@@ -1099,7 +1099,7 @@ export default class KnowledgeTriageService {
         // person never sees the entry between the two.
         const verify =
           found.decision === KnowledgeTriageDecisionType.ESCALATE &&
-          found.reasons.includes(KnowledgeEscalationReason.UNGROUNDED)
+          wantsVerifier(found.reasons, entry.citations)
             ? (
                 await tx.knowledgeVerification.createMany({
                   data: [
@@ -1421,6 +1421,30 @@ function heldBack(found: Found, backoff: Map<string, BackoffState>): Found {
     corroborates: null,
   };
 }
+
+/**
+ * Whether the verifier looks for evidence before a person sees an escalated
+ * entry. It looks when the entry cites nothing that can be checked, and when
+ * what it cited no longer holds. It does not look while a citation is still
+ * unread: the retry reads it, and triage then decides again.
+ */
+export function wantsVerifier(
+  reasons: KnowledgeEscalationReason[],
+  citations: Array<{ checkResult: string | null }>,
+): boolean {
+  if (reasons.includes(KnowledgeEscalationReason.UNGROUNDED)) {
+    return true;
+  }
+
+  return (
+    reasons.includes(KnowledgeEscalationReason.CITATION_FAILED) &&
+    citations.every((citation) => citation.checkResult !== 'UNKNOWN') &&
+    citations.some((citation) => FAILED.has(citation.checkResult ?? ''))
+  );
+}
+
+/** Results under which a citation no longer supports its claim. */
+const FAILED = new Set<string>(['CHANGED', 'MISSING']);
 
 /**
  * A citation as the acceptance judges are shown it: the lines as the server

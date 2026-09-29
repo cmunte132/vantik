@@ -47,7 +47,9 @@ import { redactSecrets } from '../triage/triage-policy';
  * The verifier agent: it looks for evidence of a fact that cites none,
  * before a person sees the fact.
  *
- * Triage asks for a look when it escalates an entry as UNGROUNDED. The
+ * Triage asks for a look when it escalates an entry as UNGROUNDED, or when
+ * the citations of an escalated entry no longer hold (CHANGED or MISSING).
+ * New evidence then replaces the citations that failed. The
  * verifier searches the code of the modules of the entry and the issues of
  * the workspace, and it names the lines or the issues that state the claim.
  * The server checks each citation as it checks a citation that a writer
@@ -93,6 +95,12 @@ const MAX_ISSUES = 8;
 
 /** The most characters of an issue that one read returns. */
 const MAX_ISSUE_TEXT = 2_000;
+
+/** Results under which a citation no longer supports its claim. */
+const FAILED_RESULTS: PageEntryCitationCheck[] = [
+  PageEntryCitationCheck.CHANGED,
+  PageEntryCitationCheck.MISSING,
+];
 
 /** The most characters of an outside page that one read returns. */
 const MAX_PAGE_TEXT = 6_000;
@@ -231,6 +239,10 @@ export default class KnowledgeVerifierService {
             workspace: { select: { preferences: true } },
           },
         },
+        citations: {
+          where: { checkResult: { in: FAILED_RESULTS } },
+          select: { kind: true, path: true, targetLabel: true },
+        },
       },
     });
 
@@ -268,6 +280,13 @@ export default class KnowledgeVerifierService {
       repos.length
         ? `Repositories: ${repos.map((repo) => repo.fullName).join(', ')}`
         : 'This workspace has no repository the server can read.',
+      ...(entry.citations.length
+        ? [
+            `It cited this before, and it no longer says the claim: ${entry.citations
+              .map((citation) => citation.path ?? citation.targetLabel ?? '')
+              .join(', ')}. Look for where the claim is stated now.`,
+          ]
+        : []),
     ].join('\n\n');
 
     let answer: Answer | null;
@@ -331,12 +350,22 @@ export default class KnowledgeVerifierService {
   }
 
   /**
-   * Queues a look for entries that wait as UNGROUNDED and got none: those
-   * written before the verifier, and those whose job was lost. Queues again
+   * Queues a look for entries that wait as UNGROUNDED, or whose citations
+   * no longer hold, and got none: those written before the verifier, and
+   * those whose job was lost. Queues again
    * a look that stayed PENDING too long. Only where triage is on or in
    * shadow.
    */
   async sweep(env: NodeJS.ProcessEnv = process.env): Promise<number> {
+    const noLongerHolds: Prisma.KnowledgeTriageDecisionWhereInput = {
+      reasons: { has: 'CITATION_FAILED' },
+      entry: {
+        citations: {
+          none: { checkResult: PageEntryCitationCheck.UNKNOWN },
+          some: { checkResult: { in: FAILED_RESULTS } },
+        },
+      },
+    };
     const stale = new Date(Date.now() - VERIFIER_PENDING_MS);
     const pending = await this.prisma.knowledgeVerification.findMany({
       where: {
@@ -349,7 +378,7 @@ export default class KnowledgeVerifierService {
     const unlooked = await this.prisma.knowledgeTriageDecision.findMany({
       where: {
         decision: 'ESCALATE',
-        reasons: { has: 'UNGROUNDED' },
+        OR: [{ reasons: { has: 'UNGROUNDED' } }, noLongerHolds],
         entry: {
           deleted: null,
           status: PageEntryStatus.PROPOSED,
@@ -789,8 +818,10 @@ export default class KnowledgeVerifierService {
 
   /**
    * Attaches the citations while the entry still waits, and records the
-   * look as FOUND, in one transaction under the entry's lock. Returns how
-   * many it attached.
+   * look as FOUND, in one transaction under the entry's lock. The citations
+   * that no longer hold leave the entry, since the new evidence replaces
+   * them, and the look keeps them for the audit. Returns how many it
+   * attached.
    */
   private async attach(
     entryId: string,
@@ -816,6 +847,27 @@ export default class KnowledgeVerifierService {
         return 0;
       }
 
+      const failed = await tx.pageEntryCitation.findMany({
+        where: { entryId, checkResult: { in: FAILED_RESULTS } },
+        select: {
+          id: true,
+          kind: true,
+          path: true,
+          commitSha: true,
+          startLine: true,
+          endLine: true,
+          targetLabel: true,
+          checkResult: true,
+          checkedAt: true,
+        },
+      });
+
+      if (failed.length) {
+        await tx.pageEntryCitation.deleteMany({
+          where: { id: { in: failed.map((citation) => citation.id) } },
+        });
+      }
+
       const { count } = await tx.pageEntryCitation.createMany({
         data: drafts.map((draft) => ({ ...draft, entryId })),
       });
@@ -830,6 +882,9 @@ export default class KnowledgeVerifierService {
           outside: record.outside,
           reason: record.reason,
           steps: record.steps as unknown as Prisma.InputJsonValue,
+          ...(failed.length && {
+            replaced: failed as unknown as Prisma.InputJsonValue,
+          }),
           finishedAt: new Date(),
         },
       });

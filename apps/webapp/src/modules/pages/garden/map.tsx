@@ -690,10 +690,13 @@ function neighbours(
       near.add(fact);
     }
   });
+  // One step out from the node and its facts, and no further.
+  const seeds = new Set(near);
+
   for (const edge of edges) {
-    if (near.has(edge.from)) {
+    if (seeds.has(edge.from)) {
       near.add(edge.to);
-    } else if (near.has(edge.to)) {
+    } else if (seeds.has(edge.to)) {
       near.add(edge.from);
     }
   }
@@ -1207,7 +1210,10 @@ function Detail({
       {tension.length > 0 && (
         <List title="Tension">
           {tension.slice(0, 4).map((edge) => {
-            const fact = factById.get(edge.from);
+            // For one fact, the fact at the other end of the edge.
+            const fact = factById.get(
+              node?.type === 'fact' && edge.from === id ? edge.to : edge.from,
+            );
             return (
               <FactLine
                 key={`${edge.type}-${edge.from}-${edge.to}`}
@@ -1257,7 +1263,7 @@ function Detail({
               key={`${edge.type}-${edge.from}-${edge.to}`}
               type="button"
               onClick={() => other && onSelect(other.id)}
-              className="text-left leading-snug"
+              className="text-left leading-snug break-all"
             >
               <span
                 className={cn(

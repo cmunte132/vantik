@@ -78,9 +78,15 @@ export const PageEntriesStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* (pageId: string) {
-      const entries = pageId
-        ? yield vantikDatabase.pageEntries.where({ pageId }).toArray()
-        : [];
+      // IndexedDB does not index a null key, so the loose facts are found by
+      // a scan of the table.
+      const entries = !pageId
+        ? []
+        : pageId === LOOSE_KEY
+          ? yield vantikDatabase.pageEntries
+              .filter((entry: PageEntryType) => !entry.pageId)
+              .toArray()
+          : yield vantikDatabase.pageEntries.where({ pageId }).toArray();
 
       if (entries.length > 0) {
         self.pageEntries.set(pageId, PageEntryArray.create(entries));

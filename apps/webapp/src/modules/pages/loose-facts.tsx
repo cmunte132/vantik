@@ -261,6 +261,16 @@ export const LooseFactsDialog = observer(
     onClose: () => void;
   }) => {
     const { pageEntriesStore } = useContextStore();
+    const open = entryIds !== null;
+
+    // The synced store holds the facts of the pages that were opened. This
+    // reads the facts outside any page into it.
+    React.useEffect(() => {
+      if (open) {
+        pageEntriesStore.load(LOOSE_KEY);
+      }
+    }, [open, pageEntriesStore]);
+
     const all: PageEntryType[] = pageEntriesStore
       .getEntries(LOOSE_KEY)
       .filter((entry: PageEntryType) => FILED.includes(entry.status));
@@ -277,10 +287,7 @@ export const LooseFactsDialog = observer(
     }
 
     return (
-      <Dialog
-        open={entryIds !== null}
-        onOpenChange={(open) => !open && onClose()}
-      >
+      <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
         <DialogContent className="p-0 gap-0 min-w-[min(560px,calc(100vw-32px))] sm:max-w-[560px]">
           <DialogHeader className="text-left px-5 pt-5 pb-3">
             <DialogTitle className="font-normal">

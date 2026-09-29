@@ -995,6 +995,128 @@ describe('the knowledge a run is handed', () => {
     ]);
   });
 
+  it('traces every entry a pack considered, and why each one not given was dropped', async () => {
+    const long = 'y'.repeat(2_000);
+    const { service } = forRun({
+      conventions: [row('convention-1', { kind: 'CONVENTION' })],
+      entries: [
+        row('near', { moduleIds: [MODULE] }),
+        row('ungrounded', { citations: [] }),
+        row('big', { content: long }),
+        row('fourth'),
+        row('retired', { status: PageEntryStatusEnum.ARCHIVED }),
+      ],
+      ranked: ['near', 'ungrounded', 'retired', 'big', 'fourth'],
+    });
+
+    const { packed, trace } = await service.tracedKnowledgeForRun(
+      WORKSPACE,
+      ask,
+      { topK: 2, tokenBudget: 200 },
+    );
+
+    expect(packed.map((entry) => entry.entryId)).toEqual([
+      'convention-1',
+      'near',
+    ]);
+    expect(trace).toMatchObject({
+      query: ask.query,
+      seedModuleIds: [MODULE],
+      topK: 2,
+      tokenBudget: 200,
+      searchFailed: false,
+    });
+    expect(trace.tokensGiven).toBeGreaterThan(0);
+    expect(trace.tokensGiven).toBeLessThanOrEqual(200);
+    expect(
+      trace.candidates.map(
+        ({ entryId, source, searchRank, nearness, given, order, dropped }) => ({
+          entryId,
+          source,
+          searchRank,
+          nearness,
+          given,
+          order,
+          dropped,
+        }),
+      ),
+    ).toEqual([
+      {
+        entryId: 'convention-1',
+        source: 'CONVENTION',
+        searchRank: null,
+        nearness: 'SEED',
+        given: true,
+        order: 1,
+        dropped: null,
+      },
+      {
+        entryId: 'near',
+        source: 'SEARCH',
+        searchRank: 1,
+        nearness: 'SEED',
+        given: true,
+        order: 2,
+        dropped: null,
+      },
+      {
+        entryId: 'ungrounded',
+        source: 'SEARCH',
+        searchRank: 2,
+        nearness: 'NONE',
+        given: false,
+        order: null,
+        dropped: 'NOT_TRUSTED',
+      },
+      {
+        entryId: 'retired',
+        source: 'SEARCH',
+        searchRank: 3,
+        nearness: 'NONE',
+        given: false,
+        order: null,
+        dropped: 'NOT_LIVE',
+      },
+      // Kept, as the second relevant entry, but too long for what is left.
+      {
+        entryId: 'big',
+        source: 'SEARCH',
+        searchRank: 4,
+        nearness: 'NONE',
+        given: false,
+        order: null,
+        dropped: 'BUDGET',
+      },
+      {
+        entryId: 'fourth',
+        source: 'SEARCH',
+        searchRank: 5,
+        nearness: 'NONE',
+        given: false,
+        order: null,
+        dropped: 'TOP_K',
+      },
+    ]);
+  });
+
+  it('traces a search that failed, so a reader sees why only conventions were given', async () => {
+    const { service } = forRun({
+      conventions: [row('convention-1', { kind: 'CONVENTION' })],
+      search: new Error('typesense is down'),
+    });
+
+    const { trace } = await service.tracedKnowledgeForRun(
+      WORKSPACE,
+      ask,
+      LIMITS,
+    );
+
+    expect(trace.searchFailed).toBe(true);
+    expect(trace.candidates.map((candidate) => candidate.entryId)).toEqual([
+      'convention-1',
+    ]);
+  });
+
   it('[KG-3.2] still hands over the conventions when the index cannot be searched', async () => {
     const { service } = forRun({
       conventions: [row('convention-1', { kind: 'CONVENTION' })],

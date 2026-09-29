@@ -11,6 +11,7 @@ import EntryCitationsService from './entry-citations.service';
 import PageRefreshService from './generated/page-refresh.service';
 import PageWriter from './generated/page-writer';
 import KnowledgeInboxService from './knowledge-inbox.service';
+import KnowledgeJobRunsService from './gardener/knowledge-job-runs.service';
 import KnowledgeIndexService from './knowledge-index.service';
 import KnowledgeOverviewService from './knowledge-overview.service';
 import { KnowledgeReviewController } from './knowledge-review.controller';
@@ -74,6 +75,7 @@ import KnowledgeVerifierService from './verifier/knowledge-verifier.service';
     KnowledgeAgreementService,
     KnowledgeReviewService,
     KnowledgeInboxService,
+    KnowledgeJobRunsService,
     KnowledgeOverviewService,
     LooseFactsService,
     KnowledgeIssues,

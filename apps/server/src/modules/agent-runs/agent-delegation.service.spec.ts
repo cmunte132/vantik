@@ -15,6 +15,7 @@ import type { ContextPackService } from './context-pack.service';
 import { ExecutorRegistry } from './executors/executor.registry';
 import type { AgentExecutor } from './executors/executor.interface';
 import { knowledgeArmFor } from './knowledge-arm';
+import type { PackTraceDraft } from 'modules/pages/knowledge.service';
 
 const WORKSPACE = 'workspace-1';
 const ISSUE = 'issue-1';
@@ -108,10 +109,23 @@ function build(options: {
     })),
   } as unknown as AgentRunsService;
 
+  const trace: PackTraceDraft = {
+    query: 'the issue',
+    seedModuleIds: [],
+    neighbourModuleIds: [],
+    topK: 5,
+    tokenBudget: 1500,
+    tokensGiven: 0,
+    searchFailed: false,
+    candidates: [],
+  };
   const contextPacks = {
-    build: jest.fn(async () => ({
-      version: 1 as const,
-      repo: { baseBranch: 'main', delivery: 'worktree' as const },
+    buildTraced: jest.fn(async () => ({
+      pack: {
+        version: 1 as const,
+        repo: { baseBranch: 'main', delivery: 'worktree' as const },
+      },
+      trace,
     })),
     recordServed: jest.fn(async (): Promise<void> => undefined),
   } as unknown as ContextPackService;
@@ -401,7 +415,7 @@ describe('AgentDelegationService knowledge arm', () => {
     expect(run.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(run.knowledgeArm).toBe(knowledgeArmFor(run.id, 0.1));
     // The pack was built for that arm, before the row existed.
-    expect(contextPacks.build).toHaveBeenCalledWith(
+    expect(contextPacks.buildTraced).toHaveBeenCalledWith(
       ISSUE,
       WORKSPACE,
       undefined,
@@ -432,13 +446,16 @@ describe('AgentDelegationService knowledge arm', () => {
     }
   });
 
-  it('[KG-3.1] records what the run was packed once the run exists', async () => {
+  it('[KG-3.1] records what the run was packed, and how it was chosen, once the run exists', async () => {
     const { service, agentRuns, contextPacks } = build();
 
     await service.delegate(delegateInput);
 
     const run = await (agentRuns.createRun as jest.Mock).mock.results[0].value;
-    expect(contextPacks.recordServed).toHaveBeenCalledWith(run);
+    expect(contextPacks.recordServed).toHaveBeenCalledWith(
+      run,
+      expect.objectContaining({ tokenBudget: 1500, candidates: [] }),
+    );
   });
 
   it('[KG-3.1] records the pack again for a retry, which is handed it too', async () => {

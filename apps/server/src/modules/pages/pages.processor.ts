@@ -44,6 +44,11 @@ import KnowledgeUpkeepService, {
   UnreadCitations,
 } from './upkeep/knowledge-upkeep.service';
 import KnowledgeVerifierService from './verifier/knowledge-verifier.service';
+import KnowledgeJobRunsService, {
+  type JobRunCounts,
+  type JobRunSubject,
+  type RecordedJob,
+} from './gardener/knowledge-job-runs.service';
 
 /**
  * The scheduler for the decay pass.
@@ -302,7 +307,26 @@ export class PagesProcessor {
     @Optional() private knowledgeIndex?: KnowledgeIndexService,
     @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
     @Optional() private verifier?: KnowledgeVerifierService,
+    @Optional() private jobRuns?: KnowledgeJobRunsService,
   ) {}
+
+  /**
+   * Runs a job's work, and records the run: what started it, how long it
+   * took, what it counted, and its error. With no recorder, it only runs.
+   */
+  private async recorded<T>(
+    name: string,
+    job: RecordedJob | undefined,
+    subject: JobRunSubject,
+    work: () => Promise<T>,
+    counts?: (result: T) => JobRunCounts | undefined,
+  ): Promise<void> {
+    if (this.jobRuns) {
+      await this.jobRuns.record(name, job, subject, work, counts);
+    } else {
+      await work();
+    }
+  }
 
   /**
    * Queues one more triage pass for entries whose evidence changed. Triage
@@ -332,33 +356,48 @@ export class PagesProcessor {
 
   /** Indexes the consolidated entries the index lost. */
   @Process(INDEX_CONSOLIDATED_JOB)
-  async handleIndexConsolidated() {
-    await this.knowledgeIndex?.indexMissingConsolidated();
+  async handleIndexConsolidated(job?: RecordedJob) {
+    return this.recorded(INDEX_CONSOLIDATED_JOB, job, {}, async () => {
+      await this.knowledgeIndex?.indexMissingConsolidated();
+    });
   }
 
   /** Rebuilds every generated page that is due. See `PageRefreshService`. */
   @Process(PAGE_REFRESH_JOB)
-  async handlePageRefresh() {
-    const { checked, written } = await this.pageRefresh.refreshDue();
+  async handlePageRefresh(job?: RecordedJob) {
+    return this.recorded(PAGE_REFRESH_JOB, job, {}, async () => {
+      const { checked, written } = await this.pageRefresh.refreshDue();
 
-    this.logger.info({
-      message: `Looked at ${checked} generated page(s); rebuilt ${written}`,
-      where: 'PagesProcessor.handlePageRefresh',
+      this.logger.info({
+        message: `Looked at ${checked} generated page(s); rebuilt ${written}`,
+        where: 'PagesProcessor.handlePageRefresh',
+      });
+
+      return { checked, written };
     });
   }
 
   /** Builds one generated page, if it is due: when made, or asked anew. */
   @Process(REFRESH_PAGE_JOB)
-  async handleRefreshPage(job: { data: { pageId: string } }) {
-    const { outcome } = await this.pageRefresh.refresh(job.data.pageId);
+  async handleRefreshPage(job: RecordedJob & { data: { pageId: string } }) {
+    return this.recorded(
+      REFRESH_PAGE_JOB,
+      job,
+      { subjectId: job.data.pageId },
+      async () => {
+        const { outcome } = await this.pageRefresh.refresh(job.data.pageId);
 
-    // A refresh that could not read its evidence or its writer's answer is
-    // tried again; the next look would get to it too, but later.
-    if (outcome === 'retrieval-failed' || outcome === 'writer-failed') {
-      throw new Error(
-        `Generated page ${job.data.pageId} was not built (${outcome})`,
-      );
-    }
+        // A refresh that could not read its evidence or its writer's answer is
+        // tried again; the next look would get to it too, but later.
+        if (outcome === 'retrieval-failed' || outcome === 'writer-failed') {
+          throw new Error(
+            `Generated page ${job.data.pageId} was not built (${outcome})`,
+          );
+        }
+
+        return { outcome };
+      },
+    );
   }
 
   /**
@@ -368,31 +407,47 @@ export class PagesProcessor {
    * without a decision.
    */
   @Process(TRIAGE_ENTRY_JOB)
-  async handleTriageEntry(job: { data: TriageEntryJob }) {
-    const outcome = await this.triage.triage(
-      job.data.entryId,
-      process.env,
-      job.data.trigger ?? KnowledgeTriageTrigger.WRITTEN,
+  async handleTriageEntry(job: RecordedJob & { data: TriageEntryJob }) {
+    return this.recorded(
+      TRIAGE_ENTRY_JOB,
+      job,
+      { entryId: job.data.entryId },
+      async () => {
+        const outcome = await this.triage.triage(
+          job.data.entryId,
+          process.env,
+          job.data.trigger ?? KnowledgeTriageTrigger.WRITTEN,
+        );
+
+        if (!outcome) {
+          return { decided: false };
+        }
+
+        const detail = [
+          outcome.reasons.length ? ` (${outcome.reasons.join(', ')})` : '',
+          outcome.policy ? ` (policy ${outcome.policy})` : '',
+          outcome.backedOffFrom
+            ? ` instead of ${outcome.backedOffFrom}, which is backed off`
+            : '',
+          outcome.applied ? ', applied' : '',
+          outcome.audit ? ', drawn for audit' : '',
+        ].join('');
+
+        this.logger.info({
+          message: `Triage (${outcome.mode.toLowerCase()}, ${outcome.trigger.toLowerCase()}) decided ${outcome.decision} for entry ${job.data.entryId}${detail}`,
+          where: 'PagesProcessor.handleTriageEntry',
+        });
+
+        return {
+          decided: true,
+          decision: outcome.decision,
+          mode: outcome.mode,
+          trigger: outcome.trigger,
+          applied: outcome.applied,
+          audit: outcome.audit,
+        };
+      },
     );
-
-    if (!outcome) {
-      return;
-    }
-
-    const detail = [
-      outcome.reasons.length ? ` (${outcome.reasons.join(', ')})` : '',
-      outcome.policy ? ` (policy ${outcome.policy})` : '',
-      outcome.backedOffFrom
-        ? ` instead of ${outcome.backedOffFrom}, which is backed off`
-        : '',
-      outcome.applied ? ', applied' : '',
-      outcome.audit ? ', drawn for audit' : '',
-    ].join('');
-
-    this.logger.info({
-      message: `Triage (${outcome.mode.toLowerCase()}, ${outcome.trigger.toLowerCase()}) decided ${outcome.decision} for entry ${job.data.entryId}${detail}`,
-      where: 'PagesProcessor.handleTriageEntry',
-    });
   }
 
   /**
@@ -400,15 +455,24 @@ export class PagesProcessor {
    * that fails records why, and the entry goes to a person.
    */
   @Process(VERIFY_ENTRY_JOB)
-  async handleVerifyEntry(job: { data: { entryId: string } }) {
-    const state = await this.verifier?.verify(job.data.entryId);
+  async handleVerifyEntry(job: RecordedJob & { data: { entryId: string } }) {
+    return this.recorded(
+      VERIFY_ENTRY_JOB,
+      job,
+      { entryId: job.data.entryId },
+      async () => {
+        const state = await this.verifier?.verify(job.data.entryId);
 
-    if (state) {
-      this.logger.info({
-        message: `The verifier looked for evidence of entry ${job.data.entryId}: ${state}`,
-        where: 'PagesProcessor.handleVerifyEntry',
-      });
-    }
+        if (state) {
+          this.logger.info({
+            message: `The verifier looked for evidence of entry ${job.data.entryId}: ${state}`,
+            where: 'PagesProcessor.handleVerifyEntry',
+          });
+        }
+
+        return { state: state ?? null };
+      },
+    );
   }
 
   /**
@@ -418,23 +482,32 @@ export class PagesProcessor {
    * UNKNOWN, which never counts against the entry.
    */
   @Process(RETRY_CITATIONS_JOB)
-  async handleRetryCitations(job: { data: { entryId: string } }) {
-    const { stillUnknown, read } = await this.entryCitations.retryUnknown(
-      job.data.entryId,
+  async handleRetryCitations(job: RecordedJob & { data: { entryId: string } }) {
+    return this.recorded(
+      RETRY_CITATIONS_JOB,
+      job,
+      { entryId: job.data.entryId },
+      async () => {
+        const { stillUnknown, read } = await this.entryCitations.retryUnknown(
+          job.data.entryId,
+        );
+
+        if (read > 0) {
+          await this.triageAgain(
+            [job.data.entryId],
+            KnowledgeTriageTrigger.CITATIONS_CHECKED,
+          );
+        }
+
+        if (stillUnknown > 0) {
+          throw new Error(
+            `${stillUnknown} citation(s) of entry ${job.data.entryId} could not be read yet`,
+          );
+        }
+
+        return { read, stillUnknown };
+      },
     );
-
-    if (read > 0) {
-      await this.triageAgain(
-        [job.data.entryId],
-        KnowledgeTriageTrigger.CITATIONS_CHECKED,
-      );
-    }
-
-    if (stillUnknown > 0) {
-      throw new Error(
-        `${stillUnknown} citation(s) of entry ${job.data.entryId} could not be read yet`,
-      );
-    }
   }
 
   /**
@@ -444,37 +517,46 @@ export class PagesProcessor {
    * first, since outcomes are what take one out of use.
    */
   @Process(RECHECK_ENTRY_JOB)
-  async handleRecheckEntry(job: { data: { entryId: string } }) {
-    // Weighing failing does not cost the re-check: the job is not retried,
-    // and the citations are worth checking either way. The failure is
-    // raised once they are, so the job is still recorded as failed.
-    let failed = false;
-    let failure: unknown;
+  async handleRecheckEntry(job: RecordedJob & { data: { entryId: string } }) {
+    return this.recorded(
+      RECHECK_ENTRY_JOB,
+      job,
+      { entryId: job.data.entryId },
+      async () => {
+        // Weighing failing does not cost the re-check: the job is not retried,
+        // and the citations are worth checking either way. The failure is
+        // raised once they are, so the job is still recorded as failed.
+        let failed = false;
+        let failure: unknown;
 
-    try {
-      await this.conventions.weigh(job.data.entryId);
-    } catch (error) {
-      failed = true;
-      failure = error;
-    }
+        try {
+          await this.conventions.weigh(job.data.entryId);
+        } catch (error) {
+          failed = true;
+          failure = error;
+        }
 
-    const { checked } = await this.entryCitations.recheck(job.data.entryId);
+        const { checked } = await this.entryCitations.recheck(job.data.entryId);
 
-    if (checked > 0) {
-      await this.triageAgain(
-        [job.data.entryId],
-        KnowledgeTriageTrigger.CITATIONS_CHECKED,
-      );
-    }
+        if (checked > 0) {
+          await this.triageAgain(
+            [job.data.entryId],
+            KnowledgeTriageTrigger.CITATIONS_CHECKED,
+          );
+        }
 
-    this.logger.info({
-      message: `Checked ${checked} citation(s) of entry ${job.data.entryId}`,
-      where: 'PagesProcessor.handleRecheckEntry',
-    });
+        this.logger.info({
+          message: `Checked ${checked} citation(s) of entry ${job.data.entryId}`,
+          where: 'PagesProcessor.handleRecheckEntry',
+        });
 
-    if (failed) {
-      throw failure;
-    }
+        if (failed) {
+          throw failure;
+        }
+
+        return { checked };
+      },
+    );
   }
 
   /**
@@ -482,8 +564,15 @@ export class PagesProcessor {
    * any the reviewer has given in enough runs.
    */
   @Process(RUN_FINDINGS_JOB)
-  async handleRunFindings(job: { data: { runId: string } }) {
-    await this.conventions.runFinished(job.data.runId);
+  async handleRunFindings(job: RecordedJob & { data: { runId: string } }) {
+    return this.recorded(
+      RUN_FINDINGS_JOB,
+      job,
+      { agentRunId: job.data.runId },
+      async () => {
+        await this.conventions.runFinished(job.data.runId);
+      },
+    );
   }
 
   /**
@@ -495,24 +584,33 @@ export class PagesProcessor {
    * read at it.
    */
   @Process(CODE_LANDED_JOB)
-  async handleCodeLanded(job: { data: CodeLandedJob }) {
-    let waiting: string[];
+  async handleCodeLanded(job: RecordedJob & { data: CodeLandedJob }) {
+    return this.recorded(
+      CODE_LANDED_JOB,
+      job,
+      { workspaceId: job.data.workspaceId, subjectId: job.data.sha },
+      async () => {
+        let waiting: string[];
 
-    try {
-      ({ waiting } = await this.upkeep.codeLanded(job.data));
-    } catch (error) {
-      // What was checked is stored, though the rest is tried again.
-      if (error instanceof UnreadCitations) {
-        await this.triageAgain(
-          error.waiting,
-          KnowledgeTriageTrigger.CODE_CHANGED,
-        );
-      }
+        try {
+          ({ waiting } = await this.upkeep.codeLanded(job.data));
+        } catch (error) {
+          // What was checked is stored, though the rest is tried again.
+          if (error instanceof UnreadCitations) {
+            await this.triageAgain(
+              error.waiting,
+              KnowledgeTriageTrigger.CODE_CHANGED,
+            );
+          }
 
-      throw error;
-    }
+          throw error;
+        }
 
-    await this.triageAgain(waiting, KnowledgeTriageTrigger.CODE_CHANGED);
+        await this.triageAgain(waiting, KnowledgeTriageTrigger.CODE_CHANGED);
+
+        return { waiting: waiting.length };
+      },
+    );
   }
 
   /**
@@ -522,12 +620,16 @@ export class PagesProcessor {
    * opened issues for are not opened again.
    */
   @Process(GAP_ISSUES_JOB)
-  async handleGapIssues() {
-    const { opened, answered } = await this.gaps.openIssues();
+  async handleGapIssues(job?: RecordedJob) {
+    return this.recorded(GAP_ISSUES_JOB, job, {}, async () => {
+      const { opened, answered } = await this.gaps.openIssues();
 
-    this.logger.info({
-      message: `Opened ${opened} knowledge gap issue(s), and marked ${answered} gap(s) answered`,
-      where: 'PagesProcessor.handleGapIssues',
+      this.logger.info({
+        message: `Opened ${opened} knowledge gap issue(s), and marked ${answered} gap(s) answered`,
+        where: 'PagesProcessor.handleGapIssues',
+      });
+
+      return { opened, answered };
     });
   }
 
@@ -536,17 +638,28 @@ export class PagesProcessor {
    * given, for every workspace.
    */
   @Process(RECOMPUTE_MODULES_JOB)
-  async handleRecomputeModules(job: { data: { workspaceId?: string } }) {
-    const { changed } = await this.pageEntriesService.recomputeModules(
-      job.data?.workspaceId,
-    );
+  async handleRecomputeModules(
+    job: RecordedJob & { data: { workspaceId?: string } },
+  ) {
+    return this.recorded(
+      RECOMPUTE_MODULES_JOB,
+      job,
+      { workspaceId: job.data?.workspaceId },
+      async () => {
+        const { changed } = await this.pageEntriesService.recomputeModules(
+          job.data?.workspaceId,
+        );
 
-    this.logger.info({
-      message:
-        `Resolved entry scopes to modules for ` +
-        `${job.data?.workspaceId ?? 'every workspace'}: ${changed} changed`,
-      where: 'PagesProcessor.handleRecomputeModules',
-    });
+        this.logger.info({
+          message:
+            `Resolved entry scopes to modules for ` +
+            `${job.data?.workspaceId ?? 'every workspace'}: ${changed} changed`,
+          where: 'PagesProcessor.handleRecomputeModules',
+        });
+
+        return { changed };
+      },
+    );
   }
 
   /**
@@ -558,50 +671,66 @@ export class PagesProcessor {
    * partial failure re-archives what it already archived and changes nothing.
    */
   @Process(DECAY_JOB)
-  async handleDecay() {
-    let expiredProposed: number;
-    let archivedStanding: number;
-    let proposedVerified: number;
-    let owedIssues: number;
-    let verified: number;
-    let observed: number;
+  async handleDecay(job?: RecordedJob) {
+    return this.recorded(DECAY_JOB, job, {}, async () => {
+      let expiredProposed: number;
+      let archivedStanding: number;
+      let proposedVerified: number;
+      let owedIssues: number;
+      let verified: number;
+      let observed: number;
 
-    try {
-      ({ expiredProposed, archivedStanding } =
-        await this.pageEntriesService.runDecay());
-      // What decay may not archive alone, it asks a person about.
-      proposedVerified = await this.upkeep.proposeUnused();
-      // Correction issues a failed run owed, in workspaces no change has
-      // landed in since, whose own runs would otherwise open them.
-      owedIssues = await this.upkeep.openOwedIssues();
-      // Entries that wait as UNGROUNDED with no look by the verifier.
-      verified = (await this.verifier?.sweep()) ?? 0;
-      // Facts observed on an outside page that the server last read over
-      // 30 days ago.
-      observed = await this.entryCitations.recheckObservedLater();
-    } catch (error) {
-      // Said out loud, because the alternative is silence. The only other
-      // signal this pass gives is the line below, and "no line" reads exactly
-      // like "no schedule" — the bug this file was written to fix. Rethrown so
-      // Bull still records the run as failed.
-      this.logger.error({
-        message: `Knowledge decay pass failed: ${error}`,
+      try {
+        ({ expiredProposed, archivedStanding } =
+          await this.pageEntriesService.runDecay());
+        // What decay may not archive alone, it asks a person about.
+        proposedVerified = await this.upkeep.proposeUnused();
+        // Correction issues a failed run owed, in workspaces no change has
+        // landed in since, whose own runs would otherwise open them.
+        owedIssues = await this.upkeep.openOwedIssues();
+        // Entries that wait as UNGROUNDED with no look by the verifier.
+        verified = (await this.verifier?.sweep()) ?? 0;
+        // Facts observed on an outside page that the server last read over
+        // 30 days ago.
+        observed = await this.entryCitations.recheckObservedLater();
+      } catch (error) {
+        // Said out loud, because the alternative is silence. The only other
+        // signal this pass gives is the line below, and "no line" reads exactly
+        // like "no schedule" — the bug this file was written to fix. Rethrown so
+        // Bull still records the run as failed.
+        this.logger.error({
+          message: `Knowledge decay pass failed: ${error}`,
+          where: 'PagesProcessor.handleDecay',
+          error: error instanceof Error ? error : undefined,
+        });
+
+        throw error;
+      }
+
+      this.logger.info({
+        message:
+          `Knowledge decay archived ${expiredProposed} untriaged and ` +
+          `${archivedStanding} unused standing entr(ies), asked a person ` +
+          `about ${proposedVerified} unused verified entr(ies), opened ` +
+          `${owedIssues} owed correction issue(s), asked the verifier ` +
+          `about ${verified} entr(ies), and queued a new read of the outside ` +
+          `pages of ${observed} observed entr(ies)`,
         where: 'PagesProcessor.handleDecay',
-        error: error instanceof Error ? error : undefined,
       });
 
-      throw error;
-    }
+      // The record of these runs is kept for as long as the gardener view
+      // looks back, and no longer.
+      const prunedJobRuns = (await this.jobRuns?.prune()) ?? 0;
 
-    this.logger.info({
-      message:
-        `Knowledge decay archived ${expiredProposed} untriaged and ` +
-        `${archivedStanding} unused standing entr(ies), asked a person ` +
-        `about ${proposedVerified} unused verified entr(ies), opened ` +
-        `${owedIssues} owed correction issue(s), asked the verifier ` +
-        `about ${verified} entr(ies), and queued a new read of the outside ` +
-        `pages of ${observed} observed entr(ies)`,
-      where: 'PagesProcessor.handleDecay',
+      return {
+        expiredProposed,
+        archivedStanding,
+        proposedVerified,
+        owedIssues,
+        verified,
+        observed,
+        prunedJobRuns,
+      };
     });
   }
 }

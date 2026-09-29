@@ -11,6 +11,7 @@ import { PrismaService } from 'nestjs-prisma';
 import { GitSourcesService } from 'modules/git/git-sources.service';
 import IssueContextService from 'modules/issues/issue-context.service';
 import KnowledgeService, {
+  type PackTraceDraft,
   type PackedEntry,
 } from 'modules/pages/knowledge.service';
 
@@ -124,20 +125,49 @@ export class ContextPackService {
     guidance?: string,
     arm?: KnowledgeArm,
   ): Promise<ContextPack> {
+    return (
+      await this.buildTraced(issueId, workspaceId, overrides, guidance, arm)
+    ).pack;
+  }
+
+  /**
+   * `build`, with the trace of how its knowledge was chosen. A run held out
+   * gets a trace that considered nothing, so a reader sees why it was given
+   * nothing.
+   */
+  async buildTraced(
+    issueId: string,
+    workspaceId: string,
+    overrides?: AgentRunConfig,
+    guidance?: string,
+    arm?: KnowledgeArm,
+  ): Promise<{ pack: ContextPack; trace: PackTraceDraft }> {
     const [context, repo] = await Promise.all([
       this.issueContext.getIssueContext(issueId),
       this.resolveRepo(issueId, workspaceId, overrides),
     ]);
 
-    const knowledge =
+    const { packed: knowledge, trace } =
       arm === 'TREATMENT'
-        ? await this.knowledge.knowledgeForRun(workspaceId, {
+        ? await this.knowledge.tracedKnowledgeForRun(workspaceId, {
             issueId,
             query: context.title,
           })
-        : [];
+        : {
+            packed: [],
+            trace: {
+              query: context.title,
+              seedModuleIds: [],
+              neighbourModuleIds: [],
+              topK: null,
+              tokenBudget: 0,
+              tokensGiven: 0,
+              searchFailed: false,
+              candidates: [],
+            },
+          };
 
-    return {
+    const pack: ContextPack = {
       version: 1,
       issue: {
         id: context.id,
@@ -189,6 +219,8 @@ export class ContextPackService {
       repo,
       knowledge,
     };
+
+    return { pack, trace };
   }
 
   /**
@@ -202,8 +234,13 @@ export class ContextPackService {
     run: Pick<AgentRun, 'id' | 'workspaceId' | 'agentUserId'> & {
       knowledgeArm?: KnowledgeArm | null;
       contextPack?: unknown;
+      issueId?: string;
+      previousRunId?: string | null;
     },
+    trace?: PackTraceDraft,
   ): Promise<void> {
+    await this.recordTrace(run, trace);
+
     if (run.knowledgeArm !== 'TREATMENT') {
       return;
     }
@@ -217,6 +254,50 @@ export class ContextPackService {
 
     if (entryIds.length) {
       await this.knowledge.recordPacked(run.workspaceId, run, entryIds);
+    }
+  }
+
+  /**
+   * Stores how the run's pack was chosen. A retry is handed the pack of the
+   * run before it, so it is given that run's trace.
+   */
+  private async recordTrace(
+    run: Pick<AgentRun, 'id' | 'workspaceId'> & {
+      knowledgeArm?: KnowledgeArm | null;
+      issueId?: string;
+      previousRunId?: string | null;
+    },
+    trace?: PackTraceDraft,
+  ): Promise<void> {
+    let draft = trace;
+
+    if (!draft && run.previousRunId) {
+      const previous = await this.prisma.knowledgePackTrace.findUnique({
+        where: { agentRunId: run.previousRunId },
+      });
+
+      draft = previous
+        ? {
+            query: previous.query,
+            seedModuleIds: previous.seedModuleIds,
+            neighbourModuleIds: previous.neighbourModuleIds,
+            topK: previous.topK,
+            tokenBudget: previous.tokenBudget,
+            tokensGiven: previous.tokensGiven,
+            searchFailed: previous.searchFailed,
+            candidates:
+              previous.candidates as unknown as PackTraceDraft['candidates'],
+          }
+        : undefined;
+    }
+
+    if (draft) {
+      await this.knowledge.recordTrace(run.workspaceId, draft, {
+        via: 'CONTEXT_PACK',
+        agentRunId: run.id,
+        arm: run.knowledgeArm,
+        issueId: run.issueId,
+      });
     }
   }
 

@@ -112,7 +112,7 @@ export class AgentDelegationService {
       knowledgeSettings(preferences).holdoutRate,
     );
 
-    const contextPack = await this.contextPacks.build(
+    const { pack: contextPack, trace } = await this.contextPacks.buildTraced(
       input.issueId,
       input.workspaceId,
       input.config,
@@ -143,7 +143,7 @@ export class AgentDelegationService {
       configHash: hashConfig(config, executor.key),
     });
 
-    await this.contextPacks.recordServed(run);
+    await this.contextPacks.recordServed(run, trace);
 
     return this.dispatchRun(run);
   }

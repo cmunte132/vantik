@@ -39,6 +39,7 @@ import {
   RUN_FINDINGS_JOB,
   runFindingsJobOptions,
 } from './pages.interface';
+import KnowledgeJobRunsService from './gardener/knowledge-job-runs.service';
 import {
   EntryModulesScheduler,
   KnowledgeGapsScheduler,
@@ -466,6 +467,53 @@ describe('knowledge gap issues', () => {
 
     openIssues.mockRejectedValueOnce(new Error('connection reset'));
     await expect(processor.handleGapIssues()).rejects.toThrow(
+      'connection reset',
+    );
+  });
+});
+
+describe('recording what the gardener did', () => {
+  it('records each job run with what it counted, and a failed one with its error', async () => {
+    const openIssues = jest.fn(async () => ({ opened: 2, answered: 1 }));
+    const record = jest.fn(
+      async (
+        _name: string,
+        _job: unknown,
+        _subject: unknown,
+        work: () => Promise<unknown>,
+      ) => work(),
+    );
+    const processor = new PagesProcessor(
+      {} as PageEntriesService,
+      {} as EntryCitationsService,
+      {} as KnowledgeTriageService,
+      {} as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
+      { openIssues } as unknown as KnowledgeGapsService,
+      {} as PageRefreshService,
+      undefined,
+      undefined,
+      undefined,
+      { record } as unknown as KnowledgeJobRunsService,
+    );
+    const job = { opts: { repeat: { cron: '0 4 * * 1' } } };
+
+    await expect(processor.handleGapIssues(job)).resolves.toBeUndefined();
+
+    expect(record).toHaveBeenCalledWith(
+      'openKnowledgeGapIssues',
+      job,
+      {},
+      expect.any(Function),
+      undefined,
+    );
+    await expect(record.mock.results[0].value).resolves.toEqual({
+      opened: 2,
+      answered: 1,
+    });
+
+    openIssues.mockRejectedValueOnce(new Error('connection reset'));
+    await expect(processor.handleGapIssues(job)).rejects.toThrow(
       'connection reset',
     );
   });

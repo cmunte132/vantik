@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  type KnowledgePackCandidate,
+  KnowledgePackDropEnum,
+  type KnowledgePackNearness,
   KnowledgeProof,
   KnowledgeTrustEnum,
   PageEntryKindEnum,
@@ -67,6 +70,18 @@ export interface PackedEntry extends KnowledgeProof {
   writtenAt: string;
 }
 
+/** How a pack was chosen, before it is stored with what it was for. */
+export interface PackTraceDraft {
+  query: string;
+  seedModuleIds: string[];
+  neighbourModuleIds: string[];
+  topK: number | null;
+  tokenBudget: number;
+  tokensGiven: number;
+  searchFailed: boolean;
+  candidates: KnowledgePackCandidate[];
+}
+
 export interface KnowledgeGap {
   query: string;
   count: number;
@@ -117,6 +132,7 @@ const PACKED_ENTRY_SELECT = {
   status: true,
   verifiedAt: true,
   createdAt: true,
+  moduleIds: true,
   citations: { select: PROOF_CITATION_SELECT },
 } as const;
 
@@ -194,6 +210,7 @@ export default class KnowledgeService {
     // apps/server/prisma" — which is what an agent starting work can actually
     // supply.
     const query = input.query?.trim() || input.scope?.trim() || '*';
+    const seeds = await this.seedsFor(workspaceId, input);
 
     const { hits } = await this.vectorService.searchKnowledge(
       workspaceId,
@@ -204,7 +221,7 @@ export default class KnowledgeService {
         // than more of the same page.
         limit: 50,
         scope: input.scope,
-        boost: await this.seedsFor(workspaceId, input),
+        boost: seeds,
       },
     );
 
@@ -235,6 +252,46 @@ export default class KnowledgeService {
       { gap: false },
     );
 
+    const given = new Set(items);
+    let order = 0;
+
+    await this.recordTrace(
+      workspaceId,
+      {
+        query,
+        seedModuleIds: seeds?.modules ?? [],
+        neighbourModuleIds: seeds?.neighbours ?? [],
+        topK: null,
+        tokenBudget,
+        tokensGiven: estimatedTokens,
+        searchFailed: false,
+        candidates: hits
+          .map((hit, index) => ({ hit, index }))
+          .filter(({ hit }) => Boolean(hit.entryId))
+          .map(({ hit, index }): KnowledgePackCandidate => {
+            const isGiven = given.has(hit);
+
+            return {
+              entryId: hit.entryId as string,
+              source: 'SEARCH' as const,
+              searchRank: index + 1,
+              nearness: 'NONE' as const,
+              trust: null,
+              tokens: estimateTokens(hit),
+              given: isGiven,
+              order: isGiven ? ++order : null,
+              dropped: isGiven ? null : KnowledgePackDropEnum.BUDGET,
+            };
+          }),
+      },
+      {
+        via: 'LOAD_CONTEXT',
+        userId: input.reader?.userId,
+        sessionId: input.reader?.sessionId,
+        issueId: input.issueId,
+      },
+    );
+
     return {
       items,
       estimatedTokens,
@@ -263,15 +320,43 @@ export default class KnowledgeService {
     input: { issueId: string; query: string },
     given?: RunKnowledgeLimits,
   ): Promise<PackedEntry[]> {
+    return (await this.tracedKnowledgeForRun(workspaceId, input, given))
+      .packed;
+  }
+
+  /**
+   * `knowledgeForRun`, with the trace of how the pack was chosen: every
+   * entry considered, in the order it was considered, and why each one not
+   * given was dropped.
+   */
+  async tracedKnowledgeForRun(
+    workspaceId: string,
+    input: { issueId: string; query: string },
+    given?: RunKnowledgeLimits,
+  ): Promise<{ packed: PackedEntry[]; trace: PackTraceDraft }> {
     const limits = given ?? (await this.runLimits(workspaceId));
+    const trace: PackTraceDraft = {
+      query: input.query.trim(),
+      seedModuleIds: [],
+      neighbourModuleIds: [],
+      topK: limits.topK,
+      tokenBudget: limits.tokenBudget,
+      tokensGiven: 0,
+      searchFailed: false,
+      candidates: [],
+    };
     const issue = await this.prisma.issue.findFirst({
       where: { id: input.issueId, deleted: null, team: { workspaceId } },
       select: { moduleIds: true },
     });
 
     if (!issue) {
-      return [];
+      return { packed: [], trace };
     }
+
+    const seeds = await this.seedsFor(workspaceId, { issueId: input.issueId });
+    trace.seedModuleIds = seeds?.modules ?? [];
+    trace.neighbourModuleIds = seeds?.neighbours ?? [];
 
     // Served entries: standing, or consolidated as a page's evidence. A
     // consolidated entry is packed too, conventions pinned included: its fact
@@ -300,9 +385,9 @@ export default class KnowledgeService {
       : [];
 
     const conventionIds = new Set(conventions.map((entry) => entry.id));
-    const ranked = (await this.rankedEntryIds(workspaceId, input)).filter(
-      (id) => !conventionIds.has(id),
-    );
+    const search = await this.rankedEntryIds(workspaceId, input, seeds);
+    trace.searchFailed = search.failed;
+    const ranked = search.ids.filter((id) => !conventionIds.has(id));
 
     const rows = ranked.length
       ? await this.prisma.pageEntry.findMany({
@@ -311,29 +396,89 @@ export default class KnowledgeService {
         })
       : [];
     const byId = new Map(rows.map((row) => [row.id, row]));
+    const nearness = (moduleIds: string[]): KnowledgePackNearness =>
+      moduleIds.some((id) => trace.seedModuleIds.includes(id))
+        ? 'SEED'
+        : moduleIds.some((id) => trace.neighbourModuleIds.includes(id))
+          ? 'NEIGHBOUR'
+          : 'NONE';
 
-    const relevant = ranked
-      .map((id) => byId.get(id))
-      .filter((row): row is (typeof rows)[number] => Boolean(row))
-      .map(packedEntry)
-      .filter((entry) => PACKABLE_TRUST.includes(entry.trust))
-      .slice(0, limits.topK);
+    // Each entry considered, with the entry to pack when it is kept.
+    const considered: Array<{
+      candidate: KnowledgePackCandidate;
+      entry: PackedEntry | null;
+    }> = conventions.map((row) => {
+      const entry = packedEntry(row);
+      const candidate: KnowledgePackCandidate = {
+        entryId: row.id,
+        source: 'CONVENTION',
+        searchRank: null,
+        nearness: 'SEED',
+        trust: entry.trust,
+        tokens: packedTokens(entry),
+        given: false,
+        order: null,
+        dropped: null,
+      };
+
+      return { candidate, entry };
+    });
+
+    let relevant = 0;
+
+    ranked.forEach((id) => {
+      const row = byId.get(id);
+      const entry = row ? packedEntry(row) : null;
+      const dropped = !entry
+        ? KnowledgePackDropEnum.NOT_LIVE
+        : !PACKABLE_TRUST.includes(entry.trust)
+          ? KnowledgePackDropEnum.NOT_TRUSTED
+          : relevant >= limits.topK
+            ? KnowledgePackDropEnum.TOP_K
+            : null;
+
+      if (!dropped) {
+        relevant += 1;
+      }
+
+      const candidate: KnowledgePackCandidate = {
+        entryId: id,
+        source: 'SEARCH',
+        searchRank: search.ids.indexOf(id) + 1,
+        nearness: row ? nearness(row.moduleIds ?? []) : 'NONE',
+        trust: entry?.trust ?? null,
+        tokens: entry ? packedTokens(entry) : null,
+        given: false,
+        order: null,
+        dropped,
+      };
+
+      considered.push({ candidate, entry: dropped ? null : entry });
+    });
 
     const packed: PackedEntry[] = [];
-    let spent = 0;
 
-    for (const entry of [...conventions.map(packedEntry), ...relevant]) {
-      const cost = packedTokens(entry);
+    for (const { candidate, entry } of considered) {
+      if (!entry) {
+        continue;
+      }
 
-      if (spent + cost > limits.tokenBudget) {
+      const cost = candidate.tokens ?? packedTokens(entry);
+
+      if (trace.tokensGiven + cost > limits.tokenBudget) {
+        candidate.dropped = KnowledgePackDropEnum.BUDGET;
         continue;
       }
 
       packed.push(entry);
-      spent += cost;
+      trace.tokensGiven += cost;
+      candidate.given = true;
+      candidate.order = packed.length;
     }
 
-    return packed;
+    trace.candidates = considered.map(({ candidate }) => candidate);
+
+    return { packed, trace };
   }
 
   /** The workspace's limits on the knowledge a run is handed. */
@@ -348,6 +493,50 @@ export default class KnowledgeService {
       topK: settings.contextTopK,
       tokenBudget: settings.contextTokenBudget,
     };
+  }
+
+  /**
+   * Stores how a pack was chosen. Best effort, like every other record of
+   * demand: a run or a `load_context` call is not failed over bookkeeping.
+   */
+  async recordTrace(
+    workspaceId: string,
+    draft: PackTraceDraft,
+    about: {
+      via: 'CONTEXT_PACK' | 'LOAD_CONTEXT';
+      agentRunId?: string;
+      arm?: 'TREATMENT' | 'HOLDOUT' | null;
+      issueId?: string;
+      userId?: string | null;
+      sessionId?: string | null;
+    },
+  ): Promise<void> {
+    try {
+      await this.prisma.knowledgePackTrace.create({
+        data: {
+          workspaceId,
+          via: about.via,
+          agentRunId: about.agentRunId,
+          arm: about.arm ?? undefined,
+          issueId: about.issueId,
+          userId: about.userId ?? undefined,
+          sessionId: about.sessionId ?? undefined,
+          query: draft.query.slice(0, 2000),
+          seedModuleIds: draft.seedModuleIds,
+          neighbourModuleIds: draft.neighbourModuleIds,
+          topK: draft.topK,
+          tokenBudget: draft.tokenBudget,
+          tokensGiven: draft.tokensGiven,
+          searchFailed: draft.searchFailed,
+          candidates: draft.candidates as unknown as Prisma.InputJsonValue,
+        },
+      });
+    } catch (error) {
+      this.logger.warn({
+        message: `The trace of a context pack was not recorded: ${error}`,
+        where: 'KnowledgeService.recordTrace',
+      });
+    }
   }
 
   /**
@@ -374,41 +563,45 @@ export default class KnowledgeService {
     }
   }
 
-  /** Entry ids by relevance to the query, seeded by the issue's modules. */
+  /**
+   * Entry ids by relevance to the query, seeded by the issue's modules, and
+   * whether the search failed.
+   */
   private async rankedEntryIds(
     workspaceId: string,
     input: { issueId: string; query: string },
-  ): Promise<string[]> {
+    seeds?: { modules: string[]; neighbours: string[] },
+  ): Promise<{ ids: string[]; failed: boolean }> {
     const query = input.query.trim();
 
     if (!query) {
-      return [];
+      return { ids: [], failed: false };
     }
 
     try {
       const { hits } = await this.vectorService.searchKnowledge(
         workspaceId,
         query,
-        {
-          limit: PACK_SEARCH_LIMIT,
-          boost: await this.seedsFor(workspaceId, { issueId: input.issueId }),
-        },
+        { limit: PACK_SEARCH_LIMIT, boost: seeds },
       );
 
-      return [
-        ...new Set(
-          hits
-            .map((hit) => hit.entryId)
-            .filter((id): id is string => Boolean(id)),
-        ),
-      ];
+      return {
+        ids: [
+          ...new Set(
+            hits
+              .map((hit) => hit.entryId)
+              .filter((id): id is string => Boolean(id)),
+          ),
+        ],
+        failed: false,
+      };
     } catch (error) {
       this.logger.warn({
         message: `The knowledge index could not be searched for a run, so it gets its modules' conventions only: ${error}`,
         where: 'KnowledgeService.rankedEntryIds',
       });
 
-      return [];
+      return { ids: [], failed: true };
     }
   }
 

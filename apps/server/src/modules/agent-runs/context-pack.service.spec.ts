@@ -15,6 +15,7 @@ import type {
 import type { IssueContext } from 'modules/issues/issue-context.interface';
 import type IssueContextService from 'modules/issues/issue-context.service';
 import type KnowledgeService from 'modules/pages/knowledge.service';
+import type { PackTraceDraft } from 'modules/pages/knowledge.service';
 
 import { ContextPackService } from './context-pack.service';
 
@@ -121,6 +122,13 @@ function buildService(preferences: unknown = null, routing: Routing = {}) {
         Promise.resolve(routing.moduleVerification ?? []),
       ),
     },
+    knowledgePackTrace: {
+      findUnique: jest.fn(({ where }: { where: { agentRunId: string } }) =>
+        Promise.resolve(
+          where.agentRunId === 'run-1' ? { ...TRACE, id: 'trace-1' } : null,
+        ),
+      ),
+    },
   } as unknown as PrismaService;
 
   const context = {
@@ -170,10 +178,37 @@ const PACKED = {
   lastCheckedSha: null as string | null,
 };
 
+const TRACE: PackTraceDraft = {
+  query: 'Search returns deleted issues',
+  seedModuleIds: ['module-1'],
+  neighbourModuleIds: [],
+  topK: 5,
+  tokenBudget: 1500,
+  tokensGiven: 120,
+  searchFailed: false,
+  candidates: [
+    {
+      entryId: 'entry-1',
+      source: 'SEARCH',
+      searchRank: 1,
+      nearness: 'SEED',
+      trust: 'GROUNDED',
+      tokens: 120,
+      given: true,
+      order: 1,
+      dropped: null,
+    },
+  ],
+};
+
 function knowledgeDouble() {
   return {
-    knowledgeForRun: jest.fn(async () => [PACKED]),
+    tracedKnowledgeForRun: jest.fn(async () => ({
+      packed: [PACKED],
+      trace: TRACE,
+    })),
     recordPacked: jest.fn(async (): Promise<void> => undefined),
+    recordTrace: jest.fn(async (): Promise<void> => undefined),
   } as unknown as KnowledgeService;
 }
 
@@ -667,7 +702,7 @@ describe('the knowledge in a pack', () => {
 
     expect(pack.knowledge).toEqual([PACKED]);
     // Asked by the issue's title, which is what the work is about.
-    expect(knowledge.knowledgeForRun).toHaveBeenCalledWith(WORKSPACE, {
+    expect(knowledge.tracedKnowledgeForRun).toHaveBeenCalledWith(WORKSPACE, {
       issueId: 'issue-1',
       query: 'Search returns deleted issues',
     });
@@ -687,7 +722,89 @@ describe('the knowledge in a pack', () => {
 
     expect(held.knowledge).toEqual([]);
     expect(unassigned.knowledge).toEqual([]);
-    expect(knowledge.knowledgeForRun).not.toHaveBeenCalled();
+    expect(knowledge.tracedKnowledgeForRun).not.toHaveBeenCalled();
+  });
+
+  it('traces how the pack of a treatment run was chosen, and stores the trace once the run exists', async () => {
+    const { service, knowledge } = withKnowledge();
+
+    const { pack, trace } = await service.buildTraced(
+      'issue-1',
+      WORKSPACE,
+      undefined,
+      undefined,
+      'TREATMENT',
+    );
+
+    expect(pack.knowledge).toEqual([PACKED]);
+    expect(trace).toEqual(TRACE);
+
+    await service.recordServed(
+      {
+        id: 'run-2',
+        workspaceId: WORKSPACE,
+        agentUserId: 'agent-1',
+        issueId: 'issue-1',
+        knowledgeArm: 'TREATMENT',
+        contextPack: pack,
+      },
+      trace,
+    );
+
+    expect(knowledge.recordTrace).toHaveBeenCalledWith(WORKSPACE, TRACE, {
+      via: 'CONTEXT_PACK',
+      agentRunId: 'run-2',
+      arm: 'TREATMENT',
+      issueId: 'issue-1',
+    });
+  });
+
+  it('traces a held-out run as one that considered nothing', async () => {
+    const { service, knowledge } = withKnowledge();
+
+    const { trace } = await service.buildTraced(
+      'issue-1',
+      WORKSPACE,
+      undefined,
+      undefined,
+      'HOLDOUT',
+    );
+    await service.recordServed(
+      {
+        id: 'run-3',
+        workspaceId: WORKSPACE,
+        agentUserId: 'agent-1',
+        knowledgeArm: 'HOLDOUT',
+      },
+      trace,
+    );
+
+    expect(trace).toMatchObject({ candidates: [], tokensGiven: 0 });
+    expect(knowledge.recordTrace).toHaveBeenCalledWith(
+      WORKSPACE,
+      expect.objectContaining({ candidates: [] }),
+      expect.objectContaining({ agentRunId: 'run-3', arm: 'HOLDOUT' }),
+    );
+    expect(knowledge.recordPacked).not.toHaveBeenCalled();
+  });
+
+  it('gives a retry the trace of the run before it, whose pack it is handed', async () => {
+    const { service, knowledge } = withKnowledge();
+
+    await service.recordServed({
+      id: 'run-1-next',
+      workspaceId: WORKSPACE,
+      agentUserId: 'agent-1',
+      knowledgeArm: 'TREATMENT',
+      previousRunId: 'run-1',
+      contextPack: { knowledge: [PACKED] },
+    });
+
+    expect(knowledge.recordTrace).toHaveBeenCalledWith(
+      WORKSPACE,
+      expect.objectContaining({ candidates: TRACE.candidates }),
+      expect.objectContaining({ agentRunId: 'run-1-next' }),
+    );
   });
 
   it('[KG-3.1] records what a treatment run was packed as served to that run', async () => {

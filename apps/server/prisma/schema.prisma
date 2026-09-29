@@ -116,6 +116,7 @@ model AgentRun {
   entryUses         PageEntryUse[]
   entrySignals      PageEntrySignal[]
   knowledgeFindings KnowledgeFinding[]
+  packTrace         KnowledgePackTrace?
 
   @@index([workspaceId, status])
   @@index([issueId])
@@ -1358,6 +1359,66 @@ model KnowledgeBackoffChange {
   @@index([workspaceId, decision, createdAt])
 }
 
+/// One run of a gardener job: what started it, how long it took, what it
+/// counted, and the error when it failed.
+///
+/// The jobs on the pages queue act on knowledge nobody asked them to touch at
+/// the time, so a person must be able to see that they ran and what they did.
+/// A job that covers every workspace at once, such as decay, has no
+/// workspace; its counts are for the deployment, so a workspace is shown its
+/// time and outcome only. Rows older than 30 days are removed by decay.
+model KnowledgeJobRun {
+  id          String              @id @default(uuid())
+  workspaceId String?
+  /// The job name on the pages queue, for example `runDecay`.
+  job         String
+  trigger     KnowledgeJobTrigger
+  /// The entry, run or page the job was about, when it was about one.
+  subjectId   String?
+  attempt     Int                 @default(1)
+  startedAt   DateTime            @default(now())
+  finishedAt  DateTime?
+  durationMs  Int?
+  /// What it counted, by name: `{"archivedStanding": 4}`.
+  counts      Json?
+  error       String?
+
+  @@index([workspaceId, job, startedAt])
+  @@index([job, startedAt])
+}
+
+/// Why a context pack held what it held: every entry it considered, the
+/// entries it dropped and why, and what it gave.
+///
+/// One row for the pack of each agent run, held out or not, and one for each
+/// `load_context` call. The candidates hold ids and reasons, not text, so the
+/// row stays small; the text is read from the entries.
+model KnowledgePackTrace {
+  id                 String          @id @default(uuid())
+  createdAt          DateTime        @default(now())
+  workspaceId        String
+  via                PageEntryUseVia
+  agentRunId         String?         @unique
+  agentRun           AgentRun?       @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  arm                KnowledgeArm?
+  issueId            String?
+  userId             String?
+  sessionId          String?
+  query              String
+  /// The issue's modules, and the modules one hop from them.
+  seedModuleIds      String[]        @default([])
+  neighbourModuleIds String[]        @default([])
+  topK               Int?
+  tokenBudget        Int
+  tokensGiven        Int             @default(0)
+  /// The search could not be reached, so only conventions were considered.
+  searchFailed       Boolean         @default(false)
+  /// `KnowledgePackCandidate[]`, in the order they were considered.
+  candidates         Json
+
+  @@index([workspaceId, createdAt])
+}
+
 /// Something the gardener did to an entry on its own, or asks a person to do,
 /// and why.
 ///
@@ -2362,6 +2423,16 @@ enum PageEntryCitationKind {
 }
 
 /// How an entry reached a reader.
+/// What started a gardener job.
+enum KnowledgeJobTrigger {
+  /// Its schedule.
+  SCHEDULE
+  /// Something that happened: a fact written, code landed, a run finished.
+  EVENT
+  /// The server started.
+  BOOT
+}
+
 enum PageEntryUseVia {
   /// Packed into a run's context when it was delegated.
   CONTEXT_PACK

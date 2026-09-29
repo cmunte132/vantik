@@ -2280,9 +2280,9 @@ describe('answering a gap', () => {
       id: 'gap-1',
       workspaceId: WORKSPACE,
     });
-    expect(
-      prisma.pageEntry.findFirst.mock.calls[0][0].where.workspaceId,
-    ).toBe(WORKSPACE);
+    expect(prisma.pageEntry.findFirst.mock.calls[0][0].where.workspaceId).toBe(
+      WORKSPACE,
+    );
     expect(prisma.pageKnowledgeGap.update.mock.calls[0][0].data).toMatchObject({
       answeredByEntryId: 'entry-1',
       answeredAt: expect.any(Date),

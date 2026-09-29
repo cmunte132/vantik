@@ -1,11 +1,22 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from 'fs';
 import { join } from 'path';
 
 import { VantikError } from '@vantikhq/agent-core';
 import { Command } from 'commander';
 
 import { resolveAgent } from '../utilities/agent';
-import { chalkError, chalkGreen, chalkGrey, chalkWarning } from '../utilities/cliOutput';
+import {
+  chalkError,
+  chalkGreen,
+  chalkGrey,
+  chalkWarning,
+} from '../utilities/cliOutput';
 import {
   pageFilename,
   parsePageFile,
@@ -75,10 +86,7 @@ export function configureKnowledgeSyncCommands(knowledge: Command) {
     .command('push')
     .description('Apply local edits back to the bank')
     .option('-d, --dir <dir>', 'Directory to read', '.vantik/knowledge')
-    .option(
-      '--dry-run',
-      'Report what would change without changing anything',
-    )
+    .option('--dry-run', 'Report what would change without changing anything')
     .action(async (options) => {
       try {
         const agent = resolveAgent();
@@ -301,10 +309,9 @@ export function configureKnowledgeSyncCommands(knowledge: Command) {
 
         // eslint-disable-next-line no-console
         console.log(
-          `${chalkGreen('Wrote')} ${pack.items.length} item(s) into ${options.file} ` +
-            chalkGrey(
-              `(~${pack.estimatedTokens} tokens${pack.omitted ? `, ${pack.omitted} omitted` : ''})`,
-            ),
+          `${chalkGreen('Wrote')} ${pack.items.length} item(s) into ${options.file} ${chalkGrey(
+            `(~${pack.estimatedTokens} tokens${pack.omitted ? `, ${pack.omitted} omitted` : ''})`,
+          )}`,
         );
       } catch (error) {
         fail(error);

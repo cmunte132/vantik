@@ -28,6 +28,8 @@ import { useContextStore } from 'store/global-context-provider';
 
 import { ConsolidateDialog } from './consolidate-dialog';
 import { RowMenu } from './entry-row';
+import { FactTrailDialog } from './fact-trail';
+import { LooseFitCard } from './loose-facts';
 import { ReviewQueue } from './review-queue';
 import { ago, CARD, Chip, NEED_YOU_BADGE, type TrustTone } from './trust';
 
@@ -78,6 +80,7 @@ export const FactsRail = observer(
     const [picking, setPicking] = React.useState(false);
     const [picked, setPicked] = React.useState<Set<string>>(new Set());
     const [folding, setFolding] = React.useState<PageEntryType[]>([]);
+    const [opened, setOpened] = React.useState<ProvenEntry | null>(null);
 
     const inUse = facts.filter((fact) => IN_USE.includes(fact.status));
     const waiting = facts.filter((fact) => WAITING.includes(fact.status));
@@ -181,17 +184,33 @@ export const FactsRail = observer(
         )}
 
         {filter === 'retired'
-          ? shown.map((fact) => <RetiredFact key={fact.id} fact={fact} />)
-          : shown.map((fact) => (
-              <FactCard
+          ? shown.map((fact) => (
+              <RetiredFact
                 key={fact.id}
                 fact={fact}
-                onReview={() => setReviewing(true)}
-                picking={picking && fact.status === PageEntryStatus.STANDING}
-                picked={picked.has(fact.id)}
-                onPick={() => toggle(fact.id)}
+                onOpen={() => setOpened(fact)}
               />
+            ))
+          : shown.map((fact, index) => (
+              <React.Fragment key={fact.id}>
+                <FactCard
+                  fact={fact}
+                  onReview={() => setReviewing(true)}
+                  onOpen={() => setOpened(fact)}
+                  picking={picking && fact.status === PageEntryStatus.STANDING}
+                  picked={picked.has(fact.id)}
+                  onPick={() => toggle(fact.id)}
+                />
+                {/* The facts outside any page that fit here come after the
+                    first fact of the page, so the page leads. */}
+                {index === 0 && filter === 'all' && (
+                  <LooseFitCard pageId={pageId} />
+                )}
+              </React.Fragment>
             ))}
+        {shown.length === 0 && filter === 'all' && (
+          <LooseFitCard pageId={pageId} />
+        )}
 
         {filter === 'all' && retired.length > 0 && (
           <div className="border border-dashed border-grayAlpha-300 rounded-[10px] px-3.5 py-2.5 flex flex-col gap-1.5">
@@ -267,6 +286,8 @@ export const FactsRail = observer(
           open={reviewing}
           onOpenChange={setReviewing}
         />
+
+        <FactTrailDialog fact={opened} onClose={() => setOpened(null)} />
 
         <ConsolidateDialog
           pageId={pageId}
@@ -364,7 +385,7 @@ export function factTone(fact: ProvenEntry): TrustTone | null {
 }
 
 /** What a fact's trust chip says. */
-function TrustChip({ fact }: { fact: ProvenEntry }) {
+export function TrustChip({ fact }: { fact: ProvenEntry }) {
   const { users } = useAllUsers();
   const tone = factTone(fact);
 
@@ -395,7 +416,7 @@ function TrustChip({ fact }: { fact: ProvenEntry }) {
 }
 
 /** "health.controller.ts 6–20", "docs.kroger.com", "ENG-42". */
-function citationLabel(citation: ServedCitation): string {
+export function citationLabel(citation: ServedCitation): string {
   if (citation.path) {
     const file = citation.path.split('/').pop() ?? citation.path;
 
@@ -419,12 +440,14 @@ const FactCard = observer(
   ({
     fact,
     onReview,
+    onOpen,
     picking,
     picked,
     onPick,
   }: {
     fact: ProvenEntry;
     onReview: () => void;
+    onOpen: () => void;
     picking: boolean;
     picked: boolean;
     onPick: () => void;
@@ -475,9 +498,13 @@ const FactCard = observer(
           </span>
         </div>
 
-        <span className="leading-snug whitespace-pre-wrap break-words">
+        <button
+          type="button"
+          className="text-left leading-snug whitespace-pre-wrap break-words hover:underline decoration-grayAlpha-300"
+          onClick={onOpen}
+        >
           {fact.content}
-        </span>
+        </button>
 
         {citations.length > 0 && (
           <span className="font-mono text-[11.5px] text-foreground/65 break-words">
@@ -505,11 +532,21 @@ const FactCard = observer(
 );
 
 /** A retired fact, in the Retired filter: a card of its own. */
-function RetiredFact({ fact }: { fact: ProvenEntry }) {
+function RetiredFact({
+  fact,
+  onOpen,
+}: {
+  fact: ProvenEntry;
+  onOpen: () => void;
+}) {
   return (
-    <div className="border border-dashed border-grayAlpha-300 rounded-[10px] px-3.5 py-2.5">
+    <button
+      type="button"
+      className="text-left border border-dashed border-grayAlpha-300 rounded-[10px] px-3.5 py-2.5"
+      onClick={onOpen}
+    >
       <RetiredText fact={fact} />
-    </div>
+    </button>
   );
 }
 

@@ -17,6 +17,7 @@ import {
 } from 'services/pages';
 
 import { useContextStore } from 'store/global-context-provider';
+import { LOOSE_KEY } from 'store/page-entries/store';
 
 import { EntryRow } from './entry-row';
 import {
@@ -71,7 +72,7 @@ export const ReviewQueue = observer(({ scope }: { scope: ReviewScope }) => {
 
   const all = reviewRows(waiting, review, (entryId, pageId) =>
     pageEntriesStore
-      .getEntries(pageId)
+      .getEntries(pageId ?? LOOSE_KEY)
       .find((entry: PageEntryType) => entry.id === entryId),
   );
   const facets = reasonFacets(all);
@@ -353,14 +354,17 @@ const ByPage = observer(
 
     const groups = new Map<string, ReviewRow[]>();
     for (const row of rows) {
-      const { pageId } = row.entry;
+      const pageId = row.entry.pageId ?? LOOSE_KEY;
       groups.set(pageId, [...(groups.get(pageId) ?? []), row]);
     }
 
     return (
       <div className="flex flex-col gap-6">
         {[...groups.entries()].map(([pageId, group]) => {
-          const page = pagesStore.getPageWithId(pageId);
+          const title =
+            pageId === LOOSE_KEY
+              ? 'Outside any page'
+              : pagesStore.getPageWithId(pageId)?.title || 'Untitled page';
           // Selecting a page selects what can be decided in bulk: its
           // waiting facts, not its audits or proposals.
           const ids = group
@@ -375,13 +379,13 @@ const ByPage = observer(
                 {ids.length > 0 && (
                   <Checkbox
                     checked={allSelected}
-                    aria-label={`Select all waiting on ${page?.title ?? 'this page'}`}
+                    aria-label={`Select all waiting on ${title}`}
                     onCheckedChange={(checked: boolean) =>
                       onSelectMany(ids, Boolean(checked))
                     }
                   />
                 )}
-                <h3 className="truncate">{page?.title || 'Untitled page'}</h3>
+                <h3 className="truncate">{title}</h3>
                 <span className="text-muted-foreground">
                   {group.length} waiting
                 </span>

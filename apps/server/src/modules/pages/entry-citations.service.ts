@@ -1236,11 +1236,7 @@ export default class EntryCitationsService {
         continue;
       }
 
-      const update = await this.readUnread(
-        entry.workspaceId,
-        citation,
-        reads,
-      );
+      const update = await this.readUnread(entry.workspaceId, citation, reads);
 
       if (!update) {
         stillUnknown++;
@@ -1433,10 +1429,7 @@ export default class EntryCitationsService {
     reads: RepoReads,
   ) {
     const range = rangeOf(citation);
-    const repo = await this.citedRepo(
-      citation.moduleRepoId,
-      entry.workspaceId,
-    );
+    const repo = await this.citedRepo(citation.moduleRepoId, entry.workspaceId);
 
     // Gone from the workspace, as the retry treats it: the cited code is no
     // longer anywhere the workspace can read, and leaving the last result

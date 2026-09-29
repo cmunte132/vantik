@@ -15,8 +15,8 @@ import { PrismaService } from 'nestjs-prisma';
 import { AgentScopeGuard } from 'modules/auth/agent-scope.guard';
 
 import KnowledgeOverviewService from './knowledge-overview.service';
-import LooseFactsService from './loose-facts.service';
 import { KnowledgeController } from './knowledge.controller';
+import LooseFactsService from './loose-facts.service';
 import { PageEntriesController } from './page-entries.controller';
 import { harnessSessionOf } from './pages.interface';
 

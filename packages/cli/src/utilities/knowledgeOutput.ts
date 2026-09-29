@@ -201,8 +201,9 @@ export function renderHits(hits: KnowledgeHit[]): string {
 
 export function renderContextPack(pack: ContextPack): string {
   const header = chalkGrey(
-    `${pack.items.length} item(s), ~${pack.estimatedTokens}/${pack.tokenBudget} tokens` +
-      (pack.omitted > 0 ? `, ${pack.omitted} omitted` : ''),
+    `${pack.items.length} item(s), ~${pack.estimatedTokens}/${pack.tokenBudget} tokens${
+      pack.omitted > 0 ? `, ${pack.omitted} omitted` : ''
+    }`,
   );
 
   return [header, '', renderHits(pack.items)].join('\n');

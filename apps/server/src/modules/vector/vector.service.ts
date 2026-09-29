@@ -7,12 +7,11 @@ import {
 import { PrismaService } from 'nestjs-prisma';
 import { Client as TypesenseClient } from 'typesense';
 
+import { liveEntryIn } from 'common/page-entry-where';
 import {
   convertTiptapJsonToMarkdown,
   convertTiptapJsonToText,
 } from 'common/utils/tiptap.utils';
-
-import { liveEntryIn } from 'common/page-entry-where';
 
 import { IssueWithRelations } from 'modules/issues/issues.interface';
 import { LoggerService } from 'modules/logger/logger.service';

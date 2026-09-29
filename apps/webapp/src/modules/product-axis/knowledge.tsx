@@ -48,11 +48,17 @@ export const Knowledge = observer(({ target }: { target: KnowledgeTarget }) => {
   const { data: pages } = useRelatedPages(target.type, target.id);
   const { data: entries } = useModuleKnowledge(moduleIds);
 
-  const openPage = (pageId: string) =>
-    router.push({
-      pathname: '/[workspaceSlug]/pages/[pageId]',
-      query: { workspaceSlug, pageId },
-    });
+  // A fact outside any page opens the Pages home, where the facts outside
+  // pages are listed.
+  const openPage = (pageId: string | null) =>
+    router.push(
+      pageId
+        ? {
+            pathname: '/[workspaceSlug]/pages/[pageId]',
+            query: { workspaceSlug, pageId },
+          }
+        : { pathname: '/[workspaceSlug]/pages', query: { workspaceSlug } },
+    );
 
   return (
     <div className="flex flex-col divide-y divide-border">

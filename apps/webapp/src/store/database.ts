@@ -137,7 +137,7 @@ export class VantikDatabase extends Dexie {
       // Indexed on pageId and status: every read of this table is "the entries
       // on this page", usually narrowed to one status for the review rail.
       [MODELS.PageEntry]:
-        'id,createdAt,updatedAt,content,scope,status,sourceUserId,sourceSession,verifiedByUserId,verifiedAt,retrievalCount,lastServedAt,supersedesId,pageId',
+        'id,createdAt,updatedAt,content,scope,status,sourceUserId,sourceSession,verifiedByUserId,verifiedAt,retrievalCount,lastServedAt,supersedesId,pageId,workspaceId',
     });
 
     this.workspaces = this.table(MODELS.Workspace);

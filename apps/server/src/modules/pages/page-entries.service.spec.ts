@@ -7,6 +7,10 @@
  * machine, which is what has to hold when a model that ignores tool
  * descriptions is pointed at the endpoint.
  */
+import type EntryCitationsService from './entry-citations.service';
+import type KnowledgeIndexService from './knowledge-index.service';
+import type { Queue } from 'bull';
+
 import {
   BadRequestException,
   ConflictException,
@@ -22,13 +26,10 @@ import {
   PageEntryPolicyEnum,
   PageEntryStatusEnum,
 } from '@vantikhq/types';
-import type { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
 import type { VectorService } from 'modules/vector/vector.service';
 
-import type EntryCitationsService from './entry-citations.service';
-import type KnowledgeIndexService from './knowledge-index.service';
 import PageEntriesService, { contentHashOf } from './page-entries.service';
 import {
   PROPOSED_ENTRY_BUDGET,
@@ -479,7 +480,12 @@ describe('[ENG-227] a fact on no page', () => {
       service.createEntry(null, AGENT, LOOSE, 'workspace-1'),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
-      service.createEntry(null, AGENT, { ...LOOSE, scope: '  ' }, 'workspace-1'),
+      service.createEntry(
+        null,
+        AGENT,
+        { ...LOOSE, scope: '  ' },
+        'workspace-1',
+      ),
     ).rejects.toThrow(/needs a scope/);
 
     expect(prisma.pageEntry.create).not.toHaveBeenCalled();
@@ -1476,7 +1482,9 @@ describe('corrections', () => {
     initial.forEach(put);
 
     const assertUniquePointer = (id: string, pointer: string | null) => {
-      if (!pointer) return;
+      if (!pointer) {
+        return;
+      }
       for (const row of rows.values()) {
         if (row.id !== id && row.supersedesId === pointer) {
           throw new Error(
@@ -1508,29 +1516,34 @@ describe('corrections', () => {
           typeof where.id === 'string'
             ? row.id !== where.id
             : !where.id.in.includes(row.id)
-        )
+        ) {
           return false;
+        }
       }
-      if (where.pageId !== undefined && row.pageId !== where.pageId)
+      if (where.pageId !== undefined && row.pageId !== where.pageId) {
         return false;
+      }
       if (where.status !== undefined) {
         if (
           typeof where.status === 'string'
             ? row.status !== where.status
             : !where.status.in.includes(row.status)
-        )
+        ) {
           return false;
+        }
       }
       if (
         where.sourceTokenId !== undefined &&
         row.sourceTokenId !== where.sourceTokenId
-      )
+      ) {
         return false;
+      }
       if (
         where.sourceUserId !== undefined &&
         row.sourceUserId !== where.sourceUserId
-      )
+      ) {
         return false;
+      }
       return true;
     };
 
@@ -1568,8 +1581,9 @@ describe('corrections', () => {
         update: jest.fn(({ where, data }) =>
           deferred(() => {
             const row = rows.get(where.id) as Row;
-            if ('supersedesId' in data)
+            if ('supersedesId' in data) {
               assertUniquePointer(row.id, data.supersedesId);
+            }
             Object.assign(row, data);
             return row;
           }),

@@ -6,8 +6,8 @@ import {
 } from '@vantikhq/agent-core';
 import { Command } from 'commander';
 
-import { resolveAgent } from '../utilities/agent';
 import { configureKnowledgeSyncCommands } from './knowledge-sync';
+import { resolveAgent } from '../utilities/agent';
 import { collectCitation } from '../utilities/citations';
 import { chalkError } from '../utilities/cliOutput';
 import {

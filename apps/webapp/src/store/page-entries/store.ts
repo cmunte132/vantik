@@ -11,6 +11,14 @@ import { vantikDatabase } from 'store/database';
 
 import { PageEntryArray } from './models';
 
+/**
+ * The key of the facts on no page. A page id is a UUID, so this key cannot
+ * be the id of a page.
+ */
+export const LOOSE_KEY = 'loose';
+
+const keyOf = (entry: { pageId: string | null }) => entry.pageId ?? LOOSE_KEY;
+
 export const PageEntriesStore: IAnyStateTreeNode = types
   .model({
     /** Keyed by page, the way the rail reads them. */
@@ -18,7 +26,22 @@ export const PageEntriesStore: IAnyStateTreeNode = types
   })
   .actions((self) => {
     const update = (entry: PageEntryType, id: string) => {
-      const pageId = entry.pageId;
+      const pageId = keyOf(entry);
+
+      // A move files the fact under another page, so it leaves its old key.
+      for (const [key, rows] of self.pageEntries.entries()) {
+        const moved =
+          key === pageId ? -1 : rows.findIndex((obj) => obj.id === id);
+
+        if (moved !== -1) {
+          rows.splice(moved, 1);
+          if (rows.length === 0) {
+            self.pageEntries.delete(key);
+          }
+          break;
+        }
+      }
+
       if (!self.pageEntries.has(pageId)) {
         self.pageEntries.set(pageId, PageEntryArray.create([]));
       }
@@ -78,7 +101,8 @@ export const PageEntriesStore: IAnyStateTreeNode = types
 
       const byPage = new Map<string, PageEntryType[]>();
       for (const entry of entries) {
-        byPage.set(entry.pageId, [...(byPage.get(entry.pageId) ?? []), entry]);
+        const key = keyOf(entry);
+        byPage.set(key, [...(byPage.get(key) ?? []), entry]);
       }
 
       for (const [pageId, rows] of byPage.entries()) {
@@ -96,7 +120,9 @@ export const PageEntriesStore: IAnyStateTreeNode = types
 
       // Newest first: the inbox is read top-down and the newest claim is the
       // one most likely to still be relevant.
-      return [...entries].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return [...entries].sort((a, b) =>
+        b.createdAt.localeCompare(a.createdAt),
+      );
     },
 
     getByStatus(pageId: string, status: PageEntryStatus): PageEntryType[] {

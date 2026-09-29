@@ -31,7 +31,8 @@ export async function savePageEntryData(
         lastServedAt: record.data.lastServedAt,
 
         supersedesId: record.data.supersedesId,
-        pageId: record.data.pageId,
+        pageId: record.data.pageId ?? null,
+        workspaceId: record.data.workspaceId,
       };
 
       switch (record.action) {

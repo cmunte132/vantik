@@ -72,7 +72,9 @@ describe('page workspace guards', () => {
   });
 
   it('reports a page in another workspace as not found', async () => {
-    const prisma = buildPrisma([{ id: 'page-1', workspaceId: THEIR_WORKSPACE }]);
+    const prisma = buildPrisma([
+      { id: 'page-1', workspaceId: THEIR_WORKSPACE },
+    ]);
 
     // Not forbidden: a foreign id and a non-existent one have to look the same,
     // or the error confirms the id exists somewhere.

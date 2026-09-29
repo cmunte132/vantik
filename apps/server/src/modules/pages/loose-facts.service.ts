@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import { PageEntryStatus, PageLinkType } from '@prisma/client';
 import type {
   KnowledgeOverviewLoose,
   LooseFactGroup,
   LooseFactSuggestion,
 } from '@vantikhq/types';
+
+import { Injectable } from '@nestjs/common';
+import { PageEntryStatus, PageLinkType } from '@prisma/client';
 import { PrismaService } from 'nestjs-prisma';
 
 import { liveEntryIn } from 'common/page-entry-where';
@@ -106,8 +107,7 @@ function suggestion(
   for (const page of pages) {
     const score =
       page.scopes.filter((other) => sameFolder(scope, other)).length +
-      page.moduleIds.filter((id) => modules.has(id)).length *
-        MODULE_LINK_SCORE;
+      page.moduleIds.filter((id) => modules.has(id)).length * MODULE_LINK_SCORE;
 
     if (score >= FIT_AT && (!best || score > best.score)) {
       best = { page, score };
@@ -209,7 +209,10 @@ export default class LooseFactsService {
   }
 
   /** The groups of loose facts that the gardener suggests to move to a page. */
-  async fitting(workspaceId: string, pageId: string): Promise<LooseFactGroup[]> {
+  async fitting(
+    workspaceId: string,
+    pageId: string,
+  ): Promise<LooseFactGroup[]> {
     const { groups } = await this.loose(workspaceId);
 
     return groups.filter(

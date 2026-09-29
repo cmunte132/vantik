@@ -120,7 +120,11 @@ describe('[ENG-227] the gardener for loose facts', () => {
       new Map(),
     );
 
-    expect(group.suggestion).toEqual({ kind: 'NONE', pageId: null, title: null });
+    expect(group.suggestion).toEqual({
+      kind: 'NONE',
+      pageId: null,
+      title: null,
+    });
   });
 
   it('groups a loose fact in the index by its scope, and a page fact by its page', () => {

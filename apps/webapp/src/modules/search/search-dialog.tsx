@@ -99,7 +99,13 @@ export function SearchDialog({ open, setOpen }: SearchDialogProps) {
               value={`page:${hit.pageId}:${hit.entryId ?? 'body'}`}
               className="m-2 !py-2"
               onSelect={() => {
-                push(`/${workspace.slug}/pages/${hit.pageId}`);
+                // A fact outside any page opens the Pages home, where the
+                // facts outside pages are listed.
+                push(
+                  hit.pageId
+                    ? `/${workspace.slug}/pages/${hit.pageId}`
+                    : `/${workspace.slug}/pages`,
+                );
                 setOpen(false);
                 setQuery('');
               }}
@@ -113,7 +119,9 @@ export function SearchDialog({ open, setOpen }: SearchDialogProps) {
                         ? 'Evidence'
                         : 'Fact'}
                   </span>
-                  <span className="truncate">{hit.pageTitle}</span>
+                  <span className="truncate">
+                    {hit.pageId ? hit.pageTitle : 'Outside any page'}
+                  </span>
                 </div>
                 <span className="text-muted-foreground truncate">
                   {hit.content}

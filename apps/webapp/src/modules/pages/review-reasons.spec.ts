@@ -204,7 +204,11 @@ describe('the review queue', () => {
     );
 
     expect(reasonFacets(rows)).toEqual([
-      { reason: 'UNGROUNDED', label: 'Cites nothing', count: 2 },
+      {
+        reason: 'UNGROUNDED',
+        label: 'Cites nothing that can be checked',
+        count: 2,
+      },
       // A tie goes by label.
       { reason: 'BROAD_SCOPE', label: 'Applies widely', count: 1 },
       {

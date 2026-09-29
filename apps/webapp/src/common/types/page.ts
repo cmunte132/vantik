@@ -84,7 +84,25 @@ export interface PageEntryType {
   lastServedAt?: string | null;
 
   supersedesId?: string | null;
-  pageId: string;
+  /** The page it is filed under. Null for a loose fact, on no page. */
+  pageId: string | null;
+  workspaceId?: string;
+  /**
+   * The moves of the fact between pages, oldest first. The entry list of the
+   * API sends them. The synced store does not hold them.
+   */
+  moves?: PageEntryMoveType[];
+}
+
+/** One step on the trail of a fact: a person filed it under another page. */
+export interface PageEntryMoveType {
+  createdAt: string;
+  /** Null when the fact was outside any page before the move. */
+  fromPageId: string | null;
+  toPageId: string | null;
+  movedById: string | null;
+  /** True when the person took the suggestion of the gardener. */
+  suggested: boolean;
 }
 
 export interface KnowledgeGapType {

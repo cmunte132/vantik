@@ -23,6 +23,7 @@ import { useContextStore } from 'store/global-context-provider';
 
 import { GapsCard } from './gaps-card';
 import { Header } from './header';
+import { LooseFactsCard } from './loose-facts';
 import { usePageNavigation } from './navigation';
 import {
   ago,
@@ -47,7 +48,8 @@ const CARD_GRID =
 
 /**
  * The Pages home: what the workspace knows and how far to trust it, the most
- * used pages of each product, and the gaps agents could not close.
+ * used pages of each product, the gaps agents could not close, and the facts
+ * outside any page.
  */
 const PagesView = observer(() => {
   const goToPage = usePageNavigation();
@@ -86,6 +88,7 @@ const PagesView = observer(() => {
               onWritePage={(query) => createPage({ title: query })}
             />
           )}
+          {overview && <LooseFactsCard loose={overview.loose} />}
         </aside>
       </div>
     </MainLayout>

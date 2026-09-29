@@ -1,3 +1,7 @@
+import type { Queue } from 'bull';
+
+import { createHash } from 'node:crypto';
+
 import { InjectQueue } from '@nestjs/bull';
 import {
   BadRequestException,
@@ -9,6 +13,7 @@ import {
   Optional,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { PageEntryProposalState, Prisma } from '@prisma/client';
 import {
   BulkUpdatePageEntriesDto,
   CreatePageEntryDto,
@@ -20,16 +25,13 @@ import {
   UpdatePageEntryDto,
   UserTypeEnum,
 } from '@vantikhq/types';
-import { PageEntryProposalState, Prisma } from '@prisma/client';
-import type { Queue } from 'bull';
-import { createHash } from 'node:crypto';
 import { PrismaService } from 'nestjs-prisma';
 
 import { liveEntryIn, onLivePageOrLoose } from 'common/page-entry-where';
 
 import { modulesForScope } from 'modules/modules/module-routing';
-import { VectorService } from 'modules/vector/vector.service';
 import type { KnowledgeSearchHit } from 'modules/vector/vector.interface';
+import { VectorService } from 'modules/vector/vector.service';
 
 import EntryCitationsService, {
   type CitationDraft,
@@ -678,7 +680,9 @@ export default class PageEntriesService {
     });
 
     if (!page) {
-      throw new NotFoundException({ message: `Page ${input.pageId} not found` });
+      throw new NotFoundException({
+        message: `Page ${input.pageId} not found`,
+      });
     }
 
     const entries = await this.prisma.pageEntry.findMany({
@@ -991,7 +995,7 @@ export default class PageEntriesService {
     }>,
     to: PageEntryStatusEnum,
   ): Promise<{
-    operations: Prisma.PrismaPromise<unknown>[];
+    operations: Array<Prisma.PrismaPromise<unknown>>;
     retired: string[];
   }> {
     if (
@@ -1302,10 +1306,10 @@ export default class PageEntriesService {
     if (target.status === PageEntryStatusEnum.SUPERSEDED) {
       throw new BadRequestException({
         message:
-          `Entry ${supersedesId} has already been superseded` +
-          (target.supersededBy ? ` by ${target.supersededBy.id}` : '') +
-          '. Supersede that one instead — a fact with two replacements is a ' +
-          'contradiction, not a correction.',
+          `Entry ${supersedesId} has already been superseded${
+            target.supersededBy ? ` by ${target.supersededBy.id}` : ''
+          }. Supersede that one instead — a fact with two replacements is a ` +
+          `contradiction, not a correction.`,
       });
     }
 
@@ -1343,13 +1347,13 @@ export default class PageEntriesService {
 
     if (!ALLOWED_STATUS_TRANSITIONS[from].includes(to)) {
       throw new BadRequestException({
-        message:
-          `An entry cannot go from ${from} to ${to}. ` +
-          (ALLOWED_STATUS_TRANSITIONS[from].length === 0
+        message: `An entry cannot go from ${from} to ${to}. ${
+          ALLOWED_STATUS_TRANSITIONS[from].length === 0
             ? `${from} is terminal: the workspace has already decided about ` +
               'this fact, and reviving it would put it back into circulation.'
             : `From ${from} the options are ` +
-              `${ALLOWED_STATUS_TRANSITIONS[from].join(', ')}.`),
+              `${ALLOWED_STATUS_TRANSITIONS[from].join(', ')}.`
+        }`,
       });
     }
   }

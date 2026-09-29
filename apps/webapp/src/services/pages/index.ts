@@ -1,5 +1,6 @@
 import type {
   KnowledgeAgreementReport,
+  LooseFactGroup,
   KnowledgeOverview,
   KnowledgeProof,
   KnowledgeReviewQueue,
@@ -167,6 +168,23 @@ export function createPageEntry({
   return ajaxPost({ url: `/api/v1/page_entries?pageId=${pageId}`, data });
 }
 
+export interface MoveEntriesParams {
+  entryIds: string[];
+  pageId: string;
+  /** True when the person takes the gardener's suggestion. */
+  suggested?: boolean;
+}
+
+/**
+ * Files facts under a page. The server records each move on the trail of
+ * the fact, and skips facts already on the page.
+ */
+export function moveEntries(
+  data: MoveEntriesParams,
+): Promise<{ moved: string[]; skipped: number }> {
+  return ajaxPost({ url: '/api/v1/page_entries/move', data });
+}
+
 export const useCreatePageMutation = mutationHook(createPage);
 
 export const useUpdatePageMutation = mutationHook(updatePage);
@@ -214,6 +232,52 @@ export const useBulkTriageMutation = mutationHook(bulkTriageEntries, {
 export const useCreatePageEntryMutation = mutationHook(createPageEntry, {
   invalidates: ['knowledge-overview'],
 });
+
+/**
+ * Makes the page that the gardener suggests for a group of facts outside
+ * any page, and files the facts under it.
+ */
+export async function makePageFor({
+  title,
+  entryIds,
+}: {
+  title: string;
+  entryIds: string[];
+}): Promise<PageType> {
+  const page = await createPage({ title });
+
+  await moveEntries({ entryIds, pageId: page.id, suggested: true });
+
+  return page;
+}
+
+export const useMakePageForMutation = mutationHook(makePageFor, {
+  invalidates: ['knowledge-overview', 'loose-facts'],
+});
+
+export const useMoveEntriesMutation = mutationHook(moveEntries, {
+  invalidates: [
+    'knowledge-overview',
+    'loose-facts',
+    'page-entry-proofs',
+    'knowledge-review',
+  ],
+});
+
+/**
+ * The groups of facts outside any page that the gardener suggests to file
+ * under this page.
+ */
+export function useLooseFactsFor(pageId?: string) {
+  return useQuery<LooseFactGroup[]>({
+    queryKey: ['loose-facts', pageId],
+    enabled: Boolean(pageId),
+    queryFn: () =>
+      ajaxGet({
+        url: `/api/v1/knowledge/loose?${new URLSearchParams({ pageId: pageId ?? '' })}`,
+      }) as Promise<LooseFactGroup[]>,
+  });
+}
 
 export interface RevertParams {
   pageId: string;
@@ -438,7 +502,8 @@ export function useKnowledgeSearch(query: string) {
 
 export interface KnowledgeHit {
   kind: 'page' | 'entry';
-  pageId: string;
+  /** The page of the hit, or null for a fact outside any page. */
+  pageId: string | null;
   pageTitle: string;
   entryId: string | null;
   content: string;

@@ -964,9 +964,7 @@ describe('entries a page cites', () => {
 
     const served = await service.searchKnowledge(WORKSPACE, 'deploys');
 
-    expect(ids(served.hits).filter((id) => id.startsWith('s'))).toHaveLength(
-      3,
-    );
+    expect(ids(served.hits).filter((id) => id.startsWith('s'))).toHaveLength(3);
     expect(ids(served.hits)).toContain('w1');
     expect(served.hits.find((hit) => hit.entryId === 'w1')?.pageId).toBeNull();
   });

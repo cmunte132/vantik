@@ -928,7 +928,9 @@ describe('knowledge tools and the product graph', () => {
 
     const unscoped = await client.callTool({
       name: 'remember',
-      arguments: { content: 'Migrations are hand-written SQL, never generated.' },
+      arguments: {
+        content: 'Migrations are hand-written SQL, never generated.',
+      },
     });
 
     expect((unscoped as { isError?: boolean }).isError).toBe(true);

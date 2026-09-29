@@ -45,6 +45,7 @@ function overview(
     facts: page('x').facts,
     week: { written: 0, settled: 0, settledObserved: 0, gapsClosed: 0 },
     gardenerAt: null,
+    loose: { count: 0, groups: [] },
     pages: [],
     products: [
       { id: 'app', name: 'Vantik App' },

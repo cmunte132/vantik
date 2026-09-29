@@ -24,6 +24,7 @@ import { useAllUsers } from 'hooks/users';
 import { useUpdatePageEntryMutation } from 'services/pages';
 
 import { entryActions } from './entry-actions';
+import { MoveFactsDialog } from './move-dialog';
 
 /**
  * One fact, and where it came from.
@@ -269,6 +270,10 @@ const Meta = observer(({ entry }: { entry: PageEntryType }) => {
 export const RowMenu = observer(({ entry }: { entry: PageEntryType }) => {
   const { mutate: update } = useUpdatePageEntryMutation();
   const [open, setOpen] = React.useState(false);
+  const [moving, setMoving] = React.useState(false);
+  // A fact written into the body of a page stays on that page, because the
+  // body is written from it.
+  const movable = entry.status !== PageEntryStatus.CONSOLIDATED;
 
   const items = entryActions(entry).map((action) => ({
     ...action,
@@ -276,31 +281,51 @@ export const RowMenu = observer(({ entry }: { entry: PageEntryType }) => {
   }));
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Change this fact"
-          className={cn(
-            'shrink-0 h-6 px-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
-            open && 'opacity-100',
+    <>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Change this fact"
+            className={cn(
+              'shrink-0 h-6 px-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+              open && 'opacity-100',
+            )}
+          >
+            <RiMoreLine size={14} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[260px]">
+          {items.map((item) => (
+            <DropdownMenuItem key={item.label} onClick={item.run}>
+              <div className="flex flex-col">
+                <span>{item.label}</span>
+                <span className="text-muted-foreground">{item.hint}</span>
+              </div>
+            </DropdownMenuItem>
+          ))}
+          {movable && (
+            <DropdownMenuItem onClick={() => setMoving(true)}>
+              <div className="flex flex-col">
+                <span>Move to page…</span>
+                <span className="text-muted-foreground">
+                  {entry.pageId
+                    ? 'File it under another page'
+                    : 'File it under the page it belongs on'}
+                </span>
+              </div>
+            </DropdownMenuItem>
           )}
-        >
-          <RiMoreLine size={14} />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[260px]">
-        {items.map((item) => (
-          <DropdownMenuItem key={item.label} onClick={item.run}>
-            <div className="flex flex-col">
-              <span>{item.label}</span>
-              <span className="text-muted-foreground">{item.hint}</span>
-            </div>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <MoveFactsDialog
+        entryIds={[entry.id]}
+        fromPageId={entry.pageId}
+        open={moving}
+        onOpenChange={setMoving}
+      />
+    </>
   );
 });
 

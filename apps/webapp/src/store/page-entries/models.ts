@@ -22,7 +22,9 @@ export const PageEntry = types.model({
   lastServedAt: types.union(types.string, types.null, types.undefined),
 
   supersedesId: types.union(types.string, types.null, types.undefined),
-  pageId: types.string,
+  /** Null for a loose fact, on no page. */
+  pageId: types.maybeNull(types.string),
+  workspaceId: types.union(types.string, types.null, types.undefined),
 });
 
 export const PageEntryArray = types.array(PageEntry);

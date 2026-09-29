@@ -13,7 +13,11 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
-import { entryPlace, liveEntryIn, onLivePageOrLoose } from 'common/page-entry-where';
+import {
+  entryPlace,
+  liveEntryIn,
+  onLivePageOrLoose,
+} from 'common/page-entry-where';
 
 import { LoggerService } from 'modules/logger/logger.service';
 

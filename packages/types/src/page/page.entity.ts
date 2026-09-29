@@ -1,5 +1,6 @@
-import { Workspace } from '../workspace';
 import type { KnowledgeProof } from './citation';
+
+import { Workspace } from '../workspace';
 
 /**
  * How strictly a page polices appended entries.

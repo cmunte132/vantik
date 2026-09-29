@@ -65,7 +65,7 @@ export interface ReviewRow {
 export function reviewRows(
   waiting: PageEntryType[],
   review: KnowledgeReviewQueue | undefined,
-  find: (entryId: string, pageId: string) => PageEntryType | undefined,
+  find: (entryId: string, pageId: string | null) => PageEntryType | undefined,
 ): ReviewRow[] {
   const proposals = (review?.items ?? []).flatMap((item): ReviewRow[] =>
     item.proposal

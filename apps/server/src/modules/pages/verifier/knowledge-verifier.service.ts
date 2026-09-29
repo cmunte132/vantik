@@ -14,10 +14,9 @@ import { tool, type ToolSet } from 'ai';
 import { Queue } from 'bull';
 import { cleanRepoPath, cleanSearchQuery } from 'integrations/repo-files';
 import { PrismaService } from 'nestjs-prisma';
-
-import { onLivePageOrLoose } from 'common/page-entry-where';
 import { z } from 'zod';
 
+import { onLivePageOrLoose } from 'common/page-entry-where';
 import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
 
 import { workspaceAgentDefaults } from 'modules/agent-runs/agent-run-settings';
@@ -273,9 +272,7 @@ export default class KnowledgeVerifierService {
       `Claim (${entry.kind.toLowerCase()}${
         entry.scope ? `, about ${entry.scope}` : ''
       }, ${
-        entry.page
-          ? `on the page "${entry.page.title}"`
-          : 'outside any page'
+        entry.page ? `on the page "${entry.page.title}"` : 'outside any page'
       }):`,
       `"""\n${redactSecrets(entry.content)}\n"""`,
       repos.length
@@ -402,8 +399,8 @@ export default class KnowledgeVerifierService {
     });
     const wanted = unlooked.filter(
       (row) =>
-        knowledgeSettings(row.entry.workspace?.preferences, env)
-          .autoTriage !== 'off',
+        knowledgeSettings(row.entry.workspace?.preferences, env).autoTriage !==
+        'off',
     );
 
     if (wanted.length) {

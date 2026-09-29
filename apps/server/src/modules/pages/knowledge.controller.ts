@@ -30,12 +30,12 @@ import {
 } from 'modules/vector/vector.interface';
 
 import KnowledgeOverviewService from './knowledge-overview.service';
-import LooseFactsService from './loose-facts.service';
 import KnowledgeService, {
   ContextPack,
   KnowledgeGap,
   type KnowledgeReader,
 } from './knowledge.service';
+import LooseFactsService from './loose-facts.service';
 import { HARNESS_SESSION_HEADER, harnessSessionOf } from './pages.interface';
 
 /**

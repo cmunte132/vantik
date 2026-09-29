@@ -72,10 +72,7 @@ export interface KnowledgePage extends KnowledgePageRef {
  * for a page body.
  */
 export type KnowledgeTrust =
-  | 'HUMAN_VERIFIED'
-  | 'GROUNDED'
-  | 'OBSERVED'
-  | 'UNGROUNDED';
+  'HUMAN_VERIFIED' | 'GROUNDED' | 'OBSERVED' | 'UNGROUNDED';
 
 /**
  * The last check of a citation. HOLDS: the cited lines read the same (or the
@@ -84,19 +81,10 @@ export type KnowledgeTrust =
  * the source could not be reached, so it has not been checked yet.
  */
 export type CitationCheck =
-  | 'HOLDS'
-  | 'MOVED'
-  | 'CHANGED'
-  | 'MISSING'
-  | 'UNKNOWN';
+  'HOLDS' | 'MOVED' | 'CHANGED' | 'MISSING' | 'UNKNOWN';
 
 export type CitationKind =
-  | 'CODE'
-  | 'ISSUE'
-  | 'PULL_REQUEST'
-  | 'COMMENT'
-  | 'RUN'
-  | 'URL';
+  'CODE' | 'ISSUE' | 'PULL_REQUEST' | 'COMMENT' | 'RUN' | 'URL';
 
 /**
  * What a claim rests on, as a writer names it: lines of code, or where a
@@ -242,13 +230,7 @@ export interface LoadContextInput extends KnowledgeSeeds {
 
 /** What a page can be linked to. */
 export type PageLinkType =
-  | 'TEAM'
-  | 'PROJECT'
-  | 'ISSUE'
-  | 'PAGE'
-  | 'PRODUCT'
-  | 'MODULE'
-  | 'CAPABILITY';
+  'TEAM' | 'PROJECT' | 'ISSUE' | 'PAGE' | 'PRODUCT' | 'MODULE' | 'CAPABILITY';
 
 export interface PageLink {
   id: string;

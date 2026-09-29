@@ -21,8 +21,11 @@ import { KnowledgeTrustEnum } from '@vantikhq/types';
 import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
 
-import { liveEntryIn, onLivePageOrLoose, onUnlockedPageOrLoose } from 'common/page-entry-where';
-
+import {
+  liveEntryIn,
+  onLivePageOrLoose,
+  onUnlockedPageOrLoose,
+} from 'common/page-entry-where';
 import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
 
 import { LoggerService } from 'modules/logger/logger.service';
@@ -1104,9 +1107,7 @@ export default class KnowledgeTriageService {
           wantsVerifier(found.reasons, entry.citations)
             ? (
                 await tx.knowledgeVerification.createMany({
-                  data: [
-                    { entryId: entry.id, workspaceId: entry.workspaceId },
-                  ],
+                  data: [{ entryId: entry.id, workspaceId: entry.workspaceId }],
                   skipDuplicates: true,
                 })
               ).count > 0

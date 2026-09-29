@@ -120,9 +120,9 @@ const ProductPagesView = observer(() => {
               {facts.inUse} facts in use
             </span>
           </div>
-          <div className="flex flex-col gap-1.5 w-[220px] max-w-full">
-            <TrustBar facts={facts} />
-            <span className="text-xs text-muted-foreground text-right">
+          <div className="flex flex-col items-end gap-1.5 max-w-full">
+            <TrustBar facts={facts} className="w-[220px] max-w-full" />
+            <span className="text-xs text-muted-foreground text-right md:whitespace-nowrap">
               {trustSentence(facts)}
             </span>
           </div>

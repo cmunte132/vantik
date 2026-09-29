@@ -1,6 +1,11 @@
-import type { LanguageModelUsage, ModelMessage } from 'ai';
+import type {
+  LanguageModel,
+  LanguageModelUsage,
+  ModelMessage,
+  ToolSet,
+} from 'ai';
 
-import { generateText, streamText } from 'ai';
+import { generateText, stepCountIs, streamText } from 'ai';
 
 import { LoggerService } from 'modules/logger/logger.service';
 
@@ -82,6 +87,65 @@ export async function generateModelText(call: ModelCall): Promise<ModelAnswer> {
 }
 
 /**
+ * A call on a model that a workspace chose, with the key that the workspace
+ * stored, rather than on the model of a role. The caller makes the client:
+ * this file does not read the keys of a workspace.
+ */
+export interface WorkspaceModelCall {
+  purpose: string;
+  /** The provider and the model, as the agent settings name them. */
+  provider: string;
+  model: string;
+  languageModel: LanguageModel;
+  system?: string;
+  prompt: string;
+  temperature?: number;
+  /** The tools the model can call, and the most steps it can take. */
+  tools?: ToolSet;
+  maxSteps?: number;
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * This function sends one prompt to a model that a workspace chose, lets the
+ * model call its tools, and returns the last answer. It writes the same log
+ * lines as `generateModelText`, with the role `workspace:<provider>`.
+ */
+export async function generateWorkspaceModelText(
+  call: WorkspaceModelCall,
+): Promise<ModelAnswer & { steps: number }> {
+  const started = Date.now();
+  const fields = () => ({
+    purpose: call.purpose,
+    role: `workspace:${call.provider}`,
+    model: call.model,
+    durationMs: Date.now() - started,
+  });
+
+  try {
+    const result = await generateText({
+      model: call.languageModel,
+      ...input(call),
+      ...(call.tools ? { tools: call.tools } : {}),
+      stopWhen: stepCountIs(call.maxSteps ?? 1),
+      ...(call.abortSignal ? { abortSignal: call.abortSignal } : {}),
+    });
+
+    logFinish(fields(), result.totalUsage, result.finishReason);
+    logExchange(call, fields(), result.text);
+
+    return {
+      text: result.text,
+      model: call.model,
+      steps: result.steps.length,
+    };
+  } catch (error) {
+    logFailure(fields(), error);
+    throw error;
+  }
+}
+
+/**
  * This function sends one prompt to a model and returns the stream of the
  * answer. The log line comes when the stream ends or fails.
  *
@@ -124,7 +188,9 @@ export function streamModelText(
 }
 
 /** The prompt part of a call, in the shape that `ai` accepts. */
-function input(call: ModelCall) {
+function input(
+  call: Pick<ModelCall, 'system' | 'temperature' | 'prompt' | 'messages'>,
+) {
   const common = {
     ...(call.system !== undefined ? { system: call.system } : {}),
     ...(call.temperature !== undefined
@@ -164,7 +230,11 @@ function logFailure(fields: CallFields, error: unknown) {
   });
 }
 
-function logExchange(call: ModelCall, fields: CallFields, answer: string) {
+function logExchange(
+  call: Pick<ModelCall, 'purpose' | 'system' | 'prompt' | 'messages'>,
+  fields: CallFields,
+  answer: string,
+) {
   logger.debug({
     message: `${fields.purpose}: prompt and answer`,
     where: 'model-call',

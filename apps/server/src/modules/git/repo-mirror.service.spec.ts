@@ -213,6 +213,40 @@ describe('RepoMirrorService', () => {
     });
   });
 
+  it('[ENG-224] searches a commit for a fixed text, whatever its case, and not the working directory', async () => {
+    const first = commit({ 'a.ts': 'one\ntwo\n' });
+    const second = commit({ 'a.ts': 'one\ntwo\nthree\n' });
+    writeFileSync(join(origin, 'a.ts'), 'edited\n');
+
+    await expect(service.search(local(), 'THREE', second)).resolves.toEqual({
+      matches: [{ path: 'a.ts', line: 3, text: 'three' }],
+    });
+    await expect(service.search(local(), 'three', first)).resolves.toEqual({
+      matches: [],
+    });
+    // A pattern character is a character to find, not a pattern.
+    await expect(service.search(local(), 'o.e', second)).resolves.toEqual({
+      matches: [],
+    });
+    await expect(service.search(local(), 'edited', second)).resolves.toEqual({
+      matches: [],
+    });
+  });
+
+  it('[ENG-224] keeps a text that looks like an option a text to find', async () => {
+    const sha = commit({ 'a.ts': 'one\n' });
+
+    await expect(service.search(local(), '--help', sha)).resolves.toEqual({
+      matches: [],
+    });
+    await expect(service.search(local(), '', sha)).resolves.toMatchObject({
+      unknown: true,
+    });
+    await expect(service.search(local(), 'one', 'HEAD')).resolves.toMatchObject(
+      { unknown: true },
+    );
+  });
+
   it('gives the head of the default branch', async () => {
     const sha = commit({ 'a.txt': 'x' });
     run(origin, 'checkout', '--quiet', '-b', 'wip');

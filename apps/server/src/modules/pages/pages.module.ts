@@ -37,6 +37,7 @@ import KnowledgeConventionsService from './upkeep/knowledge-conventions.service'
 import KnowledgeGapsService from './upkeep/knowledge-gaps.service';
 import KnowledgeIssues from './upkeep/knowledge-issues';
 import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
+import KnowledgeVerifierService from './verifier/knowledge-verifier.service';
 
 @Module({
   imports: [
@@ -64,6 +65,9 @@ import KnowledgeUpkeepService from './upkeep/knowledge-upkeep.service';
     EntryCitationsService,
     TriageJudges,
     KnowledgeTriageService,
+    // Reaches the model keys of agent-runs through the module container, as
+    // agent-runs imports this module.
+    KnowledgeVerifierService,
     KnowledgeAgreementService,
     KnowledgeReviewService,
     KnowledgeIssues,

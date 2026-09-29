@@ -53,7 +53,27 @@ function matches(row: Row, where: Where): boolean {
       return (condition as Where[]).some((part) => matches(row, part));
     }
 
+    if (key === 'NOT') {
+      return !matches(row, condition as Where);
+    }
+
     const value = row[key];
+
+    // An optional relation: `is: null` for none, `is: {...}` for one that
+    // matches.
+    if (
+      typeof condition === 'object' &&
+      condition !== null &&
+      'is' in (condition as Record<string, unknown>)
+    ) {
+      const is = (condition as { is: Where | null }).is;
+
+      return is === null
+        ? value === null || value === undefined
+        : typeof value === 'object' &&
+            value !== null &&
+            matches(value as Row, is);
+    }
 
     if (condition === null) {
       return value === null || value === undefined;
@@ -664,6 +684,36 @@ describe('the review queue', () => {
       ],
     });
   }
+
+  it('[ENG-224] leaves out an entry while the verifier looks for its evidence, and not for longer than an hour', async () => {
+    const t = harness({
+      entries: [
+        entry('looking', {
+          verification: { state: 'PENDING', updatedAt: daysAgo(0) },
+        }),
+        entry('stuck', {
+          verification: { state: 'PENDING', updatedAt: daysAgo(0.1) },
+        }),
+        entry('looked', {
+          verification: { state: 'NOTHING', updatedAt: daysAgo(0) },
+        }),
+      ],
+      decisions: [
+        decision('looking', { reasons: [Reason.UNGROUNDED] }),
+        decision('stuck', { reasons: [Reason.UNGROUNDED] }),
+        decision('looked', {
+          reasons: [Reason.UNGROUNDED, Reason.UNKNOWN_SOURCE],
+        }),
+      ],
+    });
+
+    const queue = await t.review.queue(WORKSPACE);
+
+    expect(queue.items.map((item) => item.entry.id).sort()).toEqual([
+      'looked',
+      'stuck',
+    ]);
+  });
 
   it('[KG-5.1] lists escalated entries with their reasons, beside audit items', async () => {
     const t = queued();

@@ -6,11 +6,16 @@ import { join, resolve } from 'node:path';
 import { Injectable } from '@nestjs/common';
 import {
   cleanRepoPath,
+  cleanSearchQuery,
   COMMIT_SHA,
+  MAX_MATCH_TEXT,
   MAX_REPO_FILE_BYTES,
+  MAX_SEARCH_MATCHES,
   REPO_READ_TIMEOUT_MS,
   type RepoFileRead,
   type RepoHead,
+  type RepoMatch,
+  type RepoSearch,
 } from 'integrations/repo-files';
 
 import { git, GitCommandError, type GitRemote } from './git-command';
@@ -35,6 +40,12 @@ const FORCED_FETCH_GAP_MS = 10_000;
  * monorepo would exhaust the server. A clear refusal is better than a kill.
  */
 const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
+
+/**
+ * The most output one search reads. A text in more files than this holds is
+ * too common to be evidence of anything.
+ */
+const MAX_SEARCH_OUTPUT = 4 * 1024 * 1024;
 
 /**
  * What git says when the mirror answered and there is no file there: the path
@@ -196,6 +207,98 @@ export class RepoMirrorService {
     } catch (error) {
       return { unknown: true, reason: reasonOf(error) };
     }
+  }
+
+  /**
+   * Where a text is found in the files of a commit. The search uses the text
+   * as a fixed string and ignores case. It returns at most
+   * `MAX_SEARCH_MATCHES` matches, and at most two from one file, so one file
+   * cannot fill the list. Never throws.
+   *
+   * The query goes to git after `-e` as one argument, so it cannot become an
+   * option.
+   */
+  async search(
+    resolved: ResolvedRepo,
+    query: string,
+    ref: string,
+  ): Promise<RepoSearch> {
+    const clean = cleanSearchQuery(query);
+
+    if (!clean || !COMMIT_SHA.test(ref)) {
+      return { unknown: true, reason: 'not a text or commit to search' };
+    }
+
+    let out: string;
+
+    try {
+      let mirror = await this.sync(resolved);
+
+      if (!(await hasCommit(mirror.path, ref))) {
+        mirror = await this.forceSync(resolved, mirror);
+      }
+
+      out = await git(
+        [
+          'grep',
+          '-n',
+          '-I',
+          '-F',
+          '-i',
+          '--max-count=2',
+          '-e',
+          clean,
+          ref,
+          '--',
+        ],
+        {
+          cwd: mirror.path,
+          timeoutMs: REPO_READ_TIMEOUT_MS,
+          maxBuffer: MAX_SEARCH_OUTPUT,
+        },
+      );
+    } catch (error) {
+      // git grep exits 1, and writes nothing, when it finds nothing.
+      if (
+        error instanceof GitCommandError &&
+        error.code === 1 &&
+        !error.stderr
+      ) {
+        return { matches: [] };
+      }
+
+      if (/maxBuffer/i.test(String((error as Error)?.message))) {
+        return {
+          unknown: true,
+          reason: 'the text is in too many files; search for a longer text',
+        };
+      }
+
+      return { unknown: true, reason: reasonOf(error) };
+    }
+
+    const matches: RepoMatch[] = [];
+    const prefix = `${ref}:`;
+
+    for (const line of out.split('\n')) {
+      if (matches.length >= MAX_SEARCH_MATCHES) {
+        break;
+      }
+
+      // `<ref>:<path>:<line>:<text>`
+      const rest = line.startsWith(prefix) ? line.slice(prefix.length) : null;
+      const found = rest ? /^(.+?):(\d+):(.*)$/.exec(rest) : null;
+
+      if (found) {
+        matches.push({
+          path: found[1],
+          line: Number(found[2]),
+          text: found[3].trim().slice(0, MAX_MATCH_TEXT),
+        });
+      }
+    }
+
+    return { matches };
   }
 
   /** The folders at the head of the default branch that a module can claim. */

@@ -228,6 +228,7 @@ function store(
   const entries = new Map(rows.map((row) => [row.id, row]));
   const decisions: Array<Record<string, unknown>> = [];
   const relations: Array<Record<string, unknown>> = [];
+  const verifications: Array<Record<string, unknown>> = [];
 
   const view = (row: Row) => ({ ...row, page: pages.get(row.pageId) });
 
@@ -295,6 +296,33 @@ function store(
 
         return { id: decision.id };
       }),
+    },
+    knowledgeVerification: {
+      createMany: jest.fn(
+        async ({
+          data,
+          skipDuplicates,
+        }: {
+          data: Array<Record<string, unknown>>;
+          skipDuplicates?: boolean;
+        }) => {
+          let count = 0;
+
+          for (const row of data) {
+            if (
+              skipDuplicates &&
+              verifications.some((v) => v.entryId === row.entryId)
+            ) {
+              continue;
+            }
+
+            verifications.push({ state: 'PENDING', ...row });
+            count++;
+          }
+
+          return { count };
+        },
+      ),
     },
     pageEntryRelation: {
       findMany: jest.fn(async ({ where }: { where: Where }) =>
@@ -431,6 +459,7 @@ function store(
         const saved = [...entries.values()].map((row) => ({ ...row }));
         const savedDecisions = decisions.length;
         const savedRelations = relations.map((relation) => ({ ...relation }));
+        const savedVerifications = verifications.length;
 
         try {
           return await work(client);
@@ -440,13 +469,14 @@ function store(
           }
           decisions.length = savedDecisions;
           relations.splice(0, relations.length, ...savedRelations);
+          verifications.length = savedVerifications;
           throw error;
         }
       },
     ),
   };
 
-  return { prisma, entries, decisions, relations, pages, gaps };
+  return { prisma, entries, decisions, relations, pages, gaps, verifications };
 }
 
 // ------------------------------------------------------------------ fixtures
@@ -630,17 +660,15 @@ interface Setup {
 }
 
 function triage(setup: Setup) {
-  const { prisma, entries, decisions, relations, pages, gaps } = store(
-    setup.rows,
-    {
+  const { prisma, entries, decisions, relations, pages, gaps, verifications } =
+    store(setup.rows, {
       runs: setup.runs ?? [],
       issues: setup.issues,
       comments: setup.comments,
       preferences: setup.preferences,
       backoff: setup.backoff,
       gaps: setup.gaps,
-    },
-  );
+    });
   const calls: Array<{
     role: string;
     system: string;
@@ -721,6 +749,7 @@ function triage(setup: Setup) {
     findNearEntries,
     indexer,
     queue,
+    verifications,
   };
 }
 
@@ -3069,5 +3098,52 @@ describe('triage again when the evidence changes', () => {
     await expect(
       t.service.triage('new', ON, 'CITATIONS_CHECKED'),
     ).resolves.toBeNull();
+  });
+});
+
+describe('the verifier', () => {
+  it('[ENG-224] is asked to look once for evidence of an entry that cites nothing, with the escalation', async () => {
+    const t = triage({ rows: [agentEntry({ citations: [] })] });
+
+    await expect(t.service.triage('new', SHADOW)).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: [Reason.UNGROUNDED, Reason.UNKNOWN_SOURCE],
+    });
+    expect(t.verifications).toEqual([
+      expect.objectContaining({ entryId: 'new', state: 'PENDING' }),
+    ]);
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'verifyEntry',
+      { entryId: 'new' },
+      expect.objectContaining({ jobId: 'verifyEntry:new' }),
+    );
+
+    // It looked, attached a citation that holds, and triage decides again.
+    (t.entries.get('new') as Row).citations = [holds()];
+    t.queue.add.mockClear();
+
+    await expect(
+      t.service.triage('new', SHADOW, 'VERIFIER'),
+    ).resolves.toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      trigger: 'VERIFIER',
+    });
+    expect(t.verifications).toHaveLength(1);
+    expect(t.queue.add).not.toHaveBeenCalledWith(
+      'verifyEntry',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('[ENG-224] is not asked about an entry whose citations failed, or that was refused', async () => {
+    const t = triage({
+      rows: [
+        agentEntry({ citations: [{ ...holds(), checkResult: 'CHANGED' }] }),
+      ],
+    });
+
+    await t.service.triage('new', SHADOW);
+    expect(t.verifications).toEqual([]);
   });
 });

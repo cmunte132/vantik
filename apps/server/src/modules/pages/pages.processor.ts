@@ -35,6 +35,7 @@ import {
   STANDING_ENTRY_DECAY_DAYS,
   TRIAGE_ENTRY_JOB,
   type TriageEntryJob,
+  VERIFY_ENTRY_JOB,
 } from './pages.interface';
 import KnowledgeTriageService from './triage/knowledge-triage.service';
 import KnowledgeConventionsService from './upkeep/knowledge-conventions.service';
@@ -42,6 +43,7 @@ import KnowledgeGapsService from './upkeep/knowledge-gaps.service';
 import KnowledgeUpkeepService, {
   UnreadCitations,
 } from './upkeep/knowledge-upkeep.service';
+import KnowledgeVerifierService from './verifier/knowledge-verifier.service';
 
 /**
  * The scheduler for the decay pass.
@@ -299,6 +301,7 @@ export class PagesProcessor {
     private pageRefresh: PageRefreshService,
     @Optional() private knowledgeIndex?: KnowledgeIndexService,
     @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
+    @Optional() private verifier?: KnowledgeVerifierService,
   ) {}
 
   /**
@@ -390,6 +393,22 @@ export class PagesProcessor {
       message: `Triage (${outcome.mode.toLowerCase()}, ${outcome.trigger.toLowerCase()}) decided ${outcome.decision} for entry ${job.data.entryId}${detail}`,
       where: 'PagesProcessor.handleTriageEntry',
     });
+  }
+
+  /**
+   * Looks for evidence of an entry that cites none. Not tried again: a look
+   * that fails records why, and the entry goes to a person.
+   */
+  @Process(VERIFY_ENTRY_JOB)
+  async handleVerifyEntry(job: { data: { entryId: string } }) {
+    const state = await this.verifier?.verify(job.data.entryId);
+
+    if (state) {
+      this.logger.info({
+        message: `The verifier looked for evidence of entry ${job.data.entryId}: ${state}`,
+        where: 'PagesProcessor.handleVerifyEntry',
+      });
+    }
   }
 
   /**
@@ -543,6 +562,7 @@ export class PagesProcessor {
     let archivedStanding: number;
     let proposedVerified: number;
     let owedIssues: number;
+    let verified: number;
 
     try {
       ({ expiredProposed, archivedStanding } =
@@ -552,6 +572,8 @@ export class PagesProcessor {
       // Correction issues a failed run owed, in workspaces no change has
       // landed in since, whose own runs would otherwise open them.
       owedIssues = await this.upkeep.openOwedIssues();
+      // Entries that wait as UNGROUNDED with no look by the verifier.
+      verified = (await this.verifier?.sweep()) ?? 0;
     } catch (error) {
       // Said out loud, because the alternative is silence. The only other
       // signal this pass gives is the line below, and "no line" reads exactly
@@ -570,8 +592,9 @@ export class PagesProcessor {
       message:
         `Knowledge decay archived ${expiredProposed} untriaged and ` +
         `${archivedStanding} unused standing entr(ies), asked a person ` +
-        `about ${proposedVerified} unused verified entr(ies), and opened ` +
-        `${owedIssues} owed correction issue(s)`,
+        `about ${proposedVerified} unused verified entr(ies), opened ` +
+        `${owedIssues} owed correction issue(s), and asked the verifier ` +
+        `about ${verified} entr(ies)`,
       where: 'PagesProcessor.handleDecay',
     });
   }

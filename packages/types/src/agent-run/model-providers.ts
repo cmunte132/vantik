@@ -26,6 +26,13 @@ export interface ModelProvider {
   envVar: string;
   /** Host the sandbox must reach, for the egress allowlist. */
   host: string;
+  /**
+   * The base URL of the provider's OpenAI-compatible chat endpoint. The server
+   * calls this URL when a feature runs on the workspace's own key, for
+   * example the knowledge verifier. If this value is absent, the server
+   * cannot make such a call with this provider.
+   */
+  chatBaseUrl?: string;
   /** Shown in the empty key field, so a paste can be sanity-checked by eye. */
   placeholder: string;
   /**
@@ -84,6 +91,7 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
     label: 'Anthropic',
     envVar: 'ANTHROPIC_API_KEY',
     host: 'api.anthropic.com',
+    chatBaseUrl: 'https://api.anthropic.com/v1',
     placeholder: 'sk-ant-…',
     catalogue: {
       url: 'https://api.anthropic.com/v1/models?limit=100',
@@ -99,6 +107,7 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
     label: 'OpenAI',
     envVar: 'OPENAI_API_KEY',
     host: 'api.openai.com',
+    chatBaseUrl: 'https://api.openai.com/v1',
     placeholder: 'sk-…',
     catalogue: { url: 'https://api.openai.com/v1/models', auth: 'bearer' },
   },
@@ -107,6 +116,7 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
     label: 'OpenRouter',
     envVar: 'OPENROUTER_API_KEY',
     host: 'openrouter.ai',
+    chatBaseUrl: 'https://openrouter.ai/api/v1',
     placeholder: 'sk-or-…',
     catalogue: {
       url: 'https://openrouter.ai/api/v1/models',
@@ -124,6 +134,7 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
     // enough that guessing costs an afternoon.
     envVar: 'GEMINI_API_KEY',
     host: 'generativelanguage.googleapis.com',
+    chatBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     placeholder: 'AIza…',
     catalogue: {
       url: 'https://generativelanguage.googleapis.com/v1beta/models',
@@ -140,6 +151,7 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
     label: 'xAI',
     envVar: 'XAI_API_KEY',
     host: 'api.x.ai',
+    chatBaseUrl: 'https://api.x.ai/v1',
     placeholder: 'xai-…',
     catalogue: { url: 'https://api.x.ai/v1/models', auth: 'bearer' },
   },
@@ -148,6 +160,7 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
     label: 'Groq',
     envVar: 'GROQ_API_KEY',
     host: 'api.groq.com',
+    chatBaseUrl: 'https://api.groq.com/openai/v1',
     placeholder: 'gsk_…',
     catalogue: { url: 'https://api.groq.com/openai/v1/models', auth: 'bearer' },
   },
@@ -156,6 +169,7 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
     label: 'Mistral',
     envVar: 'MISTRAL_API_KEY',
     host: 'api.mistral.ai',
+    chatBaseUrl: 'https://api.mistral.ai/v1',
     placeholder: '…',
     catalogue: { url: 'https://api.mistral.ai/v1/models', auth: 'bearer' },
   },
@@ -164,6 +178,7 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
     label: 'DeepSeek',
     envVar: 'DEEPSEEK_API_KEY',
     host: 'api.deepseek.com',
+    chatBaseUrl: 'https://api.deepseek.com/v1',
     placeholder: 'sk-…',
     catalogue: { url: 'https://api.deepseek.com/models', auth: 'bearer' },
   },
@@ -172,6 +187,7 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
     label: 'Together AI',
     envVar: 'TOGETHER_API_KEY',
     host: 'api.together.xyz',
+    chatBaseUrl: 'https://api.together.xyz/v1',
     placeholder: '…',
     catalogue: { url: 'https://api.together.xyz/v1/models', auth: 'bearer' },
   },
@@ -194,7 +210,9 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
   },
 ];
 
-export function providerById(id: string | undefined): ModelProvider | undefined {
+export function providerById(
+  id: string | undefined,
+): ModelProvider | undefined {
   return MODEL_PROVIDERS.find((provider) => provider.id === id);
 }
 

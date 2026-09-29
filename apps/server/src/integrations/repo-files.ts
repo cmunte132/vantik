@@ -23,6 +23,45 @@ export type RepoFileRead =
 
 export type RepoHead = { sha: string } | { unknown: true; reason: string };
 
+/** One place where a search of a repository found its text. */
+export interface RepoMatch {
+  path: string;
+  /** The line, when the source says which one. */
+  line: number | null;
+  /** The text around the match, cut to `MAX_MATCH_TEXT`. */
+  text: string | null;
+}
+
+export type RepoSearch =
+  { matches: RepoMatch[] } | { unknown: true; reason: string };
+
+/** The most matches one search returns. */
+export const MAX_SEARCH_MATCHES = 20;
+
+/** The most text one match returns, in characters. */
+export const MAX_MATCH_TEXT = 200;
+
+/** The longest text a search looks for. */
+export const MAX_SEARCH_QUERY = 200;
+
+/**
+ * A text to search for, cleaned, or null if it cannot be one: empty, too
+ * long, or with a character that no line of code holds.
+ */
+export function cleanSearchQuery(query: string | undefined): string | null {
+  const trimmed = (query ?? '').trim();
+
+  if (
+    !trimmed ||
+    trimmed.length > MAX_SEARCH_QUERY ||
+    /[\0\r\n]/.test(trimmed)
+  ) {
+    return null;
+  }
+
+  return trimmed;
+}
+
 /** A commit id, full or abbreviated. The only refs a citation may name. */
 export const COMMIT_SHA = /^[0-9a-f]{7,40}$/i;
 

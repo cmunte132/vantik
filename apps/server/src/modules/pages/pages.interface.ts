@@ -361,6 +361,32 @@ export function retriageJobOptions(
   };
 }
 
+/**
+ * Looks for evidence of an entry that triage escalated as UNGROUNDED: see
+ * `verifier/knowledge-verifier.service.ts`.
+ */
+export const VERIFY_ENTRY_JOB = 'verifyEntry';
+
+/**
+ * How long a look of the verifier can stay PENDING before a person sees the
+ * entry anyway, and before the nightly sweep queues it again.
+ */
+export const VERIFIER_PENDING_MS = 60 * 60 * 1000;
+
+/**
+ * One look for each entry, and one job while it waits. Not tried again: a
+ * look that fails records why, and the entry goes to a person. The nightly
+ * sweep queues again a look whose job was lost.
+ */
+export function verifyEntryJobOptions(entryId: string): JobOptions {
+  return {
+    jobId: `${VERIFY_ENTRY_JOB}:${entryId}`,
+    attempts: 1,
+    removeOnComplete: true,
+    removeOnFail: 20,
+  };
+}
+
 /** What a triage job carries. A job without a trigger is for a new entry. */
 export interface TriageEntryJob {
   entryId: string;

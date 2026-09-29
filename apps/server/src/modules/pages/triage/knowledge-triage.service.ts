@@ -34,6 +34,8 @@ import {
   PAGES_QUEUE,
   retriageJobOptions,
   TRIAGE_ENTRY_JOB,
+  VERIFY_ENTRY_JOB,
+  verifyEntryJobOptions,
 } from '../pages.interface';
 import { auditDraw, isActing } from './agreement';
 import { backoffState, type BackoffState } from './knowledge-agreement.service';
@@ -90,6 +92,11 @@ import { answerGaps } from '../upkeep/gap-answers';
  * touches a cited file, or a newer entry that says the same is accepted.
  * Each decision records its trigger, and the latest decision is the one that
  * counts.
+ *
+ * An entry escalated because it cites nothing that can be checked goes to
+ * the verifier agent first (see `KnowledgeVerifierService`), once. A person
+ * does not see it while the verifier looks. What the verifier finds is
+ * attached, and triage decides again.
  */
 
 /** How many of the nearest entries a new one is compared with. */
@@ -1079,6 +1086,21 @@ export default class KnowledgeTriageService {
             ? { ...found.outputs, notApplied }
             : found.outputs;
 
+        // One look by the verifier, asked for with the escalation, so that a
+        // person never sees the entry between the two.
+        const verify =
+          found.decision === KnowledgeTriageDecisionType.ESCALATE &&
+          found.reasons.includes(KnowledgeEscalationReason.UNGROUNDED)
+            ? (
+                await tx.knowledgeVerification.createMany({
+                  data: [
+                    { entryId: entry.id, workspaceId: entry.page.workspaceId },
+                  ],
+                  skipDuplicates: true,
+                })
+              ).count > 0
+            : false;
+
         const decision = await tx.knowledgeTriageDecision.create({
           data: {
             id,
@@ -1104,10 +1126,15 @@ export default class KnowledgeTriageService {
           select: { id: true },
         });
 
-        return { id: decision.id, applied, audit };
+        return { id: decision.id, applied, audit, verify };
       });
 
-    let result: { id: string; applied: boolean; audit: boolean };
+    let result: {
+      id: string;
+      applied: boolean;
+      audit: boolean;
+      verify: boolean;
+    };
 
     try {
       result = await write(mode === KnowledgeTriageMode.ON);
@@ -1123,6 +1150,10 @@ export default class KnowledgeTriageService {
 
     if (changed.length) {
       await this.indexer?.entriesChanged(changed);
+    }
+
+    if (result.verify) {
+      await this.verifyLater(entry.id);
     }
 
     if (
@@ -1147,6 +1178,25 @@ export default class KnowledgeTriageService {
       backedOffFrom: found.backedOffFrom ?? null,
       audit: result.audit,
     };
+  }
+
+  /**
+   * Queues the look of the verifier. Best effort: the nightly sweep queues a
+   * look whose job was not queued.
+   */
+  private async verifyLater(entryId: string): Promise<void> {
+    try {
+      await this.pagesQueue?.add(
+        VERIFY_ENTRY_JOB,
+        { entryId },
+        verifyEntryJobOptions(entryId),
+      );
+    } catch (error) {
+      this.logger.warn({
+        message: `Could not queue the verifier for entry ${entryId}: ${error}; the nightly sweep will`,
+        where: 'KnowledgeTriageService.verifyLater',
+      });
+    }
   }
 
   /**

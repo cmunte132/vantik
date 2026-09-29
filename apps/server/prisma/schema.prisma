@@ -942,6 +942,7 @@ model PageEntry {
   signals   PageEntrySignal[]
 
   triageDecisions KnowledgeTriageDecision[]
+  verification    KnowledgeVerification?
   relationsFrom   PageEntryRelation[]       @relation("PageEntryRelationFrom")
   relationsTo     PageEntryRelation[]       @relation("PageEntryRelationTo")
   maintenance     PageEntryMaintenance[]
@@ -1152,6 +1153,56 @@ model KnowledgeTriageDecision {
   @@index([entryId, createdAt])
   @@index([workspaceId, createdAt])
   @@index([workspaceId, verdictAt])
+}
+
+/// The look of the verifier agent for evidence of an entry that cites none.
+///
+/// One for each entry. A person does not see the entry while the look is
+/// PENDING. The verifier runs on the model that the workspace chose in its
+/// agent settings, with the key that the workspace stored for it, and never
+/// on a key of the deployment.
+model KnowledgeVerification {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entry   PageEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entryId String    @unique
+
+  workspaceId String
+
+  state      KnowledgeVerificationState @default(PENDING)
+  /// The provider and the model that looked, from the agent settings.
+  provider   String?
+  model      String?
+  /// How many citations the server checked and attached.
+  found      Int                        @default(0)
+  /// Whether the verifier said that the claim is about a service outside
+  /// the workspace, which its code and issues cannot confirm.
+  outside    Boolean                    @default(false)
+  /// Why it found nothing, or why it could not look.
+  reason     String?
+  /// Each search and read, in order, with a short result; and the answer.
+  steps      Json?
+  finishedAt DateTime?
+
+  @@index([workspaceId, createdAt])
+  @@index([state, createdAt])
+}
+
+/// What came of a verifier's look.
+enum KnowledgeVerificationState {
+  /// Queued or in progress.
+  PENDING
+  /// It found evidence, and the server attached it.
+  FOUND
+  /// It looked and found nothing that the server could confirm.
+  NOTHING
+  /// The look failed: the model or the code could not be asked.
+  FAILED
+  /// The workspace chose no model in its agent settings, or holds no key
+  /// for the provider of that model.
+  NO_PROVIDER
 }
 
 /// A decision type stopping or resuming acting on its own in a workspace.

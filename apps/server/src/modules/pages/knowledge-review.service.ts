@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   KnowledgeTriageDecisionType,
+  KnowledgeVerificationState,
   PageEntryMaintenanceAction,
   PageEntryProposalState,
   PageEntryStatus,
@@ -23,6 +24,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { knowledgeSettings } from './knowledge-settings';
 import PageEntriesService from './page-entries.service';
+import { VERIFIER_PENDING_MS } from './pages.interface';
 import { PROPOSAL_SELECT, proposalResponse } from './pages.service';
 import { statusLeftBy } from './triage/agreement';
 import {
@@ -95,8 +97,23 @@ export default class KnowledgeReviewService {
       ...(options.pageId ? { id: options.pageId } : {}),
     };
 
+    // Not an entry the verifier is looking at: a person sees it once the
+    // verifier is done, or once the look has taken too long.
+    const looking = new Date(Date.now() - VERIFIER_PENDING_MS);
     const waiting = await this.prisma.pageEntry.findMany({
-      where: { deleted: null, status: PageEntryStatus.PROPOSED, page },
+      where: {
+        deleted: null,
+        status: PageEntryStatus.PROPOSED,
+        page,
+        NOT: {
+          verification: {
+            is: {
+              state: KnowledgeVerificationState.PENDING,
+              updatedAt: { gt: looking },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
       select: ENTRY_SELECT,
     });

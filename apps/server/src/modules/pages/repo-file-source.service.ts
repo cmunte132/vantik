@@ -3,6 +3,7 @@ import {
   REPO_SOURCE_TIMEOUT_MS,
   type RepoFileRead,
   type RepoHead,
+  type RepoSearch,
 } from 'integrations/repo-files';
 
 import {
@@ -33,6 +34,8 @@ export interface RepoFileSource {
   read(repo: CitedRepo, path: string, ref: string): Promise<RepoFileRead>;
   /** The commit at the head of the repository's default branch. */
   head(repo: CitedRepo): Promise<RepoHead>;
+  /** Where a text is found in the files of the commit `ref`. */
+  search(repo: CitedRepo, query: string, ref: string): Promise<RepoSearch>;
 }
 
 /**
@@ -61,12 +64,20 @@ export default class RepoFileSourceService implements RepoFileSource {
     );
   }
 
+  search(repo: CitedRepo, query: string, ref: string): Promise<RepoSearch> {
+    return bounded(
+      this.withRepo(repo, (resolved) =>
+        this.mirrors.search(resolved, query, ref),
+      ),
+    );
+  }
+
   /**
    * Resolves the repository through its integration account. Only an account
    * in the repository's own workspace counts, so a row naming another
    * workspace's account reads nothing.
    */
-  private async withRepo<T extends RepoFileRead | RepoHead>(
+  private async withRepo<T extends RepoFileRead | RepoHead | RepoSearch>(
     repo: CitedRepo,
     read: (resolved: ResolvedRepo) => Promise<T>,
   ): Promise<T | { unknown: true; reason: string }> {

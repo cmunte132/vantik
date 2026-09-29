@@ -28,7 +28,9 @@ const ReviewView = observer(() => {
   }, [pageEntriesStore]);
 
   return (
-    <MainLayout header={<Header label="Review" />}>
+    <MainLayout
+      header={<Header crumbs={[{ label: 'Needs you' }]} needsYou={false} />}
+    >
       <ScrollArea className="h-[calc(100%_-_38px)] w-full">
         <div className="max-w-[80ch] mx-auto py-8 px-6 flex flex-col gap-6">
           <section className="flex flex-col gap-1">

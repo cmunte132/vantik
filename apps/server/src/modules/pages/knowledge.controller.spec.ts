@@ -1,3 +1,6 @@
+import type KnowledgeService from './knowledge.service';
+import type PageEntriesService from './page-entries.service';
+
 import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
@@ -14,8 +17,6 @@ import { AgentScopeGuard } from 'modules/auth/agent-scope.guard';
 import KnowledgeOverviewService from './knowledge-overview.service';
 import { KnowledgeController } from './knowledge.controller';
 import { PageEntriesController } from './page-entries.controller';
-import type KnowledgeService from './knowledge.service';
-import type PageEntriesService from './page-entries.service';
 import { harnessSessionOf } from './pages.interface';
 
 describe('KnowledgeController', () => {

@@ -1,3 +1,5 @@
+import type { KnowledgeOverview } from '@vantikhq/types';
+
 import {
   Body,
   Controller,
@@ -13,7 +15,6 @@ import {
   KnowledgeSearchQueryDto,
   KnowledgeSimilarDto,
 } from '@vantikhq/types';
-import type { KnowledgeOverview } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
 import { resolveWorkspaceId } from 'common/workspace-access';

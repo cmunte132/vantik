@@ -2240,3 +2240,63 @@ describe("the gardener's proposals", () => {
     expect(done('folded')).toMatchObject({ reversedById: 'person-2' });
   });
 });
+
+describe('answering a gap', () => {
+  function build(gap: Row | null, found: Row | null) {
+    const prisma = {
+      pageKnowledgeGap: {
+        findFirst: jest.fn().mockResolvedValue(gap),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }) => ({ ...gap, ...data })),
+      },
+      pageEntry: { findFirst: jest.fn().mockResolvedValue(found) },
+    };
+    const review = new KnowledgeReviewService(
+      prisma as unknown as PrismaService,
+      undefined as unknown as PageEntriesService,
+    );
+    const controller = new KnowledgeReviewController(
+      review,
+      undefined as unknown as KnowledgeAgreementService,
+      prisma as unknown as PrismaService,
+    );
+
+    return { prisma, review, controller };
+  }
+
+  it('[ENG-225] closes the gap with a fact in use in the same workspace', async () => {
+    const { prisma, review } = build({ id: 'gap-1' }, { id: 'entry-1' });
+
+    await review.answerGap(WORKSPACE, 'gap-1', 'entry-1');
+
+    expect(prisma.pageKnowledgeGap.findFirst.mock.calls[0][0].where).toEqual({
+      id: 'gap-1',
+      workspaceId: WORKSPACE,
+    });
+    expect(
+      prisma.pageEntry.findFirst.mock.calls[0][0].where.page.workspaceId,
+    ).toBe(WORKSPACE);
+    expect(prisma.pageKnowledgeGap.update.mock.calls[0][0].data).toMatchObject({
+      answeredByEntryId: 'entry-1',
+      answeredAt: expect.any(Date),
+    });
+  });
+
+  it("[ENG-225] refuses another workspace's gap, and a fact that is not in use", async () => {
+    await expect(
+      build(null, { id: 'entry-1' }).review.answerGap(WORKSPACE, 'g', 'e'),
+    ).rejects.toThrow('not found');
+    await expect(
+      build({ id: 'gap-1' }, null).review.answerGap(WORKSPACE, 'g', 'e'),
+    ).rejects.toThrow('not in use');
+  });
+
+  it('[ENG-225] refuses an agent', async () => {
+    const { controller } = build({ id: 'gap-1' }, { id: 'entry-1' });
+
+    await expect(
+      controller.answerGap(WORKSPACE, 'AGENT', 'gap-1', { entryId: 'entry-1' }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+});

@@ -1,13 +1,14 @@
 import type {
   KnowledgeAgreementReport,
+  KnowledgeOverview,
+  KnowledgeProof,
   KnowledgeReviewQueue,
   PageProposal,
 } from '@vantikhq/types';
 
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import type {
-  KnowledgeGapType,
   PageEntryStatus,
   PageEntryPolicy,
   PageEntryType,
@@ -175,24 +176,44 @@ export const useDeletePageMutation = mutationHook(deletePage);
 // Accepting marks the facts folded in and records the change in the page's
 // history, and can answer an audit, so each is asked for again.
 export const useConsolidatePageMutation = mutationHook(consolidateAndAccept, {
-  invalidates: ['knowledge-review', 'knowledge-agreement', 'page-history'],
+  invalidates: [
+    'knowledge-review',
+    'knowledge-agreement',
+    'page-history',
+    'knowledge-overview',
+  ],
 });
 
 export const useAnswerPageProposalMutation = mutationHook(answerPageProposal, {
-  invalidates: ['knowledge-review', 'knowledge-agreement', 'page-history'],
+  invalidates: [
+    'knowledge-review',
+    'knowledge-agreement',
+    'page-history',
+    'knowledge-overview',
+  ],
 });
 
 // Either can resolve an escalation or an audit, so the queue's reasons and
 // the agreement figures are asked for again.
 export const useUpdatePageEntryMutation = mutationHook(updatePageEntry, {
-  invalidates: ['knowledge-review', 'knowledge-agreement'],
+  invalidates: [
+    'knowledge-review',
+    'knowledge-agreement',
+    'knowledge-overview',
+  ],
 });
 
 export const useBulkTriageMutation = mutationHook(bulkTriageEntries, {
-  invalidates: ['knowledge-review', 'knowledge-agreement'],
+  invalidates: [
+    'knowledge-review',
+    'knowledge-agreement',
+    'knowledge-overview',
+  ],
 });
 
-export const useCreatePageEntryMutation = mutationHook(createPageEntry);
+export const useCreatePageEntryMutation = mutationHook(createPageEntry, {
+  invalidates: ['knowledge-overview'],
+});
 
 export interface RevertParams {
   pageId: string;
@@ -428,16 +449,54 @@ export interface KnowledgeHit {
 }
 
 /**
- * Questions agents asked that the bank could not answer.
- *
- * The most direct answer available to "what should I document next": it says
- * what people actually needed, rather than what somebody thought to write down.
+ * The Pages home in one read: the trust of the facts in use, each page with
+ * its product, and the gaps agents could not close.
  */
-export function useKnowledgeGaps() {
-  return useQuery<KnowledgeGapType[]>({
-    queryKey: ['knowledge-gaps'],
+export function useKnowledgeOverview() {
+  return useQuery<KnowledgeOverview>({
+    queryKey: ['knowledge-overview'],
     queryFn: () =>
-      ajaxGet({ url: '/api/v1/knowledge/gaps' }) as Promise<KnowledgeGapType[]>,
+      ajaxGet({
+        url: '/api/v1/knowledge/overview',
+      }) as Promise<KnowledgeOverview>,
+  });
+}
+
+export interface AnswerGapParams {
+  gapId: string;
+  entryId: string;
+}
+
+/** Closes a gap with the fact a person wrote to answer it. */
+export function answerKnowledgeGap({ gapId, entryId }: AnswerGapParams) {
+  return ajaxPost({
+    url: `/api/v1/knowledge/gaps/${gapId}/answer`,
+    data: { entryId },
+  });
+}
+
+export const useAnswerGapMutation = mutationHook(answerKnowledgeGap, {
+  invalidates: ['knowledge-overview'],
+});
+
+/** An entry as the entry list serves it: with its trust and its citations. */
+export type ProvenEntry = PageEntryType & KnowledgeProof;
+
+/**
+ * Every entry on a page with its proof. The synced store holds the entries
+ * but not their citation checks, so the page view reads them here. The
+ * caller passes a signature of the synced entries, and a change to them
+ * reads the list again.
+ */
+export function usePageEntryProofs(pageId?: string, signature?: string) {
+  return useQuery<ProvenEntry[]>({
+    queryKey: ['page-entry-proofs', pageId, signature],
+    enabled: Boolean(pageId),
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      ajaxGet({
+        url: `/api/v1/page_entries?${new URLSearchParams({ pageId: pageId ?? '' })}`,
+      }) as Promise<ProvenEntry[]>,
   });
 }
 
@@ -475,7 +534,11 @@ export function resolveAudit({ decisionId, agree }: ResolveAuditParams) {
 }
 
 export const useResolveAuditMutation = mutationHook(resolveAudit, {
-  invalidates: ['knowledge-review', 'knowledge-agreement'],
+  invalidates: [
+    'knowledge-review',
+    'knowledge-agreement',
+    'knowledge-overview',
+  ],
 });
 
 export interface ResolveProposalParams {
@@ -493,7 +556,11 @@ export function resolveProposal({ proposalId, accept }: ResolveProposalParams) {
 
 // Accepting archives the entry, which can be one an audit was about.
 export const useResolveProposalMutation = mutationHook(resolveProposal, {
-  invalidates: ['knowledge-review', 'knowledge-agreement'],
+  invalidates: [
+    'knowledge-review',
+    'knowledge-agreement',
+    'knowledge-overview',
+  ],
 });
 
 /**

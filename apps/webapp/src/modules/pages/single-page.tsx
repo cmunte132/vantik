@@ -1,6 +1,6 @@
 import type { Editor as EditorT } from '@tiptap/core';
 
-import { RiMoreLine } from '@remixicon/react';
+import { RiArrowDownSLine, RiMoreLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   DropdownMenu,
@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
 import { Editor, EditorExtensions } from '@vantikhq/ui/components/editor/index';
-import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import { useRouter } from 'next/router';
 import * as React from 'react';
@@ -32,24 +32,31 @@ import { MainLayout } from 'common/layouts/main-layout';
 import { PageEntryPolicy, PageKind, type PageType } from 'common/types';
 
 import { useEditorPasteHandler } from 'hooks/use-editor-paste-handler';
+import { useAllUsers } from 'hooks/users';
 
 import {
   useDeletePageMutation,
+  useKnowledgeOverview,
+  useKnowledgeReview,
   usePageBacklinks,
+  usePageLinks,
   useUpdatePageMutation,
 } from 'services/pages';
+import { byUse } from 'services/pages/overview';
 
 import { useContextStore } from 'store/global-context-provider';
 
 import { EditorRibbon } from './editor-ribbon';
-import { Header } from './header';
-import { MemoryRail } from './memory-rail';
+import { type Crumb, Header } from './header';
+import { FactsRail, PageReviewDialog, usePageFacts } from './memory-rail';
+import { usePageNavigation } from './navigation';
 import { PageHistory } from './page-history';
-import { PageNav } from './page-nav';
 import { PageSources } from './page-sources';
 import { PageTitle } from './page-title';
+import { NO_PRODUCT } from './product-pages';
 import { RelatedLinks } from './related-links';
 import { SaveIndicator, type SaveState } from './save-indicator';
+import { ago, CARD, Chip } from './trust';
 
 /**
  * What each policy means, said where a person actually chooses one.
@@ -261,10 +268,11 @@ const SinglePageView = observer(() => {
 
   return (
     <MainLayout
+      scrollable
       header={
-        <Header
-          ancestors={ancestors}
+        <PageHeader
           page={page}
+          ancestors={ancestors}
           actions={
             <div className="flex items-center gap-3">
               <SaveIndicator state={saveState} />
@@ -279,87 +287,292 @@ const SinglePageView = observer(() => {
           This page does not exist, or has been deleted.
         </div>
       ) : (
-        <div className="flex h-[calc(100%_-_38px)] w-full">
-          <PageNav activePageId={page.id} />
+        <div className="p-3 md:p-5 flex flex-wrap gap-5 items-start">
+          <article
+            className={cn(
+              CARD,
+              'min-w-0 grow-[999] basis-[440px] px-5 py-6 md:px-11 md:py-9 flex flex-col gap-3.5',
+            )}
+          >
+            {/* Keyed on the page so switching pages resets the local value,
+                rather than leaving the previous page's title sitting above
+                the new page's body. */}
+            <PageTitle
+              key={page.id}
+              value={page.title}
+              onChange={(title) => {
+                markDirty();
+                onTitleChange(page.id, title);
+              }}
+            />
 
-          <ScrollArea className="grow h-full">
-            <div className="flex justify-center w-full">
-              <div className="grow flex flex-col max-w-[80ch] pt-8 pb-8 px-6">
-                {/* Keyed on the page so switching pages in the tree resets
-                    the local value, rather than leaving the previous page's
-                    title sitting above the new page's body. */}
-                <PageTitle
-                  key={page.id}
-                  value={page.title}
-                  onChange={(title) => {
-                    markDirty();
-                    onTitleChange(page.id, title);
-                  }}
-                />
+            <PageChips page={page} />
 
-                {generated ? (
-                  <div className="mt-2 flex flex-col gap-1">
-                    <p>
-                      <span className="text-muted-foreground">Answers </span>
-                      {page.question}
-                    </p>
-                    <p className="text-muted-foreground">
-                      Generated: written from the facts its sections cite, and
-                      edited as they change. Take it over from the menu to edit
-                      it by hand.
-                    </p>
-                  </div>
-                ) : (
-                  /* Above the content and sticky, so it is still reachable
-                     partway down a long page. */
-                  <EditorRibbon editor={editorInstance} />
-                )}
-
-                <Editor
-                  key={`${page.id}-${externalRevision}-${page.kind}`}
-                  editable={!generated}
-                  value={page.description}
-                  onCreate={setEditorInstance}
-                  onChange={(content: string) => {
-                    markDirty();
-                    onBodyChange(page.id, content);
-                  }}
-                  handlePaste={handlePaste}
-                  extensions={[vantikIssueExtension, AiWritingExtension]}
-                  // There is no formatting toolbar anywhere in this product —
-                  // the editor is slash-command and selection-driven, like the
-                  // issue description. That is only discoverable if something
-                  // says so, and an empty page said nothing at all.
-                  placeholder="Write, or press '/' for headings, lists and more…"
-                  className="min-h-[300px] mt-3 text-md"
-                >
-                  <EditorExtensions suggestionItems={suggestionItems} />
-                </Editor>
-
-                {generated && (
-                  <PageSources pageId={page.id} revision={page.updatedAt} />
-                )}
-
-                <RelatedLinks pageId={page.id} />
-
-                <Backlinks pageId={page.id} />
-
-                <PageHistory
-                  pageId={page.id}
-                  open={showHistory}
-                  onOpenChange={setShowHistory}
-                />
+            {generated ? (
+              <div className="flex flex-col gap-1">
+                <p>
+                  <span className="text-muted-foreground">Answers </span>
+                  {page.question}
+                </p>
+                <p className="text-muted-foreground">
+                  Generated: written from the facts its sections cite, and
+                  edited as they change. Take it over from the menu to edit it
+                  by hand.
+                </p>
               </div>
-            </div>
-          </ScrollArea>
+            ) : (
+              /* Above the content and sticky, so it is still reachable
+                 partway down a long page. */
+              <EditorRibbon editor={editorInstance} />
+            )}
 
-          {/* Beside the page, not under it. The foot of a document is where
-              human conversation belongs; what the page tells agents is
-              standing metadata, which this product already keeps in a rail. */}
-          <MemoryRail pageId={page.id} />
+            <Editor
+              key={`${page.id}-${externalRevision}-${page.kind}`}
+              editable={!generated}
+              value={page.description}
+              onCreate={setEditorInstance}
+              onChange={(content: string) => {
+                markDirty();
+                onBodyChange(page.id, content);
+              }}
+              handlePaste={handlePaste}
+              extensions={[vantikIssueExtension, AiWritingExtension]}
+              // There is no formatting toolbar anywhere in this product —
+              // the editor is slash-command and selection-driven, like the
+              // issue description. That is only discoverable if something
+              // says so, and an empty page said nothing at all.
+              placeholder="Write, or press '/' for headings, lists and more…"
+              className="min-h-[300px] text-[15px] leading-relaxed"
+            >
+              <EditorExtensions suggestionItems={suggestionItems} />
+            </Editor>
+
+            <RewriteBanner pageId={page.id} />
+
+            {generated && (
+              <PageSources pageId={page.id} revision={page.updatedAt} />
+            )}
+
+            <RelatedLinks pageId={page.id} />
+
+            <Backlinks pageId={page.id} />
+
+            <PageHistory
+              pageId={page.id}
+              open={showHistory}
+              onOpenChange={setShowHistory}
+            />
+          </article>
+
+          {/* Beside the page, not under it. What the page tells agents is
+              standing metadata, which this product keeps in a rail. */}
+          <FactsRail
+            pageId={page.id}
+            className="min-w-0 grow basis-[340px] max-w-full"
+          />
         </div>
       )}
     </MainLayout>
+  );
+});
+
+/**
+ * The trail to the page: its product, its parents, and the page itself as a
+ * switcher between the pages beside it. Who edited it last is on the right.
+ */
+const PageHeader = observer(
+  ({
+    page,
+    ancestors,
+    actions,
+  }: {
+    page?: PageType;
+    ancestors: PageType[];
+    actions: React.ReactNode;
+  }) => {
+    const { data: overview } = useKnowledgeOverview();
+    const { pagesStore } = useContextStore();
+    const { users } = useAllUsers();
+    const goToPage = usePageNavigation();
+
+    if (!page) {
+      return <Header needsYou={false} actions={actions} />;
+    }
+
+    const own = overview?.pages.find((candidate) => candidate.id === page.id);
+    const productId = own?.productId ?? null;
+    const product = overview?.products.find(
+      (candidate) => candidate.id === productId,
+    );
+    const siblings = (overview?.pages ?? [])
+      .filter(
+        (candidate) =>
+          candidate.productId === productId && candidate.id !== page.id,
+      )
+      .sort(byUse);
+    const editor = users.find(
+      (user) => user.id === (page.updatedById ?? page.createdById),
+    );
+
+    const crumbs: Crumb[] = [
+      ...(own
+        ? [
+            {
+              label: product?.name ?? 'Other pages',
+              pathname: '/[workspaceSlug]/pages/product/[productId]',
+              query: { productId: productId ?? NO_PRODUCT },
+            },
+          ]
+        : []),
+      ...ancestors.map((ancestor) => ({
+        label: ancestor.title || 'Untitled page',
+        pathname: '/[workspaceSlug]/pages/[pageId]',
+        query: { pageId: ancestor.id },
+      })),
+      {
+        label: (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-grayAlpha-100 hover:bg-grayAlpha-200 font-medium max-w-[240px]"
+              >
+                <span className="truncate">
+                  {page.title || 'Untitled page'}
+                </span>
+                <RiArrowDownSLine size={14} className="shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-[280px] max-h-[360px] overflow-y-auto"
+            >
+              <DropdownMenuLabel>
+                {siblings.length
+                  ? `Other pages in ${product?.name ?? 'Other pages'}`
+                  : 'No other pages here'}
+              </DropdownMenuLabel>
+              {siblings.map((sibling) => (
+                <DropdownMenuItem
+                  key={sibling.id}
+                  onClick={() => goToPage(sibling.id)}
+                >
+                  <span className="truncate">
+                    {pagesStore.getPageWithId(sibling.id)?.title ||
+                      sibling.title ||
+                      'Untitled page'}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+      },
+    ];
+
+    return (
+      <Header
+        needsYou={false}
+        crumbs={crumbs}
+        note={
+          siblings.length
+            ? `${siblings.length} other ${siblings.length === 1 ? 'page' : 'pages'} in ${product?.name ?? 'Other pages'}`
+            : undefined
+        }
+        actions={
+          <div className="flex items-center gap-3">
+            <span className="text-muted-foreground whitespace-nowrap hidden lg:inline">
+              Edited{editor ? ` by ${editor.fullname ?? editor.username}` : ''}{' '}
+              · {ago(page.updatedAt)}
+            </span>
+            {actions}
+          </div>
+        }
+      />
+    );
+  },
+);
+
+/**
+ * What the page is about, and when the code under its facts was last read:
+ * the product, the teams it is linked to, and the newest check of its code.
+ */
+const PageChips = observer(({ page }: { page: PageType }) => {
+  const { data: overview } = useKnowledgeOverview();
+  const { data: links } = usePageLinks(page.id);
+  const { facts } = usePageFacts(page.id);
+  const productId = overview?.pages.find(
+    (candidate) => candidate.id === page.id,
+  )?.productId;
+  const product = overview?.products.find(
+    (candidate) => candidate.id === productId,
+  );
+  const teams = (links ?? []).filter((link) => link.entityType === 'TEAM');
+  const checked = facts
+    .filter((fact) => fact.lastCheckedSha && fact.lastCheckedAt)
+    .sort((a, b) =>
+      (b.lastCheckedAt ?? '').localeCompare(a.lastCheckedAt ?? ''),
+    )[0];
+
+  if (!product && teams.length === 0 && !checked) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {product && <Chip>{product.name}</Chip>}
+      {teams.map((team) => (
+        <Chip key={team.id}>{team.label}</Chip>
+      ))}
+      {checked && (
+        <Chip tone="code">
+          Checked against {checked.lastCheckedSha?.slice(0, 8)} ·{' '}
+          {ago(checked.lastCheckedAt)}
+        </Chip>
+      )}
+    </div>
+  );
+});
+
+/**
+ * A rewrite of the body that the gardener proposed and a person has not
+ * read. The body does not change until a person accepts it.
+ */
+const RewriteBanner = observer(({ pageId }: { pageId: string }) => {
+  const { data: review } = useKnowledgeReview(pageId);
+  const [reviewing, setReviewing] = React.useState(false);
+  const proposal = review?.pageProposals.find(
+    (candidate) => candidate.pageId === pageId,
+  );
+
+  if (!proposal) {
+    return null;
+  }
+
+  const count = proposal.entryIds.length;
+
+  return (
+    <div className="flex items-center gap-3 flex-wrap px-3.5 py-3 rounded-lg bg-[oklch(60%_0.13_240/0.08)]">
+      <span className="grow basis-[260px] leading-snug text-foreground/85">
+        <span className="font-semibold">
+          The gardener can fold {count} new {count === 1 ? 'fact' : 'facts'}{' '}
+          into this page.
+        </span>{' '}
+        The page does not change until you accept.
+      </span>
+      <button
+        type="button"
+        className="bg-background-3 rounded-md px-3 py-1.5 font-medium shadow-[0_0_0_1px_oklch(0%_0_0/0.1)]"
+        onClick={() => setReviewing(true)}
+      >
+        Read the rewrite
+      </button>
+      <PageReviewDialog
+        pageId={pageId}
+        open={reviewing}
+        onOpenChange={setReviewing}
+      />
+    </div>
   );
 });
 

@@ -346,6 +346,45 @@ export default class KnowledgeReviewService {
   }
 
   /**
+   * Closes a gap with the fact a person wrote to answer it. The fact must be
+   * in use and in the same workspace as the gap. The gap row stays, so a
+   * repeat of the question does not open a second issue.
+   */
+  async answerGap(workspaceId: string, gapId: string, entryId: string) {
+    const [gap, entry] = await Promise.all([
+      this.prisma.pageKnowledgeGap.findFirst({
+        where: { id: gapId, workspaceId },
+        select: { id: true },
+      }),
+      this.prisma.pageEntry.findFirst({
+        where: {
+          id: entryId,
+          deleted: null,
+          status: {
+            in: [PageEntryStatus.STANDING, PageEntryStatus.CONSOLIDATED],
+          },
+          page: { workspaceId, deleted: null },
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!gap || !entry) {
+      throw new NotFoundException({
+        message: gap
+          ? `Entry ${entryId} is not in use in this workspace`
+          : `Gap ${gapId} not found`,
+      });
+    }
+
+    return this.prisma.pageKnowledgeGap.update({
+      where: { id: gap.id },
+      data: { answeredAt: new Date(), answeredByEntryId: entry.id },
+      select: { id: true, query: true, answeredAt: true },
+    });
+  }
+
+  /**
    * A person's answer to an audit. Agreeing keeps what triage did; not
    * agreeing undoes it, through the same change a person would make by
    * hand: an entry accepted without a person is set aside, and one folded

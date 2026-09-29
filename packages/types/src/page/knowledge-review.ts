@@ -160,6 +160,12 @@ export class KnowledgeReviewQueryDto {
   reason?: KnowledgeReviewReasonEnum[];
 }
 
+/** The fact a person wrote to answer a gap that agents could not close. */
+export class AnswerKnowledgeGapDto {
+  @IsUUID()
+  entryId: string;
+}
+
 /** A person's answer to an audit: was triage right to do what it did? */
 export class ResolveAuditDto {
   @IsBoolean()

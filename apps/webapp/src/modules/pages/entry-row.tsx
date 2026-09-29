@@ -266,7 +266,7 @@ const Meta = observer(({ entry }: { entry: PageEntryType }) => {
  * what made the inbox meaningless: if everything is equally actionable
  * everywhere, "waiting for you" stops being a claim about anything.
  */
-const RowMenu = observer(({ entry }: { entry: PageEntryType }) => {
+export const RowMenu = observer(({ entry }: { entry: PageEntryType }) => {
   const { mutate: update } = useUpdatePageEntryMutation();
   const [open, setOpen] = React.useState(false);
 

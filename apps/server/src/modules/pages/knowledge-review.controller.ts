@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  AnswerKnowledgeGapDto,
   type KnowledgeAgreementReport,
   type KnowledgeReviewQueue,
   KnowledgeReviewQueryDto,
@@ -92,6 +93,20 @@ export class KnowledgeReviewController {
       userId,
       body.accept,
     );
+  }
+
+  /** A person answers a gap that agents could not close, with a fact. */
+  @Post('gaps/:gapId/answer')
+  @UseGuards(AuthGuard)
+  async answerGap(
+    @Workspace() workspaceId: string,
+    @Role() role: string,
+    @Param('gapId') gapId: string,
+    @Body() body: AnswerKnowledgeGapDto,
+  ) {
+    forPeople(role);
+
+    return this.review.answerGap(workspaceId, gapId, body.entryId);
   }
 
   /** A person's answer to an audit: was triage right to do what it did? */

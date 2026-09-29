@@ -41,7 +41,7 @@ export function PageTitle({ value, onChange }: PageTitleProps) {
   return (
     <Textarea
       ref={ref}
-      className="border-0 px-0 py-0 font-medium resize-none bg-transparent no-scrollbar overflow-hidden outline-none focus-visible:ring-0 text-xl"
+      className="border-0 px-0 py-0 resize-none bg-transparent no-scrollbar overflow-hidden outline-none focus-visible:ring-0 text-[28px] leading-tight font-semibold tracking-[-0.01em]"
       rows={1}
       cols={1}
       value={inputValue}

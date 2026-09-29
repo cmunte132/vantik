@@ -122,7 +122,7 @@ export default class KnowledgeGardenerService {
 
     const [settled, withKnowledge, citations, flow, events, jobs] =
       await Promise.all([
-        this.settledStat(workspaceId, weekAgo),
+        this.settledStat(workspaceId, weekAgo, report.autoTriage),
         this.withKnowledgeStat(workspaceId),
         this.citationsStat(workspaceId, weekAgo),
         this.flow(workspaceId, monthAgo),
@@ -146,6 +146,7 @@ export default class KnowledgeGardenerService {
   private async settledStat(
     workspaceId: string,
     since: Date,
+    autoTriage: string,
   ): Promise<KnowledgeGardenerStat> {
     const decisions = await this.prisma.knowledgeTriageDecision.findMany({
       where: {
@@ -189,11 +190,13 @@ export default class KnowledgeGardenerService {
 
     return {
       value: `${alone.length} of ${all.length}`,
-      tone: 'good',
+      tone: alone.length ? 'good' : 'plain',
       note:
-        alone.length === 0
-          ? 'A person decided every one.'
-          : `The code or a repeat settled ${alone.length - observed}; ${observed} rest on an outside page.`,
+        autoTriage !== 'on'
+          ? `Triage is ${autoTriage}: it records what it would do, and a person decides.`
+          : alone.length === 0
+            ? 'A person decided every one.'
+            : `The code or a repeat settled ${alone.length - observed}; ${observed} rest on an outside page.`,
     };
   }
 
@@ -218,6 +221,14 @@ export default class KnowledgeGardenerService {
     }
 
     const heldRuns = held?.verification.of ?? 0;
+
+    if (!treated?.verification.of && !heldRuns) {
+      return {
+        value: null,
+        tone: 'plain',
+        note: 'No run has reached its checks yet.',
+      };
+    }
 
     return {
       value: `${rate(treated?.verification.rate)} vs ${rate(held?.verification.rate)}`,
@@ -1461,6 +1472,7 @@ export default class KnowledgeGardenerService {
  * them, each audited decision weighted for those it was drawn from.
  */
 function agreementStat(report: {
+  autoTriage: string;
   kappaFloor: number;
   types: Array<{
     decision: string;
@@ -1487,16 +1499,23 @@ function agreementStat(report: {
   const total =
     cells.both + cells.triageOnly + cells.personOnly + cells.neither;
   const paused = acting.filter((type) => type.backedOff);
-  const alone = acting.length - paused.length;
+  // In shadow, or off, no type acts alone whatever its agreement.
+  const alone = report.autoTriage === 'on' ? acting.length - paused.length : 0;
   const note = [
-    `${alone} decision type${alone === 1 ? '' : 's'} act${alone === 1 ? 's' : ''} alone.`,
+    report.autoTriage === 'on'
+      ? null
+      : `Triage is ${report.autoTriage}, so no decision type acts alone.`,
+    report.autoTriage === 'on' &&
+      `${alone} decision type${alone === 1 ? '' : 's'} act${alone === 1 ? 's' : ''} alone.`,
     ...paused.map(
       (type) =>
         `${capitalize(DECISION_LABELS[type.decision as KnowledgeTriageDecisionType])} paused at κ ${
           type.kappa === null ? '–' : type.kappa.toFixed(2)
         }.`,
     ),
-  ].join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   if (total === 0) {
     return { value: null, tone: 'people', note: `No verdicts yet. ${note}` };

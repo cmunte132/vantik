@@ -7,6 +7,7 @@ import type {
   KnowledgeMapNode,
 } from '@vantikhq/types';
 
+import { getTailwindColor } from '@vantikhq/ui/lib/color-utils';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -330,8 +331,12 @@ function hubsOf(data: KnowledgeMap, layout: KnowledgeMapLayout): Hub[] {
       .filter((node) => node.type === 'module')
       .map((node) => [node.id, node.productId ?? null]),
   );
+  // A product without a colour of its own gets the one its swatch shows.
   const colorOf = new Map(
-    data.products.map((product) => [product.id, product.color]),
+    data.products.map((product) => [
+      product.id,
+      product.color ?? getTailwindColor(product.name),
+    ]),
   );
   const hubs = new Map<string, Hub>();
 
@@ -355,8 +360,7 @@ function hubsOf(data: KnowledgeMap, layout: KnowledgeMapLayout): Hub[] {
           : (node?.label ?? product?.name ?? 'Unknown'),
       color:
         (node?.productId && colorOf.get(node.productId)) ||
-        node?.color ||
-        product?.color ||
+        (product && colorOf.get(product.id)) ||
         GARDEN_COLOR.grey,
       facts: [],
       node,
@@ -385,10 +389,11 @@ function hubsOf(data: KnowledgeMap, layout: KnowledgeMapLayout): Hub[] {
 }
 
 /**
- * Places every node. Groups sit on a sunflower spiral, the biggest at the
- * middle. Facts circle their group, and the files and issues they cite
- * circle outside them. Runs stand in a column on the right. The same data
- * always gives the same map.
+ * Places every node. The biggest group sits in the middle, and each next
+ * group takes the first free place on a spiral around it. Facts circle their
+ * group, and the files and issues they cite circle outside them. A page or
+ * module that is not a group sits by the facts it holds. Runs stand in a
+ * column on the right. The same data always gives the same map.
  */
 function place(data: KnowledgeMap, hubs: Hub[]) {
   const byId = new Map<string, Placed>();
@@ -423,14 +428,28 @@ function place(data: KnowledgeMap, hubs: Hub[]) {
     const outer = rings.length ? rings[rings.length - 1].radius : r;
     return { hub, r, rings, outer, citeRadius: outer + 34 };
   });
-  const spacing =
-    2 * Math.max(90, ...extent.map((each) => each.citeRadius + 30)) * 0.62;
+  const taken: Array<{ x: number; y: number; r: number }> = [];
 
-  extent.forEach((each, index) => {
-    const angle = index * 2.399963;
-    const distance = spacing * Math.sqrt(index);
-    const cx = Math.cos(angle) * distance;
-    const cy = Math.sin(angle) * distance;
+  extent.forEach((each) => {
+    const room = (each.hub.facts.length ? each.citeRadius : each.r) + 24;
+    let cx = 0;
+    let cy = 0;
+
+    // Walk out along the spiral to the first place that overlaps nothing.
+    for (let step = 0; step < 4000; step += 1) {
+      const angle = step * 0.35;
+      const distance = step * 3;
+      cx = Math.cos(angle) * distance;
+      cy = Math.sin(angle) * distance;
+      if (
+        taken.every(
+          (other) => Math.hypot(other.x - cx, other.y - cy) >= other.r + room,
+        )
+      ) {
+        break;
+      }
+    }
+    taken.push({ x: cx, y: cy, r: room });
     const hubNode: KnowledgeMapNode = each.hub.node ?? {
       id: each.hub.id,
       type: 'module',
@@ -482,16 +501,28 @@ function place(data: KnowledgeMap, hubs: Hub[]) {
     });
   });
 
-  // The other pages and modules on the map, when they are not groups: on a
-  // row above everything.
+  // The pages and modules that are not groups here: by the facts they hold,
+  // or in a row above everything when they hold none on the map.
   const rest = data.nodes.filter((node) => !byId.has(node.id));
-  rest.forEach((node, index) => {
-    byId.set(node.id, {
-      node,
-      x: bounds.minX + index * 130,
-      y: bounds.minY - 90,
-      r: 8,
-    });
+  let row = 0;
+  rest.forEach((node) => {
+    const held = data.edges
+      .filter((edge) => edge.to === node.id && byId.has(edge.from))
+      .map((edge) => byId.get(edge.from) as Placed);
+
+    if (held.length) {
+      const x = held.reduce((sum, point) => sum + point.x, 0) / held.length;
+      const y = held.reduce((sum, point) => sum + point.y, 0) / held.length;
+      byId.set(node.id, { node, x: x + 14, y: y - 14, r: 6 });
+    } else {
+      byId.set(node.id, {
+        node,
+        x: bounds.minX + (row % 6) * 160,
+        y: bounds.minY - 60 - Math.floor(row / 6) * 24,
+        r: 6,
+      });
+      row += 1;
+    }
   });
 
   return { byId, bounds: boundsOf([...byId.values()]) };
@@ -633,6 +664,11 @@ function MapCanvas({
             point={point}
             selected={selected === point.node.id}
             dim={Boolean(focus) && !focus?.has(point.node.id)}
+            labelled={
+              selected === point.node.id ||
+              (Boolean(focus?.has(point.node.id)) &&
+                !hubIds.has(selected ?? ''))
+            }
             onSelect={onSelect}
           />
         ),
@@ -757,10 +793,7 @@ function HubNode({
         y={point.y + point.r + 20}
         textAnchor="middle"
         fontSize={11.5}
-        className={cn(
-          'fill-foreground',
-          hub.node?.type === 'module' && 'font-mono',
-        )}
+        className="fill-foreground"
       >
         {label.length > 28 ? `${label.slice(0, 27)}…` : label}
       </text>
@@ -772,11 +805,14 @@ function MapNode({
   point,
   selected,
   dim,
+  labelled,
   onSelect,
 }: {
   point: Placed;
   selected: boolean;
   dim: boolean;
+  /** Whether it is near what is selected, and so shows its name. */
+  labelled: boolean;
   onSelect: (id: string) => void;
 }) {
   const { node, x, y } = point;
@@ -816,6 +852,28 @@ function MapNode({
           stroke={hollow ? STATE_COLOR[state] : '#fff'}
           strokeWidth={1.5}
           strokeDasharray={state === 'waiting' ? '2 1.5' : undefined}
+        />
+      </g>
+    );
+  }
+
+  if ((node.type === 'file' || node.type === 'issue') && !labelled) {
+    const color =
+      node.type === 'file' ? GARDEN_COLOR.code : GARDEN_COLOR.people;
+
+    return (
+      <g {...common}>
+        <title>{node.label}</title>
+        <rect
+          x={x - 4}
+          y={y - 4}
+          width={8}
+          height={8}
+          rx={2}
+          fill={color}
+          fillOpacity={0.25}
+          stroke={color}
+          strokeWidth={1}
         />
       </g>
     );
@@ -1082,7 +1140,6 @@ function Detail({
           <span
             className={cn(
               'text-base font-medium grow leading-snug break-words min-w-0',
-              kind === 'module' && 'font-mono',
             )}
           >
             {label}

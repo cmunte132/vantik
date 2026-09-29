@@ -43,6 +43,7 @@ import {
   resolveCycleLimits,
 } from '../review-cycle';
 import { buildReviewPrompt, buildRevisionPrompt } from '../review-prompt';
+import { PROVIDE_PACKAGE_MANAGER } from './package-manager';
 import { parsePiEvents } from './pi-events';
 import { RunHandbackService } from '../run-handback.service';
 import { GitProxyService } from '../sandbox/git-proxy.service';
@@ -673,6 +674,25 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           run,
           'ENVIRONMENT_SETUP_FAILED',
           scrubSecrets(unpack.stderr, secrets),
+          egressDenied,
+        );
+        return;
+      }
+
+      // Before the setup commands, because they are usually `pnpm install`.
+      const packageManager = await sandbox.exec(PROVIDE_PACKAGE_MANAGER, {
+        timeoutMs: limits.deadlineAt - Date.now(),
+      });
+      egressDenied += packageManager.egressDenied;
+
+      if (packageManager.exitCode !== 0) {
+        await this.fail(
+          run,
+          'ENVIRONMENT_SETUP_FAILED',
+          scrubSecrets(
+            `Could not install the package manager that package.json names\n${packageManager.stderr}`,
+            secrets,
+          ),
           egressDenied,
         );
         return;

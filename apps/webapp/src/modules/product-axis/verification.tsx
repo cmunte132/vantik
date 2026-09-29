@@ -42,6 +42,9 @@ const FIELDS: Array<{
   { key: 'buildCommand', label: 'Build', placeholder: 'pnpm turbo build' },
 ];
 
+/** What the server keeps: a bare hostname, never a URL or a path. */
+const HOSTNAME = /^[a-z0-9.-]+$/i;
+
 export function Verification({ moduleId }: { moduleId: string }) {
   const [error, setError] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
@@ -61,16 +64,19 @@ export function Verification({ moduleId }: { moduleId: string }) {
   // Local until saved, so a half-typed command is never what a run picks up.
   const [draft, setDraft] = React.useState<Record<string, string>>({});
   const [setupDraft, setSetupDraft] = React.useState<string | null>(null);
+  const [hostsDraft, setHostsDraft] = React.useState<string | null>(null);
 
   const valueOf = (key: keyof AgentRunVerification) =>
     draft[key] ?? (stored[key] as string | undefined) ?? '';
   const setupValue = setupDraft ?? (stored.setupCommands ?? []).join('\n');
+  const hostsValue = hostsDraft ?? (stored.egressHosts ?? []).join(' ');
 
   const { mutate: updateModule, isPending } = useUpdateModuleMutation({
     onSuccess: () => {
       refetch();
       setDraft({});
       setSetupDraft(null);
+      setHostsDraft(null);
       setError(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -78,7 +84,8 @@ export function Verification({ moduleId }: { moduleId: string }) {
     onError: setError,
   });
 
-  const dirty = Object.keys(draft).length > 0 || setupDraft !== null;
+  const dirty =
+    Object.keys(draft).length > 0 || setupDraft !== null || hostsDraft !== null;
 
   const save = () => {
     // The column is replaced rather than merged, so the whole object is built
@@ -107,6 +114,27 @@ export function Verification({ moduleId }: { moduleId: string }) {
         next.setupCommands = lines;
       } else {
         delete next.setupCommands;
+      }
+    }
+
+    if (hostsDraft !== null) {
+      const hosts = hostsDraft.split(/[\s,]+/).filter(Boolean);
+      // The server drops anything that is not a bare hostname, because each
+      // one widens the sandbox's egress. Refused here too, so a pasted URL is
+      // not saved and then silently ignored.
+      const invalid = hosts.filter((host) => !HOSTNAME.test(host));
+
+      if (invalid.length > 0) {
+        setError(
+          `Not a hostname: ${invalid.join(', ')}. Give only the host, such as binaries.prisma.sh.`,
+        );
+        return;
+      }
+
+      if (hosts.length > 0) {
+        next.egressHosts = hosts;
+      } else {
+        delete next.egressHosts;
       }
     }
 
@@ -146,6 +174,18 @@ export function Verification({ moduleId }: { moduleId: string }) {
           placeholder={'pnpm install\npnpm prisma generate'}
           value={setupValue}
           onChange={(event) => setSetupDraft(event.currentTarget.value)}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-muted-foreground">
+          Hosts setup may reach, besides the npm registry and the model
+        </label>
+        <Input
+          className="font-mono"
+          placeholder="binaries.prisma.sh proxy.golang.org"
+          value={hostsValue}
+          onChange={(event) => setHostsDraft(event.currentTarget.value)}
         />
       </div>
 

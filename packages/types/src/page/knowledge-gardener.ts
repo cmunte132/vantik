@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
 import {
   IsDateString,
-  IsIn,
   IsInt,
   IsOptional,
   IsUUID,
@@ -53,6 +52,10 @@ export interface KnowledgePackCandidate {
 export class KnowledgeRecordsQueryDto {
   @IsOptional()
   @IsUUID()
+  workspaceId?: string;
+
+  @IsOptional()
+  @IsUUID()
   entryId?: string;
 
   @IsOptional()
@@ -72,6 +75,10 @@ export class KnowledgeRecordsQueryDto {
 }
 
 export class KnowledgeMapQueryDto {
+  @IsOptional()
+  @IsUUID()
+  workspaceId?: string;
+
   /** The graph as it stood at the end of this day. Today when absent. */
   @IsOptional()
   @IsDateString()
@@ -81,12 +88,6 @@ export class KnowledgeMapQueryDto {
 export const KNOWLEDGE_MAP_LAYOUTS = ['module', 'page', 'product'] as const;
 
 export type KnowledgeMapLayout = (typeof KNOWLEDGE_MAP_LAYOUTS)[number];
-
-export class KnowledgeTraceQueryDto {
-  @IsOptional()
-  @IsIn(['CONTEXT_PACK', 'LOAD_CONTEXT'])
-  via?: 'CONTEXT_PACK' | 'LOAD_CONTEXT';
-}
 
 /** A relation the gardener found between two entries. */
 export interface KnowledgeRelationRecord {
@@ -171,6 +172,8 @@ export interface KnowledgeFactFlow {
   retiredContradicted: number;
   retiredUnused: number;
   retiredReplaced: number;
+  /** Taken out of use by a person, or by decay with no record of why. */
+  retiredOther: number;
 }
 
 /** One line of what the gardener did. */
@@ -217,18 +220,15 @@ export interface KnowledgeGardener {
 }
 
 export type KnowledgeMapNodeType =
-  | 'module'
-  | 'fact'
-  | 'page'
-  | 'file'
-  | 'issue'
-  | 'run';
+  'module' | 'fact' | 'page' | 'file' | 'issue' | 'run';
 
 /** Where a fact stood on the day the map shows. */
 export type KnowledgeMapFactState =
   | 'code'
   | 'people'
   | 'observed'
+  /** In use, with nothing checked that supports it. */
+  | 'unconfirmed'
   | 'needs-you'
   | 'waiting'
   | 'retired';
@@ -341,7 +341,11 @@ export interface KnowledgeRunTrace {
     pullRequest: string | null;
   };
   /** Facts it was given that are being checked again after the run. */
-  rechecks: Array<{ entryId: string; order: number | null; evidence: string | null }>;
+  rechecks: Array<{
+    entryId: string;
+    order: number | null;
+    evidence: string | null;
+  }>;
   /** The model calls the run caused, grouped by purpose. */
   modelCalls: Array<{ purpose: string; count: number; detail: string }>;
 }

@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
 import { GitModule } from 'modules/git/git.module';
+import { KnowledgeArmsService } from 'modules/agent-runs/knowledge-arms.service';
 import { IssuesModule } from 'modules/issues/issues.module';
 import { UsersService } from 'modules/users/users.service';
 import { VectorModule } from 'modules/vector/vector.module';
@@ -11,7 +12,10 @@ import EntryCitationsService from './entry-citations.service';
 import PageRefreshService from './generated/page-refresh.service';
 import PageWriter from './generated/page-writer';
 import KnowledgeInboxService from './knowledge-inbox.service';
+import { KnowledgeGardenerController } from './gardener/knowledge-gardener.controller';
+import KnowledgeGardenerService from './gardener/knowledge-gardener.service';
 import KnowledgeJobRunsService from './gardener/knowledge-job-runs.service';
+import KnowledgeRecordsService from './gardener/knowledge-records.service';
 import KnowledgeIndexService from './knowledge-index.service';
 import KnowledgeOverviewService from './knowledge-overview.service';
 import { KnowledgeReviewController } from './knowledge-review.controller';
@@ -57,6 +61,7 @@ import KnowledgeVerifierService from './verifier/knowledge-verifier.service';
     PageEntriesController,
     KnowledgeController,
     KnowledgeReviewController,
+    KnowledgeGardenerController,
   ],
   providers: [
     PagesService,
@@ -76,6 +81,10 @@ import KnowledgeVerifierService from './verifier/knowledge-verifier.service';
     KnowledgeReviewService,
     KnowledgeInboxService,
     KnowledgeJobRunsService,
+    KnowledgeRecordsService,
+    KnowledgeGardenerService,
+    // Reads only the database; the gardener view compares the two arms.
+    KnowledgeArmsService,
     KnowledgeOverviewService,
     LooseFactsService,
     KnowledgeIssues,

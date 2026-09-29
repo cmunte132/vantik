@@ -136,8 +136,7 @@ export default class KnowledgeJobRunsService {
           finishedAt,
           durationMs: finishedAt.getTime() - started.getTime(),
           counts: (outcome.counts ?? undefined) as
-            | Prisma.InputJsonValue
-            | undefined,
+            Prisma.InputJsonValue | undefined,
           error: outcome.error?.slice(0, 2000),
         },
       });

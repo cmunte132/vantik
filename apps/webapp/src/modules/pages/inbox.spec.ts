@@ -8,6 +8,7 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import {
+  brief,
   doneLine,
   eventLine,
   inboxChoices,
@@ -110,6 +111,29 @@ describe('an inbox item as a question', () => {
         }),
       ),
     ).toBe('Contradicts a fact a person confirmed');
+  });
+});
+
+describe('a fact cut to a title', () => {
+  it('keeps the first sentence, without its full stop', () => {
+    expect(
+      brief(
+        'Binding a store needs no matching. The sync thread runs `match_tick()` about every 60s.',
+      ),
+    ).toBe('Binding a store needs no matching');
+  });
+
+  it('does not end a sentence at a dotted name', () => {
+    expect(
+      brief('The route reads sync.request_match() first. Then more.'),
+    ).toBe('The route reads sync.request_match() first');
+  });
+
+  it('stops a long sentence at a word', () => {
+    const title = brief(`${'word '.repeat(40)}end.`);
+
+    expect(title.length).toBeLessThanOrEqual(111);
+    expect(title.endsWith('word…')).toBe(true);
   });
 });
 

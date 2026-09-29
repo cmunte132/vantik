@@ -873,7 +873,7 @@ function Activity({
           rows={1}
           value={body}
           placeholder="Leave a comment…"
-          className="border-0 shadow-none px-0 min-h-0 resize-none focus-visible:ring-0"
+          className="border-0 shadow-none px-0 py-0 min-h-0 bg-transparent resize-none focus-visible:ring-0"
           onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) =>
             setBody(event.currentTarget.value)
           }

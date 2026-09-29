@@ -36,7 +36,7 @@ const AUDIT_VERB: Partial<Record<KnowledgeTriageDecisionEnum, string>> = {
 
 /** An item as a question a person answers. */
 export function inboxTitle(item: KnowledgeInboxItem): string {
-  const content = item.entry?.content.trim() ?? '';
+  const content = brief(item.entry?.content ?? '');
 
   switch (item.kind) {
     case KnowledgeInboxKindEnum.RULE:
@@ -57,6 +57,27 @@ export function inboxTitle(item: KnowledgeInboxItem): string {
     default:
       return content;
   }
+}
+
+/** The longest a title quotes of a fact before it stops at a word. */
+const BRIEF = 110;
+
+/**
+ * The first sentence of a fact, cut at a word when it is long. A title is
+ * read in a list, and the card under it holds the whole fact.
+ */
+export function brief(content: string): string {
+  const text = content.trim().replace(/\s+/g, ' ');
+  const sentence = text.match(/^.+?[.!?](?=\s+[A-Z`(“"]|$)/)?.[0] ?? text;
+  const first = sentence.replace(/\.$/, '');
+
+  if (first.length <= BRIEF) {
+    return first;
+  }
+
+  const cut = first.slice(0, BRIEF);
+
+  return `${cut.slice(0, cut.lastIndexOf(' ') > 60 ? cut.lastIndexOf(' ') : BRIEF).replace(/[,;:]$/, '')}…`;
 }
 
 /** The quiet line under an open item in the list. */

@@ -4,21 +4,21 @@ import type {
   SandboxHandle,
   SandboxRuntime,
   SandboxSpec,
-} from './sandbox.interface';
+} from "@vantikhq/types";
 
-import { accessSync, constants } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { accessSync, constants } from "node:fs";
+import { delimiter, join } from "node:path";
 
-import { Injectable } from '@nestjs/common';
+import { VM, createHttpHooks } from "@earendil-works/gondolin";
 
-import { LoggerService } from 'modules/logger/logger.service';
+import { log } from "./log";
 
 /**
  * Gondolin: a microVM sandbox with a TypeScript control plane.
  *
  * Chosen for the self-hosted and development tier, where it is a large upgrade
  * over a container at near-zero integration cost. Three of its properties map
- * directly onto requirements this issue already had:
+ * directly onto requirements the hosted executor already had:
  *
  * - a network stack implemented in JavaScript, so per-host egress allowlisting
  *   is programmatic rather than a container flag the guest could undo;
@@ -34,42 +34,26 @@ import { LoggerService } from 'modules/logger/logger.service';
  * So for a hosted multi-tenant tier the posture is different: keep a hardened
  * Firecracker/Kata path and treat Gondolin's egress and secret-injection
  * *design* as the pattern to reimplement rather than the code to trust. That
- * path is not built here, and this runtime reports itself unavailable rather
- * than pretending otherwise when the package is absent.
+ * path is not built here.
  *
- * Loaded by dynamic import on purpose: it is an optional dependency, and a
- * server that does not offer hosted execution should not fail to start because
- * a sandbox package is missing. The import resolves the package's ESM entry
- * explicitly — the `require` condition points at a CommonJS build whose
- * exports arrive namespaced under `default`, which silently yields a module
- * with no `VM` on it.
+ * This runs in the sandbox host, never in the server. Gondolin needs QEMU and,
+ * to be usable, hardware virtualisation (HVF on macOS, KVM on Linux). The
+ * server often runs where neither is available, such as a container on macOS.
  */
-@Injectable()
 export class GondolinRuntime implements SandboxRuntime {
-  readonly name = 'gondolin';
+  readonly name = "gondolin";
 
-  private readonly logger = new LoggerService('GondolinRuntime');
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private module: any;
   private probed = false;
   private unavailableReason?: string;
 
   async availability(): Promise<SandboxAvailability> {
-    await this.load();
+    this.probe();
 
-    if (!this.module) {
-      return {
-        available: false,
-        reason:
-          this.unavailableReason ??
-          'The @earendil-works/gondolin package is not installed, so this ' +
-            'server cannot provide a microVM. Install it to enable hosted ' +
-            'execution.',
-      };
+    if (this.unavailableReason) {
+      return { available: false, reason: this.unavailableReason };
     }
 
-    return { available: true, tier: 'microvm' };
+    return { available: true, tier: "microvm" };
   }
 
   async create(spec: SandboxSpec): Promise<SandboxHandle> {
@@ -87,7 +71,7 @@ export class GondolinRuntime implements SandboxRuntime {
     // `secrets` never reach the guest: what lands in its environment is the
     // placeholder map returned here, and the real values are substituted
     // host-side on requests to the hosts each secret names.
-    const { httpHooks, env: secretEnv } = this.module.createHttpHooks({
+    const { httpHooks, env: secretEnv } = createHttpHooks({
       // An explicit list means deny-by-default. Omitting the option entirely
       // would allow everything, so an empty allowlist must still be passed.
       allowedHosts: spec.egress.allow,
@@ -99,7 +83,7 @@ export class GondolinRuntime implements SandboxRuntime {
       ),
     });
 
-    const vm = await this.module.VM.create({
+    const vm = await VM.create({
       httpHooks: countDenials(httpHooks, denials),
       // Workspace paths sit underneath, so a caller that sets one of them
       // wins, and the substituted secrets win over everything.
@@ -114,9 +98,10 @@ export class GondolinRuntime implements SandboxRuntime {
       ...(rootfsSizeMb() ? { rootfs: { size: `${rootfsSizeMb()}M` } } : {}),
       sessionLabel: `vantik-run-${spec.runId}`,
       startTimeoutMs: START_TIMEOUT_MS,
-    });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
 
-    const handle = new GondolinHandle(vm, spec, this.logger, denials);
+    const handle = new GondolinHandle(vm, spec, denials);
 
     try {
       // Before the files are seeded, so the run's own files land on the
@@ -136,41 +121,22 @@ export class GondolinRuntime implements SandboxRuntime {
     return handle;
   }
 
-  private async load() {
+  private probe() {
     if (this.probed) {
       return;
     }
     this.probed = true;
 
-    try {
-      const packageJson =
-        require.resolve('@earendil-works/gondolin/package.json');
-      const entry = new URL('./dist/src/index.js', `file://${packageJson}`)
-        .href;
-
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval
-      this.module = await (Function(
-        'entry',
-        'return import(entry)',
-      )(entry) as Promise<unknown>);
-    } catch (error) {
-      this.unavailableReason = `The sandbox runtime could not be loaded: ${
-        error instanceof Error ? error.message : String(error)
-      }. Agent runs are unavailable on this server until it is.`;
-      return;
-    }
-
-    // The package loads without QEMU and only looks for it when a VM boots.
-    // Without this check the server offers agent runs it cannot start, and
-    // every run fails after its checkout with `spawnSync qemu-img ENOENT`.
+    // Gondolin looks for QEMU only when a VM boots. Without this check the
+    // sandbox host would report itself available and fail every run after its
+    // checkout with `spawnSync qemu-img ENOENT`.
     const missing = missingVmmBinaries();
 
     if (missing.length > 0) {
-      this.module = undefined;
       this.unavailableReason =
-        `This server has no ${missing.join(' or ')} on its PATH, so it ` +
-        'cannot start a sandbox. Install QEMU on the machine that runs the ' +
-        'server to enable agent runs.';
+        `The sandbox host has no ${missing.join(" or ")} on its PATH, so it ` +
+        "cannot start a sandbox. Install QEMU on the machine that runs the " +
+        "sandbox host.";
     }
   }
 }
@@ -184,14 +150,14 @@ export function missingVmmBinaries(
   env: NodeJS.ProcessEnv = process.env,
   arch: string = process.arch,
 ): string[] {
-  if (env.GONDOLIN_VMM && env.GONDOLIN_VMM !== 'qemu') {
+  if (env.GONDOLIN_VMM && env.GONDOLIN_VMM !== "qemu") {
     return [];
   }
 
   const system =
-    arch === 'arm64' ? 'qemu-system-aarch64' : 'qemu-system-x86_64';
+    arch === "arm64" ? "qemu-system-aarch64" : "qemu-system-x86_64";
 
-  return ['qemu-img', system].filter((name) => !onPath(name, env.PATH ?? ''));
+  return ["qemu-img", system].filter((name) => !onPath(name, env.PATH ?? ""));
 }
 
 function onPath(name: string, path: string): boolean {
@@ -225,7 +191,7 @@ function rootfsSizeMb(): number | undefined {
   return Number.isFinite(configured) && configured > 0 ? configured : undefined;
 }
 
-const WORKSPACE = '/workspace';
+const WORKSPACE = "/workspace";
 
 /**
  * Everything that writes, pointed at `/workspace`.
@@ -266,18 +232,17 @@ function workspaceEnv(): Record<string, string> {
 async function mountWorkspace(
   // The raw guest rather than the handle: the handle runs everything from
   // `/workspace`, which is the one directory that does not exist yet.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  vm: any,
+  vm: VM,
   spec: SandboxSpec,
 ): Promise<void> {
-  const directories = ['home', '.npm', 'tmp']
+  const directories = ["home", ".npm", "tmp"]
     .map((name) => `${WORKSPACE}/${name}`)
-    .join(' ');
+    .join(" ");
 
   // A deployment with a real disk has already been given the size it asked
   // for, and a tmpfs on top of it would be a smaller ceiling, not a larger one.
   if (rootfsSizeMb()) {
-    const prepared = await vm.exec(`mkdir -p ${directories}`, { cwd: '/' });
+    const prepared = await vm.exec(`mkdir -p ${directories}`, { cwd: "/" });
 
     if ((prepared.exitCode ?? 0) !== 0) {
       throw new Error(
@@ -292,7 +257,7 @@ async function mountWorkspace(
     `mkdir -p ${WORKSPACE} && ` +
       `mount -t tmpfs -o size=${workspaceSizeMb(spec)}m tmpfs ${WORKSPACE} && ` +
       `mkdir -p ${directories}`,
-    { cwd: '/' },
+    { cwd: "/" },
   );
 
   // Refused rather than carried on with. The run would otherwise get as far as
@@ -360,15 +325,13 @@ function countDenials(
 }
 
 class GondolinHandle implements SandboxHandle {
-  readonly tier = 'microvm' as const;
+  readonly tier = "microvm" as const;
 
   private disposed = false;
 
   constructor(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private vm: any,
+    private vm: VM,
     private spec: SandboxSpec,
-    private logger: LoggerService,
     private denials: { count: number },
   ) {}
 
@@ -385,7 +348,7 @@ class GondolinHandle implements SandboxHandle {
     // A string command runs through `/bin/sh -lc`, which is what every caller
     // here wants; the array form skips the shell and does not search PATH.
     const result = await this.vm.exec(command, {
-      cwd: '/workspace',
+      cwd: "/workspace",
       // The runtime enforces the deadline, rather than application code that a
       // runaway process can outlive.
       signal: AbortSignal.timeout(
@@ -397,19 +360,19 @@ class GondolinHandle implements SandboxHandle {
       exitCode: result.exitCode ?? 0,
       // Capped here as well as in the runtime: a command that writes a
       // gigabyte of output should cost memory once, not twice.
-      stdout: String(result.stdout ?? '').slice(-this.spec.limits.maxLogBytes),
-      stderr: String(result.stderr ?? '').slice(-this.spec.limits.maxLogBytes),
+      stdout: String(result.stdout ?? "").slice(-this.spec.limits.maxLogBytes),
+      stderr: String(result.stderr ?? "").slice(-this.spec.limits.maxLogBytes),
       egressDenied: this.denials.count - before,
     };
   }
 
   readFile(path: string): Promise<string> {
-    return this.vm.fs.readFile(guestPath(path), { encoding: 'utf-8' });
+    return this.vm.fs.readFile(guestPath(path), { encoding: "utf-8" });
   }
 
   async writeFile(path: string, contents: string): Promise<void> {
     const full = guestPath(path);
-    const directory = full.slice(0, full.lastIndexOf('/'));
+    const directory = full.slice(0, full.lastIndexOf("/"));
 
     if (directory) {
       await this.vm.fs.mkdir(directory, { recursive: true });
@@ -434,10 +397,8 @@ class GondolinHandle implements SandboxHandle {
     try {
       await this.vm.close();
     } catch (error) {
-      this.logger.error({
-        message: `Could not close sandbox ${this.spec.runId}: ${error}`,
-        where: 'GondolinHandle.dispose',
-        error: error instanceof Error ? error : undefined,
+      log.error(`Could not close the sandbox of run ${this.spec.runId}`, {
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -451,9 +412,9 @@ class GondolinHandle implements SandboxHandle {
  * normalised into a different file.
  */
 function guestPath(path: string): string {
-  const full = `/workspace/${path}`.replace(/\/+/g, '/');
+  const full = `/workspace/${path}`.replace(/\/+/g, "/");
 
-  if (full.split('/').includes('..')) {
+  if (full.split("/").includes("..")) {
     throw new Error(`Refusing to address a path outside /workspace: ${path}`);
   }
 

@@ -1,0 +1,12 @@
+{
+  "extends": "@vantikhq/typescript-config/node.json",
+  "include": ["./src/**/*.ts", "tsup.config.ts"],
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"]
+  },
+  "exclude": ["node_modules", "dist"]
+}

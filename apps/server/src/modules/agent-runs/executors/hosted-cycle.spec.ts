@@ -1,4 +1,4 @@
-import type { SandboxHandle, SandboxSpec } from '../sandbox/sandbox.interface';
+import type { SandboxHandle, SandboxSpec } from '@vantikhq/types';
 
 import { HostedExecutor } from './hosted.executor';
 

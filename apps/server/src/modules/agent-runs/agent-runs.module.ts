@@ -22,7 +22,7 @@ import { HostedExecutor } from './executors/hosted.executor';
 import { KnowledgeArmsService } from './knowledge-arms.service';
 import { RunHandbackService } from './run-handback.service';
 import { GitProxyService } from './sandbox/git-proxy.service';
-import { GondolinRuntime } from './sandbox/gondolin.runtime';
+import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
 
 @Module({
   imports: [
@@ -46,7 +46,7 @@ import { GondolinRuntime } from './sandbox/gondolin.runtime';
     RunHandbackService,
     ExecutorRegistry,
     HostedExecutor,
-    GondolinRuntime,
+    RemoteSandboxRuntime,
     GitProxyService,
     AgentRunsScheduler,
     AgentRunsProcessor,

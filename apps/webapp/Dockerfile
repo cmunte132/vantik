@@ -22,6 +22,7 @@ RUN npm install -g pnpm@10.34.5
 FROM base AS manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/docs/package.json                 apps/docs/
+COPY apps/sandbox-host/package.json         apps/sandbox-host/
 COPY apps/server/package.json               apps/server/
 COPY apps/webapp/package.json               apps/webapp/
 COPY packages/agent-core/package.json       packages/agent-core/

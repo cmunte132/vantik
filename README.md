@@ -205,6 +205,55 @@ the container, so a path that works on your machine works in the server. A
 repository must be inside that directory. Do not set it to your home directory,
 because the server can then reach every file in it.
 
+### Hosted agent runs
+
+An agent run works in a microVM. The server does not start these VMs. A
+separate process, the sandbox host (`apps/sandbox-host`), starts them, and the
+server calls it over HTTP. The sandbox host must run where QEMU and hardware
+virtualisation are. On macOS, no container has hardware virtualisation, so the
+sandbox host runs natively there, next to the containers.
+
+Both need the same token:
+
+```bash
+echo "SANDBOX_HOST_TOKEN=$(openssl rand -hex 32)" >> .env
+```
+
+**macOS.** Install QEMU, then start the sandbox host in a terminal and keep it
+open. It needs Node 23.6 or later.
+
+```bash
+brew install qemu
+```
+
+```bash
+pnpm sandbox-host
+```
+
+It listens on `127.0.0.1:3004`. The server container reaches it at
+`host.docker.internal:3004`, which is the default in `docker-compose.yaml`. If
+you run the server with `pnpm dev`, add `SANDBOX_HOST_URL=http://127.0.0.1:3004`
+to `.env`.
+
+**Linux.** Run the sandbox host as a container, with `/dev/kvm` passed through:
+
+```bash
+echo "SANDBOX_HOST_CONTAINER_URL=http://sandbox-host:3004" >> .env
+```
+
+```bash
+docker compose --profile sandbox up -d
+```
+
+The first sandbox downloads the guest image into the `sandbox-images` volume,
+so the first run takes longer.
+
+The sandbox host stops a sandbox at the run's time limit, and disposes of a
+sandbox that gets no request from the server for five minutes, for example
+after the server stops. When the server starts, it disposes of the sandboxes of
+runs that have ended. When the server cannot reach a sandbox host, agent runs
+are refused, and the Agents page says why.
+
 ### Observability
 
 The server has OpenTelemetry instrumentation, but it exports no data until you

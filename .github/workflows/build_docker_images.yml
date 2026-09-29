@@ -48,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [webapp, server]
+        app: [webapp, server, sandbox-host]
         platform: [linux/amd64, linux/arm64]
         include:
           - platform: linux/amd64
@@ -131,7 +131,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [webapp, server]
+        app: [webapp, server, sandbox-host]
 
     steps:
       - name: Download digests

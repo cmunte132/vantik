@@ -107,6 +107,13 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${POSTGRES_DB:-vantik}?schema=${DB_SCHEMA:-vantik}&sslmode=prefer
       OAUTH_CALLBACK_URL: ${FRONTEND_HOST:-http://localhost:3000}/api/v1/oauth/callback
       REPO_MIRROR_ROOT: /data/repos
+      # Where the server finds the sandbox host, which starts the VMs that
+      # hosted agent runs work in. The default is a sandbox host that runs
+      # natively on this machine, as it must on macOS. Podman and Docker
+      # Desktop both resolve host.docker.internal to that machine. With the
+      # sandbox profile on Linux, set SANDBOX_HOST_CONTAINER_URL in .env to
+      # http://sandbox-host:3004. SANDBOX_HOST_TOKEN comes from .env.
+      SANDBOX_HOST_URL: ${SANDBOX_HOST_CONTAINER_URL:-http://host.docker.internal:3004}
     ports:
       - "3001:3001"
     volumes:
@@ -141,6 +148,38 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
+
+  # Starts the microVMs that hosted agent runs work in, apart from the server.
+  # It needs /dev/kvm, so it sits behind a profile and is for Linux hosts:
+  #
+  #   docker compose --profile sandbox up -d sandbox-host
+  #
+  # and SANDBOX_HOST_CONTAINER_URL=http://sandbox-host:3004 in .env. On macOS no
+  # container gets hardware virtualisation; run the sandbox host natively with
+  # `pnpm sandbox-host` instead. See "Hosted agent runs" in README.md.
+  #
+  # It publishes no port. Only the server, on this network, calls it.
+  sandbox-host:
+    container_name: vantik-sandbox-host
+    profiles: ["sandbox"]
+    build:
+      context: .
+      dockerfile: ./apps/sandbox-host/Dockerfile
+    image: ${REGISTRY:-ghcr.io/cmunte132}/vantik-sandbox-host:${VANTIK_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    devices:
+      - /dev/kvm:/dev/kvm
+    volumes:
+      # Gondolin's guest images. Safe to remove: they download again.
+      - sandbox-images:/home/node/.cache/gondolin
+    networks:
+      - vantik
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3004/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   postgres:
     container_name: vantik-postgres
@@ -302,3 +341,4 @@ volumes:
   repo-mirrors:
   no-local-repos:
   minio-data:
+  sandbox-images:

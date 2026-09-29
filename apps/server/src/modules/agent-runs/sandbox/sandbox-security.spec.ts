@@ -8,7 +8,7 @@
  */
 import { PrismaService } from 'nestjs-prisma';
 
-import { GondolinRuntime } from './gondolin.runtime';
+import { RemoteSandboxRuntime } from './remote.runtime';
 import { scrubSecrets } from './scrub';
 import { CredentialsService } from '../credentials/credentials.service';
 import { egressAllowlistForTest } from '../executors/hosted.executor';
@@ -422,34 +422,25 @@ describe('the git token never enters the guest', () => {
 
 describe('sandbox runtime gating', () => {
   /**
-   * A runtime that has already looked for the package and not found it.
-   *
-   * The package is now a real dependency of this server, so an unmodified
-   * runtime here would boot an actual microVM — a minute of QEMU inside a unit
-   * suite, and a green result on a machine with QEMU that says nothing about a
-   * machine without it. The failure to load is what these two tests are about,
-   * so it is the thing to arrange.
+   * A server with no sandbox host. The microVMs run in the sandbox host, never
+   * in the server, so this is the case where the server can provide nothing.
    */
-  function runtimeWithNoPackage(): GondolinRuntime {
-    const runtime = new GondolinRuntime();
-
-    Object.assign(runtime, { probed: true, module: undefined });
-
-    return runtime;
+  function runtimeWithNoHost(): RemoteSandboxRuntime {
+    return new RemoteSandboxRuntime({ url: '', token: '' });
   }
 
   it('refuses rather than downgrading when no microVM is available', async () => {
-    const availability = await runtimeWithNoPackage().availability();
+    const availability = await runtimeWithNoHost().availability();
 
     // A refusal with a reason someone can act on, not a silent fallback to a
     // container.
     expect(availability.available).toBe(false);
-    expect(availability.reason).toMatch(/microVM|not installed|gVisor/i);
+    expect(availability.reason).toMatch(/sandbox host/i);
   });
 
   it('throws rather than creating a weaker sandbox', async () => {
     await expect(
-      runtimeWithNoPackage().create({
+      runtimeWithNoHost().create({
         runId: 'run-1',
         files: {},
         env: {},
@@ -465,11 +456,4 @@ describe('sandbox runtime gating', () => {
       }),
     ).rejects.toThrow();
   });
-
-  // The counterpart — "reports itself available once the package is
-  // installed" — cannot live here. Jest runs specs inside a VM context where
-  // dynamic import needs --experimental-vm-modules, so this suite sees the
-  // load fail for a reason that has nothing to do with the sandbox. It is
-  // checked against the running server instead, through
-  // `GET /v1/agent-runs/meta/executors`.
 });

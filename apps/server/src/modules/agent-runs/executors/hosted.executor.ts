@@ -7,8 +7,8 @@ import type {
   ReviewFinding,
 } from '../review-cycle';
 import type { VerificationOutcome } from '../review-prompt';
-import type { SandboxHandle } from '../sandbox/sandbox.interface';
 import type { AgentRun } from '@prisma/client';
+import type { SandboxHandle } from '@vantikhq/types';
 
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
@@ -46,7 +46,7 @@ import { buildReviewPrompt, buildRevisionPrompt } from '../review-prompt';
 import { parsePiEvents } from './pi-events';
 import { RunHandbackService } from '../run-handback.service';
 import { GitProxyService } from '../sandbox/git-proxy.service';
-import { GondolinRuntime } from '../sandbox/gondolin.runtime';
+import { RemoteSandboxRuntime } from '../sandbox/remote.runtime';
 import { scrubSecrets } from '../sandbox/scrub';
 import {
   BASE_DIR,
@@ -293,7 +293,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
 
   constructor(
     private registry: ExecutorRegistry,
-    private runtime: GondolinRuntime,
+    private runtime: RemoteSandboxRuntime,
     private credentials: CredentialsService,
     private gitProxy: GitProxyService,
     private handback: RunHandbackService,
@@ -302,6 +302,43 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
 
   async onModuleInit() {
     this.registry.register(this);
+
+    // Not awaited: the sandbox host may be down, and that must not hold up
+    // the server's boot.
+    void this.disposeLeftoverSandboxes();
+  }
+
+  /**
+   * Disposes of the sandboxes whose runs have ended.
+   *
+   * A server that stopped mid-run left its sandbox behind. The sandbox host
+   * disposes of it anyway once the keepalives stop, but not for some minutes,
+   * and the model key sits in its hooks until then. A sandbox of a run that
+   * is still working is left alone: on two replicas it belongs to the other.
+   */
+  private async disposeLeftoverSandboxes(): Promise<void> {
+    try {
+      const sandboxes = await this.runtime.list();
+
+      if (sandboxes.length === 0) {
+        return;
+      }
+
+      const idle = await this.agentRuns.idleRunIds(
+        sandboxes.map((sandbox) => sandbox.runId),
+      );
+
+      for (const sandbox of sandboxes.filter((s) => idle.has(s.runId))) {
+        this.logger.info({
+          message: `Disposing of sandbox ${sandbox.id}, left by run ${sandbox.runId}`,
+          where: 'HostedExecutor.disposeLeftoverSandboxes',
+        });
+        await this.runtime.dispose(sandbox.id);
+      }
+    } catch {
+      // No sandbox host, or none reachable: there is nothing to clean up that
+      // this server could reach anyway.
+    }
   }
 
   /**
@@ -318,7 +355,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         available: false,
         reason:
           runtime.reason ??
-          'This server cannot provide a sandbox, so agent runs are unavailable here. A microVM or gVisor runtime has to be installed on the host.',
+          'This server cannot reach a sandbox host, so agent runs are unavailable here.',
       };
     }
 

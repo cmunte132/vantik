@@ -1,4 +1,5 @@
 import type { KnowledgeArm } from '@prisma/client';
+
 import {
   BadRequestException,
   ConflictException,
@@ -490,6 +491,27 @@ export class AgentRunsService {
   }
 
   // ---------------------------------------------------------------- sweeper
+
+  /**
+   * Of these runs, the ones that no longer work: finished, or not in the
+   * database at all. A sandbox that belongs to one of them has nobody left to
+   * dispose of it.
+   */
+  async idleRunIds(runIds: string[]): Promise<Set<string>> {
+    const rows = await this.prisma.agentRun.findMany({
+      where: { id: { in: runIds } },
+      select: { id: true, status: true },
+    });
+    const working = new Set(
+      rows
+        .filter(
+          (row) => !isTerminalAgentRunStatus(row.status as AgentRunStatus),
+        )
+        .map((row) => row.id),
+    );
+
+    return new Set(runIds.filter((id) => !working.has(id)));
+  }
 
   /**
    * Extends a live run's lease, and says whether it is still the run's to

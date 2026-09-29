@@ -46,7 +46,7 @@ export const RunView = withApplicationStore(
     const router = useRouter();
     const { workspaceSlug, runId } = router.query;
 
-    const { agentRunsStore, issuesStore } = useContextStore();
+    const { agentRunsStore, issuesStore, teamsStore } = useContextStore();
     const { users } = useUsersData(false);
 
     const { data: executors } = useExecutors();
@@ -97,6 +97,7 @@ export const RunView = withApplicationStore(
     }
 
     const issue = issuesStore?.getIssueById?.(run.issueId);
+    const team = issue && teamsStore?.getTeamWithId?.(issue.teamId);
     const events = agentRunsStore.getEvents(run.id);
     const where = whereTheWorkWent(run.result ?? {});
     const failure = run.failure ? FAILURE_PROSE[run.failure] : undefined;
@@ -118,13 +119,13 @@ export const RunView = withApplicationStore(
             ]}
             actions={
               <div className="flex items-center gap-2">
-                {issue && (
+                {team && (
                   <Button variant="secondary" size="sm" asChild>
                     <NextLink
                       href={workspaceHref(
                         workspaceSlug,
                         'issue',
-                        String(issue.number),
+                        `${team.identifier}-${issue.number}`,
                       )}
                     >
                       Open issue

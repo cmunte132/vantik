@@ -1,7 +1,3 @@
-import { Injectable } from '@nestjs/common';
-
-import { LoggerService } from 'modules/logger/logger.service';
-
 import type {
   SandboxAvailability,
   SandboxExecResult,
@@ -9,6 +5,13 @@ import type {
   SandboxRuntime,
   SandboxSpec,
 } from './sandbox.interface';
+
+import { accessSync, constants } from 'node:fs';
+import { delimiter, join } from 'node:path';
+
+import { Injectable } from '@nestjs/common';
+
+import { LoggerService } from 'modules/logger/logger.service';
 
 /**
  * Gondolin: a microVM sandbox with a TypeScript control plane.
@@ -140,13 +143,10 @@ export class GondolinRuntime implements SandboxRuntime {
     this.probed = true;
 
     try {
-      const packageJson = require.resolve(
-        '@earendil-works/gondolin/package.json',
-      );
-      const entry = new URL(
-        './dist/src/index.js',
-        `file://${packageJson}`,
-      ).href;
+      const packageJson =
+        require.resolve('@earendil-works/gondolin/package.json');
+      const entry = new URL('./dist/src/index.js', `file://${packageJson}`)
+        .href;
 
       // eslint-disable-next-line @typescript-eslint/no-implied-eval
       this.module = await (Function(
@@ -154,12 +154,58 @@ export class GondolinRuntime implements SandboxRuntime {
         'return import(entry)',
       )(entry) as Promise<unknown>);
     } catch (error) {
+      this.unavailableReason = `The sandbox runtime could not be loaded: ${
+        error instanceof Error ? error.message : String(error)
+      }. Agent runs are unavailable on this server until it is.`;
+      return;
+    }
+
+    // The package loads without QEMU and only looks for it when a VM boots.
+    // Without this check the server offers agent runs it cannot start, and
+    // every run fails after its checkout with `spawnSync qemu-img ENOENT`.
+    const missing = missingVmmBinaries();
+
+    if (missing.length > 0) {
+      this.module = undefined;
       this.unavailableReason =
-        `The sandbox runtime could not be loaded: ${
-          error instanceof Error ? error.message : String(error)
-        }. Agent runs are unavailable on this server until it is.`;
+        `This server has no ${missing.join(' or ')} on its PATH, so it ` +
+        'cannot start a sandbox. Install QEMU on the machine that runs the ' +
+        'server to enable agent runs.';
     }
   }
+}
+
+/**
+ * The QEMU programs that Gondolin's default backend runs, when it is the
+ * backend in use. Gondolin picks the system emulator for the host's own
+ * architecture, and uses `qemu-img` for the guest's disk.
+ */
+export function missingVmmBinaries(
+  env: NodeJS.ProcessEnv = process.env,
+  arch: string = process.arch,
+): string[] {
+  if (env.GONDOLIN_VMM && env.GONDOLIN_VMM !== 'qemu') {
+    return [];
+  }
+
+  const system =
+    arch === 'arm64' ? 'qemu-system-aarch64' : 'qemu-system-x86_64';
+
+  return ['qemu-img', system].filter((name) => !onPath(name, env.PATH ?? ''));
+}
+
+function onPath(name: string, path: string): boolean {
+  return path
+    .split(delimiter)
+    .filter(Boolean)
+    .some((dir) => {
+      try {
+        accessSync(join(dir, name), constants.X_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    });
 }
 
 /** Long enough for a cold boot on a loaded machine; short enough to fail. */
@@ -296,8 +342,8 @@ function countDenials(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (inner?: (argument: any) => boolean | Promise<boolean>) =>
       inner
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ? async (argument: any) => {
+        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          async (argument: any) => {
             const allowed = await inner(argument);
             if (!allowed) {
               denials.count += 1;

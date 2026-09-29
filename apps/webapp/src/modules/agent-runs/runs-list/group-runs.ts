@@ -2,11 +2,12 @@
 
 /** What the list needs to know about the issue a group of runs belongs to. */
 export interface IssueLabel {
-  /** `ENG-83`, or null when the issue or its team is not in the store. */
+  /**
+   * `ENG-83`, or null when the issue or its team is not in the store. Also the
+   * link to the issue: the issue page takes the key, not the bare number.
+   */
   key: string | null;
   title: string;
-  /** For the link to the issue. Absent when the issue is not in the store. */
-  number?: number;
 }
 
 export interface GroupedRun {

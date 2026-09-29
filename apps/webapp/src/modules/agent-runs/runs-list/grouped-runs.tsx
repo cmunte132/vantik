@@ -50,7 +50,6 @@ export const GroupedRuns = observer(({ runs }: { runs: any[] }) => {
     return {
       key: team ? `${team.identifier}-${issue.number}` : null,
       title: issue?.title ?? 'Deleted issue',
-      ...(issue?.number != null ? { number: issue.number } : {}),
     };
   });
 
@@ -83,13 +82,9 @@ const Group = observer(({ group }: { group: RunGroup }) => {
         {/* The heading names the work; a row underneath names one attempt at
             it. Both are worth reaching, so both are links — this one to the
             issue, the rows to their run. */}
-        {group.issue.number != null ? (
+        {group.issue.key ? (
           <NextLink
-            href={workspaceHref(
-              workspaceSlug,
-              'issue',
-              String(group.issue.number),
-            )}
+            href={workspaceHref(workspaceSlug, 'issue', group.issue.key)}
             className="flex min-w-0 items-baseline gap-2.5 hover:underline"
           >
             <span className="shrink-0 font-mono text-xs text-muted-foreground">

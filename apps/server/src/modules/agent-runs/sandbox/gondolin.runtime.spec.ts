@@ -1,6 +1,10 @@
 import type { SandboxSpec } from './sandbox.interface';
 
-import { workspaceSizeMb } from './gondolin.runtime';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { missingVmmBinaries, workspaceSizeMb } from './gondolin.runtime';
 
 const spec = (limits: Partial<SandboxSpec['limits']>): SandboxSpec => ({
   runId: 'run-1',
@@ -43,5 +47,49 @@ describe('how much room a run gets to write in', () => {
     // is one that fails at `npx` rather than one that runs in less space.
     expect(workspaceSizeMb(spec({ memoryMb: 256, diskMb: 30720 }))).toBe(512);
     expect(workspaceSizeMb(spec({ memoryMb: 4096, diskMb: 64 }))).toBe(512);
+  });
+});
+
+describe('whether this server can start a sandbox at all', () => {
+  let bin: string;
+
+  beforeEach(() => {
+    bin = mkdtempSync(join(tmpdir(), 'vmm-spec-'));
+  });
+
+  afterEach(() => rmSync(bin, { recursive: true, force: true }));
+
+  function install(name: string) {
+    writeFileSync(join(bin, name), '#!/bin/sh\n');
+    chmodSync(join(bin, name), 0o755);
+  }
+
+  it('names each QEMU program that is not on the PATH', () => {
+    expect(missingVmmBinaries({ PATH: bin }, 'arm64')).toEqual([
+      'qemu-img',
+      'qemu-system-aarch64',
+    ]);
+  });
+
+  it('looks for the emulator of the host architecture only', () => {
+    install('qemu-img');
+    install('qemu-system-aarch64');
+
+    expect(missingVmmBinaries({ PATH: bin }, 'arm64')).toEqual([]);
+    expect(missingVmmBinaries({ PATH: bin }, 'x64')).toEqual([
+      'qemu-system-x86_64',
+    ]);
+  });
+
+  it('does not count a file that cannot be run', () => {
+    writeFileSync(join(bin, 'qemu-img'), '');
+
+    expect(missingVmmBinaries({ PATH: bin }, 'arm64')).toContain('qemu-img');
+  });
+
+  it('asks nothing of QEMU when another backend is chosen', () => {
+    expect(
+      missingVmmBinaries({ PATH: bin, GONDOLIN_VMM: 'krun' }, 'arm64'),
+    ).toEqual([]);
   });
 });

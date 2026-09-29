@@ -534,6 +534,10 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         return;
       }
 
+      // Its own step, so a sandbox that will not boot is not reported as a
+      // repository that would not fetch.
+      await note('Starting the sandbox', 'setup');
+
       sandbox = await this.runtime.create({
         runId: run.id,
         files: {

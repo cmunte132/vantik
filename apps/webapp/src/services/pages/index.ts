@@ -1,5 +1,9 @@
 import type {
   KnowledgeAgreementReport,
+  KnowledgeInboxChoiceEnum,
+  KnowledgeInboxDetail,
+  KnowledgeInboxList,
+  KnowledgeInboxView,
   LooseFactGroup,
   KnowledgeOverview,
   KnowledgeProof,
@@ -643,3 +647,103 @@ export function useKnowledgeAgreement(enabled = true) {
       }) as Promise<KnowledgeAgreementReport>,
   });
 }
+
+/**
+ * Needs you: every knowledge decision that waits on a person, shared by the
+ * workspace. Scoped to a page when one is given.
+ */
+export function useKnowledgeInbox(
+  view: KnowledgeInboxView = 'open',
+  pageId?: string,
+) {
+  return useQuery<KnowledgeInboxList>({
+    queryKey: ['knowledge-inbox', view, pageId ?? 'workspace'],
+    placeholderData: keepPreviousData,
+    // The sidebar and the Pages bar read it on every view; a decision
+    // invalidates it at once.
+    staleTime: 30 * 1000,
+    queryFn: () =>
+      ajaxGet({
+        url: `/api/v1/knowledge/inbox?${new URLSearchParams({
+          view,
+          ...(pageId ? { pageId } : {}),
+        })}`,
+      }) as Promise<KnowledgeInboxList>,
+  });
+}
+
+/** One item of Needs you, with its thread and what deciding it needs. */
+export function useKnowledgeInboxItem(id?: string) {
+  return useQuery<KnowledgeInboxDetail>({
+    queryKey: ['knowledge-inbox-item', id],
+    enabled: Boolean(id),
+    queryFn: () =>
+      ajaxGet({
+        url: `/api/v1/knowledge/inbox/${id}`,
+      }) as Promise<KnowledgeInboxDetail>,
+  });
+}
+
+export interface AssignInboxItemParams {
+  id: string;
+  /** Null takes everyone off it. */
+  assigneeId: string | null;
+}
+
+export function assignInboxItem({ id, assigneeId }: AssignInboxItemParams) {
+  return ajaxPost({
+    url: `/api/v1/knowledge/inbox/${id}/assign`,
+    data: { assigneeId },
+  });
+}
+
+export const useAssignInboxItemMutation = mutationHook(assignInboxItem, {
+  invalidates: ['knowledge-inbox', 'knowledge-inbox-item'],
+});
+
+export interface CommentInboxItemParams {
+  id: string;
+  body: string;
+}
+
+export function commentInboxItem({ id, body }: CommentInboxItemParams) {
+  return ajaxPost({
+    url: `/api/v1/knowledge/inbox/${id}/comments`,
+    data: { body },
+  });
+}
+
+export const useCommentInboxItemMutation = mutationHook(commentInboxItem, {
+  invalidates: ['knowledge-inbox-item'],
+});
+
+export interface DecideInboxItemParams {
+  id: string;
+  choice: KnowledgeInboxChoiceEnum;
+  /** For a gap: the fact that answers it. */
+  entryId?: string;
+}
+
+export function decideInboxItem({
+  id,
+  choice,
+  entryId,
+}: DecideInboxItemParams) {
+  return ajaxPost({
+    url: `/api/v1/knowledge/inbox/${id}/decide`,
+    data: { choice, ...(entryId ? { entryId } : {}) },
+  });
+}
+
+// A decision changes facts, so everything that shows them reads again.
+export const useDecideInboxItemMutation = mutationHook(decideInboxItem, {
+  invalidates: [
+    'knowledge-inbox',
+    'knowledge-inbox-item',
+    'knowledge-review',
+    'knowledge-overview',
+    'knowledge-agreement',
+    'page-entry-proofs',
+    'loose-facts',
+  ],
+});

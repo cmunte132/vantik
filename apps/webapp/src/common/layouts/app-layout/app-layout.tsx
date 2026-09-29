@@ -28,6 +28,8 @@ import { AllProviders } from 'common/wrappers/all-providers';
 
 import { useCurrentTeam } from 'hooks/teams';
 
+import { useKnowledgeInbox } from 'services/pages';
+
 import { useContextStore } from 'store/global-context-provider';
 
 import { AccountMenu } from './account-menu';
@@ -51,6 +53,8 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
     query: { workspaceSlug },
   } = useRouter();
   const team = useCurrentTeam();
+  // What waits on a person in Pages, on its row, as the Pages views show it.
+  const { data: inbox } = useKnowledgeInbox('open');
 
   const collapsed = applicationStore.sidebarCollapsed;
 
@@ -105,6 +109,9 @@ export const AppLayoutChild = observer(({ children }: LayoutProps) => {
                   title: 'Pages',
                   icon: RiBookOpenLine,
                   href: workspaceHref(workspaceSlug, 'pages'),
+                  count: inbox?.counts.open ?? 0,
+                  unread: true,
+                  countClassName: 'bg-[oklch(58%_0.19_45)] text-white',
                 },
                 // Background work is only background if there is somewhere to
                 // go and look at it. The page existed and nothing linked to

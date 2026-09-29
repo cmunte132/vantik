@@ -3,15 +3,11 @@ import type { ServedCitation } from '@vantikhq/types';
 import { RiAddLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { Checkbox } from '@vantikhq/ui/components/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@vantikhq/ui/components/dialog';
 import { Textarea } from '@vantikhq/ui/components/textarea';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
 import * as React from 'react';
 
 import { PageEntryStatus, PageKind, type PageEntryType } from 'common/types';
@@ -30,7 +26,6 @@ import { ConsolidateDialog } from './consolidate-dialog';
 import { RowMenu } from './entry-row';
 import { FactTrailDialog } from './fact-trail';
 import { LooseFitCard } from './loose-facts';
-import { ReviewQueue } from './review-queue';
 import { ago, CARD, Chip, NEED_YOU_BADGE, type TrustTone } from './trust';
 
 const IN_USE: string[] = [
@@ -74,7 +69,9 @@ export const FactsRail = observer(
     const { facts } = usePageFacts(pageId);
 
     const [filter, setFilter] = React.useState<FactFilter>('all');
-    const [reviewing, setReviewing] = React.useState(false);
+    const {
+      query: { workspaceSlug },
+    } = useRouter();
     const [adding, setAdding] = React.useState(false);
     const [showRetired, setShowRetired] = React.useState(false);
     const [picking, setPicking] = React.useState(false);
@@ -161,18 +158,20 @@ export const FactsRail = observer(
         </div>
 
         {waiting.length > 0 && filter === 'all' && (
-          <button
-            type="button"
+          <Link
+            href={{
+              pathname: '/[workspaceSlug]/pages/needs-you',
+              query: { workspaceSlug, page: pageId },
+            }}
             className="rounded-[10px] px-3.5 py-3 flex items-center gap-2 text-left bg-[oklch(66%_0.18_45/0.08)] border border-[oklch(66%_0.18_45/0.25)]"
-            onClick={() => setReviewing(true)}
           >
             <span className={NEED_YOU_BADGE}>{waiting.length}</span>
             <span className="grow leading-snug">
               {waiting.length === 1 ? 'waits' : 'wait'} on you. No agent is
               given {waiting.length === 1 ? 'it' : 'them'} until you decide.
             </span>
-            <span className="font-medium whitespace-nowrap">Review →</span>
-          </button>
+            <span className="font-medium whitespace-nowrap">Needs you →</span>
+          </Link>
         )}
 
         {shown.length === 0 && (
@@ -195,7 +194,6 @@ export const FactsRail = observer(
               <React.Fragment key={fact.id}>
                 <FactCard
                   fact={fact}
-                  onReview={() => setReviewing(true)}
                   onOpen={() => setOpened(fact)}
                   picking={picking && fact.status === PageEntryStatus.STANDING}
                   picked={picked.has(fact.id)}
@@ -281,12 +279,6 @@ export const FactsRail = observer(
 
         {adding && <AddFact pageId={pageId} onDone={() => setAdding(false)} />}
 
-        <PageReviewDialog
-          pageId={pageId}
-          open={reviewing}
-          onOpenChange={setReviewing}
-        />
-
         <FactTrailDialog fact={opened} onClose={() => setOpened(null)} />
 
         <ConsolidateDialog
@@ -305,40 +297,6 @@ export const FactsRail = observer(
     );
   },
 );
-
-/** The review queue of one page, in a dialog. */
-export function PageReviewDialog({
-  pageId,
-  open,
-  onOpenChange,
-}: {
-  pageId: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* The primitive pins itself to 500px with an `!important` max-width
-          and ships no padding of its own, so width has to be driven by
-          min-w and the spacing supplied here. */}
-      <DialogContent className="p-0 gap-0 min-w-[min(720px,calc(100vw-32px))] sm:max-w-[720px]">
-        <DialogHeader className="text-left px-6 pt-6 pb-4 border-b border-border">
-          <DialogTitle className="font-normal">
-            What waits on this page
-          </DialogTitle>
-          <p className="text-muted-foreground">
-            Facts agents recorded as they worked, and rewrites the gardener
-            proposed. None of it is given to an agent until you decide.
-          </p>
-        </DialogHeader>
-
-        <div className="px-6 py-4 overflow-y-auto max-h-[60vh]">
-          <ReviewQueue scope={{ kind: 'page', pageId }} />
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function FilterChip({
   active,
@@ -439,19 +397,20 @@ export function citationLabel(citation: ServedCitation): string {
 const FactCard = observer(
   ({
     fact,
-    onReview,
     onOpen,
     picking,
     picked,
     onPick,
   }: {
     fact: ProvenEntry;
-    onReview: () => void;
     onOpen: () => void;
     picking: boolean;
     picked: boolean;
     onPick: () => void;
   }) => {
+    const {
+      query: { workspaceSlug },
+    } = useRouter();
     const { users } = useAllUsers();
     const author = users.find((user) => user.id === fact.sourceUserId);
     const waiting = WAITING.includes(fact.status);
@@ -517,13 +476,15 @@ const FactCard = observer(
             {meta.join(' · ')}
           </span>
           {waiting && (
-            <button
-              type="button"
+            <Link
+              href={{
+                pathname: '/[workspaceSlug]/pages/needs-you',
+                query: { workspaceSlug, subject: fact.id },
+              }}
               className="text-xs font-medium text-primary"
-              onClick={onReview}
             >
               Decide
-            </button>
+            </Link>
           )}
         </div>
       </div>

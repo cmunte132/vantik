@@ -92,9 +92,22 @@ export interface PageEntryType {
    * API sends them. The synced store does not hold them.
    */
   moves?: PageEntryMoveType[];
+  /**
+   * What people decided about the fact in Needs you, oldest first. Only the
+   * entry list of the REST API carries it.
+   */
+  inboxItems?: PageEntryInboxDecision[];
 }
 
 /** One step on the trail of a fact: a person filed it under another page. */
+export interface PageEntryInboxDecision {
+  kind: string;
+  doneAt: string;
+  doneById: string;
+  /** What was decided, as a phrase: "put it in use". */
+  resolution: string | null;
+}
+
 export interface PageEntryMoveType {
   createdAt: string;
   /** Null when the fact was outside any page before the move. */

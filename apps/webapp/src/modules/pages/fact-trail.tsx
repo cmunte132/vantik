@@ -133,6 +133,17 @@ const Trail = observer(({ fact }: { fact: ProvenEntry }) => {
     });
   }
 
+  for (const [index, decided] of (fact.inboxItems ?? []).entries()) {
+    steps.push({
+      key: `decided-${index}`,
+      dot: 'people',
+      title: `Decided in Needs you by ${nameOf(decided.doneById) ?? 'a person'}`,
+      detail: [decided.resolution, DATE.format(new Date(decided.doneAt))]
+        .filter(Boolean)
+        .join(' · '),
+    });
+  }
+
   if (fact.status === PageEntryStatus.PROPOSED) {
     steps.push({
       key: 'waiting',

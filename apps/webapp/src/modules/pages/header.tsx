@@ -12,7 +12,11 @@ import * as React from 'react';
 
 import { HeaderLayout } from 'common/header-layout';
 
-import { useKnowledgeOverview } from 'services/pages';
+import { useAllUsers } from 'hooks/users';
+
+import { useKnowledgeInbox } from 'services/pages';
+
+import { UserContext } from 'store/user-context';
 
 import { NEED_YOU_BADGE } from './trust';
 
@@ -110,19 +114,28 @@ export const Header = observer(
 
 /**
  * How many things wait on a person, and the way to them. It is an
- * indicator, not a view of its own: it leads to the review inbox.
+ * indicator, not a view of its own: it leads to the Needs you inbox. Beside
+ * the count it says who is on the most of them.
  */
 export const NeedsYou = observer(() => {
   const {
     query: { workspaceSlug },
   } = useRouter();
-  const { data } = useKnowledgeOverview();
-  const count = data?.facts.needYou ?? 0;
+  const currentUser = React.useContext(UserContext);
+  const { users } = useAllUsers(false);
+  const { data } = useKnowledgeInbox('open');
+  const count = data?.counts.open ?? 0;
+  const top = data?.assignees[0];
+  const topName = top
+    ? top.userId === currentUser?.id
+      ? 'You have'
+      : `${firstName(users.find((user) => user.id === top.userId))} has`
+    : null;
 
   return (
     <Link
       href={{
-        pathname: '/[workspaceSlug]/pages/review',
+        pathname: '/[workspaceSlug]/pages/needs-you',
         query: { workspaceSlug },
       }}
       className="flex items-center gap-2 h-7 pl-2.5 pr-1.5 rounded-lg bg-background-3 shadow-[0_0_0_1px_oklch(0%_0_0/0.1)] font-medium whitespace-nowrap"
@@ -134,6 +147,15 @@ export const NeedsYou = observer(() => {
       ) : (
         <span className="text-xs text-muted-foreground pr-1">0</span>
       )}
+      {topName && (
+        <span className="text-xs font-normal text-muted-foreground pr-1 hidden lg:inline">
+          {topName} {top?.count}
+        </span>
+      )}
     </Link>
   );
 });
+
+function firstName(user?: { fullname?: string; username?: string }) {
+  return (user?.fullname || user?.username || 'Someone').split(' ')[0];
+}

@@ -20,6 +20,8 @@ export interface Link {
    * for counts that are genuinely different in kind — unread, not "how many".
    */
   unread?: boolean;
+  /** Classes for the count, for a count whose colour means something. */
+  countClassName?: string;
   strict?: boolean;
   activePaths?: string[];
 }
@@ -78,7 +80,10 @@ export function Nav({ links }: NavProps) {
                   is part of the same hit target.
                 */}
                 {link.count > 0 && (
-                  <SidebarMenuBadge variant={link.unread ? 'unread' : 'count'}>
+                  <SidebarMenuBadge
+                    variant={link.unread ? 'unread' : 'count'}
+                    className={link.countClassName}
+                  >
                     {link.count}
                   </SidebarMenuBadge>
                 )}

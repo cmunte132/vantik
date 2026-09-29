@@ -2337,6 +2337,12 @@ describe('entries as they are read', () => {
     ).toEqual({
       citations: { select: expect.any(Object) },
       moves: { select: expect.any(Object), orderBy: { createdAt: 'asc' } },
+      // What people decided about it in Needs you, for its trail.
+      inboxItems: {
+        where: { doneById: { not: null } },
+        select: expect.any(Object),
+        orderBy: { doneAt: 'asc' },
+      },
     });
   });
 });

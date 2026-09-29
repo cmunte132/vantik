@@ -18,6 +18,7 @@ import {
 import { Editor, EditorExtensions } from '@vantikhq/ui/components/editor/index';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import * as React from 'react';
 import { useDebouncedCallback } from 'use-debounce';
@@ -48,7 +49,7 @@ import { useContextStore } from 'store/global-context-provider';
 
 import { EditorRibbon } from './editor-ribbon';
 import { type Crumb, Header } from './header';
-import { FactsRail, PageReviewDialog, usePageFacts } from './memory-rail';
+import { FactsRail, usePageFacts } from './memory-rail';
 import { usePageNavigation } from './navigation';
 import { PageHistory } from './page-history';
 import { PageSources } from './page-sources';
@@ -539,8 +540,10 @@ const PageChips = observer(({ page }: { page: PageType }) => {
  * read. The body does not change until a person accepts it.
  */
 const RewriteBanner = observer(({ pageId }: { pageId: string }) => {
+  const {
+    query: { workspaceSlug },
+  } = useRouter();
   const { data: review } = useKnowledgeReview(pageId);
-  const [reviewing, setReviewing] = React.useState(false);
   const proposal = review?.pageProposals.find(
     (candidate) => candidate.pageId === pageId,
   );
@@ -560,18 +563,15 @@ const RewriteBanner = observer(({ pageId }: { pageId: string }) => {
         </span>{' '}
         The page does not change until you accept.
       </span>
-      <button
-        type="button"
+      <Link
+        href={{
+          pathname: '/[workspaceSlug]/pages/needs-you',
+          query: { workspaceSlug, subject: proposal.id },
+        }}
         className="bg-background-3 rounded-md px-3 py-1.5 font-medium shadow-[0_0_0_1px_oklch(0%_0_0/0.1)]"
-        onClick={() => setReviewing(true)}
       >
         Read the rewrite
-      </button>
-      <PageReviewDialog
-        pageId={pageId}
-        open={reviewing}
-        onOpenChange={setReviewing}
-      />
+      </Link>
     </div>
   );
 });

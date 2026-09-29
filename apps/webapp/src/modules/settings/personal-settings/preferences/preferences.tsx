@@ -7,16 +7,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@vantikhq/ui/components/select';
+import { Switch } from '@vantikhq/ui/components/switch';
+import { useToast } from '@vantikhq/ui/components/use-toast';
 import { useTheme } from 'next-themes';
 import React from 'react';
 
 import { SettingSection } from 'modules/settings/setting-section';
 
+import { useUpdateUserMutation } from 'services/users';
+
 import { resync } from 'store/resync';
+import { UserContext } from 'store/user-context';
 
 export function Preferences() {
   const { theme, setTheme } = useTheme();
   const [rebuilding, setRebuilding] = React.useState(false);
+  const currentUser = React.useContext(UserContext);
+  const { toast } = useToast();
+  // The switch moves at once; the user query refetches behind it.
+  const [hideEmail, setHideEmail] = React.useState(
+    currentUser.hideEmail ?? false,
+  );
+  const { mutate: updateUser } = useUpdateUserMutation({
+    onError: (message) => {
+      setHideEmail(currentUser.hideEmail ?? false);
+      toast({ variant: 'destructive', title: 'Error!', description: message });
+    },
+  });
 
   return (
     <div className="flex flex-col gap-2">
@@ -41,6 +58,19 @@ export function Preferences() {
             </SelectGroup>
           </SelectContent>
         </Select>
+      </SettingSection>
+
+      <SettingSection
+        title="Hide email"
+        description="Keep your email address out of the navigation, for example when you share your screen."
+      >
+        <Switch
+          checked={hideEmail}
+          onCheckedChange={(checked: boolean) => {
+            setHideEmail(checked);
+            updateUser({ hideEmail: checked });
+          }}
+        />
       </SettingSection>
 
       {/* The server repairs the sync log after downtime and asks clients to

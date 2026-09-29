@@ -6,7 +6,13 @@ import {
   Invite,
   User,
 } from '@vantikhq/types';
-import { IsArray, IsIn, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class UserIdParams {
   @IsString()
@@ -14,11 +20,17 @@ export class UserIdParams {
 }
 
 export class UpdateUserBody {
+  @IsOptional()
   @IsString()
-  fullname: string;
+  fullname?: string;
 
+  @IsOptional()
   @IsString()
-  username: string;
+  username?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  hideEmail?: boolean;
 }
 
 export class CreateAgentDto {
@@ -84,6 +96,7 @@ export function userSerializer(user: User) {
     type: user.type,
     initialSetupComplete: user.initialSetupComplete,
     anonymousDataCollection: user.anonymousDataCollection,
+    hideEmail: user.hideEmail,
 
     workspaces: user.usersOnWorkspaces.map((uWorkspace) => ({
       ...uWorkspace.workspace,

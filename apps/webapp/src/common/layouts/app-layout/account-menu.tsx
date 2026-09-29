@@ -47,9 +47,11 @@ export const AccountMenu = observer(() => {
           <div className="truncate text-sm font-medium text-sidebar-foreground">
             {currentUser.fullname}
           </div>
-          <div className="mt-0.5 truncate text-xs text-sidebar-muted">
-            {currentUser.email}
-          </div>
+          {!currentUser.hideEmail && (
+            <div className="mt-0.5 truncate text-xs text-sidebar-muted">
+              {currentUser.email}
+            </div>
+          )}
         </div>
 
         <span data-rail-hide className="flex shrink-0">

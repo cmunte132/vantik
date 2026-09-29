@@ -29,4 +29,6 @@ export interface User {
    */
   type?: UserType;
   image?: string;
+  /** Keep the email address out of the app's navigation. */
+  hideEmail?: boolean;
 }

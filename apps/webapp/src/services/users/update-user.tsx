@@ -1,18 +1,20 @@
 import { ajaxPut, mutationHook } from 'services/utils';
 
+import { GetUserQuery } from './get-user';
+
 export interface UpdateUserParams {
-  fullname: string;
-  username: string;
+  fullname?: string;
+  username?: string;
+  hideEmail?: boolean;
 }
 
-function updateUser({ fullname, username }: UpdateUserParams) {
+function updateUser(data: UpdateUserParams) {
   return ajaxPut({
     url: `/api/v1/users`,
-    data: {
-      fullname,
-      username,
-    },
+    data,
   });
 }
 
-export const useUpdateUserMutation = mutationHook(updateUser);
+export const useUpdateUserMutation = mutationHook(updateUser, {
+  invalidates: [GetUserQuery],
+});

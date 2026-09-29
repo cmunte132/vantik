@@ -17,6 +17,8 @@ export class User {
   type: UserType;
   initialSetupComplete: boolean;
   anonymousDataCollection: boolean;
+  /** Keep the email address out of the app's navigation. */
+  hideEmail: boolean;
   usersOnWorkspaces?: UsersOnWorkspaces[];
   template?: Template[];
   createdBy?: Issue[];

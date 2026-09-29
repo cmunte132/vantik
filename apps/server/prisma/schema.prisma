@@ -1943,6 +1943,10 @@ model User {
   initialSetupComplete    Boolean @default(false)
   anonymousDataCollection Boolean @default(false)
 
+  /// Keep this account's email address out of the app's navigation. Some
+  /// people share their screen, and not everyone wants the address on show.
+  hideEmail Boolean @default(false)
+
   image String?
 
   authIdentities      AuthIdentity[]

@@ -1,7 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
 
 import React from 'react';
-import { SessionAuth } from 'supertokens-auth-react/recipe/session';
+import { SessionAuth } from 'common/wrappers/session-auth';
 
 import { AuthLayout } from 'common/layouts/auth-layout';
 import { useRouter } from 'common/router';

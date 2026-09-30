@@ -142,7 +142,7 @@ function navigate(url: Url, replace: boolean): Promise<boolean> {
   return appRouter.navigate(href, { replace }).then(() => true);
 }
 
-/** For code outside React, such as the SuperTokens window handler. */
+/** For code outside React. */
 export const Router = {
   push: (url: Url) => navigate(url, false),
   replace: (url: Url) => navigate(url, true),

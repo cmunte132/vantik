@@ -3,7 +3,7 @@ import { Logo } from '@vantikhq/ui/components/dynamic-logo';
 import { Loader } from '@vantikhq/ui/components/loader';
 import posthog from 'posthog-js';
 import * as React from 'react';
-import { signOut } from 'supertokens-auth-react/recipe/session';
+import { signOut } from 'services/auth';
 
 import { deleteCookies } from 'common/common-utils';
 import { useRouter } from 'common/router';

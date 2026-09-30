@@ -1,18 +1,7 @@
 import * as Sentry from '@sentry/react';
 import posthog from 'posthog-js';
-import SuperTokensReact from 'supertokens-auth-react';
 
 import { loadClientConfig } from 'common/lib/client-config';
-import { frontendConfig } from 'common/lib/config';
-
-export function initSuperTokens() {
-  // we only want to call this init function on the frontend, so we check typeof window !== 'undefined'
-  if (typeof window !== 'undefined') {
-    // Stays synchronous: frontendConfig() derives everything it needs from the
-    // page origin, so it does not wait on the runtime config fetch.
-    SuperTokensReact.init(frontendConfig());
-  }
-}
 
 export async function initPosthog() {
   if (typeof window === 'undefined') {

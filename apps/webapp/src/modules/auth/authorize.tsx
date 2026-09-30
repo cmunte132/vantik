@@ -1,6 +1,6 @@
 import { Logo } from '@vantikhq/ui/components/dynamic-logo';
 import React from 'react';
-import { SessionAuth } from 'supertokens-auth-react/recipe/session';
+import { SessionAuth } from 'common/wrappers/session-auth';
 
 import { useRouter } from 'common/router';
 import { UserDataWrapper } from 'common/wrappers/user-data-wrapper';

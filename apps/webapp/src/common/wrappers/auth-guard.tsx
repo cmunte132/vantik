@@ -1,6 +1,6 @@
 import { Loader } from '@vantikhq/ui/components/loader';
 import React, { cloneElement } from 'react';
-import Session from 'supertokens-web-js/recipe/session';
+import { doesSessionExist } from 'services/auth';
 
 import { useRouter } from 'common/router';
 
@@ -19,7 +19,7 @@ export function AuthGuard(props: Props): React.ReactElement {
   }, []);
 
   async function checkForSession() {
-    if (await Session.doesSessionExist()) {
+    if (await doesSessionExist()) {
       router.replace('/');
     } else {
       setLoading(false);

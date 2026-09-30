@@ -2,7 +2,8 @@ import { AvatarText } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import React from 'react';
-import { SessionAuth, signOut } from 'supertokens-auth-react/recipe/session';
+import { SessionAuth } from 'common/wrappers/session-auth';
+import { signOut } from 'services/auth';
 
 import { AuthLayout } from 'common/layouts/auth-layout';
 import { useRouter } from 'common/router';

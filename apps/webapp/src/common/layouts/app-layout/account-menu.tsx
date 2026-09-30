@@ -13,7 +13,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import posthog from 'posthog-js';
 import React from 'react';
-import { signOut } from 'supertokens-auth-react/recipe/session';
+import { signOut } from 'services/auth';
 
 import { deleteCookies } from 'common/common-utils';
 import { useRouter } from 'common/router';

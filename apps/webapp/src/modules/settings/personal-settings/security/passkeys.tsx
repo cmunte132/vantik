@@ -2,35 +2,30 @@ import { Button } from '@vantikhq/ui/components/button';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import React from 'react';
 import {
-  createAndRegisterCredentialForSessionUser,
+  registerPasskey,
   doesBrowserSupportWebAuthn,
   listCredentials,
-  registerCredentialWithSignUp,
   removeCredential,
-} from 'supertokens-web-js/recipe/webauthn';
-
-import { UserContext } from 'store/user-context';
+} from 'services/auth';
 
 interface Credential {
   webauthnCredentialId: string;
   createdAt: number;
-  recipeUserId: string;
 }
 
 export function Passkeys() {
-  const user = React.useContext(UserContext);
   const { toast } = useToast();
   const [credentials, setCredentials] = React.useState<Credential[]>([]);
   const [supported, setSupported] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
-    const response = await listCredentials({ userContext: {} });
+    const response = await listCredentials();
     setCredentials(response.status === 'OK' ? response.credentials : []);
   }, []);
 
   React.useEffect(() => {
-    doesBrowserSupportWebAuthn({ userContext: {} })
+    doesBrowserSupportWebAuthn()
       .then((response) =>
         setSupported(
           response.status === 'OK' && response.browserSupportsWebauthn,
@@ -48,45 +43,16 @@ export function Passkeys() {
   const onAdd = async () => {
     setBusy(true);
     try {
-      // The first passkey and every later one take different routes. Adding a
-      // credential needs a webauthn login method to hang it off, which an
-      // account that has only ever used login codes does not have yet, so the
-      // first one is a signup carrying the session: SuperTokens creates the
-      // login method and links it to the account that is already signed in.
-      const existing = credentials[0];
-      const response = existing
-        ? await createAndRegisterCredentialForSessionUser({
-            email: user.email,
-            recipeUserId: existing.recipeUserId,
-            userContext: {},
-          })
-        : await registerCredentialWithSignUp({
-            // Registered as a first factor on purpose. Asking SuperTokens to
-            // link this credential to the session user is what MFA does, and
-            // it throws without the licensed account linking recipe. We do not
-            // need it to: the credential is attached to the account by email
-            // on the server, in our own identity table.
-            shouldTryLinkingWithSessionUser: false,
-            email: user.email,
-            userContext: {},
-          });
-
+      const response = await registerPasskey();
       if (response.status === 'OK') {
         toast({
           title: 'Saved!',
           description: 'That passkey can now sign you in.',
         });
         await refresh();
-      } else if (response.status === 'AUTHENTICATOR_ALREADY_REGISTERED') {
-        failed('That passkey is already on your account.');
-      } else if (response.status === 'INVALID_EMAIL_ERROR') {
-        failed(response.err);
-      } else if (
-        response.status !== 'FAILED_TO_REGISTER_USER' &&
-        response.status !== 'WEBAUTHN_NOT_SUPPORTED'
-      ) {
-        // A dismissed system prompt lands in FAILED_TO_REGISTER_USER, and
-        // someone who cancelled on purpose does not need to be told.
+      } else if (response.status === 'SIGN_UP_NOT_ALLOWED') {
+        failed(response.reason || 'Creating a passkey is not allowed.');
+      } else {
         failed('Could not add that passkey. Please try again.');
       }
     } catch {
@@ -100,7 +66,6 @@ export function Passkeys() {
     try {
       const response = await removeCredential({
         webauthnCredentialId,
-        userContext: {},
       });
 
       if (response.status === 'OK') {

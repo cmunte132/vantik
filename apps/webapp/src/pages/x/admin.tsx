@@ -11,7 +11,7 @@ import {
 import { Input } from '@vantikhq/ui/components/input';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import { useForm } from 'react-hook-form';
-import { SessionAuth } from 'supertokens-auth-react/recipe/session';
+import { SessionAuth } from 'common/wrappers/session-auth';
 import { z } from 'zod';
 
 import { UserDataWrapper } from 'common/wrappers/user-data-wrapper';

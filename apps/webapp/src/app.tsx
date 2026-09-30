@@ -11,7 +11,6 @@ import { PostHogProvider } from 'posthog-js/react';
 import React from 'react';
 import { HotkeysProvider } from 'react-hotkeys-hook';
 import { useMatches, useRouteError } from 'react-router';
-import { SuperTokensWrapper } from 'supertokens-auth-react';
 
 import { useGetQueryClient } from 'common/lib/react-query-client';
 import { recoverIfStaleChunk } from 'common/lib/stale-chunk-recovery';
@@ -51,7 +50,7 @@ export function App() {
   const queryClientRef = useGetQueryClient();
 
   return (
-    <SuperTokensWrapper>
+    <>
       <PostHogProvider client={posthog}>
         <ThemeProvider
           attribute="class"
@@ -84,7 +83,7 @@ export function App() {
           </HotkeysProvider>
         </ThemeProvider>
       </PostHogProvider>
-    </SuperTokensWrapper>
+    </>
   );
 }
 

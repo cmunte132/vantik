@@ -10,13 +10,12 @@ import en from 'javascript-time-ago/locale/en';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 
-import { initPosthog, initSentry, initSuperTokens } from 'common/init-config';
+import { initPosthog, initSentry } from 'common/init-config';
 import { setAppRouter } from 'common/router';
 
 import { routes } from './routes';
 
 void initSentry();
-initSuperTokens();
 // Analytics config is fetched, so this settles a beat after the app mounts.
 void initPosthog();
 

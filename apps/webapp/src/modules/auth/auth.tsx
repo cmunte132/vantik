@@ -16,15 +16,12 @@ import posthog from 'posthog-js';
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import {
-  createCode,
-  consumeCode,
-  clearLoginAttemptInfo,
-} from 'supertokens-web-js/recipe/passwordless';
-import {
   authenticateCredentialWithSignIn,
+  consumeCode,
+  createCode,
   doesBrowserSupportWebAuthn,
-  registerCredentialWithSignUp,
-} from 'supertokens-web-js/recipe/webauthn';
+  registerPasskey,
+} from 'services/auth';
 import { z } from 'zod';
 
 import { AuthLayout } from 'common/layouts/auth-layout';
@@ -46,6 +43,7 @@ export function Auth() {
   const [emailSent, setEmailSent] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [code, setCode] = React.useState('');
+  const [preAuthSessionId, setPreAuthSessionId] = React.useState('');
   const [verifying, setVerifying] = React.useState(false);
   const [passkeySupported, setPasskeySupported] = React.useState(false);
   const [passkeyLoading, setPasskeyLoading] = React.useState(false);
@@ -56,7 +54,7 @@ export function Auth() {
   // Asked rather than assumed: the passkey controls stay hidden on browsers
   // that would only fail once pressed.
   React.useEffect(() => {
-    doesBrowserSupportWebAuthn({ userContext: {} })
+    doesBrowserSupportWebAuthn()
       .then((response) => {
         setPasskeySupported(
           response.status === 'OK' && response.browserSupportsWebauthn,
@@ -79,9 +77,7 @@ export function Auth() {
   const onPasskeySignIn = async () => {
     setPasskeyLoading(true);
     try {
-      const response = await authenticateCredentialWithSignIn({
-        userContext: {},
-      });
+      const response = await authenticateCredentialWithSignIn();
 
       if (response.status === 'OK') {
         onAuthenticated();
@@ -95,11 +91,9 @@ export function Auth() {
         passkeyError('That passkey did not work. Try your email instead.');
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
+    } catch (err: unknown) {
       passkeyError(
-        err.isSuperTokensGeneralError
-          ? err.message
-          : 'Oops! Something went wrong.',
+        err instanceof Error ? err.message : 'Oops! Something went wrong.',
       );
     }
     setPasskeyLoading(false);
@@ -111,39 +105,20 @@ export function Auth() {
   const onPasskeySignUp = async ({ email }: { email: string }) => {
     setPasskeyLoading(true);
     try {
-      const response = await registerCredentialWithSignUp({
-        email,
-        userContext: {},
-      });
+      const response = await registerPasskey({ email });
 
       if (response.status === 'OK') {
         posthog.capture('user_signed_up', { email });
         onAuthenticated();
       } else if (response.status === 'SIGN_UP_NOT_ALLOWED') {
         passkeyError(response.reason);
-      } else if (
-        response.status === 'EMAIL_ALREADY_EXISTS_ERROR' ||
-        response.status === 'INVALID_CREDENTIALS_ERROR'
-      ) {
-        // The account exists but this passkey is not attached to it, and an
-        // unproven email address is not enough to attach one. Proving the
-        // inbox first is the way through.
-        passkeyError(
-          'That email already has an account. Sign in with a login code, then add a passkey from settings.',
-        );
-      } else if (response.status === 'AUTHENTICATOR_ALREADY_REGISTERED') {
-        passkeyError('That passkey is already registered. Sign in with it.');
-      } else if (response.status === 'INVALID_EMAIL_ERROR') {
-        passkeyError(response.err);
       } else if (response.status !== 'FAILED_TO_REGISTER_USER') {
         passkeyError('Could not create that passkey. Try your email instead.');
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
+    } catch (err: unknown) {
       passkeyError(
-        err.isSuperTokensGeneralError
-          ? err.message
-          : 'Oops! Something went wrong.',
+        err instanceof Error ? err.message : 'Oops! Something went wrong.',
       );
     }
     setPasskeyLoading(false);
@@ -155,36 +130,15 @@ export function Auth() {
       const response = await createCode({
         email,
       });
-
-      if (response.status === 'SIGN_IN_UP_NOT_ALLOWED') {
-        // the reason string is a user friendly message
-        // about what went wrong. It can also contain a support code which users
-        // can tell you so you know why their sign in / up was not allowed.
-        toast({
-          variant: 'destructive',
-          title: 'Error!',
-          description: response.reason,
-        });
-      } else {
-        setEmailSent(true);
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
+      setPreAuthSessionId(response.preAuthSessionId);
+      setEmailSent(true);
+    } catch (err: unknown) {
       console.log(err);
-      if (err.isSuperTokensGeneralError === true) {
-        // this may be a custom error message sent from the API by you,
-        toast({
-          variant: 'destructive',
-          title: 'Error!',
-          description: err.message,
-        });
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Error!',
-          description: 'Oops! Something went wrong.',
-        });
-      }
+      toast({
+        variant: 'destructive',
+        title: 'Error!',
+        description: err instanceof Error ? err.message : 'Oops! Something went wrong.',
+      });
     }
 
     setLoading(false);
@@ -199,16 +153,12 @@ export function Auth() {
     event.preventDefault();
     setVerifying(true);
     try {
-      const response = await consumeCode({ userInputCode: code.trim() });
+      const response = await consumeCode({
+        preAuthSessionId,
+        userInputCode: code.trim(),
+      });
 
       if (response.status === 'OK') {
-        await clearLoginAttemptInfo();
-        if (
-          response.createdNewRecipeUser &&
-          response.user.loginMethods.length === 1
-        ) {
-          posthog.capture('user_signed_up', { email: response.user.emails[0] });
-        }
         router.replace(safeRedirectPath(redirectToPath));
       } else if (response.status === 'INCORRECT_USER_INPUT_CODE_ERROR') {
         const left =
@@ -221,15 +171,7 @@ export function Auth() {
             left === 1 ? '' : 's'
           } left.`,
         });
-      } else if (response.status === 'EXPIRED_USER_INPUT_CODE_ERROR') {
-        toast({
-          variant: 'destructive',
-          title: 'Code expired',
-          description: 'Re-enter your email to get a new code.',
-        });
       } else {
-        // RESTART_FLOW_ERROR / SIGN_IN_UP_NOT_ALLOWED: send them back to start.
-        await clearLoginAttemptInfo();
         toast({
           variant: 'destructive',
           title: 'Error!',
@@ -238,14 +180,11 @@ export function Auth() {
         setCode('');
         setEmailSent(false);
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         variant: 'destructive',
         title: 'Error!',
-        description: err.isSuperTokensGeneralError
-          ? err.message
-          : 'Oops! Something went wrong.',
+        description: err instanceof Error ? err.message : 'Oops! Something went wrong.',
       });
     }
     setVerifying(false);

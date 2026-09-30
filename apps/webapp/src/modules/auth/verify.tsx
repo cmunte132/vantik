@@ -1,11 +1,7 @@
 import { Loader } from '@vantikhq/ui/components/loader';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import posthog from 'posthog-js';
 import React from 'react';
-import {
-  consumeCode,
-  clearLoginAttemptInfo,
-} from 'supertokens-web-js/recipe/passwordless';
+import { consumeMagicLink } from 'services/auth';
 
 import { useRouter } from 'common/router';
 import { safeRedirectPath } from 'common/safe-redirect';
@@ -20,56 +16,42 @@ export function Verify() {
 
   async function handleMagicLinkClicked() {
     try {
-      const response = await consumeCode();
+      const preAuthSessionId = router.query.preAuthSessionId as string;
+      const linkCode = window.location.hash?.replace(/^#/, '');
+
+      if (!preAuthSessionId || !linkCode) {
+        toast({
+          title: 'Error!',
+          description: 'Invalid magic link. Please try again',
+        });
+        router.replace('/auth');
+        return;
+      }
+
+      const response = await consumeMagicLink({
+        preAuthSessionId,
+        linkCode,
+      });
 
       if (response.status === 'OK') {
-        // we clear the login attempt info that was added when the createCode function
-        // was called since the login was successful.
-        await clearLoginAttemptInfo();
-        if (
-          response.createdNewRecipeUser &&
-          response.user.loginMethods.length === 1
-        ) {
-          toast({
-            title: 'Success!',
-            description: 'Sign up successfully!',
-          });
-          posthog.capture('user_signed_up', { email: response.user.emails[0] });
-        } else {
-          toast({
-            title: 'Success!',
-            description: 'Sign in successfully!',
-          });
-        }
+        toast({
+          title: 'Success!',
+          description: 'Sign in successfully!',
+        });
         router.replace(safeRedirectPath(redirectToPath));
       } else {
-        // this can happen if the magic link has expired or is invalid
-        // or if it was denied due to security reasons in case of automatic account linking
-
-        // we clear the login attempt info that was added when the createCode function
-        // was called - so that if the user does a page reload, they will now see the
-        // enter email / phone UI again.
-        await clearLoginAttemptInfo();
         toast({
           title: 'Error!',
           description: 'Login failed. Please try again',
         });
         router.replace('/auth');
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      if (err.isSuperTokensGeneralError === true) {
-        toast({
-          title: 'Error!',
-          description: err.message,
-        });
-        // this may be a custom error message sent from the API by you.
-      } else {
-        toast({
-          title: 'Error!',
-          description: 'Oops! Something went wrong.',
-        });
-      }
+    } catch (err: unknown) {
+      toast({
+        title: 'Error!',
+        description:
+          err instanceof Error ? err.message : 'Oops! Something went wrong.',
+      });
     }
   }
 

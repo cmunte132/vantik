@@ -87,6 +87,13 @@ export function onError<T, E>({
 
   reject(error);
 
+  if (!isServer() && rawError.resStatus === 401) {
+    const currentPath = window.location.pathname + window.location.search;
+    if (!currentPath.startsWith('/auth')) {
+      window.location.href = `/auth?redirectToPath=${encodeURIComponent(currentPath)}`;
+      return;
+    }
+  }
   if (!isServer() && !disableEvents) {
     // The failing request is the most valuable place to read the build stamp:
     // if a client broke because its build was replaced, this is where it finds

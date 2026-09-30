@@ -3,7 +3,7 @@
 /**
  * The path to send somebody to once they are signed in.
  *
- * `redirectToPath` is the query parameter SuperTokens adds when it sends a
+ * `redirectToPath` is the query parameter the app adds when it sends a
  * signed-out person to the sign-in page, so that the thing they were trying to
  * open is what they land on afterwards. It arrives on the URL, which means the
  * person browsing chooses it, and so can anybody who gets them to open a link.

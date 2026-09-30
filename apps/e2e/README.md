@@ -1,10 +1,8 @@
 # End-to-end tests
 
-These tests drive a running Vantik stack from the outside, the way a person or
-an agent does. The unit suites mock the database, redis, the auth core and the
-mail server. These tests mock nothing. They find the problems that only a
-running stack shows: a server that does not start, a route that serves another
-workspace's records, a feature that works in the code and not in the image.
+These tests use a real Vantik stack, as a person or an agent does.
+The unit suites use test objects for the database, Redis, and the SMTP server.
+These tests use real services. They check server startup, workspace access, and the behavior of the application.
 
 The runner is [Playwright](https://playwright.dev). The suite has four
 projects:
@@ -55,7 +53,7 @@ The tests also work against `pnpm dev`. Start Mailpit beside the other service
 containers, and point the server at it in `.env`:
 
 ```bash
-docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml up -d postgres redis supertokens mailpit
+docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml up -d postgres redis mailpit
 cat >> .env <<'EOF'
 SMTP_HOST=localhost
 SMTP_PORT=1025
@@ -77,6 +75,7 @@ pnpm --filter @vantikhq/e2e e2e:report
 ```
 
 Mailpit's inbox is at http://localhost:8025.
+Mailpit stores the test messages. It does not send them to the external inbox of the recipient.
 
 ### Settings
 
@@ -85,6 +84,15 @@ Mailpit's inbox is at http://localhost:8025.
 | `E2E_SERVER_URL` | `http://localhost:3001` |
 | `E2E_WEBAPP_URL` | `http://localhost:3000` |
 | `E2E_MAILPIT_URL` | `http://localhost:8025` |
+
+If the test stack uses separate ports, set `FRONTEND_HOST`, `BACKEND_HOST`, and
+`NEXT_PUBLIC_BACKEND_HOST` on the test server. Set `BACKEND_URL` on the webapp.
+Set `PUBLIC_ATTACHMENT_URL` to the frontend address with the `/api` suffix.
+Leave the `LLM_*` settings empty if the test stack has no AI provider.
+
+The repo patches `react-virtualized@9.22.6` for React 19.
+The patch uses `props.ref` instead of `element.ref` and preserves callback and object refs.
+Remove the patch when an upstream release includes the fix.
 
 ## In CI
 
@@ -181,6 +189,9 @@ and with a cookie session. There are two kinds:
 The browser project runs one test at a time. Each test works in a team of its
 own, so they could run in parallel, but the editors save half a second after
 the last keystroke, and a page starved of CPU misses that.
+
+When a sync update or a local database reload changes a saved view, the webapp keeps the same view object.
+This prevents detached model errors on an open view.
 
 Not yet covered:
 

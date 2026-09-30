@@ -6,7 +6,7 @@ description: "How to run Vantik on your own infrastructure."
 ## Overview
 
 Vantik is one Docker Compose stack in the main repository. It runs the webapp,
-the API server, PostgreSQL, Redis, and SuperTokens.
+the API server, PostgreSQL, and Redis.
 The server applies the database migrations when it starts.
 You need no separate repository for the deployment, and no setup script.
 
@@ -44,13 +44,9 @@ echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
 docker compose up -d
 ```
 
-4. Open the webapp and sign in with your email address. The default address is
-   http://localhost:3000, or use your `FRONTEND_HOST`. If you configure no
-   SMTP server, the server writes the magic login link to its log:
-
-```bash
-docker compose logs server | grep -A5 "magic link"
-```
+4. Open the webapp and sign in. The default address is http://localhost:3000.
+   Use an email code or a magic link if you configured SMTP.
+   Without SMTP, create an account with a passkey.
 
 ## How to sign in
 
@@ -58,7 +54,9 @@ There are two methods, and a new installation has both.
 
 **An email code, or a magic link.** Type an address. Vantik then sends you an
 email with a code of six digits and a link. This method needs
-[SMTP](#email-smtp). Without SMTP, the server writes the code to its log.
+[SMTP](#email-smtp). In development, the server also writes the code to its log.
+If the SMTP server rejects the message, Vantik returns an error instead of a successful login flow.
+Check the server log and the SMTP configuration before you try again.
 
 **A passkey.** Authenticate with Touch ID, Windows Hello, or a security key. You
 need no mail server, so this is the practical method for one user, or for a
@@ -72,9 +70,9 @@ browser does not offer the passkeys of the old domain. Therefore set
 `FRONTEND_HOST` before people enrol. WebAuthn also needs a secure context: use
 HTTPS in production. `localhost` is an exception, and it needs no TLS.
 
-Each account holds one passkey. The email code always continues to work, so the
-loss of a device does not lock you out. To move a passkey to a new device,
-remove the old passkey under **Settings → Security**, and enrol the new one.
+An account can hold more than one passkey. The email code also continues to work.
+Add a passkey for each device under **Settings → Security**.
+Remove a passkey there if you lose its device.
 
 By default, any person can make an account with a passkey. For an instance that
 accepts an invitation only, disable that:
@@ -85,6 +83,27 @@ PASSKEY_SIGNUP_ENABLED=false
 
 A person then arrives with an invitation or a login code, and adds a passkey
 later from Settings.
+
+### Sessions and upgrades
+
+The server stores a hash of each session token in PostgreSQL.
+The browser keeps the token in an httpOnly, SameSite=Lax cookie.
+Production cookies require HTTPS. A session has a lifetime of 30 days.
+HTTP requests with a session cookie extend the database and cookie expiry when fewer than 15 days remain.
+Websocket connections and bearer lookups do not extend the browser session lifetime.
+Sign-out revokes the session and closes its websocket connections.
+A workspace change updates only the current session. The token stays the same.
+
+The server accepts writes and websocket connections from the origins in `FRONTEND_HOST`.
+Use a comma-separated list if the installation has more than one frontend origin.
+
+Before an upgrade from SuperTokens, back up the database.
+Stop the old server and the SuperTokens service before you apply the migrations.
+The migrations copy passkeys and hash personal access tokens before they remove legacy tables.
+The migration stops if a legacy passkey has no account or no matching key.
+Keep the original hostname in `FRONTEND_HOST` so existing passkeys can authenticate.
+Users must sign in again because the new server does not accept old sessions.
+
 
 ## Scheduled jobs
 
@@ -109,10 +128,10 @@ an error to the log and continues.
 
 ### Email (SMTP)
 
-With SMTP, the server sends the magic login links and the notification emails.
-Without SMTP, the login links go to the server log. A [passkey](#how-to-sign-in)
-needs no email at all, so an installation for one user can leave SMTP unset. Any
-provider with SMTP authentication works, such as Gmail, Amazon SES, or SendGrid:
+With SMTP, the server sends login codes, magic links, and notification emails.
+In development, the server also writes login codes and links to its log.
+A [passkey](#how-to-sign-in) needs no email, so an installation for one user can leave SMTP unset.
+Any provider with SMTP authentication works, such as Gmail, Amazon SES, or SendGrid:
 
 ```bash
 SMTP_HOST=your-smtp-host
@@ -447,7 +466,7 @@ unhandled 5xx exception on the span, with its stack.
 
 **Metrics.** The rate, the errors, and the latency of the requests come from
 `http.server.request.duration`. Its labels are the route template, the method,
-and the status code. Calls to SuperTokens, hosted models, and the LLM provider
+and the status code. Calls to hosted models and the LLM provider
 use `http.client.request.duration`, with the host as the label.
 The metrics for the Node runtime cover the delay of the event loop, from the
 mean to p99. They also cover the use of the event loop, the duration of the

@@ -5,7 +5,7 @@ description: "How to run Vantik on your machine for development"
 
 ## Overview
 
-For development, run only the service containers: PostgreSQL, Redis, and SuperTokens.
+For development, run only the service containers: PostgreSQL and Redis.
 Run the server and the webapp on your host, with hot reload.
 These containers publish their ports on localhost for this purpose.
 
@@ -33,7 +33,7 @@ echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
    server.
 
 ```bash
-docker compose up -d postgres redis supertokens
+docker compose up -d postgres redis
 ```
 
 3. Install the dependencies and apply the database schema.
@@ -60,15 +60,18 @@ them, run `docker compose stop webapp server`.
 
 ![](/img/docs/enter-email.png)
 
-6. **Get the magic link.** If your `.env` file has no SMTP credentials, the
-   server sends no email. It writes the magic link to the log from step 4:
+6. **Get the login code or the magic link.** In development, the server
+   writes both values to its log:
 
 ```text
-Sending email to dev@example.com with subject Log in to Vantik
-Magic link: http://localhost:3000/auth/verify?token=...
+Enter this login code in the app:
+123456
+
+Or click here to log in with this magic link:
+http://localhost:3000/auth/verify?preAuthSessionId=example#example
 ```
 
-   Copy the link into your browser, and sign in.
+   Enter the code in the application, or open the link in your browser.
 
 :::tip
 A passkey replaces step 5 and step 6. Select **Create an account with a

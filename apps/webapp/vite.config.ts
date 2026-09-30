@@ -122,11 +122,7 @@ export default defineConfig({
       '/api': {
         target: backend,
         changeOrigin: true,
-        // SuperTokens is mounted at /api/auth on the server, so that the
-        // refresh-token cookie it sets is scoped to the path the browser asks
-        // for. Every other /api path loses its prefix.
-        rewrite: (url) =>
-          url.startsWith('/api/auth') ? url : url.replace(/^\/api/, ''),
+        rewrite: (url) => url.replace(/^\/api/, ''),
       },
       // `npx skills add https://your-vantik-host` looks for the agent skills
       // index at the origin, not under /api.

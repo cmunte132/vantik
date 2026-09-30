@@ -53,7 +53,7 @@ control this fork, and they do not endorse it.
 
 You need Docker, or podman with the compose provider. The compose stack needs no
 other setup. It runs the webapp, the API server, and all the services:
-PostgreSQL, Redis, and SuperTokens. The server applies the database migrations
+PostgreSQL and Redis. The server applies the database migrations
 when it starts. PostgreSQL also provides search through FTS, pg_trgm, and pgvector.
 
 ```bash
@@ -162,7 +162,7 @@ cp .env.example .env
 echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
 
 # 1. The service containers only. This command starts no webapp and no server.
-docker compose up -d postgres redis supertokens
+docker compose up -d postgres redis
 
 # 2. The npm packages and the database schema
 pnpm install
@@ -299,7 +299,7 @@ service containers. Then set the exporter to the published port, and not to the
 container:
 
 ```bash
-docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d postgres redis supertokens lgtm
+docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d postgres redis lgtm
 echo 'OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318' >> .env
 ```
 

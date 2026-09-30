@@ -46,14 +46,6 @@ server {
         try_files /version.json =404;
     }
 
-    # SuperTokens is mounted at /api/auth on the server, so that the refresh
-    # token cookie it sets is scoped to the same path the browser requests.
-    # These keep their prefix.
-    location ^~ /api/auth {
-        include /etc/nginx/vantik-proxy.conf;
-        proxy_pass ${BACKEND_URL};
-    }
-
     # Every other /api path loses its prefix: /api/v1/issues is /v1/issues.
     location /api/ {
         include /etc/nginx/vantik-proxy.conf;

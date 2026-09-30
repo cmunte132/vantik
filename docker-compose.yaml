@@ -13,7 +13,7 @@
 # For local development, run the apps on the host and start only the backing
 # services from this file:
 #
-#   docker compose up -d postgres redis supertokens
+#   docker compose up -d postgres redis
 #   pnpm install && pnpm migrate && pnpm dev
 #
 # They publish their ports on localhost for exactly that — see "Local
@@ -88,8 +88,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      supertokens:
-        condition: service_healthy
     env_file: .env
     environment:
       # Read at runtime, not baked in: the server advertises this on every
@@ -99,7 +97,6 @@ services:
       VANTIK_BUILD_ID: ${VANTIK_BUILD_ID:-}
       DB_HOST: postgres
       REDIS_URL: redis
-      SUPERTOKEN_CONNECTION_URI: http://supertokens:3567
       DATABASE_URL: postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${POSTGRES_DB:-vantik}?schema=${DB_SCHEMA:-vantik}&sslmode=prefer
       OAUTH_CALLBACK_URL: ${FRONTEND_HOST:-http://localhost:3000}/api/v1/oauth/callback
       REPO_MIRROR_ROOT: /data/repos
@@ -220,29 +217,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  supertokens:
-    container_name: vantik-supertokens
-    # Pinned deliberately. An auth core that moves under us on every pull is a
-    # liability, and the SDKs speak a specific CDI version: supertokens-node 24
-    # needs CDI 5.3, which this core serves.
-    image: supertokens/supertokens-postgresql:12.0.7
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      POSTGRESQL_CONNECTION_URI: "postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${POSTGRES_DB:-vantik}"
-    ports:
-      - "127.0.0.1:3567:3567"
-    networks:
-      - vantik
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c ': > /dev/tcp/127.0.0.1/3567'"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   # Object storage that speaks the S3 protocol. It is not part of the default
   # stack — attachments go to a disk unless an operator sets STORAGE_PROVIDER —
   # so it sits behind a profile and starts only when it is asked for:

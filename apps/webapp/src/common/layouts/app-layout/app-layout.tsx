@@ -18,11 +18,11 @@ import {
 } from '@vantikhq/ui/components/sidebar';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import * as React from 'react';
 
 import { GlobalShortcuts, IssueShortcutDialogs } from 'modules/shortcuts';
 
+import { useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 import { AllProviders } from 'common/wrappers/all-providers';
 

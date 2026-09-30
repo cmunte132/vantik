@@ -1,7 +1,8 @@
-import Router from 'next/router';
 import Passwordless from 'supertokens-auth-react/recipe/passwordless';
 import SessionReact from 'supertokens-auth-react/recipe/session';
 import WebAuthn from 'supertokens-auth-react/recipe/webauthn';
+
+import { Router } from 'common/router';
 
 export const frontendConfig = () => {
   // The API is proxied through this same origin at /api, and the auth UI is

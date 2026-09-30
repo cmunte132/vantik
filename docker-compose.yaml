@@ -52,9 +52,9 @@ services:
         #
         # Left unset, the build falls back to the release version plus a
         # timestamp, which is unique per build but says nothing about what is in
-        # it. Setting it means rebuilding the same commit produces the same chunk
-        # URLs, so clients that are already open are not made to reload for
-        # nothing.
+        # it. Setting it means rebuilding the same commit keeps the same stamp,
+        # so clients that are already open are not told to reload for nothing.
+        # `pnpm stack:rebuild` sets it.
         VANTIK_BUILD_ID: ${VANTIK_BUILD_ID:-}
         VANTIK_COMMIT: ${VANTIK_COMMIT:-}
     # Releases are published to GitHub Container Registry. Override REGISTRY to
@@ -66,11 +66,10 @@ services:
     depends_on:
       server:
         condition: service_healthy
-    env_file: .env
     environment:
-      # The Next.js server proxies /api/* to the backend from inside the
-      # container network. Browser-facing settings are not needed here: the
-      # browser fetches them from the server at /api/v1/config.
+      # nginx proxies /api/* to the backend from inside the container network
+      # (apps/webapp/nginx.conf.template). It needs nothing else from .env:
+      # the browser fetches its settings from the server at /api/v1/config.
       BACKEND_URL: http://server:3001
     ports:
       - "3000:3000"

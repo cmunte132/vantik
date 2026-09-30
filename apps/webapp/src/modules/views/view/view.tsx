@@ -6,7 +6,6 @@ import {
   ResizablePanelGroup,
 } from '@vantikhq/ui/components/resizable';
 import { observer } from 'mobx-react-lite';
-import { useParams } from 'next/navigation';
 import React from 'react';
 
 import { FiltersView } from 'modules/issues/filters-view/filters-view';
@@ -14,6 +13,7 @@ import { OverviewInsights } from 'modules/issues/overview-insights';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { useParams } from 'common/router';
 import { withApplicationStore } from 'common/wrappers/with-application-store';
 
 import { useLocalState } from 'hooks/use-local-state';

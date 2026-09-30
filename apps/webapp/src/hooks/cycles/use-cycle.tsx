@@ -1,7 +1,7 @@
 import { computed } from 'mobx';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { useRouter } from 'common/router';
 import type { CycleType } from 'common/types';
 
 import { useCurrentTeam } from 'hooks/teams';

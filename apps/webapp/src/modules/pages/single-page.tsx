@@ -18,8 +18,6 @@ import {
 import { Editor, EditorExtensions } from '@vantikhq/ui/components/editor/index';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 import * as React from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -30,6 +28,7 @@ import { AiWritingExtension } from 'common/editor';
 import { vantikIssueExtension } from 'common/editor/vantik-issue-extension';
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { Link, useRouter } from 'common/router';
 import { PageEntryPolicy, PageKind, type PageType } from 'common/types';
 
 import { useEditorPasteHandler } from 'hooks/use-editor-paste-handler';

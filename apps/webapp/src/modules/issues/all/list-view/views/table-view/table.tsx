@@ -13,12 +13,12 @@ import {
   TableRow,
 } from '@vantikhq/ui/components/table';
 import { observer } from 'mobx-react-lite';
-import { useParams } from 'next/navigation';
 import React from 'react';
 
-import type { IssueType } from 'common/types';
-
 import { useCompletionGuard } from 'modules/issues/components/use-completion-guard';
+
+import { useParams } from 'common/router';
+import type { IssueType } from 'common/types';
 
 import { useUpdateIssueMutation } from 'services/issues';
 

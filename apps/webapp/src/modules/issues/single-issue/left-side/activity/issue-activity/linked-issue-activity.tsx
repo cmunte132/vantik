@@ -46,6 +46,7 @@ export function LinkedIssueActivity({ linkedIssue }: LinkedIssueActivityProps) {
         <a
           href={linkedIssue.url}
           target="_blank"
+          rel="noreferrer"
           className="flex items-center gap-1 ml-2 mr-1"
         >
           {getTitle()}

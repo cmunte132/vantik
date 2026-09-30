@@ -1,8 +1,9 @@
 'use client';
 
 import { Loader } from '@vantikhq/ui/components/loader';
-import { useParams } from 'next/navigation';
 import React from 'react';
+
+import { useParams } from 'common/router';
 
 import { IssueViewContext } from 'components/side-issue-view';
 

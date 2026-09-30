@@ -6,10 +6,9 @@ import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import { Textarea } from '@vantikhq/ui/components/textarea';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 import * as React from 'react';
 
+import { Link, useRouter } from 'common/router';
 import { PageEntryStatus, PageKind, type PageEntryType } from 'common/types';
 
 import { useAllUsers } from 'hooks/users';

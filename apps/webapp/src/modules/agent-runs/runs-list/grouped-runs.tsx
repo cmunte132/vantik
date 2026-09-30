@@ -1,10 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { Link as RouterLink, useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 
 import { useContextStore } from 'store/global-context-provider';
@@ -93,7 +92,7 @@ const Group = observer(({ group }: { group: RunGroup }) => {
             it. Both are worth reaching, so both are links — this one to the
             issue, the rows to their run. */}
         {group.issue.key ? (
-          <NextLink
+          <RouterLink
             href={workspaceHref(workspaceSlug, 'issue', group.issue.key)}
             className="flex min-w-0 items-baseline gap-2.5 hover:underline"
           >
@@ -101,7 +100,7 @@ const Group = observer(({ group }: { group: RunGroup }) => {
               {group.issue.key}
             </span>
             <span className="font-medium">{group.issue.title}</span>
-          </NextLink>
+          </RouterLink>
         ) : (
           // Full width and unclipped — the whole reason the issue moved out of
           // the rows.
@@ -202,7 +201,7 @@ const Row = observer(
             rows with something at the edge. */}
         <span className="hidden w-56 shrink-0 justify-end lg:flex">
           {where && (
-            <NextLink
+            <RouterLink
               href={where.kind === 'pull_request' ? where.value : '#'}
               onClick={(event) => {
                 event.stopPropagation();
@@ -216,7 +215,7 @@ const Row = observer(
               className="truncate font-mono text-xs text-primary hover:underline"
             >
               {tail(where.value)} →
-            </NextLink>
+            </RouterLink>
           )}
         </span>
       </div>

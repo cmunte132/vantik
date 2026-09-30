@@ -1,6 +1,7 @@
-import { usePathname } from 'next/navigation';
 import React from 'react';
 import { List, type ListProps, type ScrollParams } from 'react-virtualized';
+
+import { usePathname } from 'common/router';
 
 interface ScrollManagedListProps extends ListProps {
   listId: string;

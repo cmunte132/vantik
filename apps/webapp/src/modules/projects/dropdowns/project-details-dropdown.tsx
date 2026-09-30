@@ -17,9 +17,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 
 import { useProject } from 'hooks/projects';

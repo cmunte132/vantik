@@ -8,11 +8,10 @@ import { Button } from '@vantikhq/ui/components/button';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import { IssuesLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { HeaderLayout } from 'common/header-layout';
+import { Link, useRouter } from 'common/router';
 
 import { useCycle } from 'hooks/cycles';
 import { useCurrentTeam } from 'hooks/teams';

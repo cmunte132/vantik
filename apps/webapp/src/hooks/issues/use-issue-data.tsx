@@ -1,6 +1,6 @@
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { useRouter } from 'common/router';
 import type { IssueType } from 'common/types';
 
 import { IssueViewContext } from 'components/side-issue-view';

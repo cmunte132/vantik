@@ -7,10 +7,10 @@ import {
 import { Button } from '@vantikhq/ui/components/button';
 import { IssuesLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
 import React from 'react';
 
 import { HeaderLayout } from 'common/header-layout';
+import { Link } from 'common/router';
 
 import { useProject } from 'hooks/projects';
 

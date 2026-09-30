@@ -1,8 +1,7 @@
-import type { NextLayoutComponentType } from 'next';
-
-import { usePathname } from 'next/navigation';
-import { useRouter } from 'next/router';
 import React from 'react';
+
+import type { PageComponent } from 'common/router';
+import { usePathname, useRouter } from 'common/router';
 
 import { readFiltersFromQuery } from 'hooks/use-filter-from-query';
 
@@ -10,7 +9,7 @@ import { useContextStore } from 'store/global-context-provider';
 
 export function withApplicationStore(
   Component: React.ComponentType,
-): NextLayoutComponentType {
+): PageComponent {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ComponentWithApplicationStore = (props: any) => {
     const pathname = usePathname();

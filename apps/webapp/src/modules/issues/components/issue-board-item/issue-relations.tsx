@@ -2,14 +2,14 @@ import { buttonVariants } from '@vantikhq/ui/components/button';
 import { BlockedFill, BlocksFill, SubIssue } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { useRouter } from 'common/router';
 import { getWorkflowColor } from 'common/status-color';
 import { IssueRelationEnum } from 'common/types';
 import type { IssueType, WorkflowType } from 'common/types';
-import { workspaceHref } from 'common/workspace-href';
 import { getWorkflowIcon } from 'common/workflow-icons';
+import { workspaceHref } from 'common/workspace-href';
 
 import { useTeamWithId } from 'hooks/teams';
 

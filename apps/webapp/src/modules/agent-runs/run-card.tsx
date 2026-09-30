@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Button } from '@vantikhq/ui/components/button';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
 import ReactTimeAgo from 'react-time-ago';
 
+import { useRouter } from 'common/router';
 import type { User } from 'common/types';
 import { getUserIcon } from 'common/user-util';
 import { workspaceHref } from 'common/workspace-href';
@@ -13,12 +13,7 @@ import { useCancelRunMutation, useRetryRunMutation } from 'services/agent-runs';
 
 import { useContextStore } from 'store/global-context-provider';
 
-import {
-  FAILURE_PROSE,
-  PHASE_LABEL,
-  duration,
-  isLive,
-} from './run-vocabulary';
+import { FAILURE_PROSE, PHASE_LABEL, duration, isLive } from './run-vocabulary';
 import { StatusDot } from './status-dot';
 
 interface Props {
@@ -187,11 +182,7 @@ export const RunCard = observer(({ run, user }: Props) => {
           </Button>
         )}
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push(runHref)}
-        >
+        <Button variant="ghost" size="sm" onClick={() => router.push(runHref)}>
           See what it did
         </Button>
       </div>

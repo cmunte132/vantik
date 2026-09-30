@@ -4,10 +4,10 @@ import {
   BreadcrumbLink,
 } from '@vantikhq/ui/components/breadcrumb';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
 import React from 'react';
 
 import { HeaderLayout } from 'common/header-layout';
+import { Link } from 'common/router';
 
 interface Crumb {
   title: string;

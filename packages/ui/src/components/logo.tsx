@@ -1,6 +1,3 @@
-'use client';
-
-import Image from 'next/image';
 import { useTheme } from 'next-themes';
 
 interface LogoProps {
@@ -13,7 +10,7 @@ export default function StaticLogo({ width, height }: LogoProps) {
 
   if (theme === 'light') {
     return (
-      <Image
+      <img
         src="/logo_text.svg"
         key={2}
         alt="logo"
@@ -24,7 +21,7 @@ export default function StaticLogo({ width, height }: LogoProps) {
   }
 
   return (
-    <Image
+    <img
       src="/logo_white_text.svg"
       alt="logo"
       key={1}

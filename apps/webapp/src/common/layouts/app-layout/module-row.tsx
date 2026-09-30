@@ -5,11 +5,11 @@ import {
   SidebarMenuSubItem,
 } from '@vantikhq/ui/components/sidebar';
 import { cn } from '@vantikhq/ui/lib/utils';
-import NextLink from 'next/link';
 import * as React from 'react';
 
 import { AxisIcon } from 'modules/product-axis/axis-icon';
 
+import { Link as RouterLink } from 'common/router';
 import type { IssueType, ModuleType } from 'common/types';
 
 import { useContextStore } from 'store/global-context-provider';
@@ -45,7 +45,7 @@ export function ModuleRow({
         asChild
         isActive={checkIsActive(pathname, href, [])}
       >
-        <NextLink href={href} className={cn(borrowed && 'opacity-60')}>
+        <RouterLink href={href} className={cn(borrowed && 'opacity-60')}>
           <AxisIcon
             kind="module"
             name={module.name}
@@ -58,7 +58,7 @@ export function ModuleRow({
           <span data-rail-hide className="shrink-0 text-sidebar-muted">
             {borrowed ? 'linked' : count || null}
           </span>
-        </NextLink>
+        </RouterLink>
       </SidebarMenuSubButton>
     </SidebarMenuSubItem>
   );

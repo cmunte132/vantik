@@ -1,12 +1,12 @@
 import { Loader } from '@vantikhq/ui/components/loader';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
-import { useParams } from 'next/navigation';
 
 import { Header } from 'modules/settings/header';
 import { SettingSection } from 'modules/settings/setting-section';
 
 import { ContentBox } from 'common/layouts/content-box';
 import { SettingsLayout } from 'common/layouts/settings-layout';
+import { useParams } from 'common/router';
 
 import { useGetIntegrationDefinition } from 'services/integration-definition';
 

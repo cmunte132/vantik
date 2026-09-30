@@ -1,6 +1,7 @@
 import { QueryCache, QueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/router';
 import * as React from 'react';
+
+import { useRouter } from 'common/router';
 
 export const useGetQueryClient = () => {
   const router = useRouter();

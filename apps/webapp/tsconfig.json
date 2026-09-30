@@ -1,13 +1,8 @@
 {
-  "extends": "@vantikhq/typescript-config/next.json",
+  "extends": "@vantikhq/typescript-config/react.json",
   "compilerOptions": {
-    "baseUrl": "src",
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ]
+    "baseUrl": "src"
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "src/pages/api/**.js"]
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
 }

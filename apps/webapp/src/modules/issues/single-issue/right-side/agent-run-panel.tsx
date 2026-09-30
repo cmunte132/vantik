@@ -1,16 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import {
+  STATUS_LABEL,
+  duration,
+  isLive,
+} from 'modules/agent-runs/run-vocabulary';
+import { StatusDot } from 'modules/agent-runs/status-dot';
+
+import { useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 
 import { useIssueData } from 'hooks/issues';
 
 import { useContextStore } from 'store/global-context-provider';
-
-import { STATUS_LABEL, duration, isLive } from 'modules/agent-runs/run-vocabulary';
-import { StatusDot } from 'modules/agent-runs/status-dot';
 
 /**
  * The agent's state, as one property of the issue.
@@ -67,7 +71,9 @@ export const AgentRunPanel = observer(() => {
         {/* Truncated rather than wrapped: the longest label here is "The
             runner went away", and a rail row that grows to two lines stops
             reading like the rows above it. */}
-        <span className="truncate">{STATUS_LABEL[run.status] ?? run.status}</span>
+        <span className="truncate">
+          {STATUS_LABEL[run.status] ?? run.status}
+        </span>
 
         {took && (
           <span className="shrink-0 text-muted-foreground">· {took}</span>

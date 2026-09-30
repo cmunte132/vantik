@@ -6,12 +6,12 @@ import {
   CommandList,
 } from '@vantikhq/ui/components/command';
 import { Loader } from '@vantikhq/ui/components/loader';
-import { useRouter } from 'next/router';
 import React from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { ModalIssueItem } from 'modules/issues/components/modals/modal-issue-item';
 
+import { useRouter } from 'common/router';
 import type { IssueType } from 'common/types';
 
 import { useCurrentWorkspace } from 'hooks/workspace';

@@ -95,8 +95,8 @@ jobs:
           # .dockerignore, so the build cannot read the commit itself; without
           # it the id falls through to the version plus a timestamp, and every
           # rebuild — including a re-run of this workflow on an unchanged
-          # commit — moves the chunk namespace and evicts every open client for
-          # a bundle that did not change.
+          # commit — gets a new id and tells every open client to reload for a
+          # bundle that did not change.
           build-args: |
             ${{ matrix.app == 'webapp' && format('SENTRY_AUTH_TOKEN={0}', secrets.SENTRY_AUTH_TOKEN) || '' }}
             ${{ matrix.app == 'webapp' && format('VANTIK_COMMIT={0}', github.sha) || '' }}

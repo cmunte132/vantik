@@ -1,12 +1,11 @@
 import { RiAddLine, RiDeleteBinLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { Link as RouterLink, useRouter } from 'common/router';
 import { SCOPES } from 'common/scopes';
 import type { ModuleType, ProductType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
@@ -64,12 +63,12 @@ export const Products = withApplicationStore(
             crumbs={[{ title: 'Products' }]}
             actions={
               <Button variant="secondary" size="sm" className="gap-1" asChild>
-                <NextLink
+                <RouterLink
                   href={workspaceHref(workspaceSlug, 'settings', 'new_product')}
                 >
                   <RiAddLine size={14} />
                   New product
-                </NextLink>
+                </RouterLink>
               </Button>
             }
           />
@@ -189,13 +188,13 @@ export const Modules = withApplicationStore(
                 key={module.id}
                 className="flex items-center gap-2 border-b border-border px-4 py-2"
               >
-                <NextLink
+                <RouterLink
                   href={workspaceHref(workspaceSlug, 'module', module.key)}
                   className="flex flex-1 items-center gap-2 min-w-0 hover:underline"
                 >
                   <span className="flex-1 truncate">{module.name}</span>
                   <span className="text-muted-foreground">{module.key}</span>
-                </NextLink>
+                </RouterLink>
 
                 <div className="w-64 shrink-0">
                   <OwnerSelect

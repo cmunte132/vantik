@@ -13,11 +13,11 @@ import {
 } from '@vantikhq/ui/components/select';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import * as React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { useRouter } from 'common/router';
 
 import { useKnowledgeRunTrace, useKnowledgeTracedRuns } from 'services/pages';
 

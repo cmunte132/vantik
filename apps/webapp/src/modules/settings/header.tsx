@@ -5,9 +5,8 @@ import {
 } from '@vantikhq/ui/components/breadcrumb';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 
+import { Link, useRouter } from 'common/router';
 import { SidebarExpand } from 'common/sidebar-expand';
 
 import { useCurrentTeam } from 'hooks/teams';

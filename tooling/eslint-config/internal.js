@@ -5,7 +5,6 @@ module.exports = {
     "prettier",
     "eslint:recommended",
     "plugin:prettier/recommended",
-    "next/core-web-vitals",
     "turbo",
   ],
   plugins: [
@@ -15,6 +14,8 @@ module.exports = {
     "notice",
     "import",
   ],
+  // The globals eslint-config-next used to supply. The packages run in both.
+  env: { browser: true, node: true, es2022: true },
   parserOptions: {
     ecmaVersion: 2020,
     sourceType: "module",

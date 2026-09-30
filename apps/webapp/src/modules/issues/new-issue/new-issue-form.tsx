@@ -5,7 +5,6 @@ import { FormControl, FormField, FormItem } from '@vantikhq/ui/components/form';
 import { Loader } from '@vantikhq/ui/components/loader';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import { usePathname } from 'next/navigation';
 import React from 'react';
 import {
   useWatch,
@@ -14,6 +13,7 @@ import {
 } from 'react-hook-form';
 
 import { AiWritingExtension } from 'common/editor/ai-writing';
+import { usePathname } from 'common/router';
 import type { IssueType } from 'common/types';
 
 import { useAIEnabled } from 'hooks';

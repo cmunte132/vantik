@@ -1,8 +1,8 @@
 import { Badge } from '@vantikhq/ui/components/badge';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { useRouter } from 'common/router';
 import type { ModuleType } from 'common/types';
 
 import {

@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* The families the Tailwind theme names (packages/ui/tailwind.config.ts). The
+   faces come from @fontsource-variable, imported in main.tsx. */
+:root {
+  --font-geist-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-geist-mono: 'Geist Mono Variable', ui-monospace, monospace;
+}
+
 .text-primary {
   color: #1a89c5;
 }

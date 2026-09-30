@@ -18,13 +18,12 @@ import {
   SidebarMenuSubItem,
 } from '@vantikhq/ui/components/sidebar';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
 import { withoutArchived } from 'modules/product-axis/archive';
 import { AxisIcon } from 'modules/product-axis/axis-icon';
 
+import { Link as RouterLink, usePathname } from 'common/router';
 import type { ModuleType, ProductType } from 'common/types';
 
 import { useCurrentWorkspace } from 'hooks/workspace';
@@ -62,9 +61,9 @@ export const ProductList = observer(() => {
       <SidebarGroupLabel>
         Products
         <SidebarGroupAction asChild aria-label="Add product">
-          <NextLink href={`/${workspace.slug}/settings/new_product`}>
+          <RouterLink href={`/${workspace.slug}/settings/new_product`}>
             <RiAddLine size={18} />
-          </NextLink>
+          </RouterLink>
         </SidebarGroupAction>
       </SidebarGroupLabel>
 
@@ -162,13 +161,13 @@ export const ProductList = observer(() => {
                     */}
                     <SidebarMenuSubItem>
                       <SidebarMenuSubButton asChild>
-                        <NextLink
+                        <RouterLink
                           href={`${productHref}?new=module`}
                           className="text-sidebar-muted"
                         >
                           <RiAddLine className="!size-3.5" size={18} />
                           <span className="flex-1 truncate">New module</span>
-                        </NextLink>
+                        </RouterLink>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
                   </SidebarMenuSub>

@@ -6,13 +6,11 @@
 # `turbo prune` stage that consumed the whole context, which meant any changed
 # byte anywhere — a README, a .DS_Store — reinstalled ~1800 packages.
 #
-# There is no production-deps stage: `output: "standalone"` means Next traces
-# what it needs and emits it into .next/standalone, so the runner takes only
-# build output. The stage that used to be here installed a full production tree
-# that nothing ever copied.
+# The webapp builds to static files, so there are no production dependencies
+# to install: the runner is nginx and the files in dist/.
 
 FROM node:24-alpine AS base
-RUN apk add --no-cache openssl dumb-init libc6-compat
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 # Installed once here rather than in each stage that needs it.
 RUN npm install -g pnpm@10.34.5
@@ -45,49 +43,39 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
 ## the entire node_modules tree byte for byte, with a --chown that forced a
 ## per-file rewrite.
 FROM dev-deps AS builder
-ARG SENTRY_AUTH_TOKEN
 COPY . .
-COPY apps/webapp/.prod.env .env
-# Only configure sentry-cli when a token is provided; an empty .sentryclirc
-# makes the Sentry webpack plugin attempt (and fail) source map uploads.
-RUN if [ -n "$SENTRY_AUTH_TOKEN" ]; then \
-      echo "SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN" >> .env && \
-      printf '[auth]\ntoken=%s\n' "$SENTRY_AUTH_TOKEN" > /app/apps/webapp/.sentryclirc; \
-    fi
+# Release builds in CI pass it, to upload source maps to Sentry. It stays in
+# this stage; the runner copies only dist/, which holds no maps.
+ARG SENTRY_AUTH_TOKEN
 # The build stamp. .git is in .dockerignore, so the build genuinely cannot read
 # the commit itself — it has to be passed in, and docker-compose.yaml derives it.
 # Declared here rather than at the top of the stage so changing it does not
 # invalidate the COPY above it.
 #
-# Both are in turbo.json's globalEnv: they are baked into the bundle and into the
-# chunk namespace, so a turbo cache hit replayed under a new stamp would ship the
-# wrong build id.
+# Both are in turbo.json's globalEnv: they are baked into the bundle, so a turbo
+# cache hit replayed under a new stamp would ship the wrong build id.
 ARG VANTIK_BUILD_ID
 ARG VANTIK_COMMIT
 ENV VANTIK_BUILD_ID=$VANTIK_BUILD_ID
 ENV VANTIK_COMMIT=$VANTIK_COMMIT
-# .next/cache is Next's incremental compile cache. It is deliberately not part
-# of the image — the runner takes only .next/standalone and .next/static — so a
-# cache mount costs nothing and turns every build after the first into an
-# incremental one.
-RUN --mount=type=cache,id=next-cache,target=/app/apps/webapp/.next/cache,sharing=locked \
-    --mount=type=cache,id=turbo,target=/app/.turbo,sharing=locked \
-    pnpm run build --filter=webapp...
+# The workspace packages need no build first: vite.config.ts takes
+# @vantikhq/types from source, and Tailwind scans the ui sources itself.
+#
+# Vite runs directly, not through `pnpm run`, and on one native thread. The
+# pnpm process would sit in memory for the whole build, and each extra thread
+# adds its own allocations. The build then fits beside a running stack in a
+# 2 GiB podman VM.
+RUN cd apps/webapp && \
+    NODE_ENV=production SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN \
+    RAYON_NUM_THREADS=1 TOKIO_WORKER_THREADS=1 \
+      node node_modules/vite/bin/vite.js build
 
-# Runner. No pnpm: the entrypoint execs node against the standalone server.
-FROM node:24-alpine AS runner
-RUN apk add --no-cache dumb-init bash
-WORKDIR /app
-ENV NODE_ENV=production
-
-COPY --from=builder --chown=node:node /app/apps/webapp/.next/standalone ./
-COPY --from=builder --chown=node:node /app/apps/webapp/.next/static ./apps/webapp/.next/static
-COPY --from=builder --chown=node:node /app/apps/webapp/public ./apps/webapp/public
-COPY --from=builder --chown=node:node /app/apps/webapp/package.json ./apps/webapp/package.json
-COPY --from=builder --chown=node:node /app/apps/webapp/entrypoint.sh ./apps/webapp/entrypoint.sh
+# Runner. nginx serves the files and proxies /api/* to the server; see
+# nginx.conf.template. The unprivileged image runs as a non-root user.
+FROM nginxinc/nginx-unprivileged:1.29-alpine AS runner
+COPY --from=builder /app/apps/webapp/dist /usr/share/nginx/html
+COPY apps/webapp/nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY apps/webapp/nginx-proxy.conf /etc/nginx/vantik-proxy.conf
+COPY --chmod=0755 apps/webapp/nginx-build-id.envsh /docker-entrypoint.d/15-vantik-build-id.envsh
 
 EXPOSE 3000
-
-USER node
-
-CMD ["sh", "./apps/webapp/entrypoint.sh"]

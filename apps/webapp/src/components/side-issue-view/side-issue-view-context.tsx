@@ -1,6 +1,7 @@
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
+
+import { useRouter } from 'common/router';
 
 import { useLocalCommonState } from 'hooks/use-local-state';
 import { useCurrentWorkspace } from 'hooks/workspace';

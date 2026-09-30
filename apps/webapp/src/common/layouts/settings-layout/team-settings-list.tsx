@@ -19,10 +19,9 @@ import {
 } from '@vantikhq/ui/components/sidebar';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { Link, useRouter } from 'common/router';
 import type { TeamType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
 

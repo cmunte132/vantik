@@ -2,19 +2,17 @@
   "$schema": "https://turbo.build/schema.json",
   "globalEnv": [
     "VERSION",
-    "NEXT_PUBLIC_VERSION",
     // Part of the hash, not just passed through. The build stamp is baked into
-    // the bundle and into the chunk namespace, so a cached build replayed under
-    // a new stamp would ship the old build id and defeat the whole mechanism.
+    // the bundle, so a cached build replayed under a new stamp would ship the
+    // old build id and defeat the whole mechanism.
     "VANTIK_BUILD_ID",
     "VANTIK_COMMIT",
     "NODE_ENV",
-    "NEXT_RUNTIME",
     "NEXT_PUBLIC_BACKEND_HOST",
     "NEXT_PUBLIC_POSTHOG_KEY",
     "NEXT_PUBLIC_POSTHOG_HOST",
     "NEXT_PUBLIC_SENTRY_DSN",
-    // Turns on the source map upload in next.config.js. Turbo hands a task only
+    // Turns on the source map upload in vite.config.ts. Turbo hands a task only
     // the variables listed here, so without this line the image build's token
     // never reached the build, and the upload was silently skipped.
     "SENTRY_AUTH_TOKEN",
@@ -155,8 +153,7 @@
         "^build"
       ],
       "outputs": [
-        "dist/**",
-        ".next/**"
+        "dist/**"
       ]
     },
     "lint": {},

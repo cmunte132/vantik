@@ -28,8 +28,9 @@ that work. It is not the primary interface.
 your installation, and some parts still show the old Tegon brand. The code
 builds and runs on a local machine. Read [How to start](#how-to-start-self-hosted).
 In July 2026 the maintainer updated the dependencies to NestJS 11, Prisma 6,
-React 19, Next 16, TanStack Query 5, Tiptap 3, AI SDK 7, and zod 4. The webapp
-builds with Turbopack. The webapp reads the `NEXT_PUBLIC_*` settings from the
+React 19, TanStack Query 5, Tiptap 3, AI SDK 7, and zod 4. In September 2026
+the webapp moved from Next.js to Vite: it builds in seconds to static files,
+and its image is nginx. The webapp reads the `NEXT_PUBLIC_*` settings from the
 server at `/api/v1/config`, so a self-hosted installation sets them when the
 container starts. One update is not complete: the ESLint 9 flat config.
 

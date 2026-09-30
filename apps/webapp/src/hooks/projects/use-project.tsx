@@ -1,4 +1,4 @@
-import { useRouter } from 'next/router';
+import { useRouter } from 'common/router';
 
 import { useContextStore } from 'store/global-context-provider';
 

@@ -1,12 +1,11 @@
 import { Badge } from '@vantikhq/ui/components/badge';
 import { IssuesLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { Link as RouterLink, useRouter } from 'common/router';
 import { SCOPES } from 'common/scopes';
 import type { IssueType, ProductType, TeamType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
@@ -183,7 +182,7 @@ export const ModuleView = withApplicationStore(
             into a visible filter, so the reader arrives at these issues and
             not at every issue in the workspace.
           */}
-          <NextLink
+          <RouterLink
             href={`${workspaceHref(workspaceSlug, 'all')}?module=${encodeURIComponent(
               productModule.id,
             )}`}
@@ -193,7 +192,7 @@ export const ModuleView = withApplicationStore(
             {issueCount === 1
               ? '1 issue touches this module'
               : `${issueCount} issues touch this module`}
-          </NextLink>
+          </RouterLink>
         </div>
       </MainLayout>
     );

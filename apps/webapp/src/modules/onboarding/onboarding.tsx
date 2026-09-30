@@ -1,10 +1,10 @@
 /* eslint-disable react/no-unescaped-entities */
 
-import { useRouter } from 'next/router';
 import React from 'react';
 import { SessionAuth } from 'supertokens-auth-react/recipe/session';
 
 import { AuthLayout } from 'common/layouts/auth-layout';
+import { useRouter } from 'common/router';
 import { UserDataWrapper } from 'common/wrappers/user-data-wrapper';
 
 import { UserContext } from 'store/user-context';

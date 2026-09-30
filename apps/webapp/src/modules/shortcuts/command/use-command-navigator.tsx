@@ -1,9 +1,9 @@
 import { RiPriceTag3Line, RiStackLine, RiTeamLine } from '@remixicon/react';
 import { RiAddLine, RiSearch2Line } from '@remixicon/react';
 import { IssuesLine, TriageLine } from '@vantikhq/ui/icons';
-import { useParams } from 'next/navigation';
-import { useRouter } from 'next/router';
 import React from 'react';
+
+import { useParams, useRouter } from 'common/router';
 
 import { useCurrentTeam } from 'hooks/teams';
 

@@ -11,9 +11,9 @@ import {
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import { format } from 'date-fns';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
 import * as React from 'react';
 
+import { Link } from 'common/router';
 import type { CycleType } from 'common/types';
 
 import { useCurrentTeam } from 'hooks/teams';

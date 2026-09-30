@@ -6,8 +6,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@vantikhq/ui/components/sidebar';
-import NextLink from 'next/link';
-import { usePathname } from 'next/navigation';
+
+import { Link as RouterLink, usePathname } from 'common/router';
 
 export interface Link {
   title: string;
@@ -71,7 +71,7 @@ export function Nav({ links }: NavProps) {
         return (
           <SidebarMenuItem key={link.href}>
             <SidebarMenuButton asChild isActive={isActive} tooltip={link.title}>
-              <NextLink href={link.href}>
+              <RouterLink href={link.href}>
                 {link.icon && <link.icon />}
                 <span className="flex-1 truncate">{link.title}</span>
                 {/*
@@ -87,7 +87,7 @@ export function Nav({ links }: NavProps) {
                     {link.count}
                   </SidebarMenuBadge>
                 )}
-              </NextLink>
+              </RouterLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
         );

@@ -1,8 +1,8 @@
 import { Logo } from '@vantikhq/ui/components/dynamic-logo';
-import { useRouter } from 'next/router';
 import React from 'react';
 import { SessionAuth } from 'supertokens-auth-react/recipe/session';
 
+import { useRouter } from 'common/router';
 import { UserDataWrapper } from 'common/wrappers/user-data-wrapper';
 
 import { useAuthorizeMutation } from 'services/users';

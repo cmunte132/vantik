@@ -1,12 +1,12 @@
 import { Button } from '@vantikhq/ui/components/button';
 import { Logo } from '@vantikhq/ui/components/dynamic-logo';
 import { Loader } from '@vantikhq/ui/components/loader';
-import { useRouter } from 'next/router';
 import posthog from 'posthog-js';
 import * as React from 'react';
 import { signOut } from 'supertokens-auth-react/recipe/session';
 
 import { deleteCookies } from 'common/common-utils';
+import { useRouter } from 'common/router';
 
 import { useGetUserQuery } from 'services/users';
 

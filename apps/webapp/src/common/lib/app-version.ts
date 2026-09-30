@@ -5,16 +5,17 @@
  *
  * The two can differ for a long time. An installed PWA window stays open for
  * days, so after a deploy it keeps running the bundle it started with, asking
- * for chunks under a /_next/static/<buildId>/ prefix that no longer exists.
+ * for chunks that the new build no longer has.
  * Everything here exists to notice that, cheaply and from several directions.
  */
 
 /**
- * Inlined by next.config.js `env` at build time. Not read from the container's
- * environment on purpose — it names the bundle the browser is running, which is
- * a build-time fact, unlike the settings served by /api/v1/config.
+ * Inlined by vite.config.ts `define` at build time. Not read from the
+ * container's environment on purpose — it names the bundle the browser is
+ * running, which is a build-time fact, unlike the settings served by
+ * /api/v1/config.
  */
-export const BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID ?? 'unknown';
+export const BUILD_ID = import.meta.env.VANTIK_BUILD_ID ?? 'unknown';
 
 /** The header every webapp response carries, including the /api/* proxy's. */
 export const BUILD_HEADER = 'x-vantik-build';

@@ -3,9 +3,8 @@ import { AvatarText } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
 import dayjs from 'dayjs';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
 
+import { Link, useParams } from 'common/router';
 import type { ViewType } from 'common/types';
 
 import { useCurrentTeam } from 'hooks/teams';

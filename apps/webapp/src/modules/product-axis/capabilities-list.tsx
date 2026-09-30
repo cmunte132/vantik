@@ -2,12 +2,11 @@ import { RiAddLine, RiDeleteBinLine } from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { Link as RouterLink, useRouter } from 'common/router';
 import { SCOPES } from 'common/scopes';
 import type { CapabilityType, ModuleType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
@@ -82,7 +81,7 @@ export const CapabilitiesList = observer(
               key={capability.id}
               className="flex items-center gap-2 border-b border-border px-4 py-2 hover:bg-grayAlpha-100"
             >
-              <NextLink
+              <RouterLink
                 href={workspaceHref(workspaceSlug, 'capability', capability.id)}
                 className="flex flex-1 items-center gap-2 min-w-0"
               >
@@ -105,7 +104,7 @@ export const CapabilitiesList = observer(
                     </Badge>
                   ))
                 )}
-              </NextLink>
+              </RouterLink>
 
               {onDelete && (
                 <Button

@@ -18,11 +18,10 @@ import {
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { HeaderLayout } from 'common/header-layout';
+import { Link, useRouter } from 'common/router';
 import type { ViewType } from 'common/types';
 
 import { useCurrentTeam } from 'hooks/teams';

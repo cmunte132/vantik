@@ -1,8 +1,8 @@
 import { WorkflowCategoryEnum } from '@vantikhq/types';
 import { sort } from 'fast-sort';
-import { usePathname } from 'next/navigation';
 import React from 'react';
 
+import { usePathname } from 'common/router';
 import { type WorkflowType } from 'common/types';
 import type { IssueType, LabelType, ModuleType } from 'common/types';
 

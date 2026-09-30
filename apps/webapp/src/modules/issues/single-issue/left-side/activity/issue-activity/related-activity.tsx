@@ -3,8 +3,8 @@ import { RiFileTransferLine } from '@remixicon/react';
 import { TimelineItem } from '@vantikhq/ui/components/timeline';
 import { BlockedFill, BlocksFill } from '@vantikhq/ui/icons';
 import { cn } from '@vantikhq/ui/lib/utils';
-import { useRouter } from 'next/router';
 
+import { useRouter } from 'common/router';
 import { IssueRelationEnum } from 'common/types';
 import { type IssueHistoryType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';

@@ -3,7 +3,6 @@
 import type { UseMutateFunction } from '@tanstack/react-query';
 import type { Row } from '@tanstack/react-table';
 
-import Link from 'next/link';
 import React from 'react';
 
 import {
@@ -16,6 +15,7 @@ import {
 } from 'modules/issues/components';
 import { IssueLabels } from 'modules/issues/components/issue-list-item/issue-labels';
 
+import { Link } from 'common/router';
 import type { IssueType } from 'common/types';
 
 import { type UpdateIssueParams } from 'services/issues';

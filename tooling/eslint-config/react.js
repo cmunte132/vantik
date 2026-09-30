@@ -4,10 +4,9 @@ module.exports = {
   extends: [
     "prettier",
     "plugin:prettier/recommended",
-    // `next/core-web-vitals` already pulls in `plugin:@next/next/recommended`.
-    // Extending @vercel/style-guide/eslint/next as well loads a second copy of
-    // @next/eslint-plugin-next and ESLint aborts with a plugin conflict.
-    "next/core-web-vitals",
+    "plugin:react/recommended",
+    "plugin:react/jsx-runtime",
+    "plugin:react-hooks/recommended",
     "turbo",
   ],
   plugins: [
@@ -17,6 +16,7 @@ module.exports = {
     "notice",
     "import",
   ],
+  env: { browser: true, node: true, es2022: true },
   parserOptions: {
     ecmaVersion: 2020,
     sourceType: "module",
@@ -25,6 +25,10 @@ module.exports = {
     },
   },
   rules: {
+    // TypeScript checks props and DOM attributes; eslint-config-next turned
+    // these two off for the same reason.
+    "react/prop-types": "off",
+    "react/no-unknown-property": "off",
     curly: "warn",
     // `x == null` is the idiom for null-or-undefined; everything else is strict.
     eqeqeq: ["error", "always", { null: "ignore" }],
@@ -106,6 +110,9 @@ module.exports = {
     "@typescript-eslint/no-explicit-any": "warn",
   },
   parser: "@typescript-eslint/parser",
+  settings: {
+    react: { version: "detect" },
+  },
   ignorePatterns: [
     "src/@@generated/**/*.tsx",
     "src/@@generated/**/*.ts",

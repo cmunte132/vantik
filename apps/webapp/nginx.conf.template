@@ -1,0 +1,74 @@
+# The webapp is static files. This serves them and proxies /api/* to the
+# server, which is everything the Next.js server used to do.
+#
+# The nginx image fills in ${BACKEND_URL} and ${VANTIK_BUILD_ID} from the
+# environment when the container starts: BACKEND_URL from docker-compose.yaml,
+# VANTIK_BUILD_ID from version.json (see nginx-build-id.envsh).
+
+# Cache-Control by what is served. An empty value adds no header.
+map $uri $vantik_cache_by_uri {
+    # Content-hashed by the build. A new build has new names.
+    ~^/assets/                            "public, max-age=31536000, immutable";
+    # The two files a browser will otherwise hold for up to 24h, which would
+    # pin a client to whichever build first registered them.
+    ~^/(sw\.js|manifest\.webmanifest)$    "no-cache, must-revalidate";
+    # /api/version. The authority for "what is being served now" cannot itself
+    # be cacheable, or the answer could come from the build being replaced.
+    /version.json                         "no-store";
+    default                               "";
+}
+
+map $sent_http_content_type $vantik_cache {
+    # Documents are always revalidated. Serving a stale shell is how a client
+    # ends up asking for chunks that no longer exist.
+    ~text/html                            "no-cache, must-revalidate";
+    default                               $vantik_cache_by_uri;
+}
+
+server {
+    listen 3000;
+    root /usr/share/nginx/html;
+    # Redirects name a path, not this container's host and port, which are not
+    # the ones the browser used.
+    absolute_redirect off;
+
+    # Here, not in a location: a location with its own add_header drops these.
+    add_header Cache-Control $vantik_cache always;
+    # The build stamp rides on every response, the proxied ones included. A
+    # client compares it against its own inlined id and learns it is stale
+    # without spending a request to ask.
+    add_header X-Vantik-Build "${VANTIK_BUILD_ID}" always;
+
+    # What is being served right now. Answered from the file the build wrote
+    # next to the bundle, so it cannot disagree with the assets.
+    location = /api/version {
+        default_type application/json;
+        try_files /version.json =404;
+    }
+
+    # SuperTokens is mounted at /api/auth on the server, so that the refresh
+    # token cookie it sets is scoped to the same path the browser requests.
+    # These keep their prefix.
+    location ^~ /api/auth {
+        include /etc/nginx/vantik-proxy.conf;
+        proxy_pass ${BACKEND_URL};
+    }
+
+    # Every other /api path loses its prefix: /api/v1/issues is /v1/issues.
+    location /api/ {
+        include /etc/nginx/vantik-proxy.conf;
+        proxy_pass ${BACKEND_URL}/;
+    }
+
+    # `npx skills add https://your-vantik-host` looks for the agent skills
+    # index at the origin, not under /api.
+    location /.well-known/agent-skills/ {
+        include /etc/nginx/vantik-proxy.conf;
+        proxy_pass ${BACKEND_URL};
+    }
+
+    # A path that is not a file is a route, and the app resolves it.
+    location / {
+        try_files $uri /index.html;
+    }
+}

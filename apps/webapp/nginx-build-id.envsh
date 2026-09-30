@@ -1,0 +1,7 @@
+#!/bin/sh
+# The nginx image sources *.envsh files in /docker-entrypoint.d before it fills
+# in the config templates, so what this exports reaches nginx.conf.template.
+# The build id comes from version.json, which the build wrote, so the header
+# and /api/version always name the same build.
+VANTIK_BUILD_ID=$(sed -n 's/.*"buildId":"\([^"]*\)".*/\1/p' /usr/share/nginx/html/version.json)
+export VANTIK_BUILD_ID

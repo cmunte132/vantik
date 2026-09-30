@@ -1,8 +1,7 @@
 import { Button } from '@vantikhq/ui/components/button';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 
+import { Link, useRouter } from 'common/router';
 import { type IssueType, type WorkflowType } from 'common/types';
 import { getWorkflowIcon } from 'common/workflow-icons';
 import { workspaceHref } from 'common/workspace-href';

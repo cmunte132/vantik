@@ -1,8 +1,8 @@
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { sort } from 'fast-sort';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 
+import { useRouter } from 'common/router';
 import type { NotificationType } from 'common/types';
 
 import { useContextStore } from 'store/global-context-provider';

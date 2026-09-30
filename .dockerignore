@@ -9,7 +9,6 @@
 # Build output and dependencies — reinstalled/rebuilt inside the image.
 node_modules
 **/node_modules
-**/.next
 **/dist
 **/build
 **/.turbo
@@ -28,8 +27,7 @@ out
 # never reach an image layer.
 .claude
 
-# Secrets. apps/webapp/.prod.env is deliberately NOT ignored — it holds only
-# NEXT_PUBLIC_VERSION and the webapp build reads it.
+# Secrets.
 .env
 .env.prod
 

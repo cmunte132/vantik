@@ -1,6 +1,6 @@
 module.exports = {
   root: true,
-  extends: ['@vantikhq/eslint-config/next.js'],
+  extends: ['@vantikhq/eslint-config/react.js'],
   parserOptions: {
     project: true,
   },

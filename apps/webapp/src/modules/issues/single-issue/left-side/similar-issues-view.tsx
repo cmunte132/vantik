@@ -10,11 +10,11 @@ import {
   CollapsibleTrigger,
 } from '@vantikhq/ui/components/collapsible';
 import { cn } from '@vantikhq/ui/lib/utils';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { ModalIssueItem } from 'modules/issues/components/modals/modal-issue-item';
 
+import { useRouter } from 'common/router';
 import type { IssueType } from 'common/types';
 
 import { useCurrentWorkspace } from 'hooks/workspace';

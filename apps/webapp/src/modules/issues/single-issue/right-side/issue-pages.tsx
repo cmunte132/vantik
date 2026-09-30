@@ -14,8 +14,9 @@ import {
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import * as React from 'react';
+
+import { useRouter } from 'common/router';
 
 import { useIssueData } from 'hooks/issues';
 

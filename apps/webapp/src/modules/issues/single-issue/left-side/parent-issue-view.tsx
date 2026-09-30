@@ -1,8 +1,7 @@
 import { buttonVariants } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
 
+import { Link, useParams } from 'common/router';
 import { getWorkflowColor } from 'common/status-color';
 import type { WorkflowType } from 'common/types';
 import type { IssueType } from 'common/types';

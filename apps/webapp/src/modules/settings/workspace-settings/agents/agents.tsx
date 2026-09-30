@@ -4,13 +4,12 @@ import { RoleEnum, type AgentSummary } from '@vantikhq/types';
 import { Button } from '@vantikhq/ui/components/button';
 import { Loader } from '@vantikhq/ui/components/loader';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { AgentItem } from 'modules/settings/personal-settings/api/agents/agent-item';
 import { SettingSection } from 'modules/settings/setting-section';
 
+import { Link as RouterLink, useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 
 import { useCurrentWorkspace } from 'hooks/workspace';
@@ -177,9 +176,9 @@ export const Agents = observer(() => {
         </p>
         <div>
           <Button variant="secondary" size="sm" asChild>
-            <NextLink href={workspaceHref(workspaceSlug, 'modules')}>
+            <RouterLink href={workspaceHref(workspaceSlug, 'modules')}>
               Go to modules
-            </NextLink>
+            </RouterLink>
           </Button>
         </div>
       </SettingSection>

@@ -1,5 +1,4 @@
-import { useRouter } from 'next/router';
-
+import { useRouter } from 'common/router';
 import type { CapabilityType, ModuleType, ProductType } from 'common/types';
 
 import { useContextStore } from 'store/global-context-provider';

@@ -25,12 +25,11 @@ import {
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import { IssuesLine } from '@vantikhq/ui/icons';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
 import { withoutArchived } from 'modules/product-axis/archive';
 
+import { Link as RouterLink, usePathname } from 'common/router';
 import type { ModuleType, TeamType } from 'common/types';
 
 import { useCurrentTeam } from 'hooks/teams';
@@ -69,9 +68,9 @@ export const TeamList = observer(() => {
       <SidebarGroupLabel>
         Your teams
         <SidebarGroupAction asChild aria-label="Add team">
-          <NextLink href={`/${workspace.slug}/settings/new_team`}>
+          <RouterLink href={`/${workspace.slug}/settings/new_team`}>
             <RiAddLine size={18} />
-          </NextLink>
+          </RouterLink>
         </SidebarGroupAction>
       </SidebarGroupLabel>
 
@@ -187,12 +186,12 @@ export const TeamList = observer(() => {
                             link.strict,
                           )}
                         >
-                          <NextLink href={link.href}>
+                          <RouterLink href={link.href}>
                             {link.icon && <link.icon />}
                             <span className="flex-1 truncate">
                               {link.title}
                             </span>
-                          </NextLink>
+                          </RouterLink>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                     ))}

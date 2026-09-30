@@ -1,6 +1,5 @@
 import { Loader } from '@vantikhq/ui/components/loader';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { useRouter } from 'next/router';
 import posthog from 'posthog-js';
 import React from 'react';
 import {
@@ -8,6 +7,7 @@ import {
   clearLoginAttemptInfo,
 } from 'supertokens-web-js/recipe/passwordless';
 
+import { useRouter } from 'common/router';
 import { safeRedirectPath } from 'common/safe-redirect';
 import { AuthGuard } from 'common/wrappers/auth-guard';
 

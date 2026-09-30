@@ -1,7 +1,8 @@
 import { Loader } from '@vantikhq/ui/components/loader';
-import { useRouter } from 'next/router';
 import React, { cloneElement } from 'react';
 import Session from 'supertokens-web-js/recipe/session';
+
+import { useRouter } from 'common/router';
 
 interface Props {
   children: React.ReactElement;

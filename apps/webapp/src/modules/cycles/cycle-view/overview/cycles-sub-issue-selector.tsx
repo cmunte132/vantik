@@ -1,9 +1,9 @@
 import { WorkflowCategoryEnum } from '@vantikhq/types';
 import { useEditor } from '@vantikhq/ui/components/editor/index';
-import { useRouter } from 'next/router';
 
 import { SubIssueSelector, type IssueContent } from 'common/editor';
 import { delay } from 'common/lib/common';
+import { useRouter } from 'common/router';
 import type { WorkflowType } from 'common/types';
 
 import { useCycle } from 'hooks/cycles';

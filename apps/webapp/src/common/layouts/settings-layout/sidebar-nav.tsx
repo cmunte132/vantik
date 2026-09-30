@@ -11,11 +11,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@vantikhq/ui/components/sidebar';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { Link, usePathname, useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 
 import { useContextStore } from 'store/global-context-provider';

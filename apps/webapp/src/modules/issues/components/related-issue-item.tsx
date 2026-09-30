@@ -2,8 +2,8 @@ import { RiCloseLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 
+import { useRouter } from 'common/router';
 import { getWorkflowColor } from 'common/status-color';
 import type { IssueRelationType } from 'common/types';
 import type { IssueType } from 'common/types';

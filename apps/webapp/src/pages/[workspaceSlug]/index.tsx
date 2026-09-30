@@ -1,9 +1,9 @@
 import { Loader } from '@vantikhq/ui/components/loader';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
+import { useRouter } from 'common/router';
 import type { TeamType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
 

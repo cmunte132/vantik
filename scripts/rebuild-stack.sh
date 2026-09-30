@@ -7,12 +7,16 @@
 # Use this, not `compose up -d --build`, for three reasons:
 #
 # - podman-compose starts every image build at the same time. The server's
-#   install and tsc run next to the webapp's install and next build, and the
+#   install and tsc run next to the webapp's install and vite build, and the
 #   total does not fit in a 2 GiB podman VM. This script builds one image at a
 #   time.
 # - Each build leaves the stages of the previous image as untagged images, and
 #   nothing removes them. One build on a new VM left 7.5 GB. This script prunes
 #   them after each image.
+# - The running stack holds about 800 MB, and the webapp's vite build needs
+#   about 900 MB. Beside each other they do not fit in 2 GiB, so this script
+#   stops the stack while it builds, which takes a minute or two. If a build
+#   fails, the stack starts again on the images it had.
 # - `up -d --build` can keep a container on its old image. This script
 #   recreates the containers of the images it built.
 set -euo pipefail
@@ -35,11 +39,17 @@ VANTIK_BUILD_ID=${VANTIK_BUILD_ID:-$(git rev-parse --short HEAD)}
 VANTIK_COMMIT=${VANTIK_COMMIT:-$(git rev-parse HEAD)}
 export VANTIK_BUILD_ID VANTIK_COMMIT
 
+echo "==> Stopping the stack for the build"
+"$cli" compose stop
+trap 'echo "==> Build failed; starting the stack on its old images"; "$cli" compose up -d --no-build' ERR
+
 for service in "${services[@]}"; do
   echo "==> Building $service ($VANTIK_BUILD_ID)"
   "$cli" compose build "$service"
   "$cli" image prune -f >/dev/null
 done
+
+trap - ERR
 
 echo "==> Starting the stack"
 "$cli" compose up -d --no-build

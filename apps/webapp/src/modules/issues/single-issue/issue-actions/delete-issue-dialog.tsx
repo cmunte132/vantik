@@ -9,9 +9,9 @@ import {
   AlertDialogFooter,
 } from '@vantikhq/ui/components/alert-dialog';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { useRouter } from 'common/router';
 import type { IssueType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
 

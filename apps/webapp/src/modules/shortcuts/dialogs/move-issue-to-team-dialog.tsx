@@ -10,9 +10,9 @@ import {
 } from '@vantikhq/ui/components/alert-dialog';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { useRouter } from 'common/router';
 import type { TeamType } from 'common/types';
 import type { IssueType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';

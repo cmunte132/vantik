@@ -4,11 +4,10 @@ import { getInitials } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { MainLayout } from 'common/layouts/main-layout';
+import { Link as RouterLink, useRouter } from 'common/router';
 import { SCOPES } from 'common/scopes';
 import { workspaceHref } from 'common/workspace-href';
 import { withApplicationStore } from 'common/wrappers/with-application-store';
@@ -173,11 +172,11 @@ export const RunView = withApplicationStore(
               <div className="flex items-center gap-2">
                 {issueKey && (
                   <Button variant="secondary" size="sm" asChild>
-                    <NextLink
+                    <RouterLink
                       href={workspaceHref(workspaceSlug, 'issue', issueKey)}
                     >
                       Open issue
-                    </NextLink>
+                    </RouterLink>
                   </Button>
                 )}
 

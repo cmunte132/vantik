@@ -6,11 +6,10 @@ import {
 } from '@vantikhq/ui/components/breadcrumb';
 import { Button } from '@vantikhq/ui/components/button';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 import * as React from 'react';
 
 import { HeaderLayout } from 'common/header-layout';
+import { Link, useRouter } from 'common/router';
 
 import { useAllUsers } from 'hooks/users';
 

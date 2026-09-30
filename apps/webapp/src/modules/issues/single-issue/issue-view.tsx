@@ -1,10 +1,10 @@
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { Key } from 'ts-key-enum';
 
 import { MainLayout } from 'common/layouts/main-layout';
+import { useRouter } from 'common/router';
 import { SCOPES } from 'common/scopes';
 
 import { IssueViewContext } from 'components/side-issue-view';

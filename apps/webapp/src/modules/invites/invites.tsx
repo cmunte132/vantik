@@ -1,11 +1,11 @@
 import { AvatarText } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { useRouter } from 'next/router';
 import React from 'react';
 import { SessionAuth, signOut } from 'supertokens-auth-react/recipe/session';
 
 import { AuthLayout } from 'common/layouts/auth-layout';
+import { useRouter } from 'common/router';
 import type { Invite } from 'common/types';
 import { UserDataWrapper } from 'common/wrappers/user-data-wrapper';
 

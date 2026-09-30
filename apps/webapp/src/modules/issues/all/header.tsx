@@ -5,10 +5,9 @@ import {
 } from '@vantikhq/ui/components/breadcrumb';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 
 import { HeaderLayout } from 'common/header-layout';
+import { Link, useRouter } from 'common/router';
 import type { TeamType } from 'common/types';
 
 interface HeaderProps {

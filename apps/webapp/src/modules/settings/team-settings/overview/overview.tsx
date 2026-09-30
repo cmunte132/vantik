@@ -13,13 +13,13 @@ import { Input } from '@vantikhq/ui/components/input';
 import { Separator } from '@vantikhq/ui/components/separator';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { SettingSection } from 'modules/settings/setting-section';
 
+import { useRouter } from 'common/router';
 import type { TeamType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
 

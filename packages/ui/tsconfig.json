@@ -1,5 +1,5 @@
 {
-  "extends": "@vantikhq/typescript-config/next.json",
+  "extends": "@vantikhq/typescript-config/react.json",
   "compilerOptions": {
     "baseUrl": "src",
     "plugins": [

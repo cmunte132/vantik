@@ -13,10 +13,9 @@ import {
   PopoverTrigger,
 } from '@vantikhq/ui/components/popover';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { useRouter } from 'next/router';
 import * as React from 'react';
 
+import { Link as RouterLink, useRouter } from 'common/router';
 import type { CapabilityType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
 
@@ -82,12 +81,12 @@ export const CapabilityPicker = observer(
             className="flex items-center gap-2 border-b border-border px-4 py-2"
           >
             <RiFocus3Line size={14} className="shrink-0" />
-            <NextLink
+            <RouterLink
               href={workspaceHref(workspaceSlug, 'capability', capability.id)}
               className="flex-1 truncate hover:underline"
             >
               {capability.name}
-            </NextLink>
+            </RouterLink>
             <Badge variant="outline">{capability.status ?? 'planned'}</Badge>
             <Button
               variant="ghost"

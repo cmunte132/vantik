@@ -7,11 +7,10 @@ import {
 import { Button } from '@vantikhq/ui/components/button';
 import { TeamIcon } from '@vantikhq/ui/components/team-icon';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { HeaderLayout } from 'common/header-layout';
+import { Link, useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 import { TooltipWrapper } from 'common/wrappers/tooltip-wrapper';
 

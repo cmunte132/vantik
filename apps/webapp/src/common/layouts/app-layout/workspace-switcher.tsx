@@ -10,9 +10,9 @@ import {
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
 
+import { useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 
 import { useContextStore } from 'store/global-context-provider';

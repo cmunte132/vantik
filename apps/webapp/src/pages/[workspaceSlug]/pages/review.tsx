@@ -1,5 +1,6 @@
-import { useRouter } from 'next/router';
 import * as React from 'react';
+
+import { useRouter } from 'common/router';
 
 /**
  * The old review inbox. Needs you replaced it, and a link kept from before

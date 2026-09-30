@@ -15,12 +15,11 @@ import {
 } from '@vantikhq/ui/components/popover';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { useRouter } from 'next/router';
 import * as React from 'react';
 
 import { DropdownItem } from 'modules/issues/components/issue-metadata/dropdown-item';
 
+import { Link as RouterLink, useRouter } from 'common/router';
 import type { IntegrationAccountType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
 
@@ -149,12 +148,12 @@ export const Repositories = observer(({ moduleId }: { moduleId: string }) => {
       {available.length === 0 ? (
         <div className="px-4 py-3 text-muted-foreground">
           This workspace has no repositories yet. Add one in{' '}
-          <NextLink
+          <RouterLink
             href={workspaceHref(workspaceSlug, 'settings', 'integrations')}
             className="underline"
           >
             Settings → Integrations
-          </NextLink>
+          </RouterLink>
           , either as a directory on this machine or through a source control
           account, and it appears here.
         </div>

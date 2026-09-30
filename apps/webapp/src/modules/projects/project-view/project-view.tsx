@@ -1,9 +1,9 @@
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 import { withApplicationStore } from 'common/wrappers/with-application-store';
 

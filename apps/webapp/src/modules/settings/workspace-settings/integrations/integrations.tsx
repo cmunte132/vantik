@@ -2,7 +2,6 @@ import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import { Loader } from '@vantikhq/ui/components/loader';
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
-import { useRouter } from 'next/router';
 
 import { Header } from 'modules/settings/header';
 import { SettingSection } from 'modules/settings/setting-section';
@@ -10,6 +9,7 @@ import { SettingSection } from 'modules/settings/setting-section';
 import { getIcon, type IconType } from 'common';
 import { ContentBox } from 'common/layouts/content-box';
 import { SettingsLayout } from 'common/layouts/settings-layout';
+import { useRouter } from 'common/router';
 
 import { useCurrentWorkspace } from 'hooks/workspace';
 

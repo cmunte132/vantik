@@ -1,9 +1,8 @@
 import { NodeViewWrapper } from '@tiptap/react';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
 import React from 'react';
 
+import { Link, useParams } from 'common/router';
 import { getWorkflowColor } from 'common/status-color';
 import { getWorkflowIcon } from 'common/workflow-icons';
 

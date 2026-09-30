@@ -12,11 +12,11 @@ import {
 import { Input } from '@vantikhq/ui/components/input';
 import { useToast } from '@vantikhq/ui/components/use-toast';
 import { observer } from 'mobx-react-lite';
-import { useRouter } from 'next/router';
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import { useRouter } from 'common/router';
 import type { ProductType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
 

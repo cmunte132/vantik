@@ -9,8 +9,8 @@ import {
   AlertDialogFooter,
 } from '@vantikhq/ui/components/alert-dialog';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { useRouter } from 'next/router';
 
+import { useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 
 import { useCurrentTeam } from 'hooks/teams';

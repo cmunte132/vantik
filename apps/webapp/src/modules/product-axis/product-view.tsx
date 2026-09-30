@@ -3,12 +3,11 @@ import { Badge } from '@vantikhq/ui/components/badge';
 import { Button } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import NextLink from 'next/link';
-import { useRouter } from 'next/router';
 import React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { Link as RouterLink, useRouter } from 'common/router';
 import { SCOPES } from 'common/scopes';
 import type { ModuleType } from 'common/types';
 import { workspaceHref } from 'common/workspace-href';
@@ -202,7 +201,7 @@ function ModuleRow({
   borrowed?: boolean;
 }) {
   return (
-    <NextLink
+    <RouterLink
       href={href}
       className={cn(
         'flex items-center gap-2 border-b border-border px-4 py-2 last:border-b-0 hover:bg-grayAlpha-100',
@@ -218,7 +217,7 @@ function ModuleRow({
       <span className="flex-1 truncate">{module.name}</span>
       <span className="text-muted-foreground">{module.key}</span>
       {borrowed && <Badge variant="outline">linked</Badge>}
-    </NextLink>
+    </RouterLink>
   );
 }
 

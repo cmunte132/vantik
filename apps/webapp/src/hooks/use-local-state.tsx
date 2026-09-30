@@ -1,5 +1,6 @@
-import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
+
+import { usePathname } from 'common/router';
 
 export const useLocalState = <T,>(key: string, initialValue?: T) => {
   const path = usePathname();

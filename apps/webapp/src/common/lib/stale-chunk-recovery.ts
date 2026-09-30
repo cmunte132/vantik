@@ -13,8 +13,6 @@
  * diagnosing it impossible.
  */
 
-import Router from 'next/router';
-
 import { BUILD_ID } from './app-version';
 
 const ATTEMPT_KEY = 'vantik:stale-chunk-reload';
@@ -64,9 +62,9 @@ function isStaleChunkError(value: unknown): boolean {
   const name = (value as Error).name ?? '';
   const message = (value as Error).message ?? '';
 
-  // ChunkLoadError is webpack's; Turbopack and native ESM report a failed
-  // dynamic import as a TypeError with a message naming the module, so match on
-  // both rather than on one builder's error type.
+  // ChunkLoadError is webpack's; native ESM reports a failed dynamic import as
+  // a TypeError with a message naming the module, and the wording differs per
+  // browser, so match on all of them.
   return (
     name === 'ChunkLoadError' ||
     /Loading chunk \S+ failed/i.test(message) ||
@@ -129,12 +127,21 @@ export function installStaleChunkRecovery() {
       recover('unhandledrejection');
     }
   });
+}
 
-  // Next's own signal. A client whose build was replaced hits this on the first
-  // navigation, before any component gets a chance to throw.
-  Router.events.on('routeChangeError', (error: Error) => {
-    if (isStaleChunkError(error)) {
-      recover('routeChangeError');
-    }
-  });
+/**
+ * For the route error boundary. React Router catches a page chunk that fails
+ * to load, and so does the boundary around a React.lazy component, so no
+ * window handler above sees either. This is the check that covers them: a
+ * client whose build was replaced hits it on the first navigation to a page it
+ * has not loaded yet. Returns whether the error was a stale chunk.
+ */
+export function recoverIfStaleChunk(error: unknown): boolean {
+  if (!isStaleChunkError(error)) {
+    return false;
+  }
+
+  recover('route error');
+
+  return true;
 }

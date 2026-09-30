@@ -12,7 +12,6 @@ import {
 } from '@vantikhq/ui/components/form';
 import { Input } from '@vantikhq/ui/components/input';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import { useRouter } from 'next/router';
 import posthog from 'posthog-js';
 import React from 'react';
 import { useForm } from 'react-hook-form';
@@ -29,6 +28,7 @@ import {
 import { z } from 'zod';
 
 import { AuthLayout } from 'common/layouts/auth-layout';
+import { useRouter } from 'common/router';
 import { safeRedirectPath } from 'common/safe-redirect';
 import { AuthGuard } from 'common/wrappers/auth-guard';
 

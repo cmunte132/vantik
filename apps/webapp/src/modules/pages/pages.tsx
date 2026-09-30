@@ -3,12 +3,11 @@ import type { KnowledgeOverview, KnowledgeOverviewPage } from '@vantikhq/types';
 import { RiExpandDiagonalLine } from '@remixicon/react';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
 import * as React from 'react';
 
 import { AppLayout } from 'common/layouts/app-layout';
 import { MainLayout } from 'common/layouts/main-layout';
+import { Link, useRouter } from 'common/router';
 
 import { useCreatePageMutation, useKnowledgeOverview } from 'services/pages';
 import {

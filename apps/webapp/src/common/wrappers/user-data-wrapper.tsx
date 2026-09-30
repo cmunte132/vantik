@@ -34,11 +34,24 @@ export function UserDataWrapper(props: Props): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!isLoading, !isError]);
 
-  if (!isLoading && !isError) {
-    const workspaceRes = data.workspaces.find(
-      (work) => work.slug === workspaceSlug,
-    );
+  const workspaceRes =
+    !isLoading && !isError
+      ? data.workspaces.find((work) => work.slug === workspaceSlug)
+      : undefined;
+  // A workspace address this user does not belong to: a deleted workspace, a
+  // link from another account, or the page that was open when the session
+  // ended. Everything below assumes the workspace is the user's, so send them
+  // to /, which picks their workspace, their invites, or onboarding.
+  const notMember = !isLoading && !isError && !!workspaceSlug && !workspaceRes;
 
+  React.useEffect(() => {
+    if (notMember) {
+      replace('/');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notMember]);
+
+  if (!isLoading && !isError && !notMember) {
     if (workspaceRes?.status === 'SUSPENDED') {
       return (
         <div className="flex flex-col h-[100vh] w-[100vw] items-center justify-center gap-2">

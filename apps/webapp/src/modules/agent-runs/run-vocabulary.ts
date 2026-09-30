@@ -287,3 +287,22 @@ export function formatMs(ms: number): string {
     ? `${seconds}s`
     : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
+
+/** What a run has spent, or null when it has reported nothing yet. */
+export function costOf(run: {
+  result?: { costUsd?: unknown } | null;
+}): number | null {
+  const cost = run.result?.costUsd;
+
+  return typeof cost === 'number' && Number.isFinite(cost) ? cost : null;
+}
+
+/**
+ * Money, to the cent.
+ *
+ * A run that has spent a fraction of a cent says so, rather than `$0.00`,
+ * which reads as "free" and is wrong.
+ */
+export function formatCost(usd: number): string {
+  return usd > 0 && usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`;
+}

@@ -9,7 +9,7 @@ import {
   toFeed,
   toSteps,
 } from './run-feed';
-import { phaseLabel, phaseRank } from './run-vocabulary';
+import { costOf, formatCost, phaseLabel, phaseRank } from './run-vocabulary';
 
 /**
  * The two transformations that make a run readable.
@@ -391,5 +391,19 @@ describe('stagesOf', () => {
       'todo',
       'todo',
     ]);
+  });
+});
+
+describe('spend', () => {
+  it('reads a run’s spend only when it reported one', () => {
+    expect(costOf({ result: { costUsd: 0.25 } })).toBe(0.25);
+    expect(costOf({ result: {} })).toBeNull();
+    expect(costOf({ result: null })).toBeNull();
+  });
+
+  it('never calls a fraction of a cent free', () => {
+    expect(formatCost(0.004)).toBe('<$0.01');
+    expect(formatCost(0)).toBe('$0.00');
+    expect(formatCost(1.456)).toBe('$1.46');
   });
 });

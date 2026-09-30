@@ -97,6 +97,11 @@ export class PiEventReader {
     return this.seen;
   }
 
+  /** What the messages read so far cost, and how many turns they took. */
+  get spent(): { costUsd: number; turns: number } {
+    return { costUsd: this.costUsd, turns: this.iterations };
+  }
+
   /** The steps of every line this chunk completed. */
   push(chunk: string): ParsedStep[] {
     if (chunk) {

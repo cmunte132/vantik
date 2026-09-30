@@ -44,6 +44,7 @@ interface FakeRun {
   contextPack: unknown;
   configHash: string | null;
   knowledgeArm?: string | null;
+  result?: unknown;
   deleted: Date | null;
   createdAt: Date | null;
 }
@@ -452,6 +453,35 @@ describe('AgentRunsService leases', () => {
     const { service } = buildService([makeRun({ status: 'EXPIRED' })]);
 
     await expect(service.renewLease(RUN)).resolves.toBe(false);
+  });
+});
+
+describe('AgentRunsService spend while a run works', () => {
+  it('merges the spend into what the result already holds', async () => {
+    const { service, rows } = buildService([
+      makeRun({ status: 'RUNNING', result: { egressDenied: 0 } }),
+    ]);
+
+    await service.recordSpend(RUN, { costUsd: 0.25, turns: 3 });
+
+    expect(rows.get(RUN)?.result).toEqual({
+      egressDenied: 0,
+      costUsd: 0.25,
+      turns: 3,
+    });
+  });
+
+  it('never writes over the result of a run that has finished', async () => {
+    // The meter's last write can land after the run ended. The final result
+    // is the transition's, and it stands.
+    const { service, rows, prisma } = buildService([
+      makeRun({ status: 'SUCCEEDED', result: { costUsd: 1, turns: 9 } }),
+    ]);
+
+    await service.recordSpend(RUN, { costUsd: 0.5, turns: 4 });
+
+    expect(prisma.agentRun.updateMany).not.toHaveBeenCalled();
+    expect(rows.get(RUN)?.result).toEqual({ costUsd: 1, turns: 9 });
   });
 });
 

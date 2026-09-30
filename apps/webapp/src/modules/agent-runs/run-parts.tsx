@@ -23,7 +23,7 @@ import {
   doing,
   pullNumber,
 } from './run-feed';
-import { whereTheWorkWent } from './run-vocabulary';
+import { formatCost, whereTheWorkWent } from './run-vocabulary';
 
 /**
  * The five stages of a run, as one bar each.
@@ -429,3 +429,106 @@ export const RunFacts = ({
     ))}
   </RailCard>
 );
+
+/**
+ * What the run has spent, against what it may spend.
+ *
+ * The run writes its spend while it works, so this moves as the agent does.
+ * The ceiling is checked between passes, not inside one, so a pass that starts
+ * under it can end over it; the note says so rather than letting the bar
+ * promise a hard stop.
+ */
+export const SpendCard = ({
+  costUsd,
+  budgetUsd,
+  turns,
+  passes,
+  live,
+  agentTotal,
+}: {
+  costUsd: number | null;
+  budgetUsd: number;
+  turns?: number;
+  passes?: number;
+  live: boolean;
+  /** What this issue's agent has spent over all its attempts, when more than one. */
+  agentTotal?: { costUsd: number; runs: number };
+}) => {
+  const spent = costUsd ?? 0;
+  const share = budgetUsd > 0 ? spent / budgetUsd : 0;
+
+  return (
+    <RailCard
+      title="Spend"
+      aside={
+        live ? (
+          <span className="text-sm text-muted-foreground">live</span>
+        ) : undefined
+      }
+    >
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-mono text-xl font-semibold tabular-nums">
+          {costUsd == null ? '—' : formatCost(spent)}
+        </span>
+        <span className="text-muted-foreground">
+          of {formatCost(budgetUsd)}
+        </span>
+      </div>
+
+      <span
+        className="relative h-1.5 overflow-hidden rounded-full bg-grayAlpha-100"
+        role="meter"
+        aria-label="Spend against the budget"
+        aria-valuemin={0}
+        aria-valuemax={budgetUsd}
+        aria-valuenow={spent}
+      >
+        <span
+          className={cn(
+            'absolute inset-y-0 left-0 rounded-full transition-[width] duration-500',
+            share >= 1
+              ? 'bg-destructive'
+              : share >= 0.8
+                ? 'bg-warning'
+                : 'bg-primary',
+          )}
+          style={{ width: `${Math.min(100, share * 100)}%` }}
+        />
+      </span>
+
+      {(turns != null || passes != null) && (
+        <div className="flex gap-4 text-muted-foreground">
+          {turns != null && (
+            <span>
+              <span className="text-foreground tabular-nums">{turns}</span> turn
+              {turns === 1 ? '' : 's'}
+            </span>
+          )}
+          {passes != null && (
+            <span>
+              <span className="text-foreground tabular-nums">{passes}</span>{' '}
+              pass{passes === 1 ? '' : 'es'}
+            </span>
+          )}
+        </div>
+      )}
+
+      {agentTotal && (
+        <p className="text-muted-foreground">
+          This agent has spent{' '}
+          <span className="text-foreground tabular-nums">
+            {formatCost(agentTotal.costUsd)}
+          </span>{' '}
+          on this issue over {agentTotal.runs} runs.
+        </p>
+      )}
+
+      {live && (
+        <p className="text-sm text-muted-foreground">
+          The budget is checked between passes, so a pass can end a little over
+          it.
+        </p>
+      )}
+    </RailCard>
+  );
+};

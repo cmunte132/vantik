@@ -13,7 +13,9 @@ import {
   FAILURE_PROSE,
   STATUS_LABEL,
   age,
+  costOf,
   duration,
+  formatCost,
   whereTheWorkWent,
 } from '../run-vocabulary';
 import { StatusDot } from '../status-dot';
@@ -75,6 +77,14 @@ const Group = observer(({ group }: { group: RunGroup }) => {
   const { workspaceSlug } = router.query;
 
   const count = group.runs.length;
+  // Every attempt at one issue is the same agent, so this is what that agent
+  // has spent on it, including the attempt still going.
+  const costs = group.runs
+    .map(({ run }) => costOf(run))
+    .filter((cost): cost is number => cost != null);
+  const spent = costs.length
+    ? costs.reduce((sum, cost) => sum + cost, 0)
+    : null;
 
   return (
     <section className="border-b border-border last:border-b-0">
@@ -100,6 +110,7 @@ const Group = observer(({ group }: { group: RunGroup }) => {
 
         <span className="ml-auto shrink-0 text-xs text-muted-foreground">
           {count} run{count === 1 ? '' : 's'}
+          {spent != null ? ` · ${formatCost(spent)}` : ''}
           {group.latestAt ? ` · last ${age(group.latestAt)} ago` : ''}
         </span>
       </div>
@@ -133,6 +144,7 @@ const Row = observer(
     const failure = run.failure ? FAILURE_PROSE[run.failure] : undefined;
     const where = whereTheWorkWent(run.result ?? {});
     const took = duration(run);
+    const cost = costOf(run);
 
     return (
       <div
@@ -175,6 +187,11 @@ const Row = observer(
 
         <span className="w-16 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
           {took || '—'}
+        </span>
+
+        {/* Live: a run's spend is written to it while it works. */}
+        <span className="w-14 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
+          {cost != null ? formatCost(cost) : '—'}
         </span>
 
         <span className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums md:block">

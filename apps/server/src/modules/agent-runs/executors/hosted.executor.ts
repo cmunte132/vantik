@@ -45,6 +45,7 @@ import {
 import { buildReviewPrompt, buildRevisionPrompt } from '../review-prompt';
 import { PROVIDE_PACKAGE_MANAGER } from './package-manager';
 import { PiEventReader, type ParsedStep } from './pi-events';
+import { type Spend, SpendMeter } from './spend-meter';
 import { RunHandbackService } from '../run-handback.service';
 import { GitProxyService } from '../sandbox/git-proxy.service';
 import { RemoteSandboxRuntime } from '../sandbox/remote.runtime';
@@ -210,6 +211,8 @@ interface CycleContext {
   secrets: string[];
   limits: CycleLimits;
   note: (message: string, phase: string) => Promise<void>;
+  /** The run's spend, kept on the run while it works. */
+  meter: SpendMeter;
 }
 
 /** What the whole cycle came to. */
@@ -485,8 +488,11 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     // What the model calls cost, kept outside the cycle so a run that fails
     // after spending still says what it spent: the knowledge arms compare
     // mean cost, and leaving failures out would flatter whichever arm fails
-    // expensively.
-    let costUsd = 0;
+    // expensively. Written to the run as it grows, so a person can watch a
+    // run approach its budget rather than find out when it stops.
+    const meter = new SpendMeter((spent) =>
+      this.agentRuns.recordSpend(run.id, spent),
+    );
     let releaseLease: (() => void) | undefined;
 
     const note = async (message: string, phase: string) => {
@@ -736,12 +742,12 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           secrets,
           limits,
           note,
+          meter,
         },
         reviewing,
       );
 
       egressDenied += cycle.egressDenied;
-      costUsd = cycle.costUsd;
 
       if (cycle.kind === 'failed') {
         await this.fail(
@@ -750,7 +756,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           cycle.error,
           egressDenied,
           cycle.summary,
-          costUsd,
+          meter.total,
         );
         return;
       }
@@ -800,7 +806,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           )}`,
           egressDenied,
           cycle.summary,
-          costUsd,
+          meter.total,
         );
         return;
       }
@@ -832,7 +838,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           `The agent changed nothing. ${cycle.reason}`,
           egressDenied,
           cycle.summary,
-          costUsd,
+          meter.total,
         );
         return;
       }
@@ -867,7 +873,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           headCommit: pushed.headCommit,
           egressDenied,
           reviewPasses: cycle.passes,
-          ...(cycle.costUsd ? { costUsd: cycle.costUsd } : {}),
+          ...spentFields(meter.total),
         },
       });
 
@@ -904,7 +910,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         scrubSecrets(message, secrets),
         egressDenied,
         null,
-        costUsd,
+        meter.total,
       );
     } finally {
       // Always. On success, on failure, on cancel — the VM, the checkout, the
@@ -912,6 +918,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       // after the run reached a terminal state finds nothing to renew, but a
       // timer nobody cleared keeps this run's id alive in the event loop.
       releaseLease?.();
+      meter.stop();
       await sandbox?.dispose();
       this.running.delete(run.id);
     }
@@ -1210,7 +1217,10 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         `cd /workspace/repo && ${harness} "$(cat /workspace/${options.promptPath})"`,
         {
           timeoutMs: options.timeoutMs,
-          onStdout: (chunk) => record(reader.push(chunk)),
+          onStdout: (chunk) => {
+            record(reader.push(chunk));
+            cx.meter.progress(reader.spent);
+          },
         },
       );
     } catch (error) {
@@ -1218,6 +1228,10 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       // already; only a last line without an LF is still to record.
       record(reader.flush());
       await recorded;
+
+      // What it spent before it was stopped is still spent.
+      const partial = reader.result();
+      await cx.meter.settle(reader.spent);
 
       return {
         exitCode: TIMED_OUT,
@@ -1230,9 +1244,9 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           cx.secrets,
         ),
         summary: null,
-        modelId: null,
-        costUsd: 0,
-        turns: 0,
+        modelId: partial.modelId,
+        costUsd: partial.costUsd,
+        turns: partial.iterations,
         egressDenied: 0,
       };
     }
@@ -1248,6 +1262,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     await recorded;
 
     const parsed = reader.result();
+    await cx.meter.settle(reader.spent);
 
     return {
       // A model that never answered is a failed invocation, whatever the
@@ -1511,7 +1526,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     error: string,
     egressDenied = 0,
     summary?: string | null,
-    costUsd = 0,
+    spent: Spend = { costUsd: 0, turns: 0 },
   ) {
     // Gated on the transition landing. A run this executor lost — swept for a
     // lapsed lease, cancelled from the UI — is already terminal and already
@@ -1522,7 +1537,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         failure,
         error: error.slice(0, 4000),
         ...(summary ? { summary } : {}),
-        result: { egressDenied, ...(costUsd ? { costUsd } : {}) },
+        result: { egressDenied, ...spentFields(spent) },
       })
       .then(() => true)
       .catch(() => false);
@@ -1702,3 +1717,14 @@ function pullRequestBody(cycle: {
 // were interpolated into the guest's `git clone`. Both now go to host-side git
 // as argv rather than through a shell, so there is no interpolation left to
 // guard — the escaping problem was removed rather than solved.
+
+/**
+ * A run's spend as fields of its result. A run that spent nothing — it failed
+ * before the model was called — records nothing rather than a zero.
+ */
+function spentFields(spent: Spend): { costUsd?: number; turns?: number } {
+  return {
+    ...(spent.costUsd ? { costUsd: spent.costUsd } : {}),
+    ...(spent.turns ? { turns: spent.turns } : {}),
+  };
+}

@@ -422,6 +422,42 @@ export class AgentRunsService {
     return iteration;
   }
 
+  /**
+   * What a run has spent so far, while it works.
+   *
+   * Merged into the run's result so the run page and the run cards can show a
+   * run approaching its budget. Refused once the run has finished: the final
+   * result is written by the transition that ended it, and a late write from
+   * the meter must not replace it.
+   */
+  async recordSpend(
+    runId: string,
+    spent: { costUsd: number; turns: number },
+  ): Promise<void> {
+    const run = await this.prisma.agentRun.findUnique({
+      where: { id: runId },
+      select: { status: true, result: true },
+    });
+
+    if (!run || isTerminalAgentRunStatus(run.status as AgentRunStatus)) {
+      return;
+    }
+
+    const result =
+      run.result && typeof run.result === 'object' && !Array.isArray(run.result)
+        ? (run.result as Record<string, unknown>)
+        : {};
+
+    // Conditional on the status read above, so a transition that lands in
+    // between wins.
+    await this.prisma.agentRun.updateMany({
+      where: { id: runId, status: run.status },
+      data: {
+        result: { ...result, costUsd: spent.costUsd, turns: spent.turns },
+      },
+    });
+  }
+
   async cancelRun(runId: string, scope: AgentRunScope, reason?: string) {
     return this.transition(
       runId,

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { AGENT_RUN_DEFAULT_LIMITS } from '@vantikhq/types';
 import { getInitials } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
@@ -40,9 +41,10 @@ import {
   NowCard,
   OutcomeCard,
   RunFacts,
+  SpendCard,
   Stepper,
 } from './run-parts';
-import { FAILURE_PROSE, STATUS_LABEL, isLive } from './run-vocabulary';
+import { FAILURE_PROSE, STATUS_LABEL, costOf, isLive } from './run-vocabulary';
 
 /**
  * One agent run: who is working on what, where it is, and what it did.
@@ -139,6 +141,21 @@ export const RunView = withApplicationStore(
     const agentName = agent?.fullname ?? 'Agent';
     const model = run.modelId ?? run.config?.model;
     const runner = executorLabel(executors, run.executor);
+    // Every attempt at one issue is the same agent, so its spend is the sum of
+    // them. Shown only when there is more than this one run to add up.
+    const attempts = agentRunsStore
+      .getRunsForIssue(run.issueId)
+      .filter((each: any) => each.agentUserId === run.agentUserId);
+    const agentTotal =
+      attempts.length > 1
+        ? {
+            costUsd: attempts.reduce(
+              (sum: number, each: any) => sum + (costOf(each) ?? 0),
+              0,
+            ),
+            runs: attempts.length,
+          }
+        : undefined;
 
     return (
       <MainLayout
@@ -246,23 +263,24 @@ export const RunView = withApplicationStore(
           </div>
 
           <aside className="flex min-w-0 flex-col gap-4">
+            <SpendCard
+              costUsd={costOf(run)}
+              budgetUsd={budgetOf(run)}
+              turns={
+                typeof run.result?.turns === 'number'
+                  ? run.result.turns
+                  : undefined
+              }
+              passes={run.iterationCount || undefined}
+              live={live}
+              agentTotal={agentTotal}
+            />
             {criteria.length > 0 && <DefinitionOfDone items={criteria} />}
             {files.length > 0 && <Changes files={files} />}
             <RunFacts
               facts={[
                 ...(model
                   ? [{ label: 'Model', value: model, mono: true }]
-                  : []),
-                ...(run.iterationCount
-                  ? [{ label: 'Turns', value: String(run.iterationCount) }]
-                  : []),
-                ...(run.result?.costUsd != null
-                  ? [
-                      {
-                        label: 'Cost',
-                        value: `$${Number(run.result.costUsd).toFixed(2)}`,
-                      },
-                    ]
                   : []),
                 { label: 'Runner', value: runner },
                 ...(run.config?.thinking
@@ -279,6 +297,20 @@ export const RunView = withApplicationStore(
     );
   }),
 );
+
+/**
+ * The most the run may spend.
+ *
+ * The same resolution the server's cycle makes: the run's own ceiling when it
+ * set a positive one, otherwise the default.
+ */
+function budgetOf(run: any): number {
+  const set = run.config?.limits?.maxCostUsd;
+
+  return typeof set === 'number' && set > 0
+    ? set
+    : AGENT_RUN_DEFAULT_LIMITS.maxCostUsd;
+}
 
 /** The run's state in a word, and how long it has taken. */
 const StatusPill = ({

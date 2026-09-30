@@ -93,6 +93,11 @@ interface GuestScript {
    * gives its output only with its result, as a runtime that cannot stream.
    */
   streamed?: { stdout: string; whileRunning: () => void };
+  /**
+   * The first implementing pass streams a paid message and is then stopped at
+   * the deadline, the way the runtime aborts it: by throwing.
+   */
+  stoppedAfterSpending?: boolean;
 }
 
 function buildGuest(script: GuestScript) {
@@ -149,6 +154,15 @@ function buildGuest(script: GuestScript) {
         }
 
         implementPasses += 1;
+
+        if (
+          script.stoppedAfterSpending &&
+          implementPasses === 1 &&
+          options?.onStdout
+        ) {
+          options.onStdout(`${piOutput('Working on it.')}\n`);
+          throw new Error('The sandbox deadline passed.');
+        }
 
         if (script.streamed && implementPasses === 1 && options?.onStdout) {
           // Split inside a line, as a pipe can.
@@ -231,6 +245,7 @@ function build(
   const iterations: Array<Record<string, unknown>> = [];
   const events: Array<{ message: string; phase?: string }> = [];
   const handbacks: Array<Record<string, unknown>> = [];
+  const spends: Array<{ costUsd: number; turns: number }> = [];
 
   const agentRuns = {
     transition: jest.fn(async (_id: string, status: string, patch = {}) => {
@@ -243,6 +258,11 @@ function build(
     recordIteration: jest.fn(async (_id: string, input: never) => {
       iterations.push(input);
     }),
+    recordSpend: jest.fn(
+      async (_id: string, spent: { costUsd: number; turns: number }) => {
+        spends.push(spent);
+      },
+    ),
   };
 
   const pushWorkTree = jest.fn(async (request: { summary: string }) => {
@@ -332,6 +352,7 @@ function build(
     iterations,
     events,
     handbacks,
+    spends,
     final: () => transitions[transitions.length - 1],
   };
 }
@@ -817,6 +838,33 @@ describe('when a pass crashes', () => {
       failure: 'NO_DIFF_PRODUCED',
       // One implementing pass and one review.
       result: { costUsd: 1 },
+    });
+  });
+
+  it('counts what a pass spent before the deadline stopped it', async () => {
+    const harness = build({ verdicts: {}, stoppedAfterSpending: true });
+
+    await harness.execute();
+
+    expect(harness.final().patch).toMatchObject({
+      failure: 'HARNESS_CRASHED',
+      result: { costUsd: 0.5, turns: 1 },
+    });
+  });
+
+  it('keeps the spend on the run as it grows, and in the final result', async () => {
+    // Each fake pass reports $0.50 over one turn. A person watching the run
+    // sees it climb pass by pass rather than learning the total at the end.
+    const harness = build({ verdicts: { 1: ACCEPTED } });
+
+    await harness.execute();
+
+    expect(harness.spends).toEqual([
+      { costUsd: 0.5, turns: 1 },
+      { costUsd: 1, turns: 2 },
+    ]);
+    expect(harness.final().patch).toMatchObject({
+      result: { costUsd: 1, turns: 2 },
     });
   });
 

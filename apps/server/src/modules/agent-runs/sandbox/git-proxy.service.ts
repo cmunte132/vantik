@@ -19,6 +19,8 @@ import {
 } from 'modules/git/repo-mirror.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
+import { GENERATED_DIRS } from './tree-tools';
+
 const exec = promisify(execFile);
 
 export interface PushRequest {
@@ -279,6 +281,47 @@ export class GitProxyService {
     await exec('tar', ['-xzf', archive, '-C', workdir], {
       maxBuffer: 64 * 1024 * 1024,
     });
+
+    await this.restoreGenerated(workdir);
+  }
+
+  /**
+   * Puts back what the repository tracks under a generated directory's name.
+   *
+   * The guest leaves those directories out of the archive, so a tracked file
+   * under one of them, say a checked-in `coverage/badge.svg`, is missing from
+   * it. The agent did not delete it; it was not sent. Restored from the base,
+   * it stays as it was. An edit the agent made to such a file is lost the same
+   * way, which is the lesser harm: a pull request that silently deletes files
+   * is the one a reviewer merges by mistake.
+   */
+  private async restoreGenerated(workdir: string): Promise<void> {
+    const tracked = await git(['ls-tree', '-r', '-z', '--name-only', 'HEAD'], {
+      cwd: workdir,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+
+    const left = tracked
+      .split('\0')
+      .filter(
+        (path) =>
+          path &&
+          path.split('/').some((segment) => GENERATED_DIRS.includes(segment)),
+      );
+
+    // In batches, so a long list cannot run past the argument limit.
+    for (let start = 0; start < left.length; start += 500) {
+      await git(
+        [
+          '--literal-pathspecs',
+          'checkout',
+          'HEAD',
+          '--',
+          ...left.slice(start, start + 500),
+        ],
+        { cwd: workdir },
+      );
+    }
   }
 
   private async openChangeRequest(

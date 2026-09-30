@@ -52,6 +52,7 @@ import { RemoteSandboxRuntime } from '../sandbox/remote.runtime';
 import { scrubSecrets } from '../sandbox/scrub';
 import {
   BASE_DIR,
+  GENERATED_DIRS,
   TREE_HASH_COMMAND,
   TREE_TOOLS_PATH,
   TREE_TOOLS_SCRIPT,
@@ -191,6 +192,19 @@ const MODEL_FAILED = 125;
 
 /** Enough for a content hash of a large tree, and not enough to hide in. */
 const TREE_HASH_TIMEOUT_MS = 3 * 60 * 1000;
+
+/**
+ * The largest packed tree read back from the guest, in bytes.
+ *
+ * It comes back base64 encoded in one string, and V8 will not build a string
+ * much past 512 MB, so a tree near that crashes the run at the last step with
+ * an error about string lengths. Well short of it, with room for the copies
+ * the decode makes, a run is failed saying what is too big instead.
+ */
+const MAX_TREE_BYTES = 200 * 1024 * 1024;
+
+/** The exit code the pack command uses for a tree over `MAX_TREE_BYTES`. */
+const TREE_TOO_LARGE = 3;
 
 /** Tail of a failing check's output kept for the reviewer and the event row. */
 const CHECK_OUTPUT_BYTES = 4000;
@@ -788,22 +802,38 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       // no git, and asking it to describe its own changes would be asking the
       // thing under test what it did. The host compares it against the base it
       // cloned.
+      //
+      // Generated directories stay behind: setup installed dependencies into
+      // the checkout, and the push would discard them anyway. BusyBox matches
+      // an exclude against whole path components, so `.git` does not take
+      // `.github` or `.gitignore` with it.
       const packed = await sandbox.exec(
-        'tar czf /tmp/tree.tar.gz -C /workspace/repo . && ' +
-          'base64 /tmp/tree.tar.gz > /workspace/tree.b64 && ' +
+        [
+          `tar czf /tmp/tree.tar.gz ${GENERATED_DIRS.map(
+            (name) => `--exclude=${name}`,
+          ).join(' ')} -C /workspace/repo .`,
+          `size=$(wc -c < /tmp/tree.tar.gz)`,
+          `if [ "$size" -gt ${MAX_TREE_BYTES} ]; then ` +
+            `echo "the packed tree is $size bytes" >&2; ` +
+            `rm -f /tmp/tree.tar.gz; exit ${TREE_TOO_LARGE}; fi`,
+          'base64 /tmp/tree.tar.gz > /workspace/tree.b64',
           'rm -f /tmp/tree.tar.gz',
+        ].join(' && '),
         { timeoutMs: limits.deadlineAt - Date.now() },
       );
       egressDenied += packed.egressDenied;
 
       if (packed.exitCode !== 0) {
+        const why = scrubSecrets(packed.stderr, secrets).trim();
+
         await this.fail(
           run,
           'HARNESS_CRASHED',
-          `The sandbox produced no readable working tree: ${scrubSecrets(
-            packed.stderr,
-            secrets,
-          )}`,
+          packed.exitCode === TREE_TOO_LARGE
+            ? `The working tree is too large to push: ${why}, over the ${
+                MAX_TREE_BYTES / 1024 / 1024
+              } MB limit. A generated directory the run left in the checkout is the usual cause.`
+            : `The sandbox produced no readable working tree: ${why}`,
           egressDenied,
           cycle.summary,
           meter.total,

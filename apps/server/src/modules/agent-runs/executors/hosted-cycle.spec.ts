@@ -98,6 +98,8 @@ interface GuestScript {
    * the deadline, the way the runtime aborts it: by throwing.
    */
   stoppedAfterSpending?: boolean;
+  /** What packing the tree for the push answers, when not plain success. */
+  packed?: { exitCode: number; stderr: string };
 }
 
 function buildGuest(script: GuestScript) {
@@ -181,6 +183,10 @@ function buildGuest(script: GuestScript) {
           exitCode,
           stdout: piOutput(`Did pass ${implementPasses}.`),
         };
+      }
+
+      if (command.startsWith('tar czf') && script.packed) {
+        return { ...ok, ...script.packed };
       }
 
       if (command.includes('tree-tools.sh hash')) {
@@ -348,6 +354,7 @@ function build(
     specs,
     /** What the pull request body said, which is what a reviewer opens. */
     prBody: () => pushWorkTree.mock.calls[0]?.[0]?.summary ?? '',
+    pushWorkTree,
     transitions,
     iterations,
     events,
@@ -461,6 +468,40 @@ describe('a run the reviewer accepts first time', () => {
 
     expect(packed).toContain('-C /workspace/repo');
     expect(packed).not.toContain('/workspace/base');
+  });
+
+  it('leaves installed dependencies and caches out of what is delivered', async () => {
+    const harness = build({ verdicts: { 1: ACCEPTED } });
+
+    await harness.execute();
+
+    const packed = harness.guest.commands.find((command) =>
+      command.startsWith('tar czf'),
+    );
+
+    // Setup installs into the checkout. A monorepo's node_modules packed into
+    // one base64 string is past what V8 will build, and the run crashed at
+    // the push with its work done.
+    expect(packed).toContain('--exclude=node_modules');
+    expect(packed).toContain('--exclude=.git ');
+    expect(packed).toContain('--exclude=.venv');
+    expect(packed).not.toContain('--exclude=dist');
+  });
+
+  it('fails a tree too large to read back, saying so, and pushes nothing', async () => {
+    const harness = build({
+      verdicts: { 1: ACCEPTED },
+      packed: { exitCode: 3, stderr: 'the packed tree is 300000000 bytes\n' },
+    });
+
+    await harness.execute();
+
+    expect(harness.final().status).toBe('FAILED');
+    expect(harness.final().patch).toMatchObject({ failure: 'HARNESS_CRASHED' });
+    expect(harness.final().patch.error).toContain(
+      'too large to push: the packed tree is 300000000 bytes, over the 200 MB limit',
+    );
+    expect(harness.pushWorkTree).not.toHaveBeenCalled();
   });
 });
 

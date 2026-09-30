@@ -156,6 +156,43 @@ describe('GitProxyService with a local directory', () => {
     expect(run(origin, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('wip');
   });
 
+  it('keeps a tracked file under a generated directory the guest left out', async () => {
+    mkdirSync(join(origin, 'coverage'));
+    writeFileSync(join(origin, 'coverage', 'badge.svg'), '<svg/>\n');
+    mkdirSync(join(origin, 'vendor', 'node_modules', 'x'), { recursive: true });
+    writeFileSync(join(origin, 'vendor', 'node_modules', 'x', 'i.js'), 'x\n');
+    run(origin, 'add', '-A');
+    run(origin, 'commit', '--quiet', '-m', 'track generated names');
+
+    const proxy = build();
+    const checkout = await proxy.materializeCheckout({
+      workspaceId: 'ws',
+      source: SOURCE,
+    });
+
+    // What the guest packs: everything but the generated directories.
+    const pushed = await proxy.pushWorkTree({
+      workspaceId: 'ws',
+      source: SOURCE,
+      branch: 'agent/eng-1',
+      baseBranch: checkout.baseBranch,
+      baseCommit: checkout.baseCommit,
+      treeBase64: treeOf({
+        'src/a.ts': 'export const a = 2;\n',
+        'README.md': 'app\n',
+      }),
+      commitMessage: 'ENG-1',
+      issueKey: 'ENG-1',
+      issueTitle: 'x',
+      summary: 'x',
+    });
+
+    expect(pushed?.branch).toBe('agent/eng-1');
+    expect(run(origin, 'diff', '--name-status', 'main', 'agent/eng-1')).toBe(
+      'M\tsrc/a.ts',
+    );
+  });
+
   it('takes the next free branch name rather than overwrite one', async () => {
     const proxy = build();
     const checkout = await proxy.materializeCheckout({

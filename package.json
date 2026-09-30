@@ -10,6 +10,7 @@
     "dev": "dotenv -- turbo run migrate dev --parallel --filter=!docs --filter=!sandbox-host",
     "sandbox-host": "turbo run build --filter=sandbox-host... && pnpm --filter sandbox-host start",
     "build": "dotenv -- turbo run build",
+    "stack:rebuild": "scripts/rebuild-stack.sh",
     "lint": "turbo run lint",
     "prune": "turbo prune",
     "generate": "dotenv -- turbo run generate",

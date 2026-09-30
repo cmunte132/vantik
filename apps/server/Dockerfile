@@ -52,8 +52,13 @@ COPY . .
 # The build runs through turbo, which reported `0 cached, 5 total` on every
 # run because its cache directory never survived the build. Shared with the
 # webapp image, so the packages both apps depend on are built once.
+#
+# Only the server's dependencies go through turbo. The server's own output
+# changes on every source edit, so a cached copy never hit, and turbo never
+# evicts, so each build left another copy in the cache mount.
 RUN --mount=type=cache,id=turbo,target=/app/.turbo,sharing=locked \
-    pnpm run build --filter=server...
+    pnpm run build --filter='server^...' && \
+    pnpm --filter=server run build
 
 # Runner. No pnpm: the entrypoint calls prisma and node directly, which drops a
 # 33MB layer from the runtime image.

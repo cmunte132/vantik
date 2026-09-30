@@ -226,6 +226,15 @@ open. It needs Node 23.6 or later.
 brew install qemu
 ```
 
+Build the guest image once. It needs podman or Docker, and takes a few minutes:
+
+```bash
+pnpm --filter sandbox-host build:guest
+```
+
+Without this image, a run keeps its checkout in the guest's memory, and a
+repository with large dependencies can run out of memory.
+
 ```bash
 pnpm sandbox-host
 ```

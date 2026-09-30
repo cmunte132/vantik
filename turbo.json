@@ -84,7 +84,6 @@
     "AGENT_RUN_LEASE_SWEEP_CRON",
     "AGENT_RUN_MAX_ATTEMPTS",
     "AGENT_RUN_WORKSPACE_CONCURRENCY",
-    "VANTIK_SANDBOX_ROOTFS_MB",
     // The server's way to the sandbox host, and the sandbox host's settings.
     "SANDBOX_HOST_URL",
     "SANDBOX_HOST_TOKEN",

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseEnv } from "node:util";
 
-import { GondolinRuntime } from "./gondolin";
+import { GUEST_IMAGE, GondolinRuntime, guestImage } from "./gondolin";
 import { createSandboxHostServer } from "./http";
 import { log } from "./log";
 import { Sandboxes } from "./sandboxes";
@@ -56,6 +56,15 @@ server.listen(port, bind, async () => {
     available: availability.available,
     ...(availability.reason ? { reason: availability.reason } : {}),
   });
+
+  if (!guestImage()) {
+    log.warn(
+      `There is no ${GUEST_IMAGE} image, so runs use the stock image and keep ` +
+        "their checkout in the guest's memory. A repository with large " +
+        "dependencies can then run out of memory. To build the image, run " +
+        "`pnpm --filter sandbox-host build:guest`.",
+    );
+  }
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

@@ -9,7 +9,11 @@ import type {
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 
-import { VM, createHttpHooks } from "@earendil-works/gondolin";
+import {
+  VM,
+  createHttpHooks,
+  resolveImageSelector,
+} from "@earendil-works/gondolin";
 
 import { log } from "./log";
 
@@ -83,6 +87,8 @@ export class GondolinRuntime implements SandboxRuntime {
       ),
     });
 
+    const image = guestImage();
+
     const vm = await VM.create({
       httpHooks: countDenials(httpHooks, denials),
       // Workspace paths sit underneath, so a caller that sets one of them
@@ -90,12 +96,15 @@ export class GondolinRuntime implements SandboxRuntime {
       env: { ...workspaceEnv(), ...spec.env, ...secretEnv },
       memory: `${spec.limits.memoryMb}M`,
       cpus: spec.limits.cpus,
-      // Growing the root disk needs `resize2fs` *inside* the guest, which the
-      // stock Alpine image does not carry — asking for it there fails the boot
-      // outright. So the disk cap is the guest image's own size unless a
-      // deployment has built an image that can resize and says so. Memory,
-      // cpu, wall-clock and log volume are enforced regardless.
-      ...(rootfsSizeMb() ? { rootfs: { size: `${rootfsSizeMb()}M` } } : {}),
+      // Only the Vantik image can grow its root disk: the stock image has no
+      // `resize2fs`, and a size request fails its boot. The disk is sparse, so
+      // `diskMb` is a ceiling on what the run writes, not space taken up front.
+      ...(image
+        ? {
+            sandbox: { imagePath: image },
+            rootfs: { size: `${spec.limits.diskMb}M` },
+          }
+        : {}),
       sessionLabel: `vantik-run-${spec.runId}`,
       startTimeoutMs: START_TIMEOUT_MS,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -106,7 +115,7 @@ export class GondolinRuntime implements SandboxRuntime {
     try {
       // Before the files are seeded, so the run's own files land on the
       // writable area rather than under it.
-      await mountWorkspace(vm, spec);
+      await mountWorkspace(vm, spec, Boolean(image));
 
       for (const [path, contents] of Object.entries(spec.files)) {
         await handle.writeFile(path, contents);
@@ -177,18 +186,23 @@ function onPath(name: string, path: string): boolean {
 /** Long enough for a cold boot on a loaded machine; short enough to fail. */
 const START_TIMEOUT_MS = 120_000;
 
-/**
- * The root disk size to ask the guest for, if any.
- *
- * Opt-in because it is only honoured by a guest image that ships `resize2fs`;
- * with the stock image, requesting a size fails the boot rather than being
- * ignored. A deployment that has built its own image sets
- * `VANTIK_SANDBOX_ROOTFS_MB` and gets the cap.
- */
-function rootfsSizeMb(): number | undefined {
-  const configured = Number(process.env.VANTIK_SANDBOX_ROOTFS_MB);
+/** The image `pnpm --filter sandbox-host build:guest` builds and tags. */
+export const GUEST_IMAGE = "vantik-guest:latest";
 
-  return Number.isFinite(configured) && configured > 0 ? configured : undefined;
+/**
+ * The directory of the Vantik guest image, or `undefined` if this machine has
+ * not built it.
+ *
+ * Looked up for each sandbox, not once, so an image built while the sandbox
+ * host runs is used from the next run. The lookup reads only the local image
+ * store. It never downloads.
+ */
+export function guestImage(): string | undefined {
+  try {
+    return resolveImageSelector(GUEST_IMAGE).assetDir;
+  } catch {
+    return undefined;
+  }
 }
 
 const WORKSPACE = "/workspace";
@@ -213,66 +227,50 @@ function workspaceEnv(): Record<string, string> {
 /**
  * Gives the run somewhere to write, before it has anything to write.
  *
- * The stock guest image is a ~260MB read-mostly root filesystem with about
- * 80MB free, and the harness alone unpacks to a little over 200MB — so every
- * hosted run died on `npx` with ENOSPC before the agent had said a word. The
- * other repair is to grow the root disk, which needs `resize2fs` inside the
- * guest; the stock image does not carry it, and asking for a size without it
- * fails the boot rather than being ignored. A tmpfs needs nothing from the
- * image, so it works on the image people actually have.
+ * With the Vantik image, the root disk has already grown to `diskMb`, so
+ * `/workspace` is an ordinary directory on it.
  *
- * The cost is stated rather than hidden: this is memory. The checkout, its
- * dependencies and the harness share the RAM the agent computes in, which is
- * why the size is capped against `memoryMb` rather than taken from `diskMb` —
- * a runaway `npm install` should hit a full filesystem and fail, not take the
- * guest down with an OOM. A deployment that has built an image carrying
- * `resize2fs` sets `VANTIK_SANDBOX_ROOTFS_MB`, gets a real disk of the size it
- * asked for, and skips all of this.
+ * The stock image has a root filesystem of about 260MB with about 80MB free,
+ * and it cannot grow. The harness alone unpacks to a little over 200MB. So
+ * without the Vantik image, `/workspace` is a tmpfs. That is memory: the
+ * checkout, its dependencies and the harness share the RAM that the agent's
+ * commands run in. A repository with a large `node_modules` fills most of it,
+ * and the guest then spends its time reclaiming pages instead of running
+ * tests. The sandbox host logs a warning at startup when it has only the stock
+ * image.
  */
 async function mountWorkspace(
   // The raw guest rather than the handle: the handle runs everything from
   // `/workspace`, which is the one directory that does not exist yet.
   vm: VM,
   spec: SandboxSpec,
+  realDisk: boolean,
 ): Promise<void> {
   const directories = ["home", ".npm", "tmp"]
     .map((name) => `${WORKSPACE}/${name}`)
     .join(" ");
 
-  // A deployment with a real disk has already been given the size it asked
-  // for, and a tmpfs on top of it would be a smaller ceiling, not a larger one.
-  if (rootfsSizeMb()) {
-    const prepared = await vm.exec(`mkdir -p ${directories}`, { cwd: "/" });
-
-    if ((prepared.exitCode ?? 0) !== 0) {
-      throw new Error(
-        `Could not prepare ${WORKSPACE} in the guest: ${prepared.stderr}`,
-      );
-    }
-
-    return;
-  }
-
-  const result = await vm.exec(
-    `mkdir -p ${WORKSPACE} && ` +
+  const command = realDisk
+    ? `mkdir -p ${directories}`
+    : `mkdir -p ${WORKSPACE} && ` +
       `mount -t tmpfs -o size=${workspaceSizeMb(spec)}m tmpfs ${WORKSPACE} && ` +
-      `mkdir -p ${directories}`,
-    { cwd: "/" },
-  );
+      `mkdir -p ${directories}`;
+
+  const result = await vm.exec(command, { cwd: "/" });
 
   // Refused rather than carried on with. The run would otherwise get as far as
   // fetching the harness and fail there, and "npm could not write a file" is a
   // long way from the thing that is actually wrong.
   if ((result.exitCode ?? 0) !== 0) {
     throw new Error(
-      `Could not mount a writable ${WORKSPACE} in the guest, so the harness ` +
-        `would have nowhere to install: ${result.stderr}`,
+      `Could not prepare a writable ${WORKSPACE} in the guest, so the ` +
+        `harness would have nowhere to install: ${result.stderr}`,
     );
   }
 }
 
 /**
- * How large the writable area may grow.
+ * How large the tmpfs workspace may grow, when there is no Vantik image.
  *
  * Three quarters of the guest's memory, and never more than the caller asked
  * for. tmpfs charges only for what is written, so this is a ceiling rather

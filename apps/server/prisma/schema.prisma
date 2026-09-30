@@ -8,6 +8,25 @@ generator client {
   // previewFeatures = []
 }
 
+/// Database triggers keep this text in the same transaction as its source.
+/// The vector worker sets an embedding only when its content hash still matches.
+model SearchDocument {
+  id             String                  @id
+  kind           String
+  sourceId       String
+  workspaceId    String
+  title          String
+  body           String
+  comments       String                  @default("")
+  search         Unsupported("tsvector") @default(dbgenerated())
+  embedding      Unsupported("vector")?
+  embeddingModel String?
+  contentHash    String                  @default("")
+  embeddedHash   String?
+
+  @@index([workspaceId, kind])
+}
+
 /// One agent's attempt at one issue.
 ///
 /// The unit of work the whole Autonomous agents project turns on. Execution
@@ -1540,10 +1559,8 @@ model PageEntryRelation {
 /// next, and it turns the bank from a record of what agents dumped into a
 /// record of what agents needed.
 ///
-/// Kept in postgres rather than in a typesense `nohits_queries` analytics rule,
-/// which aggregates across the whole index with no workspace field — one
-/// workspace's unanswered questions are not another's to read, and a query
-/// string is often the most revealing thing about work in progress.
+/// Each record belongs to one workspace. A query can contain private work
+/// information and must not be visible to another workspace.
 model PageKnowledgeGap {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())

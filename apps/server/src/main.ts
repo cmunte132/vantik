@@ -8,16 +8,15 @@ import './otel';
 import { VersioningType } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import * as bodyParser from 'body-parser';
+import cookieParser from 'cookie-parser';
+import { Request, Response, NextFunction } from 'express';
 import { PrismaClientExceptionFilter } from 'nestjs-prisma';
-import supertokens from 'supertokens-node';
-
 import { validationPipe } from 'common/validation';
 
 import {
   LOCAL_ATTACHMENT_PATH,
   localAttachmentBodyParser,
 } from 'modules/attachments/attachments.middleware';
-import { SupertokensExceptionFilter } from 'modules/auth/auth.filter';
 import { LoggerService } from 'modules/logger/logger.service';
 import ReplicationService from 'modules/replication/replication.service';
 
@@ -45,7 +44,24 @@ async function bootstrap() {
 
   // Validation
   app.useGlobalPipes(validationPipe());
-
+  app.use(cookieParser());
+  // Origin check on mutating requests (CSRF protection)
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const method = req.method.toUpperCase();
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      const origin = req.headers['origin'];
+      if (origin) {
+        const allowedOrigins = (process.env.FRONTEND_HOST || 'http://localhost:3000')
+          .split(',')
+          .map((h) => h.trim().replace(/\/+$/, ''));
+        if (!allowedOrigins.includes(origin)) {
+          res.status(403).json({ message: 'Forbidden: invalid origin' });
+          return;
+        }
+      }
+    }
+    next();
+  });
   app.use(bodyParser.json({ limit: '50mb' })); // Adjust limit as required
 
   app.use(LOCAL_ATTACHMENT_PATH, localAttachmentBodyParser());
@@ -61,7 +77,6 @@ async function bootstrap() {
   const { httpAdapter } = app.get(HttpAdapterHost);
   app.useGlobalFilters(
     new PrismaClientExceptionFilter(httpAdapter),
-    new SupertokensExceptionFilter(),
   );
 
   // Versioning
@@ -71,7 +86,7 @@ async function bootstrap() {
 
   app.enableCors({
     origin: process.env.FRONTEND_HOST.split(','),
-    allowedHeaders: ['content-type', ...supertokens.getAllCORSHeaders()],
+    allowedHeaders: ['content-type', 'authorization', 'x-request-id', 'rid', 'st-auth-mode'],
     credentials: true,
   });
 

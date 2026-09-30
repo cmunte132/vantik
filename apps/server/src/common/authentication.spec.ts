@@ -1,60 +1,65 @@
-import { sign } from 'jsonwebtoken';
-import { JwksClient } from 'jwks-rsa';
+import { isSessionValid } from './authentication';
 
-import { verifyAccessToken } from './authentication';
-
-jest.mock('jwks-rsa', () => ({
-  JwksClient: jest.fn().mockImplementation(() => ({
-    getSigningKey: jest.fn().mockResolvedValue({
-      getPublicKey: () => 'shared-secret',
-    }),
-  })),
-}));
-
-/**
- * The websocket handshake verifies the browser's access token here. When the
- * keys came from BACKEND_HOST, a server that could not reach its own public
- * address turned every socket away, and live updates stopped.
- */
-describe('verifyAccessToken', () => {
-  const env = process.env;
-
-  beforeEach(() => {
-    process.env = {
-      ...env,
-      BACKEND_HOST: 'http://unreachable.example:4001',
-      SUPERTOKEN_CONNECTION_URI: 'http://supertokens:3567/;http://backup:3567',
+describe('isSessionValid', () => {
+  function authServiceResolving(session: unknown) {
+    return {
+      resolveRequestSession: jest.fn().mockResolvedValue(session),
     };
+  }
+
+  const aSession = {
+    getUserId: () => 'user-1',
+    getAccessTokenPayload: () => ({ appUserId: 'user-1', workspaceId: 'ws-1' }),
+  };
+
+  it('uses the explicit identity instead of a different user in the cookie jar', async () => {
+    const cookieSession = { getUserId: () => 'cookie-user' };
+    const bearerSession = { getUserId: () => 'bearer-user' };
+    const authService = {
+      resolveRequestSession: async (_request: object, token: string) =>
+        token === 'explicit-session' ? bearerSession : cookieSession,
+    };
+    const req = {
+      cookies: { sSessionToken: 'cookie-session' },
+      headers: { authorization: 'Bearer explicit-session' },
+      session: undefined as unknown,
+    };
+
+    await isSessionValid(req as never, {} as never, authService as never);
+
+    expect((req.session as typeof bearerSession).getUserId()).toBe('bearer-user');
   });
 
-  afterAll(() => {
-    process.env = env;
+  it('does not fall back to a cookie when the explicit credential is invalid', async () => {
+    const authService = {
+      resolveRequestSession: async (_request: object, token: string) =>
+        token === 'valid-cookie' ? aSession : null,
+    };
+    const req = {
+      cookies: { sSessionToken: 'valid-cookie' },
+      headers: { authorization: 'Bearer revoked-session' },
+    };
+
+    await expect(
+      isSessionValid(req as never, {} as never, authService as never),
+    ).rejects.toThrow();
   });
 
-  it('reads the signing keys from the SuperTokens core, once', async () => {
-    const token = sign({ appUserId: 'user-1' }, 'shared-secret', {
-      keyid: 'k1',
-    });
+  it('rejects a revoked or expired session', async () => {
+    const authService = authServiceResolving(null);
+    const req = { cookies: { sSessionToken: 'revoked' }, headers: {} };
 
-    await expect(verifyAccessToken(`Bearer ${token}`)).resolves.toMatchObject({
-      appUserId: 'user-1',
-    });
-    await verifyAccessToken(`Bearer ${token}`);
-
-    expect(JwksClient).toHaveBeenCalledTimes(1);
-    expect(JwksClient).toHaveBeenCalledWith(
-      expect.objectContaining({
-        jwksUri: 'http://supertokens:3567/.well-known/jwks.json',
-      }),
-    );
+    await expect(
+      isSessionValid(req as never, {} as never, authService as never),
+    ).rejects.toThrow();
   });
 
-  it('answers null for a token it cannot verify', async () => {
-    const forged = sign({ appUserId: 'user-1' }, 'another-secret', {
-      keyid: 'k1',
-    });
+  it('rejects a request without a session or token', async () => {
+    const authService = authServiceResolving(aSession);
+    const req = { cookies: {}, headers: {} };
 
-    await expect(verifyAccessToken(`Bearer ${forged}`)).resolves.toBeNull();
-    await expect(verifyAccessToken('Bearer not-a-jwt')).resolves.toBeNull();
+    await expect(
+      isSessionValid(req as never, {} as never, authService as never),
+    ).rejects.toThrow();
   });
 });

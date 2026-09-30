@@ -8,19 +8,13 @@ import {
   type LoginEmail,
 } from './mailpit';
 
-/**
- * SuperTokens answers in cookies for a browser and in response headers for
- * anything that asks with `st-auth-mode: header`. The suite asks, so a session
- * is a pair of strings it can put in an Authorization header.
- */
-const SUPERTOKENS_HEADERS = {
-  rid: 'passwordless',
-  'st-auth-mode': 'header',
+const AUTH_HEADERS = {
+  'Content-Type': 'application/json',
 };
-
+/** A session token. The server sets it as a cookie and also accepts it as a
+ * bearer token, which is how the suite sends it. */
 export interface Session {
   accessToken: string;
-  refreshToken: string;
 }
 
 export interface SignIn {
@@ -38,7 +32,7 @@ export interface Account {
   teamIdentifier: string;
   /** A personal access token: the credential agents and the MCP use. */
   pat: string;
-  /** A SuperTokens access token. It expires an hour after it is issued. */
+  /** A session token. The session slides forward while it is used. */
   accessToken: string;
 }
 
@@ -47,10 +41,9 @@ export function bearer(token: string): Record<string, string> {
 }
 
 function sessionFrom(headers: Record<string, string>): Session {
-  const accessToken = headers['st-access-token'];
-  const refreshToken = headers['st-refresh-token'];
-  expect(accessToken, 'the response issued no access token').toBeTruthy();
-  return { accessToken, refreshToken };
+  const token = headers['set-cookie']?.match(/sSessionToken=([^;]+)/)?.[1];
+  expect(token, 'the response issued no session token').toBeTruthy();
+  return { accessToken: token! };
 }
 
 /** Asks the server to email a login code, as the sign-in page does. */
@@ -59,8 +52,8 @@ export async function requestLoginCode(
   email: string,
 ): Promise<{ deviceId: string; preAuthSessionId: string }> {
   const response = await request.post(
-    `${SERVER_URL}/api/auth/signinup/code`,
-    { headers: SUPERTOKENS_HEADERS, data: { email } },
+    `${SERVER_URL}/v1/auth/signinup/code`,
+    { headers: AUTH_HEADERS, data: { email } },
   );
   expect(response, 'creating a login code failed').toBeOK();
 
@@ -75,8 +68,8 @@ export async function consumeLoginCode(
   code: { deviceId: string; preAuthSessionId: string },
   userInputCode: string,
 ) {
-  return request.post(`${SERVER_URL}/api/auth/signinup/code/consume`, {
-    headers: SUPERTOKENS_HEADERS,
+  return request.post(`${SERVER_URL}/v1/auth/signinup/code/consume`, {
+    headers: AUTH_HEADERS,
     data: { ...code, userInputCode },
   });
 }
@@ -114,14 +107,14 @@ export async function postOnboarding(
   input: OnboardingInput,
 ) {
   return request.post(`${SERVER_URL}/v1/workspaces/onboarding`, {
-    headers: { ...bearer(session.accessToken), ...SUPERTOKENS_HEADERS },
+    headers: { ...bearer(session.accessToken), ...AUTH_HEADERS },
     data: input,
   });
 }
 
 /**
- * Onboards and returns the session the server re-issues, which is the first
- * one to carry the new workspace.
+ * Onboards. The session keeps its token: the server moves it to the new
+ * workspace and issues nothing new.
  */
 export async function onboard(
   request: APIRequestContext,
@@ -130,7 +123,11 @@ export async function onboard(
 ): Promise<Session> {
   const response = await postOnboarding(request, session, input);
   expect(response, 'onboarding failed').toBeOK();
-  return sessionFrom(response.headers());
+  expect(
+    response.headers()['set-cookie'],
+    'onboarding re-issued the session',
+  ).toBeUndefined();
+  return session;
 }
 
 export async function createPersonalAccessToken(
@@ -221,7 +218,7 @@ export async function answerInvite(
   accept = true,
 ) {
   return request.post(`${SERVER_URL}/v1/workspaces/invite_action`, {
-    headers: { ...bearer(session.accessToken), ...SUPERTOKENS_HEADERS },
+    headers: { ...bearer(session.accessToken), ...AUTH_HEADERS },
     data: { inviteId, accept },
   });
 }
@@ -243,14 +240,9 @@ export async function provisionTeammate(
   const accepted = await answerInvite(request, session, inviteId);
   expect(accepted, 'accepting the invite failed').toBeOK();
 
-  // Like onboarding, accepting re-issues the session so that it names the
-  // workspace just joined.
-  const joined = sessionFrom(accepted.headers());
-  const pat = await createPersonalAccessToken(
-    request,
-    joined.accessToken,
-    'e2e',
-  );
+  // Like onboarding, accepting moves the same session to the workspace just
+  // joined.
+  const pat = await createPersonalAccessToken(request, session.accessToken, 'e2e');
 
   return {
     email: options.email,
@@ -259,7 +251,7 @@ export async function provisionTeammate(
     teamId: options.team.id,
     teamIdentifier: options.team.identifier,
     pat,
-    accessToken: joined.accessToken,
+    accessToken: session.accessToken,
   };
 }
 

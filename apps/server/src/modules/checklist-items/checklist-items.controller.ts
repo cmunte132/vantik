@@ -15,7 +15,7 @@ import {
   CreateChecklistItemRequestParamsDto,
   UpdateChecklistItemDto,
 } from '@vantikhq/types';
-import { SessionContainer } from 'supertokens-node/recipe/session';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
@@ -42,7 +42,7 @@ export class ChecklistItemsController {
   @Post()
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createChecklistItem(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Query() issueParams: CreateChecklistItemRequestParamsDto,
     @Body() itemData: CreateChecklistItemDto,
   ): Promise<ChecklistItem> {
@@ -57,7 +57,7 @@ export class ChecklistItemsController {
   @Post(':checklistItemId')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateChecklistItem(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Param() checklistItemParams: ChecklistItemRequestParamsDto,
     @Body() itemData: UpdateChecklistItemDto,
   ): Promise<ChecklistItem> {
@@ -72,7 +72,7 @@ export class ChecklistItemsController {
   @Delete(':checklistItemId')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async deleteChecklistItem(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Param() checklistItemParams: ChecklistItemRequestParamsDto,
   ): Promise<ChecklistItem> {
     const userId = getAppUserId(session);

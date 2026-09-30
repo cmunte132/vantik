@@ -1,10 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 
-import {
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   AgentAccount,
@@ -21,8 +17,7 @@ import {
 } from '@vantikhq/types';
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
-import Passwordless from 'supertokens-node/recipe/passwordless';
-import Session from 'supertokens-node/recipe/session';
+import { AuthService, sha256Hex } from 'modules/auth/auth.service';
 
 import { generatePersonalAccessToken } from 'common/authentication';
 import { PatPrincipal, resolvePatPrincipal } from 'common/pat-session';
@@ -33,7 +28,6 @@ import {
 } from 'common/workspace-access';
 
 import { agentSettings } from 'modules/auth/agent-scope';
-import { getRecipeUserIdForAccount } from 'modules/auth/session-user';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import {
@@ -46,72 +40,10 @@ import { generateUniqueId } from './users.utils';
 @Injectable()
 export class UsersService {
   private readonly logger = new LoggerService(UsersService.name);
-
-  constructor(private prisma: PrismaService) {}
-
-  /**
-   * Records a way in to an account, creating the account if this is the first
-   * one.
-   *
-   * `supertokensUserId` is a credential, not an identity: the same person
-   * signing in with a login code and a passkey arrives with two of them. The
-   * account is keyed on email, which is what makes the second credential
-   * attach to the existing person instead of inventing a new one.
-   */
-  async upsertUserForIdentity(
-    supertokensUserId: string,
-    provider: string,
-    email: string,
-    fullname: string,
-    username?: string,
-  ) {
-    try {
-      const user = await this.prisma.user.upsert({
-        where: { email },
-        create: {
-          email,
-          fullname,
-          username: username ?? email.split('@')[0],
-        },
-        update: {},
-      });
-
-      await this.prisma.authIdentity.upsert({
-        where: { supertokensUserId },
-        create: { userId: user.id, provider, supertokensUserId },
-        update: {},
-      });
-
-      return user;
-    } catch (error) {
-      this.logger.error({
-        message: `Error while upserting the user for identity: ${supertokensUserId}`,
-        where: `UsersService.upsertUserForIdentity`,
-        error,
-      });
-      throw new InternalServerErrorException(
-        error,
-        `Error while upserting the user for identity: ${supertokensUserId}`,
-      );
-    }
-  }
-
-  /**
-   * The account a SuperTokens session belongs to.
-   *
-   * Sessions carry a recipe user id, which is not an account id and has not
-   * been one since identity moved into this database.
-   */
-  async getUserIdForSupertokensId(
-    supertokensUserId: string,
-  ): Promise<string | null> {
-    const identity = await this.prisma.authIdentity.findUnique({
-      where: { supertokensUserId },
-      select: { userId: true },
-    });
-
-    return identity ? identity.userId : null;
-  }
+  constructor(
+    private prisma: PrismaService,
+    private authService: AuthService,
+  ) {}
 
   async getUser(id: string): Promise<UserWithInvites> {
     this.logger.debug({
@@ -234,22 +166,10 @@ export class UsersService {
     type = 'user',
   ) {
     const token = generatePersonalAccessToken();
+    const tokenHash = sha256Hex(token);
 
-    // The `jwt` column is vestigial: authentication resolves a token against
-    // this table and never reads the column. It used to hold an
-    // access token minted here, but since identity moved into the database
-    // (ENG-42) minting one requires a SuperTokens *recipe* id, and this was
-    // handing it an account id — which `createNewSession` rejects, breaking
-    // every PAT creation. Nothing needs the value, so it is no longer minted.
     const pat = await this.prisma.personalAccessToken.create({
-      data: {
-        name,
-        userId,
-        token,
-        workspaceId,
-        jwt: '',
-        type,
-      },
+      data: { name, userId, tokenHash, workspaceId, type },
     });
 
     return { name, token, id: pat.id };
@@ -265,9 +185,9 @@ export class UsersService {
    * feed, and never offered as a thing to configure.
    *
    * **Per issue, not per run.** It was per run, and nothing ever reaped one —
-   * so a workspace doing a handful of delegations a day accumulated a
-   * SuperTokens user, a `User` row and a workspace membership every time, for
-   * ever, all of them replicated to every connected client because comment
+   * so a workspace doing a handful of delegations a day accumulated a `User`
+   * row and a workspace membership every time, for ever, all of them
+   * replicated to every connected client because comment
    * attribution resolves through the user list. Keyed to the issue, a second
    * attempt reuses the first attempt's identity and the issue reads as one
    * agent that had another go rather than as two strangers.
@@ -307,28 +227,19 @@ export class UsersService {
     if (existing?.user) {
       return { id: existing.user.id, name: existing.user.fullname ?? name };
     }
-
     const email = `run-${randomBytes(8).toString('hex')}@agents.vantik.local`;
 
-    const signUp = await Passwordless.signInUp({ tenantId: 'public', email });
-    if (signUp.status !== 'OK') {
-      throw new InternalServerErrorException(
-        `Could not create the run identity: ${signUp.status}`,
-      );
-    }
-
-    await this.upsertUserForIdentity(
-      signUp.recipeUserId.getAsString(),
-      'passwordless',
-      email,
-      name,
-    );
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        fullname: name,
+        username: email.split('@')[0],
+        type: UserTypeEnum.Agent,
+      },
+    });
 
     return this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.update({
-        where: { email },
-        data: { fullname: name, type: UserTypeEnum.Agent },
-      });
+      // user already created above
 
       const teamIds = (
         await tx.team.findMany({
@@ -423,21 +334,6 @@ export class UsersService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '') || 'agent';
     const email = `agent-${slug}-${randomBytes(4).toString('hex')}@agents.vantik.local`;
-
-    const signUp = await Passwordless.signInUp({ tenantId: 'public', email });
-    if (signUp.status !== 'OK') {
-      throw new InternalServerErrorException(
-        `Could not create the agent credential: ${signUp.status}`,
-      );
-    }
-
-    await this.upsertUserForIdentity(
-      signUp.recipeUserId.getAsString(),
-      'passwordless',
-      email,
-      name,
-    );
-
     // A personal agent belongs to the person who made it; a workspace-owned one
     // belongs to no individual.
     const ownerUserId = ownership === 'personal' ? createdByUserId : null;
@@ -453,9 +349,13 @@ export class UsersService {
       // set the display name explicitly — this is how the agent reads in
       // history, lists and assignments. `type` marks it non-human everywhere,
       // not only in the workspace whose membership carries the AGENT role.
-      const user = await tx.user.update({
-        where: { email },
-        data: { fullname: name, type: UserTypeEnum.Agent },
+      const user = await tx.user.create({
+        data: {
+          email,
+          fullname: name,
+          username: slug,
+          type: UserTypeEnum.Agent,
+        },
       });
 
       const teamIds = (
@@ -493,13 +393,13 @@ export class UsersService {
       // Inlined rather than calling createPersonalAccessToken, which holds its
       // own client and so would commit outside this transaction.
       const token = generatePersonalAccessToken();
+      const tokenHash = sha256Hex(token);
       await tx.personalAccessToken.create({
         data: {
           name,
           userId: user.id,
-          token,
+          tokenHash,
           workspaceId,
-          jwt: '',
           type: 'agent',
         },
       });
@@ -869,16 +769,20 @@ export class UsersService {
     });
   }
 
+  /**
+   * Approves a CLI login. The CLI polls with the same code for its token.
+   *
+   * The server keeps only the hash of a token, so it cannot give out an older
+   * CLI token again. Each approval makes a new token and revokes the older
+   * CLI tokens of the person in that workspace, so one CLI token stays live.
+   * The plaintext waits on the code until the CLI collects it.
+   */
   async authorizeCode(userId: string, codeBody: CodeDtoWithWorkspace) {
-    // only allow authorization codes that were created less than 10 mins ago
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
     const code = await this.prisma.authorizationCode.findFirst({
       where: {
         code: codeBody.code,
         personalAccessTokenId: null,
-        createdAt: {
-          gte: tenMinutesAgo,
-        },
+        createdAt: { gte: authorizationCodeCutoff() },
       },
     });
 
@@ -888,79 +792,56 @@ export class UsersService {
       );
     }
 
-    const existingCliPersonalAccessToken =
-      await this.prisma.personalAccessToken.findFirst({
-        where: {
-          userId,
-          type: 'cli',
-        },
-      });
-
-    // we only allow you to have one CLI PAT at a time, so return this
-    if (existingCliPersonalAccessToken) {
-      // associate this authorization code with the existing personal access token
-      await this.prisma.authorizationCode.updateMany({
-        where: {
-          code: codeBody.code,
-        },
-        data: {
-          personalAccessTokenId: existingCliPersonalAccessToken.id,
-          workspaceId: codeBody.workspaceId,
-        },
-      });
-
-      if (existingCliPersonalAccessToken.deleted) {
-        // re-activate revoked CLI PAT so we can use it again
-        await this.prisma.personalAccessToken.update({
-          where: {
-            id: existingCliPersonalAccessToken.id,
-          },
-          data: {
-            deleted: null,
-          },
-        });
-      }
-
-      // we don't return the decrypted token
-      return {
-        id: existingCliPersonalAccessToken.id,
-        name: existingCliPersonalAccessToken.name,
-        userId: existingCliPersonalAccessToken.userId,
-      };
-    }
+    await this.prisma.personalAccessToken.updateMany({
+      where: {
+        userId,
+        workspaceId: codeBody.workspaceId,
+        type: 'cli',
+        deleted: null,
+      },
+      data: { deleted: new Date() },
+    });
 
     // The workspace being logged into, not the literal string 'cli' this used
     // to pass as the workspace id. A token acts in the workspace it names, so a
     // token naming a workspace that does not exist can act nowhere at all.
-    const token = await this.createPersonalAccessToken(
+    const pat = await this.createPersonalAccessToken(
       'cli',
       userId,
       codeBody.workspaceId,
+      'cli',
     );
 
-    await this.prisma.authorizationCode.updateMany({
-      where: {
-        code: codeBody.code,
-      },
+    await this.prisma.authorizationCode.update({
+      where: { id: code.id },
       data: {
-        personalAccessTokenId: token.id,
+        personalAccessTokenId: pat.id,
         workspaceId: codeBody.workspaceId,
+        pendingToken: pat.token,
       },
     });
 
-    return token;
+    return { id: pat.id, name: pat.name, userId };
   }
 
-  /** Gets a PersonalAccessToken from an Auth Code, this only works within 10 mins of the auth code being created */
+  /**
+   * Gives the CLI its token, once. The code must be less than 10 minutes old,
+   * and a second call with the same code gets no token.
+   */
   async getPersonalAccessTokenFromAuthorizationCode(authorizationCode: string) {
-    // only allow authorization codes that were created less than 10 mins ago
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    // A token that nobody collected must not stay in the database.
+    await this.prisma.authorizationCode.updateMany({
+      where: {
+        pendingToken: { not: null },
+        createdAt: { lt: authorizationCodeCutoff() },
+      },
+      data: { pendingToken: null },
+    });
+
     const code = await this.prisma.authorizationCode.findFirst({
       where: {
         code: authorizationCode,
-        createdAt: {
-          gte: tenMinutesAgo,
-        },
+        createdAt: { gte: authorizationCodeCutoff() },
       },
     });
     if (!code) {
@@ -971,20 +852,15 @@ export class UsersService {
       throw new Error('No personal token found');
     }
 
-    const pat = await this.prisma.personalAccessToken.findUnique({
-      where: { id: code.personalAccessTokenId },
+    // Clears the token only if it is still there, so two calls at the same
+    // time cannot both collect it.
+    const collected = await this.prisma.authorizationCode.updateMany({
+      where: { id: code.id, pendingToken: code.pendingToken ?? '' },
+      data: { pendingToken: null },
     });
 
-    // there's no PersonalAccessToken associated with this code
-    if (!pat) {
-      return {
-        token: null,
-        workspaceId: undefined,
-      };
-    }
-
     return {
-      token: pat.token,
+      token: collected.count === 1 ? code.pendingToken : null,
       workspaceId: code.workspaceId,
     };
   }
@@ -996,7 +872,7 @@ export class UsersService {
    * used to take the database password, so on an install left with the
    * documented default anyone signed in could become anyone.
    */
-  async impersonate(key: string, userId: string, res: Response, req: Request) {
+  async impersonate(key: string, userId: string, res: Response, _req?: unknown) {
     const configured = process.env.IMPERSONATION_KEY;
     if (!configured || !sameSecret(key, configured)) {
       throw new NotFoundException();
@@ -1012,12 +888,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    await Session.createNewSession(
-      req,
-      res,
-      'public',
-      await getRecipeUserIdForAccount(this.prisma, userId),
-    );
+    await this.authService.createSession(userId, res);
 
     res.send({ status: 200, message: 'impersonate' });
   }
@@ -1027,4 +898,9 @@ export class UsersService {
 function sameSecret(given: string, expected: string): boolean {
   const digest = (value: string) => createHash('sha256').update(value).digest();
   return timingSafeEqual(digest(given), digest(expected));
+}
+
+/** A CLI authorization code works for 10 minutes after it is made. */
+function authorizationCodeCutoff(): Date {
+  return new Date(Date.now() - 10 * 60 * 1000);
 }

@@ -9,6 +9,7 @@ import {
   Query,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -22,7 +23,7 @@ import {
   User,
 } from '@vantikhq/types';
 import { Response } from 'express';
-import { SessionContainer } from 'supertokens-node/recipe/session';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 import { sanitizeScopes } from 'modules/auth/agent-scope';
 import { AuthGuard } from 'modules/auth/auth.guard';
@@ -52,20 +53,21 @@ export class UsersController {
   @Get()
   @UseGuards(AuthGuard)
   async getUser(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Query() userIdParams: { userIds: string },
-    @Workspace() workspaceId: string,
   ): Promise<UserWithInvites | PublicUser[]> {
-    try {
-      if (userIdParams.userIds && userIdParams.userIds.split(',').length > 0) {
-        return await this.users.getUsersbyId(
-          {
-            userIds: userIdParams.userIds.split(','),
-          },
-          workspaceId,
-        );
+    if (userIdParams.userIds && userIdParams.userIds.split(',').length > 0) {
+      const { workspaceId } = session.getAccessTokenPayload();
+      if (!workspaceId) {
+        throw new UnauthorizedException('No workspace is associated with this session');
       }
-    } catch (e) {}
+      return await this.users.getUsersbyId(
+        {
+          userIds: userIdParams.userIds.split(','),
+        },
+        workspaceId,
+      );
+    }
 
     const userId = getAppUserId(session);
     const user = await this.users.getUser(userId);
@@ -87,7 +89,7 @@ export class UsersController {
   @UseGuards(AuthGuard)
   async createPersonalAccessToken(
     @Workspace() workspaceId: string,
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Body()
     createPatDto: CreatePatDto,
   ) {
@@ -115,7 +117,7 @@ export class UsersController {
   @UseGuards(AuthGuard)
   async createAgentAccount(
     @Workspace() workspaceId: string,
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Body() createAgentDto: CreateAgentDto,
     @Query('workspaceId') requestedWorkspaceId?: string,
   ): Promise<AgentAccount> {
@@ -143,7 +145,7 @@ export class UsersController {
   @UseGuards(AuthGuard)
   async listAgentAccounts(
     @Workspace() workspaceId: string,
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Query('workspaceId') requestedWorkspaceId?: string,
     @Query('scope') scope?: 'mine' | 'all',
   ): Promise<AgentSummary[]> {
@@ -170,7 +172,7 @@ export class UsersController {
   @UseGuards(AuthGuard)
   async clearRevokedAgents(
     @Workspace() workspaceId: string,
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Query('workspaceId') requestedWorkspaceId?: string,
   ): Promise<{ hidden: number }> {
     return await this.users.clearRevokedAgents(
@@ -192,7 +194,7 @@ export class UsersController {
   async revokeAgent(
     @Workspace() workspaceId: string,
     @Param() { agentId }: AgentIdParams,
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Query('workspaceId') requestedWorkspaceId?: string,
   ): Promise<void> {
     return await this.users.revokeAgent(
@@ -215,7 +217,7 @@ export class UsersController {
 
   @Get('pats')
   @UseGuards(AuthGuard)
-  async getPats(@SessionDecorator() session: SessionContainer) {
+  async getPats(@SessionDecorator() session: AuthSessionContext) {
     const userId = getAppUserId(session);
     return await this.users.getPats(userId);
   }
@@ -224,7 +226,7 @@ export class UsersController {
   @UseGuards(AuthGuard)
   async deletePat(
     @Param() patIdDto: PatIdDto,
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
   ) {
     // The owner is passed down and applied in the query: a token id alone says
     // nothing about whose token it is, and this route is reachable by any
@@ -240,7 +242,7 @@ export class UsersController {
   @Post('authorization')
   @UseGuards(AuthGuard)
   async authorizeCode(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Body()
     codeBody: CodeDtoWithWorkspace,
   ) {

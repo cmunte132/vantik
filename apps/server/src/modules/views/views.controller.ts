@@ -7,7 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { View } from '@vantikhq/types';
-import { SessionContainer } from 'supertokens-node/recipe/session';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
@@ -63,7 +63,7 @@ export class ViewsController {
   @Post()
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createView(
-    @Session() session: SessionContainer,
+    @Session() session: AuthSessionContext,
     @Workspace() sessionWorkspaceId: string,
     @Body()
     createViewBody: CreateViewsRequestBody,

@@ -1,31 +1,29 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  Optional,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { VerifySessionOptions } from 'supertokens-node/recipe/session';
 
 import { isSessionValid } from 'common/authentication';
 
+import { AuthService } from 'modules/auth/auth.service';
 import { UsersService } from 'modules/users/users.service';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
     private moduleRef: ModuleRef,
-    @Optional() private readonly verifyOptions?: VerifySessionOptions,
+    // AuthModule is global, so the injector finds AuthService from every
+    // module. A strict ModuleRef lookup does not search global modules.
+    private readonly authService: AuthService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const ctx = context.switchToHttp();
+    const request = context.switchToHttp().getRequest();
+    if (request.session) {
+      return true;
+    }
+    const usersService = await this.moduleRef.resolve(UsersService, undefined, {
+      strict: false,
+    });
 
-    const resp = ctx.getResponse();
-    const request = ctx.getRequest();
-
-    const usersService = await this.moduleRef.resolve(UsersService);
-
-    return isSessionValid(request, resp, this.verifyOptions, usersService);
+    return isSessionValid(request, usersService, this.authService);
   }
 }

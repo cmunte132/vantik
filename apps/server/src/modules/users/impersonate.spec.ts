@@ -3,36 +3,20 @@ import { Response } from 'express';
 
 import { UsersService } from './users.service';
 
-// A successful impersonation is a new session for the target; stub the
-// recipe and assert on who it was made for.
-const createNewSession = jest.fn();
-jest.mock('supertokens-node/recipe/session', () => ({
-  __esModule: true,
-  default: {
-    createNewSession: (...args: unknown[]) => createNewSession(...args),
-  },
-}));
-
-jest.mock('modules/auth/session-user', () => ({
-  ...jest.requireActual('modules/auth/session-user'),
-  getRecipeUserIdForAccount: jest.fn(
-    async (_prisma: unknown, userId: string) => `recipe-${userId}`,
-  ),
-}));
+import { AuthService } from 'modules/auth/auth.service';
 
 const REQUEST = {} as never;
-// What the install docs set the database's password to, which impersonation
-// used to take as its key.
 const DOCUMENTED_DEFAULT = 'docker';
 const KEY = 'a-long-random-impersonation-key';
 
 describe('impersonating a user', () => {
   const originalEnv = process.env;
   let service: UsersService;
+  let authService: { createSession: jest.Mock };
   let res: Response & { send: jest.Mock };
 
   beforeEach(() => {
-    createNewSession.mockReset();
+    authService = { createSession: jest.fn().mockResolvedValue({}) };
     process.env = { ...originalEnv, POSTGRES_PASSWORD: DOCUMENTED_DEFAULT };
     delete process.env.IMPERSONATION_KEY;
 
@@ -43,7 +27,7 @@ describe('impersonating a user', () => {
         ),
       },
     };
-    service = new UsersService(prisma as never);
+    service = new UsersService(prisma as never, authService as unknown as AuthService);
     res = { send: jest.fn() } as never;
   });
 
@@ -57,7 +41,7 @@ describe('impersonating a user', () => {
     await expect(
       service.impersonate(DOCUMENTED_DEFAULT, 'user-target', res, REQUEST),
     ).rejects.toBeInstanceOf(NotFoundException);
-    expect(createNewSession).not.toHaveBeenCalled();
+    expect(authService.createSession).not.toHaveBeenCalled();
   });
 
   it('refuses a wrong key, the database password included', async () => {
@@ -68,7 +52,7 @@ describe('impersonating a user', () => {
         service.impersonate(key, 'user-target', res, REQUEST),
       ).rejects.toBeInstanceOf(NotFoundException);
     }
-    expect(createNewSession).not.toHaveBeenCalled();
+    expect(authService.createSession).not.toHaveBeenCalled();
   });
 
   it('signs in as the user with the configured key', async () => {
@@ -76,12 +60,7 @@ describe('impersonating a user', () => {
 
     await service.impersonate(KEY, 'user-target', res, REQUEST);
 
-    expect(createNewSession).toHaveBeenCalledWith(
-      {},
-      res,
-      'public',
-      'recipe-user-target',
-    );
+    expect(authService.createSession).toHaveBeenCalledWith('user-target', res);
   });
 
   it('makes no session for a user that does not exist', async () => {
@@ -91,6 +70,6 @@ describe('impersonating a user', () => {
     await expect(
       service.impersonate(KEY, 'user-missing', res, REQUEST),
     ).rejects.toBeInstanceOf(NotFoundException);
-    expect(createNewSession).not.toHaveBeenCalled();
+    expect(authService.createSession).not.toHaveBeenCalled();
   });
 });

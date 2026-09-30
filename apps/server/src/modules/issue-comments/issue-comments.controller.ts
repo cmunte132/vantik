@@ -14,7 +14,7 @@ import {
   IssueCommentRequestParamsDto,
   UpdateIssueCommentDto,
 } from '@vantikhq/types';
-import { SessionContainer } from 'supertokens-node/recipe/session';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
@@ -33,7 +33,7 @@ export class IssueCommentsController {
   @Post()
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createIssueComment(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Query() issueParams: CreateIssueCommentRequestParamsDto,
     @Body() commentData: CreateIssueCommentDto,
   ): Promise<IssueComment> {

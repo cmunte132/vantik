@@ -23,7 +23,7 @@ import { LoggerService } from 'modules/logger/logger.service';
  * This is an interceptor rather than an exception filter on purpose. A
  * `@Catch()` filter with no arguments matches every exception and, being
  * registered globally, would be consulted ahead of the existing
- * `PrismaClientExceptionFilter` and `SupertokensExceptionFilter` and swallow
+ * `PrismaClientExceptionFilter` and swallow
  * the cases they exist to handle. Rethrowing from here leaves the response
  * path exactly as it was.
  *

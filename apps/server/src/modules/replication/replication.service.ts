@@ -272,6 +272,11 @@ export default class ReplicationService {
       }
 
       const modelName = log.relation.name as ModelNameEnum;
+      const sendsMessages = tablesToSendMessagesFor.has(modelName);
+      const triggersIntegrations = tablesToTrigger.has(modelName);
+      if (!sendsMessages && !triggersIntegrations) {
+        return;
+      }
 
       // A physical delete carries no new row — the id comes from the replica
       // identity instead. These used to be dropped on the grounds that the app
@@ -298,7 +303,7 @@ export default class ReplicationService {
         return;
       }
 
-      if (tablesToSendMessagesFor.has(modelName)) {
+      if (sendsMessages) {
         const syncActionData = await this.syncActionsService.upsertSyncAction(
           _lsn,
           isDeleted ? 'delete' : log.tag,
@@ -334,7 +339,7 @@ export default class ReplicationService {
       // event's workspace is resolved by reading the record, which no longer
       // exists. Soft deletes still arrive here, as a `delete` tag no plugin
       // subscribes to, which is every delete the app itself performs.
-      if (tablesToTrigger.has(modelName) && log.tag !== 'delete') {
+      if (triggersIntegrations && log.tag !== 'delete') {
         const changedData = this.getChangedData(log);
 
         const workspaceId = await getWorkspaceId(

@@ -1,6 +1,6 @@
 import { Body, Controller, Param, Post, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
-import { SessionContainer } from 'supertokens-node/recipe/session';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
@@ -61,7 +61,7 @@ export class IssuesAIController {
   @UseGuards(AuthGuard)
   async aiFilters(
     @Body() filterInput: FilterInput,
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
   ) {
     return await this.issuesAiService.aiFilters(
       filterInput,

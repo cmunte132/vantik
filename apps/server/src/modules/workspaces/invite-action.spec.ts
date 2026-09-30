@@ -1,18 +1,9 @@
 import { NotFoundException } from '@nestjs/common';
 import { InviteStatusEnum, RoleEnum } from '@vantikhq/types';
-import { Request, Response } from 'express';
-import { SessionContainer } from 'supertokens-node/recipe/session';
-
+import { Response } from 'express';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
+import { AuthService } from 'modules/auth/auth.service';
 import WorkspacesService from './workspaces.service';
-
-// Answering an invite remints the session so it carries the new workspace;
-// that is SuperTokens' work, not what is under test.
-const createNewSession = jest.fn();
-jest.mock('supertokens-node/recipe/session', () => ({
-  __esModule: true,
-  default: {},
-  createNewSession: (...args: unknown[]) => createNewSession(...args),
-}));
 
 const INVITE = {
   id: 'invite-1',
@@ -24,11 +15,14 @@ const INVITE = {
   deleted: null as Date | null,
 };
 
-function sessionOf(userId: string) {
+function sessionOf(userId: string): AuthSessionContext {
   return {
-    getAccessTokenPayload: () => ({ appUserId: userId }),
-    getRecipeUserId: () => `recipe-${userId}`,
-  } as unknown as SessionContainer;
+    getAccessTokenPayload: () => ({
+      appUserId: userId,
+      sessionId: `session-of-${userId}`,
+    }),
+    getUserId: () => userId,
+  };
 }
 
 function response() {
@@ -44,11 +38,11 @@ describe('answering an invite', () => {
     invite: { findFirst: jest.Mock; update: jest.Mock };
     usersOnWorkspaces: { upsert: jest.Mock };
   };
+  let authService: { updateSessionWorkspace: jest.Mock };
   let invite: typeof INVITE;
-
   beforeEach(() => {
     invite = { ...INVITE };
-    createNewSession.mockReset();
+    authService = { updateSessionWorkspace: jest.fn().mockResolvedValue(undefined) };
 
     const emails: Record<string, string> = {
       'user-invited': INVITE.emailId,
@@ -78,14 +72,13 @@ describe('answering an invite', () => {
       usersOnWorkspaces: { upsert: jest.fn().mockResolvedValue({}) },
     };
 
-    service = new WorkspacesService(prisma as never, {} as never, {} as never);
+    service = new WorkspacesService(prisma as never, {} as never, {} as never, authService as unknown as AuthService);
   });
 
   it('joins the person it was sent to to the workspace', async () => {
     const res = response();
 
     await service.inviteAction(
-      {} as Request,
       res,
       INVITE.id,
       sessionOf('user-invited'),
@@ -102,6 +95,13 @@ describe('answering an invite', () => {
       }),
     );
     expect(res.status).toHaveBeenCalledWith(200);
+    // Only the session that accepted moves to the workspace, and it keeps its
+    // token.
+    expect(authService.updateSessionWorkspace).toHaveBeenCalledWith(
+      'session-of-user-invited',
+      INVITE.workspaceId,
+      RoleEnum.ADMIN,
+    );
   });
 
   it('refuses anyone else, and leaves the invite open', async () => {
@@ -109,8 +109,7 @@ describe('answering an invite', () => {
     // workspace in the role the invite carried.
     await expect(
       service.inviteAction(
-        {} as Request,
-        response(),
+          response(),
         INVITE.id,
         sessionOf('user-else'),
         true,
@@ -119,12 +118,11 @@ describe('answering an invite', () => {
 
     expect(prisma.usersOnWorkspaces.upsert).not.toHaveBeenCalled();
     expect(prisma.invite.update).not.toHaveBeenCalled();
-    expect(createNewSession).not.toHaveBeenCalled();
+    expect(authService.updateSessionWorkspace).not.toHaveBeenCalled();
   });
 
   it('refuses an invite already declined', async () => {
     await service.inviteAction(
-      {} as Request,
       response(),
       INVITE.id,
       sessionOf('user-invited'),
@@ -134,8 +132,7 @@ describe('answering an invite', () => {
 
     await expect(
       service.inviteAction(
-        {} as Request,
-        response(),
+          response(),
         INVITE.id,
         sessionOf('user-invited'),
         true,

@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { RoleEnum } from '@vantikhq/types';
-import { SessionContainer } from 'supertokens-node/recipe/session';
+
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 @Injectable()
 export class AdminGuard implements CanActivate {
@@ -9,9 +10,8 @@ export class AdminGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
 
-    // Extract the SuperTokens session from the request
-    const session: SessionContainer = request.session;
-    const role = session.getAccessTokenPayload().role;
+    const session = request.session as AuthSessionContext;
+    const role = session?.getAccessTokenPayload?.()?.role;
 
     return role === RoleEnum.ADMIN;
   }

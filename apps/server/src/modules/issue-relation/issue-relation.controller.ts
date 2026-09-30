@@ -1,6 +1,6 @@
 import { Controller, Delete, Param, UseGuards } from '@nestjs/common';
 import { IssueRelation, IssueRelationIdRequestDto } from '@vantikhq/types';
-import { SessionContainer } from 'supertokens-node/recipe/session';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
@@ -18,7 +18,7 @@ export class IssueRelationController {
   @Delete(':issueRelationId')
   @UseGuards(AuthGuard)
   async deleteLabel(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Param()
     issueRelationId: IssueRelationIdRequestDto,
   ): Promise<IssueRelation> {

@@ -1,4 +1,4 @@
-import { SessionContainer } from 'supertokens-node/recipe/session';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
@@ -14,7 +14,8 @@ function buildController() {
 
   const session = {
     getAccessTokenPayload: () => ({ appUserId: 'admin-1' }),
-  } as unknown as SessionContainer;
+    getUserId: () => 'admin-1',
+  } as AuthSessionContext;
 
   return { controller: new UsersController(users), users, session };
 }

@@ -22,7 +22,7 @@ import {
   PaginatedIssues,
 } from '@vantikhq/types';
 import { Response } from 'express';
-import { SessionContainer } from 'supertokens-node/recipe/session';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 import { RequiresScope } from 'modules/auth/agent-scope';
 import { AuthGuard } from 'modules/auth/auth.guard';
@@ -53,7 +53,7 @@ export class IssuesController {
   @Post()
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async createIssue(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Body() issueData: CreateIssueDto,
   ): Promise<Issue> {
     const userId = getAppUserId(session);
@@ -81,7 +81,7 @@ export class IssuesController {
   @Post(':issueId')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async updateIssue(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Param() issueParams: IssueRequestParamsDto,
     @Query() teamParams: TeamRequestParamsDto,
     @Body() issueData: UpdateIssueDto,
@@ -107,7 +107,7 @@ export class IssuesController {
   @Post(':issueId/subscribe')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async subscribeIssue(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Param() issueParams: IssueRequestParamsDto,
     @Body() subscriberData: SubscribeIssueInput,
   ) {
@@ -122,7 +122,7 @@ export class IssuesController {
   @Post(':issueId/move')
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async moveIssue(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Param() issueParams: IssueRequestParamsDto,
     @Body() moveData: TeamRequestParamsDto,
   ): Promise<Issue> {

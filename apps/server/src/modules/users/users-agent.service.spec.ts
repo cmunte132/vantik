@@ -1,4 +1,4 @@
-import { InternalServerErrorException } from '@nestjs/common';
+// InternalServerErrorException removed
 import {
   AgentOwnership,
   DEFAULT_AGENT_SCOPES,
@@ -8,15 +8,6 @@ import {
 
 import { UsersService } from './users.service';
 
-// The agent credential is minted through SuperTokens; stub it so the test
-// exercises our orchestration, not the recipe.
-const signInUp = jest.fn();
-jest.mock('supertokens-node/recipe/passwordless', () => ({
-  __esModule: true,
-  default: {
-    signInUp: (...args: unknown[]) => signInUp(...args),
-  },
-}));
 
 // createPersonalAccessToken generates the token string here; stub it so the
 // test asserts on a known value.
@@ -39,17 +30,15 @@ function buildPrisma() {
       upsert: jest.fn().mockResolvedValue({}),
     },
     user: {
-      upsert: jest.fn().mockResolvedValue({
+      create: jest.fn().mockResolvedValue({
         id: 'agent-user-1',
-        email: 'x',
+        fullname: 'Release Bot',
+        email: 'agent-release-bot-12345678@agents.vantik.local',
       }),
       update: jest.fn().mockResolvedValue({
         id: 'agent-user-1',
         fullname: 'Release Bot',
       }),
-    },
-    authIdentity: {
-      upsert: jest.fn().mockResolvedValue({}),
     },
     team: {
       findMany: jest
@@ -69,7 +58,7 @@ function buildPrisma() {
 /** The service over a stubbed prisma; each suite supplies the shape it needs. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function serviceWith(prisma: any) {
-  return new UsersService(prisma);
+  return new UsersService(prisma, {} as any);
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -88,47 +77,24 @@ describe('UsersService.createAgentAccount', () => {
 
   beforeEach(() => {
     prisma = buildPrisma();
-    signInUp.mockReset();
-    signInUp.mockResolvedValue({
-      status: 'OK',
-      recipeUserId: { getAsString: () => 'st-recipe-1' },
-    });
   });
 
-  it('gives the agent a passwordless credential at a synthetic address', async () => {
+  it('gives the agent a synthetic address and records the user', async () => {
     await provision();
 
-    expect(signInUp).toHaveBeenCalledTimes(1);
-    const arg = signInUp.mock.calls[0][0];
-    expect(arg.tenantId).toBe('public');
-    expect(arg.email).toMatch(
-      /^agent-release-bot-[0-9a-f]{8}@agents\.vantik\.local$/,
-    );
-  });
-
-  it('records the credential against a new account', async () => {
-    await provision();
-
-    expect(prisma.authIdentity.upsert).toHaveBeenCalledWith(
+    expect(prisma.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({
-          userId: 'agent-user-1',
-          provider: 'passwordless',
-          supertokensUserId: 'st-recipe-1',
+        data: expect.objectContaining({
+          email: expect.stringMatching(
+            /^agent-release-bot-[0-9a-f]{8}@agents\.vantik\.local$/,
+          ),
+          fullname: 'Release Bot',
+          type: UserTypeEnum.Agent,
         }),
       }),
     );
   });
-
-  it('sets the display name so the agent reads as itself', async () => {
-    await provision();
-
-    expect(prisma.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: { fullname: 'Release Bot', type: UserTypeEnum.Agent },
-      }),
-    );
-  });
+// sets display name directly on create
 
   it('joins the agent to the workspace as an AGENT across its teams', async () => {
     await provision();
@@ -212,9 +178,9 @@ describe('UsersService.createAgentAccount', () => {
 
     // The identity is the point: it is what the agent's edits are attributed
     // to, so provisioning must not degrade into doing nothing.
-    expect(prisma.user.update).toHaveBeenCalledWith(
+    expect(prisma.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { fullname: 'House Agent', type: UserTypeEnum.Agent },
+        data: expect.objectContaining({ fullname: 'House Agent', type: UserTypeEnum.Agent }),
       }),
     );
     expect(prisma.usersOnWorkspaces.upsert).toHaveBeenCalledTimes(1);
@@ -247,15 +213,6 @@ describe('UsersService.createAgentAccount', () => {
     });
   });
 
-  it('does not create an account if the credential could not be minted', async () => {
-    signInUp.mockResolvedValue({ status: 'SIGN_IN_UP_NOT_ALLOWED' });
-
-    await expect(provision()).rejects.toBeInstanceOf(
-      InternalServerErrorException,
-    );
-    expect(prisma.user.upsert).not.toHaveBeenCalled();
-    expect(prisma.personalAccessToken.create).not.toHaveBeenCalled();
-  });
 });
 
 describe('UsersService.listAgentAccounts', () => {
@@ -563,8 +520,8 @@ describe('UsersService.listAgentAccounts', () => {
 /**
  * The identity a delegated run is attributed to.
  *
- * It used to be minted per run and never reaped: a SuperTokens user, a `User`
- * row and a workspace membership for every delegation the workspace had ever
+ * It used to be minted per run and never reaped: a `User` row and a workspace
+ * membership for every delegation the workspace had ever
  * done, all replicated to every connected client because comment attribution
  * resolves through the user list.
  */
@@ -582,13 +539,7 @@ describe('UsersService.provisionRunIdentity', () => {
     return prisma;
   }
 
-  beforeEach(() => {
-    signInUp.mockClear();
-    signInUp.mockResolvedValue({
-      status: 'OK',
-      recipeUserId: { getAsString: () => 'st-run-1' },
-    });
-  });
+  beforeEach(() => {});
 
   it('reuses the identity already working the issue', async () => {
     const prisma = runIdentityPrisma({
@@ -604,7 +555,6 @@ describe('UsersService.provisionRunIdentity', () => {
     // The second attempt reads as the same agent having another go, rather
     // than as a stranger arriving to finish somebody else's work.
     expect(identity).toEqual({ id: 'agent-run-1', name: 'Fuzzy Zebra' });
-    expect(signInUp).not.toHaveBeenCalled();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((prisma.usersOnWorkspaces as any).create).not.toHaveBeenCalled();
   });

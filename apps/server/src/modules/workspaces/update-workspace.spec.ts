@@ -4,11 +4,6 @@
  */
 import WorkspacesService from './workspaces.service';
 
-jest.mock('supertokens-node/recipe/session', () => ({
-  __esModule: true,
-  default: {},
-}));
-
 describe('updating a workspace', () => {
   it('[KG-4.5] changes its name and icon, and never its preferences', async () => {
     const update = jest.fn(async ({ data }) => ({
@@ -17,6 +12,7 @@ describe('updating a workspace', () => {
     }));
     const service = new WorkspacesService(
       { workspace: { update } } as never,
+      {} as never,
       {} as never,
       {} as never,
     );

@@ -1,3 +1,4 @@
+import { OnModuleDestroy } from '@nestjs/common';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -12,34 +13,61 @@ import { SERVER_BUILD } from 'common/build-stamp';
 import { teamRoom, visibleTeamIds } from 'common/team-access';
 import { resolveWorkspaceId } from 'common/workspace-access';
 
+import { AuthService } from 'modules/auth/auth.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import { ClientMetadata } from './sync.interface';
 import { getAuthenticatedIdentity } from './sync.utils';
 
+const frontendOrigins = (process.env.FRONTEND_HOST || 'http://localhost:3000')
+  .split(',')
+  .map((host) => host.trim().replace(/\/+$/, ''));
+
 @WebSocketGateway({
+  allowRequest: (request, callback) => {
+    const origin = request.headers.origin;
+    callback(null, !origin || frontendOrigins.includes(origin));
+  },
   cors: {
-    // Evaluated at import time, so an unset FRONTEND_HOST used to throw before
-    // the module could load at all.
-    origin: process.env.FRONTEND_HOST?.split(',') || '',
+    origin: frontendOrigins,
     credentials: true,
   },
 })
 export class SyncGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy
 {
   @WebSocketServer() wss: Server;
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private authService: AuthService,
+  ) {}
 
   private readonly clientsMetadata: Record<string, ClientMetadata> = {};
   private readonly logger: LoggerService = new LoggerService('SyncGateway');
+  private readonly invalidateSession = (sessionId: string) => {
+    for (const [socketId, metadata] of Object.entries(this.clientsMetadata)) {
+      if (metadata.sessionId === sessionId) {
+        this.wss.sockets.sockets.get(socketId)?.disconnect(true);
+        delete this.clientsMetadata[socketId];
+      }
+    }
+  };
 
   afterInit() {
+    this.authService.sessionEvents.on('session-invalidated', this.invalidateSession);
     this.logger.info({
       message: 'Websocket Module initiated',
       where: `SyncGateway.afterInit`,
     });
+  }
+
+  onModuleDestroy() {
+    this.authService.sessionEvents.off('session-invalidated', this.invalidateSession);
+  }
+
+  private isDisconnected(client: Socket): boolean {
+    return client.connected === false;
   }
 
   async handleConnection(client: Socket) {
@@ -50,16 +78,22 @@ export class SyncGateway
 
     const { query, headers } = client.handshake;
 
-    // The identity comes from the handshake's own access token. The rooms used
-    // to be named by `query.workspaceId` and `query.userId`, which let a caller
-    // subscribe to any workspace's sync stream and to any user's notifications
-    // and conversations. Nothing in the query is trusted here.
-    const identity = await getAuthenticatedIdentity(headers);
+    // The identity comes from the handshake's own session cookie. The rooms
+    // used to be named by `query.workspaceId` and `query.userId`, which let a
+    // caller subscribe to any workspace's sync stream and to any user's
+    // notifications and conversations. Nothing in the query is trusted here.
+    const identity = await getAuthenticatedIdentity(headers, this.authService);
 
     if (!identity) {
       this.disconnect(client, 'handshake carried no valid session');
       return;
     }
+
+    this.clientsMetadata[client.id] = {
+      workspaceId: identity.workspaceId ?? '',
+      userId: identity.userId,
+      sessionId: identity.sessionId,
+    };
 
     // A user may belong to several workspaces, so the handshake still names the
     // one it wants — it is honoured only after membership is proven.
@@ -79,7 +113,10 @@ export class SyncGateway
       return;
     }
 
-    this.clientsMetadata[client.id] = { workspaceId, userId: identity.userId };
+    if (this.isDisconnected(client) || !this.clientsMetadata[client.id]) {
+      return;
+    }
+    this.clientsMetadata[client.id].workspaceId = workspaceId;
 
     client.join(workspaceId);
     client.join(identity.userId);
@@ -90,6 +127,22 @@ export class SyncGateway
     // team's room. Before this, one room held every member of the workspace and
     // every issue of every team went to all of them.
     await this.joinTeamRooms(client, identity.userId, workspaceId);
+
+    if (this.isDisconnected(client)) {
+      return;
+    }
+    const currentIdentity = await getAuthenticatedIdentity(headers, this.authService);
+    if (
+      !currentIdentity ||
+      currentIdentity.sessionId !== identity.sessionId ||
+      currentIdentity.workspaceId !== identity.workspaceId
+    ) {
+      this.disconnect(client, 'session changed during the handshake');
+      return;
+    }
+    if (this.isDisconnected(client)) {
+      return;
+    }
 
     // A client that connects to a restarted server learns the build immediately.
     // Combined with the fact that a client reconnects after a deploy anyway,

@@ -83,7 +83,7 @@ test.describe('signing in', () => {
 
     expect(response).toBeOK();
     expect((await response.json()).status).toBe('INCORRECT_USER_INPUT_CODE_ERROR');
-    expect(response.headers()['st-access-token']).toBeUndefined();
+    expect(response.headers()['set-cookie']).toBeUndefined();
   });
 });
 
@@ -120,7 +120,7 @@ test.describe('credentials', () => {
       data: { key: 'docker', userId: alice.userId },
     });
     expect(response.status()).toBe(404);
-    expect(response.headers()['st-access-token']).toBeUndefined();
+    expect(response.headers()['set-cookie']).toBeUndefined();
   });
 
   test('a personal access token keeps working', async ({ asAlice, alice }) => {

@@ -23,7 +23,6 @@ const REQUIRED = [
   'DATABASE_URL',
   'FRONTEND_HOST',
   'BACKEND_HOST',
-  'SUPERTOKEN_CONNECTION_URI',
 ];
 
 function repoRoot(): string | undefined {

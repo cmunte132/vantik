@@ -1,15 +1,7 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Req,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Res, UseGuards } from '@nestjs/common';
 import { Workspace, UpdateWorkspacePreferencesDto } from '@vantikhq/types';
-import { Request, Response } from 'express';
-import { SessionContainer } from 'supertokens-node/recipe/session';
+import { Response } from 'express';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
@@ -36,23 +28,21 @@ export class WorkspacesController {
   @Post('onboarding')
   @UseGuards(AuthGuard)
   async createIntialResources(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Body() workspaceData: CreateInitialResourcesDto,
     @Res() res: Response,
-    @Req() req: Request,
   ) {
     await this.workspacesService.createInitialResources(
       session,
       workspaceData,
       res,
-      req,
     );
   }
 
   @Get()
   @UseGuards(AuthGuard)
   async getAllWorkspaces(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
   ): Promise<Workspace[]> {
     const userId = getAppUserId(session);
     return await this.workspacesService.getAllWorkspaces(userId);
@@ -61,13 +51,11 @@ export class WorkspacesController {
   @Post('invite_action')
   @UseGuards(AuthGuard)
   async inviteAction(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Body() inviteActionBody: InviteActionBody,
     @Res() response: Response,
-    @Req() request: Request,
   ) {
     return await this.workspacesService.inviteAction(
-      request,
       response,
       inviteActionBody.inviteId,
       session,
@@ -117,7 +105,7 @@ export class WorkspacesController {
   @UseGuards(AuthGuard, AdminGuard)
   @Post('invite_users')
   async inviteUsers(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @WorkspaceD() workspaceId: string,
     @Body() inviteUsersBody: InviteUsersBody,
   ) {

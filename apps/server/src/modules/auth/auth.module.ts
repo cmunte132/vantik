@@ -1,32 +1,20 @@
-import {
-  MiddlewareConsumer,
-  Module,
-  NestModule,
-  DynamicModule,
-} from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 
 import { UsersModule } from 'modules/users/users.module';
 
+import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
-import { AuthMiddleware } from './auth.middleware';
-import { SupertokensService } from './supertokens/supertokens.service';
+import { AuthService } from './auth.service';
 
+/**
+ * Global, because many modules provide UsersService and WorkspacesService
+ * directly, and both of them need AuthService.
+ */
+@Global()
 @Module({
-  providers: [SupertokensService, AuthGuard],
-  exports: [SupertokensService, AuthGuard],
+  controllers: [AuthController],
+  providers: [AuthService, AuthGuard],
+  exports: [AuthService, AuthGuard],
   imports: [UsersModule],
 })
-export class AuthModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(AuthMiddleware).forRoutes('*');
-  }
-
-  static forRoot(): DynamicModule {
-    return {
-      providers: [SupertokensService],
-      exports: [SupertokensService],
-      imports: [UsersModule],
-      module: AuthModule,
-    };
-  }
-}
+export class AuthModule {}

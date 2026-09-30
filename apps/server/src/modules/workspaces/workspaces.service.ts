@@ -13,15 +13,10 @@ import {
   Workspace,
   WorkspaceStatusEnum,
 } from '@vantikhq/types';
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
-import {
-  createNewSession,
-  SessionContainer,
-} from 'supertokens-node/recipe/session';
-import Session from 'supertokens-node/recipe/session';
-
-import { createMagicLink } from 'common/utils/login';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
+import { AuthService } from 'modules/auth/auth.service';
 
 import { getAppUserId } from 'modules/auth/session-user';
 import { LoggerService } from 'modules/logger/logger.service';
@@ -46,13 +41,13 @@ export default class WorkspacesService {
     private prisma: PrismaService,
     private mailerService: MailerService,
     private usersService: UsersService,
+    private authService: AuthService,
   ) {}
 
   async createInitialResources(
-    session: SessionContainer,
+    session: AuthSessionContext,
     workspaceData: CreateInitialResourcesDto,
     res: Response,
-    req: Request,
   ) {
     const userId = getAppUserId(session);
     const workspace = await this.prisma.usersOnWorkspaces.findFirst({
@@ -63,7 +58,7 @@ export default class WorkspacesService {
       throw new BadRequestException('Already workspace exist');
     }
 
-    await this.prisma.$transaction(
+    const created = await this.prisma.$transaction(
       async (prisma) => {
         await prisma.user.update({
           where: { id: userId },
@@ -115,18 +110,7 @@ export default class WorkspacesService {
       },
     );
 
-    // Re-issued so the token carries the workspace that did not exist when the
-    // session was minted. It has to name the *recipe* user — the credential
-    // this session was created from — because that is what createNewSession
-    // resolves an account from. Handing it the account id instead left every
-    // first-run install unable to finish onboarding.
-    await Session.createNewSession(
-      req,
-      res,
-      'public',
-      session.getRecipeUserId(),
-    );
-
+    await this.moveSessionTo(session, created.id, RoleEnum.ADMIN);
     res.send({ status: 200, message: 'success' });
   }
 
@@ -211,7 +195,7 @@ export default class WorkspacesService {
   }
 
   async inviteUsers(
-    session: SessionContainer,
+    session: AuthSessionContext,
     workspaceId: string,
     inviteUsersBody: InviteUsersBody,
   ): Promise<Record<string, string>> {
@@ -247,7 +231,7 @@ export default class WorkspacesService {
           },
         });
 
-        const magicLink = await createMagicLink(email);
+        const magicLink = await this.authService.createInviteMagicLink(email);
 
         await this.mailerService.sendMail({
           to: email,
@@ -274,10 +258,9 @@ export default class WorkspacesService {
   }
 
   async inviteAction(
-    req: Request,
     res: Response,
     inviteId: string,
-    session: SessionContainer,
+    session: AuthSessionContext,
     accepted: boolean = false,
   ) {
     const userId = getAppUserId(session);
@@ -324,11 +307,25 @@ export default class WorkspacesService {
       },
     });
 
-    // Same reason as onboarding: the token has to pick up the workspace the
-    // invite just joined, and it is minted from the recipe user, not the
-    // account.
-    await createNewSession(req, res, 'public', session.getRecipeUserId());
+    if (accepted) {
+      await this.moveSessionTo(session, invite.workspaceId, invite.role);
+    }
     res.status(200).json(invite);
+  }
+
+  /**
+   * Points the browser session of the request at the workspace. A PAT has a
+   * fixed workspace and no session row, so nothing changes for it.
+   */
+  private async moveSessionTo(
+    session: AuthSessionContext,
+    workspaceId: string,
+    role: string,
+  ) {
+    const { sessionId } = session.getAccessTokenPayload();
+    if (sessionId) {
+      await this.authService.updateSessionWorkspace(sessionId, workspaceId, role);
+    }
   }
 
   async suspendUser(workspaceId: string, userId: string) {

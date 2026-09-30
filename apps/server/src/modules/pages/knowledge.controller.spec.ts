@@ -157,7 +157,6 @@ describe('agent scopes on the knowledge routes', () => {
           userId: 'agent-1',
           workspaceId: 'ws-1',
           user: {
-            authIdentities: [{ supertokensUserId: 'st-1' }],
             usersOnWorkspaces: [
               {
                 workspaceId: 'ws-1',

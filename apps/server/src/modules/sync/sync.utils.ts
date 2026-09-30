@@ -1,6 +1,4 @@
-import * as cookie from 'cookie';
-
-import { verifyAccessToken } from 'common/authentication';
+import { AuthService, sessionTokenFromRequest } from 'modules/auth/auth.service';
 
 import { SocketIdentity } from './sync.interface';
 
@@ -16,30 +14,24 @@ import { SocketIdentity } from './sync.interface';
  */
 export async function getAuthenticatedIdentity(
   headers: Record<string, string | string[]>,
+  authService: AuthService,
 ): Promise<SocketIdentity | null> {
-  if (!headers.cookie) {
+  const sessionToken = sessionTokenFromRequest({ headers });
+  if (!sessionToken) {
     return null;
   }
 
-  const cookies = cookie.parse(headers.cookie as string);
-
-  if (!cookies?.sAccessToken) {
+  const session = await authService.resolveSession(sessionToken);
+  if (!session) {
     return null;
   }
 
-  const payload = await verifyAccessToken(`Bearer ${cookies.sAccessToken}`);
-
-  // `sub` is the credential the session was minted for, not the account. The
-  // account id rides in the payload, and binding a socket to anything else
-  // would put someone in rooms keyed on an id no `User` row has.
-  if (!payload?.appUserId) {
-    return null;
-  }
-
+  const { appUserId, workspaceId, sessionId } = session.getAccessTokenPayload();
   return {
-    userId: payload.appUserId as string,
+    userId: appUserId,
     // The session's own workspace, used as the fallback when the handshake
     // does not name one. Membership is still checked before it is trusted.
-    workspaceId: payload.workspaceId as string | undefined,
+    workspaceId,
+    sessionId,
   };
 }

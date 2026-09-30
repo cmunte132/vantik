@@ -7,6 +7,8 @@ import { Test } from '@nestjs/testing';
 import { PrismaService } from 'nestjs-prisma';
 import request from 'supertest';
 
+import { AuthService } from 'modules/auth/auth.service';
+
 import { AttachmentController } from './attachments.controller';
 import {
   LOCAL_ATTACHMENT_PATH,
@@ -54,6 +56,7 @@ describe('the routes that serve locally signed URLs', () => {
         StorageFactory,
         // The local routes never reach the database.
         { provide: PrismaService, useValue: {} },
+        { provide: AuthService, useValue: {} },
       ],
     }).compile();
 

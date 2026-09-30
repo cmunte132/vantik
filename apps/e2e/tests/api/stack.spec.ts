@@ -46,15 +46,13 @@ test.describe('the stack', () => {
     expect(typeof config.aiEnabled).toBe('boolean');
   });
 
-  test('the webapp proxies auth routes unstripped', async ({ request }) => {
-    // SuperTokens scopes the refresh cookie to /api/auth, so the proxy must
-    // forward that prefix as it is; a mismatch here killed every session an
-    // hour after sign-in. An anonymous refresh is refused, but refused by
-    // SuperTokens rather than by a 404 from the wrong path.
-    const response = await request.post(
-      `${WEBAPP_URL}/api/auth/session/refresh`,
+  test('the webapp proxies auth routes through to the server', async ({ request }) => {
+    const response = await request.get(
+      `${WEBAPP_URL}/api/v1/auth/session`,
     );
 
-    expect(response.status()).toBe(401);
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.authenticated).toBe(false);
   });
 });

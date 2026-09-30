@@ -21,7 +21,7 @@ const TEAM_OTHER = 'team-other';
 function buildClient(query: Record<string, string>, rooms: string[] = []) {
   return {
     id: 'socket-1',
-    handshake: { query, headers: { cookie: 'sAccessToken=token' } },
+    handshake: { query, headers: { cookie: 'sSessionToken=token' } },
     join: jest.fn(),
     // The gateway leaves the team rooms that the membership no longer covers,
     // so the fake carries the rooms it is currently in.
@@ -62,7 +62,7 @@ function buildGateway(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 
-  return new SyncGateway(prisma);
+  return new SyncGateway(prisma, {} as never);
 }
 
 describe('SyncGateway.handleConnection', () => {

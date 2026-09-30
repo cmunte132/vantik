@@ -88,7 +88,7 @@ import { AppService } from './app.service';
       },
     }),
 
-    AuthModule.forRoot(),
+    AuthModule,
     ALSModule,
     HealthModule,
     UsersModule,

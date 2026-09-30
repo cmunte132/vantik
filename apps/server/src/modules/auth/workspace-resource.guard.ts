@@ -1,6 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
-import { SessionContainer } from 'supertokens-node/recipe/session';
 
 import {
   assertChecklistItemsVisible,
@@ -33,33 +32,16 @@ import {
   resolveWorkspaceId,
 } from 'common/workspace-access';
 
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 import { getAppUserId } from 'modules/auth/session-user';
 
-/**
- * Proves that the issue, comment or team named in a request belongs to a
- * workspace the caller is a member of.
- *
- * AuthGuard proves only that the caller is *some* valid user, so any endpoint
- * addressing a row by id — `GET /issues/:issueId`, `POST /issues/:issueId`,
- * the comment routes — served or modified that row whatever workspace it sat
- * in. Reads leaked issue contents; the writes were worse, since a foreign id
- * could be updated, deleted or moved.
- *
- * The check lives at the HTTP boundary rather than in the services because
- * that is where the untrusted id arrives. The same service methods are called
- * internally — `updateIssueApi` from projects.service, `moveIssue` from itself
- * for sub-issues — with no user session and a legitimate need to cross
- * workspaces, so a membership check inside them would be wrong.
- *
- * Use after AuthGuard, which populates the session this reads.
- */
 @Injectable()
 export class WorkspaceResourceGuard implements CanActivate {
   constructor(private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const session = request.session as SessionContainer;
+    const session = request.session as AuthSessionContext;
 
     const userId = getAppUserId(session);
     const workspaceId = await resolveWorkspaceId(
@@ -89,24 +71,14 @@ export class WorkspaceResourceGuard implements CanActivate {
       teamId: pathTeamId,
     } = request.params ?? {};
 
-    // An issue carries its own sub-issues, and each of those is a whole issue
-    // body again — so the ids of a write are the ids of a tree, not of one
-    // object. Reading only the top level let a caller hang a foreign module
-    // or capability off a sub-issue, which is the same hole one level down.
     const bodies = issueBodies(request.body);
 
-    // Comment creation names its issue in the query rather than the path, so
-    // a guard reading only params would let a caller comment on an issue in
-    // another workspace.
     const issueIds = unique([
       issueId,
       request.query?.issueId,
       ...bodies.map((body) => body?.issueId),
     ]);
 
-    // teamId selects the team a write lands in: a query param on update, the
-    // body on create and move, and per sub-issue on create. The workflow
-    // routes carry it in the path, as `/:teamId/workflows`.
     const requestTeamIds = unique([
       pathTeamId,
       request.query?.teamId,
@@ -129,20 +101,12 @@ export class WorkspaceResourceGuard implements CanActivate {
       );
     }
 
-    // Same shape as the checklist items below: start, complete and delete name
-    // the cycle by id and nothing else, and completing one moves other people's
-    // issues around. An issue body names one too, on create and on update, and
-    // the update connected it unchecked: an issue could be put into a cycle in
-    // another workspace.
     const cycleIds = unique([cycleId, ...bodies.map((body) => body?.cycleId)]);
 
     for (const id of cycleIds) {
       await assertCycleInWorkspace(this.prisma, id, workspaceId);
     }
 
-    // Checklist item updates and deletes address the row by id alone, with no
-    // issueId anywhere in the request, so without this a foreign item could be
-    // ticked or removed.
     if (checklistItemId) {
       await assertChecklistItemInWorkspace(
         this.prisma,
@@ -151,26 +115,16 @@ export class WorkspaceResourceGuard implements CanActivate {
       );
     }
 
-    // Read, cancel, retry and the event log all name the run by id and nothing
-    // else, so without this a caller could read or stop an agent run in
-    // another workspace.
     if (agentRunId) {
       await assertAgentRunInWorkspace(this.prisma, agentRunId, workspaceId);
     }
 
-    // Pages are reached by path on read and edit, and by query when appending
-    // an entry — the same split the comment routes have, and the same reason to
-    // check both rather than only params. A `parentId` in the body is
-    // deliberately not checked here: the issue routes use that name for an
-    // issue, so the page reparent path validates its own parent instead.
     const pageIds = unique([request.params?.pageId, request.query?.pageId]);
 
     for (const id of pageIds) {
       await assertPageInWorkspace(this.prisma, id, workspaceId);
     }
 
-    // Entry triage addresses the row by id alone, with no page anywhere in the
-    // request, so without this a foreign fact could be accepted or archived.
     const entryIds = unique([
       pageEntryId,
       request.body?.supersedesId,
@@ -181,11 +135,6 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertPageEntryInWorkspace(this.prisma, id, workspaceId);
     }
 
-    // The product axis. Each of the three is addressed by id on update and
-    // delete, the same shape as the cycle routes. The bodies matter as much as
-    // the paths: a module names its owner and its links by id, and a capability
-    // names the modules that hold its code, so a write with a foreign id would
-    // pull another workspace's rows into this one's graph.
     const productIds = unique([
       productId,
       ...bodies.map((body) => body?.ownerProductId),
@@ -196,9 +145,6 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertProductInWorkspace(this.prisma, id, workspaceId);
     }
 
-    // Issue.moduleIds is a plain string array with no foreign key behind it, so
-    // this check is the only thing standing between the column and any id a
-    // caller cares to send.
     const moduleIds = unique([
       moduleId,
       ...bodies.flatMap((body) => list(body?.moduleIds)),
@@ -208,9 +154,6 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertModuleInWorkspace(this.prisma, id, workspaceId);
     }
 
-    // A module repository is addressed by its own id, and the row carries no
-    // workspace — only the module above it does. So the check needs both ids,
-    // and proving the module alone proves nothing about the repository.
     if (moduleRepoId) {
       await assertModuleRepoInWorkspace(
         this.prisma,
@@ -239,9 +182,6 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertCapabilityInWorkspace(this.prisma, id, workspaceId);
     }
 
-    // A module names its owning team, and a link names any number of teams. A
-    // project names the teams working on it in `teams`. All go through the same
-    // team check the issue routes use.
     const linkedTeamIds = unique([
       ...bodies.map((body) => body?.ownerTeamId),
       ...bodies.flatMap((body) => list(body?.linkedTeamIds)),
@@ -252,9 +192,6 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertTeamInWorkspace(this.prisma, id, workspaceId);
     }
 
-    // A project is addressed by id on update and delete, and it now names the
-    // capabilities it builds, so the row has to be proved before the body is
-    // written into it.
     const projectIds = unique([projectId, request.query?.projectId]);
 
     for (const id of projectIds) {
@@ -269,9 +206,6 @@ export class WorkspaceResourceGuard implements CanActivate {
       );
     }
 
-    // A label is addressed by id on read, update and delete, and names another
-    // label as its group on create and update. No other route sends a
-    // `groupId`, so reading it off every body costs nothing elsewhere.
     const labelIds = unique([labelId, ...bodies.map((body) => body?.groupId)]);
 
     for (const id of labelIds) {
@@ -286,15 +220,6 @@ export class WorkspaceResourceGuard implements CanActivate {
       await assertViewInWorkspace(this.prisma, viewId, workspaceId);
     }
 
-    // A team is a visibility boundary inside the workspace (ENG-79), so the
-    // checks above are necessary and not sufficient: they prove the row is a
-    // tenant's own, and say nothing about whether this caller may see it. Every
-    // id that names a team-owned row is checked again here, against the teams
-    // the caller belongs to.
-    //
-    // This runs last so the answers stay consistent. A row of another workspace
-    // and a row of another team both give not-found, and the workspace check
-    // gets there first for the ids it covers.
     const teamIds = await visibleTeamIds(this.prisma, userId, workspaceId);
 
     await assertTeamsVisible([...linkedTeamIds, ...requestTeamIds], teamIds);
@@ -320,7 +245,6 @@ export class WorkspaceResourceGuard implements CanActivate {
   }
 }
 
-/** One object in a request body that can carry ids this guard checks. */
 interface IdBearingBody {
   issueId?: string;
   teamId?: string;
@@ -338,21 +262,8 @@ interface IdBearingBody {
   subIssues?: unknown;
 }
 
-/** The depth beyond which a body is refused rather than walked. */
 const MAX_ISSUE_DEPTH = 10;
 
-/**
- * Flattens a request body into every object whose ids have to be checked.
- *
- * An issue body nests: `subIssues` on any issue, recursively. A guard that
- * read only the top level checked the ids of the parent and none of the
- * children, so a foreign module or capability arrived on a sub-issue
- * untouched.
- *
- * The depth limit is a guard against a body built to make this walk expensive,
- * not against anything the app itself sends: a person nests a sub-issue once,
- * and never ten deep.
- */
 function issueBodies(body: unknown, depth = 0): IdBearingBody[] {
   if (!body || typeof body !== 'object' || depth > MAX_ISSUE_DEPTH) {
     return [];
@@ -368,7 +279,6 @@ function issueBodies(body: unknown, depth = 0): IdBearingBody[] {
   ];
 }
 
-/** Reads a value that should be an array, and refuses to guess when it is not. */
 function list(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }

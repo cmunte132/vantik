@@ -7,7 +7,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { SessionContainer } from 'supertokens-node/recipe/session';
+import { AuthSessionContext } from 'modules/auth/auth.interface';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { getAppUserId } from 'modules/auth/session-user';
@@ -26,7 +26,7 @@ export class OAuthCallbackController {
   @Post()
   @UseGuards(AuthGuard)
   async getRedirectURL(
-    @SessionDecorator() session: SessionContainer,
+    @SessionDecorator() session: AuthSessionContext,
     @Body() body: OAuthBodyInterface,
   ) {
     const userId = getAppUserId(session);

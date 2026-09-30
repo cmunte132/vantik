@@ -55,7 +55,7 @@ The tests also work against `pnpm dev`. Start Mailpit beside the other service
 containers, and point the server at it in `.env`:
 
 ```bash
-docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml up -d postgres redis supertokens typesense mailpit
+docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml up -d postgres redis supertokens mailpit
 cat >> .env <<'EOF'
 SMTP_HOST=localhost
 SMTP_PORT=1025

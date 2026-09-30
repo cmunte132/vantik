@@ -6,9 +6,9 @@ description: "How to run Vantik on your own infrastructure."
 ## Overview
 
 Vantik is one Docker Compose stack in the main repository. It runs the webapp,
-the API server, and all the services: PostgreSQL, Redis, SuperTokens, and
-Typesense. The server applies the database migrations when it starts. You
-need no separate repository for the deployment, and no setup script.
+the API server, PostgreSQL, Redis, and SuperTokens.
+The server applies the database migrations when it starts.
+You need no separate repository for the deployment, and no setup script.
 
 This guide gives you a deployment that works. You control the other work: the
 scale of the deployment, the backups, and the security beyond the basic level.
@@ -36,7 +36,7 @@ echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
 2. For a deployment that is more than a test on localhost, edit `.env`:
 
    - Set `FRONTEND_HOST` and `BACKEND_HOST` to your domain.
-   - Change `POSTGRES_PASSWORD` and `TYPESENSE_API_KEY`.
+   - Change `POSTGRES_PASSWORD`.
 
 3. Start the stack:
 
@@ -183,24 +183,75 @@ LLM_APP_URL=https://vantik.example.com
 LLM_APP_NAME=Vantik
 ```
 
-The search needs no API key and no external service. Typesense makes the
-embeddings in its own process, with its `ts/all-MiniLM-L12-v2` model. The issue
-titles, the descriptions, and the comments therefore never leave your
-deployment.
+### Search
 
-To build the search index again, delete the Typesense `issues` collection and
-restart the server. The server then makes the collection again, and it indexes
-every workspace from Postgres:
+PostgreSQL provides full-text search, typo matches through pg_trgm, and vectors through pgvector.
+The server combines keyword and vector ranks with reciprocal rank fusion (RRF).
+The Compose database image, `pgvector/pgvector:pg18`, includes the required extensions.
+If you use your own database, install the pgvector package and make pg_trgm available before you apply the migrations.
+The migration user must have permission to create extensions in the application schema.
+The migrations create `vector` and `pg_trgm` in the schema from `DATABASE_URL`, which defaults to `vantik`.
 
-```bash
-curl -X DELETE \
-  -H "X-TYPESENSE-API-KEY: $TYPESENSE_API_KEY" \
-  http://localhost:8108/collections/issues
+:::caution Search upgrade
+An ordinary upgrade from the old Compose stack needs no extension relocation.
+The new database image supplies the extensions, and the migrations create them.
+
+If your database already has `vector` or `pg_trgm` in another schema, the migration stops with an administrator instruction.
+An administrator must move each affected extension to the application schema before the migration can continue:
+
+```sql
+ALTER EXTENSION vector SET SCHEMA vantik;
+ALTER EXTENSION pg_trgm SET SCHEMA vantik;
 ```
 
-The server does the same work automatically after an upgrade that adds a field
-to the search schema. It finds the old collection, deletes it, and fills the new
-one.
+Run only the command for an extension that already exists in another schema.
+Replace `vantik` if the `schema` parameter in `DATABASE_URL` names a different schema.
+Then apply the migrations again.
+:::
+
+Database triggers update searchable text in each write transaction.
+No separate search service or repair job is necessary.
+The search reads current issue and knowledge metadata from the source tables.
+
+Leave `EMBEDDINGS_SOURCE` unset for keyword search only.
+To add semantic search without a hosted endpoint, set:
+
+```bash
+EMBEDDINGS_SOURCE=local
+EMBEDDINGS_MODEL=Xenova/all-MiniLM-L6-v2
+```
+
+The local model uses the CPU and produces 384-dimensional vectors by default.
+The server loads the model only when it needs a vector.
+The first load can download model files. For offline use, supply cached model files
+or set `EMBEDDINGS_MODEL` to a local model directory.
+The local source sends no document text to a hosted endpoint.
+The model uses memory in the server process and CPU time for each vector.
+Keyword-only search needs neither the model files nor that extra memory.
+
+For an OpenAI-compatible endpoint, set:
+
+```bash
+EMBEDDINGS_SOURCE=hosted
+EMBEDDINGS_BASE_URL=https://api.openai.com/v1
+EMBEDDINGS_MODEL=text-embedding-3-small
+EMBEDDINGS_API_KEY=your_API_key
+```
+
+These URL and model values are the hosted defaults.
+Leave `EMBEDDINGS_API_KEY` unset if your endpoint needs no authentication.
+Hosted sources receive document text and search text. Check your endpoint's privacy rules before you enable one.
+These settings are separate from the `LLM_*` settings for other AI features.
+
+The worker replaces vectors when the text or configured model changes.
+Search uses only vectors from the current source, endpoint, and model with the same dimensions.
+The local default uses an HNSW index. Other dimensions use an exact vector scan.
+For similar issues, the server can compute an anchor vector before the worker updates its stored vector.
+Similar-issue checks use a cosine limit of `0.55`. Near-entry checks use `0.5`.
+These limits use the local MiniLM model. Different hosted models can need different limits.
+A vector distance is a hint, not a duplicate verdict.
+If the source is unavailable, or vectors are not ready, search still returns keyword matches.
+
 
 ### File attachments
 
@@ -396,8 +447,8 @@ unhandled 5xx exception on the span, with its stack.
 
 **Metrics.** The rate, the errors, and the latency of the requests come from
 `http.server.request.duration`. Its labels are the route template, the method,
-and the status code. The outbound calls to Typesense, SuperTokens, and the LLM
-provider come from `http.client.request.duration`, with the host as the label.
+and the status code. Calls to SuperTokens, hosted models, and the LLM provider
+use `http.client.request.duration`, with the host as the label.
 The metrics for the Node runtime cover the delay of the event loop, from the
 mean to p99. They also cover the use of the event loop, the duration of the
 garbage collection for each type of collector, and the use of the V8 heap for
@@ -477,7 +528,7 @@ changes.
 | Endpoint | Meaning |
 | --- | --- |
 | `GET /` | Liveness. The process is up. This call is cheap, and it touches no dependency. |
-| `GET /health/ready` | Readiness. The endpoint returns `200` when Postgres, Redis, and Typesense all answer. If one does not answer, it returns `503`, and the body gives the status of each dependency. |
+| `GET /health/ready` | Readiness. The endpoint returns `200` when PostgreSQL and Redis answer. If either fails, it returns `503` with each dependency's status. |
 
 Point the liveness probe of your orchestrator at `/`, and its readiness probe at
 `/health/ready`. Do not use the readiness endpoint for liveness. A short fault

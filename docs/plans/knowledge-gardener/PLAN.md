@@ -49,11 +49,11 @@ node docs/plans/knowledge-gardener/verify.mjs --through 0        # full check
   `it('[KG-2.4] marks a citation MOVED when the snippet shifts lines', …)`.
   `verify.mjs` matches on the tag and passes a criterion only when a tagged
   test passes and none fails.
-- **A tagged test must exercise the behaviour the criterion names.** Build
-  the real service or controller with fakes for Prisma, Typesense, the LLM
-  and the file source, following the existing `*.spec.ts` files next to the
-  code you change. A test that asserts nothing about the behaviour is a
-  failed review, not a pass.
+- **A tagged test must exercise the behaviour that the criterion names.**
+  Build the real service or controller with isolated PostgreSQL data or
+  appropriate fakes for Prisma, the vector source, the LLM, and the file source.
+  Follow the existing `*.spec.ts` files next to the code that you change.
+  A test must assert the behaviour, not the shape of a search request.
 - **Never call a real LLM, GitHub or network endpoint from a test.**
 - **Every test in every suite must pass,** not only the tagged ones.
   `verify.mjs` runs the server, agent-core and cli Jest suites, the webapp
@@ -143,7 +143,7 @@ approximate.
 | Models | `apps/server/prisma/schema.prisma` | `Page`, `PageEntry`, `PageKnowledgeGap`, `PageHistory`, `PageLink`, `PageLinkType` (TEAM, PROJECT, ISSUE, PAGE), `PageEntryStatus`, `Product`, `Module`, `ModuleRepo` (`pathPrefixes`), `Capability` (`moduleIds`), `AgentRun`, `AgentRunIteration` (`findings`, `verificationPassed`) |
 | Entry writes and triage | `apps/server/src/modules/pages/page-entries.service.ts` | `createEntry` enforces LOCKED and budget and forces agent writes to PROPOSED. `updateEntry` (~148) and `bulkUpdate` (~196) never check `isAgent` (~409): the KG-0.1/0.2 hole. Decay ~268 ignores `lastServedAt`. |
 | Routes | `pages/pages.controller.ts`, `pages/page-entries.controller.ts`, `pages/knowledge.controller.ts` | `POST /knowledge/context` lacks `@RequiresScope('read')`, so `modules/auth/agent-scope.ts` treats it as a write (KG-0.4). |
-| Retrieval | `pages/knowledge.service.ts`, `modules/vector/vector.service.ts`, `vector.interface.ts` | One Typesense collection `pages`. Hybrid BM25 plus `ts/all-MiniLM-L12-v2` embeddings. Scope filter is exact (`scope:=`, ~867). Sort is text match, then `verified:2, scoped:1`, then `retrievalCount`. `recordDemand` writes counters and gaps. |
+| Retrieval | `pages/knowledge.service.ts`, `modules/vector/vector.service.ts`, `vector.interface.ts` | PostgreSQL searches `SearchDocument` with FTS, pg_trgm, optional pgvector, and RRF. SQL reads filters and rank fields from source tables. Database triggers update text in each write transaction. `recordDemand` writes counters and gaps. |
 | Duplicate check | `packages/agent-core/src/agent.ts` ~1170 | Client-side only (`/knowledge/similar`, then needs-decision). Raw REST skips it (KG-0.3). |
 | MCP tools | `apps/server/src/modules/mcp/mcp.tools.ts` ~700–970 | `load_context`, `recall_knowledge`, `list_pages`, `read_page`, `pages_for`, `link_page`, `remember`, `write_page`, `consolidate_knowledge`, `knowledge_gaps`, plus read-only product-axis tools. |
 | CLI | `packages/cli/src/commands/knowledge.ts`, `knowledge-sync.ts` | `vantik kb …` |
@@ -269,14 +269,12 @@ repository (for grounding).
     `ModuleRepo` rows.
   - Recompute on scope change, and when module repos change (a job on the
     pages queue is fine).
-  - Index as a Typesense facet.
+  - Use the source table's module IDs in SQL filters and rank scores.
   - A scope that is not a path (a team or project name) resolves to no
     modules. That is allowed.
-- **KG-1.3:** Prefix matching.
-  - Index each entry's scope ancestors (`apps`, `apps/server`,
-    `apps/server/prisma`) as an array facet and filter on the query path's
-    ancestors, or an equivalent that stays a Typesense filter.
-  - Unscoped entries and page bodies remain eligible, ranked lower.
+- **KG-1.3:** Match path prefixes.
+  - Match each entry's scope against the query path and its ancestors in SQL.
+  - Keep unscoped entries and page bodies eligible, with a lower rank.
 - **KG-1.4:** `PageEntry.kind` enum (FACT default, DECISION, CONVENTION,
   GOTCHA). Update the skill with one line on when each applies.
 - **KG-1.5:** Seeding from `moduleIds` or `issueId` (via `Issue.moduleIds`
@@ -285,8 +283,7 @@ repository (for grounding).
   - capabilities whose `moduleIds` contain it;
   - the product's other modules, as a weaker boost.
 
-  Use it as a boost in the Typesense query, not a hard filter, so good
-  unscoped matches still surface.
+  Use it as a rank boost in SQL, not a hard filter, so good unscoped matches remain eligible.
 - **KG-1.6:** MCP enums and descriptions, agent-core and CLI types, and a
   Knowledge section on `/product/[key]`, `/module/[key]` and
   `/capability/[id]` listing linked pages and resolved standing entries.

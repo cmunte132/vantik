@@ -5,10 +5,9 @@ description: "How to run Vantik on your machine for development"
 
 ## Overview
 
-For development, run only the service containers: PostgreSQL, Redis,
-SuperTokens, and Typesense. Run the server and the webapp on your host,
-with hot reload. These containers publish their ports on localhost for this
-purpose.
+For development, run only the service containers: PostgreSQL, Redis, and SuperTokens.
+Run the server and the webapp on your host, with hot reload.
+These containers publish their ports on localhost for this purpose.
 
 You need these tools:
 
@@ -34,7 +33,7 @@ echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
    server.
 
 ```bash
-docker compose up -d postgres redis supertokens typesense
+docker compose up -d postgres redis supertokens
 ```
 
 3. Install the dependencies and apply the database schema.
@@ -87,6 +86,17 @@ secure context, so this method works without TLS. See
    Press `C` to create your first issue.
 
 ![](/img/docs/default-workspace.png)
+
+
+## Search
+
+The Compose database image includes pgvector. The migrations enable FTS, pg_trgm, and pgvector.
+PostgreSQL triggers update searchable text in the same transaction as each document change.
+Search works without an external service.
+
+Set `EMBEDDINGS_SOURCE=local` in `.env` for semantic search with the local CPU model.
+Leave it unset for keyword search only. See [Search](/oss/self-deployment#search)
+for the model defaults, hosted endpoints, and offline use.
 
 ## FAQ
 

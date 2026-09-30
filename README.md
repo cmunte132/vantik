@@ -53,8 +53,8 @@ control this fork, and they do not endorse it.
 
 You need Docker, or podman with the compose provider. The compose stack needs no
 other setup. It runs the webapp, the API server, and all the services:
-postgres, redis, SuperTokens, and Typesense. The server applies the database
-migrations when it starts.
+PostgreSQL, Redis, and SuperTokens. The server applies the database migrations
+when it starts. PostgreSQL also provides search through FTS, pg_trgm, and pgvector.
 
 ```bash
 cp .env.example .env   # the default values work; change the secrets for a real deployment
@@ -73,7 +73,14 @@ docker compose logs server | grep -A5 "magic link"
 For a deployment that is not on localhost, do these two steps:
 
 1. Set `FRONTEND_HOST` and `BACKEND_HOST` in `.env` to your domain.
-2. Change `POSTGRES_PASSWORD` and `TYPESENSE_API_KEY`.
+2. Change `POSTGRES_PASSWORD`.
+
+Search works without an external service or an API key. Set `EMBEDDINGS_SOURCE=local`
+for semantic search with the local CPU model. Leave it unset for keyword search only.
+For a hosted model, set `EMBEDDINGS_SOURCE=hosted`, `EMBEDDINGS_BASE_URL`,
+`EMBEDDINGS_MODEL`, and `EMBEDDINGS_API_KEY` if the endpoint needs authentication.
+Hosted models receive the search text and document text. See
+[search configuration](apps/docs/docs/oss/self-deployment.mdx#search) for the defaults and offline use.
 
 ### How to connect your own agent
 
@@ -155,7 +162,7 @@ cp .env.example .env
 echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
 
 # 1. The service containers only. This command starts no webapp and no server.
-docker compose up -d postgres redis supertokens typesense
+docker compose up -d postgres redis supertokens
 
 # 2. The npm packages and the database schema
 pnpm install
@@ -292,7 +299,7 @@ service containers. Then set the exporter to the published port, and not to the
 container:
 
 ```bash
-docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d postgres redis supertokens typesense lgtm
+docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d postgres redis supertokens lgtm
 echo 'OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318' >> .env
 ```
 

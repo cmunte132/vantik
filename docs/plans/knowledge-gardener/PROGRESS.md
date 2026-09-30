@@ -3,6 +3,10 @@
 The running log for [PLAN.md](./PLAN.md). Keep it current while you work: the
 next session starts by reading it.
 
+> ENG-161 replaces Typesense with PostgreSQL search and removes the external index jobs.
+> The notes below record earlier work. Their Typesense details do not describe the current search contract.
+> See [Search](../../../apps/docs/docs/oss/self-deployment.mdx#search) for the current configuration.
+
 ## Status
 
 - Phases 4 to 7 are done. Phase 7: KG-7.1 to KG-7.6 implemented and

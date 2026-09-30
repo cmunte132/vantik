@@ -178,13 +178,15 @@ resolution. One call therefore tells you that a similar issue exists, **and**
 how somebody fixed it. `GET /v1/search/similar_issues?workspaceId=…&issueId=…`
 returns the same fields.
 
-The server makes the embeddings again after a change to an issue or to one of
-its comments. It does this work asynchronously, so a new comment becomes
-searchable in a few seconds, and not immediately.
+Database triggers update searchable issue text and comments in the same write transaction.
+The vector worker updates semantic search after a text change or a model change.
+Keyword search remains available before the new vectors are ready.
 
-The search runs fully inside your deployment. Typesense makes the embeddings in
-its own process, with a model that it includes. The server sends no title, no
-description, and no comment to an external service.
+PostgreSQL combines full-text search, typo matches, and optional semantic search.
+Leave `EMBEDDINGS_SOURCE` unset for keyword search only.
+Set it to `local` for a CPU model that sends no document text to a hosted endpoint.
+Set it to `hosted` for an OpenAI-compatible endpoint that receives document and search text.
+See [Search](/oss/self-deployment#search) for model settings, offline use, and privacy limits.
 
 ## How to keep a list payload small
 

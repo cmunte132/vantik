@@ -81,7 +81,7 @@
       "id": "KG-1.2",
       "phase": 1,
       "title": "An entry's scope resolves to module ids",
-      "detail": "PageEntry stores moduleIds resolved from its scope against ModuleRepo.pathPrefixes, reusing the matching in modules/module-routing.ts. It is recomputed when the scope changes and when a module's repositories or prefixes change. The ids are indexed in Typesense as a facet.",
+      "detail": "PageEntry stores moduleIds resolved from its scope against ModuleRepo.pathPrefixes. It uses modules/module-routing.ts. The server recalculates these IDs after a scope change or a change to module repositories or prefixes. SQL reads these IDs from the source table for filters and rank scores.",
       "checks": [{ "type": "test" }]
     },
     {
@@ -170,7 +170,7 @@
       "id": "KG-2.7",
       "phase": 2,
       "title": "Entries have a trust tier and ranking uses it",
-      "detail": "Each entry exposes trust HUMAN_VERIFIED, GROUNDED (all citations hold and it was accepted without a human) or UNGROUNDED. Typesense ranking orders human-verified above grounded above ungrounded for otherwise equal matches.",
+      "detail": "Each entry exposes trust HUMAN_VERIFIED, GROUNDED (all citations hold and the server accepted it without a human), or UNGROUNDED. SQL ranks human-verified entries above grounded entries and grounded entries above ungrounded entries for otherwise equal matches.",
       "checks": [{ "type": "test" }]
     },
     {

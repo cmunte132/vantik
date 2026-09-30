@@ -8,8 +8,8 @@ description: 'Get a Vantik instance that runs, in a few minutes'
 Vantik is an issue tracker for developers and for agents. You host it yourself,
 because there is no cloud service. The Docker Compose stack in the main
 repository needs no other setup. It starts the webapp, the API server, and all
-the services: PostgreSQL, Redis, SuperTokens, and Typesense. The default
-values work, except for one secret, which the second command makes.
+the services: PostgreSQL, Redis, and SuperTokens. PostgreSQL also provides search.
+The default values work, except for one secret, which the second command makes.
 
 ## How to run it
 
@@ -35,6 +35,10 @@ There is a second method, and it needs no log. Select **Create an account with a
 passkey**. Then authenticate with Touch ID, Windows Hello, or a security key.
 The server sends no email, so you need no mail server. See
 [How to sign in](/oss/self-deployment#how-to-sign-in).
+
+Search works without an external service. Set `EMBEDDINGS_SOURCE=local` in `.env`
+to add semantic search with a local CPU model. Leave it unset for keyword search only.
+See [Search](/oss/self-deployment#search) for hosted models and offline use.
 
 For a deployment like a production one, read
 [How to self-host](/oss/self-deployment). That page covers a custom domain, the

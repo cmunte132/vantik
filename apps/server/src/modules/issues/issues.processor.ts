@@ -2,38 +2,14 @@ import { Process, Processor } from '@nestjs/bull';
 import { Job } from 'bull';
 
 import { LoggerService } from 'modules/logger/logger.service';
-import { VectorService } from 'modules/vector/vector.service';
 
 import IssuesAIService from './issues-ai.service';
 import { IssueWithRelations } from './issues.interface';
 
 @Processor('issues')
 export class IssuesProcessor {
-  constructor(
-    private vectorService: VectorService,
-    private issuesAiservice: IssuesAIService,
-  ) {}
+  constructor(private issuesAiservice: IssuesAIService) {}
   private readonly logger: LoggerService = new LoggerService('IssueProcessor');
-
-  @Process('addIssueToVector')
-  async handleIssueToVector(job: Job<{ issue: IssueWithRelations }>) {
-    const { issue } = job.data;
-    this.logger.info({
-      message: `Adding issue to Vector ${issue.id}`,
-      where: `IssuesProcessor.handleIssueToVector`,
-    });
-    await this.vectorService.createIssueEmbedding(issue);
-  }
-
-  @Process('removeIssueFromVector')
-  async handleRemoveIssueFromVector(job: Job<{ issueId: string }>) {
-    const { issueId } = job.data;
-    this.logger.info({
-      message: `Removing issue from Vector ${issueId}`,
-      where: `IssuesProcessor.handleRemoveIssueFromVector`,
-    });
-    await this.vectorService.deleteIssueEmbedding(issueId);
-  }
 
   @Process('handleTriageIssue')
   async handleTriageIssue(
@@ -42,22 +18,20 @@ export class IssuesProcessor {
     const { issue, isDeleted } = job.data;
     this.logger.info({
       message: `Handling triage for issue ${issue.id}`,
-      where: `IssuesProcessor.handleIssueToVector`,
+      where: `IssuesProcessor.handleTriageIssue`,
     });
 
     if (isDeleted) {
       this.logger.info({
         message: `Issue ${issue.id} moved out of Triage, removing suggestions`,
-        where: `IssuesProcessor.handleIssueToVector`,
+        where: `IssuesProcessor.handleTriageIssue`,
       });
       return await this.issuesAiservice.deleteIssueSuggestion(issue.id);
     }
 
-    await this.vectorService.createIssueEmbedding(issue);
-
     this.logger.info({
       message: `Finding similar issues for issue ${issue.id}`,
-      where: `IssuesProcessor.handleIssueToVector`,
+      where: `IssuesProcessor.handleTriageIssue`,
     });
     await this.issuesAiservice.similarIssueSuggestion(
       issue.team.workspaceId,
@@ -66,7 +40,7 @@ export class IssuesProcessor {
 
     this.logger.info({
       message: `Generating issue suggestions for issue ${issue.id}`,
-      where: `IssuesProcessor.handleIssueToVector`,
+      where: `IssuesProcessor.handleTriageIssue`,
     });
     return await this.issuesAiservice.issueSuggestions(issue);
   }

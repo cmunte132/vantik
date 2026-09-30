@@ -226,7 +226,7 @@ function fakeIndex() {
     ) => {
       searches.push({ query, options });
       if (failing) {
-        throw new Error('typesense unavailable');
+        throw new Error('search unavailable');
       }
       return { hits, facets: {}, found: hits.length };
     },

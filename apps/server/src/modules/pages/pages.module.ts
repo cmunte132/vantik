@@ -16,7 +16,6 @@ import KnowledgeRecordsService from './gardener/knowledge-records.service';
 import PageRefreshService from './generated/page-refresh.service';
 import PageWriter from './generated/page-writer';
 import KnowledgeInboxService from './knowledge-inbox.service';
-import KnowledgeIndexService from './knowledge-index.service';
 import KnowledgeOverviewService from './knowledge-overview.service';
 import { KnowledgeReviewController } from './knowledge-review.controller';
 import KnowledgeReviewService from './knowledge-review.service';
@@ -31,7 +30,6 @@ import { PAGES_QUEUE } from './pages.interface';
 import {
   EntryModulesScheduler,
   KnowledgeGapsScheduler,
-  KnowledgeIndexScheduler,
   PageRefreshScheduler,
   PagesProcessor,
   PagesScheduler,
@@ -68,7 +66,6 @@ import KnowledgeVerifierService from './verifier/knowledge-verifier.service';
     PageEntriesService,
     PageLinksService,
     KnowledgeService,
-    KnowledgeIndexService,
     RepoFileSourceService,
     CitationJudge,
     EntryCitationsService,
@@ -97,7 +94,6 @@ import KnowledgeVerifierService from './verifier/knowledge-verifier.service';
     KnowledgeGapsScheduler,
     PageRefreshScheduler,
     EntryModulesScheduler,
-    KnowledgeIndexScheduler,
     PagesProcessor,
     UsersService,
   ],

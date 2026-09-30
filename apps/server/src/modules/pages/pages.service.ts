@@ -28,7 +28,6 @@ import {
 } from 'common/utils/tiptap.utils';
 
 import { citedBy, readSections } from './generated/sections';
-import KnowledgeIndexService from './knowledge-index.service';
 import { knowledgeSettings } from './knowledge-settings';
 import {
   PAGES_QUEUE,
@@ -176,14 +175,8 @@ export interface PageRevision {
 
 @Injectable()
 export default class PagesService {
-  /**
-   * `indexer` is optional so unit tests can construct the service with a prisma
-   * double alone. Indexing is a cache update, not part of the write — see
-   * KnowledgeIndexService.
-   */
   constructor(
     private prisma: PrismaService,
-    private indexer?: KnowledgeIndexService,
     private agreement?: KnowledgeAgreementService,
     @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
   ) {}
@@ -364,7 +357,6 @@ export default class PagesService {
     });
 
     await this.recordHistory(page.id, userId, { created: { to: page.title } });
-    await this.indexer?.pageChanged(page.id);
 
     if (generated) {
       await this.queueRefresh(page.id, page.updatedAt);
@@ -519,7 +511,6 @@ export default class PagesService {
       // history read as though every edit rewrote the page.
       toStoredBody(pageData) !== undefined ? current.description : undefined,
     );
-    await this.indexer?.pageChanged(pageId, { titleChanged });
 
     if (questionChanged) {
       await this.queueRefresh(
@@ -566,12 +557,6 @@ export default class PagesService {
     const ids = await this.subtreeIds(pageId);
     const deleted = new Date();
 
-    const entries = await this.prisma.pageEntry.findMany({
-      where: { pageId: { in: ids }, deleted: null },
-      select: { id: true },
-    });
-    const entryIds = entries.map((entry) => entry.id);
-
     await this.prisma.$transaction([
       this.prisma.pageEntry.updateMany({
         where: { pageId: { in: ids }, deleted: null },
@@ -586,7 +571,6 @@ export default class PagesService {
     await this.recordHistory(pageId, userId, {
       deleted: { to: ids.length },
     });
-    await this.indexer?.pageDeleted(ids, entryIds);
 
     return this.getDeletedPage(pageId);
   }
@@ -837,8 +821,6 @@ export default class PagesService {
       throw error;
     }
 
-    await this.indexer?.pageChanged(pageId);
-    await this.indexer?.entriesChanged(proposal.entryIds);
     await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
 
     return this.withMarkdown(updated);
@@ -1083,14 +1065,6 @@ export default class PagesService {
       current.description,
       generated ? current.sections : undefined,
     );
-    await this.indexer?.pageChanged(pageId);
-
-    const concerned = [...new Set([...folding.unfold, ...refolded])];
-
-    if (concerned.length) {
-      await this.indexer?.entriesChanged(concerned);
-    }
-
     return this.withMarkdown(page);
   }
 

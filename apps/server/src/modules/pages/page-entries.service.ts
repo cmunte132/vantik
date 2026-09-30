@@ -36,7 +36,6 @@ import { VectorService } from 'modules/vector/vector.service';
 import EntryCitationsService, {
   type CitationDraft,
 } from './entry-citations.service';
-import KnowledgeIndexService from './knowledge-index.service';
 import {
   entryProof,
   PROOF_CITATION_SELECT,
@@ -68,18 +67,13 @@ export default class PageEntriesService {
   private readonly logger = new Logger(PageEntriesService.name);
 
   /**
-   * The indexer and the vector service are optional for the same reason the
-   * indexer is on PagesService: the index is a cache. A write that finds
-   * Typesense down still gets the exact-duplicate check, which is postgres.
-   * The citation checker is not a cache, so a write that names citations is
-   * refused rather than stored unchecked when it is absent. Without the queue
-   * an entry is not triaged, and waits in the inbox for a person as before;
-   * without the agreement service, what people decide about triaged entries
-   * is not recorded as verdicts on triage.
+   * The vector service is optional. PostgreSQL still checks exact duplicates
+   * if semantic search is unavailable. A write with citations must have a
+   * citation checker. The queue sends entries to triage, and the agreement
+   * service records human decisions as verdicts.
    */
   constructor(
     private prisma: PrismaService,
-    private indexer?: KnowledgeIndexService,
     private vectorService?: VectorService,
     private citations?: EntryCitationsService,
     @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
@@ -324,17 +318,6 @@ export default class PageEntriesService {
     ]);
     const entry = results[detach ? 1 : 0] as ProofRow & { id: string };
 
-    // The new entry enters the index in the same breath as it is written. A
-    // human writing a fact by hand *is* the review step, so it lands STANDING
-    // and is served immediately — without this it would sit unsearchable until
-    // some later, unrelated write happened to touch it.
-    await this.indexer?.entryChanged(entry.id);
-
-    // A superseded entry has to leave the index in the same breath, or the
-    // reader gets both the correction and the thing it corrected and has no
-    // way to tell which is current.
-    await this.indexer?.entriesChanged(retired);
-
     // Citations the repository did not answer for are read again later; until
     // then the entry is written, and simply not grounded.
     await this.citations?.retryLater(entry.id, citations);
@@ -471,7 +454,7 @@ export default class PageEntriesService {
             [{ id: entryId, ...current }],
             entryData.status,
           )
-        : { operations: [], retired: [] };
+        : { operations: [] };
 
     // A person acting on an entry triage sent them gives triage a verdict,
     // written with the change. An agent withdrawing or rewording its own
@@ -562,8 +545,6 @@ export default class PageEntriesService {
       ...reversals,
       ...proposal,
     ]);
-    await this.indexer?.entryChanged(entryId);
-    await this.indexer?.entriesChanged(settled.retired);
     await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
 
     if (
@@ -647,7 +628,6 @@ export default class PageEntriesService {
         ...verdicts.operations,
         ...reversalsFor(this.prisma, eligibleEntries, input.status, userId),
       ]);
-      await this.indexer?.entriesChanged([...eligible, ...settled.retired]);
       await this.agreement?.reevaluateQuietly(verdicts.workspaceIds);
 
       if (isAccepted(input.status)) {
@@ -724,9 +704,6 @@ export default class PageEntriesService {
           })),
         }),
       ]);
-
-      // The index groups a fact by its page, and names the page in results.
-      await this.indexer?.entriesChanged(entries.map((entry) => entry.id));
     }
 
     return {
@@ -738,15 +715,10 @@ export default class PageEntriesService {
   // ------------------------------------------------------ scope and modules
 
   /**
-   * Resolves every entry's scope against the modules as they stand now, and
-   * writes the ones that moved.
-   *
-   * An entry's modules are fixed when it is written, but the modules are not:
-   * a repository is added, a prefix is narrowed, a module is deleted. Run when
-   * any of that happens to a workspace, and once at boot for all of them, which
-   * also fills in entries written before modules were resolved at all.
-   * Idempotent: an entry whose modules did not move is not written, so a
-   * second run changes nothing and re-indexes nothing.
+   * Resolve each entry's scope against the current modules.
+   * Run this method after a module repository or path prefix changes.
+   * The boot job also fills module IDs for older entries.
+   * This method writes only entries whose module IDs change.
    */
   async recomputeModules(workspaceId?: string): Promise<{ changed: number }> {
     const workspaceIds = workspaceId
@@ -782,10 +754,6 @@ export default class PageEntriesService {
           data: { moduleIds: after },
         });
       }
-
-      await this.indexer?.entriesChanged(
-        moved.map(({ id: entryId }) => entryId),
-      );
       changed += moved.length;
     }
 
@@ -995,8 +963,7 @@ export default class PageEntriesService {
    * entry takes the pointer over only from an archived one, or from a person
    * writing standing knowledge (see `assertSupersedable`).
    *
-   * Returns the writes for the caller's transaction, and the ids that leave
-   * the index.
+   * This method returns the writes for the caller's transaction.
    */
   private async settleCorrections(
     entries: Array<{
@@ -1007,13 +974,12 @@ export default class PageEntriesService {
     to: PageEntryStatusEnum,
   ): Promise<{
     operations: Array<Prisma.PrismaPromise<unknown>>;
-    retired: string[];
   }> {
     if (
       to !== PageEntryStatusEnum.STANDING &&
       to !== PageEntryStatusEnum.CONSOLIDATED
     ) {
-      return { operations: [], retired: [] };
+      return { operations: [] };
     }
 
     const targets = entries
@@ -1028,7 +994,7 @@ export default class PageEntriesService {
     const retired = await this.chainToRetire(targets);
 
     if (retired.length === 0) {
-      return { operations: [], retired: [] };
+      return { operations: [] };
     }
 
     return {
@@ -1038,7 +1004,6 @@ export default class PageEntriesService {
           data: { status: PageEntryStatusEnum.SUPERSEDED },
         }),
       ],
-      retired,
     };
   }
 
@@ -1162,13 +1127,10 @@ export default class PageEntriesService {
    * every other — the REST API, the CLI and a harness calling the endpoint
    * directly all arrive here.
    *
-   * Two tiers, both skipped when the writer names an entry to supersede or
-   * says the fact is distinct. An exact repeat, after normalising case and
-   * whitespace, is found in postgres and refused for every writer. A near
-   * match is found by
-   * the hybrid search `findSimilarEntries` runs, and is best effort: with the
-   * index unreachable the write goes ahead on the exact check alone, because a
-   * cache being down is not a reason to stop recording knowledge.
+   * Both checks skip a writer who names an entry to supersede or declares a
+   * distinct fact. PostgreSQL checks exact repeats after case and whitespace
+   * normalization. Hybrid search checks near matches. If search is
+   * unavailable, the write still uses the exact check.
    */
   private async assertNotAlreadyKnown(
     home: EntryHome,

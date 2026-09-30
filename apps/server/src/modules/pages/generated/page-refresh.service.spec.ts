@@ -7,7 +7,6 @@ import { convertTiptapJsonToMarkdown } from 'common/utils/tiptap.utils';
 
 import { VectorService } from 'modules/vector/vector.service';
 
-import KnowledgeIndexService from '../knowledge-index.service';
 import PagesService from '../pages.service';
 import PageRefreshService from './page-refresh.service';
 import PageWriter, { type WriterInput } from './page-writer';
@@ -336,8 +335,7 @@ function setup(
     ),
   };
 
-  // The index: every in-use entry in the search's filter, as a hit, and
-  // three a page unless asked for every one, as Typesense groups them.
+  // The search returns in-use entries and limits each page to three hits.
   const searchKnowledge = jest.fn(
     async (workspaceId: string, _query: string, filter: Where) => {
       const perPage = new Map<string, number>();
@@ -379,21 +377,16 @@ function setup(
   });
   const operations = jest.spyOn(writer, 'operations');
 
-  const indexer = {
-    pageChanged: jest.fn(async (): Promise<void> => undefined),
-  } as unknown as KnowledgeIndexService;
   const service = new PageRefreshService(
     prisma as unknown as PrismaService,
     vectorService,
     writer,
-    indexer,
   );
   const queue = {
     add: jest.fn<Promise<unknown>, unknown[]>(async () => ({})),
   };
   const pagesService = new PagesService(
     prisma as unknown as PrismaService,
-    indexer,
     undefined,
     queue as unknown as Queue,
   );
@@ -414,7 +407,6 @@ function setup(
     get shown(): WriterInput[] {
       return operations.mock.calls.map(([input]) => input);
     },
-    indexer,
     script: (next: (input: WriterInput) => unknown) => {
       answer = (input) => {
         const value = next(input);
@@ -471,7 +463,6 @@ describe('refreshing a generated page', () => {
       expect(page.watermark).toEqual(at(0));
       expect(page.evidenceHash).toMatch(/^[0-9a-f]{64}$/);
       expect(store.shown[0].question).toBe('How do we deploy the server?');
-      expect(store.indexer.pageChanged).toHaveBeenCalledWith(PAGE);
     });
 
     it('[KG-7.2] calls and writes nothing before the minimum interval has passed', async () => {
@@ -1158,7 +1149,6 @@ describe('refreshing a generated page', () => {
         });
         expect(store.prisma.pageHistory.create).not.toHaveBeenCalled();
         expect(sectionsOf(store.page())[0]).toEqual(first);
-        expect(store.indexer.pageChanged).toHaveBeenCalledTimes(1);
       }
     });
 

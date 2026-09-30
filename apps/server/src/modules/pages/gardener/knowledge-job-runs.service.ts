@@ -8,7 +8,7 @@ import { LoggerService } from 'modules/logger/logger.service';
 export const JOB_RUN_RETENTION_DAYS = 30;
 
 /** The jobs that the server queues when it starts. */
-const BOOT_JOBS = ['indexConsolidatedEntries', 'recomputeEntryModules'];
+const BOOT_JOBS = ['recomputeEntryModules'];
 
 /** What a Bull job gives the recorder. Only the parts it reads. */
 export interface RecordedJob {

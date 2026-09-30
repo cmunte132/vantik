@@ -14,15 +14,13 @@ import KnowledgeJobRunsService from './gardener/knowledge-job-runs.service';
 import PageRefreshService, {
   type RefreshOutcome,
 } from './generated/page-refresh.service';
-import KnowledgeIndexService from './knowledge-index.service';
+
 import PageEntriesService from './page-entries.service';
 import {
   DECAY_JOB,
   DECAY_JOB_ID,
   GAP_ISSUES_JOB,
   GAP_ISSUES_JOB_ID,
-  INDEX_CONSOLIDATED_JOB,
-  indexConsolidatedJobOptions,
   PAGE_REFRESH_JOB,
   PAGE_REFRESH_JOB_ID,
   RECHECK_ENTRY_JOB,
@@ -43,7 +41,6 @@ import {
 import {
   EntryModulesScheduler,
   KnowledgeGapsScheduler,
-  KnowledgeIndexScheduler,
   PageRefreshScheduler,
   PagesProcessor,
   PagesScheduler,
@@ -134,45 +131,6 @@ describe('PagesProcessor', () => {
     // Unscoped deliberately: the windows are a property of the deployment, not
     // of any one workspace.
     expect(runDecay).toHaveBeenCalledWith();
-  });
-});
-
-describe('putting consolidated entries back in the index', () => {
-  it('[KG-7.4] queues one pass at boot, which indexes the consolidated entries the index lost', async () => {
-    const queue = buildQueue();
-
-    await new KnowledgeIndexScheduler(queue).onModuleInit();
-
-    expect(queue.add).toHaveBeenCalledWith(
-      INDEX_CONSOLIDATED_JOB,
-      {},
-      expect.objectContaining({
-        jobId: expect.stringMatching(`^${INDEX_CONSOLIDATED_JOB}:`),
-      }),
-    );
-
-    // Replicas booting in the same minute queue one pass; a later boot
-    // gets its own, as does one after a failed pass kept for inspection.
-    const minute = 60_000 * 1_000;
-    expect(indexConsolidatedJobOptions(minute + 1).jobId).toBe(
-      indexConsolidatedJobOptions(minute + 59_999).jobId,
-    );
-    expect(indexConsolidatedJobOptions(minute + 60_000).jobId).not.toBe(
-      indexConsolidatedJobOptions(minute).jobId,
-    );
-
-    const indexMissingConsolidated = jest.fn(async () => 2);
-    await new PagesProcessor(
-      {} as PageEntriesService,
-      {} as EntryCitationsService,
-      {} as KnowledgeTriageService,
-      {} as KnowledgeUpkeepService,
-      {} as KnowledgeConventionsService,
-      {} as KnowledgeGapsService,
-      {} as PageRefreshService,
-      { indexMissingConsolidated } as unknown as KnowledgeIndexService,
-    ).handleIndexConsolidated();
-    expect(indexMissingConsolidated).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -352,7 +310,7 @@ describe('triaging a new entry', () => {
       {} as EntryCitationsService,
       {
         triage: jest.fn(async () => {
-          throw new Error('typesense is down');
+          throw new Error('search is down');
         }),
       } as unknown as KnowledgeTriageService,
       {} as KnowledgeUpkeepService,
@@ -363,7 +321,7 @@ describe('triaging a new entry', () => {
 
     await expect(
       processor.handleTriageEntry({ data: { entryId: 'entry-1' } }),
-    ).rejects.toThrow('typesense is down');
+    ).rejects.toThrow('search is down');
   });
 });
 
@@ -483,19 +441,9 @@ describe('recording what the gardener did', () => {
         work: () => Promise<unknown>,
       ) => work(),
     );
-    const processor = new PagesProcessor(
-      {} as PageEntriesService,
-      {} as EntryCitationsService,
-      {} as KnowledgeTriageService,
-      {} as KnowledgeUpkeepService,
-      {} as KnowledgeConventionsService,
-      { openIssues } as unknown as KnowledgeGapsService,
-      {} as PageRefreshService,
-      undefined,
-      undefined,
-      undefined,
-      { record } as unknown as KnowledgeJobRunsService,
-    );
+    const processor = new PagesProcessor({} as PageEntriesService, {} as EntryCitationsService, {} as KnowledgeTriageService, {} as KnowledgeUpkeepService, {} as KnowledgeConventionsService, { openIssues } as unknown as KnowledgeGapsService, {} as PageRefreshService, undefined,
+    undefined,
+    { record } as unknown as KnowledgeJobRunsService,);
     const job = { opts: { repeat: { cron: '0 4 * * 1' } } };
 
     await expect(processor.handleGapIssues(job)).resolves.toBeUndefined();
@@ -844,19 +792,9 @@ describe('triaging a waiting entry again when its evidence changes', () => {
     } = {},
   ) {
     const queue = { add: jest.fn(async () => ({})) };
-    const processor = new PagesProcessor(
-      {} as PageEntriesService,
-      (services.citations ?? {}) as EntryCitationsService,
-      {} as KnowledgeTriageService,
-      (services.upkeep ?? {}) as KnowledgeUpkeepService,
-      {
-        weigh: async (): Promise<null> => null,
-      } as unknown as KnowledgeConventionsService,
-      {} as KnowledgeGapsService,
-      {} as PageRefreshService,
-      undefined,
-      queue as unknown as Queue,
-    );
+    const processor = new PagesProcessor({} as PageEntriesService, (services.citations ?? {}) as EntryCitationsService, {} as KnowledgeTriageService, (services.upkeep ?? {}) as KnowledgeUpkeepService, {
+      weigh: async (): Promise<null> => null,
+    } as unknown as KnowledgeConventionsService, {} as KnowledgeGapsService, {} as PageRefreshService, queue as unknown as Queue,);
     const queued = () => queue.add.mock.calls.map((call: unknown[]) => call[1]);
 
     return { processor, queue, queued };

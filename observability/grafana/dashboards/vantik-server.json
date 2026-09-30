@@ -659,7 +659,7 @@
       "id": 14,
       "type": "timeseries",
       "title": "Outbound calls p95 by host",
-      "description": "The server's own HTTP clients — Typesense, SuperTokens, the LLM provider. Keyed by host, because a stall in one of these looks exactly like a slow endpoint from the outside.\n\nThe `lgtm` host is excluded: the OTLP exporter's own POSTs to the collector are themselves instrumented by the http instrumentation, so leaving them in means this panel is largely measuring the act of sending telemetry. They only exist when telemetry is switched on, which makes them pure artefact.",
+      "description": "This panel shows the server's HTTP clients by host: SuperTokens, hosted models, and the LLM provider. A slow host can delay an endpoint.\n\nThe panel excludes the `lgtm` host because its calls export telemetry to the collector.",
       "gridPos": {
         "h": 8,
         "w": 8,

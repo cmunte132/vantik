@@ -1414,13 +1414,7 @@ describe('a change that landed re-checks the citations it touches', () => {
         return read(...args);
       });
       const queue = { add: jest.fn(async (): Promise<void> => undefined) };
-      const citations = new EntryCitationsService(
-        t.prisma as never,
-        t.files as never,
-        t.judge as never,
-        undefined,
-        queue as never,
-      );
+      const citations = new EntryCitationsService(t.prisma as never, t.files as never, t.judge as never, queue as never,);
 
       await (run === 'retry'
         ? citations.retryUnknown('e1')
@@ -1462,13 +1456,7 @@ describe('a change that landed re-checks the citations it touches', () => {
         ref === cited ? { content: ORIGINAL } : read(repo, path, ref),
       );
       const queue = { add: jest.fn(async (): Promise<void> => undefined) };
-      const citations = new EntryCitationsService(
-        t.prisma as never,
-        t.files as never,
-        t.judge as never,
-        undefined,
-        queue as never,
-      );
+      const citations = new EntryCitationsService(t.prisma as never, t.files as never, t.judge as never, queue as never,);
 
       await (run === 'retry'
         ? citations.retryUnknown('e1')
@@ -1550,13 +1538,7 @@ describe('a change that landed re-checks the citations it touches', () => {
       });
       const queue = { add: jest.fn(async (): Promise<void> => undefined) };
 
-      await new EntryCitationsService(
-        t.prisma as never,
-        t.files as never,
-        t.judge as never,
-        undefined,
-        queue as never,
-      )[pinned ? 'recheck' : 'retryUnknown']('e1');
+      await new EntryCitationsService(t.prisma as never, t.files as never, t.judge as never, queue as never,)[pinned ? 'recheck' : 'retryUnknown']('e1');
 
       const read1 = pinned ? cited : SHA;
       expect(t.reads).toEqual([
@@ -1610,13 +1592,7 @@ describe('a change that landed re-checks the citations it touches', () => {
     );
     const queue = { add: jest.fn(async (): Promise<void> => undefined) };
 
-    await new EntryCitationsService(
-      t.prisma as never,
-      t.files as never,
-      t.judge as never,
-      undefined,
-      queue as never,
-    ).retryUnknown('e1');
+    await new EntryCitationsService(t.prisma as never, t.files as never, t.judge as never, queue as never,).retryUnknown('e1');
 
     const [[, job]] = queue.add.mock.calls as unknown as Array<
       [string, CodeLandedJob]
@@ -1677,13 +1653,7 @@ describe('a change that landed re-checks the citations it touches', () => {
         );
         const queue = { add: jest.fn(async (): Promise<void> => undefined) };
 
-        await new EntryCitationsService(
-          t.prisma as never,
-          t.files as never,
-          t.judge as never,
-          undefined,
-          queue as never,
-        )[run === 'retry' ? 'retryUnknown' : 'recheck']('e1');
+        await new EntryCitationsService(t.prisma as never, t.files as never, t.judge as never, queue as never,)[run === 'retry' ? 'retryUnknown' : 'recheck']('e1');
 
         expect({ case: c.name, run, queued: queue.add.mock.calls }).toEqual({
           case: c.name,
@@ -1712,13 +1682,7 @@ describe('a change that landed re-checks the citations it touches', () => {
     };
 
     await expect(
-      new EntryCitationsService(
-        t.prisma as never,
-        t.files as never,
-        t.judge as never,
-        undefined,
-        queue as never,
-      ).retryUnknown('e1'),
+      new EntryCitationsService(t.prisma as never, t.files as never, t.judge as never, queue as never,).retryUnknown('e1'),
     ).resolves.toEqual({ stillUnknown: 0, read: 1 });
 
     expect(queue.add).toHaveBeenCalledTimes(1);

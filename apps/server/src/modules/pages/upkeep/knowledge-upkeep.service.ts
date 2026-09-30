@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   PageEntryMaintenanceAction,
   PageEntryMaintenanceReason,
@@ -31,7 +31,6 @@ import EntryCitationsService, {
   STORED_READING_SELECT,
   storedCheck,
 } from '../entry-citations.service';
-import KnowledgeIndexService from '../knowledge-index.service';
 import {
   type CodeLandedJob,
   STANDING_ENTRY_DECAY_DAYS,
@@ -120,7 +119,6 @@ export default class KnowledgeUpkeepService {
     private prisma: PrismaService,
     private citations: EntryCitationsService,
     private issues: KnowledgeIssues,
-    @Optional() private indexer?: KnowledgeIndexService,
   ) {}
 
   /**
@@ -170,7 +168,6 @@ export default class KnowledgeUpkeepService {
       });
 
       summary.stale += stale;
-      await this.indexer?.entryChanged(entryId);
 
       if (
         entryChecks.some(

@@ -42,9 +42,8 @@ export class KnowledgeSearchQueryDto {
   workspaceId?: string;
 
   /**
-   * Required. A wildcard is not a question: typesense skips both the keyword
-   * match and the query embedding for `*`, and returns the whole workspace
-   * unranked — which is the unbounded dump the budget exists to prevent.
+   * The query must name a question. A wildcard cannot select the whole
+   * workspace through this endpoint.
    */
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()

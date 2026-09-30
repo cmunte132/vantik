@@ -15,7 +15,6 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { convertMarkdownToTiptapJson } from 'common/utils/tiptap.utils';
 
-import KnowledgeIndexService from './knowledge-index.service';
 import PageLinksService from './page-links.service';
 import { PagesController } from './pages.controller';
 import PagesService from './pages.service';
@@ -323,14 +322,7 @@ function setup() {
     }),
   };
 
-  const indexer = {
-    pageChanged: jest.fn(async (): Promise<void> => undefined),
-    entriesChanged: jest.fn(async (): Promise<void> => undefined),
-  };
-  const service = new PagesService(
-    prisma as unknown as PrismaService,
-    indexer as unknown as KnowledgeIndexService,
-  );
+  const service = new PagesService(prisma as unknown as PrismaService);
   const controller = new PagesController(
     service,
     {} as PageLinksService,
@@ -352,7 +344,6 @@ function setup() {
     service,
     controller,
     prisma,
-    indexer,
     entries,
     proposals,
     history,
@@ -395,8 +386,6 @@ describe('consolidating entries into a page people write', () => {
         before,
       );
       expect(t.history).toEqual([]);
-      expect(t.indexer.pageChanged).not.toHaveBeenCalled();
-      expect(t.indexer.entriesChanged).not.toHaveBeenCalled();
     }
   });
 
@@ -472,8 +461,6 @@ describe('consolidating entries into a page people write', () => {
       decidedById: 'person-1',
       decidedAt: expect.any(Date),
     });
-    expect(t.indexer.pageChanged).toHaveBeenCalledWith(PAGE);
-    expect(t.indexer.entriesChanged).toHaveBeenCalledWith(['e1', 'e2', 'e3']);
   });
 
   it('[KG-7.4] the existing revert undoes an accepted consolidation, putting its entries back in use', async () => {
@@ -483,7 +470,6 @@ describe('consolidating entries into a page people write', () => {
     // One entry moved on since: it is not put back.
     t.entries.find((row) => row.id === 'e3')!.status =
       PageEntryStatusEnum.SUPERSEDED;
-    t.indexer.entriesChanged.mockClear();
 
     const page = await t.service.revertBody(PAGE, 'history-1', 'person-2');
 
@@ -502,7 +488,6 @@ describe('consolidating entries into a page people write', () => {
       },
       previousBody: t.proposals[0].body,
     });
-    expect(t.indexer.entriesChanged).toHaveBeenCalledWith(['e1', 'e2', 'e3']);
   });
 
   it('[KG-7.4] undoing that revert folds the entries still standing back in, so no fact is served twice', async () => {
@@ -513,7 +498,6 @@ describe('consolidating entries into a page people write', () => {
     // Meanwhile a person set one of them aside: it stays aside.
     t.entries.find((row) => row.id === 'e2')!.status =
       PageEntryStatusEnum.DISPUTED;
-    t.indexer.entriesChanged.mockClear();
 
     // The body that says them comes back, and with it their place as its
     // evidence: consolidated, cited, ranked below the page.
@@ -528,7 +512,6 @@ describe('consolidating entries into a page people write', () => {
       revertedTo: { to: 'history-2' },
       reconsolidated: { to: 2, entryIds: ['e1', 'e3'] },
     });
-    expect(t.indexer.entriesChanged).toHaveBeenCalledWith(['e1', 'e3']);
 
     // And undoing that takes them out again.
     await t.service.revertBody(PAGE, 'history-3', 'person-2');
@@ -635,7 +618,6 @@ describe('consolidating entries into a page people write', () => {
     ).toBeInstanceOf(ConflictException);
     expect(t.history).toHaveLength(1);
     expect(t.page().citedEntryIds).toEqual(['e-old', 'e1', 'e2', 'e3']);
-    expect(t.indexer.pageChanged).toHaveBeenCalledTimes(1);
   });
 
   it('[KG-7.4] of two answers at once, keeps the first and undoes the second with its change', async () => {
@@ -710,7 +692,6 @@ describe('consolidating entries into a page people write', () => {
     ).rejects.toThrow(/The page changed while this was being accepted/);
     expect(racing.state()).toBe(edit);
     expect(racing.proposals[0].state).toBe(PageProposalStateEnum.OPEN);
-    expect(racing.indexer.pageChanged).not.toHaveBeenCalled();
 
     // An entry it folds in is no longer standing.
     const moved = setup();
@@ -787,7 +768,6 @@ describe('consolidating entries into a page people write', () => {
     });
     expect(JSON.stringify({ page: t.page(), entries: t.entries })).toBe(before);
     expect(t.history).toEqual([]);
-    expect(t.indexer.pageChanged).not.toHaveBeenCalled();
   });
 
   it('[KG-7.4] lists a page’s open proposals, newest first, or every one', async () => {

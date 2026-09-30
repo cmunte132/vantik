@@ -17,7 +17,6 @@ import {
   convertTiptapJsonToMarkdown,
 } from 'common/utils/tiptap.utils';
 
-import { IssuesQueue } from 'modules/issues/issues.queue';
 import IssuesService from 'modules/issues/issues.service';
 
 @Injectable()
@@ -25,7 +24,6 @@ export default class IssueCommentsService {
   constructor(
     private prisma: PrismaService,
     private issuesService: IssuesService,
-    private issuesQueue: IssuesQueue,
     private notificationsQueue: NotificationsQueue,
   ) {}
 
@@ -118,10 +116,6 @@ export default class IssueCommentsService {
       },
     });
 
-    // Comments are part of the issue's search document, so the embedding has
-    // to be refreshed whenever they change.
-    this.issuesQueue.addIssueToVector(issueComment.issue);
-
     const newBodyMarkdown = convertTiptapJsonToMarkdown(issueComment.body);
     return { ...issueComment, bodyMarkdown: newBodyMarkdown };
   }
@@ -148,8 +142,6 @@ export default class IssueCommentsService {
       },
     });
 
-    this.issuesQueue.addIssueToVector(issueComment.issue);
-
     const newBodyMarkdown = convertTiptapJsonToMarkdown(issueComment.body);
     return { ...issueComment, bodyMarkdown: newBodyMarkdown };
   }
@@ -169,8 +161,6 @@ export default class IssueCommentsService {
         parent: true,
       },
     });
-
-    this.issuesQueue.addIssueToVector(issueComment.issue);
 
     return issueComment;
   }

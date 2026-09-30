@@ -809,16 +809,12 @@ function harness(seed: Seed) {
   const s = store({ preferences: ON, ...seed });
   const prisma = s.prisma as unknown as PrismaService;
   const agreement = new KnowledgeAgreementService(prisma);
-  const pageEntries = new PageEntriesService(
-    prisma,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    agreement,
-  );
+  const pageEntries = new PageEntriesService(prisma, undefined,
+  undefined,
+  undefined,
+  agreement,);
   const review = new KnowledgeReviewService(prisma, pageEntries);
-  const pagesService = new PagesService(prisma, undefined, agreement);
+  const pagesService = new PagesService(prisma, agreement);
 
   const inbox = new KnowledgeInboxService(
     prisma,

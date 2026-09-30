@@ -35,7 +35,6 @@ import {
   snippetContains,
   type LineRange,
 } from './citation-matching';
-import KnowledgeIndexService from './knowledge-index.service';
 import {
   findQuote,
   MAX_OUTSIDE_QUOTE,
@@ -403,9 +402,6 @@ export default class EntryCitationsService {
     private prisma: PrismaService,
     private files: RepoFileSourceService,
     private judge: CitationJudge,
-    // A check that changes a result can change the entry's trust, which the
-    // index ranks by.
-    @Optional() private indexer?: KnowledgeIndexService,
     @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
   ) {}
 
@@ -1004,10 +1000,6 @@ export default class EntryCitationsService {
         })
       : 0;
 
-    if (checked > 0) {
-      await this.indexer?.entryChanged(entryId);
-    }
-
     await this.checkSinceCited(entry.workspaceId, firstReads);
 
     return { checked };
@@ -1275,10 +1267,6 @@ export default class EntryCitationsService {
             return stored;
           })
         : [];
-
-    if (firstReads.length > 0 || pagesRead > 0) {
-      await this.indexer?.entryChanged(entryId);
-    }
 
     await this.checkSinceCited(entry.workspaceId, firstReads);
 

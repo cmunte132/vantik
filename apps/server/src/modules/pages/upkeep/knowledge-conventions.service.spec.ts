@@ -544,7 +544,6 @@ function harness(seed: Seed = {}) {
   );
   const open = jest.fn(async () => ({ id: 'issue-1' }));
   const add = jest.fn(async () => ({}));
-  const entryChanged = jest.fn(async (): Promise<void> => undefined);
 
   const upkeep = new KnowledgeUpkeepService(
     prisma as never,
@@ -559,7 +558,6 @@ function harness(seed: Seed = {}) {
     upkeep,
     { open } as unknown as KnowledgeIssues,
     { add } as never,
-    { entryChanged } as never,
   );
 
   return {
@@ -578,7 +576,6 @@ function harness(seed: Seed = {}) {
     checkForWrite,
     open,
     add,
-    entryChanged,
     addRun(run: RunSeed) {
       runs.push({
         id: run.id,
@@ -1322,7 +1319,6 @@ describe('switching off a convention runs keep going wrong with', () => {
         issueId: 'issue-1',
       }),
     ]);
-    expect(t.entryChanged).toHaveBeenCalledWith('convention');
 
     // The module's team is told, with what the harmful outcomes pointed at.
     expect(t.open).toHaveBeenCalledWith(

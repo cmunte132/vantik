@@ -1,873 +1,448 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   PageEntryKindEnum,
   PageEntryStatusEnum,
   WorkflowCategoryEnum,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
-import { Client as TypesenseClient } from 'typesense';
 
-import { liveEntryIn } from 'common/page-entry-where';
 import {
   convertTiptapJsonToMarkdown,
   convertTiptapJsonToText,
 } from 'common/utils/tiptap.utils';
-
-import { IssueWithRelations } from 'modules/issues/issues.interface';
-import { LoggerService } from 'modules/logger/logger.service';
 import { scopeAncestors, scopePath } from 'modules/modules/module-routing';
 import {
   entryProof,
-  entryTrust,
+  OBSERVED_STALE_MS,
   pageBodyProof,
-  PROOF_CITATION_SELECT,
+  ProofCitationRow,
 } from 'modules/pages/knowledge-proof';
 
+import { EmbeddingsService } from './embeddings.service';
 import {
-  AXIS_OVERFETCH,
   AxisFilter,
   entryGroup,
-  INDEXED_STATUSES,
-  ISSUE_QUERY_BY,
   IssueSearchHit,
-  KNOWLEDGE_FACET_BY,
   KNOWLEDGE_GROUP_LIMIT,
   KNOWLEDGE_NEAR_MATCH_DISTANCE,
-  KNOWLEDGE_SORT_BY,
   KnowledgeSearchHit,
   KnowledgeSearchResult,
-  MAX_COMMENTS_TEXT_LENGTH,
-  MAX_TYPESENSE_PER_PAGE,
-  PAGE_QUERY_BY,
   RESOLUTION_SNIPPET_LENGTH,
   SERVED_STATUSES,
   SIMILAR_ISSUE_DISTANCE_THRESHOLD,
-  issueSchema,
-  pageEmbedding,
-  pageSchema,
-  requiredIssueFields,
-  requiredPageFields,
-  ENTRY_INDEX_INCLUDE,
-  typesenseEmbedding,
 } from './vector.interface';
 
-/**
- * Search runs entirely inside typesense, which generates embeddings in-process
- * with its built-in model. Nothing about an issue — title, description or
- * comments — is sent to a third-party service.
- */
+type QueryVector = { vector: string; model: string; dimensions: number };
+
+type KnowledgeOptions = {
+  limit?: number;
+  scope?: string;
+  pageId?: string;
+  group?: string;
+  includeStatuses?: string[];
+  vectorDistance?: number;
+  kinds?: string[];
+  moduleIds?: string[];
+  boost?: { modules: string[]; neighbours: string[] };
+  ungrouped?: boolean;
+  semanticOnly?: boolean;
+};
+
+type CitationJson = Omit<ProofCitationRow, 'checkedAt'> & {
+  checkedAt: string | null;
+};
+
+type KnowledgeRow = Omit<KnowledgeSearchHit, 'distance'> & {
+  distance: number | null;
+  verifiedAt: string | null;
+  proofCitations: CitationJson[];
+};
+
 @Injectable()
-export class VectorService implements OnModuleInit {
+export class VectorService {
   constructor(
-    private prisma: PrismaService,
-    private typesenseClient: TypesenseClient,
+    private readonly prisma: PrismaService,
+    private readonly embeddings: EmbeddingsService,
   ) {}
 
-  private readonly logger: LoggerService = new LoggerService('VectorService');
-
-  async onModuleInit() {
-    // Search must not block server boot — typesense may still be starting
-    // (or be entirely absent); collection setup is retried implicitly on the
-    // next boot and errors are logged inside each ensure call.
-    try {
-      await this.createIssuesCollection();
-      await this.createPagesCollection();
-    } catch (error) {
-      this.logger.error({
-        message: `Unable to initialise typesense collections: ${error.message}`,
-        where: `VectorService.onModuleInit`,
-      });
+  private async queryVector(text: string): Promise<QueryVector | null> {
+    if (!this.embeddings.configuredModel() || text.trim() === '*') {
+      return null;
     }
-  }
-
-  async createIssuesCollection() {
-    await this.ensureCollection(
-      'issues',
-      () => ({
-        ...issueSchema,
-        fields: [...issueSchema.fields, typesenseEmbedding],
-      }),
-      requiredIssueFields,
-      (workspaceId) => this.prefillIssuesData(workspaceId),
-    );
-  }
-
-  async createPagesCollection() {
-    await this.ensureCollection(
-      'pages',
-      () => ({
-        ...pageSchema,
-        fields: [...pageSchema.fields, pageEmbedding],
-      }),
-      requiredPageFields,
-      (workspaceId) => this.prefillPagesData(workspaceId),
-    );
-  }
-
-  /**
-   * Creates a collection if it is absent, and rebuilds it if it is stale.
-   *
-   * The schema is not versioned server-side, so a collection created by an
-   * older build is detected by the fields it is missing. Typesense's alter
-   * endpoint cannot backfill values for new fields — least of all an embedding
-   * — so a stale collection is dropped and rebuilt from Postgres instead. The
-   * prefill is idempotent and is how the very first fill already works.
-   *
-   * Generalised over the collection because there are now two following this
-   * same lifecycle, and a copy-paste of it would drift the moment one of them
-   * grew a field.
-   */
-  private async ensureCollection(
-    name: string,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    buildSchema: () => any,
-    requiredFields: string[],
-    prefill: (workspaceId: string) => Promise<void>,
-  ) {
-    let existing;
-    try {
-      existing = await this.typesenseClient.collections(name).retrieve();
-    } catch (error) {
-      if (error.httpStatus !== 404) {
-        this.logger.error({
-          message: `Error retrieving ${name} collection:`,
-          where: `VectorService.ensureCollection`,
-          error,
-        });
-        return;
-      }
-    }
-
-    if (existing) {
-      const presentFields = new Set(
-        existing.fields.map((field: { name: string }) => field.name),
-      );
-      const missingFields = requiredFields.filter(
-        (field) => !presentFields.has(field),
-      );
-
-      if (missingFields.length === 0) {
-        this.logger.info({
-          message: `${name} collection already exists`,
-          where: `VectorService.ensureCollection`,
-        });
-        return;
-      }
-
-      this.logger.info({
-        message: `${name} collection is missing ${missingFields.join(', ')} — recreating and re-indexing`,
-        where: `VectorService.ensureCollection`,
-      });
-      await this.typesenseClient.collections(name).delete();
-    }
-
-    try {
-      // A fresh copy of the schema each time — the embedding field is appended,
-      // so mutating the shared object would double it on a second call.
-      await this.typesenseClient.collections().create(buildSchema());
-    } catch (createError) {
-      // A previous create attempt may have succeeded server-side after the
-      // client timed out — a duplicate-collection 409 is fine.
-      if (createError.httpStatus !== 409) {
-        this.logger.error({
-          message: `Error creating ${name} collection:`,
-          where: `VectorService.ensureCollection`,
-          error: createError,
-        });
-        return;
-      }
-    }
-
-    this.logger.info({
-      message: `Created the ${name} collection`,
-      where: `VectorService.ensureCollection`,
-    });
-
-    await this.reindexAllWorkspaces(prefill);
-  }
-
-  /** Re-indexes every workspace. Safe to call at any time. */
-  async reindexAllWorkspaces(
-    prefill: (workspaceId: string) => Promise<void> = (workspaceId) =>
-      this.prefillIssuesData(workspaceId),
-  ) {
-    const workspaces = await this.prisma.workspace.findMany({
-      where: { deleted: null },
-      select: { id: true },
-    });
-
-    await Promise.all(workspaces.map((workspace) => prefill(workspace.id)));
-
-    this.logger.info({
-      message: 'Prefilled data for all workspaces',
-      where: `VectorService.reindexAllWorkspaces`,
-    });
-  }
-
-  async createIssueEmbedding(issue: IssueWithRelations) {
-    // Generate the issue number by combining team identifier and issue number
-    const issueNumber = `${issue.team.identifier}-${issue.number}`;
-
-    const [stateCategory, { commentsText, resolutionText }] = await Promise.all(
-      [this.getStateCategory(issue.stateId), this.getCommentTexts(issue)],
-    );
-
-    // The embedding itself is generated by typesense from the fields listed in
-    // `typesenseEmbedding.embed.from`, so only the document is upserted here.
-    await this.typesenseClient
-      .collections('issues')
-      .documents()
-      .upsert({
-        id: issue.id,
-        teamId: issue.teamId,
-        number: issue.number,
-        numberString: issue.number.toString(),
-        issueNumber,
-        title: issue.title,
-        description: issue.description ?? '',
-        descriptionString: convertTiptapJsonToText(issue.description),
-        stateId: issue.stateId,
-        stateCategory,
-        commentsText,
-        resolutionText,
-        workspaceId: issue.team.workspaceId,
-        assigneeId: issue.assigneeId ?? '',
-      });
-  }
-
-  /**
-   * Removes an issue from the search index.
-   *
-   * Issues are soft-deleted in postgres, but the index has no notion of that,
-   * so without this a deleted issue stays permanently searchable and an agent
-   * looking for prior art gets told a problem was solved by an issue that no
-   * longer exists.
-   */
-  async deleteIssueEmbedding(issueId: string) {
-    try {
-      await this.typesenseClient
-        .collections('issues')
-        .documents(issueId)
-        .delete();
-    } catch (error) {
-      // A missing document is the desired end state, not a failure: an issue
-      // deleted before it was ever indexed would otherwise fail the job and be
-      // retried forever.
-      if (error.httpStatus === 404) {
-        return;
-      }
-      throw error;
-    }
-  }
-
-  private async getStateCategory(stateId: string): Promise<string> {
-    if (!stateId) {
-      return '';
-    }
-
-    const state = await this.prisma.workflow.findUnique({
-      where: { id: stateId },
-      select: { category: true },
-    });
-
-    return state?.category ?? '';
-  }
-
-  /**
-   * Builds the searchable comment text for an issue, plus a best guess at the
-   * comment that explains the resolution: the last top-level comment posted at
-   * or before the issue's most recent transition into a COMPLETED state.
-   */
-  private async getCommentTexts(issue: IssueWithRelations) {
-    const comments = await this.prisma.issueComment.findMany({
-      where: { issueId: issue.id, deleted: null },
-      orderBy: { createdAt: 'asc' },
-      select: { body: true, createdAt: true, parentId: true },
-    });
-
-    if (comments.length === 0) {
-      return { commentsText: '', resolutionText: '' };
-    }
-
-    const texts = comments.map((comment) => ({
-      ...comment,
-      text: convertTiptapJsonToText(comment.body),
-    }));
-
-    // Keep the newest comments when the cap is hit — recent discussion is
-    // where a resolution is most likely to be described.
-    let commentsText = texts.map(({ text }) => text).join('\n\n');
-    if (commentsText.length > MAX_COMMENTS_TEXT_LENGTH) {
-      commentsText = commentsText.slice(-MAX_COMMENTS_TEXT_LENGTH);
-    }
-
-    const { completedAt, isCompleted } = await this.getCompletion(issue);
-    const topLevel = texts.filter((comment) => !comment.parentId);
-
-    // Prefer the last comment written at or before the issue was closed, so
-    // chatter added afterwards does not masquerade as the resolution. When the
-    // issue is closed but nothing qualifies — the explanation landed moments
-    // after the state change, which is the common way of working — fall back
-    // to the latest comment rather than reporting no resolution at all.
-    const resolutionComment =
-      (completedAt
-        ? topLevel.filter((comment) => comment.createdAt <= completedAt).pop()
-        : undefined) ??
-      (isCompleted ? topLevel[topLevel.length - 1] : undefined);
-
-    return { commentsText, resolutionText: resolutionComment?.text ?? '' };
-  }
-
-  private async getCompletion(
-    issue: IssueWithRelations,
-  ): Promise<{ completedAt: Date | null; isCompleted: boolean }> {
-    const completedStates = await this.prisma.workflow.findMany({
-      where: {
-        teamId: issue.teamId,
-        category: WorkflowCategoryEnum.COMPLETED,
-        deleted: null,
-      },
-      select: { id: true },
-    });
-
-    if (completedStates.length === 0) {
-      return { completedAt: null, isCompleted: false };
-    }
-
-    const completedStateIds = completedStates.map((state) => state.id);
-
-    const transition = await this.prisma.issueHistory.findFirst({
-      where: {
-        issueId: issue.id,
-        deleted: null,
-        toStateId: { in: completedStateIds },
-      },
-      orderBy: { updatedAt: 'desc' },
-      // `upsertIssueHistory` folds consecutive changes by the same user into
-      // one row, so `createdAt` is when that group of changes started — often
-      // issue creation — while `updatedAt` is when the state actually moved.
-      select: { updatedAt: true },
-    });
-
-    return {
-      completedAt: transition?.updatedAt ?? null,
-      isCompleted: completedStateIds.includes(issue.stateId),
-    };
+    const result = await this.embeddings.embed(text);
+    return result
+      ? {
+          vector: `[${result.vector.join(',')}]`,
+          model: result.model,
+          dimensions: result.vector.length,
+        }
+      : null;
   }
 
   async searchEmbeddings(
     workspaceId: string,
     searchQuery: string,
     limit: number,
-    vectorDistance: number = 0.8,
+    vectorDistance = 0.8,
     stateCategories: string[] = [],
     axis: AxisFilter = {},
     visibleTeamIds?: string[],
-  ) {
-    // Set a default value of 0.8 for vectorDistance if it is NaN
-    if (isNaN(vectorDistance)) {
-      vectorDistance = 0.8;
-    }
-
-    // The index holds no module and no capability, so the axis filter runs
-    // after the search and not inside it. A page of the requested size would
-    // then come back short, because the filter takes rows out of it. Asking
-    // for more rows costs one wider page and keeps the answer full.
-    const filtersAxis = Boolean(axis.moduleIds?.length || axis.capabilityId);
-    const perPage = Math.min(
-      filtersAxis ? limit * AXIS_OVERFETCH : limit,
-      MAX_TYPESENSE_PER_PAGE,
-    );
-
-    // Define search parameters for Typesense multiSearch. `q` must carry the
-    // actual query text: with the wildcard `*` typesense skips both the
-    // keyword match and the query embedding, and simply returns every document
-    // in the workspace unranked.
-    const searchParameters = {
-      searches: [
-        {
-          collection: 'issues',
-          q: searchQuery,
-          query_by: ISSUE_QUERY_BY,
-          filter_by: buildFilterBy(
-            workspaceId,
-            stateCategories,
-            visibleTeamIds,
-          ),
-          sort_by: '_text_match:desc',
-          vector_query: `embeddings:([], distance_threshold:${vectorDistance})`,
-          exclude_fields: 'embeddings',
-          page: 1,
-          per_page: perPage,
-        },
-      ],
-    };
-
-    // Perform multiSearch using Typesense client
-    const searchResults =
-      await this.typesenseClient.multiSearch.perform(searchParameters);
-
-    const kept = await this.dropDeletedIssues(
-      mapSearchHits(searchResults),
+  ): Promise<IssueSearchHit[]> {
+    validateId(workspaceId, 'workspaceId');
+    validateLimit(limit);
+    return this.issueSearch(
+      workspaceId,
+      searchQuery,
+      limit,
+      Number.isNaN(vectorDistance) ? 0.8 : vectorDistance,
+      stateCategories,
       axis,
       visibleTeamIds,
+      await this.queryVector(searchQuery),
     );
-
-    return kept.slice(0, limit);
-  }
-
-  /**
-   * Drops hits whose issue no longer exists, and hits the axis filter excludes.
-   *
-   * The index is a cache and postgres is the truth. Removal is queued when an
-   * issue is deleted, but a failed job, a restore from an older snapshot, or a
-   * reindex against a stale collection all leave documents behind — and a
-   * search that confidently reports a deleted issue is worse than one that
-   * misses it. One indexed lookup per search is a cheap guarantee.
-   *
-   * The module and the capability of an issue ride on the same query. They are
-   * not in the index, and adding them there means a schema change and a
-   * reindex of every issue, for a filter that this read already pays for.
-   */
-  private async dropDeletedIssues(
-    hits: IssueSearchHit[],
-    axis: AxisFilter = {},
-    visibleTeamIds?: string[],
-  ): Promise<IssueSearchHit[]> {
-    if (hits.length === 0) {
-      return hits;
-    }
-
-    const liveIssues = await this.prisma.issue.findMany({
-      where: {
-        id: { in: hits.map((hit) => hit.id) },
-        deleted: null,
-        // A team is a visibility boundary (ENG-79). The team rides on this
-        // query for the same reason the module and the capability do: the
-        // index holds neither, and this read already happens on every search.
-        // The alternative is a field in Typesense and a reindex of every
-        // issue, for a filter that costs nothing here.
-        ...(visibleTeamIds ? { teamId: { in: visibleTeamIds } } : {}),
-        // An issue records the modules it changes as a list, so a request for
-        // several modules matches an issue that names any one of them.
-        ...(axis.moduleIds?.length
-          ? { moduleIds: { hasSome: axis.moduleIds } }
-          : {}),
-        ...(axis.capabilityId ? { capabilityId: axis.capabilityId } : {}),
-      },
-      select: { id: true },
-    });
-    const liveIds = new Set(liveIssues.map((issue) => issue.id));
-
-    const live = hits.filter((hit) => liveIds.has(hit.id));
-
-    if (live.length !== hits.length) {
-      this.logger.info({
-        message: `Search dropped ${hits.length - live.length} hit(s): deleted, or outside the module and capability asked for`,
-        where: `VectorService.dropDeletedIssues`,
-      });
-    }
-
-    return live;
   }
 
   async similarIssues(
     workspaceId: string,
     issueId: string,
     visibleTeamIds?: string[],
-  ) {
-    // Prepare the search request for Typesense
-    const searchRequests = {
-      searches: [
-        {
-          collection: 'issues',
-          q: '*',
-          // Anchored on an existing document, so the wildcard `q` is correct
-          // here — the vector comes from the issue, not from query text.
-          vector_query: `embeddings:([], id:${issueId}, distance_threshold:${SIMILAR_ISSUE_DISTANCE_THRESHOLD})`,
-          filter_by: buildFilterBy(workspaceId, [], visibleTeamIds),
-          exclude_fields: 'embeddings',
-          page: 1,
-        },
-      ],
-    };
-
-    // Perform the multi-search request to Typesense
-    const searchResults =
-      await this.typesenseClient.multiSearch.perform(searchRequests);
-
-    // The vector query already excludes anything past the distance threshold,
-    // so the hits come back ranked by similarity.
-    return this.dropDeletedIssues(
-      mapSearchHits(searchResults),
+  ): Promise<IssueSearchHit[]> {
+    validateId(workspaceId, 'workspaceId');
+    const visibility = teamVisibility(visibleTeamIds);
+    const [source] = await this.prisma.$queryRaw<
+      Array<{
+        title: string;
+        embeddingText: string;
+        vector: string | null;
+        model: string | null;
+        dimensions: number | null;
+      }>
+    >(Prisma.sql`
+      SELECT i."title",
+        concat_ws(E'\n\n', COALESCE(d."title", i."title"), d."body", d."comments") AS "embeddingText",
+        CASE WHEN d."embeddedHash" = d."contentHash" THEN d."embedding"::text END AS vector,
+        d."embeddingModel" AS model, vector_dims(d."embedding") AS dimensions
+      FROM "Issue" i JOIN "Team" t ON t."id" = i."teamId"
+      LEFT JOIN "SearchDocument" d ON d."id" = 'issue:' || i."id"
+      WHERE i."id" = ${issueId} AND t."workspaceId" = ${workspaceId}
+        AND i."deleted" IS NULL AND t."deleted" IS NULL AND ${visibility}
+    `);
+    if (!source) {
+      return [];
+    }
+    const vector =
+      source.vector &&
+      source.model &&
+      source.model === this.embeddings.configuredModel()
+        ? {
+            vector: source.vector,
+            model: source.model,
+            dimensions: source.dimensions!,
+          }
+        : await this.queryVector(source.embeddingText);
+    return this.issueSearch(
+      workspaceId,
+      vector ? '*' : source.title,
+      10,
+      SIMILAR_ISSUE_DISTANCE_THRESHOLD,
+      [],
       {},
       visibleTeamIds,
+      vector,
+      issueId,
     );
   }
 
-  // ------------------------------------------------------- knowledge bank
-
-  /**
-   * Indexes a page body as one document.
-   *
-   * The body is indexed as text rather than as tiptap JSON, for the same reason
-   * issue descriptions are: nobody searches for `{"type":"doc"`.
-   */
-  async indexPage(page: {
-    id: string;
-    title: string;
-    description: string | null;
-    workspaceId: string;
-    updatedAt: Date;
-  }) {
-    await this.typesenseClient
-      .collections('pages')
-      .documents()
-      .upsert({
-        id: `page:${page.id}`,
-        workspaceId: page.workspaceId,
-        kind: 'page',
-        pageId: page.id,
-        group: page.id,
-        pageTitle: page.title,
-        entryId: '',
-        title: page.title,
-        content: convertTiptapJsonToText(page.description),
-        scope: '',
-        scopePath: '',
-        scopeAncestors: [],
-        moduleIds: [],
-        entryKind: '',
-        // A page body is the agreed narrative rather than a claim awaiting
-        // triage, so it carries the served status directly.
-        status: PageEntryStatusEnum.STANDING,
-        sourceUserId: '',
-        verified: true,
-        scoped: false,
-        trust: '',
-        retrievalCount: 0,
-        updatedBucket: monthBucket(page.updatedAt),
-        updatedAt: page.updatedAt.getTime(),
-      });
-  }
-
-  /** Indexes one asserted fact, with the provenance a reader needs to weigh it. */
-  async indexEntry(entry: {
-    id: string;
-    content: string;
-    scope: string | null;
-    status: string;
-    sourceUserId: string | null;
-    verifiedAt: Date | null;
-    retrievalCount: number;
-    updatedAt: Date;
-    workspaceId: string;
-    /** Null for a loose entry. */
-    pageId: string | null;
-    moduleIds?: string[] | null;
-    kind?: string | null;
-    /** The last check of each citation, which decides whether it is grounded. */
-    citations?: Array<{
-      kind: string;
-      checkResult: string | null;
-      checkedAt: Date | null;
-    }> | null;
-    page: { title: string } | null;
-  }) {
-    await this.typesenseClient
-      .collections('pages')
-      .documents()
-      .upsert({
-        id: `entry:${entry.id}`,
-        workspaceId: entry.workspaceId,
-        kind: 'entry',
-        pageId: entry.pageId ?? '',
-        group: entryGroup(entry),
-        pageTitle: entry.page?.title ?? '',
-        entryId: entry.id,
-        title: entry.page?.title ?? '',
-        content: entry.content,
-        scope: entry.scope ?? '',
-        scopePath: scopePath(entry.scope) ?? '',
-        scopeAncestors: scopeAncestors(entry.scope),
-        moduleIds: entry.moduleIds ?? [],
-        entryKind: entry.kind ?? '',
-        status: entry.status,
-        sourceUserId: entry.sourceUserId ?? '',
-        verified: Boolean(entry.verifiedAt),
-        scoped: Boolean(entry.scope),
-        trust: entryTrust(entry),
-        retrievalCount: entry.retrievalCount,
-        updatedBucket: monthBucket(entry.updatedAt),
-        updatedAt: entry.updatedAt.getTime(),
-      });
-  }
-
-  /**
-   * The ids of the entries the index holds in one status: what a repair
-   * compares postgres against, to find the entries the index lost.
-   */
-  async indexedEntryIds(status: PageEntryStatusEnum): Promise<Set<string>> {
-    if (!Object.values(PageEntryStatusEnum).includes(status)) {
-      throw new Error(`Unknown entry status ${status}`);
-    }
-
-    const exported = await this.typesenseClient
-      .collections('pages')
-      .documents()
-      .export({
-        filter_by: `kind:=entry && status:=\`${status}\``,
-        include_fields: 'entryId',
-      });
-
-    return new Set(
-      exported
-        .split('\n')
-        .filter((line) => line.trim())
-        .map((line) => (JSON.parse(line) as { entryId?: string }).entryId)
-        .filter((id): id is string => Boolean(id)),
+  private async issueSearch(
+    workspaceId: string,
+    query: string,
+    limit: number,
+    distance: number,
+    categories: string[],
+    axis: AxisFilter,
+    visibleTeamIds: string[] | undefined,
+    vector: QueryVector | null,
+    excludeId?: string,
+  ): Promise<IssueSearchHit[]> {
+    const states = categories.filter((value) =>
+      Object.values(WorkflowCategoryEnum).includes(
+        value as WorkflowCategoryEnum,
+      ),
     );
+    const filters = [
+      Prisma.sql`d."kind" = 'issue' AND d."workspaceId" = ${workspaceId}`,
+      Prisma.sql`t."workspaceId" = ${workspaceId} AND t."deleted" IS NULL AND i."deleted" IS NULL`,
+      teamVisibility(visibleTeamIds),
+      ...(states.length
+        ? [Prisma.sql`w."category"::text IN (${Prisma.join(states)})`]
+        : []),
+      ...(axis.moduleIds?.length
+        ? [Prisma.sql`i."moduleIds" && ${axis.moduleIds}::text[]`]
+        : []),
+      ...(axis.capabilityId
+        ? [Prisma.sql`i."capabilityId" = ${axis.capabilityId}`]
+        : []),
+      ...(excludeId ? [Prisma.sql`i."id" <> ${excludeId}`] : []),
+    ];
+    const rows = await this.prisma.$queryRaw<
+      Array<
+        IssueSearchHit & {
+          distance: number | null;
+          resolutionBody: string | null;
+        }
+      >
+    >(Prisma.sql`
+      WITH documents AS (
+        SELECT d.*, i."title" AS "issueTitle", i."description", i."stateId",
+          COALESCE(w."category"::text, '') AS "stateCategory", i."teamId", i."number",
+          t."identifier" || '-' || i."number" AS "issueNumber", i."assigneeId"
+        FROM "SearchDocument" d JOIN "Issue" i ON i."id" = d."sourceId"
+        JOIN "Team" t ON t."id" = i."teamId"
+        LEFT JOIN "Workflow" w ON w."id" = i."stateId" AND w."deleted" IS NULL
+        WHERE ${Prisma.join(filters, ' AND ')}
+      ), ${rankDocuments(
+        query,
+        vector,
+        distance,
+        Boolean(excludeId && vector),
+        Prisma.sql`d."issueNumber" ILIKE ${query.trim().replace(/[\\%_]/g, '\\$&') + '%'}
+          OR d."number"::text ILIKE ${query.trim().replace(/[\\%_]/g, '\\$&') + '%'}`,
+      )},
+      chosen AS (
+        SELECT d.*, r.score, r.distance FROM documents d JOIN ranked r USING ("id")
+        ORDER BY r.score DESC, r.distance ASC NULLS LAST, d."id" LIMIT ${limit}
+      )
+      SELECT c."sourceId" AS id, c."issueTitle" AS title, COALESCE(c."description", '') AS description,
+        c."body" AS "descriptionString", c."stateId", c."stateCategory", c."teamId", c."number",
+        c."issueNumber", c."workspaceId", COALESCE(c."assigneeId", '') AS "assigneeId", c.distance,
+        resolution."body" AS "resolutionBody"
+      FROM chosen c
+      LEFT JOIN LATERAL (
+        SELECT MAX(h."updatedAt") AS "completedAt"
+        FROM "IssueHistory" h JOIN "Workflow" state ON state."id" = h."toStateId"
+        WHERE h."issueId" = c."sourceId" AND h."deleted" IS NULL
+          AND state."category" = 'COMPLETED' AND state."deleted" IS NULL
+      ) completion ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT comment."body" FROM "IssueComment" comment
+        WHERE comment."issueId" = c."sourceId" AND comment."deleted" IS NULL AND comment."parentId" IS NULL
+          AND (comment."createdAt" <= completion."completedAt" OR c."stateCategory" = 'COMPLETED')
+        ORDER BY CASE WHEN comment."createdAt" <= completion."completedAt" THEN 0 ELSE 1 END,
+          comment."createdAt" DESC, comment."id"
+        LIMIT 1
+      ) resolution ON TRUE
+      ORDER BY c.score DESC, c.distance ASC NULLS LAST, c."id"
+    `);
+    return rows.map(({ resolutionBody, distance: value, ...row }) => ({
+      ...row,
+      descriptionMarkdown: convertTiptapJsonToMarkdown(row.description),
+      resolutionSnippet: convertTiptapJsonToText(resolutionBody).slice(
+        0,
+        RESOLUTION_SNIPPET_LENGTH,
+      ),
+      ...distanceFields(value),
+    }));
   }
 
-  /**
-   * Removes a page or entry from the index.
-   *
-   * Pages and entries are soft-deleted in postgres and the index has no notion
-   * of that. A deleted page that stays searchable is worse here than it is for
-   * issues: an agent served a retracted fact acts on it, having been told the
-   * workspace believes it.
-   */
-  async deleteKnowledgeDocument(documentId: string) {
-    try {
-      await this.typesenseClient
-        .collections('pages')
-        .documents(documentId)
-        .delete();
-    } catch (error) {
-      // A missing document is the desired end state, not a failure.
-      if (error.httpStatus === 404) {
-        return;
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Searches the bank: page bodies and standing entries, grouped so no single
-   * page can dominate, and ranked inside the query rather than in Node.
-   */
   async searchKnowledge(
     workspaceId: string,
     query: string,
-    options: {
-      limit?: number;
-      scope?: string;
-      /** Restrict to one page. Filtered in the query, not after it. */
-      pageId?: string;
-      /** Restrict to one group (see `entryGroup`), such as a loose scope. */
-      group?: string;
-      /** Include statuses other than STANDING. Triage surfaces only. */
-      includeStatuses?: string[];
-      vectorDistance?: number;
-      /** Only these entry kinds. Page bodies are not entries and drop out. */
-      kinds?: string[];
-      /** Only entries in at least one of these modules. Filtered in the query. */
-      moduleIds?: string[];
-      /**
-       * Modules whose knowledge ranks first, and their neighbours in the
-       * product graph, which rank after them and ahead of everything else.
-       */
-      boost?: { modules: string[]; neighbours: string[] };
-      /**
-       * Every hit, not three a page. Only for a reader that takes a scope's
-       * evidence whole, as a generated page's refresh does; what is served
-       * to agents stays grouped.
-       */
-      ungrouped?: boolean;
-    } = {},
+    options: KnowledgeOptions = {},
   ): Promise<KnowledgeSearchResult> {
-    const searchParameters = {
-      searches: [
-        {
-          collection: 'pages',
-          q: query,
-          query_by: PAGE_QUERY_BY,
-          filter_by: buildKnowledgeFilterBy(workspaceId, options),
-          sort_by: buildKnowledgeSortBy(options),
-          facet_by: KNOWLEDGE_FACET_BY,
-          // The control that holds when every other gate has failed: fifty
-          // entries on one page contribute at most three documents.
-          ...(options.ungrouped
-            ? {}
-            : { group_by: 'group', group_limit: KNOWLEDGE_GROUP_LIMIT }),
-          vector_query: `embeddings:([], distance_threshold:${
-            options.vectorDistance ?? 0.8
-          })`,
-          exclude_fields: 'embeddings',
-          page: 1,
-          per_page: options.limit ?? 20,
-        },
-      ],
-    };
-
-    const searchResults =
-      await this.typesenseClient.multiSearch.perform(searchParameters);
-
-    const result = mapKnowledgeResults(searchResults);
-
+    validateId(workspaceId, 'workspaceId');
+    if (options.pageId) {
+      validateId(options.pageId, 'pageId');
+    }
+    const limit = options.limit ?? 20;
+    validateLimit(limit);
+    const vector = await this.queryVector(query);
+    const statuses = (
+      options.includeStatuses?.length
+        ? options.includeStatuses
+        : SERVED_STATUSES
+    ).filter((value) =>
+      Object.values(PageEntryStatusEnum).includes(value as PageEntryStatusEnum),
+    );
+    const kinds = (options.kinds ?? []).filter((value) =>
+      Object.values(PageEntryKindEnum).includes(value as PageEntryKindEnum),
+    );
+    const filters = [
+      Prisma.sql`d."workspaceId" = ${workspaceId} AND d."kind" IN ('page', 'entry')`,
+      Prisma.sql`((d."kind" = 'page' AND p."workspaceId" = ${workspaceId} AND p."deleted" IS NULL)
+        OR (d."kind" = 'entry' AND e."workspaceId" = ${workspaceId} AND e."deleted" IS NULL
+          AND (e."pageId" IS NULL OR (p."deleted" IS NULL AND p."workspaceId" = ${workspaceId}))))`,
+      statuses.length
+        ? Prisma.sql`CASE WHEN d."kind" = 'page' THEN 'STANDING' ELSE e."status"::text END IN (${Prisma.join(statuses)})`
+        : Prisma.sql`FALSE`,
+      ...(options.pageId ? [Prisma.sql`p."id" = ${options.pageId}`] : []),
+      ...(options.group
+        ? [
+            Prisma.sql`COALESCE(p."id", 'scope:' || COALESCE(e."scope", '')) = ${options.group}`,
+          ]
+        : []),
+      ...(kinds.length
+        ? [Prisma.sql`e."kind"::text IN (${Prisma.join(kinds)})`]
+        : []),
+      ...(options.moduleIds?.length
+        ? [Prisma.sql`e."moduleIds" && ${options.moduleIds}::text[]`]
+        : []),
+    ];
+    if (options.scope) {
+      const path = scopePath(options.scope);
+      filters.push(
+        path
+          ? Prisma.sql`(COALESCE(e."scope", '') = '' OR search_scope_path(e."scope") IN (${Prisma.join(scopeAncestors(options.scope))})
+            OR starts_with(search_scope_path(e."scope"), ${path + '/'}))`
+          : Prisma.sql`(COALESCE(e."scope", '') = '' OR e."scope" = ${options.scope})`,
+      );
+    }
+    const moduleBoost = options.boost?.modules.length
+      ? Prisma.sql`CASE WHEN e."moduleIds" && ${options.boost.modules}::text[] THEN 2
+          ${options.boost.neighbours.length ? Prisma.sql`WHEN e."moduleIds" && ${options.boost.neighbours}::text[] THEN 1` : Prisma.empty}
+          ELSE 0 END`
+      : options.boost?.neighbours.length
+        ? Prisma.sql`CASE WHEN e."moduleIds" && ${options.boost.neighbours}::text[] THEN 1 ELSE 0 END`
+        : Prisma.sql`0`;
+    const scopeBoost = options.scope
+      ? Prisma.sql`CASE WHEN COALESCE(e."scope", '') <> '' THEN 1 ELSE 0 END`
+      : Prisma.sql`0`;
+    const [result] = await this.prisma.$queryRaw<
+      Array<{
+        hits: KnowledgeRow[];
+        facets: Record<string, Record<string, number>>;
+        found: number;
+      }>
+    >(Prisma.sql`
+      WITH documents AS (
+        SELECT d.*, p."id" AS "pageId", COALESCE(p."title", '') AS "pageTitle",
+          e."id" AS "entryId", e."scope", COALESCE(e."status"::text, 'STANDING') AS status,
+          e."sourceUserId", e."verifiedAt", COALESCE(e."retrievalCount", 0) AS "retrievalCount",
+          e."kind"::text AS "entryKind", COALESCE(e."moduleIds", ARRAY[]::text[]) AS "moduleIds",
+          COALESCE(p."id", 'scope:' || COALESCE(e."scope", '')) AS "groupKey",
+          ${scopeBoost} AS "scopeBoost", ${moduleBoost} AS "moduleBoost",
+          CASE WHEN d."kind" = 'page' OR e."verifiedAt" IS NOT NULL THEN 2
+            WHEN e."status" IN ('STANDING', 'CONSOLIDATED') AND EXISTS (
+              SELECT 1 FROM "PageEntryCitation" citation WHERE citation."entryId" = e."id"
+            ) AND NOT EXISTS (
+              SELECT 1 FROM "PageEntryCitation" citation WHERE citation."entryId" = e."id"
+                AND (COALESCE(citation."checkResult"::text, '') NOT IN ('HOLDS', 'MOVED')
+                  OR (citation."kind" = 'URL' AND (citation."checkedAt" IS NULL
+                    OR citation."checkedAt" < ${new Date(Date.now() - OBSERVED_STALE_MS)})))
+            ) THEN 1 ELSE 0 END AS "trustBoost"
+        FROM "SearchDocument" d
+        LEFT JOIN "PageEntry" e ON d."kind" = 'entry' AND e."id" = d."sourceId"
+        LEFT JOIN "Page" p ON p."id" = CASE WHEN d."kind" = 'page' THEN d."sourceId" ELSE e."pageId" END
+        WHERE ${Prisma.join(filters, ' AND ')}
+      ), ${rankDocuments(
+        query,
+        vector,
+        options.vectorDistance ?? 0.8,
+        options.semanticOnly,
+        Prisma.sql`d."scope" ILIKE ${query.trim().replace(/[\\%_]/g, '\\$&') + '%'}`,
+      )},
+      matches AS (
+        SELECT d.*, r.score, r.distance,
+          row_number() OVER (ORDER BY ${knowledgeOrder(options)}, d."id") AS position
+        FROM documents d JOIN ranked r USING ("id")
+      ), evidence AS (
+        SELECT m.*, citing."pageId" AS "evidencePageId", citing."pageTitle" AS "evidencePageTitle",
+          citing.position AS "evidencePosition"
+        FROM matches m LEFT JOIN LATERAL (
+          SELECT page."id" AS "pageId", page."title" AS "pageTitle", body.position
+          FROM "Page" page LEFT JOIN matches body ON body."kind" = 'page' AND body."pageId" = page."id"
+          WHERE m."kind" = 'entry' AND page."workspaceId" = ${workspaceId} AND page."deleted" IS NULL
+            AND (m."entryId" = ANY(page."citedEntryIds")
+              OR (m.status = 'CONSOLIDATED' AND m."pageId" = page."id"))
+          ORDER BY body.position ASC NULLS LAST, page."id" LIMIT 1
+        ) citing ON TRUE
+      ), ordered AS (
+        SELECT *, GREATEST(position, COALESCE("evidencePosition", position)) AS "servePosition",
+          row_number() OVER (PARTITION BY "groupKey" ORDER BY
+            GREATEST(position, COALESCE("evidencePosition", position)),
+            CASE WHEN "kind" = 'page' THEN 0 ELSE 1 END, position) AS "groupPosition"
+        FROM evidence
+      ), selected AS (
+        SELECT * FROM ordered
+        ${options.ungrouped ? Prisma.empty : Prisma.sql`WHERE "groupPosition" <= ${KNOWLEDGE_GROUP_LIMIT}`}
+        ORDER BY "servePosition", CASE WHEN "kind" = 'page' THEN 0 ELSE 1 END, position LIMIT ${limit}
+      ), hit_rows AS (
+        SELECT s."id", s."kind", s."pageId", s."pageTitle", s."entryId", s."title",
+          s."body" AS content, s."scope", s.status, s."sourceUserId",
+          (s."kind" = 'page' OR s."verifiedAt" IS NOT NULL) AS verified,
+          s."verifiedAt", s."retrievalCount", s."entryKind", s."moduleIds", s.distance,
+          CASE WHEN s."evidencePageId" IS NOT NULL THEN jsonb_build_object(
+            'pageId', s."evidencePageId", 'pageTitle', s."evidencePageTitle") END AS "evidenceFor",
+          COALESCE((SELECT jsonb_agg(jsonb_build_object(
+            'kind', c."kind", 'path', c."path", 'commitSha', c."commitSha", 'startLine', c."startLine",
+            'endLine', c."endLine", 'targetLabel', c."targetLabel", 'checkedAt', c."checkedAt",
+            'checkedSha', c."checkedSha", 'checkResult', c."checkResult", 'judgment', c."judgment",
+            'judgeModel', c."judgeModel", 'moduleRepo', CASE WHEN repo."id" IS NOT NULL
+              THEN jsonb_build_object('fullName', repo."fullName") END) ORDER BY c."createdAt", c."id")
+            FROM "PageEntryCitation" c LEFT JOIN "ModuleRepo" repo ON repo."id" = c."moduleRepoId"
+            WHERE c."entryId" = s."entryId"), '[]'::jsonb) AS "proofCitations",
+          s."servePosition", s.position
+        FROM selected s
+      ), facet_counts AS (
+        SELECT field, value, COUNT(*)::int AS count FROM matches m
+        CROSS JOIN LATERAL (VALUES ('sourceUserId', COALESCE(m."sourceUserId", '')),
+          ('scope', COALESCE(m."scope", '')), ('status', m.status), ('kind', m."kind"),
+          ('entryKind', COALESCE(m."entryKind", ''))) facet(field, value)
+        GROUP BY field, value
+      ), facets AS (
+        SELECT field, jsonb_object_agg(value, count) AS counts FROM facet_counts GROUP BY field
+      )
+      SELECT COALESCE((SELECT jsonb_agg(to_jsonb(hit_rows) - 'servePosition' - 'position'
+        ORDER BY "servePosition", CASE WHEN "kind" = 'page' THEN 0 ELSE 1 END, position)
+        FROM hit_rows), '[]'::jsonb) AS hits,
+        COALESCE((SELECT jsonb_object_agg(field, counts) FROM facets), '{}'::jsonb) AS facets,
+        (SELECT ${options.ungrouped ? Prisma.sql`COUNT(*)` : Prisma.sql`COUNT(DISTINCT "groupKey")`}::int FROM matches) AS found
+    `);
     return {
-      ...result,
-      hits: await this.asEvidence(
-        workspaceId,
-        await this.liveWithProof(result.hits),
+      facets: result.facets,
+      found: result.found,
+      hits: result.hits.map(
+        ({ proofCitations, verifiedAt, distance, ...hit }) => ({
+          ...hit,
+          ...(hit.entryId
+            ? entryProof({
+                status: hit.status,
+                verifiedAt: verifiedAt ? new Date(verifiedAt) : null,
+                citations: proofCitations.map((citation) => ({
+                  ...citation,
+                  checkedAt: citation.checkedAt
+                    ? new Date(citation.checkedAt)
+                    : null,
+                })),
+              })
+            : pageBodyProof()),
+          ...distanceFields(distance),
+        }),
       ),
     };
   }
 
-  /**
-   * Marks each entry a page cites as the evidence for that page, and ranks
-   * it below the page when both were found.
-   *
-   * A page cites the entries consolidated into its body, and a generated
-   * page the entries its sections were written from (`Page.citedEntryIds`);
-   * an entry CONSOLIDATED before pages kept that list is its own page's.
-   * Such an entry is served, since it is what the page's words rest on, but
-   * never above the page for the same match, and never as a second source
-   * for what the page says. Nothing else is reordered.
-   */
-  private async asEvidence(
-    workspaceId: string,
-    hits: KnowledgeSearchHit[],
-  ): Promise<KnowledgeSearchHit[]> {
-    const entryIds = hits
-      .map((hit) => hit.entryId)
-      .filter((id): id is string => Boolean(id));
-
-    if (entryIds.length === 0) {
-      return hits;
-    }
-
-    const citing = await this.prisma.page.findMany({
-      where: {
-        workspaceId,
-        deleted: null,
-        citedEntryIds: { hasSome: entryIds },
-      },
-      select: { id: true, title: true, citedEntryIds: true },
-    });
-    const pagesFor = (hit: KnowledgeSearchHit) => {
-      const pages =
-        hit.status === PageEntryStatusEnum.CONSOLIDATED
-          ? [{ pageId: hit.pageId, pageTitle: hit.pageTitle }]
-          : [];
-
-      for (const page of citing) {
-        if (
-          page.citedEntryIds.includes(hit.entryId as string) &&
-          !pages.some((known) => known.pageId === page.id)
-        ) {
-          pages.push({ pageId: page.id, pageTitle: page.title });
-        }
-      }
-
-      return pages;
-    };
-
-    const ranked: KnowledgeSearchHit[] = [];
-    const below = new Map<string, KnowledgeSearchHit[]>();
-
-    hits.forEach((hit, index) => {
-      if (!hit.entryId) {
-        ranked.push(hit, ...(below.get(hit.pageId) ?? []));
-        below.delete(hit.pageId);
-        return;
-      }
-
-      const pages = pagesFor(hit);
-
-      if (pages.length === 0) {
-        ranked.push(hit);
-        return;
-      }
-
-      // Held back until the first of its pages found after it, if any.
-      const later = pages.find((page) =>
-        hits
-          .slice(index + 1)
-          .some((other) => !other.entryId && other.pageId === page.pageId),
-      );
-      const shown =
-        later ??
-        pages.find((page) =>
-          ranked.some(
-            (other) => !other.entryId && other.pageId === page.pageId,
-          ),
-        ) ??
-        pages[0];
-      const marked = { ...hit, evidenceFor: shown };
-
-      if (later) {
-        below.set(later.pageId, [...(below.get(later.pageId) ?? []), marked]);
-      } else {
-        ranked.push(marked);
-      }
-    });
-
-    return ranked;
-  }
-
-  /**
-   * Entries that look like the one about to be written.
-   *
-   * Returned to the caller, never used to reject a write. Measured against the
-   * live index, cosine distance from this model did not reliably rank an exact
-   * restatement above an unrelated document — an LLM comparing two short facts
-   * is far better at that judgment than a threshold, so this hands it the
-   * candidates and lets it decide.
-   */
   async findSimilarEntries(
     workspaceId: string,
-    /**
-     * The page the new entry goes on. Null for a loose entry, whose repeats
-     * are looked for across the workspace, because it is served there.
-     */
     pageId: string | null,
     content: string,
   ): Promise<KnowledgeSearchHit[]> {
     const { hits } = await this.searchKnowledge(workspaceId, content, {
       limit: 5,
       vectorDistance: KNOWLEDGE_NEAR_MATCH_DISTANCE,
-      // Narrowed in the query rather than afterwards. Grouping caps each page
-      // at three documents and this asks for five groups, so a page-scoped
-      // filter applied in Node returns nothing at all whenever five other pages
-      // happen to rank above the one being written to — which is silently no
-      // dedup check on exactly the busiest workspaces.
       ...(pageId ? { pageId } : {}),
-      // Proposed entries are indexed for this query and served by no other:
-      // ten agents appending the same untriaged fact is the flood this exists
-      // to catch, and every one of those claims is PROPOSED. Consolidated
-      // ones are served, as their page's evidence, so a repeat of one is a
-      // repeat.
+      kinds: Object.values(PageEntryKindEnum),
       includeStatuses: [...SERVED_STATUSES, PageEntryStatusEnum.PROPOSED],
     });
-
-    return hits.filter((hit) => hit.entryId);
+    return hits;
   }
 
-  /**
-   * Proposed and served entries like `content`, among those of the given
-   * modules (or of one page, for an entry scoped to none), with how alike
-   * each is: 1 minus the vector distance. Only hits the embedding matched are
-   * kept; a match on words alone says nothing about meaning. Triage compares
-   * a new entry with these before any model is asked about it.
-   */
   async findNearEntries(
     workspaceId: string,
     content: string,
     options: {
       moduleIds?: string[];
       pageId?: string | null;
-      /** The scope of a loose entry, used when it has no modules. */
       scope?: string | null;
       minSimilarity: number;
       limit?: number;
@@ -876,6 +451,7 @@ export class VectorService implements OnModuleInit {
     const { hits } = await this.searchKnowledge(workspaceId, content, {
       limit: options.limit ?? 10,
       vectorDistance: 1 - options.minSimilarity,
+      semanticOnly: true,
       ...(options.moduleIds?.length
         ? { moduleIds: options.moduleIds }
         : options.pageId
@@ -883,9 +459,9 @@ export class VectorService implements OnModuleInit {
           : {
               group: entryGroup({ pageId: null, scope: options.scope ?? null }),
             }),
+      kinds: Object.values(PageEntryKindEnum),
       includeStatuses: [...SERVED_STATUSES, PageEntryStatusEnum.PROPOSED],
     });
-
     return hits
       .filter(
         (hit) =>
@@ -893,491 +469,126 @@ export class VectorService implements OnModuleInit {
           typeof hit.distance === 'number' &&
           1 - hit.distance >= options.minSimilarity,
       )
-      .map((hit) => ({
-        entryId: hit.entryId as string,
-        similarity: 1 - (hit.distance as number),
-      }));
-  }
-
-  /**
-   * Drops hits whose page or entry no longer exists, and gives the rest their
-   * proof.
-   *
-   * The index is a cache and postgres is the truth. Serving a fact the
-   * workspace has deleted is the failure that loses trust in the bank, and one
-   * indexed lookup per search is a cheap guarantee against it. The same lookup
-   * reads each entry's verification and citations, so what a reader is told
-   * about an entry's grounding is what postgres says now, not what it said
-   * when the document was last written.
-   */
-  private async liveWithProof(
-    hits: KnowledgeSearchHit[],
-  ): Promise<KnowledgeSearchHit[]> {
-    if (hits.length === 0) {
-      return hits;
-    }
-
-    const [livePages, liveEntries] = await Promise.all([
-      this.prisma.page.findMany({
-        where: {
-          id: {
-            in: hits
-              .filter((hit) => !hit.entryId)
-              .map((hit) => hit.pageId)
-              .filter(Boolean),
-          },
-          deleted: null,
-        },
-        select: { id: true },
-      }),
-      this.prisma.pageEntry.findMany({
-        where: {
-          id: { in: hits.map((hit) => hit.entryId).filter(Boolean) },
-          deleted: null,
-        },
-        select: {
-          id: true,
-          pageId: true,
-          page: { select: { deleted: true } },
-          status: true,
-          verifiedAt: true,
-          citations: { select: PROOF_CITATION_SELECT },
-        },
-      }),
-    ]);
-
-    const livePageIds = new Set(livePages.map((page) => page.id));
-    const entriesById = new Map(liveEntries.map((entry) => [entry.id, entry]));
-
-    // An entry is live when postgres has it and its page, if it has one, is
-    // live. The page is read from postgres, not from the index.
-    const live = hits
-      .filter((hit) => {
-        if (!hit.entryId) {
-          return livePageIds.has(hit.pageId);
-        }
-
-        const entry = entriesById.get(hit.entryId);
-
-        return (
-          entry !== undefined &&
-          (entry.pageId === null || entry.page?.deleted === null)
-        );
-      })
-      .map((hit) => ({
-        ...hit,
-        ...(hit.entryId
-          ? entryProof(entriesById.get(hit.entryId))
-          : pageBodyProof()),
-      }));
-
-    if (live.length !== hits.length) {
-      this.logger.info({
-        message: `Knowledge index is stale: dropped ${hits.length - live.length} hit(s) for deleted pages or entries`,
-        where: `VectorService.liveWithProof`,
-      });
-    }
-
-    return live;
-  }
-
-  async prefillPagesData(workspaceId: string) {
-    const pages = await this.prisma.page.findMany({
-      where: { workspaceId, deleted: null },
-    });
-
-    for (const page of pages) {
-      await this.indexPage(page);
-    }
-
-    // The same statuses the incremental path indexes, or a rebuild would
-    // quietly narrow the collection and take the duplicate check with it.
-    const entries = await this.prisma.pageEntry.findMany({
-      where: {
-        deleted: null,
-        status: { in: INDEXED_STATUSES },
-        ...liveEntryIn(workspaceId),
-      },
-      include: ENTRY_INDEX_INCLUDE,
-    });
-
-    for (const entry of entries) {
-      await this.indexEntry(entry);
-    }
-
-    this.logger.info({
-      message: `Prefilled ${pages.length} pages and ${entries.length} entries for workspaceId: ${workspaceId}`,
-      where: `VectorService.prefillPagesData`,
-    });
-  }
-
-  async prefillIssuesData(workspaceId: string) {
-    const issues = await this.prisma.issue.findMany({
-      where: { team: { workspaceId }, deleted: null },
-      include: { team: true },
-    });
-
-    for (const issue of issues) {
-      await this.createIssueEmbedding(issue);
-    }
-
-    this.logger.info({
-      message: `Prefilled all issues data into vector for workspaceId: ${workspaceId}`,
-      where: `VectorService.prefillIssuesData`,
-    });
+      .map((hit) => ({ entryId: hit.entryId!, similarity: 1 - hit.distance! }));
   }
 }
 
-const ALLOWED_STATE_CATEGORIES = new Set(Object.values(WorkflowCategoryEnum));
-
-// Matches the standard UUID format (e.g. UUID v4) produced by the database.
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function buildFilterBy(
-  workspaceId: string,
-  stateCategories: string[],
-  visibleTeamIds?: string[],
-): string {
-  if (!UUID_REGEX.test(workspaceId)) {
-    throw new Error('Invalid workspaceId format');
-  }
-
-  const filters = [`workspaceId:=\`${workspaceId}\``];
-
-  const allowedCategories = stateCategories.filter((c) =>
-    ALLOWED_STATE_CATEGORIES.has(c as WorkflowCategoryEnum),
-  );
-
-  if (allowedCategories.length > 0) {
-    filters.push(
-      `stateCategory:=[${allowedCategories.map((c) => `\`${c}\``).join(',')}]`,
-    );
-  }
-
-  // A team is a visibility boundary (ENG-79). The document holds `teamId`
-  // already, so the filter runs inside the search: a page of hits then comes
-  // back full, where a filter applied to the results would return fewer rows
-  // than the caller asked for. `dropDeletedIssues` applies the same limit
-  // against postgres, which is the authority — the index is a cache, and a
-  // stale document must not decide who reads what.
-  //
-  // Each id is checked against the uuid pattern before it reaches the string.
-  // A filter expression is not a parameterised query, so an id that is not a
-  // uuid is a way to write a new expression.
-  if (visibleTeamIds) {
-    const teamIds = visibleTeamIds.filter((id) => UUID_REGEX.test(id));
-
-    // Typesense has no expression for "match nothing", and an empty list is
-    // silently dropped. A member of no team must get no issue, so the filter
-    // names an id that no row can hold.
-    filters.push(
-      teamIds.length > 0
-        ? `teamId:=[${teamIds.map((id) => `\`${id}\``).join(',')}]`
-        : 'teamId:=`none`',
-    );
-  }
-
-  return filters.join(' && ');
+function rankDocuments(
+  query: string,
+  vector: QueryVector | null,
+  threshold: number,
+  vectorOnly = false,
+  identifierMatch: Prisma.Sql = Prisma.sql`FALSE`,
+): Prisma.Sql {
+  const wildcard = query.trim() === '*' || query.trim() === '';
+  const distance =
+    vector?.dimensions === 384
+      ? Prisma.sql`d."embedding"::vector(384) <=> ${vector.vector}::vector(384)`
+      : vector
+        ? Prisma.sql`d."embedding" <=> ${vector.vector}::vector`
+        : Prisma.sql`NULL::double precision`;
+  const matchingVector = vector
+    ? Prisma.sql`d."embeddingModel" = ${vector.model} AND d."embeddedHash" = d."contentHash"
+        AND vector_dims(d."embedding") = ${vector.dimensions}`
+    : Prisma.sql`FALSE`;
+  const ann =
+    vector?.dimensions === 384
+      ? Prisma.sql`
+        SELECT d."id", ${distance} AS distance FROM "SearchDocument" d
+        WHERE ${matchingVector}
+          AND EXISTS (SELECT 1 FROM documents eligible WHERE eligible."id" = d."id")
+        ORDER BY ${distance}
+        LIMIT (SELECT COUNT(*) FROM documents)`
+      : Prisma.sql`SELECT "id", NULL::double precision AS distance FROM documents WHERE FALSE`;
+  const prefix = query.trim().replace(/[\\%_]/g, '\\$&') + '%';
+  const prefixQuery = (query.match(/[\p{L}\p{N}]+/gu) ?? [])
+    .map((word) => `${word}:*`)
+    .join(' & ');
+  return Prisma.sql`
+    vector_ann AS MATERIALIZED (${ann}),
+    vector_candidates AS (
+      SELECT * FROM vector_ann
+      UNION ALL
+      SELECT d."id", ${distance} AS distance FROM documents d
+      WHERE ${matchingVector}
+        AND NOT EXISTS (SELECT 1 FROM vector_ann seen WHERE seen."id" = d."id")
+    ),
+    lexical AS (
+      SELECT d."id", row_number() OVER (ORDER BY
+        (ts_rank_cd(d."search", websearch_to_tsquery('english', ${query}))
+          + ts_rank_cd(d."search", to_tsquery('english', ${prefixQuery}))
+          + word_similarity(${query}, d."title") * 0.1
+          + word_similarity(${query}, d."body") * 0.04
+          + word_similarity(${query}, d."comments") * 0.02
+          + CASE WHEN ${identifierMatch} THEN 1 ELSE 0 END) DESC, d."id") AS rank
+      FROM documents d WHERE ${
+        wildcard || vectorOnly
+          ? Prisma.sql`FALSE`
+          : Prisma.sql`
+        (d."search" @@ websearch_to_tsquery('english', ${query})
+          OR d."search" @@ to_tsquery('english', ${prefixQuery})
+          OR d."title" % ${query} OR d."title" ILIKE ${prefix}
+          OR word_similarity(${query}, d."title") >= 0.5
+          OR word_similarity(${query}, d."body") >= 0.5
+          OR word_similarity(${query}, d."comments") >= 0.5
+          OR (${identifierMatch}))`
+      }
+    ), semantic AS (
+      SELECT "id", row_number() OVER (ORDER BY distance, "id") AS rank
+      FROM vector_candidates WHERE distance <= ${threshold}
+    ), ranked AS (
+      SELECT d."id", c.distance,
+        COALESCE(1.0 / (60 + l.rank), 0) + COALESCE(1.0 / (60 + v.rank), 0) AS score
+      FROM documents d LEFT JOIN lexical l USING ("id") LEFT JOIN semantic v USING ("id")
+        LEFT JOIN vector_candidates c USING ("id")
+      WHERE l.rank IS NOT NULL OR v.rank IS NOT NULL
+        ${wildcard && !vectorOnly ? Prisma.sql`OR TRUE` : Prisma.empty}
+    )
+  `;
 }
 
-/**
- * The read-side half of the status guarantee.
- *
- * `PROPOSED`, `SUPERSEDED`, `DISPUTED` and `ARCHIVED` must never reach a
- * caller: getting this wrong means agents are served facts the workspace has
- * not accepted, or has rejected or replaced. `CONSOLIDATED` is served, as the
- * evidence for the page it was folded into, and `asEvidence` marks it so and
- * ranks it below that page: two copies of one fact read as two independent
- * confirmations of it otherwise.
- *
- * Callers may widen the status set for triage surfaces, but never past the
- * workspace filter, and the same `UUID_REGEX` guard that stops filter injection
- * on the issues collection applies here.
- */
-function buildKnowledgeFilterBy(
-  workspaceId: string,
-  options: {
-    scope?: string;
-    pageId?: string;
-    group?: string;
-    includeStatuses?: string[];
-    kinds?: string[];
-    moduleIds?: string[];
-  } = {},
-): string {
-  if (!UUID_REGEX.test(workspaceId)) {
-    throw new Error('Invalid workspaceId format');
-  }
-
-  if (options.pageId && !UUID_REGEX.test(options.pageId)) {
-    throw new Error('Invalid pageId format');
-  }
-
-  const statuses = (
-    options.includeStatuses?.length ? options.includeStatuses : SERVED_STATUSES
-  ).filter((status) =>
-    Object.values(PageEntryStatusEnum).includes(status as PageEntryStatusEnum),
-  );
-
-  const filters = [
-    `workspaceId:=\`${workspaceId}\``,
-    `status:=[${statuses.map((status) => `\`${status}\``).join(',')}]`,
-  ];
-
-  if (options.pageId) {
-    filters.push(`pageId:=\`${options.pageId}\``);
-  }
-
-  if (options.group) {
-    filters.push(`group:=${quoteFilterValue(options.group)}`);
-  }
-
-  const moduleIds = (options.moduleIds ?? []).filter((id) =>
-    UUID_REGEX.test(id),
-  );
-  if (moduleIds.length > 0) {
-    filters.push(`moduleIds:=[${moduleIds.map(quoteFilterValue).join(',')}]`);
-  }
-
+function knowledgeOrder(options: KnowledgeOptions): Prisma.Sql {
   if (options.scope) {
-    const path = scopePath(options.scope);
-
-    // At or above the folder asked about (an entry about `apps/server` applies
-    // to work in `apps/server/prisma`), at or below it (an entry about
-    // `apps/server/prisma` is about work in `apps/server`), or scoped to
-    // nothing and so true everywhere. Unscoped knowledge stays eligible; the
-    // sort ranks it below the scoped matches.
-    const ancestors = scopeAncestors(options.scope)
-      .map(quoteFilterValue)
-      .join(',');
-
-    filters.push(
-      path
-        ? `(scopePath:=[${ancestors}] || scopeAncestors:=${quoteFilterValue(path)} || scoped:=false)`
-        : `(scope:=${quoteFilterValue(options.scope)} || scoped:=false)`,
-    );
+    return Prisma.sql`d."scopeBoost" DESC, d."moduleBoost" DESC, d."trustBoost" DESC,
+      r.score DESC, d."retrievalCount" DESC`;
   }
-
-  const kinds = (options.kinds ?? []).filter((kind) =>
-    Object.values(PageEntryKindEnum).includes(kind as PageEntryKindEnum),
-  );
-  if (kinds.length > 0) {
-    filters.push(`entryKind:=[${kinds.map(quoteFilterValue).join(',')}]`);
+  if (options.boost?.modules.length || options.boost?.neighbours.length) {
+    return Prisma.sql`floor(r.score * 300) DESC, d."moduleBoost" DESC, d."trustBoost" DESC,
+      r.score DESC, d."retrievalCount" DESC`;
   }
-
-  return filters.join(' && ');
+  return Prisma.sql`r.score DESC, d."trustBoost" DESC,
+    CASE WHEN COALESCE(d."scope", '') <> '' THEN 1 ELSE 0 END DESC, d."retrievalCount" DESC`;
 }
 
-/**
- * A value inside a filter or sort expression. Backticks quote it, so a value
- * containing `&&` or a colon cannot close the literal and append a condition
- * of the caller's choosing; a backtick in the value itself is dropped, since
- * no scope, id or kind has one.
- */
-function quoteFilterValue(value: string): string {
-  return `\`${value.replace(/`/g, '')}\``;
+function teamVisibility(ids?: string[]): Prisma.Sql {
+  return ids === undefined
+    ? Prisma.sql`TRUE`
+    : ids.length
+      ? Prisma.sql`t."id" IN (${Prisma.join(ids)})`
+      : Prisma.sql`FALSE`;
 }
 
-/**
- * The ranking, as tiers inside one `_eval`.
- *
- * With no scope and nothing to boost, the ranking is the default: text match
- * first, then verified knowledge, grounded knowledge and scoped knowledge
- * breaking ties in that order. Within every tier below, verified outranks
- * grounded and grounded outranks the rest. A scope makes scoped
- * matches outrank unscoped knowledge outright, which is what asking about a
- * folder means. Modules to boost rank their knowledge above their neighbours'
- * and theirs above the rest; with a query to match, the text match is bucketed
- * first so a boost reorders near-equals without burying the answer.
- *
- * Typesense allows three sort fields, so every signal shares one `_eval`, and
- * it scores a document by the best tier it matches rather than a sum. Each tier
- * is therefore the conjunction of the signals it counts, scored by how much of
- * what was asked for it matches, and listed best first.
- */
-/**
- * Trust, best first, as conditions a tier can require. Page bodies are indexed
- * verified: they are the narrative a person maintains. An observed entry
- * ranks with a grounded one: the server checked the evidence of both.
- */
-const TRUST_LEVELS = ['verified:true', 'trust:=[GROUNDED,OBSERVED]', null];
+function distanceFields(distance: number | null): {
+  distance?: number;
+  relevanceScore?: number;
+} {
+  return distance === null || distance === undefined
+    ? {}
+    : { distance, relevanceScore: 1 - distance };
+}
 
-function buildKnowledgeSortBy(options: {
-  scope?: string;
-  boost?: { modules: string[]; neighbours: string[] };
-}): string {
-  const modules = (options.boost?.modules ?? []).filter((id) =>
-    UUID_REGEX.test(id),
-  );
-  const neighbours = (options.boost?.neighbours ?? []).filter(
-    (id) => UUID_REGEX.test(id) && !modules.includes(id),
-  );
-
-  if (!options.scope && modules.length === 0 && neighbours.length === 0) {
-    return KNOWLEDGE_SORT_BY;
+function validateId(value: string, name: string): void {
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+  ) {
+    throw new Error(`Invalid ${name} format`);
   }
-
-  const inModules = (ids: string[]) =>
-    `moduleIds:=[${ids.map(quoteFilterValue).join(',')}]`;
-
-  const scopeLevels = options.scope ? ['scoped:true', null] : [null];
-  const moduleLevels = [
-    ...(modules.length ? [inModules(modules)] : []),
-    ...(neighbours.length ? [inModules(neighbours)] : []),
-    null,
-  ];
-
-  const tiers: Array<{ conditions: string[]; score: number }> = [];
-  scopeLevels.forEach((scoped, scopeRank) =>
-    moduleLevels.forEach((module, moduleRank) =>
-      TRUST_LEVELS.forEach((trust, trustRank) => {
-        const score =
-          (scopeLevels.length - 1 - scopeRank) *
-            moduleLevels.length *
-            TRUST_LEVELS.length +
-          (moduleLevels.length - 1 - moduleRank) * TRUST_LEVELS.length +
-          (TRUST_LEVELS.length - 1 - trustRank);
-        const conditions = [scoped, module, trust].filter(Boolean) as string[];
-
-        if (score > 0) {
-          tiers.push({ conditions, score });
-        }
-      }),
-    ),
-  );
-
-  const evaluated = `_eval([${tiers
-    .sort((a, b) => b.score - a.score)
-    .map(({ conditions, score }) => `(${conditions.join(' && ')}):${score}`)
-    .join(',')}]):desc`;
-
-  return options.scope
-    ? `${evaluated},_text_match:desc,retrievalCount:desc`
-    : `_text_match(buckets: 10):desc,${evaluated},retrievalCount:desc`;
 }
 
-/** A coarse recency facet — one value per month, not one per timestamp. */
-function monthBucket(date: Date): string {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
-/**
- * Flattens a grouped Typesense response into hits plus facet counts.
- *
- * Grouped searches return `grouped_hits` rather than `hits`, which is exactly
- * the shape a Node-side re-sort would flatten and then reorder — undoing the
- * per-page cap. The order typesense returns is the order that is served.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapKnowledgeResults(searchResults: any): KnowledgeSearchResult {
-  const result = searchResults.results?.[0] ?? {};
-
-  const rawHits = result.grouped_hits
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      result.grouped_hits.flatMap((group: any) => group.hits ?? [])
-    : (result.hits ?? []);
-
-  const facets: Record<string, Record<string, number>> = {};
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const facet of result.facet_counts ?? []) {
-    facets[facet.field_name] = (facet.counts ?? []).reduce(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (counts: Record<string, number>, entry: any) => {
-        counts[entry.value] = entry.count;
-        return counts;
-      },
-      {},
-    );
+function validateLimit(limit: number): void {
+  if (!Number.isInteger(limit) || limit < 0) {
+    throw new Error('Search limit must be a non-negative integer');
   }
-
-  return {
-    hits: rawHits.map(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ({ document, vector_distance }: any): KnowledgeSearchHit => ({
-        id: document.id,
-        kind: document.kind,
-        pageId: document.pageId || null,
-        pageTitle: document.pageTitle ?? '',
-        entryId: document.entryId || null,
-        title: document.title,
-        content: document.content,
-        scope: document.scope || null,
-        status: document.status,
-        sourceUserId: document.sourceUserId || null,
-        verified: Boolean(document.verified),
-        retrievalCount: document.retrievalCount ?? 0,
-        entryKind: document.entryKind || null,
-        moduleIds: document.moduleIds ?? [],
-        // The index's word for it, until the proof is read from postgres.
-        trust: document.trust || null,
-        citations: [],
-        lastCheckedAt: null,
-        lastCheckedSha: null,
-        distance: vector_distance,
-        relevanceScore:
-          vector_distance === undefined ? undefined : 1 - vector_distance,
-      }),
-    ),
-    facets,
-    found: result.found ?? rawHits.length,
-  };
-}
-
-/** Flattens a Typesense multiSearch response into plain issue hits. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapSearchHits(searchResults: any): IssueSearchHit[] {
-  return (
-    searchResults.results
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map(({ hits }: any) =>
-        hits?.map(
-          ({
-            document: {
-              id,
-              title,
-              description,
-              stateId,
-              stateCategory,
-              resolutionText,
-              teamId,
-              number,
-              issueNumber,
-              descriptionString,
-              workspaceId,
-              assigneeId,
-            },
-            vector_distance,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          }: any) => ({
-            id,
-            title,
-            description,
-            // Search results are part of the same markdown boundary as the
-            // issue endpoints: a caller should never have to parse tiptap JSON
-            // out of `description` to read what a hit actually says.
-            descriptionMarkdown: convertTiptapJsonToMarkdown(description ?? ''),
-            descriptionString,
-            stateId,
-            stateCategory: stateCategory ?? '',
-            resolutionSnippet: (resolutionText ?? '').slice(
-              0,
-              RESOLUTION_SNIPPET_LENGTH,
-            ),
-            teamId,
-            number,
-            issueNumber,
-            workspaceId,
-            assigneeId,
-            distance: vector_distance,
-            // Typesense reports a cosine distance (0 = identical); callers
-            // that rank or weight results want it the other way round.
-            relevanceScore:
-              vector_distance === undefined ? undefined : 1 - vector_distance,
-          }),
-        ),
-      )
-      .flat()
-      .filter(Boolean)
-  );
 }

@@ -12,6 +12,7 @@ onlyBuiltDependencies:
   - browser-tabs-lock
   - esbuild
   - msgpackr-extract
+  - onnxruntime-node
   - prisma
   - protobufjs
   - sharp

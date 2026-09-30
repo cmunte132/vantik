@@ -62,11 +62,8 @@ export const MAX_SEARCH_LIMIT = 100;
 export const DEFAULT_VECTOR_DISTANCE = 0.8;
 
 /**
- * Query params arrive as strings and every numeric one here is optional.
- * `parseInt(undefined)` is NaN, and a NaN carried into the typesense query
- * fails the whole request — so omitting `limit` used to turn a valid search
- * into a 500. A default on the service signature does not help: the controller
- * passes NaN explicitly, and defaults only apply to `undefined`.
+ * Query parameters arrive as strings. This function uses the default for an
+ * absent or invalid number so the search receives a finite value.
  */
 function parseNumberParam(value: string | undefined, fallback: number): number {
   if (value === undefined || value.trim() === '') {

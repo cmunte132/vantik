@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
-import { Client as TypesenseClient } from 'typesense';
 
 import { CacheService } from 'modules/cache/cache.service';
 import { LoggerService } from 'modules/logger/logger.service';
@@ -39,18 +38,15 @@ export class HealthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
-    private readonly typesense: TypesenseClient,
   ) {}
 
   async readiness(): Promise<ReadinessReport> {
     const checks: Array<[string, Promise<unknown>]> = [
       ['postgres', this.prisma.$queryRaw`SELECT 1`],
       ['redis', this.cache.ping()],
-      ['typesense', this.typesense.health.retrieve()],
     ];
 
-    // Run them together: three sequential two-second timeouts would put the
-    // worst case past most orchestrators' probe timeout.
+    // Run both checks at the same time to keep the probe within its timeout.
     const results = await Promise.all(
       checks.map(async ([name, work]) => {
         try {

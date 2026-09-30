@@ -334,17 +334,14 @@ export default class IssuesAIService {
       issueId,
     );
 
-    // Create issue relations for each similar issue
-    similarIssues.map(async (similarIssue) => {
+    for (const similarIssue of similarIssues) {
       const relationData: CreateIssueRelationDto = {
         type: IssueRelationEnum.SIMILAR,
         issueId,
         relatedIssueId: similarIssue.id,
       };
-
-      // Create the issue relation using the issue relation service
       await this.issueRelationService.createIssueRelation(null, relationData);
-    });
+    }
 
     return similarIssues;
   }

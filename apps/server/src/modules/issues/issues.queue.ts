@@ -10,22 +10,6 @@ export class IssuesQueue {
   constructor(@InjectQueue('issues') private readonly issuesQueue: Queue) {}
   private readonly logger: LoggerService = new LoggerService('IssueQueue');
 
-  async addIssueToVector(issue: Issue) {
-    this.logger.info({
-      message: `Adding issue to vector queue ${issue.id}`,
-      where: `IssuesQueue.addIssueToVector`,
-    });
-    await this.issuesQueue.add('addIssueToVector', { issue });
-  }
-
-  async removeIssueFromVector(issueId: string) {
-    this.logger.info({
-      message: `Removing issue from vector queue ${issueId}`,
-      where: `IssuesQueue.removeIssueFromVector`,
-    });
-    await this.issuesQueue.add('removeIssueFromVector', { issueId });
-  }
-
   async handleTriageIssue(issue: Issue, isDeleted: boolean) {
     this.logger.info({
       message: `Handling Triage issue ${issue.id}`,

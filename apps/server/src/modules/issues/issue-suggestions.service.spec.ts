@@ -269,3 +269,25 @@ describe('IssuesAIService.dismissModuleSuggestion', () => {
     expect(prisma.issueSuggestion.update).not.toHaveBeenCalled();
   });
 });
+
+describe('IssuesAIService.similarIssueSuggestion', () => {
+  it('fails triage when a similarity relation cannot persist', async () => {
+    const failure = new Error('relation write failed');
+    const service = new IssuesAIService(
+      {} as PrismaService,
+      {
+        similarIssues: async () => [{ id: 'related-issue' }],
+      } as unknown as VectorService,
+      {} as AIRequestsService,
+      {
+        createIssueRelation: async () => {
+          throw failure;
+        },
+      } as unknown as IssueRelationService,
+    );
+
+    await expect(
+      service.similarIssueSuggestion(WORKSPACE, 'issue-1'),
+    ).rejects.toBe(failure);
+  });
+});

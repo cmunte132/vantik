@@ -9,7 +9,7 @@
  * `TriageJudges` over a completion that answers from the test: no model is
  * ever called.
  */
-import type KnowledgeIndexService from '../knowledge-index.service';
+
 import type { Queue } from 'bull';
 
 import {
@@ -735,11 +735,6 @@ function triage(setup: Setup) {
       return setup.near ?? [];
     },
   );
-  const indexer = {
-    entriesChanged: jest.fn(
-      async (ids: string[]): Promise<number> => ids.length,
-    ),
-  };
 
   const queue = { add: jest.fn(async () => ({})) };
 
@@ -747,7 +742,6 @@ function triage(setup: Setup) {
     prisma as unknown as PrismaService,
     judges,
     { findNearEntries } as unknown as VectorService,
-    indexer as unknown as KnowledgeIndexService,
     queue as unknown as Queue,
   );
 
@@ -761,7 +755,6 @@ function triage(setup: Setup) {
     gaps,
     calls,
     findNearEntries,
-    indexer,
     queue,
     verifications,
   };
@@ -819,7 +812,6 @@ describe('an exact repeat', () => {
     // Decided by the hash: no model and no index were needed.
     expect(t.calls).toEqual([]);
     expect(t.findNearEntries).not.toHaveBeenCalled();
-    expect(t.indexer.entriesChanged).toHaveBeenCalledWith(['new']);
   });
 
   it('[KG-4.1] is looked for only in the same modules, or on the same page when the entry has none', async () => {
@@ -1076,7 +1068,6 @@ describe('folding in a repeat', () => {
       expect(t.relations).toEqual([
         expect.objectContaining({ toId: 'original', type: Relation.DUPLICATE }),
       ]);
-      expect(t.indexer.entriesChanged).not.toHaveBeenCalled();
     },
   );
 });
@@ -1442,7 +1433,6 @@ describe('the triage job and its record', () => {
       'await queue.add(job, { attempts: RETRIES });',
     );
     expect(t.entries.get('new')?.status).toBe('STANDING');
-    expect(t.indexer.entriesChanged).toHaveBeenCalledWith(['new']);
   });
 
   it('[KG-4.3] records an escalation with every reason that applied', async () => {
@@ -1486,12 +1476,10 @@ describe('the triage job and its record', () => {
   it('[KG-4.3] fails, to be tried again, when the index cannot be asked for neighbours', async () => {
     const t = triage({
       rows: [fresh()],
-      near: new Error('typesense is down'),
+      near: new Error('search is down'),
     });
 
-    await expect(t.service.triage('new', ON)).rejects.toThrow(
-      'typesense is down',
-    );
+    await expect(t.service.triage('new', ON)).rejects.toThrow('search is down');
     // Nothing is decided blind.
     expect(t.decisions).toEqual([]);
     expect(t.entries.get('new')?.status).toBe('PROPOSED');
@@ -1521,7 +1509,6 @@ describe('the triage job and its record', () => {
     expect(t.decisions[0].outputs).toMatchObject({
       notApplied: 'the entry changed while it was triaged',
     });
-    expect(t.indexer.entriesChanged).not.toHaveBeenCalled();
   });
 });
 
@@ -1823,7 +1810,6 @@ describe('shadow mode', () => {
     });
     expect(t.entries.get('new')?.status).toBe('PROPOSED');
     expect(t.prisma.pageEntry.updateMany).not.toHaveBeenCalled();
-    expect(t.indexer.entriesChanged).not.toHaveBeenCalled();
   });
 
   it('[KG-4.5] records a repeat and a contradiction without folding in or disputing anything', async () => {
@@ -1911,7 +1897,6 @@ describe('contradictions', () => {
       status: 'DISPUTED',
       content: contradicting,
     });
-    expect(t.indexer.entriesChanged).toHaveBeenCalledWith(['new', 'older']);
   });
 
   it('[KG-7.4] withholds a consolidated entry an accepted one wins against, as it would a standing one', async () => {
@@ -2061,7 +2046,6 @@ describe('contradictions', () => {
         type: Relation.CONTRADICTS,
         preferredId: 'new',
       });
-      expect(t.indexer.entriesChanged).not.toHaveBeenCalled();
     },
   );
 

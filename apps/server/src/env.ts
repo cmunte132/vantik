@@ -1,21 +1,9 @@
 /**
- * Loads the environment before anything reads it.
+ * This file loads the environment before other modules read it.
  *
- * Every setting the server has is read from `process.env`, and many are read
- * the moment their module is imported: the queue crons, the run and page
- * limits, the OpenTelemetry exporter. So the file is loaded here, as the first
- * import of `main.ts`, rather than by a Nest module that only runs once all of
- * those imports have already happened.
- *
- * A variable already in the environment wins over the file. That is how the
- * compose stack and `dotenv-cli` hand them over, and it means this file only
- * fills gaps. The file is looked for in the working directory and then at the
- * repo root, so starting the server from `apps/server` finds the same `.env`
- * as starting it from the root.
- *
- * `.env` builds values out of other values (`DATABASE_URL` out of `DB_HOST`
- * and friends), so it is read with dotenv-expand, as `dotenv-cli` reads it.
- * Node's own `process.loadEnvFile` would leave `${DB_HOST}` in the URL.
+ * A value in process.env takes priority over a value in the file.
+ * The server reads .env from the current directory and the repository root.
+ * dotenv-expand resolves variables such as ${DB_HOST} in DATABASE_URL.
  */
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -24,19 +12,18 @@ import { config } from 'dotenv';
 import { expand } from 'dotenv-expand';
 
 /**
- * What the server cannot boot without.
- *
- * Each of these, when missing, fails somewhere far from its cause: Typesense
- * reports a missing `apiKey`, SuperTokens a missing `apiDomain`, and CORS a
- * TypeError on `split`. Naming them here turns that into one sentence.
+ * The server needs these settings to start.
+ * EMBEDDINGS_SOURCE is optional. If it is empty, search uses keywords only.
+ * The value local uses a quantized MiniLM model on the server.
+ * The value hosted uses an OpenAI-compatible endpoint.
+ * EMBEDDINGS_MODEL selects the model or a local model directory.
+ * EMBEDDINGS_BASE_URL and EMBEDDINGS_API_KEY configure the hosted endpoint.
  */
 const REQUIRED = [
   'DATABASE_URL',
   'FRONTEND_HOST',
   'BACKEND_HOST',
   'SUPERTOKEN_CONNECTION_URI',
-  'TYPESENSE_HOST',
-  'TYPESENSE_API_KEY',
 ];
 
 function repoRoot(): string | undefined {

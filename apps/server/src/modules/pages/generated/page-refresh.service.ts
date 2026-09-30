@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PageLinkType, Prisma } from '@prisma/client';
 import {
   PageEntryStatusEnum,
@@ -16,7 +16,6 @@ import { LoggerService } from 'modules/logger/logger.service';
 import { SERVED_STATUSES } from 'modules/vector/vector.interface';
 import { VectorService } from 'modules/vector/vector.service';
 
-import KnowledgeIndexService from '../knowledge-index.service';
 import { knowledgeSettings } from '../knowledge-settings';
 import PageWriter, { type WriterEntry } from './page-writer';
 import {
@@ -108,7 +107,6 @@ export default class PageRefreshService {
     private prisma: PrismaService,
     private vectorService: VectorService,
     private writer: PageWriter,
-    @Optional() private indexer?: KnowledgeIndexService,
   ) {}
 
   /** Refreshes every generated page that is due. One failing stops no other. */
@@ -360,10 +358,6 @@ export default class PageRefreshService {
       return { outcome: 'raced' };
     }
 
-    if (changed) {
-      await this.indexer?.pageChanged(page.id);
-    }
-
     return changed
       ? { outcome: 'written', applied: applied.length, dropped }
       : { outcome: 'no-change', dropped };
@@ -550,11 +544,10 @@ export default class PageRefreshService {
   }
 
   /**
-   * The entries a refresh writes from: those in scope that best answer the
-   * question, as the index finds them, confirmed in use from postgres, since
-   * the index can be behind. An index that cannot be reached throws, and
-   * the refresh writes nothing. Ungrouped, as the scope is the page's own:
-   * a module whose facts sit on one page gives up all of them, not three.
+   * This method selects in-use entries that best answer the page's question.
+   * PostgreSQL search ranks the entries. If search fails, the refresh writes
+   * nothing. The page's own scope has no group limit, so one page can supply
+   * all of its relevant entries.
    */
   private async retrieve(
     page: RefreshedPage,

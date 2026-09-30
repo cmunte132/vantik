@@ -453,9 +453,6 @@ export default class IssuesService {
       });
     }
 
-    // Add the updated issue to the vector
-    this.issuesQueue.addIssueToVector(updatedIssue);
-
     // Find the current and updated issue states
     const [currentIssueState, updatedIssueState] = await Promise.all([
       this.prisma.workflow.findUnique({ where: { id: currentIssue.stateId } }),
@@ -521,10 +518,6 @@ export default class IssuesService {
       message: `Issue ${deleteIssue.id} marked as deleted`,
       where: `IssueService.updateIssueApi`,
     });
-
-    // The index does not model soft deletes, so the document has to go or the
-    // issue stays searchable forever.
-    this.issuesQueue.removeIssueFromVector(deleteIssue.id);
 
     // Delete the issue history associated with the deleted issue
     await this.deleteIssueHistory(deleteIssue.id);
@@ -846,8 +839,6 @@ export default class IssuesService {
         assigneeId,
       },
     });
-
-    this.issuesQueue.addIssueToVector(updatedIssue);
 
     if (currentIssue.subIssue.length > 0) {
       for (const subIssue of currentIssue.subIssue) {

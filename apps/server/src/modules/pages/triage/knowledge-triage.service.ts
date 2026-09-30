@@ -31,7 +31,6 @@ import { convertTiptapJsonToText } from 'common/utils/tiptap.utils';
 import { LoggerService } from 'modules/logger/logger.service';
 import { VectorService } from 'modules/vector/vector.service';
 
-import KnowledgeIndexService from '../knowledge-index.service';
 import { entryTrust } from '../knowledge-proof';
 import { knowledgeSettings } from '../knowledge-settings';
 import { contentHashOf } from '../page-entries.service';
@@ -257,7 +256,6 @@ export default class KnowledgeTriageService {
     private prisma: PrismaService,
     private judges: TriageJudges,
     private vector: VectorService,
-    @Optional() private indexer?: KnowledgeIndexService,
     @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
   ) {}
 
@@ -798,9 +796,8 @@ export default class KnowledgeTriageService {
   }
 
   /**
-   * The entries most like this one among those it could be related to,
-   * nearest first. Asked of the index, then narrowed to the neighbourhood in
-   * postgres, which is the authority on status, modules and order.
+   * This method returns the nearest eligible entries in the same neighbourhood.
+   * PostgreSQL supplies search ranks and authoritative status and module data.
    */
   private async nearNeighbours(
     entry: TriagedEntry,
@@ -1064,7 +1061,6 @@ export default class KnowledgeTriageService {
     auditRate: number,
     found: Found,
   ): Promise<TriageOutcome> {
-    const changed: string[] = [];
     // Chosen here so the audit draw can be seeded with it.
     const id = randomUUID();
 
@@ -1087,9 +1083,7 @@ export default class KnowledgeTriageService {
           });
         }
 
-        const applied = act
-          ? await this.apply(tx, entry, found, changed)
-          : false;
+        const applied = act ? await this.apply(tx, entry, found) : false;
         // Drawn from what was acted on without a person: whatever else was
         // decided reaches a person anyway. Never a refused credential, which
         // an audit would only put in front of more people.
@@ -1156,12 +1150,7 @@ export default class KnowledgeTriageService {
       }
 
       // Rolled back: record what was decided, and that it was not acted on.
-      changed.length = 0;
       result = await write(false, error.message);
-    }
-
-    if (changed.length) {
-      await this.indexer?.entriesChanged(changed);
     }
 
     if (result.verify) {
@@ -1260,7 +1249,6 @@ export default class KnowledgeTriageService {
     tx: Prisma.TransactionClient,
     entry: TriagedEntry,
     found: Found,
-    changed: string[],
   ): Promise<boolean> {
     // An escalation waits for a person, whatever the mode.
     if (found.decision === KnowledgeTriageDecisionType.ESCALATE) {
@@ -1285,8 +1273,6 @@ export default class KnowledgeTriageService {
     if (count === 0) {
       throw new StaleTriage('the entry changed while it was triaged');
     }
-
-    changed.push(entry.id);
 
     if (found.corroborates) {
       const { count: corroborated } = await tx.pageEntry.updateMany({
@@ -1332,8 +1318,6 @@ export default class KnowledgeTriageService {
             `the entry it contradicts, ${displaced.id}, changed while it was triaged`,
           );
         }
-
-        changed.push(displaced.id);
       }
 
       // Retired as a person's acceptance retires it: only as it was read,
@@ -1356,8 +1340,6 @@ export default class KnowledgeTriageService {
             `the entry it corrects, ${found.retires.id}, changed while it was triaged`,
           );
         }
-
-        changed.push(found.retires.id);
       }
     }
 

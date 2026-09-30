@@ -179,23 +179,6 @@ export function recomputeModulesJobOptions(
 }
 
 /**
- * Indexes the consolidated entries the search index does not hold. Queued
- * once at boot: entries consolidated before a consolidated entry was served
- * were taken out of the index then, and nothing since would put them back.
- * Replicas booting in the same minute queue one pass; a later boot, or one
- * after a failed pass kept for inspection, gets a pass of its own.
- */
-export const INDEX_CONSOLIDATED_JOB = 'indexConsolidatedEntries';
-
-export function indexConsolidatedJobOptions(now = Date.now()): JobOptions {
-  return {
-    jobId: `${INDEX_CONSOLIDATED_JOB}:${Math.floor(now / 60_000)}`,
-    removeOnComplete: true,
-    removeOnFail: 20,
-  };
-}
-
-/**
  * Reads again the code citations an entry was written with that the server
  * could not read at the time, because the repository did not answer.
  */

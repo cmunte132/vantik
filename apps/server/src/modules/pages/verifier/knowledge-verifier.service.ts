@@ -28,7 +28,6 @@ import EntryCitationsService, {
   type CitationDraft,
   lockEntry,
 } from '../entry-citations.service';
-import KnowledgeIndexService from '../knowledge-index.service';
 import { knowledgeSettings } from '../knowledge-settings';
 import { MAX_OUTSIDE_QUOTE, MIN_OUTSIDE_QUOTE } from '../outside-source';
 import {
@@ -176,7 +175,6 @@ export default class KnowledgeVerifierService {
     private citations: EntryCitationsService,
     private files: RepoFileSourceService,
     @Optional() private moduleRef?: ModuleRef,
-    @Optional() private indexer?: KnowledgeIndexService,
     @Optional() @InjectQueue(PAGES_QUEUE) private pagesQueue?: Queue,
   ) {}
 
@@ -341,7 +339,6 @@ export default class KnowledgeVerifierService {
       return KnowledgeVerificationState.NOTHING;
     }
 
-    await this.indexer?.entryChanged(entryId);
     await this.triageAgain(entryId);
 
     return KnowledgeVerificationState.FOUND;

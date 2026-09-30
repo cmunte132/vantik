@@ -1,5 +1,5 @@
 import { InjectQueue } from '@nestjs/bull';
-import { HttpException, Injectable, Optional } from '@nestjs/common';
+import { HttpException, Injectable } from '@nestjs/common';
 import {
   PageEntryKind,
   PageEntryMaintenanceAction,
@@ -29,7 +29,6 @@ import { LoggerService } from 'modules/logger/logger.service';
 import { pathBelongsToModule } from 'modules/modules/module-routing';
 
 import EntryCitationsService from '../entry-citations.service';
-import KnowledgeIndexService from '../knowledge-index.service';
 import { knowledgeSettings } from '../knowledge-settings';
 import PageEntriesService from '../page-entries.service';
 import {
@@ -137,7 +136,6 @@ export default class KnowledgeConventionsService {
     private upkeep: KnowledgeUpkeepService,
     private issues: KnowledgeIssues,
     @InjectQueue(PAGES_QUEUE) private pagesQueue: Queue,
-    @Optional() private indexer?: KnowledgeIndexService,
   ) {}
 
   /**
@@ -412,7 +410,6 @@ export default class KnowledgeConventionsService {
     });
 
     if (done?.outcome === 'ARCHIVED') {
-      await this.indexer?.entryChanged(entryId);
       await this.openSwitchedOffIssue(done.rowId, since);
     }
 

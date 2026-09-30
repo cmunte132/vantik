@@ -190,14 +190,7 @@ function setup(
     };
   };
 
-  const service = new KnowledgeVerifierService(
-    prisma as unknown as PrismaService,
-    { checkForWrite } as unknown as EntryCitationsService,
-    files as unknown as RepoFileSourceService,
-    moduleRef as unknown as ModuleRef,
-    undefined,
-    queue as unknown as Queue,
-  );
+  const service = new KnowledgeVerifierService(prisma as unknown as PrismaService, { checkForWrite } as unknown as EntryCitationsService, files as unknown as RepoFileSourceService, moduleRef as unknown as ModuleRef, queue as unknown as Queue,);
 
   return {
     service,

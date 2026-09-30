@@ -25,7 +25,7 @@ import { RepoMirrorService } from 'modules/git/repo-mirror.service';
 import CitationJudge, { JudgeRequest } from './citation-judge';
 import { hashSnippet } from './citation-matching';
 import EntryCitationsService from './entry-citations.service';
-import KnowledgeIndexService from './knowledge-index.service';
+
 import { RETRY_CITATIONS_JOB } from './pages.interface';
 import RepoFileSourceService, { CitedRepo } from './repo-file-source.service';
 
@@ -316,21 +316,18 @@ function setup() {
     })),
   };
   const queue = { add: jest.fn(async (): Promise<void> => undefined) };
-  const indexer = {
-    entryChanged: jest.fn(async (): Promise<void> => undefined),
-  };
+
   const service = new EntryCitationsService(
     db.prisma,
     files.source as unknown as RepoFileSourceService,
     judge as unknown as CitationJudge,
-    indexer as unknown as KnowledgeIndexService,
     queue as unknown as Queue,
   );
 
   files.put('acme/api', SHA1, 'src/pages.ts', { content: PAGES_TS });
   files.heads.set('acme/api', { sha: SHA1 });
 
-  return { service, db, files, judge, queue, indexer };
+  return { service, db, files, judge, queue };
 }
 
 async function refusalOf(promise: Promise<unknown>) {
@@ -566,7 +563,7 @@ describe('a repository that cannot be reached', () => {
   });
 
   it('[KG-2.3] reads an unread citation once the repository answers, and counts those still unread', async () => {
-    const { service, db, files, indexer } = setup();
+    const { service, db, files } = setup();
     const entryId = store(db, [
       {
         kind: 'CODE',
@@ -603,7 +600,6 @@ describe('a repository that cannot be reached', () => {
       checkedAt: WRITTEN,
     });
     expect(db.citations[1].checkResult).toBe('UNKNOWN');
-    expect(indexer.entryChanged).toHaveBeenCalledWith(entryId);
   });
 
   it('[KG-2.3] records a citation whose lines never existed as missing once it can be read', async () => {
@@ -630,7 +626,7 @@ describe('a repository that cannot be reached', () => {
 
 describe('a repository that throws instead of answering', () => {
   it('[KG-2.3] still lets the write through with an UNKNOWN citation', async () => {
-    const { db, judge, queue, indexer } = setup();
+    const { db, judge, queue } = setup();
     // The real file source, over a mirror whose fetch rejects (here a token
     // refresh that cannot reach GitHub).
     const failing = jest.fn(async () => {
@@ -646,7 +642,6 @@ describe('a repository that throws instead of answering', () => {
       db.prisma,
       source,
       judge as unknown as CitationJudge,
-      indexer as unknown as KnowledgeIndexService,
       queue as unknown as Queue,
     );
 
@@ -744,7 +739,7 @@ describe('a citation still unread when the retries have run out', () => {
   });
 
   it('[KG-2.3] stays unread, untouched, while the repository still does not answer', async () => {
-    const { service, db, files, indexer } = setup();
+    const { service, db, files } = setup();
     const entryId = store(db, [
       {
         kind: 'CODE',
@@ -760,7 +755,6 @@ describe('a citation still unread when the retries have run out', () => {
 
     await expect(service.recheck(entryId)).resolves.toEqual({ checked: 0 });
     expect(db.citations[0].checkResult).toBe('UNKNOWN');
-    expect(indexer.entryChanged).not.toHaveBeenCalled();
   });
 });
 
@@ -956,7 +950,6 @@ describe('re-checking a code citation against the default branch', () => {
       endLine: 5,
     });
     expect(context.judge.judge).not.toHaveBeenCalled();
-    expect(context.indexer.entryChanged).toHaveBeenCalledWith(entryId);
   });
 
   it('[KG-2.4] moved, with the line range updated, when the lines are elsewhere in the file', async () => {
@@ -999,7 +992,6 @@ describe('re-checking a code citation against the default branch', () => {
       checked: 0,
     });
     expect(context.db.citations[0].checkResult).toBe('HOLDS');
-    expect(context.indexer.entryChanged).not.toHaveBeenCalled();
   });
 
   it('[KG-2.4] [KG-2.5] changed when the lines are gone, and only then asks a judge, recording its answer and model', async () => {

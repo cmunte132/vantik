@@ -5,7 +5,6 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { convertMarkdownToTiptapJson } from 'common/utils/tiptap.utils';
 
-import KnowledgeIndexService from '../knowledge-index.service';
 import PageLinksService from '../page-links.service';
 import { PagesController } from '../pages.controller';
 import { REFRESH_PAGE_JOB, refreshPageJobOptions } from '../pages.interface';
@@ -59,12 +58,9 @@ function setup(current?: Row, userType = 'User') {
   const queue = {
     add: jest.fn<Promise<Row>, unknown[]>(async () => ({})),
   };
-  const indexer = {
-    pageChanged: jest.fn(async (): Promise<void> => undefined),
-  } as unknown as KnowledgeIndexService;
+
   const service = new PagesService(
     prisma as unknown as PrismaService,
-    indexer,
     undefined,
     queue as unknown as Queue,
   );

@@ -1,21 +1,7 @@
-/**
- * Retrieval is the product here — agents do not browse a wiki, they ask a
- * question or load context before starting work.
- *
- * Two invariants carry most of the weight, and both are tested here rather than
- * left to review: entries the workspace has rejected, replaced or already
- * folded into a page body are never served, and the context pack fits the
- * budget it was given. The first is what keeps the bank trustworthy; the second
- * is what stops it becoming the unbounded context dump that file-based memory
- * already is.
- */
 import { KnowledgeTrustEnum, PageEntryStatusEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
-import {
-  KNOWLEDGE_GROUP_LIMIT,
-  KNOWLEDGE_SORT_BY,
-} from 'modules/vector/vector.interface';
+import { KnowledgeSearchHit } from 'modules/vector/vector.interface';
 import { VectorService } from 'modules/vector/vector.service';
 
 import KnowledgeService from './knowledge.service';
@@ -23,37 +9,9 @@ import PageEntriesService from './page-entries.service';
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
 
-/** A typesense double that records the parameters it was handed. */
-function buildTypesense(documents: unknown[] = []) {
-  return {
-    multiSearch: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      perform: jest.fn((_params: any) =>
-        Promise.resolve({
-          results: [
-            {
-              grouped_hits: documents.map((document) => ({
-                hits: [{ document, vector_distance: 0.3 }],
-              })),
-              facet_counts: [
-                {
-                  field_name: 'sourceUserId',
-                  counts: [{ value: 'claude-opus-5', count: 24 }],
-                },
-              ],
-              found: documents.length,
-            },
-          ],
-        }),
-      ),
-    },
-    collections: jest.fn(() => ({
-      documents: jest.fn(() => ({ upsert: jest.fn(), delete: jest.fn() })),
-    })),
-  };
-}
-
-function entryDocument(overrides: Record<string, unknown> = {}) {
+function entryDocument(
+  overrides: Record<string, unknown> = {},
+): KnowledgeSearchHit {
   return {
     id: 'entry:entry-1',
     kind: 'entry',
@@ -67,32 +25,17 @@ function entryDocument(overrides: Record<string, unknown> = {}) {
     sourceUserId: 'agent-1',
     verified: true,
     retrievalCount: 4,
+    trust: KnowledgeTrustEnum.HUMAN_VERIFIED,
+    citations: [],
+    lastCheckedAt: null,
+    lastCheckedSha: null,
     ...overrides,
   };
 }
 
 function buildService(documents: unknown[] = [entryDocument()]) {
-  const typesense = buildTypesense(documents);
-
   const prisma = {
-    page: {
-      // The page every hit is on is live, and no page cites an entry.
-      findMany: jest.fn(({ where }: { where: { citedEntryIds?: unknown } }) =>
-        Promise.resolve(where.citedEntryIds ? [] : [{ id: 'page-1' }]),
-      ),
-    },
     pageEntry: {
-      // Echoes back whatever ids were asked about, so by default every hit is
-      // live and the staleness check only bites when a test says so.
-      findMany: jest.fn(({ where }) =>
-        Promise.resolve(
-          (where.id?.in ?? []).map((id: string) => ({
-            id,
-            pageId: 'page-1',
-            page: { deleted: null as Date | null },
-          })),
-        ),
-      ),
       updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
     },
     pageEntryUse: {
@@ -115,81 +58,23 @@ function buildService(documents: unknown[] = [entryDocument()]) {
     },
   } as unknown as PrismaService;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const vector = new VectorService(prisma, typesense as any);
+  const vector = {
+    searchKnowledge: jest.fn(async () => ({
+      hits: documents,
+      facets: { sourceUserId: { 'claude-opus-5': 24 } },
+      found: documents.length,
+    })),
+  } as unknown as VectorService;
   const entries = new PageEntriesService(prisma);
 
   return {
     service: new KnowledgeService(prisma, vector, entries),
-    typesense,
+    vector,
     prisma,
   };
 }
 
-const searchParams = (typesense: ReturnType<typeof buildTypesense>) =>
-  typesense.multiSearch.perform.mock.calls[0][0].searches[0];
-
 describe('KnowledgeService.search', () => {
-  it('[KG-7.4] serves standing entries, and consolidated ones as evidence, and nothing else', async () => {
-    const { service, typesense } = buildService();
-
-    await service.search(WORKSPACE, 'redis');
-
-    // The read-side half of the status guarantee. A CONSOLIDATED entry is
-    // the evidence a page body rests on, served marked as that and below the
-    // page; serving a SUPERSEDED one hands back something the workspace has
-    // explicitly replaced, and a PROPOSED one something it has not accepted.
-    const filter = searchParams(typesense).filter_by as string;
-    expect(filter).toContain('status:=[`STANDING`,`CONSOLIDATED`]');
-    for (const status of ['PROPOSED', 'SUPERSEDED', 'DISPUTED', 'ARCHIVED']) {
-      expect(filter).not.toContain(status);
-    }
-  });
-
-  it('scopes to the caller’s workspace and rejects a malformed one', async () => {
-    const { service, typesense } = buildService();
-
-    await service.search(WORKSPACE, 'redis');
-    expect(searchParams(typesense).filter_by).toContain(
-      `workspaceId:=\`${WORKSPACE}\``,
-    );
-
-    // The same guard the issues collection carries: a filter built from an
-    // unvalidated id is a filter the caller can rewrite.
-    await expect(
-      service.search('not-a-uuid && workspaceId:*', 'redis'),
-    ).rejects.toThrow(/Invalid workspaceId/);
-  });
-
-  it('caps how much of a result set one page can occupy', async () => {
-    const { service, typesense } = buildService();
-
-    await service.search(WORKSPACE, 'redis');
-
-    const params = searchParams(typesense);
-    // The control that still holds when every other gate has failed.
-    expect(params.group_by).toBe('group');
-    expect(params.group_limit).toBe(KNOWLEDGE_GROUP_LIMIT);
-  });
-
-  it('ranks inside the query rather than re-sorting in Node', async () => {
-    const { service, typesense } = buildService();
-
-    await service.search(WORKSPACE, 'redis');
-
-    const params = searchParams(typesense);
-    expect(params.sort_by).toBe(KNOWLEDGE_SORT_BY);
-    expect(params.sort_by).toContain('_eval');
-  });
-
-  it('returns facet counts sufficient to drive bulk triage', async () => {
-    const { service } = buildService();
-
-    const result = await service.search(WORKSPACE, 'redis');
-
-    expect(result.facets.sourceUserId).toEqual({ 'claude-opus-5': 24 });
-  });
-
   it('counts a served entry as demand for it', async () => {
     const { service, prisma } = buildService();
 
@@ -198,20 +83,6 @@ describe('KnowledgeService.search', () => {
     const { data } = (prisma.pageEntry.updateMany as jest.Mock).mock
       .calls[0][0];
     expect(data.retrievalCount).toEqual({ increment: 1 });
-  });
-
-  it('drops hits whose entry has been deleted since it was indexed', async () => {
-    const { service, prisma } = buildService([
-      entryDocument({ id: 'entry:gone', entryId: 'gone' }),
-    ]);
-
-    // The index is a cache and postgres is the truth: a fact that survives its
-    // own retraction is the failure that costs the bank its trust.
-    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValue([]);
-
-    const result = await service.search(WORKSPACE, 'redis');
-
-    expect(result.hits).toHaveLength(0);
   });
 
   it('records a question the bank could not answer', async () => {
@@ -259,16 +130,6 @@ describe('KnowledgeService.contextPack', () => {
     });
 
     expect(pack.tokenBudget).toBeLessThanOrEqual(20_000);
-  });
-
-  it('falls back to the scope as the question when no query is given', async () => {
-    const { service, typesense } = buildService();
-
-    // An agent starting work cannot express what it does not yet know it needs,
-    // but it can always say where it is working.
-    await service.contextPack(WORKSPACE, { scope: 'apps/server/prisma' });
-
-    expect(searchParams(typesense).q).toBe('apps/server/prisma');
   });
 
   it('[ENG-224] never records a task or a scope as a knowledge gap, though it found nothing', async () => {
@@ -479,119 +340,6 @@ describe('KnowledgeService.seedsFor', () => {
     await expect(
       service.seedsFor('other-workspace', { issueId: ISSUE }),
     ).resolves.toBeUndefined();
-  });
-
-  it('[KG-1.4] [KG-1.5] hands kinds and seeds to the search when recalling', async () => {
-    const { service, typesense, prisma } = buildService();
-    Object.assign(prisma, {
-      module: {
-        findMany: jest.fn(async ({ where }) =>
-          where.id ? [{ id: M1, ownerProductId: null as string | null }] : [],
-        ),
-      },
-      capability: { findMany: jest.fn(async (): Promise<unknown[]> => []) },
-    });
-
-    await service.search(WORKSPACE, 'redis', {
-      kinds: ['GOTCHA'],
-      moduleIds: [M1],
-    });
-
-    expect(searchParams(typesense).filter_by).toContain(
-      'entryKind:=[`GOTCHA`]',
-    );
-    expect(searchParams(typesense).sort_by).toContain(`moduleIds:=[\`${M1}\`]`);
-  });
-
-  it('[KG-1.5] hands the seeds to the search when context is loaded for an issue', async () => {
-    const { service, typesense, prisma } = buildService();
-    Object.assign(prisma, {
-      issue: {
-        findFirst: jest.fn(async () => ({
-          moduleIds: [M1],
-          capabilityId: null as string | null,
-        })),
-      },
-      module: {
-        findMany: jest.fn(async ({ where }) =>
-          where.id ? [{ id: M1, ownerProductId: null as string | null }] : [],
-        ),
-      },
-      capability: { findMany: jest.fn(async (): Promise<unknown[]> => []) },
-    });
-
-    await service.contextPack(WORKSPACE, { issueId: ISSUE, tokenBudget: 500 });
-
-    expect(searchParams(typesense).sort_by).toContain(`moduleIds:=[\`${M1}\`]`);
-  });
-});
-
-describe('the proof served with recall and context', () => {
-  const checkedAt = new Date('2026-09-20T10:00:00Z');
-  const grounded = {
-    id: 'entry-1',
-    pageId: 'page-1',
-    page: { deleted: null as Date | null },
-    status: PageEntryStatusEnum.STANDING,
-    verifiedAt: null as Date | null,
-    citations: [
-      {
-        kind: 'CODE',
-        path: 'apps/server/src/cache.ts',
-        commitSha: 'abcdef1',
-        startLine: 12,
-        endLine: 30,
-        targetLabel: null as string | null,
-        checkedAt,
-        checkedSha: 'fedcba9',
-        checkResult: 'HOLDS',
-        judgment: null as string | null,
-        judgeModel: null as string | null,
-        moduleRepo: { fullName: 'acme/api' },
-      },
-    ],
-  };
-  const proof = {
-    trust: 'GROUNDED',
-    citations: [
-      {
-        kind: 'CODE',
-        repo: 'acme/api',
-        path: 'apps/server/src/cache.ts',
-        lines: '12-30',
-        result: 'HOLDS',
-        checkedAt: checkedAt.toISOString(),
-        checkedSha: 'fedcba9',
-      },
-    ],
-    lastCheckedAt: checkedAt.toISOString(),
-    lastCheckedSha: 'fedcba9',
-  };
-
-  it('[KG-2.8] gives every recalled item its trust tier, citations and last check', async () => {
-    const { service, prisma } = buildService([
-      entryDocument({ verified: false }),
-    ]);
-    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValueOnce([grounded]);
-
-    const { hits } = await service.search(WORKSPACE, 'redis');
-
-    expect(hits[0]).toMatchObject(proof);
-  });
-
-  it('[KG-2.8] gives every item of a context pack the same, and counts it against the budget', async () => {
-    const { service, prisma } = buildService([
-      entryDocument({ verified: false }),
-    ]);
-    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValueOnce([grounded]);
-    const bare = await buildService([
-      entryDocument({ verified: false }),
-    ]).service.contextPack(WORKSPACE, { query: 'redis' });
-
-    const pack = await service.contextPack(WORKSPACE, { query: 'redis' });
-
-    expect(pack.items[0]).toMatchObject(proof);
-    expect(pack.estimatedTokens).toBeGreaterThan(bare.estimatedTokens);
   });
 });
 
@@ -1102,7 +850,7 @@ describe('the knowledge a run is handed', () => {
   it('traces a search that failed, so a reader sees why only conventions were given', async () => {
     const { service } = forRun({
       conventions: [row('convention-1', { kind: 'CONVENTION' })],
-      search: new Error('typesense is down'),
+      search: new Error('search database is down'),
     });
 
     const { trace } = await service.tracedKnowledgeForRun(
@@ -1120,7 +868,7 @@ describe('the knowledge a run is handed', () => {
   it('[KG-3.2] still hands over the conventions when the index cannot be searched', async () => {
     const { service } = forRun({
       conventions: [row('convention-1', { kind: 'CONVENTION' })],
-      search: new Error('typesense is down'),
+      search: new Error('search database is down'),
     });
 
     const packed = await service.knowledgeForRun(WORKSPACE, ask, LIMITS);

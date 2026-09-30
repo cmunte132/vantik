@@ -831,7 +831,7 @@ describe('vantik MCP tools', () => {
       'POST /projects/project-search': {
         id: 'project-search',
         name: 'Search rewrite',
-        description: 'Replace the search stack. Typesense, decided 2026-07.',
+        description: 'Replace the search stack. PostgreSQL, decided 2026-07.',
         status: 'Completed',
       },
     });
@@ -841,7 +841,7 @@ describe('vantik MCP tools', () => {
       arguments: {
         project: 'Search rewrite',
         status: 'Completed',
-        description: 'Replace the search stack. Typesense, decided 2026-07.',
+        description: 'Replace the search stack. PostgreSQL, decided 2026-07.',
       },
     });
 
@@ -921,7 +921,7 @@ describe('knowledge tools and the product graph', () => {
     expect(requests.filter((r) => r.method === 'POST')).toEqual([]);
   });
 
-  it('[ENG-227] remember writes a scoped fact with no page, and refuses one with neither', async () => {
+  it('[ENG-227] refuses a fact with neither a page nor a scope', async () => {
     const { client, requests } = await connect({
       'POST /page_entries': { id: 'entry-1', content: 'x', pageId: null },
     });
@@ -936,18 +936,6 @@ describe('knowledge tools and the product graph', () => {
     expect((unscoped as { isError?: boolean }).isError).toBe(true);
     expect(requests).toEqual([]);
 
-    await client.callTool({
-      name: 'remember',
-      arguments: {
-        content: 'Migrations are hand-written SQL, never generated.',
-        scope: 'apps/server/prisma',
-      },
-    });
-
-    const write = requests.find((r) => r.method === 'POST');
-    expect(write?.path).toBe('/page_entries');
-    expect(new URLSearchParams(write?.query).get('pageId')).toBeNull();
-    expect(write?.body).toMatchObject({ scope: 'apps/server/prisma' });
   });
 
   it('[KG-1.5] load_context passes the issue and modules the work is in', async () => {

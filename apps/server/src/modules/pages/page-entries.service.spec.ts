@@ -8,7 +8,7 @@
  * descriptions is pointed at the endpoint.
  */
 import type EntryCitationsService from './entry-citations.service';
-import type KnowledgeIndexService from './knowledge-index.service';
+
 import type { Queue } from 'bull';
 
 import {
@@ -207,7 +207,6 @@ function buildService({
   return {
     service: new PageEntriesService(
       prisma,
-      undefined,
       vectorService,
       undefined,
       queue as unknown as Queue | undefined,
@@ -1134,7 +1133,7 @@ describe('a write the page already holds', () => {
 
   it('[KG-0.3] still records the fact when the index cannot be reached', async () => {
     const { service, prisma } = buildService({
-      nearMatches: new Error('typesense is down'),
+      nearMatches: new Error('search is down'),
     });
 
     await expect(
@@ -1942,9 +1941,7 @@ describe("an entry's modules", () => {
     const update = jest.fn(
       async (_args: { where: { id: string }; data: unknown }) => ({}),
     );
-    const indexer = {
-      entriesChanged: jest.fn(async (_ids: string[]): Promise<void> => {}),
-    };
+
     const prisma = {
       moduleRepo: { findMany: jest.fn(async () => repos) },
       pageEntry: {
@@ -1957,10 +1954,7 @@ describe("an entry's modules", () => {
         update,
       },
     } as unknown as PrismaService;
-    const service = new PageEntriesService(
-      prisma,
-      indexer as unknown as KnowledgeIndexService,
-    );
+    const service = new PageEntriesService(prisma);
 
     await expect(service.recomputeModules('workspace-1')).resolves.toEqual({
       changed: 3,
@@ -1972,12 +1966,6 @@ describe("an entry's modules", () => {
       ['moved', { moduleIds: ['webapp'] }],
       ['new-module', { moduleIds: ['server'] }],
       ['gone', { moduleIds: [] }],
-    ]);
-    // The index learns the new modules, for exactly the entries that moved.
-    expect(indexer.entriesChanged).toHaveBeenCalledWith([
-      'moved',
-      'new-module',
-      'gone',
     ]);
   });
 });
@@ -2090,7 +2078,6 @@ describe('citations on a write', () => {
     };
     const service = new PageEntriesService(
       built.prisma,
-      undefined,
       built.vectorService,
       citations as unknown as EntryCitationsService,
     );
@@ -2179,39 +2166,34 @@ describe('an entry as it is written', () => {
   it('[KG-2.8] comes back with its trust, citations and last check, so the writer sees what they came to', async () => {
     const checkedAt = new Date('2026-09-27T01:00:00Z');
     const { prisma, vectorService } = buildService();
-    const withCitations = new PageEntriesService(
-      prisma,
-      undefined,
-      vectorService,
-      {
-        checkForWrite: jest.fn(async () => [
-          {
-            kind: PageEntryCitationKindEnum.CODE,
-            moduleRepoId: 'repo-1',
-            path: 'src/a.ts',
-            commitSha: 'abcdef1',
-            startLine: 3,
-            endLine: 5,
-            snippet: 'a();',
-            snippetHash: 'hash',
-            checkedAt,
-            checkedSha: 'abcdef1',
-            checkResult: PageEntryCitationCheckEnum.HOLDS,
-          },
-          {
-            kind: PageEntryCitationKindEnum.CODE,
-            moduleRepoId: 'repo-1',
-            path: 'src/b.ts',
-            commitSha: 'abcdef1',
-            startLine: 1,
-            endLine: 1,
-            checkedAt: null as Date | null,
-            checkResult: PageEntryCitationCheckEnum.UNKNOWN,
-          },
-        ]),
-        retryLater: jest.fn(async (): Promise<void> => undefined),
-      } as unknown as EntryCitationsService,
-    );
+    const withCitations = new PageEntriesService(prisma, vectorService, {
+      checkForWrite: jest.fn(async () => [
+        {
+          kind: PageEntryCitationKindEnum.CODE,
+          moduleRepoId: 'repo-1',
+          path: 'src/a.ts',
+          commitSha: 'abcdef1',
+          startLine: 3,
+          endLine: 5,
+          snippet: 'a();',
+          snippetHash: 'hash',
+          checkedAt,
+          checkedSha: 'abcdef1',
+          checkResult: PageEntryCitationCheckEnum.HOLDS,
+        },
+        {
+          kind: PageEntryCitationKindEnum.CODE,
+          moduleRepoId: 'repo-1',
+          path: 'src/b.ts',
+          commitSha: 'abcdef1',
+          startLine: 1,
+          endLine: 1,
+          checkedAt: null as Date | null,
+          checkResult: PageEntryCitationCheckEnum.UNKNOWN,
+        },
+      ]),
+      retryLater: jest.fn(async (): Promise<void> => undefined),
+    } as unknown as EntryCitationsService);
 
     const entry = await withCitations.createEntry('page-1', AGENT, {
       content: 'The importer drops the last row when the file has no newline.',
@@ -2374,7 +2356,6 @@ describe('answering a knowledge gap', () => {
     };
     const service = new PageEntriesService(
       built.prisma,
-      undefined,
       built.vectorService,
       citations as unknown as EntryCitationsService,
     );

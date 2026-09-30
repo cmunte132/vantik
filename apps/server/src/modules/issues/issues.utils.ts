@@ -211,9 +211,6 @@ export async function handlePostCreateIssue(
     });
   }
 
-  // Add the issue to the vector service for similarity search
-  issuesQueue.addIssueToVector(issue);
-
   // Check if the issue state is in the triage category and handle it accordingly
   const issueState = await prisma.workflow.findUnique({
     where: { id: issue.stateId },

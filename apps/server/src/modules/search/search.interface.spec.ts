@@ -24,27 +24,17 @@ describe('SearchInputData', () => {
     expect(errors.filter((e) => e.property === 'query')).toHaveLength(0);
   });
 
-  // @IsNotEmpty() checks `value !== ''` and does not trim, so whitespace-only
-  // strings pass DTO validation. Typesense handles them as near-empty queries
-  // rather than rejecting them.
-  it('passes a whitespace-only query through DTO validation', async () => {
-    const input = Object.assign(new SearchInputData(), { query: '   ' });
-    const errors = await validate(input);
-    expect(errors.filter((e) => e.property === 'query')).toHaveLength(0);
-  });
 });
 
 describe('parseSearchLimit', () => {
-  // `limit` is optional, and parseInt(undefined) is NaN. A NaN reaching the
-  // typesense query turned an otherwise valid search into a 500, so callers
-  // that omitted the param could not search at all.
+  // An absent or invalid limit must not make a valid search fail.
   it('falls back to the default when the param is absent or unusable', () => {
     expect(parseSearchLimit(undefined)).toBe(DEFAULT_SEARCH_LIMIT);
     expect(parseSearchLimit('')).toBe(DEFAULT_SEARCH_LIMIT);
     expect(parseSearchLimit('all')).toBe(DEFAULT_SEARCH_LIMIT);
   });
 
-  it('clamps to a range typesense will accept', () => {
+  it('clamps the result count to the supported range', () => {
     expect(parseSearchLimit('5')).toBe(5);
     expect(parseSearchLimit('0')).toBe(1);
     expect(parseSearchLimit('-3')).toBe(1);

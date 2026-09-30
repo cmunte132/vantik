@@ -13,7 +13,7 @@
 # For local development, run the apps on the host and start only the backing
 # services from this file:
 #
-#   docker compose up -d postgres redis supertokens typesense
+#   docker compose up -d postgres redis supertokens
 #   pnpm install && pnpm migrate && pnpm dev
 #
 # They publish their ports on localhost for exactly that — see "Local
@@ -90,8 +90,6 @@ services:
         condition: service_healthy
       supertokens:
         condition: service_healthy
-      typesense:
-        condition: service_healthy
     env_file: .env
     environment:
       # Read at runtime, not baked in: the server advertises this on every
@@ -101,7 +99,6 @@ services:
       VANTIK_BUILD_ID: ${VANTIK_BUILD_ID:-}
       DB_HOST: postgres
       REDIS_URL: redis
-      TYPESENSE_HOST: typesense
       SUPERTOKEN_CONNECTION_URI: http://supertokens:3567
       DATABASE_URL: postgresql://${POSTGRES_USER:-docker}:${POSTGRES_PASSWORD:-docker}@postgres:5432/${POSTGRES_DB:-vantik}?schema=${DB_SCHEMA:-vantik}&sslmode=prefer
       OAUTH_CALLBACK_URL: ${FRONTEND_HOST:-http://localhost:3000}/api/v1/oauth/callback
@@ -182,10 +179,9 @@ services:
 
   postgres:
     container_name: vantik-postgres
-    image: postgres:18-alpine
+    image: pgvector/pgvector:pg18
     restart: unless-stopped
-    # wal_level=logical enables the built-in pgoutput logical decoding the
-    # sync engine subscribes to; no postgres extensions are required.
+    # The sync engine uses pgoutput and needs wal_level=logical.
     command: ["postgres", "-c", "wal_level=logical"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-docker}
@@ -243,34 +239,6 @@ services:
       - vantik
     healthcheck:
       test: ["CMD-SHELL", "bash -c ': > /dev/tcp/127.0.0.1/3567'"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  typesense:
-    container_name: vantik-typesense
-    # 27.x → 30.x needs no reindex: v30 still supports downgrading to any
-    # version above v27, so the on-disk format carries over. The v30 auto-
-    # migration of synonyms/curation/analytics rules does not apply — none are
-    # used here.
-    image: typesense/typesense:30.2
-    restart: unless-stopped
-    command:
-      ["--data-dir", "/data", "--api-key", "${TYPESENSE_API_KEY:-random_API_key}"]
-    ports:
-      - "127.0.0.1:8108:8108"
-    volumes:
-      - typesense-data:/data
-    networks:
-      - vantik
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "bash",
-          "-c",
-          "exec 3<>/dev/tcp/127.0.0.1/8108 && printf 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q ok <&3",
-        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -335,7 +303,6 @@ networks:
 volumes:
   postgres-data:
   redis-data:
-  typesense-data:
   attachment-data:
   repo-mirrors:
   no-local-repos:

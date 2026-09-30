@@ -6,8 +6,9 @@
 # `turbo prune` stage that consumed the whole context, which meant any changed
 # byte anywhere — a README, a .DS_Store — reinstalled ~1800 packages twice.
 
-FROM node:24-alpine AS base
-RUN apk add --no-cache openssl dumb-init libc6-compat
+FROM node:24-bookworm-slim AS base
+RUN apt-get update && apt-get install -y --no-install-recommends openssl dumb-init ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 # Installed once here rather than in each stage that needs it.
 RUN npm install -g pnpm@10.34.5
@@ -62,10 +63,11 @@ RUN --mount=type=cache,id=turbo,target=/app/.turbo,sharing=locked \
 
 # Runner. No pnpm: the entrypoint calls prisma and node directly, which drops a
 # 33MB layer from the runtime image.
-FROM node:24-alpine AS runner
+FROM node:24-bookworm-slim AS runner
 # The local-repo integration reads the files of a knowledge citation with git.
 # Without git, every code citation in a local repository stays unread.
-RUN apk add --no-cache openssl dumb-init bash git
+RUN apt-get update && apt-get install -y --no-install-recommends openssl dumb-init bash git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 

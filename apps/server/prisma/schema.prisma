@@ -318,6 +318,12 @@ model AuthorizationCode {
   personalAccessTokenId String?
   workspaceId           String?
   code                  String
+
+  /// The CLI token in plaintext, from approval until the CLI collects it.
+  /// The server keeps only the hash of a token, so this is the one place the
+  /// CLI can get its token from. The first collection clears it, and it is
+  /// usable only while the code is less than 10 minutes old.
+  pendingToken String?
 }
 
 model Company {
@@ -681,9 +687,9 @@ model PersonalAccessToken {
   updatedAt DateTime  @updatedAt
   deleted   DateTime?
 
-  name  String
-  jwt   String
-  token String
+  name      String
+  /// SHA-256 of the token, in hex. The token itself is shown once, at creation.
+  tokenHash String @unique
 
   /// When this token last authenticated a request.
   ///
@@ -697,11 +703,6 @@ model PersonalAccessToken {
   userId      String
   type        String @default("user")
   workspaceId String
-
-  @@unique([name, userId, token])
-  /// Authenticating a request means finding the token by value, and the
-  /// uniqueness constraint above cannot serve a lookup on `token` alone.
-  @@index([token])
 }
 
 model Label {
@@ -2001,10 +2002,8 @@ model Template {
 }
 
 model User {
-  // Its own key. This used to be whatever id SuperTokens minted, which made
-  // identity and credentials the same column and meant one person could hold
-  // exactly one credential: a passkey and a login code for the same address
-  // are two SuperTokens users, and only one of them could be this value.
+  // Its own key, apart from any credential. One person can hold several
+  // credentials: a login code and one or more passkeys for the same address.
   id String @id @default(uuid())
 
   createdAt DateTime @default(now())
@@ -2027,36 +2026,104 @@ model User {
 
   image String?
 
-  authIdentities      AuthIdentity[]
   usersOnWorkspaces   UsersOnWorkspaces[]
   template            Template[]
   integrationAccount  IntegrationAccount[]
   attachment          Attachment[]
   personalAccessToken PersonalAccessToken[]
+  sessions            Session[]
+  passkeys            PasskeyCredential[]
   Conversation        Conversation[]
   ConversationHistory ConversationHistory[]
 }
 
-/// One way in to an account: a login code, a passkey, whatever comes later.
-/// SuperTokens owns the credential and issues a recipe user id per method, so
-/// somebody with both a passkey and a login code has two rows here pointing at
-/// one User. This is the table account linking would have been paying for.
-model AuthIdentity {
+/// A live session for an authenticated user or agent.
+/// Holds an opaque random token stored hashed in Postgres with sliding expiry.
+model Session {
   id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  expiresAt DateTime
+
+  /// SHA-256 hash of the session token presented in the cookie.
+  tokenHash String @unique
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  /// The workspace this session currently acts in.
+  workspaceId String?
+
+  /// Role of the user in the current workspace.
+  role String?
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+/// Pending email code or magic link sign-in.
+model EmailVerification {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  expiresAt DateTime
+
+  email String
+
+  /// SHA-256 hash of the 6-digit login code.
+  codeHash String?
+
+  /// SHA-256 hash of the magic link token.
+  linkTokenHash String? @unique
+
+  attempts Int @default(0)
+
+  @@index([email])
+  @@index([codeHash])
+  @@index([linkTokenHash])
+  @@index([expiresAt])
+}
+
+enum PasskeyChallengeOperation {
+  SIGNUP
+  REGISTER
+  SIGNIN
+}
+
+/// The server deletes each challenge before it verifies a passkey response.
+model PasskeyChallenge {
+  challenge String                    @id
+  operation PasskeyChallengeOperation
+  userId    String?
+  email     String?
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+/// A registered WebAuthn credential (passkey).
+model PasskeyCredential {
+  /// Base64URL-encoded credential id.
+  id        String   @id
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String
 
-  /// SuperTokens recipe id: `passwordless`, `webauthn`.
-  provider String
+  /// The public key bytes (COSE format) verified against by simplewebauthn.
+  publicKey Bytes
 
-  /// The recipe user id SuperTokens issued. Sessions arrive carrying this, and
-  /// minting one for a personal access token needs it back.
-  supertokensUserId String @unique
+  /// Signature counter for clone detection.
+  counter BigInt @default(0)
 
-  @@unique([userId, provider])
+  /// JSON array of transports, e.g. ["internal"] or ["usb", "nfc"].
+  transports Json @default("[]")
+
+  /// Optional Relying Party id the credential was registered under.
+  rpId String?
+
   @@index([userId])
 }
 

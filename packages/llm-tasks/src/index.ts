@@ -4,9 +4,11 @@ import { type LLMTask } from './task';
 import { triageAccept, triagePair } from './triage';
 
 export * from './citation-judge';
+export * from './evidence';
 export * from './json';
 export * from './lines';
 export * from './page-refresh';
+export * from './redact';
 export * from './task';
 export * from './triage';
 

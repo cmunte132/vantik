@@ -9,6 +9,7 @@ export * from './json';
 export * from './lines';
 export * from './page-refresh';
 export * from './redact';
+export * from './relation-guard';
 export * from './task';
 export * from './triage';
 

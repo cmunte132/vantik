@@ -50,7 +50,9 @@ export const triagePair: LLMTask<PairInput, PairAnswer> = {
     '"supersedes": the newer says the existing is no longer so.',
     '"contradicts": they cannot both be true.',
     '"distinct": they are about different things, or you cannot tell.',
-    'If they differ in any number, date, negation or condition, answer "distinct".',
+    'A difference in a number, date, negation or condition means they are not',
+    'duplicates. Decide from what the difference means whether the newer',
+    'refines, supersedes or contradicts the existing, or is about something else.',
   ].join('\n'),
   prompt: ({ newer, existing }) =>
     [

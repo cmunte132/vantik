@@ -17,7 +17,7 @@ import {
   Prisma,
   UserType,
 } from '@prisma/client';
-import { formatEvidence } from '@vantikhq/llm-tasks';
+import { factualDifference, formatEvidence } from '@vantikhq/llm-tasks';
 import { KnowledgeTrustEnum } from '@vantikhq/types';
 import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
@@ -46,7 +46,6 @@ import {
 import { auditDraw, isActing } from './agreement';
 import { backoffState, type BackoffState } from './knowledge-agreement.service';
 import { preferred } from './precedence';
-import { factualDifference } from './relation-guard';
 import TriageJudges, {
   type AcceptJudgment,
   type PairJudgment,

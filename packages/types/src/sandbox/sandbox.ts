@@ -101,6 +101,17 @@ export interface SandboxExecResult {
   egressDenied: number;
 }
 
+export interface SandboxExecOptions {
+  timeoutMs?: number;
+  /**
+   * Called with stdout as the command writes it, in order, while it runs. The
+   * result still carries stdout in full (up to `maxLogBytes`). If some output
+   * was lost on the way, the next chunk starts with an LF, so a reader that
+   * splits on lines drops the broken line rather than joining two halves.
+   */
+  onStdout?: (chunk: string) => void;
+}
+
 /**
  * A running guest.
  *
@@ -111,7 +122,7 @@ export interface SandboxExecResult {
 export interface SandboxHandle {
   readonly id: string;
   readonly tier: SandboxTier;
-  exec(command: string, options?: { timeoutMs?: number }): Promise<SandboxExecResult>;
+  exec(command: string, options?: SandboxExecOptions): Promise<SandboxExecResult>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, contents: string): Promise<void>;
   dispose(): Promise<void>;

@@ -1,4 +1,4 @@
-import { parsePiEvents } from './pi-events';
+import { PiEventReader, parsePiEvents } from './pi-events';
 
 /** One event per line, the way Pi's `--mode json` writes them. */
 function stream(...events: unknown[]): string {
@@ -261,5 +261,65 @@ describe('a model call that never answered', () => {
     );
 
     expect(failure?.message).toContain('did not say why');
+  });
+});
+
+/**
+ * The sandbox hands stdout over in chunks as the harness writes it, and a
+ * chunk ends wherever the pipe happened to flush, often inside a line.
+ */
+describe('reading Pi’s event stream as it arrives', () => {
+  const lines = [
+    stream({
+      type: 'tool_execution_start',
+      toolCallId: 'call-1',
+      toolName: 'read',
+      args: { path: 'src/a.ts' },
+    }),
+    stream({
+      type: 'tool_execution_start',
+      toolCallId: 'call-2',
+      toolName: 'read',
+      args: { path: 'src/b.ts' },
+    }),
+  ].join('\n');
+
+  it('gives a step only once its line is complete', () => {
+    const reader = new PiEventReader();
+    const cut = lines.indexOf('src/b.ts');
+
+    expect(reader.push(lines.slice(0, 10))).toEqual([]);
+    expect(
+      reader.push(lines.slice(10, cut)).map((step) => step.message),
+    ).toEqual(['read: src/a.ts']);
+    expect(reader.push(lines.slice(cut))).toEqual([]);
+    expect(reader.flush().map((step) => step.message)).toEqual([
+      'read: src/b.ts',
+    ]);
+  });
+
+  it('reads the same run whatever the chunks were', () => {
+    const reader = new PiEventReader();
+
+    for (const character of lines) {
+      reader.push(character);
+    }
+    reader.flush();
+
+    expect(reader.result()).toEqual(parsePiEvents(lines));
+  });
+
+  it('drops a line broken by lost output rather than joining two halves', () => {
+    const reader = new PiEventReader();
+    const [first, second] = lines.split('\n');
+
+    reader.push(first!.slice(0, 20));
+    // The runtime marks the gap with an LF; the rest of the lost line follows.
+    const steps = [
+      ...reader.push(`\n${second!.slice(5)}\n`),
+      ...reader.push(`${second}\n`),
+    ];
+
+    expect(steps.map((step) => step.message)).toEqual(['read: src/b.ts']);
   });
 });

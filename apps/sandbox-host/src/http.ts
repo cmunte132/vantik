@@ -145,11 +145,17 @@ export function createSandboxHostServer(
         Math.max(Number(url.searchParams.get("waitMs")) || 0, 0),
         SANDBOX_HOST_MAX_WAIT_MS,
       );
+      const sinceParam = url.searchParams.get("since");
+      const since = sinceParam === null ? undefined : Number(sinceParam);
+
+      if (since !== undefined && !(Number.isInteger(since) && since >= 0)) {
+        throw new HttpError(400, "since must be a whole number, 0 or more.");
+      }
 
       return send(
         response,
         200,
-        await sandboxes.waitExec(id, parts[3], waitMs),
+        await sandboxes.waitExec(id, parts[3], waitMs, since),
       );
     }
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { NotFoundError, Sandboxes } from "./sandboxes";
+import { MAX_STREAM_CHARS, NotFoundError, Sandboxes } from "./sandboxes";
 import { FakeRuntime, spec } from "./testing";
 
 let now: number;
@@ -132,5 +132,92 @@ describe("a command", () => {
     }
 
     expect(runtime.handles[0].disposed).toBe(0);
+  });
+});
+
+/**
+ * The harness writes one line for each step it takes. The server shows those
+ * steps while the run works, so a poll must hand over output as it comes, and
+ * must not lose any when an answer goes missing on the way back.
+ */
+describe("a command's output, while it runs", () => {
+  it("is answered as soon as there is output, not only at the end", async () => {
+    const { id } = await sandboxes.create(spec());
+    const execId = sandboxes.startExec(id, "wait");
+    const handle = runtime.handles[0];
+
+    const started = Date.now();
+    const poll = sandboxes.waitExec(id, execId, 10_000, 0);
+    handle.write!("one\n");
+    handle.write!("two\n");
+
+    await expect(poll).resolves.toEqual({
+      done: false,
+      stream: { from: 0, text: "one\ntwo\n" },
+    });
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it("gives the same output again until a later offset acknowledges it", async () => {
+    const { id } = await sandboxes.create(spec());
+    const execId = sandboxes.startExec(id, "wait");
+    runtime.handles[0].write!("one\n");
+
+    // The first answer is lost; the retry asks from the same offset.
+    await sandboxes.waitExec(id, execId, 0, 0);
+    await expect(sandboxes.waitExec(id, execId, 0, 0)).resolves.toEqual({
+      done: false,
+      stream: { from: 0, text: "one\n" },
+    });
+
+    runtime.handles[0].write!("two\n");
+    await expect(sandboxes.waitExec(id, execId, 0, 4)).resolves.toEqual({
+      done: false,
+      stream: { from: 4, text: "two\n" },
+    });
+  });
+
+  it("hands over the output that is left with the result", async () => {
+    const { id } = await sandboxes.create(spec());
+    const execId = sandboxes.startExec(id, "wait");
+    const handle = runtime.handles[0];
+    handle.write!("last\n");
+    handle.release!({
+      exitCode: 0,
+      stdout: "last\n",
+      stderr: "",
+      egressDenied: 0,
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    await expect(sandboxes.waitExec(id, execId, 1_000, 0)).resolves.toEqual({
+      done: true,
+      result: { exitCode: 0, stdout: "last\n", stderr: "", egressDenied: 0 },
+      stream: { from: 0, text: "last\n" },
+    });
+  });
+
+  it("drops the oldest output nobody collected, and says where it starts", async () => {
+    const { id } = await sandboxes.create(spec());
+    const execId = sandboxes.startExec(id, "wait");
+    const handle = runtime.handles[0];
+    handle.write!("x".repeat(MAX_STREAM_CHARS));
+    handle.write!("tail");
+
+    const status = await sandboxes.waitExec(id, execId, 0, 0);
+
+    expect(status.stream?.from).toBe(4);
+    expect(status.stream?.text.endsWith("tail")).toBe(true);
+    expect(status.stream?.text.length).toBe(MAX_STREAM_CHARS);
+  });
+
+  it("leaves a poll without an offset as it was", async () => {
+    const { id } = await sandboxes.create(spec());
+    const execId = sandboxes.startExec(id, "wait");
+    runtime.handles[0].write!("one\n");
+
+    await expect(sandboxes.waitExec(id, execId, 0)).resolves.toEqual({
+      done: false,
+    });
   });
 });

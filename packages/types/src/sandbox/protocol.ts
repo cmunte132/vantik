@@ -19,7 +19,7 @@ import type { SandboxExecResult, SandboxTier } from './sandbox';
  * - `DELETE /v1/sandboxes/:id`                   204, also when it is gone
  * - `POST   /v1/sandboxes/:id/keepalive`         204; the server holds it still
  * - `POST   /v1/sandboxes/:id/exec`              `SandboxHostExecRequest` → `SandboxHostExecStarted`
- * - `GET    /v1/sandboxes/:id/exec/:execId`      `SandboxHostExecStatus`
+ * - `GET    /v1/sandboxes/:id/exec/:execId`      `SandboxHostExecStatus` (`?waitMs=`, `?since=`)
  * - `GET    /v1/sandboxes/:id/files?path=`       the file, as UTF-8 text
  * - `PUT    /v1/sandboxes/:id/files?path=`       the body is the file, as UTF-8 text
  *
@@ -57,11 +57,25 @@ export interface SandboxHostExecStarted {
 /**
  * Where a command is. A poll with `?waitMs=` waits up to that long, and up to
  * `SANDBOX_HOST_MAX_WAIT_MS`, for the command to finish before it answers.
+ *
+ * A poll with `?since=<offset>` also asks for the stdout written after that
+ * offset. It then answers as soon as there is new output, not only when the
+ * command finishes. The host keeps output until a poll asks for a later
+ * offset, so a poll whose answer was lost can be sent again with the same
+ * offset. `stream.from` is greater than `since` only when the host had to drop
+ * output that nobody collected.
  */
-export type SandboxHostExecStatus =
+export type SandboxHostExecStatus = (
   | { done: false }
   | { done: true; result: SandboxExecResult }
-  | { done: true; error: string };
+  | { done: true; error: string }
+) & { stream?: SandboxHostStream };
+
+export interface SandboxHostStream {
+  /** The offset of `text` in the command's stdout. */
+  from: number;
+  text: string;
+}
 
 export interface SandboxHostError {
   error: string;

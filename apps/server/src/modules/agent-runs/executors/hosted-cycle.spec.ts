@@ -1,4 +1,8 @@
-import type { SandboxHandle, SandboxSpec } from '@vantikhq/types';
+import type {
+  SandboxExecOptions,
+  SandboxHandle,
+  SandboxSpec,
+} from '@vantikhq/types';
 
 import { HostedExecutor } from './hosted.executor';
 
@@ -83,6 +87,12 @@ interface GuestScript {
    * tick is ever alive long enough to renew anything.
    */
   slowHarnessMs?: number;
+  /**
+   * Stdout the first implementing pass writes while it runs, before it exits,
+   * and a hook called once it has been written. Without it the fake harness
+   * gives its output only with its result, as a runtime that cannot stream.
+   */
+  streamed?: { stdout: string; whileRunning: () => void };
 }
 
 function buildGuest(script: GuestScript) {
@@ -96,7 +106,7 @@ function buildGuest(script: GuestScript) {
     tier: 'microvm',
     disposed: false,
 
-    async exec(command: string) {
+    async exec(command: string, options?: SandboxExecOptions) {
       commands.push(command);
 
       const ok = { exitCode: 0, stdout: '', stderr: '', egressDenied: 0 };
@@ -139,6 +149,19 @@ function buildGuest(script: GuestScript) {
         }
 
         implementPasses += 1;
+
+        if (script.streamed && implementPasses === 1 && options?.onStdout) {
+          // Split inside a line, as a pipe can.
+          const { stdout, whileRunning } = script.streamed;
+          const middle = Math.floor(stdout.length / 2);
+          options.onStdout(stdout.slice(0, middle));
+          options.onStdout(stdout.slice(middle));
+          await new Promise((resolve) => setImmediate(resolve));
+          whileRunning();
+
+          return { ...ok, exitCode, stdout };
+        }
+
         return {
           ...ok,
           exitCode,
@@ -866,6 +889,37 @@ describe('whatever happens', () => {
     expect(harness.specs[0].secrets.ANTHROPIC_API_KEY.hosts).toEqual([
       'api.anthropic.com',
     ]);
+  });
+
+  it('puts each step on the timeline while the harness still runs', async () => {
+    const step = (path: string) =>
+      JSON.stringify({
+        type: 'tool_execution_start',
+        toolCallId: path,
+        toolName: 'read',
+        args: { path },
+      });
+    let seenWhileRunning: string[] = [];
+
+    const harness = build({
+      verdicts: { 1: ACCEPTED },
+      streamed: {
+        stdout: `${step('src/a.ts')}\n${step('src/b.ts')}\n${piOutput('Done.')}`,
+        whileRunning: () => {
+          seenWhileRunning = harness.events.map((event) => event.message);
+        },
+      },
+    });
+
+    await harness.execute();
+
+    expect(seenWhileRunning).toEqual(
+      expect.arrayContaining(['read: src/a.ts', 'read: src/b.ts']),
+    );
+    // Once each: the result's copy of the same output is not read again.
+    expect(
+      harness.events.filter((event) => event.message === 'read: src/a.ts'),
+    ).toHaveLength(1);
   });
 
   it('groups each pass under its own heading in the timeline', async () => {

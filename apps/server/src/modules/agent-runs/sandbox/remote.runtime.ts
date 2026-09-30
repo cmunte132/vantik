@@ -2,12 +2,14 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   SANDBOX_HOST_MAX_WAIT_MS,
   type SandboxAvailability,
+  type SandboxExecOptions,
   type SandboxExecResult,
   type SandboxHandle,
   type SandboxHostCreated,
   type SandboxHostExecStarted,
   type SandboxHostExecStatus,
   type SandboxHostSandbox,
+  type SandboxHostStream,
   type SandboxRuntime,
   type SandboxSpec,
   type SandboxTier,
@@ -140,6 +142,7 @@ export class RemoteSandboxRuntime implements SandboxRuntime {
     id: string,
     command: string,
     timeoutMs: number,
+    onStdout?: SandboxExecOptions['onStdout'],
   ): Promise<SandboxExecResult> {
     const base = `/v1/sandboxes/${encodeURIComponent(id)}/exec`;
     const { execId } = await this.request<SandboxHostExecStarted>(
@@ -152,6 +155,9 @@ export class RemoteSandboxRuntime implements SandboxRuntime {
     // against a sandbox host that went quiet without saying so.
     const giveUpAt = Date.now() + timeoutMs + 2 * 60_000;
     let failures = 0;
+    // The offset of the next stdout to collect. Only a caller that reads the
+    // output as it comes asks for it; the others get the result alone.
+    let since = 0;
 
     for (;;) {
       let status: SandboxHostExecStatus;
@@ -159,7 +165,9 @@ export class RemoteSandboxRuntime implements SandboxRuntime {
       try {
         status = await this.request<SandboxHostExecStatus>(
           'GET',
-          `${base}/${encodeURIComponent(execId)}?waitMs=${SANDBOX_HOST_MAX_WAIT_MS}`,
+          `${base}/${encodeURIComponent(execId)}?waitMs=${SANDBOX_HOST_MAX_WAIT_MS}${
+            onStdout ? `&since=${since}` : ''
+          }`,
           { timeoutMs: SANDBOX_HOST_MAX_WAIT_MS + 15_000 },
         );
         failures = 0;
@@ -178,6 +186,10 @@ export class RemoteSandboxRuntime implements SandboxRuntime {
         continue;
       }
 
+      if (onStdout && status.stream) {
+        since = this.takeStream(status.stream, since, onStdout);
+      }
+
       if (status.done) {
         if ('error' in status) {
           throw new Error(status.error);
@@ -191,6 +203,26 @@ export class RemoteSandboxRuntime implements SandboxRuntime {
         );
       }
     }
+  }
+
+  /**
+   * Gives the caller the new part of a stream answer, and returns the offset
+   * to ask from next. Output the sandbox host had to drop is marked with an
+   * LF, so a reader that splits on lines drops the broken line rather than
+   * joining two halves.
+   */
+  private takeStream(
+    stream: SandboxHostStream,
+    since: number,
+    onStdout: (chunk: string) => void,
+  ): number {
+    const text = stream.text.slice(Math.max(since - stream.from, 0));
+
+    if (text) {
+      onStdout(stream.from > since ? `\n${text}` : text);
+    }
+
+    return Math.max(since, stream.from + stream.text.length);
   }
 
   /** @internal */
@@ -317,12 +349,13 @@ class RemoteSandboxHandle implements SandboxHandle {
 
   exec(
     command: string,
-    options: { timeoutMs?: number } = {},
+    options: SandboxExecOptions = {},
   ): Promise<SandboxExecResult> {
     return this.runtime.exec(
       this.id,
       command,
       options.timeoutMs ?? this.spec.limits.maxDurationMs,
+      options.onStdout,
     );
   }
 

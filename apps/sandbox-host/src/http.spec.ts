@@ -110,6 +110,29 @@ describe("the routes", () => {
     });
   });
 
+  it("hands over a command's output from the offset a poll asks for", async () => {
+    const id = await create();
+    const started = await call(`/v1/sandboxes/${id}/exec`, {
+      method: "POST",
+      body: JSON.stringify({ command: "wait" }),
+    });
+    const { execId } = (await started.json()) as { execId: string };
+    runtime.handles[0].write!("one\ntwo\n");
+
+    const polled = await call(
+      `/v1/sandboxes/${id}/exec/${execId}?waitMs=0&since=4`,
+    );
+    await expect(polled.json()).resolves.toEqual({
+      done: false,
+      stream: { from: 4, text: "two\n" },
+    });
+
+    const refused = await call(
+      `/v1/sandboxes/${id}/exec/${execId}?waitMs=0&since=-1`,
+    );
+    expect(refused.status).toBe(400);
+  });
+
   it("writes and reads a file as plain text", async () => {
     const id = await create();
     const contents = "a large checkout, base64\n".repeat(1000);

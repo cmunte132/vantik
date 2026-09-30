@@ -3,11 +3,9 @@ import type { AgentStepKind } from '@vantikhq/types';
 /**
  * What Pi's JSON event stream says a run did.
  *
- * The sandbox runs the harness as one command and reads its output afterwards,
- * so this is a parser over the whole stream rather than a live tap. That is a
- * real limitation — a hosted run shows nothing until it finishes — but the
- * alternative today is what it replaced: three events per run, none of which
- * said anything the agent did.
+ * The sandbox streams the harness's output while it runs, and `PiEventReader`
+ * turns it into steps a line at a time, so the timeline fills in as the agent
+ * works. `parsePiEvents` is the same reader over a whole stream at once.
  *
  * A reader must not be able to tell from the timeline which backend produced
  * it, so the mapping lives here rather than in any one executor and
@@ -64,68 +62,121 @@ export interface ParsedRun {
  * report a formatting complaint.
  */
 export function parsePiEvents(stdout: string): ParsedRun {
-  const steps: ParsedStep[] = [];
-  const assistantText: string[] = [];
-  let modelId: string | null = null;
-  let costUsd = 0;
-  let iterations = 0;
+  const reader = new PiEventReader();
+
+  reader.push(stdout);
+  reader.flush();
+
+  return reader.result();
+}
+
+/**
+ * Reads Pi's event stream as it arrives, a chunk at a time.
+ *
+ * The sandbox streams the harness's stdout while it runs, so each step can
+ * reach the timeline while the agent is still working. `push` gives the steps
+ * of the lines that a chunk completed; a line split across two chunks is held
+ * until its end arrives. `result` is what `parsePiEvents` gives for the same
+ * text, whatever the chunks were.
+ */
+export class PiEventReader {
+  private pending = '';
+  private readonly steps: ParsedStep[] = [];
+  private readonly assistantText: string[] = [];
+  private modelId: string | null = null;
+  private costUsd = 0;
+  private iterations = 0;
   // Overwritten by every settled message, so what survives is the state of the
   // *last* one. That is what makes a retried call that then answered read as a
   // success rather than as the error it recovered from.
-  let failure: RunFailure | null = null;
+  private failure: RunFailure | null = null;
+  private seen = false;
 
-  // Split on LF and nothing else, the same as the RPC framing rule: U+2028 and
-  // U+2029 are legal inside a JSON string, and a generic line reader would
-  // break one record into two and lose it.
-  for (const line of stdout.split('\n')) {
+  /** True once any output has arrived. */
+  get received(): boolean {
+    return this.seen;
+  }
+
+  /** The steps of every line this chunk completed. */
+  push(chunk: string): ParsedStep[] {
+    if (chunk) {
+      this.seen = true;
+    }
+
+    // Split on LF and nothing else, the same as the RPC framing rule: U+2028
+    // and U+2029 are legal inside a JSON string, and a generic line reader
+    // would break one record into two and lose it.
+    const lines = (this.pending + chunk).split('\n');
+    this.pending = lines.pop() ?? '';
+
+    return lines.flatMap((line) => this.read(line));
+  }
+
+  /** The steps of a last line that no LF ended. */
+  flush(): ParsedStep[] {
+    const line = this.pending;
+    this.pending = '';
+
+    return this.read(line);
+  }
+
+  result(): ParsedRun {
+    return {
+      steps: [...this.steps],
+      // The last thing it said, which is where the closing report is. Earlier
+      // messages are narration between tool calls and reporting them as the
+      // result of the run would bury the part somebody has to read.
+      summary: this.assistantText.length
+        ? (this.assistantText[this.assistantText.length - 1]
+            ?.trim()
+            .slice(0, 4000) ?? null)
+        : null,
+      modelId: this.modelId,
+      costUsd: this.costUsd,
+      iterations: this.iterations,
+      failure: this.failure,
+    };
+  }
+
+  private read(line: string): ParsedStep[] {
     const event = parseLine(line);
 
     if (!event) {
-      continue;
+      return [];
     }
 
     if (event.type === 'turn_end') {
-      iterations += 1;
+      this.iterations += 1;
     }
 
     // `message_end` rather than `turn_end`, which carries the same message a
     // second time, or `message_start`, which reports an error before the retry
     // that may clear it.
     if (event.type === 'message_end') {
-      failure = failureOf(event);
+      this.failure = failureOf(event);
     }
 
     const model = modelOf(event);
     if (model) {
-      modelId = model;
+      this.modelId = model;
     }
 
-    costUsd += costOf(event);
+    this.costUsd += costOf(event);
 
     const text = assistantTextOf(event);
     if (text) {
-      assistantText.push(text);
+      this.assistantText.push(text);
     }
 
     const step = describe(event);
-    if (step) {
-      steps.push(step);
+    if (!step) {
+      return [];
     }
-  }
 
-  return {
-    steps,
-    // The last thing it said, which is where the closing report is. Earlier
-    // messages are narration between tool calls and reporting them as the
-    // result of the run would bury the part somebody has to read.
-    summary: assistantText.length
-      ? (assistantText[assistantText.length - 1]?.trim().slice(0, 4000) ?? null)
-      : null,
-    modelId,
-    costUsd,
-    iterations,
-    failure,
-  };
+    this.steps.push(step);
+
+    return [step];
+  }
 }
 
 /**
@@ -137,8 +188,7 @@ export function parsePiEvents(stdout: string): ParsedRun {
  */
 export function failureOf(event: PiEvent): RunFailure | null {
   const message = event.message as
-    | { stopReason?: unknown; errorMessage?: unknown }
-    | undefined;
+    { stopReason?: unknown; errorMessage?: unknown } | undefined;
 
   if (message?.stopReason !== 'error') {
     return null;

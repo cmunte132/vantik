@@ -44,7 +44,7 @@ import {
 } from '../review-cycle';
 import { buildReviewPrompt, buildRevisionPrompt } from '../review-prompt';
 import { PROVIDE_PACKAGE_MANAGER } from './package-manager';
-import { parsePiEvents } from './pi-events';
+import { PiEventReader, type ParsedStep } from './pi-events';
 import { RunHandbackService } from '../run-handback.service';
 import { GitProxyService } from '../sandbox/git-proxy.service';
 import { RemoteSandboxRuntime } from '../sandbox/remote.runtime';
@@ -1166,6 +1166,38 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         skills: options.skills,
       });
 
+    // Each step goes to the timeline as the harness reports it, so a person
+    // can watch the agent work rather than wait for it to finish. Recorded in
+    // order, one at a time, and never allowed to fail the invocation: the
+    // timeline is the record of the work, not a part of it.
+    const reader = new PiEventReader();
+    let recorded = Promise.resolve();
+    const record = (steps: ParsedStep[]) => {
+      for (const step of steps) {
+        recorded = recorded.then(() =>
+          this.agentRuns
+            .appendEvent(
+              cx.run.id,
+              {
+                message: scrubSecrets(step.message, cx.secrets),
+                level: step.level,
+                // The parser cannot know which pass it is reading, and every
+                // step it produces claims `implement`. Overridden here so the
+                // reviewer's tool calls appear under the review rather than
+                // under the work it is reviewing.
+                phase: options.phase,
+                ...(step.data ? { data: step.data } : {}),
+              },
+              { workspaceId: cx.run.workspaceId },
+            )
+            .then(
+              (): undefined => undefined,
+              (): undefined => undefined,
+            ),
+        );
+      }
+    };
+
     // The runtime enforces the deadline by aborting, which surfaces as a throw
     // rather than as an exit code. Caught here and turned into a failed
     // invocation so the cycle can decide what it means: on the first pass that
@@ -1176,9 +1208,17 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     try {
       result = await cx.sandbox.exec(
         `cd /workspace/repo && ${harness} "$(cat /workspace/${options.promptPath})"`,
-        { timeoutMs: options.timeoutMs },
+        {
+          timeoutMs: options.timeoutMs,
+          onStdout: (chunk) => record(reader.push(chunk)),
+        },
       );
     } catch (error) {
+      // The steps it reported before it was stopped are on the timeline
+      // already; only a last line without an LF is still to record.
+      record(reader.flush());
+      await recorded;
+
       return {
         exitCode: TIMED_OUT,
         stderr: scrubSecrets(
@@ -1197,30 +1237,17 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       };
     }
 
-    // The event stream is the run's history and the agent's own report on what
-    // it did. Read before the exit code is judged, because a harness that died
+    // A runtime that does not stream gives the output only with the result.
+    // Read then, before the exit code is judged, because a harness that died
     // halfway still says where it got to, and that is most of what makes a
     // failed run worth reading.
-    const parsed = parsePiEvents(result.stdout);
-
-    for (const step of parsed.steps) {
-      await this.agentRuns
-        .appendEvent(
-          cx.run.id,
-          {
-            message: scrubSecrets(step.message, cx.secrets),
-            level: step.level,
-            // The parser cannot know which pass it is reading, and every step
-            // it produces claims `implement`. Overridden here so the reviewer's
-            // tool calls appear under the review rather than under the work it
-            // is reviewing.
-            phase: options.phase,
-            ...(step.data ? { data: step.data } : {}),
-          },
-          { workspaceId: cx.run.workspaceId },
-        )
-        .catch((): undefined => undefined);
+    if (!reader.received) {
+      record(reader.push(result.stdout));
     }
+    record(reader.flush());
+    await recorded;
+
+    const parsed = reader.result();
 
     return {
       // A model that never answered is a failed invocation, whatever the

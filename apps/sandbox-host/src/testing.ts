@@ -1,4 +1,5 @@
 import type {
+  SandboxExecOptions,
   SandboxExecResult,
   SandboxHandle,
   SandboxRuntime,
@@ -31,6 +32,8 @@ export class FakeHandle implements SandboxHandle {
   /** Settles a pending exec; set by the test to control when it finishes. */
   release?: (result: SandboxExecResult) => void;
   lastTimeoutMs?: number;
+  /** Writes stdout for a pending exec, as a running command would. */
+  write?: (chunk: string) => void;
 
   constructor(readonly spec: SandboxSpec) {}
 
@@ -40,9 +43,10 @@ export class FakeHandle implements SandboxHandle {
 
   exec(
     command: string,
-    options: { timeoutMs?: number } = {},
+    options: SandboxExecOptions = {},
   ): Promise<SandboxExecResult> {
     this.lastTimeoutMs = options.timeoutMs;
+    this.write = options.onStdout;
 
     if (command === "fail") {
       return Promise.reject(new Error("the guest went away"));

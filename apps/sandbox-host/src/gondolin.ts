@@ -1,5 +1,6 @@
 import type {
   SandboxAvailability,
+  SandboxExecOptions,
   SandboxExecResult,
   SandboxHandle,
   SandboxRuntime,
@@ -8,6 +9,8 @@ import type {
 
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
+import { Writable } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 
 import {
   VM,
@@ -339,9 +342,30 @@ class GondolinHandle implements SandboxHandle {
 
   async exec(
     command: string,
-    options: { timeoutMs?: number } = {},
+    options: SandboxExecOptions = {},
   ): Promise<SandboxExecResult> {
     const before = this.denials.count;
+    const limit = this.spec.limits.maxLogBytes;
+
+    // stdout goes to a stream rather than into a buffer, so a caller can see a
+    // long command's output while it runs (the harness reports each step it
+    // takes). Only the last `maxLogBytes` is kept for the result: a command
+    // that writes a gigabyte should not cost a gigabyte here.
+    let tail = "";
+    const decoder = new StringDecoder("utf8");
+    const take = (text: string) => {
+      if (!text) {
+        return;
+      }
+      tail = (tail + text).slice(-limit);
+      options.onStdout?.(text);
+    };
+    const stdout = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        take(decoder.write(chunk));
+        done();
+      },
+    });
 
     // A string command runs through `/bin/sh -lc`, which is what every caller
     // here wants; the array form skips the shell and does not search PATH.
@@ -352,14 +376,15 @@ class GondolinHandle implements SandboxHandle {
       signal: AbortSignal.timeout(
         options.timeoutMs ?? this.spec.limits.maxDurationMs,
       ),
+      stdout,
     });
+
+    take(decoder.end());
 
     return {
       exitCode: result.exitCode ?? 0,
-      // Capped here as well as in the runtime: a command that writes a
-      // gigabyte of output should cost memory once, not twice.
-      stdout: String(result.stdout ?? "").slice(-this.spec.limits.maxLogBytes),
-      stderr: String(result.stderr ?? "").slice(-this.spec.limits.maxLogBytes),
+      stdout: tail,
+      stderr: String(result.stderr ?? "").slice(-limit),
       egressDenied: this.denials.count - before,
     };
   }

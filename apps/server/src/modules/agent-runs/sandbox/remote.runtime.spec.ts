@@ -24,12 +24,12 @@ type Route = (init: RequestInit) => Response | Promise<Response>;
 
 /** A fetch that answers from a table of `METHOD path` routes. */
 function fakeFetch(routes: Record<string, Route | Route[]>) {
-  const calls: Array<{ key: string; init: RequestInit }> = [];
+  const calls: Array<{ key: string; init: RequestInit; url: string }> = [];
 
   const fetchImpl = jest.fn(async (input: string, init: RequestInit = {}) => {
     const path = input.slice(URL_.length).split('?')[0];
     const key = `${init.method ?? 'GET'} ${path}`;
-    calls.push({ key, init });
+    calls.push({ key, init, url: input });
 
     const route = routes[key];
     const handler = Array.isArray(route) ? route.shift() : route;
@@ -159,6 +159,58 @@ describe('a command', () => {
       JSON.parse(String(calls.find((c) => c.key.endsWith('/exec'))!.init.body)),
     ).toEqual({ command: 'pi run', timeoutMs: 5_000 });
 
+    await sandbox.dispose();
+  });
+
+  it('hands over stdout as it comes, asking from where the last poll ended', async () => {
+    const { runtime: remote, calls } = runtime({
+      'GET /v1/availability': AVAILABLE,
+      'POST /v1/sandboxes': CREATED,
+      'POST /v1/sandboxes/sb-1/exec': () => json(202, { execId: 'ex-1' }),
+      'GET /v1/sandboxes/sb-1/exec/ex-1': [
+        () => json(200, { done: false, stream: { from: 0, text: 'one\n' } }),
+        // Output the sandbox host had to drop: `from` is past the offset.
+        () => json(200, { done: false, stream: { from: 10, text: 'ee\n' } }),
+        () =>
+          json(200, {
+            done: true,
+            result: { exitCode: 0, stdout: 'x', stderr: '', egressDenied: 0 },
+            stream: { from: 13, text: 'four\n' },
+          }),
+      ],
+    });
+    const chunks: string[] = [];
+
+    const sandbox = await remote.create(SPEC);
+    await sandbox.exec('pi run', { onStdout: (chunk) => chunks.push(chunk) });
+
+    expect(chunks).toEqual(['one\n', '\nee\n', 'four\n']);
+    expect(
+      calls
+        .filter((call) => call.key === 'GET /v1/sandboxes/sb-1/exec/ex-1')
+        .map((call) => new URL(call.url).searchParams.get('since')),
+    ).toEqual(['0', '4', '13']);
+    await sandbox.dispose();
+  });
+
+  it('asks for no stdout when the caller does not read it', async () => {
+    const { runtime: remote, calls } = runtime({
+      'GET /v1/availability': AVAILABLE,
+      'POST /v1/sandboxes': CREATED,
+      'POST /v1/sandboxes/sb-1/exec': () => json(202, { execId: 'ex-1' }),
+      'GET /v1/sandboxes/sb-1/exec/ex-1': () =>
+        json(200, {
+          done: true,
+          result: { exitCode: 0, stdout: '', stderr: '', egressDenied: 0 },
+        }),
+    });
+
+    const sandbox = await remote.create(SPEC);
+    await sandbox.exec('true');
+
+    expect(calls.find((call) => call.key.endsWith('/ex-1'))!.url).not.toContain(
+      'since=',
+    );
     await sandbox.dispose();
   });
 

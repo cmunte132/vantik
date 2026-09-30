@@ -28,7 +28,27 @@ export interface LifetimeOptions {
 interface Exec {
   status: SandboxHostExecStatus;
   finished: Promise<void>;
+  /** The stdout that no poll has acknowledged yet. */
+  text: string;
+  /** The offset of `text` in the command's stdout. */
+  base: number;
+  /** Polls that wait for output, woken on each chunk. */
+  waiters: Set<() => void>;
 }
+
+/**
+ * The most unacknowledged stdout kept for one command. A server that stops
+ * polling must not make the sandbox host hold everything a long command
+ * writes, so past this the oldest output is dropped.
+ */
+export const MAX_STREAM_CHARS = 16 * 1024 * 1024;
+
+/**
+ * How long a poll waits for more output after the first new output arrives.
+ * The harness writes many small lines at once, and one answer for all of them
+ * costs less than one answer for each.
+ */
+const BATCH_MS = 250;
 
 interface Entry {
   id: string;
@@ -109,9 +129,35 @@ export class Sandboxes {
     const execId = randomUUID();
     const remaining = Math.max(entry.deadlineAt - this.now(), 1);
 
-    const exec: Exec = { status: { done: false }, finished: Promise.resolve() };
+    const exec: Exec = {
+      status: { done: false },
+      finished: Promise.resolve(),
+      text: "",
+      base: 0,
+      waiters: new Set(),
+    };
+    const wake = () => {
+      for (const waiter of exec.waiters) {
+        waiter();
+      }
+    };
+    const onStdout = (chunk: string) => {
+      exec.text += chunk;
+
+      if (exec.text.length > MAX_STREAM_CHARS) {
+        const dropped = exec.text.length - MAX_STREAM_CHARS;
+        exec.text = exec.text.slice(dropped);
+        exec.base += dropped;
+      }
+
+      wake();
+    };
+
     exec.finished = entry.handle
-      .exec(command, { timeoutMs: Math.min(timeoutMs ?? remaining, remaining) })
+      .exec(command, {
+        timeoutMs: Math.min(timeoutMs ?? remaining, remaining),
+        onStdout,
+      })
       .then(
         (result) => {
           exec.status = { done: true, result };
@@ -122,7 +168,8 @@ export class Sandboxes {
             error: error instanceof Error ? error.message : String(error),
           };
         },
-      );
+      )
+      .finally(wake);
 
     entry.execs.set(execId, exec);
 
@@ -132,11 +179,17 @@ export class Sandboxes {
   /**
    * Where a command is, waiting up to `waitMs` for it to finish. A finished
    * command is given out once and then forgotten.
+   *
+   * With `since`, the answer also carries the stdout from that offset, and it
+   * comes as soon as there is new output. Output before `since` is
+   * acknowledged and dropped; output after it is kept until a later poll
+   * acknowledges it, so a poll whose answer was lost can be sent again.
    */
   async waitExec(
     id: string,
     execId: string,
     waitMs: number,
+    since?: number,
   ): Promise<SandboxHostExecStatus> {
     const entry = this.entry(id);
     const exec = entry.execs.get(execId);
@@ -145,23 +198,70 @@ export class Sandboxes {
       throw new NotFoundError(`No command ${execId} in sandbox ${id}`);
     }
 
-    if (!exec.status.done && waitMs > 0) {
-      let timer: NodeJS.Timeout | undefined;
+    const streaming = since !== undefined;
 
-      await Promise.race([
-        exec.finished,
-        new Promise<void>((resolve) => {
-          timer = setTimeout(resolve, waitMs);
-        }),
-      ]);
-      clearTimeout(timer);
+    if (streaming && since > exec.base) {
+      const acknowledged = Math.min(since - exec.base, exec.text.length);
+      exec.text = exec.text.slice(acknowledged);
+      exec.base += acknowledged;
     }
+
+    if (!exec.status.done && waitMs > 0 && !(streaming && exec.text)) {
+      await this.waitForChange(exec, waitMs, streaming);
+    }
+
+    const status: SandboxHostExecStatus = streaming
+      ? { ...exec.status, stream: { from: exec.base, text: exec.text } }
+      : exec.status;
 
     if (exec.status.done) {
       entry.execs.delete(execId);
     }
 
-    return exec.status;
+    return status;
+  }
+
+  /**
+   * Waits until the command finishes or `waitMs` passes. When `forOutput` is
+   * set, new output also ends the wait, after a short batch.
+   */
+  private async waitForChange(
+    exec: Exec,
+    waitMs: number,
+    forOutput: boolean,
+  ): Promise<void> {
+    const deadline = this.now() + waitMs;
+    let timer: NodeJS.Timeout | undefined;
+    let waiter: (() => void) | undefined;
+
+    try {
+      await new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, waitMs);
+        void exec.finished.then(resolve);
+
+        if (forOutput) {
+          waiter = () => {
+            if (exec.status.done) {
+              resolve();
+              return;
+            }
+            // The first chunk starts the batch; the ones after it join it.
+            exec.waiters.delete(waiter!);
+            clearTimeout(timer);
+            timer = setTimeout(
+              resolve,
+              Math.max(Math.min(BATCH_MS, deadline - this.now()), 0),
+            );
+          };
+          exec.waiters.add(waiter);
+        }
+      });
+    } finally {
+      clearTimeout(timer);
+      if (waiter) {
+        exec.waiters.delete(waiter);
+      }
+    }
   }
 
   readFile(id: string, path: string): Promise<string> {

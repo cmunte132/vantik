@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { RiLinkM } from '@remixicon/react';
+import { getInitials } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
+import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import NextLink from 'next/link';
 import { useRouter } from 'next/router';
@@ -23,21 +24,34 @@ import {
 import { useContextStore } from 'store/global-context-provider';
 
 import { Header } from './header';
-import { RunTimeline } from './run-timeline';
+import { RunActivity } from './run-activity';
 import {
-  FAILURE_PROSE,
-  duration,
-  isLive,
-  whereTheWorkWent,
-} from './run-vocabulary';
+  changesOf,
+  clock,
+  inFlight,
+  runStart,
+  stagesOf,
+  toFeed,
+  toSteps,
+} from './run-feed';
+import {
+  Changes,
+  DefinitionOfDone,
+  NowCard,
+  OutcomeCard,
+  RunFacts,
+  Stepper,
+} from './run-parts';
+import { FAILURE_PROSE, STATUS_LABEL, isLive } from './run-vocabulary';
 
 /**
- * One agent run: what it was working on, how it ended, and what it did.
+ * One agent run: who is working on what, where it is, and what it did.
  *
- * A page rather than a pane, so it has the width to show a transcript and the
- * app keeps one navigation rail rather than two. The order down the page is
- * the order the questions get asked: is it still going, did it work, where is
- * the work, and only then what happened along the way.
+ * The order down the page is the order the questions get asked. Is it still
+ * going, and how far along — the header and the five stages. What is it doing
+ * now, or how did it end — the Now card, which becomes the outcome card. Then
+ * the activity feed, for anyone who wants the detail. The rail on the right
+ * holds what the run is measured against and what it changed.
  */
 export const RunView = withApplicationStore(
   observer(() => {
@@ -46,7 +60,8 @@ export const RunView = withApplicationStore(
     const router = useRouter();
     const { workspaceSlug, runId } = router.query;
 
-    const { agentRunsStore, issuesStore, teamsStore } = useContextStore();
+    const { agentRunsStore, issuesStore, teamsStore, checklistItemsStore } =
+      useContextStore();
     const { users } = useUsersData(false);
 
     const { data: executors } = useExecutors();
@@ -64,6 +79,13 @@ export const RunView = withApplicationStore(
         agentRunsStore.loadEvents(run.id);
       }
     }, [run?.id, agentRunsStore]);
+
+    // The Definition of Done lives on the issue, and its items load per issue.
+    React.useEffect(() => {
+      if (run?.issueId) {
+        checklistItemsStore?.load?.(run.issueId);
+      }
+    }, [run?.issueId, checklistItemsStore]);
 
     // A live run's clock has to move on its own: no sync event arrives merely
     // because another second passed.
@@ -96,14 +118,27 @@ export const RunView = withApplicationStore(
       );
     }
 
+    const now = Date.now();
     const issue = issuesStore?.getIssueById?.(run.issueId);
     const team = issue && teamsStore?.getTeamWithId?.(issue.teamId);
+    const issueKey = team && issue ? `${team.identifier}-${issue.number}` : '';
     const events = agentRunsStore.getEvents(run.id);
-    const where = whereTheWorkWent(run.result ?? {});
+    const feed = toFeed(events);
+    const current = inFlight(run, feed);
+    const stages = stagesOf(run, events, now);
+    const files = changesOf(toSteps(events));
+    const criteria =
+      checklistItemsStore?.getChecklistItems?.(run.issueId) ?? [];
     const failure = run.failure ? FAILURE_PROSE[run.failure] : undefined;
+    const start = runStart(run);
+    const ended = run.finishedAt ? Date.parse(run.finishedAt) : null;
+    const took = live ? now - start : ended ? ended - start : null;
     // Absent is ordinary: an agent minted moments before it runs is not in the
     // cached membership list yet, and a removed one never will be.
     const agent = users?.find((user: any) => user.id === run.agentUserId);
+    const agentName = agent?.fullname ?? 'Agent';
+    const model = run.modelId ?? run.config?.model;
+    const runner = executorLabel(executors, run.executor);
 
     return (
       <MainLayout
@@ -119,14 +154,10 @@ export const RunView = withApplicationStore(
             ]}
             actions={
               <div className="flex items-center gap-2">
-                {team && (
+                {issueKey && (
                   <Button variant="secondary" size="sm" asChild>
                     <NextLink
-                      href={workspaceHref(
-                        workspaceSlug,
-                        'issue',
-                        `${team.identifier}-${issue.number}`,
-                      )}
+                      href={workspaceHref(workspaceSlug, 'issue', issueKey)}
                     >
                       Open issue
                     </NextLink>
@@ -155,100 +186,135 @@ export const RunView = withApplicationStore(
           />
         }
       >
-        <div className="flex max-w-3xl flex-col gap-4 p-4">
-          {/* The outcome as a sentence. Four grey pills of equal weight rank
-              nothing, and ranking is the entire job of the top of this page. */}
-          <h1 className="text-lg leading-snug font-medium">
-            {verdict(run, agent?.fullname, failure)}
-          </h1>
+        <div className="grid grid-cols-1 gap-10 px-4 pt-7 pb-10 md:px-10 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="flex max-w-[780px] min-w-0 flex-col gap-[22px]">
+            <div className="flex flex-col gap-3.5">
+              <div className="flex items-center gap-3">
+                <span className="relative size-[34px] shrink-0">
+                  {live && (
+                    <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" />
+                  )}
+                  <span className="relative grid size-full place-items-center rounded-full bg-primary text-sm font-semibold text-white">
+                    {getInitials(agentName)}
+                  </span>
+                </span>
 
-          {/* The identifiers drop below it. They are what makes two runs of one
-              issue tellable apart afterwards, which is a different question
-              from the one a reader arrives with. */}
-          <p className="text-muted-foreground">
-            {[
-              duration(run),
-              run.iterationCount
-                ? `${run.iterationCount} iteration${run.iterationCount === 1 ? '' : 's'}`
-                : '',
-              run.result?.costUsd != null
-                ? `$${Number(run.result.costUsd).toFixed(2)}`
-                : '',
-              run.attempt > 1 ? `attempt ${run.attempt}` : '',
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-            {run.modelId ? (
-              <>
-                {' · '}
-                <span className="font-mono">{run.modelId}</span>
-              </>
-            ) : null}
-            {` on ${executorLabel(executors, run.executor)}`}
-          </p>
+                <div className="flex min-w-0 grow flex-col">
+                  <span className="truncate font-semibold">{agentName}</span>
+                  <span className="truncate text-muted-foreground">
+                    {[
+                      issueKey,
+                      model,
+                      runner,
+                      run.attempt > 1 ? `attempt ${run.attempt}` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </div>
 
-          {/* Where the work went is why most people opened this page, so it is
-              a target above the timeline rather than a bordered box below it. */}
-          {(where || live) && (
-            <div className="flex flex-wrap items-center gap-2">
-              {where?.kind === 'pull_request' && (
-                <Button size="sm" asChild>
-                  <a href={where.value} target="_blank" rel="noreferrer">
-                    <RiLinkM className="mr-1 size-3.5" size={18} />
-                    Review the pull request
-                  </a>
-                </Button>
-              )}
+                <StatusPill
+                  status={run.status}
+                  failed={Boolean(failure)}
+                  took={took}
+                />
+              </div>
 
-              {where?.kind === 'worktree' && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    navigator.clipboard?.writeText(`cd ${where.value}`)
-                  }
-                >
-                  Copy cd path
-                </Button>
-              )}
+              <h1 className="text-xl leading-snug font-semibold tracking-tight">
+                {issue?.title ?? 'Agent run'}
+              </h1>
 
-              {/* Beside the pull request rather than instead of it: a reviewer
-                  opens the PR, and somebody pulling the work locally wants the
-                  branch. The raw url is not shown — the button is the target,
-                  and a wrapped git url is just noise under it. */}
-              {run.result?.branch && where?.kind !== 'worktree' && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    navigator.clipboard?.writeText(run.result.branch)
-                  }
-                >
-                  Copy branch
-                </Button>
-              )}
+              <Stepper stages={stages} />
             </div>
-          )}
 
-          {failure && (
-            <div className="flex flex-col gap-1 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-              <p className="text-destructive">
-                This run stopped because {failure.what}.
-              </p>
-              <p className="text-muted-foreground">{failure.next}</p>
-            </div>
-          )}
+            {live ? (
+              current && <NowCard item={current} now={now} />
+            ) : (
+              <OutcomeCard run={run} failure={failure} feed={feed} />
+            )}
 
-          {run.summary && <p className="whitespace-pre-wrap">{run.summary}</p>}
-
-          <div className="border-t border-border pt-2">
-            <RunTimeline run={run} events={events} />
+            <RunActivity
+              feed={feed}
+              start={start}
+              current={current}
+              agentName={agentName}
+              live={live}
+              setupMs={
+                (run.phaseTimings as Record<string, number> | null)?.setup
+              }
+            />
           </div>
+
+          <aside className="flex min-w-0 flex-col gap-4">
+            {criteria.length > 0 && <DefinitionOfDone items={criteria} />}
+            {files.length > 0 && <Changes files={files} />}
+            <RunFacts
+              facts={[
+                ...(model
+                  ? [{ label: 'Model', value: model, mono: true }]
+                  : []),
+                ...(run.iterationCount
+                  ? [{ label: 'Turns', value: String(run.iterationCount) }]
+                  : []),
+                ...(run.result?.costUsd != null
+                  ? [
+                      {
+                        label: 'Cost',
+                        value: `$${Number(run.result.costUsd).toFixed(2)}`,
+                      },
+                    ]
+                  : []),
+                { label: 'Runner', value: runner },
+                ...(run.config?.thinking
+                  ? [{ label: 'Thinking', value: String(run.config.thinking) }]
+                  : []),
+                ...(run.result?.branch
+                  ? [{ label: 'Branch', value: run.result.branch, mono: true }]
+                  : []),
+              ]}
+            />
+          </aside>
         </div>
       </MainLayout>
     );
   }),
 );
+
+/** The run's state in a word, and how long it has taken. */
+const StatusPill = ({
+  status,
+  failed,
+  took,
+}: {
+  status: string;
+  failed: boolean;
+  took: number | null;
+}) => {
+  const tone = isLive(status)
+    ? 'bg-primary/15 text-primary'
+    : status === 'SUCCEEDED'
+      ? 'bg-success/15 text-success'
+      : status === 'NEEDS_REVIEW'
+        ? 'bg-warning/15 text-warning'
+        : failed || status === 'FAILED' || status === 'EXPIRED'
+          ? 'bg-destructive/15 text-destructive'
+          : 'bg-grayAlpha-100 text-muted-foreground';
+
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-medium',
+        tone,
+      )}
+    >
+      <span className="size-[7px] rounded-full bg-current" />
+      {STATUS_LABEL[status] ?? status}
+      {took != null && (
+        <span className="font-mono font-normal opacity-80">{clock(took)}</span>
+      )}
+    </span>
+  );
+};
 
 /**
  * The executor as a person would name it, not as a key.
@@ -262,40 +328,4 @@ function executorLabel(executors: any, key: string): string {
     ((executors as any[]) ?? []).find((entry: any) => entry.key === key)
       ?.label ?? key
   ).toLowerCase();
-}
-
-/**
- * How the run ended, in one line.
- *
- * Written rather than composed from a status enum, because the sentence a
- * reader needs is not the same for a run that is still going, one that
- * produced a pull request, and one that stopped at a ceiling.
- */
-function verdict(
-  run: any,
-  agentName: string | undefined,
-  failure?: { what: string },
-): string {
-  const who = agentName ?? 'The agent';
-
-  if (isLive(run.status)) {
-    return `${who} is working on this.`;
-  }
-
-  if (failure) {
-    return `${who} could not finish — ${failure.what}.`;
-  }
-
-  switch (run.status) {
-    case 'SUCCEEDED':
-      return run.result?.prUrl
-        ? `${who} finished and opened a pull request.`
-        : `${who} finished the work.`;
-    case 'NEEDS_REVIEW':
-      return `${who} finished, but somebody has to judge whether it is right.`;
-    case 'CANCELED':
-      return `${who} was stopped before it finished.`;
-    default:
-      return `${who} could not finish this run.`;
-  }
 }

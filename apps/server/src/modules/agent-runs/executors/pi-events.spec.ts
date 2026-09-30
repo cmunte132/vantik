@@ -84,6 +84,112 @@ describe('reading a run out of Pi’s event stream', () => {
     expect(iterations).toBe(2);
   });
 
+  it('keeps what the agent said between tool calls as a note', () => {
+    const { steps } = parsePiEvents(
+      stream({
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: 'The model has no updatedAt.\nI will read createdAt.',
+            },
+            { type: 'toolCall', name: 'read' },
+          ],
+        },
+      }),
+    );
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0]?.message).toBe('The model has no updatedAt.');
+    expect(steps[0]?.data).toEqual({
+      kind: 'note',
+      text: 'The model has no updatedAt.\nI will read createdAt.',
+    });
+  });
+
+  it('writes no note for a message that only called a tool', () => {
+    const { steps } = parsePiEvents(
+      stream({
+        type: 'message_end',
+        message: { role: 'assistant', content: [{ type: 'toolCall' }] },
+      }),
+    );
+
+    expect(steps).toHaveLength(0);
+  });
+
+  it('counts the lines of a new file', () => {
+    const { steps } = parsePiEvents(
+      stream({
+        type: 'tool_execution_start',
+        toolCallId: 'call-2',
+        toolName: 'write',
+        args: { path: 'a.ts', content: 'one\ntwo\nthree\n' },
+      }),
+    );
+
+    expect(steps[0]?.data).toMatchObject({
+      kind: 'write',
+      target: 'a.ts',
+      added: 3,
+    });
+  });
+
+  it('keeps an edit’s diff, counted and without line numbers', () => {
+    const { steps } = parsePiEvents(
+      stream({
+        type: 'tool_execution_end',
+        toolCallId: 'call-3',
+        toolName: 'edit',
+        isError: false,
+        result: {
+          content: [{ type: 'text', text: 'Successfully replaced 1 block.' }],
+          details: {
+            diff: [
+              '  9 function changedSince() {',
+              '-10   const where = { updatedAt };',
+              '+10   const column = changeColumnOf(model);',
+              '+11   const where = { [column]: since };',
+              '   ...',
+            ].join('\n'),
+          },
+        },
+      }),
+    );
+
+    expect(steps[0]?.data).toEqual({
+      kind: 'write',
+      ref: 'call-3',
+      ok: true,
+      added: 2,
+      removed: 1,
+      diff: [
+        ' function changedSince() {',
+        '-  const where = { updatedAt };',
+        '+  const column = changeColumnOf(model);',
+        '+  const where = { [column]: since };',
+        ' …',
+      ].join('\n'),
+    });
+  });
+
+  it('caps a long diff but still counts all of it', () => {
+    const lines = Array.from({ length: 100 }, (_, i) => `+${i + 1} line ${i}`);
+    const { steps } = parsePiEvents(
+      stream({
+        type: 'tool_execution_end',
+        toolName: 'edit',
+        isError: false,
+        result: { details: { diff: lines.join('\n') } },
+      }),
+    );
+
+    expect(steps[0]?.data?.added).toBe(100);
+    expect(String(steps[0]?.data?.diff).split('\n')).toHaveLength(40);
+  });
+
   it('takes the agent’s last message as the summary', () => {
     // Earlier messages are narration between tool calls. The closing report is
     // the thing a reviewer came to read.

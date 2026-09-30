@@ -230,6 +230,10 @@ export function describe(event: PiEvent): ParsedStep | null {
     const name = String(event.toolName ?? 'a tool');
     const detail = describeToolArgs(event.args);
     const kind = kindOf(name, detail);
+    // A new file's size is known before the tool runs. An edit's is not: it is
+    // counted from the diff the tool reports when it ends.
+    const written =
+      name.toLowerCase() === 'write' ? lineCountOf(event.args) : undefined;
 
     return {
       message: detail ? `${name}: ${detail}` : `Running ${name}`,
@@ -243,8 +247,29 @@ export function describe(event: PiEvent): ParsedStep | null {
             ? { command: detail }
             : { target: detail }
           : {}),
+        ...(written == null ? {} : { added: written }),
       },
     };
+  }
+
+  // An edit that landed. Its diff is the most useful thing a reader can see
+  // about it, and the tool has already worked it out.
+  if (type === 'tool_execution_end' && !event.isError) {
+    const diff = diffOf(event.result);
+
+    if (diff) {
+      return {
+        message: `${String(event.toolName ?? 'edit')} finished`,
+        level: 'INFO',
+        phase: 'implement',
+        data: {
+          kind: 'write' as AgentStepKind,
+          ...(event.toolCallId ? { ref: String(event.toolCallId) } : {}),
+          ok: true,
+          ...diff,
+        },
+      };
+    }
   }
 
   // A test result that passed, which is the one success worth a second event.
@@ -288,6 +313,19 @@ export function describe(event: PiEvent): ParsedStep | null {
     };
   }
 
+  // What the agent says between tool calls: why it is about to do something,
+  // or what it found. That is the part of a run a person can follow without
+  // reading the tool calls themselves.
+  const text = assistantTextOf(event);
+  if (text) {
+    return {
+      message: (text.split('\n')[0] ?? '').slice(0, 200),
+      level: 'INFO',
+      phase: 'implement',
+      data: { kind: 'note' as AgentStepKind, text: text.slice(0, NOTE_LIMIT) },
+    };
+  }
+
   if (type === 'auto_retry_start') {
     return {
       message: 'The model call failed; retrying',
@@ -313,6 +351,69 @@ export function describe(event: PiEvent): ParsedStep | null {
 
 /** How much of a failing command's output is worth keeping. */
 const OUTPUT_LIMIT = 2000;
+
+/** How much of one thing the agent said is worth keeping. */
+const NOTE_LIMIT = 2000;
+
+/** How much of an edit's diff is kept, in lines and in characters. */
+const DIFF_LINES = 40;
+const DIFF_CHARS = 4000;
+
+/** The lines of a new file, from the `write` tool's arguments. */
+function lineCountOf(args: unknown): number | undefined {
+  const content = (args as { content?: unknown } | null)?.content;
+
+  if (typeof content !== 'string') {
+    return undefined;
+  }
+
+  return content ? content.replace(/\n$/, '').split('\n').length : 0;
+}
+
+/**
+ * An edit's diff, from the tool's own report of it.
+ *
+ * Pi's edit tool puts the diff at `details.diff`, one line each: `+N text` for
+ * an added line, `-N text` for a removed one, ` N text` for context, and a line
+ * of `...` for unchanged lines it left out. The counts are over the whole diff;
+ * the preview keeps its start, without the line numbers.
+ */
+function diffOf(
+  result: unknown,
+): { added: number; removed: number; diff: string } | null {
+  const diff = (result as { details?: { diff?: unknown } } | null)?.details
+    ?.diff;
+
+  if (typeof diff !== 'string' || !diff.trim()) {
+    return null;
+  }
+
+  let added = 0;
+  let removed = 0;
+  const preview: string[] = [];
+  let length = 0;
+
+  for (const line of diff.split('\n')) {
+    const match = /^([+\- ])\s*\d+ (.*)$/.exec(line);
+    const mark = match ? match[1] : ' ';
+    const body = match ? match[2] : line.trim() === '...' ? '…' : line.trim();
+
+    if (mark === '+') {
+      added += 1;
+    } else if (mark === '-') {
+      removed += 1;
+    }
+
+    const kept = `${mark}${body.slice(0, 200)}`;
+
+    if (preview.length < DIFF_LINES && length + kept.length <= DIFF_CHARS) {
+      preview.push(kept);
+      length += kept.length + 1;
+    }
+  }
+
+  return { added, removed, diff: preview.join('\n') };
+}
 
 /**
  * Which of the five kinds a tool is.

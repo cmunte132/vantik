@@ -365,6 +365,7 @@ export const AGENT_STEP_KINDS = [
   'search',
   'bash',
   'test',
+  'note',
 ] as const;
 
 export type AgentStepKind = (typeof AGENT_STEP_KINDS)[number];
@@ -382,6 +383,16 @@ export interface AgentStepData {
   output?: string;
   passed?: number;
   failed?: number;
+  /** A `note`: what the agent said between tool calls. */
+  text?: string;
+  /** Lines a write added and removed, when the harness reported them. */
+  added?: number;
+  removed?: number;
+  /**
+   * The start of an edit's diff, one line each, prefixed `+`, `-` or a space.
+   * A context line of `…` stands for unchanged lines left out.
+   */
+  diff?: string;
 }
 
 export class AgentRunEvent {

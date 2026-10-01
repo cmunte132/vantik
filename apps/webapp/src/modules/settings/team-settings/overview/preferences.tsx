@@ -30,7 +30,7 @@ export const Preferences = observer(() => {
           </p>
 
           <div className="flex gap-1 max-w-[500px] mt-2">
-            <Input value={teamEmail} />
+            <Input value={teamEmail} readOnly />
             <Button
               variant="ghost"
               onClick={() => {

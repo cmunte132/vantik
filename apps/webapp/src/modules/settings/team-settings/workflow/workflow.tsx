@@ -1,12 +1,7 @@
-import type {
-  DraggableProvided,
-  DraggableStateSnapshot,
-  DragStart,
-  DropResult,
-} from '@hello-pangea/dnd';
+import type { DragStart, DropResult } from '@hello-pangea/dnd';
+import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 
 import { WorkflowCategoryEnum } from '@vantikhq/types';
-import { Board, BoardRow } from '@vantikhq/ui/components/board';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
@@ -22,11 +17,11 @@ import { useUpdateWorkflowMutation } from 'services/workflow';
 import { useContextStore } from 'store/global-context-provider';
 
 import { WorkflowCategory } from './workflow-category';
-import { WorkflowItem } from './workflow-item';
 
 export const Workflow = observer(() => {
   const { workflowsStore } = useContextStore();
-  const [currentCategory, setCurrentCategory] = React.useState(undefined);
+  const [currentCategory, setCurrentCategory] =
+    React.useState<WorkflowCategoryEnum>();
   const team = useCurrentTeam();
   const { mutate: updateWorkflow } = useUpdateWorkflowMutation({
     onSuccess: () => {},
@@ -44,6 +39,11 @@ export const Workflow = observer(() => {
   );
 
   const onDragEnd = (result: DropResult) => {
+    setCurrentCategory(undefined);
+    if (!result.destination) {
+      return;
+    }
+
     const workflowId = result.draggableId;
 
     const workflow = workflowsStore.getWorkflowWithId(workflowId);
@@ -63,23 +63,6 @@ export const Workflow = observer(() => {
     setCurrentCategory(workflow.category);
   };
 
-  const renderClone = (
-    provided: DraggableProvided,
-    snapshot: DraggableStateSnapshot,
-  ) => {
-    const id = provided.draggableProps['data-rfd-draggable-id'];
-    const workflow = workflowsStore.getWorkflowWithId(id);
-
-    return (
-      <WorkflowItem
-        key={workflow.name}
-        workflow={workflow}
-        isDragging={snapshot.isDragging}
-        provided={provided}
-      />
-    );
-  };
-
   return (
     <SettingSection
       title="Workflow"
@@ -87,26 +70,31 @@ export const Workflow = observer(() => {
     from start to completion. Here you can customize and re-order the
     available workflow statuses."
     >
-      <Board onDragEnd={onDragEnd} className="w-full" onDragStart={onDragStart}>
+      <DragDropContext onDragEnd={onDragEnd} onDragStart={onDragStart}>
         <div className="flex flex-col w-full">
           {Object.values(WorkflowCategoryEnum).map((category) => {
             return (
-              <BoardRow
-                id={category}
+              <Droppable
+                droppableId={category}
                 key={category}
-                mode="virtual"
-                renderClone={renderClone}
-                isDropDisabled={currentCategory && currentCategory !== category}
+                isDropDisabled={Boolean(
+                  currentCategory && currentCategory !== category,
+                )}
               >
-                <WorkflowCategory
-                  categoryName={category}
-                  workflows={getWorkflows(category)}
-                />
-              </BoardRow>
+                {(provided) => (
+                  <div ref={provided.innerRef} {...provided.droppableProps}>
+                    <WorkflowCategory
+                      categoryName={category}
+                      workflows={getWorkflows(category)}
+                    />
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
             );
           })}
         </div>
-      </Board>
+      </DragDropContext>
     </SettingSection>
   );
 });

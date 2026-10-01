@@ -50,6 +50,11 @@ overrides:
   svgo@>=4.0.0 <4.1.0: ^4.1.0
   undici@>=6.0.0 <6.28.0: ^6.28.0
 
+patchedDependencies:
+  react-virtualized@9.22.6:
+    hash: 3f574b74bcccec5c8cb3f7ab992c27a8ff9297939aa85ff44047cac9a6af6225
+    path: patches/react-virtualized@9.22.6.patch
+
 importers:
 
   .:
@@ -644,7 +649,7 @@ importers:
         version: 7.4.4(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react-virtualized:
         specifier: ^9.22.6
-        version: 9.22.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 9.22.6(patch_hash=3f574b74bcccec5c8cb3f7ab992c27a8ff9297939aa85ff44047cac9a6af6225)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       socket.io-client:
         specifier: ^4.7.4
         version: 4.8.3
@@ -33444,7 +33449,7 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  react-virtualized@9.22.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+  react-virtualized@9.22.6(patch_hash=3f574b74bcccec5c8cb3f7ab992c27a8ff9297939aa85ff44047cac9a6af6225)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       '@babel/runtime': 7.29.7
       clsx: 1.2.1

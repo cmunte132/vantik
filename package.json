@@ -70,6 +70,9 @@
       "svgo@>=3.0.0 <3.3.5": "^3.3.5",
       "svgo@>=4.0.0 <4.1.0": "^4.1.0",
       "undici@>=6.0.0 <6.28.0": "^6.28.0"
+    },
+    "patchedDependencies": {
+      "react-virtualized@9.22.6": "patches/react-virtualized@9.22.6.patch"
     }
   },
   "dependencies": {

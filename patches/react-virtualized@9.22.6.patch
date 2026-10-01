@@ -1,0 +1,38 @@
+diff --git a/dist/commonjs/CellMeasurer/CellMeasurer.js b/dist/commonjs/CellMeasurer/CellMeasurer.js
+index 47c391ea2fadd145c130ec7ec86819daff67182b..5eb5b7954169800911538264e62aa5d7c41f14ea 100644
+--- a/dist/commonjs/CellMeasurer/CellMeasurer.js
++++ b/dist/commonjs/CellMeasurer/CellMeasurer.js
+@@ -105,10 +105,10 @@ var CellMeasurer = exports["default"] = /*#__PURE__*/function (_React$PureCompon
+       }
+       return /*#__PURE__*/(0, _react.cloneElement)(resolvedChildren, {
+         ref: function ref(node) {
+-          if (typeof resolvedChildren.ref === 'function') {
+-            resolvedChildren.ref(node);
+-          } else if (resolvedChildren.ref) {
+-            resolvedChildren.ref.current = node;
++          if (typeof resolvedChildren.props.ref === 'function') {
++            resolvedChildren.props.ref(node);
++          } else if (resolvedChildren.props.ref) {
++            resolvedChildren.props.ref.current = node;
+           }
+           _this2._child.current = node;
+         }
+diff --git a/dist/es/CellMeasurer/CellMeasurer.js b/dist/es/CellMeasurer/CellMeasurer.js
+index b8d3b33924a2df50f2b77af7f131fec85c8f6b34..ec3c753cc2adba226e9f2af9fea4a19afef3f1dd 100644
+--- a/dist/es/CellMeasurer/CellMeasurer.js
++++ b/dist/es/CellMeasurer/CellMeasurer.js
+@@ -96,10 +96,10 @@ var CellMeasurer = /*#__PURE__*/function (_React$PureComponent) {
+       }
+       return /*#__PURE__*/cloneElement(resolvedChildren, {
+         ref: function ref(node) {
+-          if (typeof resolvedChildren.ref === 'function') {
+-            resolvedChildren.ref(node);
+-          } else if (resolvedChildren.ref) {
+-            resolvedChildren.ref.current = node;
++          if (typeof resolvedChildren.props.ref === 'function') {
++            resolvedChildren.props.ref(node);
++          } else if (resolvedChildren.props.ref) {
++            resolvedChildren.props.ref.current = node;
+           }
+           _this2._child.current = node;
+         }

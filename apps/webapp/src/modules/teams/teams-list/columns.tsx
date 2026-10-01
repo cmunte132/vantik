@@ -106,7 +106,7 @@ export const useProjectColumns = (): Array<ColumnDef<TeamType>> => {
     },
 
     {
-      accessorKey: 'Created At',
+      accessorKey: 'createdAt',
       header: () => {
         return <span className="px-4 whitespace-nowrap">Created At</span>;
       },
@@ -119,7 +119,7 @@ export const useProjectColumns = (): Array<ColumnDef<TeamType>> => {
       },
     },
     {
-      accessorKey: 'Created At',
+      id: 'actions',
       header: () => {
         return <span className="px-4 whitespace-nowrap"></span>;
       },

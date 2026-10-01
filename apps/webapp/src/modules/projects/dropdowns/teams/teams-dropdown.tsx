@@ -65,6 +65,7 @@ export const TeamsDropdown = observer(
           <Button
             variant="link"
             role="combobox"
+            size="sm"
             aria-expanded={open}
             className="flex items-center px-0 shadow-none justify-between focus-visible:ring-1 focus-visible:border-primary text-muted-foreground"
           >
@@ -78,6 +79,7 @@ export const TeamsDropdown = observer(
           <Button
             variant="link"
             role="combobox"
+            size="sm"
             aria-expanded={open}
             className="flex items-center px-0 shadow-none justify-between focus-visible:ring-1 focus-visible:border-primary"
           >
@@ -97,6 +99,7 @@ export const TeamsDropdown = observer(
         <Button
           variant="link"
           role="combobox"
+          size="sm"
           aria-expanded={open}
           className="flex items-center gap-1 justify-between shadow-none focus-visible:ring-1 focus-visible:border-primary "
         >
@@ -113,15 +116,7 @@ export const TeamsDropdown = observer(
       <div>
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <Button
-              variant="link"
-              role="combobox"
-              size="sm"
-              aria-expanded={open}
-              className="flex items-center p-0 justify-between focus-visible:ring-1 focus-visible:border-primary "
-            >
-              {getTrigger()}
-            </Button>
+            {getTrigger()}
           </PopoverTrigger>
           {/* In a portal, as the label picker is. Left in the new project
               dialog's form, each row's checkbox clicks a hidden input of its

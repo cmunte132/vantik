@@ -9,7 +9,7 @@ import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
 import { HeaderLayout } from 'common/header-layout';
-import { Link, useRouter } from 'common/router';
+import { Link, toHref, useRouter } from 'common/router';
 
 import { useAllUsers } from 'hooks/users';
 
@@ -69,27 +69,29 @@ export const Header = observer(
       >
         <Breadcrumb className="min-w-0">
           <BreadcrumbItem>
-            <Link
-              href={{
+            <BreadcrumbLink
+              as={Link}
+              href={toHref({
                 pathname: '/[workspaceSlug]/pages',
                 query: { workspaceSlug },
-              }}
+              })}
             >
-              <BreadcrumbLink>Pages</BreadcrumbLink>
-            </Link>
+              Pages
+            </BreadcrumbLink>
           </BreadcrumbItem>
 
           {crumbs.map((crumb, index) => (
             <BreadcrumbItem key={index} className="min-w-0">
               {crumb.pathname ? (
-                <Link
-                  href={{
+                <BreadcrumbLink
+                  as={Link}
+                  href={toHref({
                     pathname: crumb.pathname,
                     query: { workspaceSlug, ...crumb.query },
-                  }}
+                  })}
                 >
-                  <BreadcrumbLink>{crumb.label}</BreadcrumbLink>
-                </Link>
+                  {crumb.label}
+                </BreadcrumbLink>
               ) : typeof crumb.label === 'string' ? (
                 <BreadcrumbLink className="truncate">
                   {crumb.label}

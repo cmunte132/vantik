@@ -4,6 +4,8 @@ import {
   type Instance,
   types,
   flow,
+  applySnapshot,
+  type SnapshotIn,
 } from 'mobx-state-tree';
 
 import type { ViewType } from 'common/types';
@@ -42,10 +44,11 @@ export const ViewsStore: IAnyStateTreeNode = types
     };
 
     const load = flow(function* () {
-      const views = yield vantikDatabase.views.toArray();
+      const views: SnapshotIn<typeof Views> = yield vantikDatabase.views.toArray();
 
-      self.views = Views.create(
-        sort(views).asc((view: ViewType) => new Date(view.createdAt)),
+      applySnapshot(
+        self.views,
+        sort(views).asc((view) => new Date(view.createdAt)),
       );
     });
 

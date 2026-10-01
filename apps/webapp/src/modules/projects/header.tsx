@@ -53,21 +53,19 @@ export const Header = observer(
         <Breadcrumb>
           <BreadcrumbItem>
             {href ? (
-              <Link href={href}>
-                <BreadcrumbLink>{title}</BreadcrumbLink>
-              </Link>
+              <BreadcrumbLink as={Link} href={href}>
+                {title}
+              </BreadcrumbLink>
             ) : (
               <BreadcrumbLink>{title}</BreadcrumbLink>
             )}
           </BreadcrumbItem>
           {isProjectView && (
-            <>
-              <BreadcrumbItem>
-                <BreadcrumbLink>{project?.name}</BreadcrumbLink>
-              </BreadcrumbItem>
-              <ProjectDetailsDropdown />
-            </>
+            <BreadcrumbItem>
+              <BreadcrumbLink>{project?.name}</BreadcrumbLink>
+            </BreadcrumbItem>
           )}
+          {isProjectView && <ProjectDetailsDropdown />}
         </Breadcrumb>
 
         {isProjectView && (

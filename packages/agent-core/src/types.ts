@@ -109,6 +109,26 @@ export interface Module {
   repos?: Array<{ repository: string; pathPrefixes: string[] }>;
 }
 
+/** A repository that a connected source offers, which a module can link to. */
+export interface AvailableRepo {
+  /** "owner/name", as the source names it. */
+  repository: string;
+  /** The kind of source, for example "github". */
+  source: string;
+  integrationAccountId: string;
+  externalRepoId: string;
+}
+
+/** One repository linked to a module. */
+export interface ModuleRepoLink {
+  id: string;
+  moduleId: string;
+  repository: string;
+  /** Empty means the module is all of the repository. */
+  pathPrefixes: string[];
+  isDefault: boolean;
+}
+
 /** Something the software does for the people who use it. */
 export interface Capability {
   id: string;

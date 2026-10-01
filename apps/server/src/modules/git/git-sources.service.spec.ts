@@ -52,12 +52,23 @@ function build() {
     },
   );
 
+  const findMany = jest.fn(
+    async ({ where }: { where: { workspaceId: string } }) =>
+      Object.entries(ACCOUNTS)
+        .filter(([, account]) => account.workspaceId === where.workspaceId)
+        .map(([id, account]) => ({
+          id,
+          settings: account.settings,
+          integrationDefinition: { slug: account.slug },
+        })),
+  );
+
   const service = new GitSourcesService(
-    { integrationAccount: { findFirst } } as unknown as PrismaService,
+    { integrationAccount: { findFirst, findMany } } as unknown as PrismaService,
     { slug: 'github', notifies: true } as unknown as GithubSource,
   );
 
-  return { service, findFirst };
+  return { service, findFirst, findMany };
 }
 
 describe('GitSourcesService', () => {
@@ -130,5 +141,30 @@ describe('GitSourcesService', () => {
     await expect(
       service.require({ workspaceId: 'ws-1', ...ref }),
     ).rejects.toThrow(/cannot be used/);
+  });
+
+  it('offers the repositories of the git sources only, with their ids', async () => {
+    const { service, findMany } = build();
+
+    await expect(service.offered('ws-1')).resolves.toEqual([
+      {
+        integrationAccountId: 'github-1',
+        source: 'github',
+        externalRepoId: '123',
+        fullName: 'acme/api',
+      },
+      {
+        integrationAccountId: 'local-1',
+        source: 'local-repo',
+        externalRepoId: 'repo-1',
+        fullName: 'vantik',
+      },
+    ]);
+    // A personal account's repositories are not the workspace's to link.
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { workspaceId: 'ws-1', deleted: null, personal: false },
+      }),
+    );
   });
 });

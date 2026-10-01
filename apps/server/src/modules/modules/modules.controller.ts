@@ -47,6 +47,14 @@ export class ModulesController {
     return await this.modules.createModule(moduleData, workspace);
   }
 
+  // What `POST :moduleId/repos` can link, for a caller that cannot read the
+  // synced integration accounts the webapp picks from.
+  @Get('available_repos')
+  @UseGuards(AuthGuard)
+  async availableRepos(@Workspace() workspace: string) {
+    return await this.modules.availableRepos(workspace);
+  }
+
   // The repository routes come before the bare `:moduleId` routes. Nest matches
   // in the order it is given, so `POST :moduleId/repos` declared after
   // `POST :moduleId` would never be reached.

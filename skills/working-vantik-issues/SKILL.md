@@ -118,6 +118,15 @@ a near-miss.
 request that changes the code, because that is the one moment the answer is
 known rather than guessed. Your job is to read them, not write them.
 
+**Change the map only when it is wrong or a person asks.** The map itself has
+tools: `create_product`, `create_module`, `add_module_repo` and
+`create_capability`, each with an `update_` tool. Use them when a person asks
+you to, or when the code you work in has no module. A repository with no module
+also blocks every fact that cites its code. Read the lists first and extend
+what exists. A module has one owner, a team or a product. `add_module_repo`
+links only a repository that a connected source offers. If no source offers
+it, tell the person to connect the source in the app.
+
 **Use the axis to find what will collide with you.** Before you start, ask what
 else is in flight around the code you are about to change:
 

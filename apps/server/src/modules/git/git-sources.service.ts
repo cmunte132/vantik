@@ -120,6 +120,49 @@ export class GitSourcesService {
   isGitSource(slug: string): boolean {
     return this.sources.has(slug);
   }
+
+  /**
+   * Every repository that a connected git source in the workspace offers,
+   * which is what a module can link to.
+   *
+   * The webapp reads the same list from its synced integration accounts. A
+   * caller with only the REST API has no other way to learn the ids that
+   * `createModuleRepo` needs. Personal accounts are left out, as they are in
+   * the webapp: a module's repository belongs to the workspace.
+   */
+  async offered(workspaceId: string): Promise<OfferedRepo[]> {
+    const accounts = await this.prisma.integrationAccount.findMany({
+      where: { workspaceId, deleted: null, personal: false },
+      select: {
+        id: true,
+        settings: true,
+        integrationDefinition: { select: { slug: true } },
+      },
+    });
+
+    return accounts.flatMap((account) => {
+      const slug = account.integrationDefinition?.slug ?? '';
+      if (!this.sources.has(slug)) {
+        return [];
+      }
+
+      return repositoriesOf(account.settings).map((listing) => ({
+        integrationAccountId: account.id,
+        source: slug,
+        externalRepoId: String(listing.id),
+        fullName: String(listing.fullName ?? listing.id),
+      }));
+    });
+  }
+}
+
+/** One repository a module can link to, and the source that offers it. */
+export interface OfferedRepo {
+  integrationAccountId: string;
+  /** The slug of the source, for example "github". */
+  source: string;
+  externalRepoId: string;
+  fullName: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

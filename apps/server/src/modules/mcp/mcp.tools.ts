@@ -354,9 +354,10 @@ export function registerVantikTools(
   // ------------------------------------------------- the product axis
   //
   // A project says which objective an issue serves. This axis says what the
-  // software is made of, and it is read-only here on purpose: a workspace's
-  // products, modules and capabilities are its map, drawn by the people who
-  // own the code. An agent reads the map to place its work on it.
+  // software is made of: a workspace's products, modules and capabilities are
+  // its map. An agent reads the map to place its work on it, and draws on it
+  // when a person asks it to or when the map lacks the code it works in. A
+  // missing module also blocks every fact that cites that module's code.
 
   server.registerTool(
     'list_products',
@@ -402,6 +403,203 @@ export function registerVantikTools(
       inputSchema: {},
     },
     handler(() => agent.listCapabilities()),
+  );
+
+  const productFields = {
+    key: z
+      .string()
+      .optional()
+      .describe(
+        'A short name, for example "cloud". Made from the name if omitted.',
+      ),
+    description: z.string().optional().describe('Markdown.'),
+    status: z.string().optional(),
+  };
+
+  server.registerTool(
+    'create_product',
+    {
+      title: 'Create product',
+      description:
+        'Add a product: something the workspace ships, which groups the ' +
+        'modules that build it. Check list_products first and reuse what is ' +
+        'there. Products are few; most new code is a module of a product ' +
+        'that exists.',
+      inputSchema: { name: z.string(), ...productFields },
+    },
+    handler((input) => agent.createProduct(input)),
+  );
+
+  server.registerTool(
+    'update_product',
+    {
+      title: 'Update product',
+      description:
+        'Change a product that exists: its name, key, description or status. ' +
+        'An omitted field is left alone.',
+      inputSchema: {
+        product: z.string().describe('Product key, name or id.'),
+        name: z.string().optional(),
+        ...productFields,
+      },
+    },
+    handler(({ product, ...changes }) => agent.updateProduct(product, changes)),
+  );
+
+  const moduleFields = {
+    key: z
+      .string()
+      .optional()
+      .describe(
+        'A short name, for example "server". Made from the name if omitted.',
+      ),
+    description: z.string().optional().describe('Markdown.'),
+    status: z.string().optional(),
+    ownerTeam: teamRef
+      .optional()
+      .describe(
+        'The team that owns it. A module has one owner: give ownerTeam or ' +
+          'ownerProduct, not both. On update, naming one moves the module ' +
+          'to it.',
+      ),
+    ownerProduct: z
+      .string()
+      .optional()
+      .describe('The product that owns it: product key, name or id.'),
+    linkedTeams: z
+      .array(teamRef)
+      .optional()
+      .describe(
+        'Other teams that use it. A link carries no authority. Replaces ' +
+          'the set on update.',
+      ),
+    linkedProducts: z
+      .array(z.string())
+      .optional()
+      .describe('Other products that use it. Replaces the set on update.'),
+  };
+
+  server.registerTool(
+    'create_module',
+    {
+      title: 'Create module',
+      description:
+        'Add a module: a piece of code, usually one repository or a path ' +
+        'inside one. Check list_modules first; if a module already covers ' +
+        'the code, add a repository or a path to it instead. A module has ' +
+        'exactly one owner, a team or a product. After you create it, link ' +
+        'its code with add_module_repo: a module with no repository places ' +
+        'no work and grounds no fact.',
+      inputSchema: { name: z.string(), ...moduleFields },
+    },
+    handler((input) => agent.createModule(input)),
+  );
+
+  server.registerTool(
+    'update_module',
+    {
+      title: 'Update module',
+      description:
+        'Change a module that exists: its name, key, description, status, ' +
+        'owner or links. An omitted field is left alone.',
+      inputSchema: {
+        module: moduleRef,
+        name: z.string().optional(),
+        ...moduleFields,
+      },
+    },
+    handler(({ module, ...changes }) => agent.updateModule(module, changes)),
+  );
+
+  const repoFields = {
+    module: moduleRef,
+    repository: z
+      .string()
+      .describe('The repository as its source names it, "owner/name".'),
+    pathPrefixes: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'The folders or files in the repository that belong to this ' +
+          'module, for example ["web/"]. Omit or leave empty when the module ' +
+          'is all of the repository. Several modules can share one ' +
+          'repository with different prefixes.',
+      ),
+    isDefault: z
+      .boolean()
+      .optional()
+      .describe('Whether this is the repository an agent run works in.'),
+  };
+
+  server.registerTool(
+    'add_module_repo',
+    {
+      title: 'Link a repository to a module',
+      description:
+        'Say where the code of a module is: a repository, and optionally ' +
+        'the paths in it. This is what lets list_modules answer "which ' +
+        'module am I in", and what lets remember accept a fact that cites ' +
+        'that code. Only a repository that a connected source offers can be ' +
+        'linked. If no source offers it, the error lists what is on offer, ' +
+        'and a person has to connect the source in the app first.',
+      inputSchema: repoFields,
+    },
+    handler(({ module, ...input }) => agent.addModuleRepo(module, input)),
+  );
+
+  server.registerTool(
+    'update_module_repo',
+    {
+      title: 'Change the paths of a module repository',
+      description:
+        'Change the paths of a repository that is already linked to a ' +
+        'module, for example when code moves to a new folder.',
+      inputSchema: repoFields,
+    },
+    handler(({ module, ...input }) => agent.updateModuleRepo(module, input)),
+  );
+
+  const capabilityFields = {
+    description: z.string().optional().describe('Markdown.'),
+    status: z
+      .enum(['planned', 'active', 'live', 'deprecated'])
+      .optional()
+      .describe('Defaults to planned.'),
+    modules: z
+      .array(moduleRef)
+      .optional()
+      .describe('The modules that hold the code. Replaces the set on update.'),
+  };
+
+  server.registerTool(
+    'create_capability',
+    {
+      title: 'Create capability',
+      description:
+        'Add a capability: something the software does for the people who ' +
+        'use it, such as "Scheduled shows", not a piece of code. Check ' +
+        'list_capabilities first, and name it the way a user would.',
+      inputSchema: { name: z.string(), ...capabilityFields },
+    },
+    handler((input) => agent.createCapability(input)),
+  );
+
+  server.registerTool(
+    'update_capability',
+    {
+      title: 'Update capability',
+      description:
+        'Change a capability that exists: its name, description, status or ' +
+        'the modules that hold it. An omitted field is left alone.',
+      inputSchema: {
+        capability: capabilityRef,
+        name: z.string().optional(),
+        ...capabilityFields,
+      },
+    },
+    handler(({ capability, ...changes }) =>
+      agent.updateCapability(capability, changes),
+    ),
   );
 
   server.registerTool(

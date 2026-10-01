@@ -1,5 +1,16 @@
 import { VantikClient, VantikClientConfig } from './client';
-import { Directory, isUuid, parseIssueKey } from './directory';
+import {
+  Directory,
+  RawCapability,
+  RawModule,
+  RawModuleRepo,
+  RawProduct,
+  isUuid,
+  parseIssueKey,
+  toCapability,
+  toModule,
+  toProduct,
+} from './directory';
 import {
   VantikAmbiguousError,
   VantikApiError,
@@ -35,9 +46,11 @@ import {
 } from './knowledge';
 import {
   AgentRunSummary,
+  AvailableRepo,
   Capability,
   DefinitionOfDone,
   Module,
+  ModuleRepoLink,
   Paginated,
   PriorityName,
   Product,
@@ -95,6 +108,16 @@ function toAgentRunSummary(run: RawAgentRun): AgentRunSummary {
     worktreePath: run.result?.worktreePath ?? null,
     createdAt: run.createdAt,
     finishedAt: run.finishedAt ?? null,
+  };
+}
+
+function toModuleRepoLink(moduleId: string, row: RawModuleRepo): ModuleRepoLink {
+  return {
+    id: row.id,
+    moduleId,
+    repository: row.fullName,
+    pathPrefixes: row.pathPrefixes ?? [],
+    isDefault: row.isDefault ?? false,
   };
 }
 
@@ -291,6 +314,59 @@ export interface UpdateProjectInput {
    * Replaces the existing set; an empty list clears it.
    */
   teams?: string[];
+}
+
+/**
+ * A product, as a caller writes one. On update every field is optional, and an
+ * omitted field is left alone.
+ */
+export interface ProductInput {
+  name: string;
+  /** A short name, for example "cloud". The server makes one from the name. */
+  key?: string;
+  description?: string;
+  status?: string;
+}
+
+/**
+ * A module, as a caller writes one. Teams and products are named the way a
+ * person names them — "ENG", "PodReader" — and resolved to ids here.
+ */
+export interface ModuleInput {
+  name: string;
+  /** A short name, for example "server". The server makes one from the name. */
+  key?: string;
+  description?: string;
+  status?: string;
+  /**
+   * The one owner: a team or a product, never both. On update, naming one
+   * moves the module to it and clears the other.
+   */
+  ownerTeam?: string;
+  ownerProduct?: string;
+  /** The other teams and products that use it. Replaces the set on update. */
+  linkedTeams?: string[];
+  linkedProducts?: string[];
+}
+
+export interface ModuleRepoInput {
+  /**
+   * The repository as its source names it, "owner/name", or the id the source
+   * gives it. It must be one that `listAvailableRepos` offers.
+   */
+  repository: string;
+  /** The paths that belong to this module. Empty means the whole repository. */
+  pathPrefixes?: string[];
+  isDefault?: boolean;
+}
+
+export interface CapabilityInput {
+  name: string;
+  description?: string;
+  /** planned, active, live or deprecated. Defaults to planned. */
+  status?: string;
+  /** The modules that hold the code, by key, name or id. Replaces on update. */
+  modules?: string[];
 }
 
 export interface SearchTasksInput {
@@ -546,6 +622,269 @@ export class VantikAgent {
   /** The workspace's capabilities — what the software does for its users. */
   listCapabilities(): Promise<Capability[]> {
     return this.directory.getCapabilities();
+  }
+
+  // --------------------------------------------- writing the product axis
+  //
+  // Neutral, like the rest of this client: each method changes what it is told
+  // to change, and the server's rules — one owner per module, a repository a
+  // connected source offers — come back as the server words them.
+
+  async createProduct(input: ProductInput): Promise<Product> {
+    const created = await this.client.post<RawProduct>('/products', {
+      body: {
+        name: input.name,
+        key: input.key,
+        description: input.description,
+        status: input.status,
+      },
+    });
+    this.directory.forgetProductAxis();
+    return toProduct(created);
+  }
+
+  async updateProduct(
+    reference: string,
+    input: Partial<ProductInput>,
+  ): Promise<Product> {
+    const { id } = await this.directory.resolveProduct(reference);
+    const updated = await this.client.post<RawProduct>(`/products/${id}`, {
+      body: {
+        name: input.name,
+        key: input.key,
+        description: input.description,
+        status: input.status,
+      },
+    });
+    this.directory.forgetProductAxis();
+    return toProduct(updated);
+  }
+
+  async createModule(input: ModuleInput): Promise<Module> {
+    const created = await this.client.post<RawModule>('/modules', {
+      body: {
+        name: input.name,
+        key: input.key,
+        description: input.description,
+        status: input.status,
+        ...(await this.moduleRelations(input)),
+      },
+    });
+    this.directory.forgetProductAxis();
+    return toModule(created);
+  }
+
+  async updateModule(
+    reference: string,
+    input: Partial<ModuleInput>,
+  ): Promise<Module> {
+    const { id } = await this.directory.resolveModule(reference);
+    const relations = await this.moduleRelations(input);
+
+    // The server checks the owner the row is left with. Naming a new owner of
+    // one kind has to clear the other kind, or a move from a team to a product
+    // is refused as a module with two owners. Naming both is still sent as
+    // both, so the server refuses it in its own words.
+    const owner =
+      relations.ownerTeamId && !relations.ownerProductId
+        ? { ownerTeamId: relations.ownerTeamId, ownerProductId: null }
+        : relations.ownerProductId && !relations.ownerTeamId
+          ? { ownerTeamId: null, ownerProductId: relations.ownerProductId }
+          : {
+              ownerTeamId: relations.ownerTeamId,
+              ownerProductId: relations.ownerProductId,
+            };
+
+    const updated = await this.client.post<RawModule>(`/modules/${id}`, {
+      body: {
+        name: input.name,
+        key: input.key,
+        description: input.description,
+        status: input.status,
+        ...owner,
+        linkedTeamIds: relations.linkedTeamIds,
+        linkedProductIds: relations.linkedProductIds,
+      },
+    });
+    this.directory.forgetProductAxis();
+    return toModule(updated);
+  }
+
+  /** Turns the teams and products a module names into the ids it stores. */
+  private async moduleRelations(input: Partial<ModuleInput>) {
+    const [ownerTeam, ownerProduct, linkedTeamIds, linkedProductIds] =
+      await Promise.all([
+        input.ownerTeam
+          ? this.directory.resolveTeam(input.ownerTeam)
+          : undefined,
+        input.ownerProduct
+          ? this.directory.resolveProduct(input.ownerProduct)
+          : undefined,
+        this.resolveTeams(input.linkedTeams),
+        input.linkedProducts
+          ? Promise.all(
+              input.linkedProducts.map((reference) =>
+                this.directory.resolveProduct(reference),
+              ),
+            ).then((products) => [
+              ...new Set(products.map((product) => product.id)),
+            ])
+          : undefined,
+      ]);
+
+    return {
+      ownerTeamId: ownerTeam?.id,
+      ownerProductId: ownerProduct?.id,
+      linkedTeamIds,
+      linkedProductIds,
+    };
+  }
+
+  /** Every repository a module can link to, across the connected sources. */
+  async listAvailableRepos(): Promise<AvailableRepo[]> {
+    const offered = await this.client.get<
+      Array<{
+        integrationAccountId: string;
+        source: string;
+        externalRepoId: string;
+        fullName: string;
+      }>
+    >('/modules/available_repos');
+
+    return offered.map((repo) => ({
+      repository: repo.fullName,
+      source: repo.source,
+      integrationAccountId: repo.integrationAccountId,
+      externalRepoId: repo.externalRepoId,
+    }));
+  }
+
+  /** The repositories linked to one module. */
+  async listModuleRepos(reference: string): Promise<ModuleRepoLink[]> {
+    const { id } = await this.directory.resolveModule(reference);
+    const rows = await this.client.get<RawModuleRepo[]>(`/modules/${id}/repos`);
+    return rows.map((row) => toModuleRepoLink(id, row));
+  }
+
+  /**
+   * Links a repository to a module.
+   *
+   * The server takes only a repository that a connected source offers, named
+   * by that source's ids. A caller knows the repository by its name, so the
+   * name is looked up in what the sources offer, and a repository that no
+   * source offers is refused here with what is on offer and what to do.
+   */
+  async addModuleRepo(
+    reference: string,
+    input: ModuleRepoInput,
+  ): Promise<ModuleRepoLink> {
+    const [{ id }, offered] = await Promise.all([
+      this.directory.resolveModule(reference),
+      this.listAvailableRepos(),
+    ]);
+
+    const needle = input.repository.trim().toLowerCase();
+    const matches = offered.filter(
+      (repo) =>
+        repo.repository.toLowerCase() === needle ||
+        repo.externalRepoId === input.repository.trim(),
+    );
+
+    if (matches.length === 0) {
+      throw new VantikNotFoundError(
+        `No connected source offers the repository "${input.repository}". ` +
+          `On offer: ${
+            offered.map((repo) => repo.repository).join(', ') || 'none'
+          }. A person has to connect the source that hosts it, and choose ` +
+          'the repository there, in Settings > Integrations. Then try again.',
+      );
+    }
+    if (matches.length > 1) {
+      throw new VantikAmbiguousError(
+        `"${input.repository}" is offered by ${matches.length} connected ` +
+          `sources (${matches
+            .map((repo) => `${repo.source} ${repo.integrationAccountId}`)
+            .join(', ')}). Link it in the app, where you can choose the source.`,
+      );
+    }
+
+    const [repo] = matches;
+    const created = await this.client.post<RawModuleRepo>(
+      `/modules/${id}/repos`,
+      {
+        body: {
+          integrationAccountId: repo.integrationAccountId,
+          externalRepoId: repo.externalRepoId,
+          fullName: repo.repository,
+          pathPrefixes: input.pathPrefixes,
+          isDefault: input.isDefault,
+        },
+      },
+    );
+    return toModuleRepoLink(id, created);
+  }
+
+  /** Changes the paths of a repository already linked to a module. */
+  async updateModuleRepo(
+    reference: string,
+    input: ModuleRepoInput,
+  ): Promise<ModuleRepoLink> {
+    const linked = await this.listModuleRepos(reference);
+    const wanted = input.repository.trim();
+    const repo = linked.find(
+      (row) =>
+        row.repository.toLowerCase() === wanted.toLowerCase() ||
+        row.id === wanted,
+    );
+
+    if (!repo) {
+      throw new VantikNotFoundError(
+        `This module has no repository "${input.repository}". Linked: ${
+          linked.map((row) => row.repository).join(', ') || 'none'
+        }.`,
+      );
+    }
+
+    const updated = await this.client.post<RawModuleRepo>(
+      `/modules/${repo.moduleId}/repos/${repo.id}`,
+      {
+        body: { pathPrefixes: input.pathPrefixes, isDefault: input.isDefault },
+      },
+    );
+    return toModuleRepoLink(repo.moduleId, updated);
+  }
+
+  async createCapability(input: CapabilityInput): Promise<Capability> {
+    const created = await this.client.post<RawCapability>('/capabilities', {
+      body: {
+        name: input.name,
+        description: input.description,
+        status: input.status,
+        moduleIds: await this.resolveModuleIds(input.modules),
+      },
+    });
+    this.directory.forgetProductAxis();
+    return toCapability(created);
+  }
+
+  async updateCapability(
+    reference: string,
+    input: Partial<CapabilityInput>,
+  ): Promise<Capability> {
+    const { id } = await this.directory.resolveCapability(reference);
+    const updated = await this.client.post<RawCapability>(
+      `/capabilities/${id}`,
+      {
+        body: {
+          name: input.name,
+          description: input.description,
+          status: input.status,
+          moduleIds: await this.resolveModuleIds(input.modules),
+        },
+      },
+    );
+    this.directory.forgetProductAxis();
+    return toCapability(updated);
   }
 
   /** Prior work resembling this one, with how each was resolved. */

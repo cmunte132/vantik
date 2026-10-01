@@ -46,7 +46,7 @@ function forget<V>(loading: Promise<V>, clear: () => void): Promise<V> {
 }
 
 /** The API rows behind the product axis, before they are trimmed for an agent. */
-interface RawProduct {
+export interface RawProduct {
   id: string;
   name: string;
   key: string;
@@ -54,25 +54,68 @@ interface RawProduct {
   status?: string | null;
 }
 
-interface RawModule extends RawProduct {
+export interface RawModule extends RawProduct {
   ownerTeamId?: string | null;
   ownerProductId?: string | null;
   linkedTeamIds?: string[];
   linkedProductIds?: string[];
 }
 
-interface RawModuleRepo {
+export interface RawModuleRepo {
+  id: string;
   /** "owner/name" on the provider. */
   fullName: string;
   pathPrefixes?: string[];
+  isDefault?: boolean;
 }
 
-interface RawCapability {
+export interface RawCapability {
   id: string;
   name: string;
   description?: string | null;
   status?: string | null;
   moduleIds?: string[];
+}
+
+/**
+ * Trims the API rows for an agent. Exported because a write hands back the same
+ * row as a read, and the answer to a write should look like the list it joins.
+ */
+export function toProduct(product: RawProduct): Product {
+  return {
+    id: product.id,
+    name: product.name,
+    key: product.key,
+    description: product.description ?? null,
+    status: product.status ?? null,
+  };
+}
+
+export function toModule(module: RawModule): Module {
+  return {
+    id: module.id,
+    name: module.name,
+    key: module.key,
+    description: module.description ?? null,
+    status: module.status ?? null,
+    owner: module.ownerProductId
+      ? { kind: 'product' as const, id: module.ownerProductId }
+      : module.ownerTeamId
+        ? { kind: 'team' as const, id: module.ownerTeamId }
+        : null,
+    linkedTeamIds: module.linkedTeamIds ?? [],
+    linkedProductIds: module.linkedProductIds ?? [],
+  };
+}
+
+export function toCapability(capability: RawCapability): Capability {
+  return {
+    id: capability.id,
+    name: capability.name,
+    description: capability.description ?? null,
+    status: capability.status ?? null,
+    moduleIds: capability.moduleIds ?? [],
+  };
 }
 
 /**
@@ -282,15 +325,9 @@ export class Directory {
    */
   getProducts(): Promise<Product[]> {
     this.products ??= forget(
-      this.client.get<RawProduct[]>('/products').then((products) =>
-        products.map((product) => ({
-          id: product.id,
-          name: product.name,
-          key: product.key,
-          description: product.description ?? null,
-          status: product.status ?? null,
-        })),
-      ),
+      this.client
+        .get<RawProduct[]>('/products')
+        .then((products) => products.map(toProduct)),
       () => {
         this.products = undefined;
       },
@@ -301,22 +338,9 @@ export class Directory {
 
   getModules(): Promise<Module[]> {
     this.modules ??= forget(
-      this.client.get<RawModule[]>('/modules').then((modules) =>
-        modules.map((module) => ({
-          id: module.id,
-          name: module.name,
-          key: module.key,
-          description: module.description ?? null,
-          status: module.status ?? null,
-          owner: module.ownerProductId
-            ? { kind: 'product' as const, id: module.ownerProductId }
-            : module.ownerTeamId
-              ? { kind: 'team' as const, id: module.ownerTeamId }
-              : null,
-          linkedTeamIds: module.linkedTeamIds ?? [],
-          linkedProductIds: module.linkedProductIds ?? [],
-        })),
-      ),
+      this.client
+        .get<RawModule[]>('/modules')
+        .then((modules) => modules.map(toModule)),
       () => {
         this.modules = undefined;
       },
@@ -348,17 +372,21 @@ export class Directory {
     );
   }
 
+  /**
+   * Drops the cached product axis after a write, so that the next lookup in
+   * the same process sees the new row or the new name.
+   */
+  forgetProductAxis(): void {
+    this.products = undefined;
+    this.modules = undefined;
+    this.capabilities = undefined;
+  }
+
   getCapabilities(): Promise<Capability[]> {
     this.capabilities ??= forget(
-      this.client.get<RawCapability[]>('/capabilities').then((capabilities) =>
-        capabilities.map((capability) => ({
-          id: capability.id,
-          name: capability.name,
-          description: capability.description ?? null,
-          status: capability.status ?? null,
-          moduleIds: capability.moduleIds ?? [],
-        })),
-      ),
+      this.client
+        .get<RawCapability[]>('/capabilities')
+        .then((capabilities) => capabilities.map(toCapability)),
       () => {
         this.capabilities = undefined;
       },

@@ -129,9 +129,13 @@ describe('vantik MCP tools', () => {
     // chooses from, and a tool silently appearing or vanishing changes agent
     // behaviour everywhere without any other test noticing.
     expect(names).toEqual([
+      'add_module_repo',
       'add_note',
       'close_task',
       'consolidate_knowledge',
+      'create_capability',
+      'create_module',
+      'create_product',
       'create_project',
       'create_task',
       'find_similar_tasks',
@@ -152,7 +156,11 @@ describe('vantik MCP tools', () => {
       'recall_knowledge',
       'remember',
       'search_tasks',
+      'update_capability',
       'update_criteria',
+      'update_module',
+      'update_module_repo',
+      'update_product',
       'update_project',
       'update_task',
       'write_page',
@@ -1203,5 +1211,195 @@ describe('citations and proof over MCP', () => {
     expect(recalled[0]).toMatchObject(proof);
     expect(context.items[0]).toMatchObject(proof);
     expect(page.standing[0]).toMatchObject(proof);
+  });
+});
+
+describe('writing the product axis', () => {
+  const axisRoutes = {
+    ...baseRoutes,
+    'GET /products': [
+      { id: 'product-pod', name: 'PodReader', key: 'podreader' },
+    ],
+    'GET /modules': [
+      {
+        id: 'module-web',
+        name: 'PodReader Web',
+        key: 'podreader-web',
+        ownerTeamId: 'team-eng',
+      },
+    ],
+    'GET /capabilities': [] as unknown[],
+  };
+
+  it('creates a module owned by a product named by name', async () => {
+    const { client, requests } = await connect({
+      ...axisRoutes,
+      'POST /modules': {
+        id: 'module-fn',
+        name: 'PodReader Functions',
+        key: 'podreader-functions',
+        ownerProductId: 'product-pod',
+      },
+    });
+
+    const created = jsonOf(
+      await client.callTool({
+        name: 'create_module',
+        arguments: { name: 'PodReader Functions', ownerProduct: 'PodReader' },
+      }),
+    );
+
+    const sent = requests.find(
+      (request) => request.method === 'POST' && request.path === '/modules',
+    );
+    expect(sent?.body).toMatchObject({
+      name: 'PodReader Functions',
+      ownerProductId: 'product-pod',
+    });
+    expect(created.owner).toEqual({ kind: 'product', id: 'product-pod' });
+  });
+
+  /**
+   * The server checks the owner the row is left with, so moving a module from
+   * a team to a product has to clear the team in the same request.
+   */
+  it('clears the old owner when a module moves to a product', async () => {
+    const { client, requests } = await connect({
+      ...axisRoutes,
+      'POST /modules/module-web': {
+        id: 'module-web',
+        name: 'PodReader Web',
+        key: 'podreader-web',
+        ownerProductId: 'product-pod',
+      },
+    });
+
+    await client.callTool({
+      name: 'update_module',
+      arguments: { module: 'podreader-web', ownerProduct: 'podreader' },
+    });
+
+    const sent = requests.find(
+      (request) => request.path === '/modules/module-web',
+    );
+    expect(sent?.body).toEqual({
+      ownerTeamId: null,
+      ownerProductId: 'product-pod',
+    });
+  });
+
+  it('hands back the refusal of the server in its own words', async () => {
+    const refusal = 'A module has one owner: a team or a product, not both.';
+    const { client } = await connect({
+      ...axisRoutes,
+      'POST /modules': new Response(JSON.stringify({ message: refusal }), {
+        status: 400,
+      }),
+    });
+
+    const result = await client.callTool({
+      name: 'create_module',
+      arguments: { name: 'Both', ownerTeam: 'ENG', ownerProduct: 'PodReader' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain(refusal);
+  });
+
+  it('links a repository that a connected source offers, by name', async () => {
+    const { client, requests } = await connect({
+      ...axisRoutes,
+      'GET /modules/available_repos': [
+        {
+          integrationAccountId: 'account-1',
+          source: 'github',
+          externalRepoId: '4242',
+          fullName: 'cmunte/podreader',
+        },
+      ],
+      'POST /modules/module-web/repos': {
+        id: 'repo-1',
+        fullName: 'cmunte/podreader',
+        pathPrefixes: ['web/'],
+      },
+    });
+
+    const linked = jsonOf(
+      await client.callTool({
+        name: 'add_module_repo',
+        arguments: {
+          module: 'PodReader Web',
+          repository: 'cmunte/PodReader',
+          pathPrefixes: ['web/'],
+        },
+      }),
+    );
+
+    const sent = requests.find(
+      (request) => request.path === '/modules/module-web/repos',
+    );
+    expect(sent?.body).toMatchObject({
+      integrationAccountId: 'account-1',
+      externalRepoId: '4242',
+      pathPrefixes: ['web/'],
+    });
+    expect(linked).toMatchObject({
+      repository: 'cmunte/podreader',
+      pathPrefixes: ['web/'],
+    });
+  });
+
+  it('says what is on offer when no source offers the repository', async () => {
+    const { client, requests } = await connect({
+      ...axisRoutes,
+      'GET /modules/available_repos': [
+        {
+          integrationAccountId: 'account-1',
+          source: 'github',
+          externalRepoId: '1',
+          fullName: 'cmunte/vantik',
+        },
+      ],
+    });
+
+    const result = await client.callTool({
+      name: 'add_module_repo',
+      arguments: { module: 'podreader-web', repository: 'cmunte/podreader' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('On offer: cmunte/vantik');
+    expect(textOf(result)).toContain('Settings > Integrations');
+    expect(
+      requests.some((request) => request.path === '/modules/module-web/repos'),
+    ).toBe(false);
+  });
+
+  it('creates a capability held by modules named by key', async () => {
+    const { client, requests } = await connect({
+      ...axisRoutes,
+      'POST /capabilities': {
+        id: 'capability-1',
+        name: 'Account settings',
+        status: 'live',
+        moduleIds: ['module-web'],
+      },
+    });
+
+    await client.callTool({
+      name: 'create_capability',
+      arguments: {
+        name: 'Account settings',
+        status: 'live',
+        modules: ['podreader-web'],
+      },
+    });
+
+    const sent = requests.find((request) => request.path === '/capabilities');
+    expect(sent?.body).toEqual({
+      name: 'Account settings',
+      status: 'live',
+      moduleIds: ['module-web'],
+    });
   });
 });

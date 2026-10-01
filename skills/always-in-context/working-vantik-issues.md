@@ -15,7 +15,8 @@ edits are attributed to the agent, not to a person). Tools: `search_tasks`,
 `get_task`, `find_similar_tasks`, `list_tasks`, `create_task`, `update_task`,
 `update_criteria`, `pick_up_task`, `add_note`, `close_task`, `list_projects`,
 `create_project`, `update_project`, `list_products`, `list_modules`,
-`list_capabilities`.
+`list_capabilities`, and the `create_`/`update_` tools for products, modules,
+module repos and capabilities.
 
 Two obligations. **Restraint on filing, generosity on progress** — "few and
 meaty" governs how many issues exist, and says nothing about notes and criteria,
@@ -96,6 +97,9 @@ a service), and a **capability** is what the software does for its users.
 - **Do not set the modules.** There is deliberately no field for them: modules
   are recorded by a person, or by the pull request that changes the code, at the
   one moment the answer is known rather than guessed.
+- **Change the map only when it is wrong or a person asks** — `create_product`,
+  `create_module`, `add_module_repo`, `create_capability` and their `update_`
+  tools. Read the lists first and extend what exists.
 - **Ask what will collide with you** before you start —
   `list_tasks(modules: ["server"], stateCategory: ["STARTED"])`, or
   `list_tasks(capability: "…")`. That is the question this axis exists to answer.

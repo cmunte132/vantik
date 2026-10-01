@@ -3,10 +3,14 @@ export type { VantikClientConfig } from './client';
 export { Directory, isUuid, parseIssueKey } from './directory';
 export { VantikAgent } from './agent';
 export type {
+  CapabilityInput,
   CloseTaskInput,
   CreateProjectInput,
   CreateTaskInput,
   ListTasksInput,
+  ModuleInput,
+  ModuleRepoInput,
+  ProductInput,
   SearchTasksInput,
   UpdateProjectInput,
   UpdateTaskInput,

@@ -188,6 +188,11 @@ export class ModulesService {
     return deleted;
   }
 
+  /** The repositories that the workspace's connected sources offer. */
+  async availableRepos(workspaceId: string) {
+    return await this.gitSources.offered(workspaceId);
+  }
+
   async getModuleRepos(moduleId: string) {
     return await this.prisma.moduleRepo.findMany({
       where: { moduleId, deleted: null },

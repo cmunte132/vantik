@@ -39,6 +39,13 @@ export const integrationSeeds: IntegrationSeed[] = [
     description: 'A git repository on the disk of this machine.',
     icon: 'local-repo',
   },
+  {
+    name: 'Git remote',
+    slug: 'git-remote',
+    description:
+      'Repositories on Forgejo, Gitea, GitLab or any git host that serves HTTP or HTTPS.',
+    icon: 'git-remote',
+  },
 
   {
     name: 'Bug Enricher',

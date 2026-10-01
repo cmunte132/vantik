@@ -1,6 +1,7 @@
 import { PrismaService } from 'nestjs-prisma';
 
 import { GitSourcesService } from './git-sources.service';
+import { GitRemoteSource } from './sources/git-remote.source';
 import { GithubSource } from './sources/github.source';
 
 /**
@@ -66,6 +67,7 @@ function build() {
   const service = new GitSourcesService(
     { integrationAccount: { findFirst, findMany } } as unknown as PrismaService,
     { slug: 'github', notifies: true } as unknown as GithubSource,
+    { slug: 'git-remote', notifies: false } as unknown as GitRemoteSource,
   );
 
   return { service, findFirst, findMany };

@@ -165,7 +165,13 @@ export class CredentialsService implements OnModuleInit {
 
   async list(workspaceId: string): Promise<CredentialHandle[]> {
     const rows = await this.prisma.workspaceCredential.findMany({
-      where: { workspaceId, deleted: null },
+      // The token of a git remote belongs to its connection, and the git
+      // remote settings show it. The agent settings list leaves it out.
+      where: {
+        workspaceId,
+        deleted: null,
+        kind: { in: ['MODEL_API_KEY', 'GIT_TOKEN'] },
+      },
       // Named explicitly. A `select` that grows by accident is how the
       // ciphertext ends up in a response.
       select: HANDLE_FIELDS,
@@ -437,6 +443,104 @@ export class CredentialsService implements OnModuleInit {
    * is server-side and must keep the value out of anything a guest can read —
    * which for the git token means never passing it in at all.
    */
+  /**
+   * This method seals the token of one git remote connection. The connection
+   * is an integration account, and its id goes in `provider`. A second call
+   * for the same connection replaces the token.
+   */
+  async putRemoteToken(input: {
+    workspaceId: string;
+    integrationAccountId: string;
+    secret: string;
+    createdById?: string;
+  }): Promise<{ hint: string }> {
+    const secret = input.secret.trim();
+
+    if (!secret) {
+      throw new BadRequestException({ message: 'The token is empty.' });
+    }
+
+    const where = {
+      workspaceId: input.workspaceId,
+      kind: 'GIT_REMOTE_TOKEN' as const,
+      provider: input.integrationAccountId,
+    };
+    const existing = await this.prisma.workspaceCredential.findFirst({
+      where,
+      select: { id: true, deleted: true },
+    });
+    const data = {
+      ...seal(secret),
+      hint: hintFor(secret),
+      deleted: null as Date | null,
+      rotatedAt: existing && !existing.deleted ? new Date() : null,
+    };
+
+    if (existing) {
+      await this.prisma.workspaceCredential.update({
+        where: { id: existing.id },
+        data,
+      });
+    } else {
+      await this.prisma.workspaceCredential.create({
+        data: { ...data, ...where, createdById: input.createdById },
+      });
+    }
+
+    return { hint: data.hint };
+  }
+
+  /**
+   * This method returns the hint for the token of each connection in a
+   * workspace. The key of the map is the id of the integration account.
+   */
+  async remoteTokenHints(workspaceId: string): Promise<Map<string, string>> {
+    const rows = await this.prisma.workspaceCredential.findMany({
+      where: { workspaceId, kind: 'GIT_REMOTE_TOKEN', deleted: null },
+      select: { provider: true, hint: true },
+    });
+
+    return new Map(rows.map((row) => [row.provider, row.hint]));
+  }
+
+  /**
+   * This method opens the token of one git remote connection. If the
+   * connection has no token, it returns null. Only the git sources call it.
+   */
+  async revealRemoteToken(
+    workspaceId: string,
+    integrationAccountId: string,
+  ): Promise<string | null> {
+    const row = await this.prisma.workspaceCredential.findFirst({
+      where: {
+        workspaceId,
+        kind: 'GIT_REMOTE_TOKEN',
+        provider: integrationAccountId,
+        deleted: null,
+      },
+    });
+
+    return row
+      ? open({ ciphertext: row.ciphertext, nonce: row.nonce, tag: row.tag })
+      : null;
+  }
+
+  /** This method removes the token of one git remote connection. */
+  async removeRemoteToken(
+    workspaceId: string,
+    integrationAccountId: string,
+  ): Promise<void> {
+    await this.prisma.workspaceCredential.updateMany({
+      where: {
+        workspaceId,
+        kind: 'GIT_REMOTE_TOKEN',
+        provider: integrationAccountId,
+        deleted: null,
+      },
+      data: { deleted: new Date() },
+    });
+  }
+
   async reveal(
     workspaceId: string,
     kind: CredentialKind,

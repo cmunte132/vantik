@@ -59,6 +59,7 @@ function local(id = 'repo-1'): ResolvedRepo {
     externalRepoId: id,
     fullName: 'app',
     listing: { id, fullName: 'app', path: origin },
+    config: {},
   };
 
   return { source: new LocalDirectorySource(), repo };

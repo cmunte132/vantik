@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
 import { type GitSource, type SourceRepo } from './git-source';
+import { GitRemoteSource } from './sources/git-remote.source';
 import { GithubSource } from './sources/github.source';
 import { LocalDirectorySource } from './sources/local-directory.source';
 
@@ -34,9 +35,10 @@ export class GitSourcesService {
   constructor(
     private prisma: PrismaService,
     github: GithubSource,
+    gitRemote: GitRemoteSource,
   ) {
     this.sources = new Map(
-      [github, new LocalDirectorySource()].map((source) => [
+      [github, gitRemote, new LocalDirectorySource()].map((source) => [
         source.slug,
         source,
       ]),
@@ -61,6 +63,7 @@ export class GitSourcesService {
         id: true,
         accountId: true,
         settings: true,
+        integrationConfiguration: true,
         integrationDefinition: { select: { slug: true } },
       },
     });
@@ -99,6 +102,7 @@ export class GitSourcesService {
         externalRepoId: ref.externalRepoId,
         fullName: String(listing.fullName ?? ref.externalRepoId),
         listing,
+        config: objectOf(account.integrationConfiguration),
       },
     };
   }
@@ -176,6 +180,15 @@ function repositoriesOf(settings: any): Array<Record<string, unknown>> {
           Boolean(entry) && typeof entry === 'object',
       )
     : [];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function objectOf(value: any): Record<string, unknown> {
+  const parsed = typeof value === 'string' ? safeParse(value) : value;
+
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : {};
 }
 
 function safeParse(value: string): unknown {

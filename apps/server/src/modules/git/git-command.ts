@@ -46,12 +46,21 @@ export function tokenRemote(
   url: string,
   token: string,
   username = 'x-access-token',
+  options: { followRedirects?: boolean } = {},
 ): GitRemote {
   const basic = Buffer.from(`${username}:${token}`).toString('base64');
 
   return {
     url,
-    env: configEnv({ 'http.extraHeader': `Authorization: Basic ${basic}` }),
+    // Git sends `http.extraHeader` to every address that it requests. If the
+    // caller turns redirects off, a redirect to a different host cannot get
+    // the token.
+    env: configEnv({
+      'http.extraHeader': `Authorization: Basic ${basic}`,
+      ...(options.followRedirects === false
+        ? { 'http.followRedirects': 'false' }
+        : {}),
+    }),
     dispose: async () => undefined,
     secrets: [token, basic],
   };

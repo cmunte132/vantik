@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { Injectable } from '@nestjs/common';
 
 import { git, type GitRemote } from 'modules/git/git-command';
+import { deliversPullRequest } from 'modules/git/git-source';
 import {
   GitSourcesService,
   type ResolvedRepo,
@@ -189,7 +190,7 @@ export class GitProxyService {
 
       // A source with no pull requests, such as a directory on this machine,
       // hands back the branch itself.
-      if (!resolved.source.openChangeRequest) {
+      if (!deliversPullRequest(resolved.source, resolved.repo)) {
         return { branch, headCommit, delivery: 'branch' };
       }
 

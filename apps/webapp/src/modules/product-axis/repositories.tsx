@@ -193,7 +193,12 @@ function connectableRepos(
     }
 
     let settings: {
-      repositories?: Array<{ id: string; fullName: string; path?: string }>;
+      repositories?: Array<{
+        id: string;
+        fullName: string;
+        path?: string;
+        webUrl?: string;
+      }>;
     };
 
     try {
@@ -210,7 +215,9 @@ function connectableRepos(
         externalRepoId: String(repo.id),
         fullName: repo.fullName,
         integrationAccountId: account.id,
-        path: repo.path,
+        // A repository on a git host has no path. Its web page tells two
+        // repositories with the same name apart.
+        path: repo.path ?? repo.webUrl,
       });
     }
   }

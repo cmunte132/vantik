@@ -2336,6 +2336,11 @@ enum WorkspaceCredentialKind {
   /// Used by the host to push and open pull requests on the sandbox's
   /// request. Never injected into the guest.
   GIT_TOKEN
+  /// The token of one git remote connection. `provider` holds the id of the
+  /// integration account, so each connection has its own token. The host
+  /// uses it to fetch, to push and to open pull requests. The guest never
+  /// gets it.
+  GIT_REMOTE_TOKEN
 }
 
 enum AgentRunEventLevel {

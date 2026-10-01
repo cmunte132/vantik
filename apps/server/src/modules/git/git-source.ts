@@ -17,6 +17,11 @@ export interface SourceRepo {
   fullName: string;
   /** The entry for this repository in the account's `settings.repositories`. */
   listing: Record<string, unknown>;
+  /**
+   * The `integrationConfiguration` of the account. It holds the settings of
+   * the connection that are not secret, for example the address of a host.
+   */
+  config: Record<string, unknown>;
 }
 
 export interface ChangeRequest {
@@ -75,6 +80,28 @@ export interface GitSource {
     request: ChangeRequest,
   ): Promise<string | undefined>;
 
+  /**
+   * This method returns true if `openChangeRequest` can open a pull request
+   * for this repository. A source that has no such method does not need it.
+   * The git remote source needs it, because a generic host has no API.
+   */
+  opensChangeRequests?(repo: SourceRepo): boolean;
+
   /** Where the repository is, for a person: a URL or a path. Never a secret. */
   location(repo: SourceRepo): string;
+}
+
+/**
+ * This function returns true if a run on this repository hands back a pull
+ * request. If it returns false, the run hands back the pushed branch.
+ */
+export function deliversPullRequest(
+  source: GitSource,
+  repo: SourceRepo,
+): boolean {
+  if (!source.openChangeRequest) {
+    return false;
+  }
+
+  return source.opensChangeRequests ? source.opensChangeRequests(repo) : true;
 }

@@ -57,6 +57,11 @@ export class Spec {
    * Connect button that authorises nothing, and off again the same way.
    */
   no_auth?: LocalParams;
+  /**
+   * A form for the address of a git host and a token. The workspace can
+   * connect more than one host.
+   */
+  git_remote?: LocalParams;
   team_mappings?: TeamMappingParams;
   other_data?: any;
 }

@@ -11,10 +11,10 @@ import { ErrorReportingInterceptor } from 'common/interceptors/error-reporting.i
 import { smtpFrom, smtpTransportOptions } from 'common/smtp';
 
 import { AgentHooksModule } from 'modules/agent-hooks/agent-hooks.module';
+import { AgentRunsModule } from 'modules/agent-runs/agent-runs.module';
 import { AgentSkillModule } from 'modules/agent-skill/agent-skill.module';
 import { AIRequestsModule } from 'modules/ai-requests/ai-requests.module';
 import { ALSModule } from 'modules/als/als.module';
-import { AgentRunsModule } from 'modules/agent-runs/agent-runs.module';
 import { AttachmentModule } from 'modules/attachments/attachments.module';
 import { AgentScopeGuard } from 'modules/auth/agent-scope.guard';
 import { AuthModule } from 'modules/auth/auth.module';
@@ -24,6 +24,7 @@ import { CapabilitiesModule } from 'modules/capabilities/capabilities.module';
 import { ChecklistItemsModule } from 'modules/checklist-items/checklist-items.module';
 import { ClientConfigModule } from 'modules/client-config/client-config.module';
 import { CyclesModule } from 'modules/cycles/cycles.module';
+import { GitRemoteModule } from 'modules/git-remote/git-remote.module';
 import { HealthModule } from 'modules/health/health.module';
 import { IntegrationAccountModule } from 'modules/integration-account/integration-account.module';
 import { IntegrationDefinitionModule } from 'modules/integration-definition/integration-definition.module';
@@ -131,6 +132,7 @@ import { AppService } from './app.service';
     IntegrationAccountModule,
     IntegrationsModule,
     LocalRepoModule,
+    GitRemoteModule,
 
     BullConfigModule,
 

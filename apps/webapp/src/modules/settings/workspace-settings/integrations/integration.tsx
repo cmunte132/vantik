@@ -10,6 +10,7 @@ import { useParams } from 'common/router';
 
 import { useGetIntegrationDefinition } from 'services/integration-definition';
 
+import { GitRemotes } from './git-remotes';
 import { IntegrationAuth } from './integration-auth';
 import { LocalRepositories } from './local-repositories';
 import { NoAuthConnect } from './no-auth-connect';
@@ -40,6 +41,12 @@ export function Integration() {
                   <LocalRepositories
                     instruction={
                       integrationDefinition.spec.local_auth.instruction
+                    }
+                  />
+                ) : integrationDefinition.spec?.git_remote ? (
+                  <GitRemotes
+                    instruction={
+                      integrationDefinition.spec.git_remote.instruction
                     }
                   />
                 ) : integrationDefinition.spec?.no_auth ? (

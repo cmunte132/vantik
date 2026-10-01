@@ -5,6 +5,7 @@ import { CredentialsModule } from 'modules/agent-runs/credentials/credentials.mo
 
 import { GitSourcesService } from './git-sources.service';
 import { RepoMirrorService } from './repo-mirror.service';
+import { GitRemoteSource } from './sources/git-remote.source';
 import { GithubSource } from './sources/github.source';
 
 /**
@@ -15,7 +16,12 @@ import { GithubSource } from './sources/github.source';
   // PluginsModule for the GitHub installation token, and CredentialsModule for
   // the workspace's git token.
   imports: [PluginsModule, CredentialsModule],
-  providers: [GitSourcesService, RepoMirrorService, GithubSource],
-  exports: [GitSourcesService, RepoMirrorService],
+  providers: [
+    GitSourcesService,
+    RepoMirrorService,
+    GithubSource,
+    GitRemoteSource,
+  ],
+  exports: [GitSourcesService, RepoMirrorService, GitRemoteSource],
 })
 export class GitModule {}

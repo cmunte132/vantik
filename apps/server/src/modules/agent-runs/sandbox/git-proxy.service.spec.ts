@@ -59,6 +59,7 @@ function build(): GitProxyService {
       externalRepoId: 'repo-1',
       fullName: 'app',
       listing: { id: 'repo-1', fullName: 'app', path: origin },
+      config: {},
     },
   }));
 

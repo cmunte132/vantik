@@ -1,6 +1,7 @@
 import { RiFlashlightLine, RiStackLine } from '@remixicon/react';
 import {
   RiDiscordFill,
+  RiGitBranchLine,
   RiGitRepositoryLine,
   RiGithubFill,
   RiMailFill,
@@ -11,6 +12,7 @@ export const ICON_MAPPING = {
   discord: RiDiscordFill,
   github: RiGithubFill,
   'local-repo': RiGitRepositoryLine,
+  'git-remote': RiGitBranchLine,
 
   // Defaults
   integration: RiStackLine,

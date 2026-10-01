@@ -8,6 +8,7 @@ import type {
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
+import { deliversPullRequest } from 'modules/git/git-source';
 import { GitSourcesService } from 'modules/git/git-sources.service';
 import IssueContextService from 'modules/issues/issue-context.service';
 import KnowledgeService, {
@@ -333,7 +334,7 @@ export class ContextPackService {
       delivery:
         'unresolved' in resolved
           ? null
-          : resolved.source.openChangeRequest
+          : deliversPullRequest(resolved.source, resolved.repo)
             ? 'pull_request'
             : 'branch',
     };

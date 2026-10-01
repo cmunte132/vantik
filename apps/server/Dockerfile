@@ -1,10 +1,8 @@
 # Built from the repo root: docker build -f apps/server/Dockerfile .
 #
-# The install stages deliberately depend on nothing but the workspace manifests
-# and the lockfile. Editing source cannot reinstall node_modules; only a
-# package.json or pnpm-lock.yaml change can. This replaces an earlier
-# `turbo prune` stage that consumed the whole context, which meant any changed
-# byte anywhere — a README, a .DS_Store — reinstalled ~1800 packages twice.
+# The install stages use the workspace manifests, lockfile and dependency patches.
+# Source changes do not cause another dependency install.
+# A manifest, lockfile or patch change invalidates the install cache.
 
 FROM node:24-bookworm-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends openssl dumb-init ca-certificates \
@@ -13,10 +11,11 @@ WORKDIR /app
 # Installed once here rather than in each stage that needs it.
 RUN npm install -g pnpm@10.34.5
 
-## Workspace manifests, and nothing else. This layer is the cache key for every
-## install below, so it must not contain source.
+## This stage supplies the manifests and patches for dependency installation.
+## It excludes application source to preserve the install cache.
 FROM base AS manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 COPY apps/docs/package.json                 apps/docs/
 COPY apps/sandbox-host/package.json         apps/sandbox-host/
 COPY apps/server/package.json               apps/server/

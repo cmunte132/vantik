@@ -281,6 +281,15 @@ dashboard, add the observability overlay:
 docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d
 ```
 
+To rebuild the application and Bull Board from this checkout, use the same overlay:
+
+```bash
+COMPOSE_FILE=docker-compose.yaml:docker-compose.observability.yaml \
+  pnpm stack:rebuild server webapp bull-board
+```
+
+The rebuild script stops the stack, builds one image at a time, and starts the stack again.
+
 Grafana is on [localhost:3002](http://localhost:3002) and needs no login. The
 overlay includes Prometheus, Tempo, and Loki. These all work with no more setup:
 the rate, the errors, and the latency of the requests, the health of the Node

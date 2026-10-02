@@ -17,6 +17,8 @@ import { Textarea } from '@vantikhq/ui/components/textarea';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
+import { ModelPicker } from 'modules/agent-runs/model-picker';
+
 import { useIssueData } from 'hooks/issues';
 import { useCurrentWorkspace } from 'hooks/workspace';
 
@@ -216,26 +218,12 @@ export const DelegateControl = observer(() => {
 
                 <div className="flex flex-col gap-1">
                   <label className="text-xs text-muted-foreground">Model</label>
-                  <Select
-                    value={modelId ?? DEFAULT}
-                    onValueChange={(value) =>
-                      setModelId(value === DEFAULT ? undefined : value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-72">
-                      {/* The workspace default first and selected. Most runs
-                          should not be a decision. */}
-                      <SelectItem value={DEFAULT}>Workspace default</SelectItem>
-                      {models.map((model: ModelChoiceOption) => (
-                        <SelectItem key={model.id} value={model.id}>
-                          {model.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ModelPicker
+                    models={models}
+                    value={modelId}
+                    noneLabel="Workspace default"
+                    onChange={setModelId}
+                  />
                 </div>
               </div>
 

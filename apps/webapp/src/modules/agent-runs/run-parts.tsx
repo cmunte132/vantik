@@ -187,7 +187,13 @@ export const OutcomeCard = ({
         <span className="text-md font-semibold">{heading}</span>
       </div>
 
-      {failure && <p className="text-muted-foreground">{failure.next}</p>}
+      {/* The run's own message names the cause; the category's remedy is a
+          guess at it, so it shows only when the run gave no message. */}
+      {run.error ? (
+        <p className="text-muted-foreground">{run.error}</p>
+      ) : (
+        failure && <p className="text-muted-foreground">{failure.next}</p>
+      )}
 
       {run.summary && <Summary text={run.summary} />}
 

@@ -11,6 +11,8 @@ import {
 } from '@vantikhq/ui/components/select';
 import * as React from 'react';
 
+import { ModelPicker } from 'modules/agent-runs/model-picker';
+
 import {
   type CredentialHandle,
   type ProviderOption,
@@ -337,25 +339,14 @@ function RunDefaults({
 
       <Field label="Model">
         {models.length > 0 ? (
-          <Select
-            value={defaults.model ?? ''}
-            onValueChange={(model) =>
+          <ModelPicker
+            models={models}
+            value={defaults.model}
+            placeholder="Pick a model. Runs do not fall back to a default."
+            onChange={(model) =>
               onChange({ ...defaults, provider: chosen?.provider, model })
             }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="The provider's default" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {models.map((model) => (
-                  <SelectItem key={model.id} value={model.id}>
-                    {model.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          />
         ) : (
           // No list to offer, because the provider publishes none or could not
           // be reached. A text box is worse than a menu but better than being
@@ -363,7 +354,7 @@ function RunDefaults({
           <Input
             className="font-mono"
             value={defaults.model ?? ''}
-            placeholder="Model id — the provider's default if empty"
+            placeholder="Model id. Runs do not fall back to a default."
             onChange={(event) =>
               onChange({
                 ...defaults,

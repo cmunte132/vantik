@@ -283,6 +283,16 @@ export class AgentRunsService {
       });
     }
 
+    // A failed run said why only in its own row. Logging it here, the one
+    // place every executor's failure passes through, puts the reason in the
+    // server log beside everything else that happened at that moment.
+    if (to === 'FAILED') {
+      this.logger.warn({
+        message: `Agent run ${runId} on issue ${current.issueId} failed (${patch.failure ?? 'no category'}): ${patch.error ?? 'no message'}`,
+        where: 'AgentRunsService.transition',
+      });
+    }
+
     // Only the writer that moved the run into its end gets here, so a run's
     // outcome is attributed to its knowledge once.
     if (isTerminalAgentRunStatus(to)) {

@@ -62,6 +62,9 @@ async function bootstrap() {
     }
     next();
   });
+  // Browser telemetry is relayed unauthenticated, so it gets a small cap of its
+  // own. It parses first, and the general parser below then skips the body.
+  app.use('/v1/telemetry', bodyParser.json({ limit: '1mb' }));
   app.use(bodyParser.json({ limit: '50mb' })); // Adjust limit as required
 
   app.use(LOCAL_ATTACHMENT_PATH, localAttachmentBodyParser());

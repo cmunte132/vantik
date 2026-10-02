@@ -1,13 +1,12 @@
 import { Button } from '@vantikhq/ui/components/button';
 import { Logo } from '@vantikhq/ui/components/dynamic-logo';
 import { Loader } from '@vantikhq/ui/components/loader';
-import posthog from 'posthog-js';
 import * as React from 'react';
-import { signOut } from 'services/auth';
 
 import { deleteCookies } from 'common/common-utils';
 import { useRouter } from 'common/router';
 
+import { signOut } from 'services/auth';
 import { useGetUserQuery } from 'services/users';
 
 import { UserContext } from 'store/user-context';
@@ -23,16 +22,6 @@ export function UserDataWrapper(props: Props): React.ReactElement {
     query: { workspaceSlug },
     replace,
   } = useRouter();
-
-  React.useEffect(() => {
-    if (!isLoading && !isError) {
-      posthog.identify(
-        data.id, // Replace 'distinct_id' with your user's unique identifier
-        { email: data.email, name: data.fullname }, // optional: set additional person properties
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!isLoading, !isError]);
 
   const workspaceRes =
     !isLoading && !isError
@@ -59,7 +48,6 @@ export function UserDataWrapper(props: Props): React.ReactElement {
           <Button
             variant="secondary"
             onClick={async () => {
-              posthog.reset(true);
               deleteCookies();
               await signOut();
 

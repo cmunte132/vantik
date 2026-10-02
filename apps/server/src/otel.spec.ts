@@ -15,11 +15,15 @@ describe('HealthCheckSampler', () => {
     [{ 'url.path': '/health/ready' }],
     [{ 'http.target': '/health/ready?probe=1' }],
     [{ 'url.path': '/' }],
-  ])('drops the server span of a probe: %j', (attributes) => {
-    expect(decide(SpanKind.SERVER, attributes)).toBe(
-      tracing.SamplingDecision.NOT_RECORD,
-    );
-  });
+    [{ 'url.path': '/v1/telemetry/traces' }],
+  ])(
+    'drops the server span of a probe or a relayed export: %j',
+    (attributes) => {
+      expect(decide(SpanKind.SERVER, attributes)).toBe(
+        tracing.SamplingDecision.NOT_RECORD,
+      );
+    },
+  );
 
   it('keeps a real request, and a client call to a health path', () => {
     expect(decide(SpanKind.SERVER, { 'url.path': '/v1/issues' })).toBe(

@@ -43,9 +43,6 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
 ## per-file rewrite.
 FROM dev-deps AS builder
 COPY . .
-# Release builds in CI pass it, to upload source maps to Sentry. It stays in
-# this stage; the runner copies only dist/, which holds no maps.
-ARG SENTRY_AUTH_TOKEN
 # The build stamp. .git is in .dockerignore, so the build genuinely cannot read
 # the commit itself — it has to be passed in, and docker-compose.yaml derives it.
 # Declared here rather than at the top of the stage so changing it does not
@@ -65,7 +62,7 @@ ENV VANTIK_COMMIT=$VANTIK_COMMIT
 # adds its own allocations. The build then fits beside a running stack in a
 # 2 GiB podman VM.
 RUN cd apps/webapp && \
-    NODE_ENV=production SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN \
+    NODE_ENV=production \
     RAYON_NUM_THREADS=1 TOKIO_WORKER_THREADS=1 \
       node node_modules/vite/bin/vite.js build
 

@@ -9,18 +9,19 @@
     "VANTIK_COMMIT",
     "NODE_ENV",
     "NEXT_PUBLIC_BACKEND_HOST",
-    "NEXT_PUBLIC_POSTHOG_KEY",
-    "NEXT_PUBLIC_POSTHOG_HOST",
-    "NEXT_PUBLIC_SENTRY_DSN",
-    // Turns on the source map upload in vite.config.ts. Turbo hands a task only
-    // the variables listed here, so without this line the image build's token
-    // never reached the build, and the upload was silently skipped.
-    "SENTRY_AUTH_TOKEN",
     "LOG_LEVEL",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
     "OTEL_EXPORTER_OTLP_HEADERS",
     "OTEL_METRIC_EXPORT_INTERVAL",
     "OTEL_LOG_LEVEL",
+    // Read by the browser telemetry relay, which resolves its target the way
+    // the OTel exporters do.
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+    "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
+    "TELEMETRY_RATE_LIMIT",
+    "TELEMETRY_RATE_LIMIT_WINDOW_MS",
     "POSTGRES_USER",
     "POSTGRES_PASSWORD",
     "POSTGRES_DB",

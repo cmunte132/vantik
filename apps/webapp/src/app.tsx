@@ -5,9 +5,6 @@ import { Button } from '@vantikhq/ui/components/button';
 import { ThemeProvider } from '@vantikhq/ui/components/theme-provider';
 import { Toaster } from '@vantikhq/ui/components/toaster';
 import { TooltipProvider } from '@vantikhq/ui/components/tooltip';
-import * as Sentry from '@sentry/react';
-import posthog from 'posthog-js';
-import { PostHogProvider } from 'posthog-js/react';
 import React from 'react';
 import { HotkeysProvider } from 'react-hotkeys-hook';
 import { useMatches, useRouteError } from 'react-router';
@@ -16,6 +13,7 @@ import { useGetQueryClient } from 'common/lib/react-query-client';
 import { recoverIfStaleChunk } from 'common/lib/stale-chunk-recovery';
 import type { PageHandle } from 'common/router';
 import { SCOPES } from 'common/scopes';
+import { reportError } from 'common/telemetry';
 import { AppVersionProvider } from 'common/wrappers/app-version-provider';
 
 import { UnsentChangesChip } from 'components/unsent-changes-chip';
@@ -51,38 +49,36 @@ export function App() {
 
   return (
     <>
-      <PostHogProvider client={posthog}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <HotkeysProvider initiallyActiveScopes={[SCOPES.Global]}>
-            <TooltipProvider delayDuration={500}>
-              <StoreContext.Provider value={storeContextStore}>
-                <QueryClientProvider client={queryClientRef.current}>
-                  {/*
-                    Above the routes and outside any auth guard: a client can
-                    be stale on the login screen too, and the stale-chunk
-                    recovery it installs has to be in place before the first
-                    navigation.
-                  */}
-                  <AppVersionProvider>
-                    <div className="min-h-screen font-sans antialiased flex">
-                      <CurrentPage />
-                    </div>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <HotkeysProvider initiallyActiveScopes={[SCOPES.Global]}>
+          <TooltipProvider delayDuration={500}>
+            <StoreContext.Provider value={storeContextStore}>
+              <QueryClientProvider client={queryClientRef.current}>
+                {/*
+                  Above the routes and outside any auth guard: a client can
+                  be stale on the login screen too, and the stale-chunk
+                  recovery it installs has to be in place before the first
+                  navigation.
+                */}
+                <AppVersionProvider>
+                  <div className="min-h-screen font-sans antialiased flex">
+                    <CurrentPage />
+                  </div>
 
-                    <Toaster />
-                    <UpdateAvailableChip />
-                    <UnsentChangesChip />
-                  </AppVersionProvider>
-                </QueryClientProvider>
-              </StoreContext.Provider>
-            </TooltipProvider>
-          </HotkeysProvider>
-        </ThemeProvider>
-      </PostHogProvider>
+                  <Toaster />
+                  <UpdateAvailableChip />
+                  <UnsentChangesChip />
+                </AppVersionProvider>
+              </QueryClientProvider>
+            </StoreContext.Provider>
+          </TooltipProvider>
+        </HotkeysProvider>
+      </ThemeProvider>
     </>
   );
 }
@@ -115,7 +111,7 @@ export function AppError() {
     // A page chunk from a build that has been replaced. Reloading fixes it, so
     // it is not an error worth reporting.
     if (!recoverIfStaleChunk(error)) {
-      Sentry.captureException(error);
+      reportError(error, { 'vantik.error.source': 'route' });
     }
   }, [error]);
 

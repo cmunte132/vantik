@@ -12,9 +12,15 @@ import {
 } from '@vantikhq/ui/components/form';
 import { Input } from '@vantikhq/ui/components/input';
 import { useToast } from '@vantikhq/ui/components/use-toast';
-import posthog from 'posthog-js';
 import React from 'react';
 import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+
+import { AuthLayout } from 'common/layouts/auth-layout';
+import { useRouter } from 'common/router';
+import { safeRedirectPath } from 'common/safe-redirect';
+import { AuthGuard } from 'common/wrappers/auth-guard';
+
 import {
   authenticateCredentialWithSignIn,
   consumeCode,
@@ -22,12 +28,6 @@ import {
   doesBrowserSupportWebAuthn,
   registerPasskey,
 } from 'services/auth';
-import { z } from 'zod';
-
-import { AuthLayout } from 'common/layouts/auth-layout';
-import { useRouter } from 'common/router';
-import { safeRedirectPath } from 'common/safe-redirect';
-import { AuthGuard } from 'common/wrappers/auth-guard';
 
 export const AuthSchema = z.object({
   email: z.string().email(),
@@ -108,7 +108,6 @@ export function Auth() {
       const response = await registerPasskey({ email });
 
       if (response.status === 'OK') {
-        posthog.capture('user_signed_up', { email });
         onAuthenticated();
       } else if (response.status === 'SIGN_UP_NOT_ALLOWED') {
         passkeyError(response.reason);
@@ -137,7 +136,8 @@ export function Auth() {
       toast({
         variant: 'destructive',
         title: 'Error!',
-        description: err instanceof Error ? err.message : 'Oops! Something went wrong.',
+        description:
+          err instanceof Error ? err.message : 'Oops! Something went wrong.',
       });
     }
 
@@ -184,7 +184,8 @@ export function Auth() {
       toast({
         variant: 'destructive',
         title: 'Error!',
-        description: err instanceof Error ? err.message : 'Oops! Something went wrong.',
+        description:
+          err instanceof Error ? err.message : 'Oops! Something went wrong.',
       });
     }
     setVerifying(false);

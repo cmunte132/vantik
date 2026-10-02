@@ -8,18 +8,15 @@
  */
 export interface ClientConfig {
   socketHost: string;
-  posthogKey: string;
-  posthogHost: string;
-  sentryDsn: string;
+  /** Whether the server relays browser telemetry to an OTLP backend. */
+  telemetryEnabled: boolean;
   /** Whether this install has an LLM endpoint configured. */
   aiEnabled: boolean;
 }
 
 const FALLBACK: ClientConfig = {
   socketHost: '',
-  posthogKey: '',
-  posthogHost: 'https://us.i.posthog.com',
-  sentryDsn: '',
+  telemetryEnabled: false,
   // Off until the server says otherwise, so an install without an endpoint
   // never flashes an AI affordance that would fail when pressed.
   aiEnabled: false,

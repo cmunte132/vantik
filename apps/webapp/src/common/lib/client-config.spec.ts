@@ -26,9 +26,7 @@ async function freshModule() {
 
 const SERVED = {
   socketHost: 'http://localhost:3001',
-  posthogKey: 'phc_test',
-  posthogHost: 'https://us.i.posthog.com',
-  sentryDsn: '',
+  telemetryEnabled: false,
   aiEnabled: true,
 };
 

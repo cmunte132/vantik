@@ -50,6 +50,7 @@ import { SupportModule } from 'modules/support/support.module';
 import { SyncModule } from 'modules/sync/sync.module';
 import { SyncActionsModule } from 'modules/sync-actions/sync-actions.module';
 import { TeamsModule } from 'modules/teams/teams.module';
+import { TelemetryModule } from 'modules/telemetry/telemetry.module';
 import { TemplatesModule } from 'modules/templates/templates.module';
 import { UsersModule } from 'modules/users/users.module';
 import { ViewsModule } from 'modules/views/views.module';
@@ -138,6 +139,7 @@ import { AppService } from './app.service';
 
     CachceModule,
     ClientConfigModule,
+    TelemetryModule,
 
     SupportModule,
   ],

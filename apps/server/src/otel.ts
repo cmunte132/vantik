@@ -62,13 +62,21 @@ function metricExportIntervalMs(): number {
 /**
  * This function returns true for the paths of the liveness and readiness
  * probes. Compose calls `/health/ready` every few seconds.
+ *
+ * It also returns true for the browser telemetry relay. A trace of each relayed
+ * export would go back to the backend through the relay itself, and every tab
+ * sends one every few seconds.
  */
 function isHealthCheck(path: unknown): boolean {
   if (typeof path !== 'string') {
     return false;
   }
   const pathname = path.split('?')[0];
-  return pathname === '/' || pathname.startsWith('/health');
+  return (
+    pathname === '/' ||
+    pathname.startsWith('/health') ||
+    pathname.startsWith('/v1/telemetry')
+  );
 }
 
 /**

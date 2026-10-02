@@ -11,13 +11,13 @@ import {
   DropdownMenuTrigger,
 } from '@vantikhq/ui/components/dropdown-menu';
 import { observer } from 'mobx-react-lite';
-import posthog from 'posthog-js';
 import React from 'react';
-import { signOut } from 'services/auth';
 
 import { deleteCookies } from 'common/common-utils';
 import { useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
+
+import { signOut } from 'services/auth';
 
 import { UserContext } from 'store/user-context';
 
@@ -88,7 +88,6 @@ export const AccountMenu = observer(() => {
 
         <DropdownMenuItem
           onClick={async () => {
-            posthog.reset(true);
             deleteCookies();
             await signOut();
 

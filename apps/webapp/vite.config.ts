@@ -4,7 +4,6 @@ import type { Plugin } from 'vite';
 
 import path from 'node:path';
 
-import { sentryVitePlugin } from '@sentry/vite-plugin';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
@@ -89,25 +88,8 @@ function versionFile(): Plugin {
 
 const backend = process.env.BACKEND_URL ?? 'http://localhost:3001';
 
-// Release builds in CI carry a Sentry token. They build source maps, upload
-// them, and delete them, so Sentry can read stack traces and browsers never
-// get the maps. Every other build skips all three.
-const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
-
 export default defineConfig({
-  plugins: [
-    react(),
-    versionFile(),
-    sentryAuthToken &&
-      sentryVitePlugin({
-        org: 'vantik',
-        project: 'javascript-nextjs',
-        authToken: sentryAuthToken,
-        release: { name: buildId },
-        sourcemaps: { filesToDeleteAfterUpload: ['dist/**/*.map'] },
-        telemetry: false,
-      }),
-  ],
+  plugins: [react(), versionFile()],
   resolve: { alias },
   define: {
     'import.meta.env.VANTIK_BUILD_ID': JSON.stringify(buildId),
@@ -131,7 +113,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: sentryAuthToken ? 'hidden' : false,
+    sourcemap: false,
   },
   // Vite 8 transforms with oxc, and it applies no JSX runtime unless it is told
   // to. Without this, an import of any file that holds JSX fails to parse in a

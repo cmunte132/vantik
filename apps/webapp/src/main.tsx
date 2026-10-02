@@ -10,14 +10,12 @@ import en from 'javascript-time-ago/locale/en';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 
-import { initPosthog, initSentry } from 'common/init-config';
 import { setAppRouter } from 'common/router';
+import { initTelemetry } from 'common/telemetry';
 
 import { routes } from './routes';
 
-void initSentry();
-// Analytics config is fetched, so this settles a beat after the app mounts.
-void initPosthog();
+void initTelemetry();
 
 TimeAgo.addDefaultLocale(en);
 

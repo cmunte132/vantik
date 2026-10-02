@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { isLLMConfigured } from 'modules/ai-requests/llm-provider';
+import { relayTarget } from 'modules/telemetry/otlp-relay';
 
 /**
  * Settings the browser needs before it can talk to anything else.
@@ -15,9 +16,12 @@ export interface ClientConfig {
    * API this cannot be a same-origin path.
    */
   socketHost: string;
-  posthogKey: string;
-  posthogHost: string;
-  sentryDsn: string;
+  /**
+   * Whether the server exports telemetry. True makes the browser start its
+   * OTel SDK and send to the relay at /v1/telemetry. Says only that an OTLP
+   * endpoint is set, never where it is or what authenticates to it.
+   */
+  telemetryEnabled: boolean;
   /**
    * Whether an LLM endpoint is configured. False hides the AI affordances
    * instead of offering ones that cannot work — see isLLMConfigured. Says only
@@ -35,10 +39,7 @@ export class ClientConfigService {
       // reachable from outside. Prefer it, fall back for plain local runs.
       socketHost:
         process.env.NEXT_PUBLIC_BACKEND_HOST ?? process.env.BACKEND_HOST ?? '',
-      posthogKey: process.env.NEXT_PUBLIC_POSTHOG_KEY ?? '',
-      posthogHost:
-        process.env.NEXT_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com',
-      sentryDsn: process.env.NEXT_PUBLIC_SENTRY_DSN ?? '',
+      telemetryEnabled: Boolean(relayTarget('traces') || relayTarget('logs')),
       aiEnabled: isLLMConfigured(),
     };
   }

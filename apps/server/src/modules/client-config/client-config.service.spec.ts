@@ -42,4 +42,30 @@ describe('ClientConfigService', () => {
     expect(serialised).not.toContain('key');
     expect(serialised).not.toContain('fast-model');
   });
+
+  // The browser starts its SDK on this flag, and the flag must not disclose
+  // the backend or the credentials the server sends to it.
+  it('reports telemetry as on when an OTLP endpoint is set, and hides it', () => {
+    process.env = {
+      ...env,
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'https://otlp.example.test',
+      OTEL_EXPORTER_OTLP_HEADERS: 'authorization=Basic%20c2VjcmV0',
+    };
+
+    const config = service.getClientConfig();
+    const serialised = JSON.stringify(config);
+
+    expect(config.telemetryEnabled).toBe(true);
+    expect(serialised).not.toContain('example.test');
+    expect(serialised).not.toContain('c2VjcmV0');
+  });
+
+  it('reports telemetry as off when no endpoint is set', () => {
+    process.env = { ...env };
+    delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT;
+
+    expect(service.getClientConfig().telemetryEnabled).toBe(false);
+  });
 });

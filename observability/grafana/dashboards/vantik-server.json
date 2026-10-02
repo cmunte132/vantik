@@ -1,7 +1,7 @@
 {
   "uid": "vantik-server",
   "title": "Vantik Server",
-  "description": "Requests, datastores and Node runtime health for apps/server. Metric names here are the Prometheus translations of the OTel names emitted by apps/server/src/otel.ts — dots become underscores and the unit is appended, so http.server.request.duration is http_server_request_duration_seconds.",
+  "description": "Requests, datastores, Node runtime health, queues and model calls for apps/server. Metric names here are the Prometheus translations of the OTel names emitted by apps/server/src/otel.ts — dots become underscores and the unit is appended, so http.server.request.duration is http_server_request_duration_seconds.",
   "tags": [
     "vantik"
   ],
@@ -80,7 +80,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval]))",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\", http_route!~\"/|/health.*\"}[$__rate_interval]))",
           "instant": false
         }
       ]
@@ -141,7 +141,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "100 * (sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\", http_response_status_code=~\"5..\"}[$__rate_interval])) or vector(0)) / sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval]))",
+          "expr": "100 * (sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\", http_route!~\"/|/health.*\", http_response_status_code=~\"5..\"}[$__rate_interval])) or vector(0)) / sum(rate(http_server_request_duration_seconds_count{service_name=~\"$service\", http_route!~\"/|/health.*\"}[$__rate_interval]))",
           "instant": false
         }
       ]
@@ -201,7 +201,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\", http_route!~\"/|/health.*\"}[$__rate_interval])))",
           "instant": false
         }
       ]
@@ -327,7 +327,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "label_replace(sum by (http_route) (rate(http_server_request_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval])), \"http_route\", \"(unrouted)\", \"http_route\", \"^$\")",
+          "expr": "label_replace(sum by (http_route) (rate(http_server_request_duration_seconds_count{service_name=~\"$service\", http_route!~\"/|/health.*\"}[$__rate_interval])), \"http_route\", \"(unrouted)\", \"http_route\", \"^$\")",
           "legendFormat": "{{http_route}}"
         }
       ]
@@ -373,19 +373,19 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\", http_route!~\"/|/health.*\"}[$__rate_interval])))",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.90, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.90, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\", http_route!~\"/|/health.*\"}[$__rate_interval])))",
           "legendFormat": "p90"
         },
         {
           "refId": "C",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\", http_route!~\"/|/health.*\"}[$__rate_interval])))",
           "legendFormat": "p99"
         }
       ]
@@ -465,7 +465,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "sum by (http_response_status_code) (rate(http_server_request_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval]))",
+          "expr": "sum by (http_response_status_code) (rate(http_server_request_duration_seconds_count{service_name=~\"$service\", http_route!~\"/|/health.*\"}[$__rate_interval]))",
           "legendFormat": "{{http_response_status_code}}"
         }
       ]
@@ -516,7 +516,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "label_replace(histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval]))), \"http_route\", \"(unrouted)\", \"http_route\", \"^$\")",
+          "expr": "label_replace(histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\", http_route!~\"/|/health.*\"}[$__rate_interval]))), \"http_route\", \"(unrouted)\", \"http_route\", \"^$\")",
           "legendFormat": "{{http_route}}"
         }
       ]
@@ -546,7 +546,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "The panels below cover the **`pg` driver only** — in this app that is the replication/sync engine, not the request path. Prisma talks to Postgres through its own Rust engine and emits **spans but no metrics**, so application query rate and latency cannot be graphed here.\n\nFor Prisma query timings, open a trace: [Explore → Tempo](/explore?left=%7B%22datasource%22:%22tempo%22%7D) and search `{span.http.route=\"/health/ready\"}`. Each request carries `prisma:engine:db_query` children with their own durations."
+        "content": "The panels below cover the **`pg` driver only** — in this app that is the replication/sync engine, not the request path. Prisma talks to Postgres through its own Rust engine and emits **spans but no metrics**, so application query rate and latency cannot be graphed here.\n\nFor Prisma query timings, open a trace: [Explore → Tempo](/explore?left=%7B%22datasource%22:%22tempo%22%7D) and search `{resource.service.name=\"vantik-server\" && kind=server}`. Each request carries `prisma:engine:db_query` children with their own durations."
       }
     },
     {
@@ -985,6 +985,627 @@
       ]
     },
     {
+      "id": 100,
+      "type": "timeseries",
+      "title": "Process memory",
+      "description": "All the memory the process holds (resident set size), split into the V8 heap and the native part. Native memory is the Prisma query engine, the allocator arenas and the buffers; the V8 heap panel does not show it. process_memory_usage_bytes comes from apps/server/src/common/telemetry/process-metrics.ts.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 50
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "max(process_memory_usage_bytes{service_name=~\"$service\"})",
+          "legendFormat": "resident (total)"
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "expr": "sum(v8js_memory_heap_space_physical_size_bytes{service_name=~\"$service\"})",
+          "legendFormat": "V8 heap"
+        },
+        {
+          "refId": "C",
+          "editorMode": "code",
+          "expr": "max(process_memory_usage_bytes{service_name=~\"$service\"}) - sum(v8js_memory_heap_space_physical_size_bytes{service_name=~\"$service\"})",
+          "legendFormat": "native"
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "type": "timeseries",
+      "title": "CPU",
+      "description": "CPU time per second of wall time, by mode. 100% is one full core.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 50
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum by (cpu_mode) (rate(process_cpu_time_seconds_total{service_name=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{cpu_mode}}"
+        }
+      ]
+    },
+    {
+      "id": 110,
+      "type": "row",
+      "title": "Queues",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      },
+      "panels": []
+    },
+    {
+      "id": 111,
+      "type": "timeseries",
+      "title": "Jobs waiting",
+      "description": "Jobs ready to run that no processor has started. A line that only climbs means the processors cannot keep up. Bull queues, from apps/server/src/modules/bull/bull-telemetry.ts. Each job also has a span named \"process <queue>\" in Tempo, as a child of the request that added it.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 59
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum by (queue) (vantik_queue_jobs{service_name=~\"$service\", state=\"waiting\"})",
+          "legendFormat": "{{queue}}"
+        }
+      ]
+    },
+    {
+      "id": 112,
+      "type": "timeseries",
+      "title": "Active, delayed and failed jobs",
+      "description": "Failed jobs stay in Redis until something removes them, so the failed line is a total, not a rate. Bull queues, from apps/server/src/modules/bull/bull-telemetry.ts. Each job also has a span named \"process <queue>\" in Tempo, as a child of the request that added it.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 59
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum by (queue, state) (vantik_queue_jobs{service_name=~\"$service\", state=~\"active|delayed|failed\"})",
+          "legendFormat": "{{queue}} {{state}}"
+        }
+      ]
+    },
+    {
+      "id": 113,
+      "type": "timeseries",
+      "title": "Job throughput by outcome",
+      "description": "Attempts that ended per second. A retry is a second attempt. Bull queues, from apps/server/src/modules/bull/bull-telemetry.ts. Each job also has a span named \"process <queue>\" in Tempo, as a child of the request that added it.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 59
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum by (queue, outcome) (rate(vantik_queue_job_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{queue}} {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 114,
+      "type": "timeseries",
+      "title": "Job duration p95",
+      "description": "The time a processor used for one attempt. Bull queues, from apps/server/src/modules/bull/bull-telemetry.ts. Each job also has a span named \"process <queue>\" in Tempo, as a child of the request that added it.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 67
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, queue, job_name) (rate(vantik_queue_job_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "{{queue}} {{job_name}}"
+        }
+      ]
+    },
+    {
+      "id": 115,
+      "type": "timeseries",
+      "title": "Job wait p95",
+      "description": "The time from when a job was ready to when a processor started it. For a delayed job, the wait starts when the delay ends. Bull queues, from apps/server/src/modules/bull/bull-telemetry.ts. Each job also has a span named \"process <queue>\" in Tempo, as a child of the request that added it.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 67
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, queue) (rate(vantik_queue_job_wait_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "{{queue}}"
+        }
+      ]
+    },
+    {
+      "id": 120,
+      "type": "row",
+      "title": "LLM",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 75
+      },
+      "panels": []
+    },
+    {
+      "id": 121,
+      "type": "timeseries",
+      "title": "Calls per minute by purpose",
+      "description": "purpose is the feature that made the call, for example triage.pair. Model calls, from apps/server/src/modules/ai-requests/model-telemetry.ts. Each call also has a span named \"chat <model>\" in Tempo. Agent runs in a sandbox are not here: the harness calls the model itself.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 76
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cpm",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "60 * sum by (vantik_llm_purpose) (rate(gen_ai_client_operation_duration_seconds_count{service_name=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{vantik_llm_purpose}}"
+        }
+      ]
+    },
+    {
+      "id": 122,
+      "type": "timeseries",
+      "title": "Call duration p95 by model",
+      "description": "Model calls, from apps/server/src/modules/ai-requests/model-telemetry.ts. Each call also has a span named \"chat <model>\" in Tempo. Agent runs in a sandbox are not here: the harness calls the model itself.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 76
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, gen_ai_request_model) (rate(gen_ai_client_operation_duration_seconds_bucket{service_name=~\"$service\"}[$__rate_interval])))",
+          "legendFormat": "{{gen_ai_request_model}}"
+        }
+      ]
+    },
+    {
+      "id": 123,
+      "type": "timeseries",
+      "title": "Failed calls by purpose",
+      "description": "error_type is the class of the error, for example APICallError. The log line of the failure has the message. Model calls, from apps/server/src/modules/ai-requests/model-telemetry.ts. Each call also has a span named \"chat <model>\" in Tempo. Agent runs in a sandbox are not here: the harness calls the model itself.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 76
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cpm",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "60 * sum by (vantik_llm_purpose, error_type) (rate(gen_ai_client_operation_duration_seconds_count{service_name=~\"$service\", error_type!=\"\"}[$__rate_interval]))",
+          "legendFormat": "{{vantik_llm_purpose}} {{error_type}}"
+        }
+      ]
+    },
+    {
+      "id": 124,
+      "type": "timeseries",
+      "title": "Tokens per minute by model",
+      "description": "Model calls, from apps/server/src/modules/ai-requests/model-telemetry.ts. Each call also has a span named \"chat <model>\" in Tempo. Agent runs in a sandbox are not here: the harness calls the model itself.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 84
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "interval": "15s",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "60 * sum by (gen_ai_request_model, gen_ai_token_type) (rate(gen_ai_client_token_usage_sum{service_name=~\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{gen_ai_request_model}} {{gen_ai_token_type}}"
+        }
+      ]
+    },
+    {
+      "id": 125,
+      "type": "bargauge",
+      "title": "Tokens by purpose in the time range",
+      "description": "Input and output tokens together, for the whole time range of the dashboard. Model calls, from apps/server/src/modules/ai-requests/model-telemetry.ts. Each call also has a span named \"chat <model>\" in Tempo. Agent runs in a sandbox are not here: the harness calls the model itself.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 84
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "instant": true,
+          "legendFormat": "{{vantik_llm_purpose}}",
+          "expr": "sort_desc(sum by (vantik_llm_purpose) (increase(gen_ai_client_token_usage_sum{service_name=~\"$service\"}[$__range])))"
+        }
+      ]
+    },
+    {
       "id": 20,
       "type": "row",
       "title": "Logs",
@@ -992,7 +1613,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 92
       },
       "collapsed": false,
       "panels": []
@@ -1006,7 +1627,7 @@
         "h": 9,
         "w": 8,
         "x": 0,
-        "y": 51
+        "y": 93
       },
       "datasource": {
         "type": "loki",
@@ -1089,7 +1710,7 @@
         "h": 9,
         "w": 16,
         "x": 8,
-        "y": 51
+        "y": 93
       },
       "datasource": {
         "type": "loki",
@@ -1124,7 +1745,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 60
+        "y": 102
       },
       "datasource": {
         "type": "loki",

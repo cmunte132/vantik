@@ -14,7 +14,14 @@
  * for self-hosted installs — nothing is registered and no data leaves the
  * process.
  */
-import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
+import {
+  Attributes,
+  Context,
+  diag,
+  DiagConsoleLogger,
+  DiagLogLevel,
+  SpanKind,
+} from '@opentelemetry/api';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
@@ -27,7 +34,7 @@ import {
 } from '@opentelemetry/resources';
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
-import { NodeSDK } from '@opentelemetry/sdk-node';
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node';
 import {
   ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
   ATTR_SERVICE_NAME,
@@ -35,6 +42,7 @@ import {
 } from '@opentelemetry/semantic-conventions';
 import { PrismaInstrumentation } from '@prisma/instrumentation';
 
+import { registerProcessMetrics } from './common/telemetry/process-metrics';
 import { VANTIK_VERSION } from './common/version';
 
 const SERVICE_NAME = 'vantik-server';
@@ -49,6 +57,52 @@ const SERVICE_NAME = 'vantik-server';
 function metricExportIntervalMs(): number {
   const configured = Number(process.env.OTEL_METRIC_EXPORT_INTERVAL);
   return Number.isFinite(configured) && configured > 0 ? configured : 60_000;
+}
+
+/**
+ * This function returns true for the paths of the liveness and readiness
+ * probes. Compose calls `/health/ready` every few seconds.
+ */
+function isHealthCheck(path: unknown): boolean {
+  if (typeof path !== 'string') {
+    return false;
+  }
+  const pathname = path.split('?')[0];
+  return pathname === '/' || pathname.startsWith('/health');
+}
+
+/**
+ * This sampler drops the trace of a health check. A trace for each probe
+ * hides the requests that people make.
+ *
+ * The http instrumentation has `ignoreIncomingRequestHook`, but that hook
+ * removes only the server span. The Prisma and Redis spans of the probe then
+ * start their own traces, and the noise increases. This sampler drops the
+ * server span, and the parent-based sampler then drops its children too.
+ *
+ * The http instrumentation still records the request duration metric for a
+ * probe. The dashboard removes the health routes from its queries.
+ */
+export class HealthCheckSampler implements tracing.Sampler {
+  shouldSample(
+    _context: Context,
+    _traceId: string,
+    _spanName: string,
+    spanKind: SpanKind,
+    attributes: Attributes,
+  ): tracing.SamplingResult {
+    if (
+      spanKind === SpanKind.SERVER &&
+      isHealthCheck(attributes['url.path'] ?? attributes['http.target'])
+    ) {
+      return { decision: tracing.SamplingDecision.NOT_RECORD };
+    }
+    return { decision: tracing.SamplingDecision.RECORD_AND_SAMPLED };
+  }
+
+  toString(): string {
+    return 'HealthCheckSampler';
+  }
 }
 
 let sdk: NodeSDK | undefined;
@@ -88,6 +142,7 @@ export function startOtel(): void {
     // The exporters read OTEL_EXPORTER_OTLP_HEADERS themselves, which is how
     // hosted collectors take their auth token.
     traceExporter: new OTLPTraceExporter(),
+    sampler: new tracing.ParentBasedSampler({ root: new HealthCheckSampler() }),
     // Metrics ride the same endpoint and the same on/off switch as traces:
     // with no collector configured there is nothing to look at, so running a
     // meter provider would be machinery nobody sees.
@@ -151,21 +206,51 @@ export function startOtel(): void {
   });
 
   sdk.start();
+  registerProcessMetrics();
 
   // Flush on the way out. Without this the last spans of a request that
   // triggered a shutdown — often the interesting ones — are lost.
-  const shutdown = async () => {
-    try {
-      await sdk?.shutdown();
-    } catch (error) {
-      // A failed flush must not stop the process from exiting.
-      // eslint-disable-next-line no-console
-      console.error('OpenTelemetry shutdown failed', error);
+  //
+  // Two things stopped the flush before. The handler must prevent both:
+  //
+  // - The exporters unref their sockets. When the signal handler starts the
+  //   flush, nothing else holds the event loop, so Node exits before the
+  //   export request ends. A timer with a reference keeps the process alive
+  //   until the flush ends.
+  // - The Nest shutdown hooks send the signal to the process again when the app
+  //   is closed. If this listener is gone at that time, the second signal kills
+  //   the process during the flush. This listener stays until the flush ends,
+  //   holds a second signal, and sends it again after the flush.
+  let flushing = false;
+  let heldSignal: NodeJS.Signals | undefined;
+
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (flushing) {
+      heldSignal = signal;
+      return;
     }
+    flushing = true;
+    const keepAlive = setInterval(() => undefined, 1_000);
+
+    sdk
+      ?.shutdown()
+      .catch((error) => {
+        // A failed flush must not stop the process from exiting.
+        // eslint-disable-next-line no-console
+        console.error('OpenTelemetry shutdown failed', error);
+      })
+      .finally(() => {
+        clearInterval(keepAlive);
+        process.removeListener('SIGTERM', shutdown);
+        process.removeListener('SIGINT', shutdown);
+        if (heldSignal) {
+          process.kill(process.pid, heldSignal);
+        }
+      });
   };
 
-  process.once('SIGTERM', shutdown);
-  process.once('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 startOtel();

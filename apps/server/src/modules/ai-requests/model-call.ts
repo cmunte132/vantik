@@ -10,6 +10,7 @@ import { generateText, stepCountIs, streamText } from 'ai';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import { getLanguageModel, resolveModel } from './llm-provider';
+import { startModelTelemetry } from './model-telemetry';
 
 const logger = new LoggerService('LLM');
 
@@ -22,8 +23,11 @@ const logger = new LoggerService('LLM');
  * and the error. When LOG_LEVEL is `debug`, a second line holds the prompt and
  * the answer, so you can see what the model got and what it said.
  *
+ * Each call also makes a span and records metrics. model-telemetry.ts has
+ * the names.
+ *
  * Do not call `generateText` or `streamText` from `ai` directly. A direct call
- * writes no log line, and you cannot find it later.
+ * writes no log line and no span, and you cannot find it later.
  */
 
 export interface ModelCall {
@@ -58,14 +62,19 @@ export async function generateModelText(call: ModelCall): Promise<ModelAnswer> {
   const started = Date.now();
   let role: string | null = null;
   let model: string | null = null;
+  const telemetry = startModelTelemetry(call.purpose);
 
   try {
     ({ role, modelId: model } = resolveModel(call.role));
+    telemetry.setModel(role, model);
 
-    const result = await generateText({
-      model: getLanguageModel(model),
-      ...input(call),
-    });
+    const result = await telemetry.run(() =>
+      generateText({
+        model: getLanguageModel(model),
+        ...input(call),
+      }),
+    );
+    telemetry.finish(result.totalUsage, result.finishReason);
 
     const fields = {
       purpose: call.purpose,
@@ -78,6 +87,7 @@ export async function generateModelText(call: ModelCall): Promise<ModelAnswer> {
 
     return { text: result.text, model };
   } catch (error) {
+    telemetry.fail(error);
     logFailure(
       { purpose: call.purpose, role, model, durationMs: Date.now() - started },
       error,
@@ -121,15 +131,28 @@ export async function generateWorkspaceModelText(
     model: call.model,
     durationMs: Date.now() - started,
   });
+  const telemetry = startModelTelemetry(
+    call.purpose,
+    `workspace:${call.provider}`,
+    call.model,
+    call.provider,
+  );
 
   try {
-    const result = await generateText({
-      model: call.languageModel,
-      ...input(call),
-      ...(call.tools ? { tools: call.tools } : {}),
-      stopWhen: stepCountIs(call.maxSteps ?? 1),
-      ...(call.abortSignal ? { abortSignal: call.abortSignal } : {}),
-    });
+    const result = await telemetry.run(() =>
+      generateText({
+        model: call.languageModel,
+        ...input(call),
+        ...(call.tools ? { tools: call.tools } : {}),
+        stopWhen: stepCountIs(call.maxSteps ?? 1),
+        ...(call.abortSignal ? { abortSignal: call.abortSignal } : {}),
+      }),
+    );
+    telemetry.finish(
+      result.totalUsage,
+      result.finishReason,
+      result.steps.length,
+    );
 
     logFinish(fields(), result.totalUsage, result.finishReason);
     logExchange(call, fields(), result.text);
@@ -140,6 +163,7 @@ export async function generateWorkspaceModelText(
       steps: result.steps.length,
     };
   } catch (error) {
+    telemetry.fail(error);
     logFailure(fields(), error);
     throw error;
   }
@@ -158,10 +182,13 @@ export function streamModelText(
   const started = Date.now();
   let role: string | null = null;
   let model: string | null = null;
+  const telemetry = startModelTelemetry(call.purpose);
 
   try {
     ({ role, modelId: model } = resolveModel(call.role));
+    telemetry.setModel(role, model);
   } catch (error) {
+    telemetry.fail(error);
     logFailure({ purpose: call.purpose, role, model, durationMs: 0 }, error);
     throw error;
   }
@@ -173,18 +200,26 @@ export function streamModelText(
     durationMs: Date.now() - started,
   });
 
-  return streamText({
-    model: getLanguageModel(model),
-    ...input(call),
-    onFinish: async (event) => {
-      logFinish(fields(), event.totalUsage, event.finishReason);
-      logExchange(call, fields(), event.text);
-      await onFinish?.(event.text, model);
-    },
-    onError: ({ error }) => {
-      logFailure(fields(), error);
-    },
-  });
+  return telemetry.run(() =>
+    streamText({
+      model: getLanguageModel(model),
+      ...input(call),
+      onFinish: async (event) => {
+        telemetry.finish(event.totalUsage, event.finishReason);
+        logFinish(fields(), event.totalUsage, event.finishReason);
+        logExchange(call, fields(), event.text);
+        await onFinish?.(event.text, model);
+      },
+      onError: ({ error }) => {
+        telemetry.fail(error);
+        logFailure(fields(), error);
+      },
+      // The client closed the stream. The span must end, or it stays open.
+      onAbort: () => {
+        telemetry.finish(undefined, 'abort');
+      },
+    }),
+  );
 }
 
 /** The prompt part of a call, in the shape that `ai` accepts. */

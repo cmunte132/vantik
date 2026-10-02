@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { ModelNameEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 import { Client } from 'pg';
@@ -27,6 +28,8 @@ import {
 // image works — no wal2json extension required.
 const REPLICATION_SLOT_PLUGIN = 'pgoutput';
 const PUBLICATION_NAME = 'vantik_publication';
+
+const tracer = trace.getTracer('vantik-replication');
 
 @Injectable()
 export default class ReplicationService {
@@ -303,60 +306,87 @@ export default class ReplicationService {
         return;
       }
 
-      if (sendsMessages) {
-        const syncActionData = await this.syncActionsService.upsertSyncAction(
-          _lsn,
-          isDeleted ? 'delete' : log.tag,
-          modelName,
-          modelId,
-        );
+      // One span for each change. Without it, each Prisma query of the sync
+      // work starts its own trace, and the traces of one change do not join.
+      await tracer.startActiveSpan(
+        `replicate ${modelName} ${log.tag}`,
+        {
+          kind: SpanKind.CONSUMER,
+          attributes: {
+            'db.collection.name': modelName,
+            'vantik.replication.operation': log.tag,
+          },
+        },
+        async (span) => {
+          try {
+            if (sendsMessages) {
+              const syncActionData =
+                await this.syncActionsService.upsertSyncAction(
+                  _lsn,
+                  isDeleted ? 'delete' : log.tag,
+                  modelName,
+                  modelId,
+                );
 
-        // Nothing to announce: a record deleted before any client was ever
-        // told it existed.
-        if (!syncActionData) {
-          return;
-        }
+              // Nothing to announce: a record deleted before any client was ever
+              // told it existed.
+              if (!syncActionData) {
+                return;
+              }
 
-        // Three models belong to one person and go to that person's own room.
-        // Everything else goes to the room of the team that owns it, and to the
-        // workspace room when no team does. Before this, one room held every
-        // member of the workspace, so a change to any issue of any team reached
-        // all of them (ENG-79).
-        const recipientId = [
-          ModelNameEnum.Notification,
-          ModelNameEnum.Conversation,
-          ModelNameEnum.ConversationHistory,
-        ].includes(modelName)
-          ? (syncActionData.data.recipientId ?? syncActionData.data.userId)
-          : announcementRoom(syncActionData.workspaceId, syncActionData.teamId);
+              // Three models belong to one person and go to that person's own room.
+              // Everything else goes to the room of the team that owns it, and to the
+              // workspace room when no team does. Before this, one room held every
+              // member of the workspace, so a change to any issue of any team reached
+              // all of them (ENG-79).
+              const recipientId = [
+                ModelNameEnum.Notification,
+                ModelNameEnum.Conversation,
+                ModelNameEnum.ConversationHistory,
+              ].includes(modelName)
+                ? (syncActionData.data.recipientId ??
+                  syncActionData.data.userId)
+                : announcementRoom(
+                    syncActionData.workspaceId,
+                    syncActionData.teamId,
+                  );
 
-        this.syncGateway.wss
-          .to(recipientId)
-          .emit('message', JSON.stringify(syncActionData));
-      }
+              this.syncGateway.wss
+                .to(recipientId)
+                .emit('message', JSON.stringify(syncActionData));
+            }
 
-      // Physical deletes are deliberately not handed to integrations: the
-      // event's workspace is resolved by reading the record, which no longer
-      // exists. Soft deletes still arrive here, as a `delete` tag no plugin
-      // subscribes to, which is every delete the app itself performs.
-      if (triggersIntegrations && log.tag !== 'delete') {
-        const changedData = this.getChangedData(log);
+            // Physical deletes are deliberately not handed to integrations: the
+            // event's workspace is resolved by reading the record, which no longer
+            // exists. Soft deletes still arrive here, as a `delete` tag no plugin
+            // subscribes to, which is every delete the app itself performs.
+            if (triggersIntegrations && log.tag !== 'delete') {
+              const changedData = this.getChangedData(log);
 
-        const workspaceId = await getWorkspaceId(
-          this.prisma,
-          modelName,
-          modelId,
-        );
+              const workspaceId = await getWorkspaceId(
+                this.prisma,
+                modelName,
+                modelId,
+              );
 
-        await this.integrationEvents.recordChanged({
-          modelName,
-          modelId,
-          tag: isDeleted ? 'delete' : log.tag,
-          changedData,
-          workspaceId,
-          lsn: _lsn,
-        });
-      }
+              await this.integrationEvents.recordChanged({
+                modelName,
+                modelId,
+                tag: isDeleted ? 'delete' : log.tag,
+                changedData,
+                workspaceId,
+                lsn: _lsn,
+              });
+            }
+          } catch (error) {
+            span.recordException(error as Error);
+            span.setStatus({ code: SpanStatusCode.ERROR });
+            throw error;
+          } finally {
+            span.end();
+          }
+        },
+      );
     });
   }
 }

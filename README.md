@@ -298,6 +298,20 @@ holds its `traceId`, so you can go from a slow trace to the log lines of that
 trace, and back again. The logs use the same OTLP connection as the other data.
 No service reads your containers directly.
 
+The dashboard also shows these items:
+
+- The memory of the whole process, with the V8 heap and the native part, and
+  the CPU time.
+- The Bull queues: the jobs in each state, the duration and the wait time of
+  each job, and the failures. Each job has a span in Tempo. The span is a child
+  of the request that added the job.
+- The model calls: the calls for each feature, the duration for each model,
+  the tokens, and the failures. Each call has a span in Tempo, with the HTTP
+  calls to the model as its children.
+
+The server does not send a trace for a health check, because the traces of the
+probes hide the real requests.
+
 The overlay also starts Bull Board on [localhost:3003](http://localhost:3003).
 It shows the background jobs of the server for each queue, and the error of
 each failed job. Bull deletes most jobs when they complete, so the dashboard

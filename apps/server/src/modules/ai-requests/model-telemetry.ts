@@ -40,8 +40,10 @@ let instruments: { duration: Histogram; tokens: Histogram } | undefined;
  * This function makes the instruments on the first call. The metrics API has
  * no proxy: a meter that a module gets before the SDK starts stays a no-op.
  * The bucket boundaries are the ones that the semantic conventions recommend.
+ * Exported so agent runs record their sandbox model calls on the same
+ * histograms.
  */
-function getInstruments() {
+export function genAiInstruments() {
   if (instruments) {
     return instruments;
   }
@@ -139,7 +141,7 @@ export function startModelTelemetry(
       }
       ended = true;
 
-      const { duration, tokens } = getInstruments();
+      const { duration, tokens } = genAiInstruments();
       const attributes = metricAttributes();
       duration.record((Date.now() - started) / 1000, attributes);
       if (usage?.inputTokens !== undefined) {
@@ -177,7 +179,7 @@ export function startModelTelemetry(
 
       const errorType =
         error instanceof Error ? error.name || 'Error' : '_OTHER';
-      getInstruments().duration.record((Date.now() - started) / 1000, {
+      genAiInstruments().duration.record((Date.now() - started) / 1000, {
         ...metricAttributes(),
         'error.type': errorType,
       });

@@ -27,6 +27,7 @@ import {
   AGENT_RUN_LEASE_MS,
   AGENT_RUN_MAX_ATTEMPTS,
 } from './agent-runs.interface';
+import { recordRunFinished } from './executors/run-telemetry';
 
 /** Fields a caller may set as part of a transition. */
 export interface TransitionPatch {
@@ -299,7 +300,15 @@ export class AgentRunsService {
       await this.attributeOutcome(runId);
     }
 
-    return this.requireRunUnscoped(runId);
+    const moved = await this.requireRunUnscoped(runId);
+
+    // Counted here for the same reason the failure is logged here: every
+    // executor's end, and the sweeper's and a cancel's, passes through.
+    if (isTerminalAgentRunStatus(to)) {
+      recordRunFinished(moved);
+    }
+
+    return moved;
   }
 
   /**

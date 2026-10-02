@@ -92,6 +92,13 @@ export class PiEventReader {
   private failure: RunFailure | null = null;
   private seen = false;
 
+  /**
+   * `observe` sees every event the stream carried, parsed, before it is turned
+   * into a step — which is how the run's trace gets its model and tool calls
+   * without a second parser.
+   */
+  constructor(private readonly observe?: (event: PiEvent) => void) {}
+
   /** True once any output has arrived. */
   get received(): boolean {
     return this.seen;
@@ -149,6 +156,8 @@ export class PiEventReader {
     if (!event) {
       return [];
     }
+
+    this.observe?.(event);
 
     if (event.type === 'turn_end') {
       this.iterations += 1;
@@ -208,7 +217,7 @@ export function failureOf(event: PiEvent): RunFailure | null {
   };
 }
 
-type PiEvent = Record<string, unknown>;
+export type PiEvent = Record<string, unknown>;
 
 function parseLine(line: string): PiEvent | null {
   const trimmed = line.trim();
@@ -548,9 +557,27 @@ export function modelOf(event: PiEvent): string | null {
   return typeof message?.model === 'string' ? message.model : null;
 }
 
-/** What one message cost, when the provider reported it. */
+/**
+ * What one message cost, when the provider reported it.
+ *
+ * Read only off an assistant's `message_end`. Pi puts the same message, usage
+ * and all, on `message_start`, on every `message_update` while it streams and
+ * again on `turn_end`, so summing every event that carries a message counted
+ * each call several times — a run that cost $0.17 at the provider reported
+ * $0.61.
+ */
 function costOf(event: PiEvent): number {
-  const message = event.message as { usage?: unknown } | undefined;
+  if (event.type !== 'message_end') {
+    return 0;
+  }
+
+  const message = event.message as
+    { role?: unknown; usage?: unknown } | undefined;
+
+  if (message?.role !== 'assistant') {
+    return 0;
+  }
+
   const usage = message?.usage as { cost?: { total?: unknown } } | undefined;
   const total = usage?.cost?.total;
 

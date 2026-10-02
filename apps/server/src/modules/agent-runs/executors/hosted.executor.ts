@@ -47,6 +47,7 @@ import { PROVIDE_PACKAGE_MANAGER } from './package-manager';
 import { PiEventReader, type ParsedStep } from './pi-events';
 import { type Spend, SpendMeter } from './spend-meter';
 import { RunHandbackService } from '../run-handback.service';
+import { RunTelemetry, startRunTelemetry } from './run-telemetry';
 import { GitProxyService } from '../sandbox/git-proxy.service';
 import { RemoteSandboxRuntime } from '../sandbox/remote.runtime';
 import { scrubSecrets } from '../sandbox/scrub';
@@ -240,6 +241,8 @@ interface CycleContext {
   note: (message: string, phase: string) => Promise<void>;
   /** The run's spend, kept on the run while it works. */
   meter: SpendMeter;
+  /** The run's trace, which the harness's events are fed into. */
+  telemetry: RunTelemetry;
 }
 
 /** What the whole cycle came to. */
@@ -318,6 +321,9 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
   readonly label = 'Vantik hosted sandbox';
 
   private readonly logger = new LoggerService('HostedExecutor');
+
+  /** Open traces, so whichever path ends a run can end its trace. */
+  private readonly traces = new Map<string, RunTelemetry>();
 
   /** Live guests, so cancel can actually kill one. */
   private readonly running = new Map<string, SandboxHandle>();
@@ -442,6 +448,21 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     // pack does not carry.
     const pack = (run.contextPack ?? {}) as unknown as ContextPack;
 
+    // One trace per run, started before anything can refuse it, so a run that
+    // fails on a missing key is as visible to the telemetry backend as one that
+    // fails three passes in. `fail` and the success path end it with the
+    // outcome; `finally` ends whatever neither of them reached.
+    const telemetry = startRunTelemetry({
+      runId: run.id,
+      issueId: run.issueId,
+      agentUserId: run.agentUserId,
+      executor: run.executor,
+      attempt: run.attempt,
+      provider: config.provider ?? null,
+      model: config.model ?? null,
+    });
+    this.traces.set(run.id, telemetry);
+
     // The clock starts here, not when the agent does. A budget that excludes
     // the clone is not a budget for the run — and a repository so large that
     // fetching it eats the wall clock is a fact somebody needs to see rather
@@ -475,6 +496,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     }
 
     const provider = providerById(model.provider);
+    telemetry.setModel(model.provider, config.model ?? null);
 
     if (!provider) {
       // The stored provider is not one this build knows. Refusing beats
@@ -523,6 +545,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     let releaseLease: (() => void) | undefined;
 
     const note = async (message: string, phase: string) => {
+      telemetry.phase(phase);
       // Scrubbed before it is written, not after. An event row is read by a
       // human and replicated to every connected client.
       await this.agentRuns
@@ -770,6 +793,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           limits,
           note,
           meter,
+          telemetry,
         },
         reviewing,
       );
@@ -935,6 +959,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         prUrl: pushed.prUrl,
         attempt: run.attempt,
       });
+
+      telemetry.end({ status });
     } catch (error) {
       // Where it broke decides what the user is told to do. Everything before
       // the agent phase is the environment — a guest that would not boot is
@@ -965,6 +991,11 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       meter.stop();
       await sandbox?.dispose();
       this.running.delete(run.id);
+      // A no-op when the outcome already ended it. Otherwise the run left this
+      // executor some other way — cancelled, swept, or a transition someone
+      // else won — and the trace says only that it stopped here.
+      telemetry.end({ status: 'ENDED_ELSEWHERE' });
+      this.traces.delete(run.id);
     }
   }
 
@@ -1221,7 +1252,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     // can watch the agent work rather than wait for it to finish. Recorded in
     // order, one at a time, and never allowed to fail the invocation: the
     // timeline is the record of the work, not a part of it.
-    const reader = new PiEventReader();
+    cx.telemetry.phase(options.phase);
+    const reader = new PiEventReader((event) => cx.telemetry.observe(event));
     let recorded = Promise.resolve();
     const record = (steps: ParsedStep[]) => {
       for (const step of steps) {
@@ -1589,6 +1621,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     if (!failed) {
       return;
     }
+
+    this.traces.get(run.id)?.end({ status: 'FAILED', failure, error });
 
     // A failed run says so on the issue too. Silence here is what made a
     // sandbox failure invisible to everyone not watching the runs list.

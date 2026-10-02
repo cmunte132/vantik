@@ -251,12 +251,37 @@ describe('reading a run out of Pi’s event stream', () => {
   it('adds up what the run cost', () => {
     const { costUsd } = parsePiEvents(
       stream(
-        { type: 'message_end', message: { usage: { cost: { total: 0.02 } } } },
-        { type: 'message_end', message: { usage: { cost: { total: 0.03 } } } },
+        {
+          type: 'message_end',
+          message: { role: 'assistant', usage: { cost: { total: 0.02 } } },
+        },
+        {
+          type: 'message_end',
+          message: { role: 'assistant', usage: { cost: { total: 0.03 } } },
+        },
       ),
     );
 
     expect(costUsd).toBeCloseTo(0.05);
+  });
+
+  it('counts each call once, though Pi repeats its message on other events', () => {
+    const message = { role: 'assistant', usage: { cost: { total: 0.02 } } };
+    const { costUsd } = parsePiEvents(
+      stream(
+        { type: 'message_start', message },
+        { type: 'message_update', message },
+        { type: 'message_update', message },
+        { type: 'message_end', message },
+        { type: 'turn_end', message },
+        {
+          type: 'message_end',
+          message: { role: 'toolResult', usage: { cost: { total: 0.02 } } },
+        },
+      ),
+    );
+
+    expect(costUsd).toBeCloseTo(0.02);
   });
 
   it('survives a stream that was truncated or has prose in it', () => {

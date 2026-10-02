@@ -535,6 +535,7 @@ receives.
 | `process <queue>` | Consumer | Each attempt of a job, as a child of the `send` span. `vantik.queue.job` names the job, and `vantik.queue.attempt` counts the attempts. |
 | `chat <model>` | Client | Each model call, with the `gen_ai.*` attributes: the provider, the model, the tokens, and the finish reason. `vantik.llm.purpose` names the feature, and `vantik.llm.role` names the agent role. The span holds no prompt and no answer. |
 | `replicate <Model> <op>` | Consumer | Each change that the server sends to the browsers |
+| `send /` | Producer | Each socket.io message to the browsers, with `messaging.system=socket.io`. Some backends show socket.io as a queue for this reason. |
 | `documentLoad`, `documentFetch`, `resourceFetch` | Internal | The load of a page in the browser |
 | `GET`, `POST`, and the other methods | Client | Each API call from the browser. The call carries `traceparent`, so the server span of the call is in the same trace. |
 

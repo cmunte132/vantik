@@ -115,6 +115,12 @@ function triageStep(
   const sources = citations.length
     ? citations.map(citationLabel).join(', ')
     : 'what it cites';
+  // A fact is written once: deciding again on WRITTEN means a later pass
+  // did, because the rules triage decides by changed or a pass failed.
+  const trigger =
+    decided.trigger === 'WRITTEN' && index > 0
+      ? 'again, under changed rules'
+      : TRIGGER[decided.trigger ?? ''];
   const why = decided.reasons
     .map((reason) => REASON_LABELS[reason as KnowledgeReviewReasonEnum])
     .filter(Boolean);
@@ -130,10 +136,7 @@ function triageStep(
       <span className="flex flex-col gap-1.5">
         <span>
           {DATE_TIME.format(new Date(decided.at))}
-          {TRIGGER[decided.trigger ?? '']
-            ? `, ${TRIGGER[decided.trigger ?? '']}`
-            : ''}
-          .
+          {trigger ? `, ${trigger}` : ''}.
         </span>
         {decided.checks.length > 0 && (
           <span>

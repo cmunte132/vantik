@@ -216,9 +216,10 @@ interface Neighbour {
  * becomes of an entry, so that an entry still waiting under the old rules is
  * decided again (see `triage` and `sweep`). 2: the provisional tier. 3: a
  * dispute by one check is EVIDENCE_DISPUTED, and the judges read an issue's
- * problem as the state before it.
+ * problem as the state before it. 4: an issue or comment alone never refuses
+ * a claim, and the judges see a cited issue's state.
  */
-export const TRIAGE_POLICY_VERSION = 3;
+export const TRIAGE_POLICY_VERSION = 4;
 
 /**
  * Corroborations by other entries that promote a provisional entry: as many
@@ -257,6 +258,12 @@ function isProvisional(entry: {
 }) {
   return entry.status === PageEntryStatus.STANDING && !!entry.provisionalSince;
 }
+
+/** Citations that state how things are now, which alone can refuse a claim. */
+const STATES_THE_PRESENT: ReadonlySet<PageEntryCitationKind> = new Set([
+  PageEntryCitationKind.CODE,
+  PageEntryCitationKind.URL,
+]);
 
 /** How old an entry must be before the nightly sweep queues triage for it. */
 export const TRIAGE_SWEEP_AFTER_MS = 60 * 60 * 1000;
@@ -763,8 +770,16 @@ export default class KnowledgeTriageService {
 
           // Both found the evidence says otherwise: the claim is wrong, and
           // is refused. One alone is a person's to settle. Short of that,
-          // what the evidence does not settle is provisional.
-          if (against.length === judgments.length) {
+          // what the evidence does not settle is provisional. Only code or a
+          // page states how things are; an issue or a comment tells of a
+          // change, often from the problem before it, so neither refuses a
+          // claim alone.
+          if (
+            against.length === judgments.length &&
+            entry.citations.some((citation) =>
+              STATES_THE_PRESENT.has(citation.kind),
+            )
+          ) {
             contradicted = true;
           } else if (against.length > 0) {
             needsPerson = true;
@@ -1182,6 +1197,7 @@ export default class KnowledgeTriageService {
               id: true,
               title: true,
               description: true,
+              stateId: true,
               sourceMetadata: true,
               support: { select: { id: true } },
               team: { select: { preferences: true } },
@@ -1219,13 +1235,29 @@ export default class KnowledgeTriageService {
       externalSource: string | null;
     }> = [];
 
+    // Its state says whether the problem an issue describes is still so: a
+    // done issue's description is the state before it was done.
+    const states = new Map(
+      (issues.length
+        ? await this.prisma.workflow.findMany({
+            where: { id: { in: [...new Set(issues.map((i) => i.stateId))] } },
+            select: { id: true, name: true, category: true },
+          })
+        : []
+      ).map((state) => [state.id, state]),
+    );
+
     for (const issue of issues) {
+      const state = states.get(issue.stateId);
+
       texts.set(
         issue.id,
         citedText(
-          `${issue.title}\n\n${convertTiptapJsonToText(
-            issue.description ?? '',
-          )}`,
+          `${issue.title}\n${
+            state
+              ? `State: ${state.name} (${state.category.toLowerCase()})\n`
+              : ''
+          }\n${convertTiptapJsonToText(issue.description ?? '')}`,
         ),
       );
       targets.push({

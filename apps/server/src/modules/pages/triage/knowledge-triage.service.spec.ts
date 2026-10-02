@@ -180,6 +180,7 @@ interface Target {
   /** An issue's. */
   title?: string;
   description?: string | null;
+  stateId?: string;
   sourceMetadata: unknown;
   support?: { id: string } | null;
   team?: { workspaceId: string; deleted: Date | null; preferences: unknown };
@@ -423,6 +424,11 @@ function store(
             })),
       ),
     },
+    workflow: {
+      findMany: jest.fn(async () => [
+        { id: 'state-done', name: 'Done', category: 'COMPLETED' },
+      ]),
+    },
     issueComment: {
       findMany: jest.fn(async ({ where }: { where: Where }) =>
         (options.comments ?? []).filter((comment) =>
@@ -633,6 +639,7 @@ function issueTarget(overrides: Partial<Target> = {}): Target {
     description: tiptap(
       'Deliveries are retried by the worker, not the handler.',
     ),
+    stateId: 'state-done',
     sourceMetadata: null,
     support: null,
     team: { workspaceId: WORKSPACE, deleted: null, preferences: {} },
@@ -2794,7 +2801,7 @@ describe('what the acceptance judges are shown', () => {
     );
 
     expect(accept.prompt).toContain(
-      'issue ENG-4 (holds)\nRetry webhooks from the queue\n\nDeliveries are retried by the worker, not the handler.',
+      'issue ENG-4 (holds)\nRetry webhooks from the queue\nState: Done (completed)\n\nDeliveries are retried by the worker, not the handler.',
     );
     expect(accept.prompt).toContain(
       `comment ${COMMENT_ID} (holds)\nConfirmed in staging: the worker retries.`,
@@ -3468,6 +3475,21 @@ describe('provisional knowledge', () => {
       applied: true,
     });
     expect(t.entries.get('new')?.status).toBe('ARCHIVED');
+  });
+
+  it('[ENG-184] leaves to a person an entry only an issue contradicts, since an issue tells of a change', async () => {
+    const t = triage({
+      rows: [fresh({ citations: [cites('ISSUE', ISSUE_ID, 'ENG-4')] })],
+      issues: [issueTarget()],
+      accept:
+        '{"verdict": "contradicted", "reason": "the issue says otherwise"}',
+    });
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: [Reason.EVIDENCE_DISPUTED],
+    });
+    expect(t.entries.get('new')?.status).toBe('PROPOSED');
   });
 
   it('[ENG-184] leaves to a person an entry one judge finds the evidence contradicts', async () => {

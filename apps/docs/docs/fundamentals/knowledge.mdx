@@ -290,7 +290,10 @@ Triage makes an entry provisional when the only reasons against it are these:
 `PIN_REQUEST` and `BROAD_SCOPE`. Any other reason sends the entry to a person.
 
 Triage refuses an entry when both judges find that its evidence contradicts
-it. It also refuses an entry when it contradicts an entry in use that ranks
+it, and that evidence includes code or an outside page. An issue or a comment
+tells of a change, often starting from the problem before it, so it never
+refuses a claim alone: a person decides. The judges see each cited issue's
+state. It also refuses an entry when it contradicts an entry in use that ranks
 above it, for example a grounded entry. When only one judge finds the
 evidence contradicts it, a person decides (`EVIDENCE_DISPUTED`).
 

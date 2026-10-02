@@ -214,9 +214,11 @@ interface Neighbour {
 /**
  * The version of the rules triage decides by. Raised when they change what
  * becomes of an entry, so that an entry still waiting under the old rules is
- * decided again (see `triage` and `sweep`). 2: the provisional tier.
+ * decided again (see `triage` and `sweep`). 2: the provisional tier. 3: a
+ * dispute by one check is EVIDENCE_DISPUTED, and the judges read an issue's
+ * problem as the state before it.
  */
-export const TRIAGE_POLICY_VERSION = 2;
+export const TRIAGE_POLICY_VERSION = 3;
 
 /**
  * Corroborations by other entries that promote a provisional entry: as many

@@ -7,7 +7,7 @@ import {
   skillArguments,
   skillFiles,
 } from '../agent-skills';
-import { piCommand } from './hosted.executor';
+import { isPushRejection, piCommand } from './hosted.executor';
 
 /**
  * The harness invocation the sandbox runs.
@@ -213,5 +213,22 @@ describe('the bundled skills', () => {
 
     expect(code?.body).toContain('Watch it fail');
     expect(code?.body).toContain('fix the cause rather than the check');
+  });
+});
+
+describe('a refused push', () => {
+  it('is told apart from a crash on GitHub and on Forgejo', () => {
+    expect(
+      isPushRejection(' ! [rejected]        HEAD -> main (non-fast-forward)'),
+    ).toBe(true);
+    expect(
+      isPushRejection(
+        "remote: Forgejo: User 'vantik-bot' is not allowed to push to branch 'agent/eng-200'\n" +
+          ' ! [remote rejected] HEAD -> agent/eng-200 (pre-receive hook declined)',
+      ),
+    ).toBe(true);
+    expect(
+      isPushRejection('fatal: unable to access: Could not resolve host'),
+    ).toBe(false);
   });
 });

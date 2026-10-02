@@ -166,6 +166,17 @@ function hostOf(url: string): string {
   }
 }
 
+/**
+ * Whether git's output says the remote refused the push. GitHub says
+ * `[rejected]`; Forgejo and Gitea say `[remote rejected]` when a pre-receive
+ * hook refuses an account that has no write access.
+ */
+export function isPushRejection(message: string): boolean {
+  return /\[(remote )?rejected\]|non-fast-forward|protected branch|denying|not allowed to push|pre-receive hook declined/i.test(
+    message,
+  );
+}
+
 /** Harness scratch that must never reach the diff. Never legitimately tracked. */
 const HARNESS_ARTIFACTS = ['.pi', '.pi-session', '.vantik-run'];
 
@@ -935,7 +946,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
 
       await this.fail(
         run,
-        /\[rejected\]|non-fast-forward|protected branch|denying/i.test(message)
+        isPushRejection(message)
           ? 'PUSH_REJECTED'
           : sandbox
             ? 'HARNESS_CRASHED'

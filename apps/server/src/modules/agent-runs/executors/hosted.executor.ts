@@ -114,12 +114,14 @@ export function piCommand(options: {
     args.push('--skill', skill);
   }
 
+  // Quoted, so the shell reads an id as it is: OpenRouter's aliases start
+  // with `~`, which unquoted would expand to a home directory.
   if (options.provider && isSafeModelId(options.provider)) {
-    args.push('--provider', options.provider);
+    args.push('--provider', `'${options.provider}'`);
   }
 
   if (options.model && isSafeModelId(options.model)) {
-    args.push('--model', options.model);
+    args.push('--model', `'${options.model}'`);
   }
 
   // Checked against the list rather than passed through: Pi rejects a level it

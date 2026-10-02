@@ -56,10 +56,15 @@ export const PI_REQUIRED_FLAGS = [
  *
  * These reach a shell. Model ids are letters, digits and the handful of
  * separators providers actually use (`gpt-4.1`, `claude-opus-4-5-20260315`,
- * `anthropic/claude-opus-4.5` on OpenRouter, `meta-llama/Llama-3.3-70B:free`),
- * so anything outside that set is refused rather than escaped — a quoting bug
+ * `anthropic/claude-opus-4.5` on OpenRouter, `meta-llama/Llama-3.3-70B:free`,
+ * and OpenRouter's aliases such as `~anthropic/claude-sonnet-latest`), so
+ * anything outside that set is refused rather than escaped — a quoting bug
  * here is command execution, and there is no legitimate id it would reject.
+ *
+ * `~` is a shell character: at the start of a word it expands to a home
+ * directory. The command line therefore single-quotes every id, which the set
+ * makes safe, because it holds no quote to end the quoting.
  */
 export function isSafeModelId(value: string): boolean {
-  return /^[A-Za-z0-9._:@/-]{1,200}$/.test(value);
+  return /^[A-Za-z0-9._:@/~-]{1,200}$/.test(value);
 }

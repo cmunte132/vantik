@@ -53,7 +53,18 @@ describe('the bundled harness command', () => {
         model: 'claude-opus-4-5',
         thinking: 'high',
       }),
-    ).toContain('--provider anthropic --model claude-opus-4-5 --thinking high');
+    ).toContain(
+      "--provider 'anthropic' --model 'claude-opus-4-5' --thinking high",
+    );
+  });
+
+  it('passes an OpenRouter alias quoted, so the shell cannot expand its ~', () => {
+    expect(
+      piCommand({
+        provider: 'openrouter',
+        model: '~anthropic/claude-sonnet-latest',
+      }),
+    ).toContain("--model '~anthropic/claude-sonnet-latest'");
   });
 
   it('drops a model id that is not safe to put in a command line', () => {

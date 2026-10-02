@@ -61,7 +61,7 @@ import {
   inboxSubline,
   inboxTitle,
   isToday,
-  KIND_LABELS,
+  inboxKind,
 } from './inbox';
 import { citationLabel } from './memory-rail';
 import { age, ago, CARD, Chip, CHIP_TONE } from './trust';
@@ -338,7 +338,7 @@ function Row({
   nameOf: (userId: string | null) => string | null;
   onSelect: () => void;
 }) {
-  const kind = KIND_LABELS[item.kind];
+  const kind = inboxKind(item);
   const isDone = Boolean(item.doneAt);
   // An audit asks about something agents already settled, so it does not
   // call for attention the way the rest do.

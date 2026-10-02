@@ -29,6 +29,16 @@ export const KIND_LABELS: Record<
   [KnowledgeInboxKindEnum.GAP]: { label: 'Knowledge gap' },
 };
 
+/** The chip of an item in the list: a waiting rule says whether it is a decision. */
+export function inboxKind(item: KnowledgeInboxItem): {
+  label: string;
+  tone?: TrustTone;
+} {
+  return item.kind === KnowledgeInboxKindEnum.RULE && isDecision(item)
+    ? { label: 'Team decision', tone: 'needYou' }
+    : KIND_LABELS[item.kind];
+}
+
 const AUDIT_VERB: Partial<Record<KnowledgeTriageDecisionEnum, string>> = {
   [KnowledgeTriageDecisionEnum.AUTO_ACCEPT]: 'accept',
   [KnowledgeTriageDecisionEnum.CORROBORATE]: 'fold in',

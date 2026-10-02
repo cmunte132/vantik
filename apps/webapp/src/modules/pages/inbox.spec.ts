@@ -12,6 +12,7 @@ import {
   doneLine,
   eventLine,
   inboxChoices,
+  inboxKind,
   inboxReason,
   inboxSubline,
   inboxTitle,
@@ -161,6 +162,13 @@ describe('the answers an item takes', () => {
   ])('a %s takes %j', (kind, expected) => {
     expect(inboxChoices(item({ kind })).map(({ choice }) => choice)).toEqual(
       expected,
+    );
+  });
+
+  it('names a waiting decision apart from a rule in the list', () => {
+    expect(inboxKind(decision()).label).toBe('Team decision');
+    expect(inboxKind(item({ kind: KnowledgeInboxKindEnum.RULE })).label).toBe(
+      'Team rule',
     );
   });
 

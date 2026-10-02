@@ -82,15 +82,24 @@ export function cloneUrlFor(host: RemoteHost, fullName: string): string {
   return `${host.baseUrl}/${fullName}.git`;
 }
 
+/** The account that owns a token: on a well-run host, a bot user. */
+export interface HostIdentity {
+  login: string;
+  /** The name that commits pushed with the token carry as their author. */
+  name: string;
+  /** The address that commits carry, so the host links them to the account. */
+  email: string;
+}
+
 /**
  * This function checks the token against the API of the host. It returns the
- * login name of the token owner. A generic host has no API, so the function
+ * account that owns the token. A generic host has no API, so the function
  * returns null for it.
  */
 export async function whoAmI(
   host: RemoteHost,
   token: string,
-): Promise<string | null> {
+): Promise<HostIdentity | null> {
   if (host.kind === 'generic') {
     return null;
   }
@@ -99,7 +108,21 @@ export async function whoAmI(
 
   const login = host.kind === 'gitlab' ? data?.username : data?.login;
 
-  return typeof login === 'string' ? login : null;
+  if (typeof login !== 'string' || !login) {
+    return null;
+  }
+
+  const name = host.kind === 'gitlab' ? data?.name : data?.full_name;
+  const email = data?.email;
+
+  return {
+    login,
+    name: typeof name === 'string' && name ? name : login,
+    email:
+      typeof email === 'string' && email.includes('@')
+        ? email
+        : `${login}@noreply.${new URL(host.baseUrl).hostname}`,
+  };
 }
 
 /**

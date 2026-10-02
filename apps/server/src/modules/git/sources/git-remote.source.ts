@@ -6,6 +6,7 @@ import { CredentialsService } from 'modules/agent-runs/credentials/credentials.s
 import { anonymousRemote, tokenRemote, type GitRemote } from '../git-command';
 import {
   type ChangeRequest,
+  type CommitIdentity,
   type GitSource,
   type SourceRepo,
 } from '../git-source';
@@ -99,6 +100,22 @@ export class GitRemoteSource implements GitSource {
       title: request.title,
       body: request.body,
     });
+  }
+
+  /**
+   * The account that owns the token, which the server read from the host
+   * when the token was saved. On a well-run host it is a bot user, so the
+   * commit names the bot and not the person who connected the host.
+   */
+  commitAuthor(repo: SourceRepo): CommitIdentity | null {
+    const { authorName, authorEmail } = repo.config;
+
+    return typeof authorName === 'string' &&
+      authorName &&
+      typeof authorEmail === 'string' &&
+      authorEmail
+      ? { name: authorName, email: authorEmail }
+      : null;
   }
 
   location(repo: SourceRepo): string {

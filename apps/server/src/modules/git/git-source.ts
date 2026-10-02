@@ -24,6 +24,12 @@ export interface SourceRepo {
   config: Record<string, unknown>;
 }
 
+/** Who a commit names: as its author, or in a `Co-authored-by` trailer. */
+export interface CommitIdentity {
+  name: string;
+  email: string;
+}
+
 export interface ChangeRequest {
   branch: string;
   baseBranch: string;
@@ -86,6 +92,13 @@ export interface GitSource {
    * The git remote source needs it, because a generic host has no API.
    */
   opensChangeRequests?(repo: SourceRepo): boolean;
+
+  /**
+   * The author of the commits the server pushes, or null for the default
+   * agent identity. A connection that pushes as a bot account names that
+   * account, so the host shows the bot as the author and not a person.
+   */
+  commitAuthor?(repo: SourceRepo): CommitIdentity | null;
 
   /** Where the repository is, for a person: a URL or a path. Never a secret. */
   location(repo: SourceRepo): string;

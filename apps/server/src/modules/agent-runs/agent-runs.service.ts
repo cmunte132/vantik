@@ -1,11 +1,10 @@
-import type { KnowledgeArm } from '@prisma/client';
-
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { type AgentRun, type KnowledgeArm, UserType } from '@prisma/client';
 import {
   AGENT_RUN_TRANSITIONS,
   AgentRunFailure,
@@ -17,6 +16,7 @@ import {
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+import { type CommitIdentity } from 'modules/git/git-source';
 import { KnowledgeSignalsService } from 'modules/knowledge-signals/knowledge-signals.service';
 import { LoggerService } from 'modules/logger/logger.service';
 import KnowledgeConventionsService from 'modules/pages/upkeep/knowledge-conventions.service';
@@ -117,6 +117,29 @@ export class AgentRunsService {
   ) {}
 
   // ------------------------------------------------------------------ reads
+
+  /**
+   * The person who delegated a run, for the `Co-authored-by` trailer of its
+   * commit. Null when nobody did, or when the creator is not a person.
+   */
+  async delegator(
+    run: Pick<AgentRun, 'createdById'>,
+  ): Promise<CommitIdentity | null> {
+    if (!run.createdById) {
+      return null;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: run.createdById },
+      select: { fullname: true, username: true, email: true, type: true },
+    });
+
+    if (!user || user.type !== UserType.User) {
+      return null;
+    }
+
+    return { name: user.fullname || user.username, email: user.email };
+  }
 
   async listRuns(filter: ListAgentRunsFilter, scope: AgentRunScope) {
     const page = filter.page ?? 1;

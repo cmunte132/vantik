@@ -264,6 +264,7 @@ function build(
     recordIteration: jest.fn(async (_id: string, input: never) => {
       iterations.push(input);
     }),
+    delegator: jest.fn(async (): Promise<null> => null),
     recordSpend: jest.fn(
       async (_id: string, spent: { costUsd: number; turns: number }) => {
         spends.push(spent);

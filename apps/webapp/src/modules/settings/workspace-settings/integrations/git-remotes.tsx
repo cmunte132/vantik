@@ -96,6 +96,9 @@ function Connection({ connection }: { connection: GitRemoteConnection }) {
             {connection.hasToken
               ? `As ${connection.username}, with token ${connection.tokenHint ?? ''}`
               : 'No token. The server can fetch public repositories, but it cannot push.'}
+            {connection.hasToken && connection.author && (
+              <> · Commits as {connection.author}</>
+            )}
           </div>
         </div>
         <Button variant="ghost" size="sm" onClick={() => setEditing(!editing)}>
@@ -375,7 +378,11 @@ function ConnectForm({ instruction }: { instruction?: string }) {
     <div className="flex flex-col gap-2">
       <p className="text-muted-foreground">
         {instruction ??
-          'Connect a Forgejo, Gitea or GitLab host, or any git host that serves HTTP or HTTPS.'}
+          'Connect a Forgejo, Gitea or GitLab host, or any git host that serves HTTP or HTTPS.'}{' '}
+        Use a token that belongs to a bot account, not to a person: on Forgejo
+        or Gitea, a user such as vantik-bot in a team with write access to the
+        repositories; on GitLab, a project or group access token. Commits and
+        pull requests then name the bot.
       </p>
       <div className="flex gap-2">
         <div className="w-44 shrink-0">

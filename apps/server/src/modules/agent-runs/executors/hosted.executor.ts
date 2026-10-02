@@ -859,6 +859,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         issueKey: pack.issue?.key ?? run.issueId,
         issueTitle: pack.issue?.title ?? 'Agent work',
         summary: pullRequestBody(cycle),
+        coAuthor: await this.agentRuns.delegator(run),
       });
 
       if (!pushed) {

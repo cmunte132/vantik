@@ -8,6 +8,7 @@ import {
   listHostRepositories,
   normaliseBaseUrl,
   openHostPullRequest,
+  whoAmI,
 } from './git-remote-hosts';
 import { GitRemoteSource } from './git-remote.source';
 
@@ -171,6 +172,24 @@ describe('GitRemoteSource', () => {
   it('shows the web page of the repository as its location', () => {
     expect(source().location(repo())).toBe(`${BASE}/cmunte/perk-pilot`);
   });
+
+  it('commits as the account that owns the token', () => {
+    const bot = repo({
+      config: {
+        kind: 'forgejo',
+        baseUrl: BASE,
+        username: 'vantik-bot',
+        authorName: 'Vantik Bot',
+        authorEmail: 'bot@example.com',
+      },
+    });
+
+    expect(source().commitAuthor(bot)).toEqual({
+      name: 'Vantik Bot',
+      email: 'bot@example.com',
+    });
+    expect(source().commitAuthor(repo())).toBeNull();
+  });
 });
 
 describe('host API', () => {
@@ -267,5 +286,38 @@ describe('host API', () => {
     expect(
       (axios.get as jest.Mock).mock.calls[0][1].headers.Authorization,
     ).toBe(undefined);
+  });
+
+  it('reads the Forgejo account that owns the token', async () => {
+    (axios.get as jest.Mock).mockResolvedValue({
+      data: {
+        login: 'vantik-bot',
+        full_name: 'Vantik Bot',
+        email: 'bot@example.com',
+      },
+    });
+
+    expect(await whoAmI(host, 'secret-token-1234')).toEqual({
+      login: 'vantik-bot',
+      name: 'Vantik Bot',
+      email: 'bot@example.com',
+    });
+  });
+
+  it('reads a GitLab bot, and gives it a no-reply address when the host hides one', async () => {
+    (axios.get as jest.Mock).mockResolvedValue({
+      data: { username: 'project_3_bot_ab12', name: '', email: null },
+    });
+
+    expect(
+      await whoAmI(
+        { kind: 'gitlab', baseUrl: 'https://gitlab.example.com', username: '' },
+        'glpat-secret',
+      ),
+    ).toEqual({
+      login: 'project_3_bot_ab12',
+      name: 'project_3_bot_ab12',
+      email: 'project_3_bot_ab12@noreply.gitlab.example.com',
+    });
   });
 });

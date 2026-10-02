@@ -10,6 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { type GitSource } from 'modules/git/git-source';
 import {
   GitSourcesService,
   type RepoRef,
@@ -49,9 +50,11 @@ function run(cwd: string, ...args: string[]): string {
   }).trim();
 }
 
-function build(): GitProxyService {
+function build(
+  source: GitSource = new LocalDirectorySource(),
+): GitProxyService {
   const require = jest.fn(async (ref: RepoRef) => ({
-    source: new LocalDirectorySource(),
+    source,
     repo: {
       workspaceId: ref.workspaceId,
       integrationAccountId: 'account-1',
@@ -243,5 +246,65 @@ describe('GitProxyService with a local directory', () => {
 
     expect(pushed).toBeUndefined();
     expect(run(origin, 'branch', '--list', 'agent/*')).toBe('');
+  });
+
+  it('commits as the source’s bot account, with the delegating person as co-author', async () => {
+    const bot: GitSource = Object.assign(new LocalDirectorySource(), {
+      commitAuthor: () => ({
+        name: 'Vantik Bot',
+        email: 'vantik-bot@noreply.forgejo.example.com',
+      }),
+    });
+    const proxy = build(bot);
+    const checkout = await proxy.materializeCheckout({
+      workspaceId: 'ws',
+      source: SOURCE,
+    });
+
+    await proxy.pushWorkTree({
+      workspaceId: 'ws',
+      source: SOURCE,
+      branch: 'agent/eng-1',
+      baseBranch: checkout.baseBranch,
+      baseCommit: checkout.baseCommit,
+      treeBase64: treeOf({ 'src/a.ts': 'export const a = 2;\n' }),
+      commitMessage: 'ENG-1: Change a',
+      issueKey: 'ENG-1',
+      issueTitle: 'Change a',
+      summary: 'Changed a.',
+      coAuthor: { name: 'Ada Person', email: 'ada@example.com' },
+    });
+
+    expect(run(origin, 'log', '-1', '--format=%an <%ae>', 'agent/eng-1')).toBe(
+      'Vantik Bot <vantik-bot@noreply.forgejo.example.com>',
+    );
+    expect(run(origin, 'log', '-1', '--format=%B', 'agent/eng-1')).toBe(
+      'ENG-1: Change a\n\nCo-authored-by: Ada Person <ada@example.com>',
+    );
+  });
+
+  it('commits as the agent when the source names no bot account', async () => {
+    const proxy = build();
+    const checkout = await proxy.materializeCheckout({
+      workspaceId: 'ws',
+      source: SOURCE,
+    });
+
+    await proxy.pushWorkTree({
+      workspaceId: 'ws',
+      source: SOURCE,
+      branch: 'agent/eng-1',
+      baseBranch: checkout.baseBranch,
+      baseCommit: checkout.baseCommit,
+      treeBase64: treeOf({ 'src/a.ts': 'export const a = 2;\n' }),
+      commitMessage: 'ENG-1: Change a',
+      issueKey: 'ENG-1',
+      issueTitle: 'Change a',
+      summary: 'Changed a.',
+    });
+
+    expect(
+      run(origin, 'log', '-1', '--format=%an <%ae>%n%B', 'agent/eng-1'),
+    ).toBe('Vantik Agent <agent@vantik.local>\nENG-1: Change a');
   });
 });

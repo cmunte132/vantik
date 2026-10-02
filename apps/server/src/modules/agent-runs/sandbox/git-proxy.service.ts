@@ -9,7 +9,10 @@ import { promisify } from 'node:util';
 import { Injectable } from '@nestjs/common';
 
 import { git, type GitRemote } from 'modules/git/git-command';
-import { deliversPullRequest } from 'modules/git/git-source';
+import {
+  type CommitIdentity,
+  deliversPullRequest,
+} from 'modules/git/git-source';
 import {
   GitSourcesService,
   type ResolvedRepo,
@@ -46,7 +49,19 @@ export interface PushRequest {
   issueKey: string;
   issueTitle: string;
   summary: string;
+  /**
+   * The person who delegated the run. The commit names them in a
+   * `Co-authored-by` trailer, so the history says who asked for the work
+   * while the author stays the agent or the connection's bot account.
+   */
+  coAuthor?: CommitIdentity | null;
 }
+
+/** The author of a commit when the source names no bot account. */
+const AGENT_AUTHOR: CommitIdentity = {
+  name: 'Vantik Agent',
+  email: 'agent@vantik.local',
+};
 
 export interface PushResult {
   branch: string;
@@ -164,17 +179,20 @@ export class GitProxyService {
         return undefined;
       }
 
+      const author =
+        resolved.source.commitAuthor?.(resolved.repo) ?? AGENT_AUTHOR;
+
       await git(
         [
           '-c',
-          'user.name=Vantik Agent',
+          `user.name=${author.name}`,
           '-c',
-          'user.email=agent@vantik.local',
+          `user.email=${author.email}`,
           'commit',
           '--no-verify',
           '--quiet',
           '-m',
-          request.commitMessage,
+          commitMessage(request.commitMessage, request.coAuthor),
         ],
         { cwd: workdir },
       );
@@ -349,4 +367,16 @@ export class GitProxyService {
       return undefined;
     }
   }
+}
+
+/** The message with a `Co-authored-by` trailer for the delegating person. */
+export function commitMessage(
+  message: string,
+  coAuthor?: CommitIdentity | null,
+): string {
+  if (!coAuthor) {
+    return message;
+  }
+
+  return `${message}\n\nCo-authored-by: ${coAuthor.name} <${coAuthor.email}>`;
 }

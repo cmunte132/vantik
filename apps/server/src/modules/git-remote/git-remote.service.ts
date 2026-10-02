@@ -24,6 +24,7 @@ import {
   cloneUrlFor,
   getHostRepository,
   hostErrorReason,
+  type HostIdentity,
   isOnHost,
   listHostRepositories,
   normaliseBaseUrl,
@@ -100,21 +101,34 @@ export class GitRemoteService {
 
     const token = dto.token?.trim() || null;
     let username = dto.username?.trim() || '';
+    // The account that owns the token. Commits pushed through the connection
+    // name it as their author, so a bot token puts the bot in the history.
+    let identity: HostIdentity | null = null;
 
     if (token && dto.kind !== 'generic') {
       try {
-        username ||=
-          (await whoAmI({ kind: dto.kind, baseUrl, username: '' }, token)) ??
-          '';
+        identity = await whoAmI(
+          { kind: dto.kind, baseUrl, username: '' },
+          token,
+        );
       } catch (error) {
         throw new BadRequestException(
           `Vantik cannot use this token on ${baseUrl}: ${hostErrorReason(error)}.`,
         );
       }
+
+      username ||= identity?.login ?? '';
     }
 
     const definition = await this.definition();
-    const config = { kind: dto.kind, baseUrl, username: username || 'git' };
+    const config = {
+      kind: dto.kind,
+      baseUrl,
+      username: username || 'git',
+      ...(identity
+        ? { authorName: identity.name, authorEmail: identity.email }
+        : {}),
+    };
 
     const account = await this.prisma.integrationAccount.upsert({
       where: {
@@ -444,11 +458,21 @@ function toConnection(
     kind: config.kind as GitRemoteConnection['kind'],
     baseUrl: String(config.baseUrl ?? account.accountId ?? ''),
     username: String(config.username ?? 'git'),
+    author: authorOf(config),
     hasToken: hints.has(account.id),
     tokenHint: hints.get(account.id) ?? null,
     repositories: repositoriesOf(account),
     createdAt: account.createdAt.toISOString(),
   };
+}
+
+/** The bot account that commits pushed through the connection name. */
+function authorOf(config: Record<string, unknown>): string | null {
+  const { authorName, authorEmail } = config;
+
+  return typeof authorName === 'string' && typeof authorEmail === 'string'
+    ? `${authorName} <${authorEmail}>`
+    : null;
 }
 
 function configOf(account: AccountRow): Record<string, unknown> {

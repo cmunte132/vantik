@@ -4,7 +4,12 @@
  * Forgejo and Gitea have the same API. GitLab has a different API. A generic
  * host has no API that Vantik knows, so it gives git access and nothing more.
  */
-export const GIT_REMOTE_KINDS = ['forgejo', 'gitea', 'gitlab', 'generic'] as const;
+export const GIT_REMOTE_KINDS = [
+  'forgejo',
+  'gitea',
+  'gitlab',
+  'generic',
+] as const;
 
 export type GitRemoteKind = (typeof GIT_REMOTE_KINDS)[number];
 
@@ -55,6 +60,14 @@ export class GitRemoteConnection {
 
   /** The user name that git sends with the token. */
   username: string;
+
+  /**
+   * The author of the commits that runs push through this connection, as
+   * `Name <email>`: the account that owns the token, read from the host when
+   * the token was saved. Null for a generic host, whose commits carry the
+   * default agent identity.
+   */
+  author: string | null;
 
   hasToken: boolean;
 

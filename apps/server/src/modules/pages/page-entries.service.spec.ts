@@ -2391,7 +2391,62 @@ describe('entries as they are read', () => {
         select: expect.any(Object),
         orderBy: { doneAt: 'asc' },
       },
+      triageDecisions: {
+        where: { mode: 'ON' },
+        select: expect.any(Object),
+        orderBy: { createdAt: 'asc' },
+      },
     });
+  });
+
+  it('[ENG-184] carry what triage decided and acted on, with what each check said', async () => {
+    const { service, prisma } = buildService();
+    (prisma.pageEntry.findMany as jest.Mock).mockResolvedValueOnce([
+      {
+        id: 'e1',
+        status: 'PROPOSED',
+        citations: [],
+        triageDecisions: [
+          {
+            createdAt: new Date('2026-10-02T04:36:00Z'),
+            decision: 'ESCALATE',
+            reasons: ['EVIDENCE_DISPUTED'],
+            policy: null,
+            trigger: 'WRITTEN',
+            outputs: {
+              accept: [
+                {
+                  readable: true,
+                  accept: false,
+                  contradicted: true,
+                  reason: 'says otherwise',
+                },
+                { readable: false, accept: false, contradicted: false },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    const [entry] = (await service.getEntries(
+      'workspace-1',
+    )) as unknown as Array<Record<string, unknown>>;
+
+    expect(entry.triageDecisions).toBeUndefined();
+    expect(entry.triage).toEqual([
+      {
+        at: new Date('2026-10-02T04:36:00Z'),
+        decision: 'ESCALATE',
+        reasons: ['EVIDENCE_DISPUTED'],
+        policy: null,
+        trigger: 'WRITTEN',
+        checks: [
+          { verdict: 'contradicted', reason: 'says otherwise' },
+          { verdict: null, reason: null },
+        ],
+      },
+    ]);
   });
 });
 

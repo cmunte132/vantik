@@ -32,6 +32,7 @@ import { PrismaService } from 'nestjs-prisma';
 import { MIN_GAP_ASKS } from './knowledge-overview.service';
 import KnowledgeReviewService from './knowledge-review.service';
 import PageEntriesService from './page-entries.service';
+import { checksOf } from './triage/checks';
 import PagesService, {
   PROPOSAL_SELECT,
   proposalResponse,
@@ -328,22 +329,8 @@ export default class KnowledgeInboxService {
       orderBy: { createdAt: 'desc' },
       select: { outputs: true },
     });
-    const accept = (decision?.outputs as { accept?: unknown } | null)?.accept;
 
-    if (!Array.isArray(accept)) {
-      return [];
-    }
-
-    return accept.map((judgment: Record<string, unknown>) => ({
-      verdict: !judgment.readable
-        ? null
-        : judgment.accept
-          ? 'accept'
-          : judgment.contradicted
-            ? 'contradicted'
-            : 'escalate',
-      reason: typeof judgment.reason === 'string' ? judgment.reason : null,
-    }));
+    return checksOf(decision?.outputs);
   }
 
   /** Puts a person on an item, or, with null, takes everyone off it. */

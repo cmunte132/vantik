@@ -13,7 +13,11 @@ import {
   Optional,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { PageEntryProposalState, Prisma } from '@prisma/client';
+import {
+  KnowledgeTriageMode,
+  PageEntryProposalState,
+  Prisma,
+} from '@prisma/client';
 import {
   BulkUpdatePageEntriesDto,
   CreatePageEntryDto,
@@ -55,6 +59,7 @@ import {
   WriterIdentity,
 } from './pages.interface';
 import KnowledgeAgreementService from './triage/knowledge-agreement.service';
+import { checksOf } from './triage/checks';
 import { secretIn } from './triage/triage-policy';
 import { answerGaps, isAccepted } from './upkeep/gap-answers';
 import {
@@ -128,14 +133,36 @@ export default class PageEntriesService {
           },
           orderBy: { doneAt: 'asc' },
         },
+        // What triage decided and acted on, for the same trail. A shadow
+        // decision changed nothing, so it is not part of the fact's story.
+        triageDecisions: {
+          where: { mode: KnowledgeTriageMode.ON },
+          select: {
+            createdAt: true,
+            decision: true,
+            reasons: true,
+            policy: true,
+            trigger: true,
+            outputs: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
     // Every entry read goes out with its proof, the same as a search hit, so
     // an agent reading a page is told what each claim rests on.
-    return entries.map((entry) => ({
+    return entries.map(({ triageDecisions, ...entry }) => ({
       ...entry,
       ...entryProof(entry),
+      triage: (triageDecisions ?? []).map((decision) => ({
+        at: decision.createdAt,
+        decision: decision.decision,
+        reasons: decision.reasons,
+        policy: decision.policy,
+        trigger: decision.trigger,
+        checks: checksOf(decision.outputs),
+      })),
     })) as unknown as PageEntry[];
   }
 

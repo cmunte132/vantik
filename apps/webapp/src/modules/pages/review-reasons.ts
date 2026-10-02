@@ -2,6 +2,7 @@ import {
   KnowledgeReviewReasonEnum,
   KnowledgeTriageDecisionEnum,
   type KnowledgeReviewItem,
+  type PageEntryCheck,
   type KnowledgeReviewQueue,
 } from '@vantikhq/types';
 
@@ -31,12 +32,43 @@ export const REASON_LABELS: Record<KnowledgeReviewReasonEnum, string> = {
   [KnowledgeReviewReasonEnum.AUDIT]: 'Audit',
   [KnowledgeReviewReasonEnum.LOW_AGREEMENT]: 'Triage is holding back',
   [KnowledgeReviewReasonEnum.EVIDENCE_DISPUTED]:
-    'One check read its source as saying otherwise',
+    'A check read its source as saying otherwise',
   [KnowledgeReviewReasonEnum.CITATION_CONTRADICTED]: 'The code now disagrees',
   [KnowledgeReviewReasonEnum.CITATION_MISSING]: 'Its cited file is gone',
   [KnowledgeReviewReasonEnum.CITATION_UNJUDGED]: 'Its cited code changed',
   [KnowledgeReviewReasonEnum.UNUSED]: 'Nobody uses it',
 };
+
+/** What a check's verdict means for the claim, and the colour of its dot. */
+export const CHECK_VERDICTS: Record<
+  NonNullable<PageEntryCheck['verdict']> | 'unread',
+  { label: string; dot: string }
+> = {
+  accept: {
+    label: 'Its source confirms it',
+    dot: 'bg-[oklch(64.93%_0.107_154)]',
+  },
+  escalate: {
+    label: 'Its source does not settle it',
+    dot: 'bg-[oklch(70%_0_0)]',
+  },
+  contradicted: {
+    label: 'Its source says otherwise',
+    dot: 'bg-[oklch(61.34%_0.162_23.58)]',
+  },
+  unread: {
+    label: 'Gave no answer that could be read',
+    dot: 'bg-[oklch(70%_0_0)]',
+  },
+};
+
+/** Whether every check that answered read the claim's source as saying otherwise. */
+export function allContradicted(checks: PageEntryCheck[]): boolean {
+  return (
+    checks.length > 1 &&
+    checks.every((check) => check.verdict === 'contradicted')
+  );
+}
 
 /** One row of the queue. */
 export interface ReviewRow {

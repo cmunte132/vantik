@@ -3,7 +3,7 @@ import type {
   KnowledgeReviewReasonEnum,
   KnowledgeTriageDecisionEnum,
 } from './knowledge-review';
-import type { PageEntry, PageProposal } from './page.entity';
+import type { PageEntry, PageEntryCheck, PageProposal } from './page.entity';
 
 import {
   IsEnum,
@@ -141,11 +141,7 @@ export interface KnowledgeInboxDetail {
 }
 
 /** What one acceptance check said of a fact, in its own words. */
-export interface KnowledgeInboxCheck {
-  /** Null when its answer could not be read. */
-  verdict: 'accept' | 'escalate' | 'contradicted' | null;
-  reason: string | null;
-}
+export type KnowledgeInboxCheck = PageEntryCheck;
 
 export class KnowledgeInboxQueryDto {
   @IsOptional()

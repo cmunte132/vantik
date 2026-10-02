@@ -8,9 +8,10 @@ import {
   KnowledgeTriageDecisionEnum,
   type KnowledgeInboxEvent,
   type KnowledgeInboxItem,
+  type PageEntryCheck,
 } from '@vantikhq/types';
 
-import { auditPrompt, REASON_LABELS } from './review-reasons';
+import { allContradicted, auditPrompt, REASON_LABELS } from './review-reasons';
 
 /** The label of each kind in the list, and its colour. */
 export const KIND_LABELS: Record<
@@ -115,7 +116,10 @@ export function inboxSubline(item: KnowledgeInboxItem): string {
 }
 
 /** Why the item is in front of a person, as the pill above its title says it. */
-export function inboxReason(item: KnowledgeInboxItem): string {
+export function inboxReason(
+  item: KnowledgeInboxItem,
+  checks: PageEntryCheck[] = [],
+): string {
   switch (item.kind) {
     case KnowledgeInboxKindEnum.CONTRADICTION:
       return item.reasons.includes(
@@ -132,6 +136,13 @@ export function inboxReason(item: KnowledgeInboxItem): string {
     case KnowledgeInboxKindEnum.GAP:
       return `Asked by ${item.gap?.count ?? 0} runs, answered by nothing`;
     default:
+      if (
+        item.reasons[0] === KnowledgeReviewReasonEnum.EVIDENCE_DISPUTED &&
+        allContradicted(checks)
+      ) {
+        return 'Both checks read its source as saying otherwise';
+      }
+
       return item.reasons[0]
         ? REASON_LABELS[item.reasons[0]]
         : 'Waits on a person';

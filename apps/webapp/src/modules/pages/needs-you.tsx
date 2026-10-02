@@ -64,6 +64,7 @@ import {
   inboxKind,
 } from './inbox';
 import { citationLabel } from './memory-rail';
+import { CHECK_VERDICTS } from './review-reasons';
 import { age, ago, CARD, Chip, CHIP_TONE } from './trust';
 
 const VIEWS: Array<{ view: KnowledgeInboxView; label: string }> = [
@@ -551,7 +552,9 @@ const Detail = observer(
                 tone={isDone ? undefined : 'needYou'}
                 className="self-start"
               >
-                {isDone ? doneLine(item, nameOf) : inboxReason(item)}
+                {isDone
+                  ? doneLine(item, nameOf)
+                  : inboxReason(item, data.checks ?? [])}
               </Chip>
               <h1 className="text-xl font-semibold leading-tight break-words">
                 {title}
@@ -619,29 +622,6 @@ const Detail = observer(
   },
 );
 
-/** What each check said, in the words a person weighs, with its own reason. */
-const VERDICTS: Record<
-  NonNullable<KnowledgeInboxCheck['verdict']> | 'unread',
-  { label: string; dot: string }
-> = {
-  accept: {
-    label: 'Its source confirms it',
-    dot: 'bg-[oklch(64.93%_0.107_154)]',
-  },
-  escalate: {
-    label: 'Its source does not settle it',
-    dot: 'bg-[oklch(70%_0_0)]',
-  },
-  contradicted: {
-    label: 'Its source says otherwise',
-    dot: 'bg-[oklch(61.34%_0.162_23.58)]',
-  },
-  unread: {
-    label: 'Gave no answer that could be read',
-    dot: 'bg-[oklch(70%_0_0)]',
-  },
-};
-
 /**
  * What the two checks of its last triage said. A model's reason is what a
  * person needs to judge whether the check was right, for example when it
@@ -658,7 +638,7 @@ function Checks({ checks }: { checks: KnowledgeInboxCheck[] }) {
         What the checks said
       </span>
       {checks.map((check, index) => {
-        const verdict = VERDICTS[check.verdict ?? 'unread'];
+        const verdict = CHECK_VERDICTS[check.verdict ?? 'unread'];
 
         return (
           <div key={index} className="flex gap-2.5">

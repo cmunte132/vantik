@@ -1,3 +1,5 @@
+import type { PageEntryTriageStep } from '@vantikhq/types';
+
 /** How strictly a page polices entries appended to it by agents. */
 export enum PageEntryPolicy {
   OPEN = 'OPEN',
@@ -97,6 +99,8 @@ export interface PageEntryType {
    * entry list of the REST API carries it.
    */
   inboxItems?: PageEntryInboxDecision[];
+  /** What triage decided and acted on, oldest first. Only the REST entry list carries it. */
+  triage?: PageEntryTriageStep[];
 }
 
 /** One step on the trail of a fact: a person filed it under another page. */

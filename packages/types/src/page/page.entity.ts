@@ -174,6 +174,24 @@ export interface PageEntryInboxDecision {
   resolution: string | null;
 }
 
+/** What one acceptance check of triage said of a fact, in its own words. */
+export interface PageEntryCheck {
+  /** Null when its answer could not be read. */
+  verdict: 'accept' | 'escalate' | 'contradicted' | null;
+  reason: string | null;
+}
+
+/** One decision triage made about the fact, and acted on. */
+export interface PageEntryTriageStep {
+  at: string | Date;
+  decision: string;
+  reasons: string[];
+  policy: string | null;
+  /** What made triage decide: the fact was written, or its evidence changed. */
+  trigger: string | null;
+  checks: PageEntryCheck[];
+}
+
 export class PageEntry {
   id: string;
   createdAt: Date;
@@ -223,6 +241,9 @@ export class PageEntry {
 
   /** What people decided about the fact in Needs you, oldest first, when read. */
   inboxItems?: PageEntryInboxDecision[];
+
+  /** What triage decided about the fact, oldest first, when read. */
+  triage?: PageEntryTriageStep[];
 
   /**
    * The proof, when the entry is served: trust tier, citations, and the last

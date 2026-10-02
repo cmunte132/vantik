@@ -4,6 +4,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@vantikhq/ui/components/dialog';
+import {
+  KnowledgeReviewReasonEnum,
+  type PageEntryTriageStep,
+  type ServedCitation,
+} from '@vantikhq/types';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
@@ -17,6 +22,11 @@ import type { ProvenEntry } from 'services/pages';
 import { useContextStore } from 'store/global-context-provider';
 
 import { citationLabel, TrustChip } from './memory-rail';
+import {
+  allContradicted,
+  CHECK_VERDICTS,
+  REASON_LABELS,
+} from './review-reasons';
 import { moveDetail } from './trail';
 import { age, ago } from './trust';
 
@@ -66,6 +76,100 @@ function citationDetail(fact: ProvenEntry): string {
   return `The server found ${citations.length > 1 ? 'them' : 'it'}${
     checkedAt ? ` ${ago(checkedAt)}` : ''
   }. Whether ${citations.length > 1 ? 'they say' : 'it says'} what this claims is for the checks to judge.`;
+}
+
+/** What triage did, as the trail says it, and the dot it gets. */
+const TRIAGE_TITLE: Record<string, [string, keyof typeof DOT]> = {
+  AUTO_ACCEPT: ['Triage checked it and put it in use', 'code'],
+  PROVISIONAL: ['Triage put it in use as provisional', 'written'],
+  ESCALATE: ['Triage checked it and left it to a person', 'waiting'],
+  REJECT: ['Triage checked it and refused it', 'retired'],
+  CORROBORATE: [
+    'Triage found a fact that says the same, and counted it there',
+    'moved',
+  ],
+};
+
+/** What made triage decide, after the time it did. */
+const TRIGGER: Record<string, string> = {
+  WRITTEN: 'when it was written',
+  CITATIONS_CHECKED: 'once its citations were read',
+  CODE_CHANGED: 'after the code it cites changed',
+  RELATED: 'after a fact in use said the same',
+  VERIFIER: 'after the verifier found evidence',
+};
+
+/**
+ * One triage decision on the trail: when and why it ran, what each check
+ * read in the sources and said, and why that led where it did.
+ */
+function triageStep(
+  decided: PageEntryTriageStep,
+  index: number,
+  citations: ServedCitation[],
+): Step {
+  const [title, dot] = TRIAGE_TITLE[decided.decision] ?? [
+    'Triage decided about it',
+    'written',
+  ];
+  const sources = citations.length
+    ? citations.map(citationLabel).join(', ')
+    : 'what it cites';
+  const why = decided.reasons
+    .map((reason) => REASON_LABELS[reason as KnowledgeReviewReasonEnum])
+    .filter(Boolean);
+  const onlyNarrative =
+    decided.reasons.includes(KnowledgeReviewReasonEnum.EVIDENCE_DISPUTED) &&
+    allContradicted(decided.checks);
+
+  return {
+    key: `triage-${index}`,
+    dot,
+    title,
+    detail: (
+      <span className="flex flex-col gap-1.5">
+        <span>
+          {DATE_TIME.format(new Date(decided.at))}
+          {TRIGGER[decided.trigger ?? '']
+            ? `, ${TRIGGER[decided.trigger ?? '']}`
+            : ''}
+          .
+        </span>
+        {decided.checks.length > 0 && (
+          <span>
+            {decided.checks.length === 2 ? 'Two models' : 'A model'} read{' '}
+            {sources} against it:
+          </span>
+        )}
+        {decided.checks.map((check, at) => {
+          const verdict = CHECK_VERDICTS[check.verdict ?? 'unread'];
+
+          return (
+            <span key={at} className="flex gap-2">
+              <span
+                className={cn(
+                  'mt-[6px] size-[6px] shrink-0 rounded-full',
+                  verdict.dot,
+                )}
+              />
+              <span>
+                <span className="text-foreground/85">{verdict.label}.</span>{' '}
+                {check.reason}
+              </span>
+            </span>
+          );
+        })}
+        {onlyNarrative ? (
+          <span>
+            An issue or a comment tells of a change, often from the problem
+            before it, so it cannot refuse a fact alone. A person decides.
+          </span>
+        ) : (
+          why.length > 0 && <span>Why: {why.join('; ').toLowerCase()}.</span>
+        )}
+      </span>
+    ),
+  };
 }
 
 interface Step {
@@ -150,6 +254,10 @@ const Trail = observer(({ fact }: { fact: ProvenEntry }) => {
           : `It cites ${citations.map(citationLabel).join(', ')}`,
       detail: citationDetail(fact),
     });
+  }
+
+  for (const [index, decided] of (fact.triage ?? []).entries()) {
+    steps.push(triageStep(decided, index, citations));
   }
 
   if (fact.verifiedAt) {

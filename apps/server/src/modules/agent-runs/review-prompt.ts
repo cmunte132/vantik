@@ -4,6 +4,7 @@ import type { ReviewFinding } from './review-cycle';
 import { openCriteria, verificationCommands } from './agent-prompt';
 import { reviewVerdictPath } from './review-cycle';
 import { TREE_DIFF_COMMAND } from './sandbox/tree-tools';
+import { sandboxEnvironment } from './sandbox-environment';
 
 /**
  * What the reviewer and the reviser are told.
@@ -210,6 +211,8 @@ export function buildRevisionPrompt(input: {
     '## The issue',
     '',
     pack.issue.description || '(no description)',
+    '',
+    ...sandboxEnvironment(pack),
   ];
 
   if (criteria.length) {

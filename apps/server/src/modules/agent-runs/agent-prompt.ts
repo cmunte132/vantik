@@ -2,6 +2,8 @@ import type { ContextPack } from './context-pack.service';
 
 import { describeProof } from 'modules/pages/knowledge-proof';
 
+import { sandboxEnvironment } from './sandbox-environment';
+
 /**
  * What the agent is actually told.
  *
@@ -39,6 +41,8 @@ export function buildAgentPrompt(pack: ContextPack): string {
       `This issue is about ${pack.repo.pathPrefixes.join(', ')} in this repository. Start there.`,
     );
   }
+
+  parts.push('', ...sandboxEnvironment(pack));
 
   // Above the Definition of Done on purpose. It is how the person wants the
   // work approached, and an instruction about approach is worth nothing once

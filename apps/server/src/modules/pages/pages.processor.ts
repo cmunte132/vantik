@@ -637,6 +637,7 @@ export class PagesProcessor {
       let proposedVerified: number;
       let owedIssues: number;
       let verified: number;
+      let triaged: number;
       let observed: number;
 
       try {
@@ -649,6 +650,9 @@ export class PagesProcessor {
         owedIssues = await this.upkeep.openOwedIssues();
         // Entries that wait as UNGROUNDED with no look by the verifier.
         verified = (await this.verifier?.sweep()) ?? 0;
+        // Entries that wait with no decision triage acted on: every pass
+        // failed, or it decided only in shadow and is now on.
+        triaged = await this.triage.sweep();
         // Facts observed on an outside page that the server last read over
         // 30 days ago.
         observed = await this.entryCitations.recheckObservedLater();
@@ -672,7 +676,8 @@ export class PagesProcessor {
           `${archivedStanding} unused standing entr(ies), asked a person ` +
           `about ${proposedVerified} unused verified entr(ies), opened ` +
           `${owedIssues} owed correction issue(s), asked the verifier ` +
-          `about ${verified} entr(ies), and queued a new read of the outside ` +
+          `about ${verified} entr(ies), queued triage again for ${triaged}, ` +
+          `and queued a new read of the outside ` +
           `pages of ${observed} observed entr(ies)`,
         where: 'PagesProcessor.handleDecay',
       });
@@ -687,6 +692,7 @@ export class PagesProcessor {
         proposedVerified,
         owedIssues,
         verified,
+        triaged,
         observed,
         prunedJobRuns,
       };

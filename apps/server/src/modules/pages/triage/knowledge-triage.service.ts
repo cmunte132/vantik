@@ -198,6 +198,12 @@ interface Neighbour {
   models: string[];
 }
 
+/** How old an entry must be before the nightly sweep queues triage for it. */
+export const TRIAGE_SWEEP_AFTER_MS = 60 * 60 * 1000;
+
+/** The most entries of each kind one nightly sweep queues triage for. */
+export const TRIAGE_SWEEP_LIMIT = 50;
+
 const ENTRY_SELECT = {
   id: true,
   createdAt: true,
@@ -265,7 +271,8 @@ export default class KnowledgeTriageService {
    * workspace. A pass for a new entry (`WRITTEN`) also returns null when the
    * entry has a decision. Any other trigger decides again only after an
    * escalation, and only when the evidence differs from what the last
-   * decision saw.
+   * decision saw. Neither holds where the last decision was made in shadow
+   * and triage is now on: that entry is decided again, whatever the trigger.
    */
   async triage(
     entryId: string,
@@ -297,15 +304,19 @@ export default class KnowledgeTriageService {
     // Once for each state of the evidence. A retry after the decision was
     // recorded, or a second job for the same entry, changes nothing. A later
     // pass decides again only about an entry that waits for a person, and
-    // only when what it rests on changed since the last decision.
+    // only when what it rests on changed since the last decision. A decision
+    // made in shadow never acted, so once triage is on it binds nothing.
     const last = await this.prisma.knowledgeTriageDecision.findFirst({
       where: { entryId },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      select: { decision: true, applied: true, inputs: true },
+      select: { decision: true, applied: true, inputs: true, mode: true },
     });
+    const onlyShadowed =
+      last?.mode === KnowledgeTriageMode.SHADOW && settings.autoTriage === 'on';
 
     if (
       last &&
+      !onlyShadowed &&
       (trigger === KnowledgeTriageTrigger.WRITTEN ||
         last.applied ||
         last.decision !== KnowledgeTriageDecisionType.ESCALATE ||
@@ -1198,6 +1209,55 @@ export default class KnowledgeTriageService {
         where: 'KnowledgeTriageService.verifyLater',
       });
     }
+  }
+
+  /**
+   * Queues a pass for entries that wait with nothing triage acted on: those
+   * whose every pass failed, and, where triage is now on, those it decided
+   * about only in shadow. Only entries older than an hour, so a pass still
+   * being tried is not doubled. Returns how many it queued.
+   */
+  async sweep(env: NodeJS.ProcessEnv = process.env): Promise<number> {
+    const waiting: Prisma.PageEntryWhereInput = {
+      deleted: null,
+      status: PageEntryStatus.PROPOSED,
+      createdAt: { lt: new Date(Date.now() - TRIAGE_SWEEP_AFTER_MS) },
+      ...onLivePageOrLoose(),
+    };
+    const select = {
+      id: true,
+      workspace: { select: { preferences: true } },
+    } as const;
+    const [undecided, shadowed] = await Promise.all([
+      this.prisma.pageEntry.findMany({
+        where: { ...waiting, triageDecisions: { none: {} } },
+        orderBy: { createdAt: 'asc' },
+        take: TRIAGE_SWEEP_LIMIT,
+        select,
+      }),
+      this.prisma.pageEntry.findMany({
+        where: {
+          ...waiting,
+          triageDecisions: {
+            some: { mode: KnowledgeTriageMode.SHADOW },
+            none: { mode: KnowledgeTriageMode.ON },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: TRIAGE_SWEEP_LIMIT,
+        select,
+      }),
+    ]);
+    const triageIs = (entry: (typeof undecided)[number]) =>
+      knowledgeSettings(entry.workspace?.preferences, env).autoTriage;
+    const entryIds = [
+      ...undecided.filter((entry) => triageIs(entry) !== 'off'),
+      ...shadowed.filter((entry) => triageIs(entry) === 'on'),
+    ].map((entry) => entry.id);
+
+    await this.triageAgain(entryIds, KnowledgeTriageTrigger.WRITTEN);
+
+    return entryIds.length;
   }
 
   /**

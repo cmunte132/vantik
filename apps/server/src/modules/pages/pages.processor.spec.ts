@@ -118,7 +118,7 @@ describe('PagesProcessor', () => {
       {
         recheckObservedLater: async () => 0,
       } as unknown as EntryCitationsService,
-      {} as KnowledgeTriageService,
+      { sweep: async () => 0 } as unknown as KnowledgeTriageService,
       {
         proposeUnused: async () => 0,
         openOwedIssues: async () => 0,
@@ -604,7 +604,7 @@ describe('the decay pass', () => {
       {
         recheckObservedLater: async () => 0,
       } as unknown as EntryCitationsService,
-      {} as KnowledgeTriageService,
+      { sweep: async () => 0 } as unknown as KnowledgeTriageService,
       { proposeUnused, openOwedIssues } as unknown as KnowledgeUpkeepService,
       {} as KnowledgeConventionsService,
       {} as KnowledgeGapsService,
@@ -625,7 +625,7 @@ describe('the decay pass', () => {
       {
         recheckObservedLater: async () => 0,
       } as unknown as EntryCitationsService,
-      {} as KnowledgeTriageService,
+      { sweep: async () => 0 } as unknown as KnowledgeTriageService,
       {
         proposeUnused: async () => 0,
         openOwedIssues,
@@ -638,6 +638,29 @@ describe('the decay pass', () => {
     expect(openOwedIssues).toHaveBeenCalledWith();
   });
 
+  it('[ENG-183] queues triage again for entries no pass acted on', async () => {
+    const sweep = jest.fn(async () => 3);
+
+    await new PagesProcessor(
+      {
+        runDecay: async () => ({ expiredProposed: 0, archivedStanding: 0 }),
+      } as unknown as PageEntriesService,
+      {
+        recheckObservedLater: async () => 0,
+      } as unknown as EntryCitationsService,
+      { sweep } as unknown as KnowledgeTriageService,
+      {
+        proposeUnused: async () => 0,
+        openOwedIssues: async () => 0,
+      } as unknown as KnowledgeUpkeepService,
+      {} as KnowledgeConventionsService,
+      {} as KnowledgeGapsService,
+      {} as PageRefreshService,
+    ).handleDecay();
+
+    expect(sweep).toHaveBeenCalledWith();
+  });
+
   it('[ENG-224] queues a new read of outside pages that are due', async () => {
     const recheckObservedLater = jest.fn(async () => 4);
 
@@ -646,7 +669,7 @@ describe('the decay pass', () => {
         runDecay: async () => ({ expiredProposed: 0, archivedStanding: 0 }),
       } as unknown as PageEntriesService,
       { recheckObservedLater } as unknown as EntryCitationsService,
-      {} as KnowledgeTriageService,
+      { sweep: async () => 0 } as unknown as KnowledgeTriageService,
       {
         proposeUnused: async () => 0,
         openOwedIssues: async () => 0,

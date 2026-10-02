@@ -3194,3 +3194,91 @@ describe('the verifier', () => {
     expect(t.verifications).toEqual([]);
   });
 });
+
+describe('after shadow, and after passes that failed', () => {
+  it('[ENG-183] decides again, and acts, about an entry decided only in shadow once triage is on', async () => {
+    const t = triage({ rows: [fresh()] });
+
+    await expect(t.service.triage('new', SHADOW)).resolves.toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: false,
+    });
+    // Still shadow: the decision stands and nothing more is decided.
+    await expect(t.service.triage('new', SHADOW)).resolves.toBeNull();
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      mode: KnowledgeTriageMode.ON,
+      applied: true,
+    });
+    expect(t.decisions).toHaveLength(2);
+    expect(t.entries.get('new')?.status).toBe('STANDING');
+  });
+
+  it('[ENG-183] decides once under on after a shadow decision, not on every pass', async () => {
+    const t = triage({
+      rows: [
+        agentEntry({ citations: [{ ...holds(), checkResult: 'UNKNOWN' }] }),
+      ],
+    });
+
+    await t.service.triage('new', SHADOW);
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+      mode: KnowledgeTriageMode.ON,
+    });
+    await expect(t.service.triage('new', ON)).resolves.toBeNull();
+    expect(t.decisions).toHaveLength(2);
+  });
+
+  const sweeping = (
+    undecided: Array<{ id: string; autoTriage?: string }>,
+    shadowed: Array<{ id: string; autoTriage?: string }>,
+  ) => {
+    const t = triage({ rows: [] });
+    const row = ({ id, autoTriage }: { id: string; autoTriage?: string }) => ({
+      id,
+      workspace: {
+        preferences: autoTriage ? { knowledge: { autoTriage } } : {},
+      },
+    });
+    const findMany = jest.fn(
+      async ({ where }: { where: { triageDecisions: { some?: unknown } } }) =>
+        (where.triageDecisions.some ? shadowed : undecided).map(row),
+    );
+
+    (t.prisma as unknown as { pageEntry: { findMany: unknown } }).pageEntry = {
+      ...t.prisma.pageEntry,
+      findMany,
+    };
+
+    return { ...t, findMany };
+  };
+
+  it('[ENG-183] queues entries no pass decided, and shadow decisions where triage is on', async () => {
+    const t = sweeping(
+      [{ id: 'failed' }, { id: 'failed-off', autoTriage: 'off' }],
+      [{ id: 'shadowed' }, { id: 'still-shadow', autoTriage: 'shadow' }],
+    );
+
+    await expect(t.service.sweep(ON)).resolves.toBe(2);
+
+    const queued = t.queue.add.mock.calls.map(
+      (call) => (call as unknown[])[1] as { entryId: string; trigger: string },
+    );
+    expect(queued).toEqual([
+      { entryId: 'failed', trigger: 'WRITTEN' },
+      { entryId: 'shadowed', trigger: 'WRITTEN' },
+    ]);
+    // A new job id each time, so a failed job Bull keeps cannot hold it.
+    const [, , options] = t.queue.add.mock.calls[0] as unknown[];
+    expect((options as { jobId: string }).jobId).not.toBe('triageEntry:failed');
+  });
+
+  it('[ENG-183] queues no shadow decision while triage is in shadow', async () => {
+    const t = sweeping([{ id: 'failed' }], [{ id: 'shadowed' }]);
+
+    await expect(t.service.sweep(SHADOW)).resolves.toBe(1);
+    expect(t.queue.add).toHaveBeenCalledTimes(1);
+  });
+});

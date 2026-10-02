@@ -68,11 +68,12 @@ export interface KnowledgePage extends KnowledgePageRef {
  * How far an item of knowledge can be trusted. HUMAN_VERIFIED: a person
  * confirmed it. GROUNDED: accepted, and every citation it makes still reads
  * the same. OBSERVED: accepted, and it rests on an outside page that the
- * server read on the date of its last check. UNGROUNDED: anything else. Null
- * for a page body.
+ * server read on the date of its last check. PROVISIONAL: put in use by
+ * triage although nothing verified it; check it before relying on it.
+ * UNGROUNDED: anything else. Null for a page body.
  */
 export type KnowledgeTrust =
-  'HUMAN_VERIFIED' | 'GROUNDED' | 'OBSERVED' | 'UNGROUNDED';
+  'HUMAN_VERIFIED' | 'GROUNDED' | 'OBSERVED' | 'PROVISIONAL' | 'UNGROUNDED';
 
 /**
  * The last check of a citation. HOLDS: the cited lines read the same (or the

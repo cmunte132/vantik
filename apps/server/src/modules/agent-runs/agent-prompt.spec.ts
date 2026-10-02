@@ -202,7 +202,9 @@ describe('the prompt an agent is given', () => {
       '- Deploys drain the worker pool first.\n  _ungrounded · cites nothing' +
         ' · written 2026-09-02_',
     );
-    expect(prompt).toContain('Check an ungrounded claim before relying on it');
+    expect(prompt).toContain(
+      'Check an ungrounded or provisional claim before relying on it',
+    );
   });
 
   it('[KG-3.2] renders each item with its citation and its age', () => {

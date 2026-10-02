@@ -64,6 +64,8 @@ export interface PairJudgment {
 /** One judgment of whether an entry should be accepted. */
 export interface AcceptJudgment {
   accept: boolean;
+  /** The judge found that the evidence says the claim is not so. */
+  contradicted: boolean;
   reason: string | null;
   model: string | null;
   raw: string | null;
@@ -107,8 +109,13 @@ const ACCEPT_SYSTEM = [
   '- it gives no instructions to the reader beyond describing how things are.',
   'Otherwise, or if you are unsure, do not accept it.',
   '',
+  'Answer "contradicted" only when the evidence shown says the claim is not',
+  'so: the cited lines state something the claim denies or a different value,',
+  'name or behaviour. Evidence that is missing, unclear, or about something',
+  'else does not contradict it; answer "escalate" for that.',
+  '',
   'Answer with one JSON object and nothing else:',
-  '{"verdict": "accept" | "escalate", "reason": "<one sentence>"}',
+  '{"verdict": "accept" | "escalate" | "contradicted", "reason": "<one sentence>"}',
 ].join('\n');
 
 const RELATIONS: Record<string, PageEntryRelationType> = {
@@ -275,9 +282,14 @@ export function parseAccept(answer: {
   const parsed = parseObject(answer.text);
   const verdict = String(parsed?.verdict ?? '').toLowerCase();
 
-  if (verdict !== 'accept' && verdict !== 'escalate') {
+  if (
+    verdict !== 'accept' &&
+    verdict !== 'escalate' &&
+    verdict !== 'contradicted'
+  ) {
     return {
       accept: false,
+      contradicted: false,
       reason: answer.error
         ? `the judge could not be asked: ${answer.error}`
         : 'the judge gave no answer that could be read',
@@ -289,6 +301,7 @@ export function parseAccept(answer: {
 
   return {
     accept: verdict === 'accept',
+    contradicted: verdict === 'contradicted',
     reason: stringOrNull(parsed?.reason),
     model: answer.model,
     raw: answer.text,

@@ -141,6 +141,27 @@ describe('judging whether to accept an entry', () => {
     });
   });
 
+  it('[ENG-184] reads a verdict that the evidence contradicts the claim', () => {
+    expect(
+      parseAccept({
+        text: '{"verdict": "contradicted", "reason": "the lines say three"}',
+        model: 'm',
+      }),
+    ).toMatchObject({
+      accept: false,
+      contradicted: true,
+      readable: true,
+      reason: 'the lines say three',
+    });
+    expect(
+      parseAccept({ text: '{"verdict": "escalate"}', model: 'm' }),
+    ).toMatchObject({ accept: false, contradicted: false, readable: true });
+    expect(parseAccept({ text: 'No.', model: 'm' })).toMatchObject({
+      contradicted: false,
+      readable: false,
+    });
+  });
+
   it('[KG-4.7] reads an answer it cannot understand, or no answer, as not accepting', async () => {
     expect(parseAccept({ text: 'Looks good!', model: 'm' })).toMatchObject({
       accept: false,

@@ -19,6 +19,8 @@ export interface KnowledgeFactCounts {
   people: number;
   /** In use, and it rests on an outside page that the server read. */
   observed: number;
+  /** In use as provisional: nothing confirms it yet, and nothing spoke against it. */
+  provisional: number;
   /** In use, with no evidence that still holds. */
   unconfirmed: number;
   /** Waiting on a person: an entry to decide, an audit, or a rewrite. */

@@ -92,6 +92,7 @@ export default class KnowledgeOverviewService {
           pageId: true,
           status: true,
           verifiedAt: true,
+          provisionalSince: true,
           moduleIds: true,
           citations: {
             select: { kind: true, checkResult: true, checkedAt: true },
@@ -555,6 +556,7 @@ function emptyCounts(): KnowledgeFactCounts {
     code: 0,
     people: 0,
     observed: 0,
+    provisional: 0,
     unconfirmed: 0,
     needYou: 0,
   };
@@ -569,6 +571,8 @@ function countTrust(counts: KnowledgeFactCounts, trust: KnowledgeTrustEnum) {
     counts.code++;
   } else if (trust === KnowledgeTrustEnum.OBSERVED) {
     counts.observed++;
+  } else if (trust === KnowledgeTrustEnum.PROVISIONAL) {
+    counts.provisional++;
   } else {
     counts.unconfirmed++;
   }

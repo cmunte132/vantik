@@ -369,7 +369,9 @@ export function TrustChip({ fact }: { fact: ProvenEntry }) {
     );
   }
 
-  return <Chip>Unconfirmed</Chip>;
+  return (
+    <Chip>{fact.trust === 'PROVISIONAL' ? 'Provisional' : 'Unconfirmed'}</Chip>
+  );
 }
 
 /** "health.controller.ts 6–20", "docs.kroger.com", "ENG-42". */

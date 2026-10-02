@@ -277,6 +277,7 @@ describe('KnowledgeOverviewService.overview', () => {
       code: 1,
       people: 2,
       observed: 1,
+      provisional: 0,
       unconfirmed: 1,
       needYou: 3,
     });

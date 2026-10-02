@@ -634,6 +634,8 @@ export class PagesProcessor {
     return this.recorded(DECAY_JOB, job, {}, async () => {
       let expiredProposed: number;
       let archivedStanding: number;
+      let archivedProvisional: number;
+      let promotedProvisional: number;
       let proposedVerified: number;
       let owedIssues: number;
       let verified: number;
@@ -641,8 +643,12 @@ export class PagesProcessor {
       let observed: number;
 
       try {
-        ({ expiredProposed, archivedStanding } =
-          await this.pageEntriesService.runDecay());
+        ({
+          expiredProposed,
+          archivedStanding,
+          archivedProvisional,
+          promotedProvisional,
+        } = await this.pageEntriesService.runDecay());
         // What decay may not archive alone, it asks a person about.
         proposedVerified = await this.upkeep.proposeUnused();
         // Correction issues a failed run owed, in workspaces no change has
@@ -651,7 +657,8 @@ export class PagesProcessor {
         // Entries that wait as UNGROUNDED with no look by the verifier.
         verified = (await this.verifier?.sweep()) ?? 0;
         // Entries that wait with no decision triage acted on: every pass
-        // failed, or it decided only in shadow and is now on.
+        // failed, it decided under earlier rules, or it decided only in
+        // shadow and is now on.
         triaged = await this.triage.sweep();
         // Facts observed on an outside page that the server last read over
         // 30 days ago.
@@ -673,7 +680,9 @@ export class PagesProcessor {
       this.logger.info({
         message:
           `Knowledge decay archived ${expiredProposed} untriaged and ` +
-          `${archivedStanding} unused standing entr(ies), asked a person ` +
+          `${archivedStanding} unused standing entr(ies), archived ` +
+          `${archivedProvisional} and settled ${promotedProvisional} ` +
+          `provisional entr(ies) by use, asked a person ` +
           `about ${proposedVerified} unused verified entr(ies), opened ` +
           `${owedIssues} owed correction issue(s), asked the verifier ` +
           `about ${verified} entr(ies), queued triage again for ${triaged}, ` +
@@ -689,6 +698,8 @@ export class PagesProcessor {
       return {
         expiredProposed,
         archivedStanding,
+        archivedProvisional,
+        promotedProvisional,
         proposedVerified,
         owedIssues,
         verified,

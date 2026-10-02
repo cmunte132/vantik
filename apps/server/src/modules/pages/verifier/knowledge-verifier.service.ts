@@ -44,6 +44,27 @@ import RepoFileSourceService, {
 import { redactSecrets } from '../triage/triage-policy';
 
 /**
+ * Entries the verifier looks at: those that wait for a decision, and those
+ * in use as provisional, which evidence would settle.
+ */
+const UNDECIDED: Prisma.PageEntryWhereInput = {
+  OR: [
+    { status: PageEntryStatus.PROPOSED },
+    { status: PageEntryStatus.STANDING, provisionalSince: { not: null } },
+  ],
+};
+
+function isUndecided(entry: {
+  status: PageEntryStatus;
+  provisionalSince: Date | null;
+}) {
+  return (
+    entry.status === PageEntryStatus.PROPOSED ||
+    (entry.status === PageEntryStatus.STANDING && !!entry.provisionalSince)
+  );
+}
+
+/**
  * The verifier agent: it looks for evidence of a fact that cites none,
  * before a person sees the fact.
  *
@@ -66,6 +87,10 @@ import { redactSecrets } from '../triage/triage-policy';
  * settings, with the key that the workspace stored for that provider. It
  * never uses a key of the deployment. A workspace with no such model or key
  * gets no look, and the entry goes to a person.
+ *
+ * Triage also asks for a look when it puts an entry in use as provisional
+ * because nothing confirmed it. A provisional entry is in use while the
+ * verifier looks; what it finds lets triage promote it.
  *
  * The claim and all that the tools return are data for the model, never
  * instructions. The model can only read. What it answers changes nothing
@@ -237,10 +262,11 @@ export default class KnowledgeVerifierService {
           where: { checkResult: { in: FAILED_RESULTS } },
           select: { kind: true, path: true, targetLabel: true },
         },
+        provisionalSince: true,
       },
     });
 
-    if (!entry || entry.status !== PageEntryStatus.PROPOSED) {
+    if (!entry || !isUndecided(entry)) {
       await this.finish(verification.id, {
         state: KnowledgeVerificationState.NOTHING,
         reason: 'the entry no longer waits for a decision',
@@ -372,11 +398,23 @@ export default class KnowledgeVerifierService {
     });
     const unlooked = await this.prisma.knowledgeTriageDecision.findMany({
       where: {
-        decision: 'ESCALATE',
-        OR: [{ reasons: { has: 'UNGROUNDED' } }, noLongerHolds],
+        OR: [
+          {
+            decision: 'ESCALATE',
+            OR: [{ reasons: { has: 'UNGROUNDED' } }, noLongerHolds],
+          },
+          {
+            decision: 'PROVISIONAL',
+            OR: [
+              { reasons: { has: 'UNGROUNDED' } },
+              { reasons: { has: 'JUDGES_DISAGREE' } },
+              noLongerHolds,
+            ],
+          },
+        ],
         entry: {
           deleted: null,
-          status: PageEntryStatus.PROPOSED,
+          ...UNDECIDED,
           verification: { is: null },
           ...onLivePageOrLoose(),
         },
@@ -832,7 +870,7 @@ export default class KnowledgeVerifierService {
       await lockEntry(tx, entryId);
 
       const entry = await tx.pageEntry.findFirst({
-        where: { id: entryId, deleted: null, status: PageEntryStatus.PROPOSED },
+        where: { id: entryId, deleted: null, ...UNDECIDED },
         select: { id: true },
       });
 

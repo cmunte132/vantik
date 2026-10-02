@@ -18,7 +18,8 @@ export interface AgreementRow {
 const LABELS: Record<string, string> = {
   [KnowledgeTriageDecisionEnum.AUTO_ACCEPT]: 'Putting facts into use',
   [KnowledgeTriageDecisionEnum.CORROBORATE]: 'Folding in repeats',
-  [KnowledgeTriageDecisionEnum.REJECT]: 'Refusing on a policy',
+  [KnowledgeTriageDecisionEnum.PROVISIONAL]: 'Using facts as provisional',
+  [KnowledgeTriageDecisionEnum.REJECT]: 'Refusing facts',
   [KnowledgeTriageDecisionEnum.ESCALATE]: 'Sending to a person',
 };
 

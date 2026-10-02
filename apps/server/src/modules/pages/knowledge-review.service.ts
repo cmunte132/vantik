@@ -454,7 +454,8 @@ export default class KnowledgeReviewService {
     }
 
     const keep =
-      decision.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT
+      decision.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT ||
+      decision.decision === KnowledgeTriageDecisionType.PROVISIONAL
         ? agree
         : !agree;
     let entry: Awaited<ReturnType<PageEntriesService['updateEntry']>>;

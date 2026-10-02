@@ -809,10 +809,13 @@ function harness(seed: Seed) {
   const s = store({ preferences: ON, ...seed });
   const prisma = s.prisma as unknown as PrismaService;
   const agreement = new KnowledgeAgreementService(prisma);
-  const pageEntries = new PageEntriesService(prisma, undefined,
-  undefined,
-  undefined,
-  agreement,);
+  const pageEntries = new PageEntriesService(
+    prisma,
+    undefined,
+    undefined,
+    undefined,
+    agreement,
+  );
   const review = new KnowledgeReviewService(prisma, pageEntries);
   const pagesService = new PagesService(prisma, agreement);
 
@@ -1777,7 +1780,8 @@ describe('agreement', () => {
     const t = measured();
 
     const report = await t.agreement.report(WORKSPACE);
-    const [accept, corroborate, reject, escalate] = report.types;
+    // PROVISIONAL is measured too; nothing here was put in use as provisional.
+    const [accept, corroborate, reject, , escalate] = report.types;
 
     expect(report).toMatchObject({
       autoTriage: 'on',
@@ -1862,6 +1866,7 @@ describe('agreement', () => {
       'AUTO_ACCEPT',
       'CORROBORATE',
       'REJECT',
+      'PROVISIONAL',
       'ESCALATE',
     ]);
     expect(report.types[0].samples).toBe(4);
@@ -2100,6 +2105,7 @@ describe('backing off as verdicts arrive', () => {
       [Decision.AUTO_ACCEPT, 18, false],
       [Decision.CORROBORATE, 1, false],
       [Decision.REJECT, 0, true],
+      [Decision.PROVISIONAL, 0, false],
       [Decision.ESCALATE, 3, false],
     ]);
   });

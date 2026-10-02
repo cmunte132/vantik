@@ -315,6 +315,7 @@ export default class KnowledgeConventionsService {
         id: true,
         status: true,
         verifiedAt: true,
+        provisionalSince: true,
         sourceUserId: true,
         workspaceId: true,
         workspace: { select: { preferences: true } },

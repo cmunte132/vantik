@@ -46,6 +46,8 @@ import {
   PAGES_QUEUE,
   PROPOSED_ENTRY_BUDGET,
   PROPOSED_ENTRY_EXPIRY_DAYS,
+  PROVISIONAL_ENTRY_DECAY_DAYS,
+  PROVISIONAL_PROMOTE_HELPFUL,
   STANDING_ENTRY_DECAY_DAYS,
   type ServedTo,
   TRIAGE_ENTRY_JOB,
@@ -456,6 +458,12 @@ export default class PageEntriesService {
           )
         : { operations: [] };
 
+    const edited =
+      (entryData.content !== undefined &&
+        entryData.content !== current.content) ||
+      (entryData.scope !== undefined && entryData.scope !== current.scope) ||
+      (entryData.kind !== undefined && entryData.kind !== current.kind);
+
     // A person acting on an entry triage sent them gives triage a verdict,
     // written with the change. An agent withdrawing or rewording its own
     // entry is not a verdict on anything.
@@ -464,16 +472,7 @@ export default class PageEntriesService {
         ? { operations: [], decisionIds: [], workspaceIds: [] }
         : await this.agreement.verdictsFor(
             [{ id: entryId, status: current.status }],
-            {
-              status: entryData.status,
-              edited:
-                (entryData.content !== undefined &&
-                  entryData.content !== current.content) ||
-                (entryData.scope !== undefined &&
-                  entryData.scope !== current.scope) ||
-                (entryData.kind !== undefined &&
-                  entryData.kind !== current.kind),
-            },
+            { status: entryData.status, edited },
             userId,
             { strict: options.audit },
           );
@@ -537,6 +536,13 @@ export default class PageEntriesService {
             verifiedByUserId: entryData.verified ? userId : null,
             verifiedAt: entryData.verified ? new Date() : null,
           }),
+          // A person who keeps, moves, verifies or rewrites a provisional
+          // entry has decided about it: it is no longer provisional. An
+          // agent rewording its own entry has not.
+          ...(!agent &&
+            (entryData.status !== undefined ||
+              entryData.verified ||
+              edited) && { provisionalSince: null }),
         },
         include: { citations: { select: PROOF_CITATION_SELECT } },
       }),
@@ -834,6 +840,8 @@ export default class PageEntriesService {
   async runDecay(workspaceId?: string): Promise<{
     expiredProposed: number;
     archivedStanding: number;
+    archivedProvisional: number;
+    promotedProvisional: number;
   }> {
     const scope: Prisma.PageEntryWhereInput = workspaceId
       ? liveEntryIn(workspaceId)
@@ -870,10 +878,81 @@ export default class PageEntriesService {
       data: { status: PageEntryStatusEnum.ARCHIVED },
     });
 
+    const provisional = await this.decayProvisional(
+      scope,
+      cited,
+      daysAgo(PROVISIONAL_ENTRY_DECAY_DAYS),
+    );
+
     return {
       expiredProposed: expiredProposed.count,
       archivedStanding: archivedStanding.count,
+      archivedProvisional: provisional.archived,
+      promotedProvisional: provisional.promoted,
     };
+  }
+
+  /**
+   * Settles provisional entries by use. One that runs went wrong on more
+   * often than well is archived; so is one nothing has served within the
+   * window, unless a live page cites it. One that runs went well on, and
+   * none wrong, is promoted: it stays in use, no longer provisional.
+   */
+  private async decayProvisional(
+    scope: Prisma.PageEntryWhereInput,
+    cited: string[],
+    cutoff: Date,
+  ): Promise<{ archived: number; promoted: number }> {
+    const provisional: Prisma.PageEntryWhereInput = {
+      ...scope,
+      deleted: null,
+      status: PageEntryStatusEnum.STANDING,
+      provisionalSince: { not: null },
+      verifiedAt: null,
+    };
+    const signalled = await this.prisma.pageEntry.findMany({
+      where: {
+        ...provisional,
+        OR: [{ harmfulCount: { gt: 0 } }, { helpfulCount: { gt: 0 } }],
+      },
+      select: { id: true, helpfulCount: true, harmfulCount: true },
+    });
+    const harmful = signalled
+      .filter((entry) => entry.harmfulCount > entry.helpfulCount)
+      .map((entry) => entry.id);
+    const helpful = signalled
+      .filter(
+        (entry) =>
+          entry.harmfulCount === 0 &&
+          entry.helpfulCount >= PROVISIONAL_PROMOTE_HELPFUL,
+      )
+      .map((entry) => entry.id);
+
+    const archived = await this.prisma.pageEntry.updateMany({
+      where: {
+        ...provisional,
+        id: { notIn: helpful },
+        OR: [
+          { id: { in: harmful } },
+          {
+            ...unusedSince(cutoff),
+            ...(cited.length ? { id: { notIn: cited } } : {}),
+          },
+        ],
+      },
+      data: {
+        status: PageEntryStatusEnum.ARCHIVED,
+        provisionalSince: null,
+      },
+    });
+    const promoted = helpful.length
+      ? await this.prisma.pageEntry.updateMany({
+          where: { ...provisional, id: { in: helpful } },
+          data: { provisionalSince: null },
+        })
+      : { count: 0 };
+
+    return { archived: archived.count, promoted: promoted.count };
   }
 
   // --------------------------------------------------------------- internals
@@ -1166,6 +1245,7 @@ export default class PageEntriesService {
         status: true,
         sourceUserId: true,
         verifiedAt: true,
+        provisionalSince: true,
         retrievalCount: true,
         pageId: true,
         page: { select: { title: true } },

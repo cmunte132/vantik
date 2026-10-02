@@ -132,6 +132,27 @@ describe('KnowledgeService.contextPack', () => {
     expect(pack.tokenBudget).toBeLessThanOrEqual(20_000);
   });
 
+  it('[ENG-184] gives provisional entries after the rest, and only a few', async () => {
+    const provisional = (id: string) =>
+      entryDocument({
+        id: `entry:${id}`,
+        entryId: id,
+        trust: KnowledgeTrustEnum.PROVISIONAL,
+        verified: false,
+      });
+    const { service } = buildService([
+      provisional('p1'),
+      provisional('p2'),
+      provisional('p3'),
+      entryDocument({ id: 'entry:v1', entryId: 'v1' }),
+    ]);
+
+    const pack = await service.contextPack(WORKSPACE, { query: 'deployment' });
+
+    expect(pack.items.map((item) => item.entryId)).toEqual(['v1', 'p1', 'p2']);
+    expect(pack.omitted).toBe(1);
+  });
+
   it('[ENG-224] never records a task or a scope as a knowledge gap, though it found nothing', async () => {
     const { service, prisma } = buildService([]);
 
@@ -448,6 +469,7 @@ describe('the knowledge a run is handed', () => {
       kind: 'FACT',
       status: PageEntryStatusEnum.STANDING as string,
       verifiedAt: null as Date | null,
+      provisionalSince: null as Date | null,
       createdAt: written,
       citations: [holding] as unknown[],
       ...overrides,
@@ -577,6 +599,39 @@ describe('the knowledge a run is handed', () => {
       },
       deleted: null,
     });
+  });
+
+  it('[ENG-184] hands a run relevant provisional entries after the trusted ones, at most two, and pins no provisional convention', async () => {
+    const provisional = (id: string, overrides: Record<string, unknown> = {}) =>
+      row(id, { citations: [], provisionalSince: written, ...overrides });
+    const { service, prisma } = forRun({
+      entries: [
+        provisional('p1'),
+        provisional('p2', { kind: 'CONVENTION' }),
+        provisional('p3'),
+        row('grounded-1'),
+      ],
+      ranked: ['p1', 'p2', 'p3', 'grounded-1'],
+    });
+
+    const { packed, trace } = await service.tracedKnowledgeForRun(
+      WORKSPACE,
+      ask,
+      LIMITS,
+    );
+
+    expect(packed.map((entry) => [entry.entryId, entry.trust])).toEqual([
+      ['grounded-1', KnowledgeTrustEnum.GROUNDED],
+      ['p1', KnowledgeTrustEnum.PROVISIONAL],
+      ['p2', KnowledgeTrustEnum.PROVISIONAL],
+    ]);
+    expect(
+      trace.candidates.find((candidate) => candidate.entryId === 'p3'),
+    ).toMatchObject({ given: false, dropped: 'PROVISIONAL_LIMIT' });
+    // A convention nobody accepted reaches a run only when it is relevant.
+    expect(
+      (prisma.pageEntry.findMany as jest.Mock).mock.calls[0][0].where,
+    ).toMatchObject({ kind: 'CONVENTION', provisionalSince: null });
   });
 
   it('[KG-3.2] [KG-7.4] pins a convention folded into its page’s body to its modules’ runs, as a standing one, and none retired', async () => {

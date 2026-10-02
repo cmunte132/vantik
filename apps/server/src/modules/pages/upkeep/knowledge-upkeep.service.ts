@@ -275,6 +275,7 @@ export default class KnowledgeUpkeepService {
         select: {
           status: true,
           verifiedAt: true,
+          provisionalSince: true,
           contentHash: true,
           workspaceId: true,
           page: { select: { entryPolicy: true } },

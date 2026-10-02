@@ -29,6 +29,8 @@ import { auditDraw } from './agreement';
 import KnowledgeTriageService, {
   digestOf,
   MAX_CITED_TEXT,
+  PROVISIONAL_PROMOTE_CORROBORATIONS,
+  TRIAGE_POLICY_VERSION,
 } from './knowledge-triage.service';
 import TriageJudges, { type Complete } from './triage-judges';
 
@@ -75,6 +77,7 @@ interface Row {
   sourceUserId: string | null;
   sourceSession: string | null;
   verifiedAt: Date | null;
+  provisionalSince: Date | null;
   corroborationCount: number;
   citations: Citation[];
 }
@@ -526,6 +529,7 @@ function existing(id: string, overrides: Partial<Row> = {}): Row {
     sourceUserId: 'agent-2',
     sourceSession: null,
     verifiedAt: null,
+    provisionalSince: null,
     corroborationCount: 0,
     citations: [holds()],
     ...overrides,
@@ -961,8 +965,8 @@ describe('an exact repeat', () => {
   });
 
   it('[ENG-224] of two identical grounded entries, accepts the newer and folds the older into it', async () => {
-    // The older one waits for a person; the newer one is grounded. Folding
-    // the newer into the older would archive its evidence.
+    // The older one still waits, decided only in shadow; the newer one is
+    // grounded. Folding the newer into the older would archive its evidence.
     const older = fresh({
       id: 'a',
       createdAt: at(5),
@@ -972,10 +976,11 @@ describe('an exact repeat', () => {
     const newer = fresh({ id: 'b', createdAt: at(6), updatedAt: at(6) });
     const t = triage({ rows: [older, newer] });
 
-    await t.service.triage('a', ON);
+    await t.service.triage('a', SHADOW);
     expect(t.decisions[0]).toMatchObject({
-      decision: Decision.ESCALATE,
+      decision: Decision.PROVISIONAL,
       trigger: 'WRITTEN',
+      applied: false,
     });
 
     await expect(t.service.triage('b', ON)).resolves.toMatchObject({
@@ -1008,6 +1013,79 @@ describe('an exact repeat', () => {
     expect(t.entries.get('b')).toMatchObject({
       status: 'STANDING',
       corroborationCount: 1,
+    });
+  });
+
+  it('[ENG-184] of a provisional entry and a grounded one that says the same, accepts the grounded one and archives the provisional one', async () => {
+    const older = fresh({
+      id: 'a',
+      createdAt: at(5),
+      updatedAt: at(5),
+      citations: [],
+    });
+    const newer = fresh({ id: 'b', createdAt: at(6), updatedAt: at(6) });
+    const t = triage({ rows: [older, newer] });
+
+    await expect(t.service.triage('a', ON)).resolves.toMatchObject({
+      decision: Decision.PROVISIONAL,
+      applied: true,
+    });
+    expect(t.entries.get('a')?.status).toBe('STANDING');
+
+    // Not folded into the provisional one, which would leave the claim
+    // served as unverified without the evidence that verifies it.
+    await expect(t.service.triage('b', ON)).resolves.toMatchObject({
+      decision: Decision.AUTO_ACCEPT,
+      applied: true,
+    });
+    expect(t.entries.get('b')?.status).toBe('STANDING');
+    expect(t.entries.get('a')).toMatchObject({
+      status: 'ARCHIVED',
+      provisionalSince: null,
+    });
+  });
+
+  it('[ENG-184] promotes a provisional entry once enough other writes say the same', async () => {
+    const t = triage({
+      rows: [
+        existing('a', {
+          content: NEW_CONTENT,
+          citations: [],
+          provisionalSince: at(1),
+          corroborationCount: PROVISIONAL_PROMOTE_CORROBORATIONS - 1,
+        }),
+        fresh({ citations: [] }),
+      ],
+    });
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.CORROBORATE,
+      applied: true,
+    });
+    expect(t.entries.get('a')).toMatchObject({
+      status: 'STANDING',
+      corroborationCount: PROVISIONAL_PROMOTE_CORROBORATIONS,
+      provisionalSince: null,
+    });
+  });
+
+  it('[ENG-184] keeps a provisional entry provisional on fewer repeats', async () => {
+    const t = triage({
+      rows: [
+        existing('a', {
+          content: NEW_CONTENT,
+          citations: [],
+          provisionalSince: at(1),
+        }),
+        fresh({ citations: [] }),
+      ],
+    });
+
+    await t.service.triage('new', ON);
+
+    expect(t.entries.get('a')).toMatchObject({
+      corroborationCount: 1,
+      provisionalSince: at(1),
     });
   });
 });
@@ -1272,7 +1350,7 @@ describe('near neighbours', () => {
     // judgments that agree.
     ['two unreadable', ['same', 'the same']],
   ])(
-    '[KG-4.2] reads %s judge output as DISTINCT, and escalates rather than accept',
+    '[KG-4.2] reads %s judge output as DISTINCT, and keeps it provisional rather than accept',
     async (_what, answers) => {
       const t = triage({
         rows: [existing('neighbour', { content: neighbourText }), fresh()],
@@ -1290,11 +1368,14 @@ describe('near neighbours', () => {
         }),
       ]);
       expect(outcome).toMatchObject({
-        decision: Decision.ESCALATE,
+        decision: Decision.PROVISIONAL,
         reasons: [Reason.JUDGES_DISAGREE],
       });
       expect(t.entries.get('neighbour')?.corroborationCount).toBe(0);
-      expect(t.entries.get('new')?.status).toBe('PROPOSED');
+      expect(t.entries.get('new')).toMatchObject({
+        status: 'STANDING',
+        provisionalSince: expect.any(Date),
+      });
     },
   );
 
@@ -1437,19 +1518,41 @@ describe('the triage job and its record', () => {
 
   it('[KG-4.3] records an escalation with every reason that applied', async () => {
     const t = triage({
-      rows: [fresh({ citations: [], kind: 'CONVENTION' })],
+      rows: [
+        fresh({
+          citations: [],
+          kind: 'CONVENTION',
+          supersedesId: 'someone-else',
+        }),
+      ],
     });
 
     const outcome = await t.service.triage('new', ON);
 
     expect(outcome?.decision).toBe(Decision.ESCALATE);
     expect([...(t.decisions[0].reasons as string[])].sort()).toEqual(
-      [Reason.PIN_REQUEST, Reason.UNGROUNDED].sort(),
+      [Reason.PIN_REQUEST, Reason.SUPERSEDE_REQUEST, Reason.UNGROUNDED].sort(),
     );
     expect(t.decisions[0].applied).toBe(false);
     // An escalation waits for a person.
     expect(t.entries.get('new')?.status).toBe('PROPOSED');
     // No model was asked to accept what a person has to look at anyway.
+    expect(t.calls).toEqual([]);
+  });
+
+  it('[ENG-184] records what kept a provisional entry from being accepted', async () => {
+    const t = triage({
+      rows: [fresh({ citations: [], kind: 'CONVENTION' })],
+    });
+
+    const outcome = await t.service.triage('new', ON);
+
+    expect(outcome?.decision).toBe(Decision.PROVISIONAL);
+    expect([...(t.decisions[0].reasons as string[])].sort()).toEqual(
+      [Reason.PIN_REQUEST, Reason.UNGROUNDED].sort(),
+    );
+    expect(t.decisions[0].applied).toBe(true);
+    // Nothing to read, so no model was asked to accept it.
     expect(t.calls).toEqual([]);
   });
 
@@ -1559,12 +1662,6 @@ describe('auto-accept', () => {
       {},
       { scope: null, citations: [] },
       [Reason.UNGROUNDED, Reason.BROAD_SCOPE],
-    ],
-    [
-      'it asks to replace an entry',
-      {},
-      { supersedesId: 'someone-else' },
-      [Reason.SUPERSEDE_REQUEST],
     ],
     [
       'one judge would not accept it',
@@ -1697,20 +1794,34 @@ describe('auto-accept', () => {
   });
 
   it.each(cases)(
-    '[KG-4.4] escalates when %s',
+    '[ENG-184] puts it in use as provisional when %s',
     async (_why, setup, overrides, reasons) => {
       const t = triage({ rows: [fresh(overrides)], ...setup });
 
       const outcome = await t.service.triage('new', ON);
 
       expect(outcome).toMatchObject({
-        decision: Decision.ESCALATE,
+        decision: Decision.PROVISIONAL,
         reasons,
-        applied: false,
+        applied: true,
       });
-      expect(t.entries.get('new')?.status).toBe('PROPOSED');
+      expect(t.entries.get('new')).toMatchObject({
+        status: 'STANDING',
+        provisionalSince: expect.any(Date),
+      });
     },
   );
+
+  it('[KG-4.4] escalates when it asks to replace an entry that is not in use', async () => {
+    const t = triage({ rows: [fresh({ supersedesId: 'someone-else' })] });
+
+    expect(await t.service.triage('new', ON)).toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: [Reason.SUPERSEDE_REQUEST],
+      applied: false,
+    });
+    expect(t.entries.get('new')?.status).toBe('PROPOSED');
+  });
 
   it('[KG-4.4] escalates when what it contradicts was verified by a person', async () => {
     const verified = existing('verified', {
@@ -1755,7 +1866,7 @@ describe('auto-accept', () => {
     expect(t.entries.get('locked')?.status).toBe('STANDING');
   });
 
-  it('[KG-4.4] escalates when the judges classify a pair differently', async () => {
+  it('[ENG-184] puts it in use as provisional when the judges classify a pair with an unverified neighbour differently', async () => {
     const t = triage({
       rows: [
         existing('neighbour', {
@@ -1773,7 +1884,7 @@ describe('auto-accept', () => {
     const outcome = await t.service.triage('new', ON);
 
     expect(outcome).toMatchObject({
-      decision: Decision.ESCALATE,
+      decision: Decision.PROVISIONAL,
       reasons: [Reason.JUDGES_DISAGREE],
     });
     expect(t.relations[0]).toMatchObject({ type: Relation.DISTINCT });
@@ -1943,7 +2054,7 @@ describe('contradictions', () => {
     expect(t.entries.get('verified')?.status).toBe('STANDING');
   });
 
-  it('[KG-4.6] a grounded entry outranks a newer ungrounded one', async () => {
+  it('[ENG-184] a grounded entry outranks a newer ungrounded one, which is refused', async () => {
     const t = triage({
       rows: [
         existing('grounded', { content: contradicting }),
@@ -1959,8 +2070,13 @@ describe('contradictions', () => {
       type: Relation.SUPERSEDES,
       preferredId: 'grounded',
     });
-    expect(outcome?.decision).toBe(Decision.ESCALATE);
+    expect(outcome).toMatchObject({
+      decision: Decision.REJECT,
+      policy: 'OUTRANKED',
+      reasons: [],
+    });
     expect(t.entries.get('grounded')?.status).toBe('STANDING');
+    expect(t.entries.get('new')?.status).toBe('ARCHIVED');
   });
 
   it('[KG-4.6] a proposed entry it outranks is left for its own triage', async () => {
@@ -2147,7 +2263,7 @@ describe('without a model', () => {
     expect(t.entries.get('new')?.status).toBe('PROPOSED');
   });
 
-  it('[KG-4.7] treats a model that cannot be reached as a check that did not run', async () => {
+  it('[KG-4.7] never accepts an entry when the model cannot be reached, and keeps it provisional', async () => {
     const t = triage({ rows: [fresh()] });
     const failing = TriageJudges.using(async () => {
       throw new Error('connect ECONNREFUSED');
@@ -2157,10 +2273,10 @@ describe('without a model', () => {
     const outcome = await t.service.triage('new', ON);
 
     expect(outcome).toMatchObject({
-      decision: Decision.ESCALATE,
+      decision: Decision.PROVISIONAL,
       reasons: [Reason.JUDGES_DISAGREE],
     });
-    expect(t.entries.get('new')?.status).toBe('PROPOSED');
+    expect(t.entries.get('new')?.provisionalSince).toEqual(expect.any(Date));
   });
 });
 
@@ -2311,20 +2427,20 @@ describe('secrets and outside input', () => {
     }
   });
 
-  it("[KG-4.8] holds an agent's ungrounded entry against its unknown source, and asks no model", async () => {
+  it("[KG-4.8] holds an agent's ungrounded entry against its unknown source, keeps it provisional, and asks no model", async () => {
     for (const runs of [[run()], []] as Run[][]) {
       const t = triage({ rows: [agentEntry({ citations: [] })], runs });
 
       expect(await t.service.triage('new', ON)).toMatchObject({
-        decision: Decision.ESCALATE,
+        decision: Decision.PROVISIONAL,
         reasons: [Reason.UNGROUNDED, Reason.UNKNOWN_SOURCE],
-        applied: false,
+        applied: true,
       });
-      // No model is asked to accept what a person has to look at anyway.
+      // It cites nothing a model could read.
       expect(
         t.calls.filter((call) => call.system.includes('knowledge')),
       ).toEqual([]);
-      expect(t.entries.get('new')?.status).toBe('PROPOSED');
+      expect(t.entries.get('new')?.status).toBe('STANDING');
     }
 
     // The same for an entry the server has no user record of, or one by an
@@ -2794,7 +2910,7 @@ describe('audits', () => {
     });
   });
 
-  it('[KG-5.2] never audits what reaches a person anyway, or a refused credential', async () => {
+  it('[KG-5.2] never audits what reaches a person anyway, a provisional entry, or a refused credential', async () => {
     // In shadow mode everything waits for a person.
     const shadow = triage({ rows: [fresh()] });
     await shadow.service.triage('new', atRate('1', SHADOW));
@@ -2805,10 +2921,22 @@ describe('audits', () => {
       auditRate: null,
     });
 
-    const escalated = triage({ rows: [fresh({ citations: [] })] });
+    const escalated = triage({
+      rows: [fresh({ supersedesId: 'someone-else' })],
+    });
     await escalated.service.triage('new', atRate('1'));
     expect(escalated.decisions[0]).toMatchObject({
       decision: Decision.ESCALATE,
+      audit: false,
+      auditRate: null,
+    });
+
+    // Settled by evidence or use, not by a person.
+    const provisional = triage({ rows: [fresh({ citations: [] })] });
+    await provisional.service.triage('new', atRate('1'));
+    expect(provisional.decisions[0]).toMatchObject({
+      decision: Decision.PROVISIONAL,
+      applied: true,
       audit: false,
       auditRate: null,
     });
@@ -3023,7 +3151,8 @@ describe('a knowledge gap answered by an entry triage accepts', () => {
       rows: [answering()],
       issues: [issueTarget()],
       gaps: [gap()],
-      accept: '{"verdict": "reject", "reason": "the lines say otherwise"}',
+      accept:
+        '{"verdict": "contradicted", "reason": "the lines say otherwise"}',
     });
 
     expect((await rejected.service.triage('new', ON))?.decision).not.toBe(
@@ -3053,13 +3182,14 @@ describe('triage again when the evidence changes', () => {
     expect(t.decisions).toHaveLength(1);
   });
 
-  it('[ENG-224] decides again when a citation starts to hold, and records why', async () => {
+  it('[ENG-224] decides again when a citation starts to hold, records why, and promotes the provisional entry', async () => {
     const t = triage({ rows: [waiting()] });
 
     await expect(t.service.triage('new', ON)).resolves.toMatchObject({
-      decision: Decision.ESCALATE,
+      decision: Decision.PROVISIONAL,
       reasons: expect.arrayContaining([Reason.CITATION_FAILED]),
     });
+    expect(t.entries.get('new')?.provisionalSince).toEqual(expect.any(Date));
 
     // Nothing changed: nothing is decided.
     await expect(
@@ -3078,7 +3208,10 @@ describe('triage again when the evidence changes', () => {
     expect(t.decisions).toHaveLength(2);
     expect(t.decisions[1]).toMatchObject({ trigger: 'CITATIONS_CHECKED' });
     expect(t.decisions[1].inputsDigest).not.toBe(t.decisions[0].inputsDigest);
-    expect(t.entries.get('new')?.status).toBe('STANDING');
+    expect(t.entries.get('new')).toMatchObject({
+      status: 'STANDING',
+      provisionalSince: null,
+    });
   });
 
   it('[ENG-224] decides again when a change to the code moves what a citation says', async () => {
@@ -3128,11 +3261,11 @@ describe('triage again when the evidence changes', () => {
 });
 
 describe('the verifier', () => {
-  it('[ENG-224] is asked to look once for evidence of an entry that cites nothing, with the escalation', async () => {
+  it('[ENG-184] is asked to look once for evidence of an entry that cites nothing, with the decision', async () => {
     const t = triage({ rows: [agentEntry({ citations: [] })] });
 
     await expect(t.service.triage('new', SHADOW)).resolves.toMatchObject({
-      decision: Decision.ESCALATE,
+      decision: Decision.PROVISIONAL,
       reasons: [Reason.UNGROUNDED, Reason.UNKNOWN_SOURCE],
     });
     expect(t.verifications).toEqual([
@@ -3170,7 +3303,7 @@ describe('the verifier', () => {
     });
 
     await expect(t.service.triage('new', SHADOW)).resolves.toMatchObject({
-      decision: Decision.ESCALATE,
+      decision: Decision.PROVISIONAL,
       reasons: expect.arrayContaining([Reason.CITATION_FAILED]),
     });
     expect(t.verifications).toEqual([
@@ -3224,7 +3357,7 @@ describe('after shadow, and after passes that failed', () => {
 
     await t.service.triage('new', SHADOW);
     await expect(t.service.triage('new', ON)).resolves.toMatchObject({
-      decision: Decision.ESCALATE,
+      decision: Decision.PROVISIONAL,
       mode: KnowledgeTriageMode.ON,
     });
     await expect(t.service.triage('new', ON)).resolves.toBeNull();
@@ -3275,10 +3408,195 @@ describe('after shadow, and after passes that failed', () => {
     expect((options as { jobId: string }).jobId).not.toBe('triageEntry:failed');
   });
 
+  it('[ENG-184] queues entries with no decision under the rules triage decides by now', async () => {
+    const t = sweeping([{ id: 'old-rules' }], []);
+
+    await t.service.sweep(ON);
+
+    const current = {
+      inputs: { path: ['policyVersion'], equals: TRIAGE_POLICY_VERSION },
+    };
+    const [[undecided], [shadowed]] = t.findMany.mock.calls as unknown as Array<
+      [{ where: { triageDecisions: unknown } }]
+    >;
+    expect(undecided.where.triageDecisions).toEqual({ none: current });
+    expect(shadowed.where.triageDecisions).toEqual({
+      some: { ...current, mode: KnowledgeTriageMode.SHADOW },
+      none: { ...current, mode: KnowledgeTriageMode.ON },
+    });
+  });
+
   it('[ENG-183] queues no shadow decision while triage is in shadow', async () => {
     const t = sweeping([{ id: 'failed' }], [{ id: 'shadowed' }]);
 
     await expect(t.service.sweep(SHADOW)).resolves.toBe(1);
     expect(t.queue.add).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('provisional knowledge', () => {
+  it('[ENG-184] decides again about an entry decided under earlier rules', async () => {
+    const t = triage({ rows: [fresh({ supersedesId: 'someone-else' })] });
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+    });
+    expect(t.decisions[0].inputs).toMatchObject({
+      policyVersion: TRIAGE_POLICY_VERSION,
+    });
+    await expect(t.service.triage('new', ON)).resolves.toBeNull();
+
+    // As a decision made before the provisional tier was recorded.
+    delete (t.decisions[0].inputs as Record<string, unknown>).policyVersion;
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+    });
+    expect(t.decisions).toHaveLength(2);
+  });
+
+  it('[ENG-184] refuses an entry both judges find the evidence contradicts', async () => {
+    const t = triage({
+      rows: [fresh()],
+      accept: '{"verdict": "contradicted", "reason": "the lines say three"}',
+    });
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.REJECT,
+      policy: 'CONTRADICTED',
+      reasons: [],
+      applied: true,
+    });
+    expect(t.entries.get('new')?.status).toBe('ARCHIVED');
+  });
+
+  it('[ENG-184] leaves to a person an entry one judge finds the evidence contradicts', async () => {
+    const t = triage({
+      rows: [fresh()],
+      accept: [
+        '{"verdict": "accept", "reason": "fine"}',
+        '{"verdict": "contradicted", "reason": "the lines say three"}',
+      ],
+    });
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: [Reason.JUDGES_DISAGREE],
+      applied: false,
+    });
+    expect(t.entries.get('new')?.status).toBe('PROPOSED');
+  });
+
+  it('[ENG-184] leaves to a person a disagreement about a verified neighbour', async () => {
+    const t = triage({
+      rows: [
+        existing('verified', {
+          content: 'The queue worker retries webhook deliveries.',
+          verifiedAt: at(1),
+        }),
+        fresh(),
+      ],
+      near: [{ entryId: 'verified', similarity: 0.9 }],
+      pair: () => [
+        agreed('refines') as string,
+        agreed('contradicts') as string,
+      ],
+    });
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: [Reason.JUDGES_DISAGREE],
+    });
+    expect(t.entries.get('new')?.status).toBe('PROPOSED');
+  });
+
+  it('[ENG-184] leaves to a person a correction nothing confirms', async () => {
+    const t = triage({
+      rows: [
+        existing('old', { content: 'Webhooks retry twice.' }),
+        agentEntry({ supersedesId: 'old', citations: [] }),
+      ],
+    });
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+      reasons: expect.arrayContaining([Reason.SUPERSEDE_REQUEST]),
+    });
+    expect(t.entries.get('old')?.status).toBe('STANDING');
+  });
+
+  it('[ENG-184] a newer provisional entry replaces an older provisional one it contradicts, archiving it', async () => {
+    const t = triage({
+      rows: [
+        existing('older', {
+          content: 'The queue worker drops webhook deliveries.',
+          citations: [],
+          provisionalSince: at(1),
+        }),
+        fresh({ citations: [] }),
+      ],
+      near: [{ entryId: 'older', similarity: 0.8 }],
+      pair: () => agreed('contradicts'),
+    });
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.PROVISIONAL,
+      applied: true,
+    });
+    expect(t.relations[0]).toMatchObject({ preferredId: 'new' });
+    expect(t.entries.get('older')).toMatchObject({
+      status: 'ARCHIVED',
+      provisionalSince: null,
+    });
+  });
+
+  it('[ENG-184] takes a provisional entry out of use when evidence it gains is contested', async () => {
+    const setup: Setup = {
+      rows: [
+        agentEntry({ citations: [{ ...holds(), checkResult: 'CHANGED' }] }),
+      ],
+    };
+    const t = triage(setup);
+
+    await expect(t.service.triage('new', ON)).resolves.toMatchObject({
+      decision: Decision.PROVISIONAL,
+    });
+
+    (t.entries.get('new') as Row).citations[0].checkResult = 'HOLDS';
+    setup.accept = [
+      '{"verdict": "accept", "reason": "fine"}',
+      '{"verdict": "contradicted", "reason": "the lines say three"}',
+    ];
+
+    await expect(
+      t.service.triage('new', ON, 'CITATIONS_CHECKED'),
+    ).resolves.toMatchObject({
+      decision: Decision.ESCALATE,
+      applied: false,
+    });
+    expect(t.entries.get('new')).toMatchObject({
+      status: 'PROPOSED',
+      provisionalSince: null,
+    });
+  });
+
+  it('[ENG-184] changes nothing when a provisional entry is decided provisional again', async () => {
+    const t = triage({
+      rows: [
+        agentEntry({ citations: [{ ...holds(), checkResult: 'CHANGED' }] }),
+      ],
+    });
+
+    await t.service.triage('new', ON);
+    const since = t.entries.get('new')?.provisionalSince;
+    (t.entries.get('new') as Row).citations[0].checkResult = 'MISSING';
+
+    await expect(
+      t.service.triage('new', ON, 'CODE_CHANGED'),
+    ).resolves.toMatchObject({
+      decision: Decision.PROVISIONAL,
+      applied: false,
+    });
+    expect(t.entries.get('new')?.provisionalSince).toBe(since);
   });
 });

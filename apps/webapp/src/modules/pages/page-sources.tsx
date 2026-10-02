@@ -7,6 +7,7 @@ const TRUST_LABEL: Record<string, string> = {
   GROUNDED: 'grounded',
   OBSERVED: 'observed',
   UNGROUNDED: 'ungrounded',
+  PROVISIONAL: 'provisional',
 };
 
 /**

@@ -23,6 +23,8 @@ export enum KnowledgePackDropEnum {
   NOT_TRUSTED = 'NOT_TRUSTED',
   /** Kept, but ranked below the number of entries a pack gives. */
   TOP_K = 'TOP_K',
+  /** Provisional, and the pack already held as many provisional entries as it gives. */
+  PROVISIONAL_LIMIT = 'PROVISIONAL_LIMIT',
   /** Did not fit in what was left of the token budget. */
   BUDGET = 'BUDGET',
 }
@@ -238,6 +240,8 @@ export type KnowledgeMapFactState =
   | 'code'
   | 'people'
   | 'observed'
+  /** In use as provisional: nothing confirms it yet. */
+  | 'provisional'
   /** In use, with nothing checked that supports it. */
   | 'unconfirmed'
   | 'needs-you'

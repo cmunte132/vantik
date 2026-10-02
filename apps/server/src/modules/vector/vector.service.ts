@@ -56,6 +56,7 @@ type CitationJson = Omit<ProofCitationRow, 'checkedAt'> & {
 type KnowledgeRow = Omit<KnowledgeSearchHit, 'distance'> & {
   distance: number | null;
   verifiedAt: string | null;
+  provisionalSince: string | null;
   proofCitations: CitationJson[];
 };
 
@@ -317,11 +318,12 @@ export class VectorService {
       WITH documents AS (
         SELECT d.*, p."id" AS "pageId", COALESCE(p."title", '') AS "pageTitle",
           e."id" AS "entryId", e."scope", COALESCE(e."status"::text, 'STANDING') AS status,
-          e."sourceUserId", e."verifiedAt", COALESCE(e."retrievalCount", 0) AS "retrievalCount",
+          e."sourceUserId", e."verifiedAt", e."provisionalSince", COALESCE(e."retrievalCount", 0) AS "retrievalCount",
           e."kind"::text AS "entryKind", COALESCE(e."moduleIds", ARRAY[]::text[]) AS "moduleIds",
           COALESCE(p."id", 'scope:' || COALESCE(e."scope", '')) AS "groupKey",
           ${scopeBoost} AS "scopeBoost", ${moduleBoost} AS "moduleBoost",
           CASE WHEN d."kind" = 'page' OR e."verifiedAt" IS NOT NULL THEN 2
+            WHEN e."provisionalSince" IS NOT NULL THEN -1
             WHEN e."status" IN ('STANDING', 'CONSOLIDATED') AND EXISTS (
               SELECT 1 FROM "PageEntryCitation" citation WHERE citation."entryId" = e."id"
             ) AND NOT EXISTS (
@@ -370,7 +372,7 @@ export class VectorService {
         SELECT s."id", s."kind", s."pageId", s."pageTitle", s."entryId", s."title",
           s."body" AS content, s."scope", s.status, s."sourceUserId",
           (s."kind" = 'page' OR s."verifiedAt" IS NOT NULL) AS verified,
-          s."verifiedAt", s."retrievalCount", s."entryKind", s."moduleIds", s.distance,
+          s."verifiedAt", s."provisionalSince", s."retrievalCount", s."entryKind", s."moduleIds", s.distance,
           CASE WHEN s."evidencePageId" IS NOT NULL THEN jsonb_build_object(
             'pageId', s."evidencePageId", 'pageTitle', s."evidencePageTitle") END AS "evidenceFor",
           COALESCE((SELECT jsonb_agg(jsonb_build_object(
@@ -402,12 +404,21 @@ export class VectorService {
       facets: result.facets,
       found: result.found,
       hits: result.hits.map(
-        ({ proofCitations, verifiedAt, distance, ...hit }) => ({
+        ({
+          proofCitations,
+          verifiedAt,
+          provisionalSince,
+          distance,
+          ...hit
+        }) => ({
           ...hit,
           ...(hit.entryId
             ? entryProof({
                 status: hit.status,
                 verifiedAt: verifiedAt ? new Date(verifiedAt) : null,
+                provisionalSince: provisionalSince
+                  ? new Date(provisionalSince)
+                  : null,
                 citations: proofCitations.map((citation) => ({
                   ...citation,
                   checkedAt: citation.checkedAt

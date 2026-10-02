@@ -70,6 +70,12 @@ export enum KnowledgeTrustEnum {
    * page again after 30 days.
    */
   OBSERVED = 'OBSERVED',
+  /**
+   * In use, but nothing confirms it yet: triage put it in use because nothing
+   * spoke against it. Evidence or corroboration promotes it; harm, disuse or
+   * a better-grounded contradiction retires it.
+   */
+  PROVISIONAL = 'PROVISIONAL',
   /** Anything else. */
   UNGROUNDED = 'UNGROUNDED',
 }

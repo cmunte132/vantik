@@ -30,12 +30,14 @@ const TRUST_CHIP: Record<string, { tone?: TrustTone; label: string }> = {
   HUMAN_VERIFIED: { tone: 'people', label: 'Confirmed by a person' },
   OBSERVED: { tone: 'observed', label: 'Observed' },
   UNGROUNDED: { label: 'Unconfirmed' },
+  PROVISIONAL: { label: 'Provisional' },
 };
 
 const DROPPED: Record<string, string> = {
   NOT_LIVE: 'not in use when the pack was built',
   NOT_TRUSTED: 'nothing checked supports it',
   TOP_K: 'ranked below the facts a pack gives',
+  PROVISIONAL_LIMIT: 'provisional, and the pack held enough of those',
   BUDGET: 'cut by the token budget',
 };
 

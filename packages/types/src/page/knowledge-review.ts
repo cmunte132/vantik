@@ -16,6 +16,8 @@ import {
 /** What triage decided about an entry. */
 export enum KnowledgeTriageDecisionEnum {
   AUTO_ACCEPT = 'AUTO_ACCEPT',
+  /** Put in use as provisional: nothing confirms it, nothing speaks against it. */
+  PROVISIONAL = 'PROVISIONAL',
   CORROBORATE = 'CORROBORATE',
   ESCALATE = 'ESCALATE',
   REJECT = 'REJECT',

@@ -101,6 +101,11 @@ export function FactChips({ facts, outOfDate, rewriteWaiting }: PageState) {
     chips.push(['observed', `${facts.observed} observed`]);
   }
 
+  // Grey: in use, but nothing confirms it yet.
+  const provisional = facts.provisional
+    ? `${facts.provisional} provisional`
+    : null;
+
   // A rewrite already says that the page waits on a person.
   const waiting = facts.needYou - (rewriteWaiting ? 1 : 0);
 
@@ -108,7 +113,7 @@ export function FactChips({ facts, outOfDate, rewriteWaiting }: PageState) {
     chips.push(['needYou', `${waiting} need you`]);
   }
 
-  if (chips.length === 0) {
+  if (chips.length === 0 && !provisional) {
     return (
       <span className="text-xs text-muted-foreground">
         {facts.inUse ? `${facts.inUse} unconfirmed` : 'No facts yet'}
@@ -123,6 +128,7 @@ export function FactChips({ facts, outOfDate, rewriteWaiting }: PageState) {
           {label}
         </Chip>
       ))}
+      {provisional && <Chip>{provisional}</Chip>}
     </>
   );
 }
@@ -170,6 +176,7 @@ export function trustSentence(facts: KnowledgeFactCounts): string {
     `${facts.code} by code`,
     `${facts.people} by people`,
     `${facts.observed} observed`,
+    `${facts.provisional} provisional`,
     `${facts.needYou} need you`,
   ].join(' · ');
 }
@@ -182,10 +189,19 @@ export function sumFacts(all: KnowledgeFactCounts[]): KnowledgeFactCounts {
       code: total.code + facts.code,
       people: total.people + facts.people,
       observed: total.observed + facts.observed,
+      provisional: total.provisional + facts.provisional,
       unconfirmed: total.unconfirmed + facts.unconfirmed,
       needYou: total.needYou + facts.needYou,
     }),
-    { inUse: 0, code: 0, people: 0, observed: 0, unconfirmed: 0, needYou: 0 },
+    {
+      inUse: 0,
+      code: 0,
+      people: 0,
+      observed: 0,
+      provisional: 0,
+      unconfirmed: 0,
+      needYou: 0,
+    },
   );
 }
 

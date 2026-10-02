@@ -203,6 +203,12 @@ export class PageEntry {
   verifiedByUserId: string | null;
   verifiedAt: Date | null;
 
+  /**
+   * When triage put the fact in use as provisional, or null. Its trust is
+   * PROVISIONAL while this is set.
+   */
+  provisionalSince?: Date | null;
+
   retrievalCount: number;
   lastServedAt: Date | null;
 

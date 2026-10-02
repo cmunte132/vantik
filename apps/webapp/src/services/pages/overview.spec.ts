@@ -27,6 +27,7 @@ function page(
       code: 0,
       people: 0,
       observed: 0,
+      provisional: 0,
       unconfirmed: 0,
       needYou: 0,
     },

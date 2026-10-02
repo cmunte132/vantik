@@ -51,6 +51,21 @@ export const STANDING_ENTRY_DECAY_DAYS = Number(
 );
 
 /**
+ * How long a provisional entry may go unserved before it archives itself.
+ * Shorter than for a standing entry: nothing but use speaks for it.
+ */
+export const PROVISIONAL_ENTRY_DECAY_DAYS = Number(
+  process.env.PAGE_PROVISIONAL_ENTRY_DECAY_DAYS ?? 60,
+);
+
+/**
+ * Helpful outcome signals, net of harmful ones, that settle a provisional
+ * entry: as many runs it was served to went well without a run going wrong
+ * on it.
+ */
+export const PROVISIONAL_PROMOTE_HELPFUL = 2;
+
+/**
  * When the decay pass runs. Empty or `off` disables it entirely.
  *
  * Both windows above are dormant without this — a deployment that trusts decay

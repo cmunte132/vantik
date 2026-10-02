@@ -185,7 +185,11 @@ export function auditPrompt(audit: NonNullable<ReviewRow['audit']>): {
         question:
           audit.policy === 'ONE_FACT'
             ? 'Triage refused this as several claims in one entry.'
-            : 'Triage refused this on a policy.',
+            : audit.policy === 'CONTRADICTED'
+              ? 'Triage refused this: what it cites says otherwise.'
+              : audit.policy === 'OUTRANKED'
+                ? 'Triage refused this: it contradicts a better-supported fact.'
+                : 'Triage refused this on a policy.',
         agree: 'Right to refuse it',
         disagree: 'Use it',
       };

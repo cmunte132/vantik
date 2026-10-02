@@ -32,6 +32,7 @@ const TRUST: Record<string, string> = {
   GROUNDED: 'grounded',
   OBSERVED: 'observed',
   UNGROUNDED: 'ungrounded',
+  PROVISIONAL: 'provisional',
 };
 
 /**

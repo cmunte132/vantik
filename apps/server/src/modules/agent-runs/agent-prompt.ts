@@ -113,8 +113,9 @@ export function buildAgentPrompt(pack: ContextPack): string {
       '## What this workspace already knows',
       '',
       'Each item says how far it can be trusted: verified by a person, ' +
-        'grounded in code that still reads the same, or ungrounded. Check ' +
-        'an ungrounded claim before relying on it.',
+        'grounded in code that still reads the same, ungrounded, or ' +
+        'provisional (learned but not verified). Check an ungrounded or ' +
+        'provisional claim before relying on it.',
       '',
       ...pack.knowledge.map(
         (item) =>

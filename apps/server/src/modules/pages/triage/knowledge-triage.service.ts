@@ -165,6 +165,19 @@ function isServed(status: string): status is PageEntryStatus {
   return (SERVED as string[]).includes(status);
 }
 
+/** Whether a neighbour was found to say otherwise than the entry. */
+function opposes(neighbour: Neighbour) {
+  return (
+    neighbour.relation === PageEntryRelationType.CONTRADICTS ||
+    neighbour.relation === PageEntryRelationType.SUPERSEDES
+  );
+}
+
+/** Whether any reason makes the entry a person's to decide. */
+function hasHard(reasons: Set<KnowledgeEscalationReason>) {
+  return [...reasons].some((reason) => !SOFT_REASONS.has(reason));
+}
+
 /** What a triage pass decided, as its caller logs it. */
 export interface TriageOutcome {
   decisionId: string;
@@ -198,6 +211,51 @@ interface Neighbour {
   models: string[];
 }
 
+/**
+ * The version of the rules triage decides by. Raised when they change what
+ * becomes of an entry, so that an entry still waiting under the old rules is
+ * decided again (see `triage` and `sweep`). 2: the provisional tier.
+ */
+export const TRIAGE_POLICY_VERSION = 2;
+
+/**
+ * Corroborations by other entries that promote a provisional entry: as many
+ * separate writes saying the same thing as this settle it without evidence.
+ */
+export const PROVISIONAL_PROMOTE_CORROBORATIONS = 2;
+
+/**
+ * What keeps an entry from being accepted without making it a person's to
+ * decide. Each says only that nothing confirms the entry: it cites nothing,
+ * what it cites no longer holds or does not settle it, its writer is not
+ * known, or it would reach further than an unconfirmed claim should. An
+ * entry with only these reasons is put in use as provisional, served as
+ * unverified, and settled later by evidence or use. Every other reason
+ * (something it contradicts that a person answers for, text from outside,
+ * a correction, no model, back-off, an audit) waits for a person.
+ */
+export const SOFT_REASONS: ReadonlySet<KnowledgeEscalationReason> = new Set([
+  KnowledgeEscalationReason.UNGROUNDED,
+  KnowledgeEscalationReason.CITATION_FAILED,
+  KnowledgeEscalationReason.UNKNOWN_SOURCE,
+  KnowledgeEscalationReason.JUDGES_DISAGREE,
+  KnowledgeEscalationReason.PIN_REQUEST,
+  KnowledgeEscalationReason.BROAD_SCOPE,
+]);
+
+/** An entry that waits for triage or a person. */
+function isWaiting(entry: { status: string }) {
+  return entry.status === PageEntryStatus.PROPOSED;
+}
+
+/** An entry triage put in use as provisional, and nothing has settled since. */
+function isProvisional(entry: {
+  status: string;
+  provisionalSince: Date | null;
+}) {
+  return entry.status === PageEntryStatus.STANDING && !!entry.provisionalSince;
+}
+
 /** How old an entry must be before the nightly sweep queues triage for it. */
 export const TRIAGE_SWEEP_AFTER_MS = 60 * 60 * 1000;
 
@@ -219,6 +277,7 @@ const ENTRY_SELECT = {
   sourceUserId: true,
   sourceSession: true,
   verifiedAt: true,
+  provisionalSince: true,
   workspaceId: true,
   workspace: { select: { preferences: true } },
   citations: {
@@ -269,10 +328,13 @@ export default class KnowledgeTriageService {
    * Triage one entry. Returns null when there is nothing to decide: the entry
    * is gone, no longer waiting for triage, or triage is off for its
    * workspace. A pass for a new entry (`WRITTEN`) also returns null when the
-   * entry has a decision. Any other trigger decides again only after an
-   * escalation, and only when the evidence differs from what the last
-   * decision saw. Neither holds where the last decision was made in shadow
-   * and triage is now on: that entry is decided again, whatever the trigger.
+   * entry has a decision. Any other trigger decides again only about an entry
+   * that waits after an escalation or is in use as provisional, and only when
+   * the evidence differs from what the last decision saw.
+   *
+   * A decision that binds nothing is set aside, whatever the trigger: one
+   * made in shadow, once triage is on, and one made under an earlier
+   * `TRIAGE_POLICY_VERSION` about an entry that still waits.
    */
   async triage(
     entryId: string,
@@ -284,10 +346,11 @@ export default class KnowledgeTriageService {
       select: ENTRY_SELECT,
     });
 
-    // Only the inbox is triaged. A person who wrote a standing entry was the
-    // review, and one that was accepted, disputed or archived since it was
-    // written has had its decision made by someone else.
-    if (!entry || entry.status !== PageEntryStatus.PROPOSED) {
+    // Only the inbox, and what triage put in use as provisional, is triaged.
+    // A person who wrote a standing entry was the review, and one that was
+    // accepted, disputed or archived since it was written has had its
+    // decision made by someone else.
+    if (!entry || !(isWaiting(entry) || isProvisional(entry))) {
       return null;
     }
 
@@ -303,25 +366,36 @@ export default class KnowledgeTriageService {
 
     // Once for each state of the evidence. A retry after the decision was
     // recorded, or a second job for the same entry, changes nothing. A later
-    // pass decides again only about an entry that waits for a person, and
-    // only when what it rests on changed since the last decision. A decision
-    // made in shadow never acted, so once triage is on it binds nothing.
+    // pass decides again only about an entry that waits for a person or is
+    // provisional, and only when what it rests on changed since the last
+    // decision.
     const last = await this.prisma.knowledgeTriageDecision.findFirst({
       where: { entryId },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: { decision: true, applied: true, inputs: true, mode: true },
     });
-    const onlyShadowed =
-      last?.mode === KnowledgeTriageMode.SHADOW && settings.autoTriage === 'on';
+    const lastInputs = last?.inputs as {
+      evidenceDigest?: string;
+      policyVersion?: number;
+    } | null;
+    // A decision made in shadow never acted, and one made under an earlier
+    // policy was made by rules that no longer apply.
+    const setAside =
+      isWaiting(entry) &&
+      ((last?.mode === KnowledgeTriageMode.SHADOW &&
+        settings.autoTriage === 'on') ||
+        (lastInputs?.policyVersion ?? 1) !== TRIAGE_POLICY_VERSION);
+    const open =
+      (last?.decision === KnowledgeTriageDecisionType.ESCALATE &&
+        !last.applied) ||
+      last?.decision === KnowledgeTriageDecisionType.PROVISIONAL;
 
     if (
       last &&
-      !onlyShadowed &&
+      !setAside &&
       (trigger === KnowledgeTriageTrigger.WRITTEN ||
-        last.applied ||
-        last.decision !== KnowledgeTriageDecisionType.ESCALATE ||
-        (last.inputs as { evidenceDigest?: string } | null)?.evidenceDigest ===
-          evidenceDigest)
+        !open ||
+        lastInputs?.evidenceDigest === evidenceDigest)
     ) {
       return null;
     }
@@ -341,7 +415,12 @@ export default class KnowledgeTriageService {
         heldBack(
           {
             ...found,
-            inputs: { ...found.inputs, trigger, evidenceDigest },
+            inputs: {
+              ...found.inputs,
+              trigger,
+              evidenceDigest,
+              policyVersion: TRIAGE_POLICY_VERSION,
+            },
           },
           backoff,
         ),
@@ -439,23 +518,43 @@ export default class KnowledgeTriageService {
     // would archive the evidence and leave the claim with a person. It is
     // decided on its own, and once it is accepted the waiting one is
     // triaged again and folds into it.
+    //
+    // Nor is it folded into a provisional entry: folding it in would leave
+    // the claim served as unverified, without the evidence that verifies it.
+    // It is accepted, and replaces the provisional one (see `displaces`).
     const grounded = isGrounded(entry.citations);
-    const canFoldInto = (status: string) => isServed(status) || !grounded;
+    const canFoldInto = (row: { status: string; provisional: boolean }) =>
+      isServed(row.status) ? !(grounded && row.provisional) : !grounded;
 
     // ---------------------------------------------------- 2. exact repeat
     const repeats = await this.prisma.pageEntry.findMany({
       where: { ...neighbourhood, contentHash },
-      select: { id: true, status: true, createdAt: true, contentHash: true },
+      select: {
+        id: true,
+        status: true,
+        content: true,
+        createdAt: true,
+        contentHash: true,
+        provisionalSince: true,
+      },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    const asFolded = (row: (typeof repeats)[number]) => ({
+      status: row.status,
+      provisional: isProvisional(row),
     });
     // The accepted one if there is one, since that is the one served, and
     // otherwise the first said.
     const repeatOf =
       repeats.find((row) => isServed(row.status)) ?? repeats[0] ?? null;
-    const repeated = repeatOf && canFoldInto(repeatOf.status) ? repeatOf : null;
+    const repeated =
+      repeatOf && canFoldInto(asFolded(repeatOf)) ? repeatOf : null;
     // A served entry written after this one that triage found says the same
     // thing. It is the one served, so this one folds into it.
-    const foldsInto = servedDuplicates[0] ?? null;
+    const foldsInto =
+      servedDuplicates.find((row) =>
+        canFoldInto({ status: row.status, provisional: isProvisional(row) }),
+      ) ?? null;
 
     const models: string[] = [];
     const outputs: {
@@ -475,15 +574,10 @@ export default class KnowledgeTriageService {
             },
             settings.similarityThreshold,
           );
-    const wouldBe = {
-      id: entry.id,
-      trust: entryTrust({
-        status: PageEntryStatus.STANDING,
-        verifiedAt: entry.verifiedAt,
-        citations: entry.citations,
-      }),
-      createdAt: entry.createdAt,
-    };
+    // Set when a disagreement is a person's to settle: about how the entry
+    // relates to something a person answers for, as an agreed contradiction
+    // would be, or about whether its evidence contradicts it.
+    let needsPerson = false;
 
     for (const neighbour of neighbours) {
       // A different number, date, negation or condition prevents a
@@ -527,6 +621,13 @@ export default class KnowledgeTriageService {
       // nothing: the pair is kept as distinct, and a person settles it.
       if (!agreed) {
         reasons.add(KnowledgeEscalationReason.JUDGES_DISAGREE);
+
+        if (
+          neighbour.trust === KnowledgeTrustEnum.HUMAN_VERIFIED ||
+          neighbour.locked
+        ) {
+          needsPerson = true;
+        }
         Object.assign(neighbour, {
           relation: PageEntryRelationType.DISTINCT,
           decidedBy: PageEntryRelationDecider.MODEL,
@@ -558,17 +659,7 @@ export default class KnowledgeTriageService {
         reason: first.reason,
       });
 
-      if (
-        first.type === PageEntryRelationType.CONTRADICTS ||
-        first.type === PageEntryRelationType.SUPERSEDES
-      ) {
-        // Which of the two stands is precedence's to say, not the model's.
-        neighbour.preferredId = preferred(wouldBe, {
-          id: neighbour.id,
-          trust: neighbour.trust,
-          createdAt: neighbour.createdAt,
-        }).id;
-
+      if (opposes(neighbour)) {
         if (neighbour.trust === KnowledgeTrustEnum.HUMAN_VERIFIED) {
           reasons.add(KnowledgeEscalationReason.CONTRADICTS_VERIFIED);
         }
@@ -583,7 +674,10 @@ export default class KnowledgeTriageService {
       (neighbour) =>
         neighbour.relation === PageEntryRelationType.DUPLICATE &&
         neighbour.decidedBy === PageEntryRelationDecider.MODEL &&
-        canFoldInto(neighbour.status),
+        canFoldInto({
+          status: neighbour.status,
+          provisional: neighbour.trust === KnowledgeTrustEnum.PROVISIONAL,
+        }),
     );
     const corroborates =
       foldsInto?.id ?? repeated?.id ?? nearDuplicate?.id ?? null;
@@ -596,6 +690,9 @@ export default class KnowledgeTriageService {
         : nearDuplicate
           ? { content: nearDuplicate.content }
           : null;
+
+    // Both acceptance judges found the evidence it cites says otherwise.
+    let contradicted = false;
 
     // A repeat is folded into what it repeats rather than accepted, so what
     // acceptance asks of an entry does not apply to it.
@@ -633,15 +730,14 @@ export default class KnowledgeTriageService {
         reasons.add(KnowledgeEscalationReason.BROAD_SCOPE);
       }
 
-      // Precedence can prefer a neighbour over this entry only when a reason
-      // above already applies: an entry with no grounding reason is grounded
-      // or verified, an unverified neighbour ranks no higher, and between
-      // equals the newer, this one, wins. A verified neighbour escalates with
-      // CONTRADICTS_VERIFIED. So nothing precedence ruled against is accepted.
-
       // The last check, and the only one asked of a model about the entry
-      // itself; not asked at all when a person has to look anyway.
-      if (reasons.size === 0) {
+      // itself: whether what it cites says what it claims. Not asked when a
+      // person has to look anyway, nor when it cites nothing to read.
+      const readable = entry.citations.some((citation) =>
+        READABLE.includes(citation.kind),
+      );
+
+      if (!needsPerson && !hasHard(reasons) && readable) {
         if (!this.judges.available()) {
           reasons.add(KnowledgeEscalationReason.NO_LLM);
         } else {
@@ -661,20 +757,86 @@ export default class KnowledgeTriageService {
           );
           outputs.accept = judgments;
 
-          if (!judgments.every((judgment) => judgment.accept)) {
+          const against = judgments.filter((judgment) => judgment.contradicted);
+
+          // Both found the evidence says otherwise: the claim is wrong, and
+          // is refused. One alone is a person's to settle. Short of that,
+          // what the evidence does not settle is provisional.
+          if (against.length === judgments.length) {
+            contradicted = true;
+          } else if (against.length > 0) {
+            needsPerson = true;
+            reasons.add(KnowledgeEscalationReason.JUDGES_DISAGREE);
+          } else if (!judgments.every((judgment) => judgment.accept)) {
             reasons.add(KnowledgeEscalationReason.JUDGES_DISAGREE);
           }
         }
       }
     }
 
+    // What the entry would be in use as. Provisional when only soft reasons
+    // keep it from being accepted (see `SOFT_REASONS`).
+    const provisional =
+      !corroborates &&
+      !contradicted &&
+      !needsPerson &&
+      !hasHard(reasons) &&
+      reasons.size > 0;
+
+    // A correction retires what it corrects. One nothing confirms does not:
+    // a person decides whether it is right.
+    if (provisional && supersedes && isServed(supersedes.status)) {
+      reasons.add(KnowledgeEscalationReason.SUPERSEDE_REQUEST);
+    }
+
+    const wouldBe = {
+      id: entry.id,
+      trust: provisional
+        ? KnowledgeTrustEnum.PROVISIONAL
+        : entryTrust({
+            status: PageEntryStatus.STANDING,
+            verifiedAt: entry.verifiedAt,
+            citations: entry.citations,
+          }),
+      createdAt: entry.createdAt,
+    };
+
+    // Which of two contradicting entries stands is precedence's to say, not
+    // the model's. A grounded entry outranks every unverified neighbour, or
+    // is the newer of two equals; a verified one escalated above. So only a
+    // provisional entry is ever outranked, and it is not put in use against
+    // something that stands higher.
+    for (const neighbour of neighbours) {
+      if (opposes(neighbour)) {
+        neighbour.preferredId = preferred(wouldBe, {
+          id: neighbour.id,
+          trust: neighbour.trust,
+          createdAt: neighbour.createdAt,
+        }).id;
+      }
+    }
+
+    const outranked = neighbours.some(
+      (neighbour) =>
+        opposes(neighbour) &&
+        neighbour.preferredId === neighbour.id &&
+        isServed(neighbour.status),
+    );
+
     // ------------------------------------------------------- 5. decision
     const decision =
-      reasons.size > 0
+      needsPerson || hasHard(reasons)
         ? KnowledgeTriageDecisionType.ESCALATE
-        : corroborates
-          ? KnowledgeTriageDecisionType.CORROBORATE
-          : KnowledgeTriageDecisionType.AUTO_ACCEPT;
+        : contradicted || outranked
+          ? KnowledgeTriageDecisionType.REJECT
+          : corroborates
+            ? KnowledgeTriageDecisionType.CORROBORATE
+            : reasons.size > 0
+              ? KnowledgeTriageDecisionType.PROVISIONAL
+              : KnowledgeTriageDecisionType.AUTO_ACCEPT;
+    const accepted =
+      decision === KnowledgeTriageDecisionType.AUTO_ACCEPT ||
+      decision === KnowledgeTriageDecisionType.PROVISIONAL;
 
     const relations = [
       ...(repeatOf
@@ -705,8 +867,16 @@ export default class KnowledgeTriageService {
 
     return decide({
       decision,
-      policy: null,
-      reasons: [...reasons],
+      policy:
+        decision !== KnowledgeTriageDecisionType.REJECT
+          ? null
+          : contradicted
+            ? KnowledgeTriagePolicy.CONTRADICTED
+            : KnowledgeTriagePolicy.OUTRANKED,
+      // What kept it from being accepted, for a provisional entry as for an
+      // escalated one. A refusal rests on its policy.
+      reasons:
+        decision === KnowledgeTriageDecisionType.REJECT ? [] : [...reasons],
       corroborates:
         decision === KnowledgeTriageDecisionType.CORROBORATE
           ? corroborates
@@ -720,19 +890,37 @@ export default class KnowledgeTriageService {
               content: supersedes.content,
             }
           : null,
-      // Served entries precedence ruled against, standing or consolidated.
+      // Served entries precedence ruled against, standing or consolidated,
+      // and, for a grounded entry, provisional ones that say the same thing.
       // Only an accepted entry displaces anything, and only in `on` mode.
-      displaces: neighbours.flatMap((neighbour) =>
-        neighbour.preferredId === entry.id && isServed(neighbour.status)
-          ? [
-              {
-                id: neighbour.id,
-                status: neighbour.status,
-                content: neighbour.content,
-              },
-            ]
-          : [],
-      ),
+      displaces: accepted
+        ? [
+            ...neighbours.flatMap((neighbour) =>
+              (opposes(neighbour) && neighbour.preferredId === entry.id) ||
+              (grounded &&
+                !provisional &&
+                neighbour.relation === PageEntryRelationType.DUPLICATE &&
+                neighbour.trust === KnowledgeTrustEnum.PROVISIONAL)
+                ? [neighbour]
+                : [],
+            ),
+            ...(grounded && !provisional
+              ? repeats.filter(
+                  (row) => isServed(row.status) && isProvisional(row),
+                )
+              : []),
+          ]
+            .filter((row) => isServed(row.status))
+            .map((row) => ({
+              id: row.id,
+              status: row.status as PageEntryStatus,
+              content: row.content,
+              provisional:
+                'trust' in row
+                  ? row.trust === KnowledgeTrustEnum.PROVISIONAL
+                  : isProvisional(row),
+            }))
+        : [],
       relations,
       // Waiting entries that say the same thing. Once this one is accepted,
       // each is triaged again and folds into it.
@@ -793,7 +981,15 @@ export default class KnowledgeTriageService {
         },
       },
       select: {
-        from: { select: { id: true, content: true, createdAt: true } },
+        from: {
+          select: {
+            id: true,
+            content: true,
+            status: true,
+            provisionalSince: true,
+            createdAt: true,
+          },
+        },
       },
     });
 
@@ -842,6 +1038,7 @@ export default class KnowledgeTriageService {
         content: true,
         status: true,
         verifiedAt: true,
+        provisionalSince: true,
         createdAt: true,
         page: { select: { entryPolicy: true } },
         citations: {
@@ -1097,8 +1294,13 @@ export default class KnowledgeTriageService {
         const applied = act ? await this.apply(tx, entry, found) : false;
         // Drawn from what was acted on without a person: whatever else was
         // decided reaches a person anyway. Never a refused credential, which
-        // an audit would only put in front of more people.
-        const drawn = applied && found.policy !== KnowledgeTriagePolicy.SECRET;
+        // an audit would only put in front of more people, and never a
+        // provisional entry: it is served as unverified, and evidence or use
+        // settles it, not a person.
+        const drawn =
+          applied &&
+          found.policy !== KnowledgeTriagePolicy.SECRET &&
+          found.decision !== KnowledgeTriageDecisionType.PROVISIONAL;
         const audit = drawn && auditDraw(id) < auditRate;
         const outputs =
           notApplied !== undefined
@@ -1108,8 +1310,9 @@ export default class KnowledgeTriageService {
         // One look by the verifier, asked for with the escalation, so that a
         // person never sees the entry between the two.
         const verify =
-          found.decision === KnowledgeTriageDecisionType.ESCALATE &&
-          wantsVerifier(found.reasons, entry.citations)
+          (found.decision === KnowledgeTriageDecisionType.ESCALATE ||
+            found.decision === KnowledgeTriageDecisionType.PROVISIONAL) &&
+          wantsVerifier(found.reasons, entry.citations, found.decision)
             ? (
                 await tx.knowledgeVerification.createMany({
                   data: [{ entryId: entry.id, workspaceId: entry.workspaceId }],
@@ -1170,7 +1373,8 @@ export default class KnowledgeTriageService {
 
     if (
       result.applied &&
-      found.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT
+      (found.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT ||
+        found.decision === KnowledgeTriageDecisionType.PROVISIONAL)
     ) {
       await this.answerGapsQuietly(entry.id);
       await this.triageAgain(
@@ -1212,10 +1416,12 @@ export default class KnowledgeTriageService {
   }
 
   /**
-   * Queues a pass for entries that wait with nothing triage acted on: those
-   * whose every pass failed, and, where triage is now on, those it decided
-   * about only in shadow. Only entries older than an hour, so a pass still
-   * being tried is not doubled. Returns how many it queued.
+   * Queues a pass for entries that wait with nothing triage acted on under
+   * the rules it decides by now: those whose every pass failed, those
+   * decided under an earlier `TRIAGE_POLICY_VERSION`, and, where triage is
+   * now on, those it decided about only in shadow. Only entries older than
+   * an hour, so a pass still being tried is not doubled. Returns how many it
+   * queued.
    */
   async sweep(env: NodeJS.ProcessEnv = process.env): Promise<number> {
     const waiting: Prisma.PageEntryWhereInput = {
@@ -1224,13 +1430,16 @@ export default class KnowledgeTriageService {
       createdAt: { lt: new Date(Date.now() - TRIAGE_SWEEP_AFTER_MS) },
       ...onLivePageOrLoose(),
     };
+    const current: Prisma.KnowledgeTriageDecisionWhereInput = {
+      inputs: { path: ['policyVersion'], equals: TRIAGE_POLICY_VERSION },
+    };
     const select = {
       id: true,
       workspace: { select: { preferences: true } },
     } as const;
     const [undecided, shadowed] = await Promise.all([
       this.prisma.pageEntry.findMany({
-        where: { ...waiting, triageDecisions: { none: {} } },
+        where: { ...waiting, triageDecisions: { none: current } },
         orderBy: { createdAt: 'asc' },
         take: TRIAGE_SWEEP_LIMIT,
         select,
@@ -1239,8 +1448,8 @@ export default class KnowledgeTriageService {
         where: {
           ...waiting,
           triageDecisions: {
-            some: { mode: KnowledgeTriageMode.SHADOW },
-            none: { mode: KnowledgeTriageMode.ON },
+            some: { ...current, mode: KnowledgeTriageMode.SHADOW },
+            none: { ...current, mode: KnowledgeTriageMode.ON },
           },
         },
         orderBy: { createdAt: 'asc' },
@@ -1310,28 +1519,55 @@ export default class KnowledgeTriageService {
     entry: TriagedEntry,
     found: Found,
   ): Promise<boolean> {
-    // An escalation waits for a person, whatever the mode.
-    if (found.decision === KnowledgeTriageDecisionType.ESCALATE) {
-      return false;
-    }
+    const provisional = isProvisional(entry);
+    let data: Prisma.PageEntryUpdateManyMutationInput;
 
-    const status =
-      found.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT
-        ? PageEntryStatus.STANDING
-        : PageEntryStatus.ARCHIVED;
+    switch (found.decision) {
+      case KnowledgeTriageDecisionType.ESCALATE:
+        // An escalation waits for a person, whatever the mode. A
+        // provisional entry stops being served while it waits.
+        if (!provisional) {
+          return false;
+        }
+        data = { status: PageEntryStatus.PROPOSED, provisionalSince: null };
+        break;
+      case KnowledgeTriageDecisionType.PROVISIONAL:
+        // Already in use as provisional: nothing to change.
+        if (provisional) {
+          return false;
+        }
+        data = {
+          status: PageEntryStatus.STANDING,
+          provisionalSince: new Date(),
+        };
+        break;
+      case KnowledgeTriageDecisionType.AUTO_ACCEPT:
+        // Accepted outright, or promoted from provisional.
+        data = { status: PageEntryStatus.STANDING, provisionalSince: null };
+        break;
+      default:
+        data = { status: PageEntryStatus.ARCHIVED, provisionalSince: null };
+    }
 
     const { count } = await tx.pageEntry.updateMany({
       where: {
         id: entry.id,
         deleted: null,
-        status: PageEntryStatus.PROPOSED,
+        status: entry.status,
         updatedAt: entry.updatedAt,
       },
-      data: { status },
+      data,
     });
 
     if (count === 0) {
       throw new StaleTriage('the entry changed while it was triaged');
+    }
+
+    // Taking a provisional entry out of use is not acting on the escalation:
+    // what it escalated still waits for a person, and the decision is
+    // recorded as not applied, as every escalation is.
+    if (found.decision === KnowledgeTriageDecisionType.ESCALATE) {
+      return false;
     }
 
     if (found.corroborates) {
@@ -1353,13 +1589,29 @@ export default class KnowledgeTriageService {
           `the entry it repeats, ${found.corroborates}, changed while it was triaged`,
         );
       }
+
+      // Said again by enough separate writes, a provisional claim is settled.
+      await tx.pageEntry.updateMany({
+        where: {
+          id: found.corroborates,
+          status: PageEntryStatus.STANDING,
+          provisionalSince: { not: null },
+          corroborationCount: { gte: PROVISIONAL_PROMOTE_CORROBORATIONS },
+        },
+        data: { provisionalSince: null },
+      });
     }
 
     // Disputed rather than superseded: withheld until a person looks, and
-    // reversible, because a model found the contradiction. Each only as it
-    // was compared: a person verifying it, rewording it or locking its page
-    // since takes it out of what precedence decided about.
-    if (found.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT) {
+    // reversible, because a model found the contradiction. A provisional
+    // entry is archived instead: nobody vouched for it, and what replaces it
+    // ranks at least as high. Each only as it was compared: a person
+    // verifying it, rewording it or locking its page since takes it out of
+    // what precedence decided about.
+    if (
+      found.decision === KnowledgeTriageDecisionType.AUTO_ACCEPT ||
+      found.decision === KnowledgeTriageDecisionType.PROVISIONAL
+    ) {
       for (const displaced of found.displaces ?? []) {
         const { count: disputed } = await tx.pageEntry.updateMany({
           where: {
@@ -1368,9 +1620,12 @@ export default class KnowledgeTriageService {
             status: displaced.status,
             verifiedAt: null,
             content: displaced.content,
+            ...(displaced.provisional && { provisionalSince: { not: null } }),
             ...onUnlockedPageOrLoose(),
           },
-          data: { status: PageEntryStatus.DISPUTED },
+          data: displaced.provisional
+            ? { status: PageEntryStatus.ARCHIVED, provisionalSince: null }
+            : { status: PageEntryStatus.DISPUTED },
         });
 
         if (disputed === 0) {
@@ -1418,8 +1673,16 @@ interface Found {
   corroboratesAsRead?: Prisma.PageEntryWhereInput | null;
   /** The served entry it corrects, as read; accepting it retires that one. */
   retires?: { id: string; status: PageEntryStatus; content: string } | null;
-  /** Standing entries precedence ruled against, with their content as read. */
-  displaces?: Array<{ id: string; status: PageEntryStatus; content: string }>;
+  /**
+   * Served entries it replaces, with their content as read: those precedence
+   * ruled against, and provisional ones a grounded entry says again.
+   */
+  displaces?: Array<{
+    id: string;
+    status: PageEntryStatus;
+    content: string;
+    provisional: boolean;
+  }>;
   /** Waiting entries that say the same thing, to triage again on acceptance. */
   sameAsWaiting?: string[];
   relations?: Array<{
@@ -1462,16 +1725,23 @@ function heldBack(found: Found, backoff: Map<string, BackoffState>): Found {
 }
 
 /**
- * Whether the verifier looks for evidence before a person sees an escalated
- * entry. It looks when the entry cites nothing that can be checked, and when
- * what it cited no longer holds. It does not look while a citation is still
- * unread: the retry reads it, and triage then decides again.
+ * Whether the verifier looks for evidence: before a person sees an escalated
+ * entry, or to settle a provisional one. It looks when the entry cites
+ * nothing that can be checked, and when what it cited no longer holds; for a
+ * provisional entry, also when the judges did not find that what it cites
+ * settles it. It does not look while a citation is still unread: the retry
+ * reads it, and triage then decides again.
  */
 export function wantsVerifier(
   reasons: KnowledgeEscalationReason[],
   citations: Array<{ checkResult: string | null }>,
+  decision: KnowledgeTriageDecisionType = KnowledgeTriageDecisionType.ESCALATE,
 ): boolean {
-  if (reasons.includes(KnowledgeEscalationReason.UNGROUNDED)) {
+  if (
+    reasons.includes(KnowledgeEscalationReason.UNGROUNDED) ||
+    (decision === KnowledgeTriageDecisionType.PROVISIONAL &&
+      reasons.includes(KnowledgeEscalationReason.JUDGES_DISAGREE))
+  ) {
     return true;
   }
 

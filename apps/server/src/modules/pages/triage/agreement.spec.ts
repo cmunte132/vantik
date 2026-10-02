@@ -21,6 +21,7 @@ import {
   personDecision,
   type RatedDecision,
   shouldBackOff,
+  statusLeftBy,
   triageLabel,
   weightOf,
 } from './agreement';
@@ -230,6 +231,16 @@ describe('what triage and the person each said', () => {
       Decision.ESCALATE,
     );
 
+    // Kept in use as provisional: what triage did. Set aside: it needed a
+    // person after all.
+    expect(personDecision(Verdict.ACCEPTED, Decision.PROVISIONAL)).toBe(
+      Decision.PROVISIONAL,
+    );
+    expect(personDecision(Verdict.REJECTED, Decision.PROVISIONAL)).toBe(
+      Decision.ESCALATE,
+    );
+    expect(statusLeftBy(Decision.PROVISIONAL)).toBe('STANDING');
+
     expect(
       agrees(rated(Decision.AUTO_ACCEPT, Verdict.ACCEPTED), Verdict.ACCEPTED),
     ).toBe(true);
@@ -264,28 +275,29 @@ describe('what triage and the person each said', () => {
 
 describe('agreement per decision type', () => {
   it('[KG-5.3] measures each type against the rest, with the counts', () => {
-    const [accept, corroborate, reject, escalate] = agreementByType([
-      ...Array.from({ length: 3 }, () =>
-        rated(Decision.AUTO_ACCEPT, Verdict.ACCEPTED),
-      ),
-      rated(Decision.AUTO_ACCEPT, Verdict.REJECTED),
-      rated(Decision.ESCALATE, Verdict.REJECTED, judged),
-      rated(Decision.ESCALATE, Verdict.EDITED, judged),
-      rated(Decision.ESCALATE, Verdict.ACCEPTED, judged),
-      rated(Decision.CORROBORATE, Verdict.REJECTED),
-      rated(Decision.CORROBORATE, Verdict.REJECTED),
-      rated(Decision.CORROBORATE, Verdict.ACCEPTED),
-      rated(Decision.REJECT, Verdict.REJECTED, { policy: Policy.ONE_FACT }),
-      rated(Decision.ESCALATE, Verdict.ACCEPTED, {
-        reasons: [Reason.LOW_AGREEMENT],
-        backedOffFrom: Decision.AUTO_ACCEPT,
-      }),
-      // Left out: a rule escalated it, and a credential was refused.
-      rated(Decision.ESCALATE, Verdict.ACCEPTED, {
-        reasons: [Reason.UNGROUNDED],
-      }),
-      rated(Decision.REJECT, Verdict.ACCEPTED, { policy: Policy.SECRET }),
-    ]);
+    const [accept, corroborate, reject, provisional, escalate] =
+      agreementByType([
+        ...Array.from({ length: 3 }, () =>
+          rated(Decision.AUTO_ACCEPT, Verdict.ACCEPTED),
+        ),
+        rated(Decision.AUTO_ACCEPT, Verdict.REJECTED),
+        rated(Decision.ESCALATE, Verdict.REJECTED, judged),
+        rated(Decision.ESCALATE, Verdict.EDITED, judged),
+        rated(Decision.ESCALATE, Verdict.ACCEPTED, judged),
+        rated(Decision.CORROBORATE, Verdict.REJECTED),
+        rated(Decision.CORROBORATE, Verdict.REJECTED),
+        rated(Decision.CORROBORATE, Verdict.ACCEPTED),
+        rated(Decision.REJECT, Verdict.REJECTED, { policy: Policy.ONE_FACT }),
+        rated(Decision.ESCALATE, Verdict.ACCEPTED, {
+          reasons: [Reason.LOW_AGREEMENT],
+          backedOffFrom: Decision.AUTO_ACCEPT,
+        }),
+        // Left out: a rule escalated it, and a credential was refused.
+        rated(Decision.ESCALATE, Verdict.ACCEPTED, {
+          reasons: [Reason.UNGROUNDED],
+        }),
+        rated(Decision.REJECT, Verdict.ACCEPTED, { policy: Policy.SECRET }),
+      ]);
 
     // AUTO_ACCEPT: 12 rated, 7 about acceptance. Both 4 (three accepted,
     // one held back and accepted), triage only 1, person only 2 (an
@@ -328,6 +340,11 @@ describe('agreement per decision type', () => {
       counts: { both: 2, triageOnly: 1, personOnly: 1, neither: 8 },
     });
     expect(escalate.kappa).toBeCloseTo(5 / 9, 12);
+    // PROVISIONAL: nothing was put in use as provisional.
+    expect(provisional).toMatchObject({
+      decision: Decision.PROVISIONAL,
+      samples: 0,
+    });
   });
 
   it('[KG-5.4] counts as evidence about a type only the verdicts where it was said', () => {

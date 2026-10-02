@@ -112,11 +112,13 @@ each citation's last check:
 | `GROUNDED` | The entry is accepted, and every citation was read and still holds. |
 | `OBSERVED` | The entry is accepted, it cites an outside page, and every citation still holds. The citation shows the date that the server last read the page. |
 | `UNGROUNDED` | Nothing that was checked supports the entry, or the code that it cites has changed or gone. An agent checks it against the code before relying on it. |
+| `PROVISIONAL` | The entry is in use, but nothing confirmed it yet. Triage found no reason to refuse it and no reason to ask a person. An agent checks it before relying on it. See [Provisional facts](#provisional-facts). |
 
 Verified entries rank first. Grounded and observed entries rank next, and a
-grounded entry wins over an observed one when the two contradict. Apart from
-the conventions of its modules, a hosted agent run is given only verified,
-grounded or observed entries.
+grounded entry wins over an observed one when the two contradict. Provisional
+entries rank last. Apart from the conventions of its modules, a hosted agent
+run is given verified, grounded or observed entries, and a maximum of two
+provisional ones.
 
 ### Checks when the code changes
 
@@ -146,11 +148,15 @@ Knowledge that nobody uses is not load-bearing, so a nightly pass archives it:
 
 - A proposed entry that waited longer than `PAGE_PROPOSED_ENTRY_EXPIRY_DAYS`.
 - A standing entry that was not served in `PAGE_STANDING_ENTRY_DECAY_DAYS`.
+- A provisional entry that was not served in `PAGE_PROVISIONAL_ENTRY_DECAY_DAYS`.
+- A provisional entry for which runs had more harmful outcomes than helpful
+  ones.
 
 The pass keeps an entry if one of its citations was checked and held within
 that window. It never archives an entry that a person verified; it asks a
 person instead. It never archives an entry that a page cites, because the
-page is read in its place. Outcomes of agent runs never delete knowledge.
+page is read in its place. Outcomes of agent runs archive only provisional
+entries, and never delete knowledge.
 
 ## What agents get
 
@@ -159,8 +165,13 @@ page is read in its place. Outcomes of agent runs never delete knowledge.
 - **`recall_knowledge`** answers a question from the bank.
 - **A hosted agent run** gets the conventions of its issue's modules first,
   then the `KNOWLEDGE_CONTEXT_TOP_K` most relevant verified, grounded or
-  observed entries, within `KNOWLEDGE_CONTEXT_TOKEN_BUDGET` tokens. Each entry shows its
-  citation and its age.
+  observed entries, within `KNOWLEDGE_CONTEXT_TOKEN_BUDGET` tokens. A maximum
+  of two provisional entries follow them, labelled as provisional. Each entry
+  shows its citation and its age.
+
+`load_context` and `recall_knowledge` also serve a maximum of two provisional
+entries, after the others. A provisional convention is served only when it is
+relevant. It is not given to every run in its modules until it is promoted.
 
 The server records each time an entry is served. When a run ends, its checks,
 its review and its pull request (merged or closed) count as helpful or harmful
@@ -184,13 +195,15 @@ flowchart TD
   read -- "a citation does not hold" --> refused(["The server refuses the write"])
   read -- the lines hold --> judges["Two models judge the claim<br/>against the lines"]
   judges -- both accept --> confirmed(["In use: the code confirms it"])
-  judges -- "the models disagree, or it contradicts<br/>a fact that a person verified" --> person(["A person decides"])
+  judges -- "it contradicts a fact that<br/>a person verified" --> person(["A person decides"])
+  judges -- both find it contradicted --> rejected(["Triage refuses it"])
+  judges -- the models disagree --> provisional
   cites -- no --> verifier["A verifier agent searches<br/>the repositories and the issues"]
   verifier -- it finds evidence --> cited["The agent adds the citations"]
   cited -- check it again --> read
   verifier -- it finds nothing --> outside{"Is it about an<br/>outside service?"}
   outside -- "yes: the service's own page<br/>states it, and both models accept" --> observed(["In use: observed on a date,<br/>checked again after 30 days"])
-  outside -- "no: it is a decision,<br/>a rule or a convention" --> person
+  outside -- "no: it is a decision,<br/>a rule or a convention" --> provisional(["In use as provisional,<br/>until evidence settles it"])
 ```
 
 ### The verifier
@@ -246,8 +259,8 @@ The server triages each new entry before a person sees it:
    contradiction, or a different fact.
 4. **Grounding.** Every citation must hold. A fact with no evidence goes to
    the verifier before a person sees it.
-5. **Decision.** Triage accepts the entry, folds it into another, refuses it,
-   or escalates it to a person.
+5. **Decision.** Triage accepts the entry, puts it in use as provisional,
+   folds it into another, refuses it, or escalates it to a person.
 
 `KNOWLEDGE_AUTO_TRIAGE` controls whether triage acts:
 
@@ -255,7 +268,7 @@ The server triages each new entry before a person sees it:
 |---|---|
 | `off` | No triage. Every entry waits for a person. |
 | `shadow` | Triage decides and records each decision, but changes nothing. The default. Compare its decisions with what people decide before you turn it on. |
-| `on` | Triage accepts, folds in and refuses as it decides. Escalations still wait for a person. |
+| `on` | Triage accepts, puts in use as provisional, folds in and refuses as it decides. Escalations still wait for a person. |
 
 Triage accepts an entry without a person only when every condition holds: the
 entry says one thing, it cites code, an issue, a comment or an outside page,
@@ -265,9 +278,48 @@ this: triage accepts a grounded entry from an agent as it accepts one from a
 person. For a convention or a decision, the judges accept only evidence that
 states the rule or the decision, not code that only follows a practice.
 
+### Provisional facts
+
+Most facts that are not proven are not wrong. A decision, a rule, or a fact
+about an outside service often has no line of code that states it. Triage
+does not send each such fact to a person. It puts the fact in use as
+provisional, and evidence settles it later.
+
+Triage makes an entry provisional when the only reasons against it are these:
+`UNGROUNDED`, `CITATION_FAILED`, `UNKNOWN_SOURCE`, `JUDGES_DISAGREE`,
+`PIN_REQUEST` and `BROAD_SCOPE`. Any other reason sends the entry to a person.
+
+Triage refuses an entry when both judges find that its evidence contradicts
+it. It also refuses an entry when it contradicts an entry in use that ranks
+above it, for example a grounded entry. When only one judge finds the
+evidence contradicts it, a person decides.
+
+A provisional entry is promoted to a full entry when one of these occurs:
+
+- Triage decides again and accepts it, for example because the verifier
+  found evidence.
+- Two other writes say the same thing.
+- Runs that were given it had two or more helpful outcomes and no harmful one.
+- A person keeps it, verifies it, or edits it.
+
+A provisional entry is taken out of use when one of these occurs:
+
+- A grounded entry says the same thing, or contradicts it. The provisional
+  entry is archived.
+- A newer provisional entry contradicts it. The older one is archived.
+- Evidence that it gains is contested. It goes to a person.
+- Decay archives it. See [Decay](#decay).
+
+Triage never audits a provisional decision, because a provisional entry is
+not trusted yet. Triage records the version of the rules that it decided by.
+When the rules change, a waiting entry that was decided by older rules is
+decided again.
+
 ### Escalation reasons
 
-An escalated entry waits in the review queue, with the reasons attached:
+An escalated entry waits in the review queue, with the reasons attached. The
+reasons in the list in [Provisional facts](#provisional-facts) send an entry to
+a person only together with another reason:
 
 | Reason | Meaning |
 |---|---|
@@ -470,5 +522,6 @@ workspace:
 |---|---|---|
 | `PAGE_PROPOSED_ENTRY_BUDGET` | `10` | The proposed entries that one token may leave on one curated page. |
 | `PAGE_PROPOSED_ENTRY_EXPIRY_DAYS` | `30` | How long a proposed entry waits before decay archives it. |
+| `PAGE_PROVISIONAL_ENTRY_DECAY_DAYS` | `60` | How long a provisional entry may go unused before decay archives it. |
 | `PAGE_STANDING_ENTRY_DECAY_DAYS` | `90` | How long a standing entry may go unused before decay archives it. |
 | `PAGE_DECAY_CRON` | `0 3 * * *` (nightly) | When the decay pass runs. `off` disables it. |

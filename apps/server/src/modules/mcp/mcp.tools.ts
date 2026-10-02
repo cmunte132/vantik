@@ -975,7 +975,8 @@ export function registerVantikTools(
         '(the repo path or area you are working in) even if you have no ' +
         'specific question, because at the start of a task you do not yet ' +
         'know what you do not know. Each item says how far to trust it and ' +
-        'what it cites; check an ungrounded claim before relying on it.',
+        'what it cites; check an ungrounded or provisional claim before ' +
+        'relying on it.',
       inputSchema: {
         task: z
           .string()
@@ -1008,8 +1009,9 @@ export function registerVantikTools(
         'migrations", "why is redis only a cache here". Searches page bodies ' +
         'and the facts agents have asserted, newest and best-established ' +
         'first, with who asserted each and how far to trust it: verified by ' +
-        'a person, grounded in cited code that still reads the same, or ' +
-        'ungrounded, with each citation and when it was last checked. Use ' +
+        'a person, grounded in cited code that still reads the same, ' +
+        'ungrounded, or provisional (in use but not yet verified), with ' +
+        'each citation and when it was last checked. Use ' +
         'this before investigating something from scratch; the answer may ' +
         'already be in the bank.',
       inputSchema: {
@@ -1143,9 +1145,10 @@ export function registerVantikTools(
         'request, comment or run). The server reads cited code itself and ' +
         'refuses the write if a citation does not hold, telling you which ' +
         'one and why, so fix it and call again. The answer lists what each ' +
-        'citation came to. Once a person accepts it, a fact whose ' +
-        'citations all still hold is served as grounded, above uncited ' +
-        'ones.\n\n' +
+        'citation came to. Once accepted, a fact whose citations all still ' +
+        'hold is served as grounded, above uncited ones. A fact nothing ' +
+        'confirms and nothing contradicts is served as provisional until ' +
+        'evidence or use settles it, so cite what you can.\n\n' +
         'The call searches before it writes. If near matches come back, ' +
         'nothing was written: read them, then either supersede one or say ' +
         'the fact is distinct.',

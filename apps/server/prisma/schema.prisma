@@ -955,6 +955,12 @@ model PageEntry {
   /// a DUPLICATE relation from the repeat, which records who said it and when.
   corroborationCount Int @default(0)
 
+  /// Set when triage put the entry in use as provisional: nothing confirmed
+  /// it, and nothing spoke against it. Served as unverified while set.
+  /// Cleared when evidence or corroboration promotes it, or when a person
+  /// keeps, verifies or edits it.
+  provisionalSince DateTime?
+
   /// The workspace of the fact. It is stored on the entry, because a fact on
   /// no page has no page to find its workspace through.
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
@@ -1248,7 +1254,8 @@ model KnowledgeTriageDecision {
   workspaceId String
 
   decision KnowledgeTriageDecisionType
-  /// Why it escalated, every reason that applied. Empty for any other decision.
+  /// Why it escalated, or, for PROVISIONAL, what kept it from being accepted:
+  /// every reason that applied. Empty for any other decision.
   reasons  KnowledgeEscalationReason[] @default([])
   /// The policy a REJECT broke, kept when a backed-off REJECT escalated.
   policy   KnowledgeTriagePolicy?
@@ -2553,6 +2560,10 @@ enum PageEntrySignalKind {
 enum KnowledgeTriageDecisionType {
   /// Every condition held; the entry is accepted without a person.
   AUTO_ACCEPT
+  /// Nothing settles it, and nothing speaks against it: it is put in use as
+  /// provisional, served as unverified, until evidence or use settles it.
+  /// The reasons say what kept it from being accepted.
+  PROVISIONAL
   /// It says what an existing entry already says; the existing one counts it.
   CORROBORATE
   /// Something only a person can settle; the reasons say what.
@@ -2649,6 +2660,11 @@ enum KnowledgeTriagePolicy {
   SECRET
   /// It is several claims in one entry.
   ONE_FACT
+  /// Both judges found that the evidence it cites says it is not so.
+  CONTRADICTED
+  /// It contradicts knowledge in use that stands higher than it can: that
+  /// knowledge is grounded or observed, and it is not.
+  OUTRANKED
 }
 
 /// Why triage decided about an entry. Triage decides once when an agent or a

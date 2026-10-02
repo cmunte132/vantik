@@ -43,6 +43,7 @@ function setup(
   options: {
     preferences?: unknown;
     status?: string;
+    provisionalSince?: Date | null;
     verification?: Row | null;
     key?: { provider: string; secret: string; baseUrl: string | null } | null;
     answer?:
@@ -69,6 +70,7 @@ function setup(
     kind: 'FACT',
     scope: 'apps/server',
     status: options.status ?? 'PROPOSED',
+    provisionalSince: options.provisionalSince ?? null,
     moduleIds: ['m1'],
     workspaceId: WORKSPACE,
     workspace: { preferences: options.preferences ?? {} },
@@ -190,7 +192,13 @@ function setup(
     };
   };
 
-  const service = new KnowledgeVerifierService(prisma as unknown as PrismaService, { checkForWrite } as unknown as EntryCitationsService, files as unknown as RepoFileSourceService, moduleRef as unknown as ModuleRef, queue as unknown as Queue,);
+  const service = new KnowledgeVerifierService(
+    prisma as unknown as PrismaService,
+    { checkForWrite } as unknown as EntryCitationsService,
+    files as unknown as RepoFileSourceService,
+    moduleRef as unknown as ModuleRef,
+    queue as unknown as Queue,
+  );
 
   return {
     service,
@@ -320,6 +328,21 @@ describe('the verifier', () => {
 
     await expect(moved.withModel().verify('e1')).resolves.toBe('NOTHING');
     expect(moved.asked).toEqual([]);
+  });
+
+  it('[ENG-184] looks at an entry in use as provisional, which evidence would settle', async () => {
+    const t = setup({
+      holds: true,
+      status: 'STANDING',
+      provisionalSince: new Date('2026-09-30T00:00:00Z'),
+    });
+
+    await expect(t.withModel().verify('e1')).resolves.toBe('FOUND');
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'triageEntry',
+      { entryId: 'e1', trigger: 'VERIFIER' },
+      expect.anything(),
+    );
   });
 
   it('[ENG-224] gives the model tools that read the code and the issues, and keeps each step', async () => {

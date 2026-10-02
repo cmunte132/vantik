@@ -55,6 +55,7 @@ export interface ProofCitationRow {
 export interface ProofRow {
   status: string;
   verifiedAt: Date | null;
+  provisionalSince?: Date | null;
   citations?: ProofCitationRow[] | null;
 }
 
@@ -94,6 +95,10 @@ export const OBSERVED_STALE_MS = 2 * OBSERVED_RECHECK_MS;
  * it has not been checked either, so an entry is grounded only once every
  * citation it has has been read and holds.
  *
+ * An accepted entry that triage put in use as provisional is provisional
+ * until something settles it, whatever its citations say: the judges did not
+ * both find that they support it.
+ *
  * An entry that rests on an outside page, and whose citations all hold, is
  * observed and not grounded: the server read the page on a date, and a page
  * can change with no commit to show it. An observation older than
@@ -103,6 +108,7 @@ export function entryTrust(
   entry: {
     status: string;
     verifiedAt: Date | null;
+    provisionalSince?: Date | null;
     citations?: Array<{
       kind: string;
       checkResult: string | null;
@@ -113,6 +119,10 @@ export function entryTrust(
 ): KnowledgeTrustEnum {
   if (entry.verifiedAt) {
     return KnowledgeTrustEnum.HUMAN_VERIFIED;
+  }
+
+  if (entry.provisionalSince && ACCEPTED.includes(entry.status)) {
+    return KnowledgeTrustEnum.PROVISIONAL;
   }
 
   const citations = entry.citations ?? [];
@@ -214,6 +224,7 @@ const TRUST_WORDS: Record<KnowledgeTrustEnum, string> = {
   [KnowledgeTrustEnum.GROUNDED]: 'grounded',
   [KnowledgeTrustEnum.OBSERVED]: 'observed',
   [KnowledgeTrustEnum.UNGROUNDED]: 'ungrounded',
+  [KnowledgeTrustEnum.PROVISIONAL]: 'provisional, not verified',
 };
 
 /**

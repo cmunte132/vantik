@@ -5,7 +5,9 @@ import { KnowledgeTrustEnum } from '@vantikhq/types';
  *
  * Decided in code, in a fixed order, and never by a model: a person's
  * verification beats a grounded entry, a grounded entry beats an observed
- * one, an observed entry beats an ungrounded one, and within a tier the newer entry wins, because the later of two
+ * one, an observed entry beats an ungrounded one, an ungrounded entry (in use
+ * because a person put it there) beats a provisional one (in use because
+ * triage found nothing against it), and within a tier the newer entry wins, because the later of two
  * claims of the same standing is the likelier to describe the system as it
  * is now. A model only reports that two entries contradict; what follows from
  * it does not depend on how the model phrased its answer.
@@ -16,6 +18,7 @@ const RANK: Record<KnowledgeTrustEnum, number> = {
   [KnowledgeTrustEnum.GROUNDED]: 2,
   [KnowledgeTrustEnum.OBSERVED]: 1,
   [KnowledgeTrustEnum.UNGROUNDED]: 0,
+  [KnowledgeTrustEnum.PROVISIONAL]: -1,
 };
 
 export interface Contender {

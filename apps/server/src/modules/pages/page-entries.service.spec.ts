@@ -52,7 +52,13 @@ interface Options {
   pointsAt?: { id: string; status: PageEntryStatusEnum } | null;
   supersededBy?: { id: string; status?: PageEntryStatusEnum } | null;
   /** What the page already holds, for the duplicate check. */
-  existing?: Array<{ id: string; content: string; status?: string }>;
+  existing?: Array<{
+    id: string;
+    content: string;
+    status?: string;
+    helpfulCount?: number;
+    harmfulCount?: number;
+  }>;
   /** What the near-match search returns, or an error it throws. */
   nearMatches?: Array<{ entryId: string; content: string }> | Error;
   /** The pages queue, when the test wants to see what is queued on it. */
@@ -780,6 +786,24 @@ describe('status transitions', () => {
     expect(data.verifiedByUserId).toBe('human-1');
     expect(data.verifiedAt).toBeInstanceOf(Date);
   });
+
+  it('[ENG-184] settles a provisional entry when a person verifies, keeps or rewrites it', async () => {
+    for (const change of [
+      { verified: true },
+      { status: PageEntryStatusEnum.STANDING },
+      { content: 'Webhooks retry three times.' },
+    ]) {
+      const { service, prisma } = buildService({
+        entryStatus: PageEntryStatusEnum.STANDING,
+        userType: 'User',
+      });
+
+      await service.updateEntry('entry-1', 'human-1', change);
+
+      const { data } = (prisma.pageEntry.update as jest.Mock).mock.calls[0][0];
+      expect(data.provisionalSince).toBeNull();
+    }
+  });
 });
 
 describe('serving and decay', () => {
@@ -796,6 +820,45 @@ describe('serving and decay', () => {
     // number decides what survives the decay pass.
     expect(data.retrievalCount).toEqual({ increment: 1 });
     expect(data.lastServedAt).toBeInstanceOf(Date);
+  });
+
+  it('[ENG-184] settles provisional entries by use: archives the harmful and the unused, promotes the helpful', async () => {
+    const { service, prisma } = buildService({
+      existing: [
+        { id: 'harmful', content: 'harmful', helpfulCount: 1, harmfulCount: 2 },
+        { id: 'helpful', content: 'helpful', helpfulCount: 2, harmfulCount: 0 },
+        { id: 'mixed', content: 'mixed', helpfulCount: 3, harmfulCount: 1 },
+      ],
+    });
+
+    await expect(service.runDecay('workspace-1')).resolves.toMatchObject({
+      archivedProvisional: 1,
+      promotedProvisional: 1,
+    });
+
+    const provisional = (prisma.pageEntry.updateMany as jest.Mock).mock.calls
+      .map(([args]) => args)
+      .filter(({ where }) => where.provisionalSince);
+    const [archive, promote] = provisional;
+
+    expect(archive.where).toMatchObject({
+      status: PageEntryStatusEnum.STANDING,
+      provisionalSince: { not: null },
+      verifiedAt: null,
+      id: { notIn: ['helpful'] },
+      OR: [
+        { id: { in: ['harmful'] } },
+        expect.objectContaining({ createdAt: { lt: expect.any(Date) } }),
+      ],
+    });
+    expect(archive.data).toEqual({
+      status: PageEntryStatusEnum.ARCHIVED,
+      provisionalSince: null,
+    });
+    expect(promote).toMatchObject({
+      where: { id: { in: ['helpful'] } },
+      data: { provisionalSince: null },
+    });
   });
 
   it('[KG-3.1] writes a use row for each entry served, with who it went to and how', async () => {
@@ -1343,9 +1406,12 @@ describe('decay', () => {
   it('[KG-6.5] archives on use and checks, never on outcomes', async () => {
     const { service, prisma } = buildService();
     await service.runDecay('workspace-1');
-    const passes = (prisma.pageEntry.updateMany as jest.Mock).mock.calls.map(
-      ([{ where }]) => JSON.stringify(where),
-    );
+    // The passes over entries something confirms. A provisional entry has
+    // nothing confirming it, so its outcomes are what settle it (ENG-184).
+    const passes = (prisma.pageEntry.updateMany as jest.Mock).mock.calls
+      .map(([{ where }]) => where)
+      .filter((where) => !where.provisionalSince)
+      .map((where) => JSON.stringify(where));
 
     // A harmful signal has the entry checked again, and what the check finds
     // is what counts; the counts themselves archive nothing.

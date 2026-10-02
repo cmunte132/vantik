@@ -79,6 +79,7 @@ export const ACTING_DECISIONS = [
   KnowledgeTriageDecisionType.AUTO_ACCEPT,
   KnowledgeTriageDecisionType.CORROBORATE,
   KnowledgeTriageDecisionType.REJECT,
+  KnowledgeTriageDecisionType.PROVISIONAL,
 ] as const;
 
 export type ActingDecision = (typeof ACTING_DECISIONS)[number];
@@ -93,7 +94,8 @@ export function isActing(
 export function statusLeftBy(
   decision: KnowledgeTriageDecisionType,
 ): PageEntryStatus {
-  return decision === KnowledgeTriageDecisionType.AUTO_ACCEPT
+  return decision === KnowledgeTriageDecisionType.AUTO_ACCEPT ||
+    decision === KnowledgeTriageDecisionType.PROVISIONAL
     ? PageEntryStatus.STANDING
     : PageEntryStatus.ARCHIVED;
 }
@@ -160,7 +162,8 @@ export function triageLabel(
  * The decision a person's verdict says triage should have made, given the
  * one it did make.
  *
- * Keeping the entry as written is what AUTO_ACCEPT does. Taking it out of use
+ * Keeping the entry as written is what AUTO_ACCEPT does, or PROVISIONAL when
+ * that is what triage did: either way it stays in use. Taking it out of use
  * agrees with folding it into what it repeats, or refusing it on a policy,
  * when that is what triage did; otherwise it says the entry needed a person,
  * since triage has no way to drop an entry for being wrong. So does editing
@@ -171,7 +174,10 @@ export function personDecision(
   label: KnowledgeTriageDecisionType,
 ): KnowledgeTriageDecisionType {
   if (verdict === KnowledgeVerdict.ACCEPTED) {
-    return KnowledgeTriageDecisionType.AUTO_ACCEPT;
+    // Keeping a provisional entry in use is what triage did with it.
+    return label === KnowledgeTriageDecisionType.PROVISIONAL
+      ? KnowledgeTriageDecisionType.PROVISIONAL
+      : KnowledgeTriageDecisionType.AUTO_ACCEPT;
   }
 
   if (

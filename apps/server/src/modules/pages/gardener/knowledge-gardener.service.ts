@@ -86,6 +86,7 @@ const DECISION_LABELS: Record<KnowledgeTriageDecisionType, string> = {
   CORROBORATE: 'folding in repeats',
   ESCALATE: 'escalating',
   REJECT: 'refusing facts',
+  PROVISIONAL: 'using facts as provisional',
 };
 
 const REASON_LABELS: Record<PageEntryMaintenanceReason, string> = {
@@ -397,7 +398,10 @@ export default class KnowledgeGardenerService {
         flow.refused += 1;
       } else if (!entry.verifiedAt && decision === 'CORROBORATE') {
         flow.folded += 1;
-      } else if (!entry.verifiedAt && decision === 'AUTO_ACCEPT') {
+      } else if (
+        !entry.verifiedAt &&
+        (decision === 'AUTO_ACCEPT' || decision === 'PROVISIONAL')
+      ) {
         flow.settledByAgents += 1;
       } else {
         flow.decidedByPeople += 1;
@@ -795,6 +799,7 @@ export default class KnowledgeGardenerService {
             pageId: true,
             moduleIds: true,
             verifiedAt: true,
+            provisionalSince: true,
             createdAt: true,
             updatedAt: true,
             supersedesId: true,
@@ -1571,6 +1576,7 @@ function stateAsOf(
   entry: Parameters<typeof retiredTime>[0] & {
     id: string;
     verifiedAt: Date | null;
+    provisionalSince: Date | null;
     createdAt: Date;
     citations: Parameters<typeof entryTrust>[0]['citations'];
   },
@@ -1585,7 +1591,9 @@ function stateAsOf(
   }
 
   const accepted = entry.triageDecisions.find(
-    (decision) => decision.decision === 'AUTO_ACCEPT',
+    (decision) =>
+      decision.decision === 'AUTO_ACCEPT' ||
+      decision.decision === 'PROVISIONAL',
   );
   const acceptedAt =
     entry.verifiedAt ??
@@ -1604,6 +1612,7 @@ function stateAsOf(
       status: ACCEPTED.includes(entry.status) ? entry.status : 'STANDING',
       verifiedAt:
         entry.verifiedAt && entry.verifiedAt <= until ? entry.verifiedAt : null,
+      provisionalSince: entry.provisionalSince,
       citations: entry.citations,
     })
   ) {
@@ -1613,6 +1622,8 @@ function stateAsOf(
       return 'code';
     case KnowledgeTrustEnum.OBSERVED:
       return 'observed';
+    case KnowledgeTrustEnum.PROVISIONAL:
+      return 'provisional';
     default:
       return 'unconfirmed';
   }

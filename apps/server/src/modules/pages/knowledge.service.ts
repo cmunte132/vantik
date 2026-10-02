@@ -116,12 +116,23 @@ const MAX_PACKED_CONVENTIONS = 25;
 /** Candidates asked of the search, so trust can filter and still leave K. */
 const PACK_SEARCH_LIMIT = 20;
 
-/** The trust a relevant entry needs to be packed without a person asking. */
+/**
+ * The trust a relevant entry needs to be packed without a person asking.
+ * A provisional entry is packed too, after every trusted one and at most
+ * `MAX_PACKED_PROVISIONAL` of them, and the agent is told it is not verified.
+ */
 const PACKABLE_TRUST: Array<KnowledgeTrustEnum | null> = [
   KnowledgeTrustEnum.GROUNDED,
   KnowledgeTrustEnum.OBSERVED,
   KnowledgeTrustEnum.HUMAN_VERIFIED,
+  KnowledgeTrustEnum.PROVISIONAL,
 ];
+
+/**
+ * The most provisional entries one pack holds. Enough to pass on what was
+ * learned but not yet proven; few enough that it cannot crowd out what was.
+ */
+export const MAX_PACKED_PROVISIONAL = 2;
 
 /** The columns a packed entry is built from. */
 const PACKED_ENTRY_SELECT = {
@@ -131,6 +142,7 @@ const PACKED_ENTRY_SELECT = {
   kind: true,
   status: true,
   verifiedAt: true,
+  provisionalSince: true,
   createdAt: true,
   moduleIds: true,
   citations: { select: PROOF_CITATION_SELECT },
@@ -226,9 +238,18 @@ export default class KnowledgeService {
     );
 
     const items: KnowledgeSearchHit[] = [];
+    const overLimit = new Set<KnowledgeSearchHit>();
     let estimatedTokens = 0;
 
-    for (const hit of hits) {
+    // Provisional entries after everything else, and only a few of them.
+    const provisional = hits.filter(
+      (hit) => hit.trust === KnowledgeTrustEnum.PROVISIONAL,
+    );
+
+    for (const hit of [
+      ...hits.filter((hit) => hit.trust !== KnowledgeTrustEnum.PROVISIONAL),
+      ...provisional.slice(0, MAX_PACKED_PROVISIONAL),
+    ]) {
       const cost = estimateTokens(hit);
 
       if (estimatedTokens + cost > tokenBudget) {
@@ -238,6 +259,10 @@ export default class KnowledgeService {
       items.push(hit);
       estimatedTokens += cost;
     }
+
+    provisional
+      .slice(MAX_PACKED_PROVISIONAL)
+      .forEach((hit) => overLimit.add(hit));
 
     // Never a knowledge gap. The query here is the task an agent is about to
     // do, or the area it works in, not a question it asked: a pack that finds
@@ -253,7 +278,6 @@ export default class KnowledgeService {
     );
 
     const given = new Set(items);
-    let order = 0;
 
     await this.recordTrace(
       workspaceId,
@@ -276,11 +300,15 @@ export default class KnowledgeService {
               source: 'SEARCH' as const,
               searchRank: index + 1,
               nearness: 'NONE' as const,
-              trust: null,
+              trust: hit.trust ?? null,
               tokens: estimateTokens(hit),
               given: isGiven,
-              order: isGiven ? ++order : null,
-              dropped: isGiven ? null : KnowledgePackDropEnum.BUDGET,
+              order: isGiven ? items.indexOf(hit) + 1 : null,
+              dropped: isGiven
+                ? null
+                : overLimit.has(hit)
+                  ? KnowledgePackDropEnum.PROVISIONAL_LIMIT
+                  : KnowledgePackDropEnum.BUDGET,
             };
           }),
       },
@@ -303,11 +331,14 @@ export default class KnowledgeService {
   /**
    * What a run on this issue is handed: the conventions of the issue's
    * modules, then the few entries most relevant to its title that are
-   * grounded or verified by a person, within a token budget.
+   * grounded or verified by a person, then at most `MAX_PACKED_PROVISIONAL`
+   * relevant provisional ones, within a token budget.
    *
    * Conventions come first and are not held to a trust tier: a person
    * accepted each one as how work is done in that module, and the agent is
-   * told each item's tier either way. The relevant entries are, because
+   * told each item's tier either way. A provisional convention is not pinned:
+   * nobody accepted it, so it reaches a run only when the search finds it
+   * relevant. The relevant entries are, because
    * nobody chose them for this issue; a search did. Everything is read from
    * postgres, trust included, so an entry retracted or no longer grounded
    * since it was indexed is not packed. An index that cannot be reached
@@ -373,6 +404,7 @@ export default class KnowledgeService {
             ...live,
             kind: PageEntryKindEnum.CONVENTION,
             moduleIds: { hasSome: issue.moduleIds },
+            provisionalSince: null,
           },
           orderBy: [
             { verifiedAt: { sort: 'desc', nulls: 'last' } },
@@ -424,20 +456,32 @@ export default class KnowledgeService {
     });
 
     let relevant = 0;
+    let provisional = 0;
+    const isProvisional = (id: string) =>
+      Boolean(byId.get(id)?.provisionalSince);
 
-    ranked.forEach((id) => {
+    // Trusted entries in search order, then provisional ones: a provisional
+    // entry fills what room the trusted ones leave.
+    [
+      ...ranked.filter((id) => !isProvisional(id)),
+      ...ranked.filter(isProvisional),
+    ].forEach((id) => {
       const row = byId.get(id);
       const entry = row ? packedEntry(row) : null;
+      const unverified = entry?.trust === KnowledgeTrustEnum.PROVISIONAL;
       const dropped = !entry
         ? KnowledgePackDropEnum.NOT_LIVE
         : !PACKABLE_TRUST.includes(entry.trust)
           ? KnowledgePackDropEnum.NOT_TRUSTED
           : relevant >= limits.topK
             ? KnowledgePackDropEnum.TOP_K
-            : null;
+            : unverified && provisional >= MAX_PACKED_PROVISIONAL
+              ? KnowledgePackDropEnum.PROVISIONAL_LIMIT
+              : null;
 
       if (!dropped) {
         relevant += 1;
+        provisional += unverified ? 1 : 0;
       }
 
       const candidate: KnowledgePackCandidate = {
@@ -804,6 +848,7 @@ function packedEntry(row: {
   kind: string;
   status: string;
   verifiedAt: Date | null;
+  provisionalSince: Date | null;
   createdAt: Date;
   citations: Parameters<typeof entryProof>[0]['citations'];
 }): PackedEntry {

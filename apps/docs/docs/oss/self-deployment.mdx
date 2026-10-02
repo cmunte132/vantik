@@ -492,11 +492,76 @@ The server pushes the metrics every 60 seconds by default, and
 `OTEL_METRIC_EXPORT_INTERVAL` controls this period. The metrics are cumulative,
 so a longer period costs you resolution, and not data.
 
-Any OpenTelemetry backend works: Grafana Tempo, Grafana Mimir, Honeycomb,
-Jaeger, Sentry, or a local collector that sends the data to several backends.
+Any backend that accepts OTLP works, for example a hosted service, a
+self-hosted store, or a local collector that sends the data to several
+backends.
 
 If you set an endpoint and no data arrives, set `OTEL_LOG_LEVEL=debug`. The
 exporter then shows its own diagnostics, which are silent at the other levels.
+
+### The telemetry contract
+
+This section lists the data that Vantik sends. It is the full interface between
+Vantik and your backend. Vantik uses the names of the OpenTelemetry semantic
+conventions where a convention exists, so a backend that knows the conventions
+shows the data with no setup. A name that starts with `vantik.` has no
+convention.
+
+**Services.** Each signal carries these resource attributes:
+
+| Attribute | Server | Browser |
+| --- | --- | --- |
+| `service.name` | `vantik-server` | `vantik-webapp` |
+| `service.version` | The release version | The build id |
+| `deployment.environment.name` | `NODE_ENV` | `NODE_ENV` of the build |
+| `session.id` | — | A random id for each browser tab |
+
+The browser does not send to your backend directly. It sends OTLP/JSON to
+`POST /v1/telemetry/traces` and `POST /v1/telemetry/logs` on the server, and
+the server sends the data on to your endpoint, with your headers. Thus the
+browser needs no address, no credentials, and no CORS setting. The server sets
+`service.name` to `vantik-webapp` on all the data that it relays, so the
+relay cannot send data that claims to come from the server. When no endpoint is
+set, the webapp does not load its telemetry code, and the relay discards what it
+receives.
+
+**Spans.**
+
+| Span | Kind | Where it comes from |
+| --- | --- | --- |
+| `GET /v1/...` and the other routes | Server | Each API request. The attributes follow the HTTP conventions, and `request.id`, `vantik.workspace_id`, and `vantik.actor_id` identify the request. |
+| `prisma:*`, Redis, and Postgres spans | Client | The queries below a request or a job |
+| `send <queue>` | Producer | A job added to a Bull queue, with `messaging.system=bull` and `messaging.destination.name` |
+| `process <queue>` | Consumer | Each attempt of a job, as a child of the `send` span. `vantik.queue.job` names the job, and `vantik.queue.attempt` counts the attempts. |
+| `chat <model>` | Client | Each model call, with the `gen_ai.*` attributes: the provider, the model, the tokens, and the finish reason. `vantik.llm.purpose` names the feature, and `vantik.llm.role` names the agent role. The span holds no prompt and no answer. |
+| `replicate <Model> <op>` | Consumer | Each change that the server sends to the browsers |
+| `documentLoad`, `documentFetch`, `resourceFetch` | Internal | The load of a page in the browser |
+| `GET`, `POST`, and the other methods | Client | Each API call from the browser. The call carries `traceparent`, so the server span of the call is in the same trace. |
+
+**Metrics.** The server sends these metrics. The browser sends no metrics.
+
+| Metric | What it measures |
+| --- | --- |
+| `http.server.request.duration` | The rate, the errors, and the latency of the requests, for each route |
+| `http.client.request.duration` | The calls from the server to other services, for each host |
+| `nodejs.eventloop.*`, `v8js.*` | The event loop, the garbage collection, and the V8 heap |
+| `process.memory.usage`, `process.cpu.time` | The resident memory and the CPU time of the process |
+| `messaging.process.duration` | The time of each attempt of a job, for each queue and job. A failed attempt has `error.type`. |
+| `vantik.queue.job.wait` | The time from when a job is ready to when a processor starts it |
+| `vantik.queue.jobs` | The jobs in each state (`vantik.queue.state`), for each queue |
+| `gen_ai.client.operation.duration` | The time of each model call |
+| `gen_ai.client.token.usage` | The input and the output tokens of each model call |
+
+**Logs.** The server sends each log line, with the `traceId` and the `spanId` of
+the span that wrote it. The browser sends two kinds of record:
+
+- An error, at severity `ERROR`, with `exception.type`,
+  `exception.message`, and `exception.stacktrace`. `vantik.error.source` tells
+  where the browser caught the error: `window`, `unhandledrejection`, or
+  `route`.
+- A Core Web Vital, as an event named `browser.web_vital`, with
+  `web_vital.name` (`LCP`, `INP`, `CLS`, `FCP`, or `TTFB`), `web_vital.value`,
+  and `web_vital.rating`.
 
 ### A backend in the stack
 
@@ -540,9 +605,11 @@ server and the browser relay both read them.
 
 **Background jobs.** The server does its background work in Bull queues in
 Redis: triage, citation checks, page refreshes, agent runs, and cycles. Each
-attempt of a job is a span named `process <queue>`, and the span is a child of
-the request that added the job. The `vantik.queue.*` metrics give the jobs in
-each state, the duration, and the wait time. Any backend that shows traces and
+addition of a job is a `send <queue>` span, and each attempt of the job is a
+`process <queue>` span below it, so a job is in the trace of the request that
+added it. `messaging.process.duration` gives the duration of the attempts, and
+`vantik.queue.jobs` and `vantik.queue.job.wait` give the jobs in each state and
+the wait time. Any backend that shows traces and
 metrics thus shows the jobs, with no queue dashboard.
 
 ### Health endpoints

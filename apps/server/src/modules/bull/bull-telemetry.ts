@@ -2,6 +2,13 @@
  * Telemetry for the Bull queues: a span for each job, the duration and the
  * wait time of each job, and the number of jobs in each state.
  *
+ * The spans and the duration follow the OpenTelemetry semantic conventions for
+ * messaging, so a backend that knows those conventions shows the queues with
+ * no setup: a `send <queue>` producer span when a job is added, a
+ * `process <queue>` consumer span for each attempt, and the
+ * `messaging.process.duration` histogram. The wait time and the depth have no
+ * convention, so they are `vantik.queue.*` metrics with the same attributes.
+ *
  * Bull has no OpenTelemetry instrumentation, so this module patches two
  * points in Bull itself:
  *
@@ -9,9 +16,10 @@
  *   puts a wrapper around the processor. `@nestjs/bull` calls
  *   `queue.process()` for each `@Process()` method, and `process()` calls
  *   `setHandler()`, so every processor in the server gets the wrapper.
- * - `Job.create` and `Job.createBulk` write a job to Redis. The patch adds the
- *   trace context of the caller to the options of the job. The job span then
- *   becomes a child of the request or the job that added it.
+ * - `Job.create` and `Job.createBulk` write a job to Redis. The patch runs the
+ *   write in a producer span and adds that span's trace context to the options
+ *   of the job. The job span then becomes a child of the request or the job
+ *   that added it.
  *
  * The patches must be in place before Nest starts the processors. The bull
  * module imports this file, so Node runs it when it loads the app module.
@@ -52,6 +60,8 @@ const queues = new Set<Queue.Queue>();
 
 const STATES = ['waiting', 'active', 'delayed', 'failed', 'paused'] as const;
 
+const MESSAGING_SYSTEM = 'bull';
+
 let instruments:
   | {
       jobDuration: Histogram;
@@ -84,7 +94,11 @@ function getInstruments() {
             number
           >;
           for (const state of STATES) {
-            result.observe(counts[state] ?? 0, { queue: queue.name, state });
+            result.observe(counts[state] ?? 0, {
+              'messaging.system': MESSAGING_SYSTEM,
+              'messaging.destination.name': queue.name,
+              'vantik.queue.state': state,
+            });
           }
         } catch {
           // If Redis does not answer, this export has no count for the
@@ -95,7 +109,7 @@ function getInstruments() {
   });
 
   instruments = {
-    jobDuration: meter.createHistogram('vantik.queue.job.duration', {
+    jobDuration: meter.createHistogram('messaging.process.duration', {
       description: 'The time that a processor used for one attempt of a job.',
       unit: 's',
       valueType: ValueType.DOUBLE,
@@ -124,7 +138,12 @@ type Processor = (job: Queue.Job) => Promise<unknown>;
  */
 function traced(queue: Queue.Queue, job: Queue.Job, run: Processor) {
   const name = jobLabel(job.name);
-  const attributes = { queue: queue.name, 'job.name': name };
+  const attributes = {
+    'messaging.system': MESSAGING_SYSTEM,
+    'messaging.operation.name': 'process',
+    'messaging.destination.name': queue.name,
+    'vantik.queue.job': name,
+  };
   const started = Date.now();
   const { jobDuration, jobWait } = getInstruments();
 
@@ -140,16 +159,16 @@ function traced(queue: Queue.Queue, job: Queue.Job, run: Processor) {
       ? propagation.extract(context.active(), carrier)
       : context.active();
 
+  // The convention names the span after the operation and the destination
+  // only. The job name is an attribute, so one queue is one span name.
   return tracer.startActiveSpan(
-    `process ${queue.name}${name === 'default' ? '' : ` ${name}`}`,
+    `process ${queue.name}`,
     {
       kind: SpanKind.CONSUMER,
       attributes: {
-        'messaging.system': 'bull',
+        ...attributes,
         'messaging.operation.type': 'process',
-        'messaging.destination.name': queue.name,
         'messaging.message.id': String(job.id),
-        'vantik.queue.job': name,
         'vantik.queue.attempt': job.attemptsMade + 1,
       },
     },
@@ -157,15 +176,12 @@ function traced(queue: Queue.Queue, job: Queue.Job, run: Processor) {
     async (span) => {
       try {
         const value = await run(job);
-        jobDuration.record((Date.now() - started) / 1000, {
-          ...attributes,
-          outcome: 'completed',
-        });
+        jobDuration.record((Date.now() - started) / 1000, attributes);
         return value;
       } catch (error) {
         jobDuration.record((Date.now() - started) / 1000, {
           ...attributes,
-          outcome: 'failed',
+          'error.type': errorType(error),
         });
         span.recordException(error as Error);
         span.setStatus({
@@ -180,21 +196,74 @@ function traced(queue: Queue.Queue, job: Queue.Job, run: Processor) {
   );
 }
 
+/** The class of an error, which is what the convention puts in error.type. */
+function errorType(error: unknown): string {
+  return error instanceof Error ? error.constructor.name : '_OTHER';
+}
+
 /**
- * This function returns the options of a new job, with the trace context of
- * the caller. It does not change a repeatable job. Bull adds the next
- * repetition from inside the current one, so a parent span would chain every
- * repetition into one trace without an end.
+ * This function returns true if adding a job should make a producer span. It
+ * does not trace a repeatable job: Bull adds the next repetition from inside
+ * the current one, so a parent span would chain every repetition into one
+ * trace without an end. A job added outside any span is not traced either,
+ * because a lone producer span says nothing about who added the job.
  */
-function withTraceContext(opts: Record<string, unknown> | undefined) {
-  if (!opts || opts.repeat || !trace.getSpan(context.active())) {
-    return opts;
-  }
+function shouldTrace(opts: Record<string, unknown> | undefined): boolean {
+  return !!opts && !opts.repeat && !!trace.getSpan(context.active());
+}
+
+/** The options of a new job, with the trace context of the active span. */
+function withTraceContext(opts: Record<string, unknown>) {
   const carrier: Record<string, string> = {};
   propagation.inject(context.active(), carrier);
   return Object.keys(carrier).length
     ? { ...opts, [TRACE_CONTEXT]: carrier }
     : opts;
+}
+
+function queueName(queue: unknown): string {
+  return (queue as { name?: string })?.name ?? 'unknown';
+}
+
+/**
+ * This function runs the write of one or more jobs in a `send <queue>`
+ * producer span. The write itself makes the Redis spans, which become the
+ * children of this span.
+ */
+function sending<T>(
+  queue: unknown,
+  count: number,
+  write: () => Promise<T>,
+): Promise<T> {
+  const name = queueName(queue);
+
+  return tracer.startActiveSpan(
+    `send ${name}`,
+    {
+      kind: SpanKind.PRODUCER,
+      attributes: {
+        'messaging.system': MESSAGING_SYSTEM,
+        'messaging.operation.type': 'send',
+        'messaging.operation.name': 'send',
+        'messaging.destination.name': name,
+        ...(count > 1 ? { 'messaging.batch.message_count': count } : {}),
+      },
+    },
+    async (span) => {
+      try {
+        return await write();
+      } catch (error) {
+        span.recordException(error as Error);
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: (error as Error)?.message,
+        });
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
+  );
 }
 
 let patched = false;
@@ -226,7 +295,12 @@ export function patchBull(): void {
     data: unknown,
     opts?: Record<string, unknown>,
   ) {
-    return create.call(this, queue, name, data, withTraceContext(opts));
+    if (!shouldTrace(opts)) {
+      return create.call(this, queue, name, data, opts);
+    }
+    return sending(queue, 1, () =>
+      create.call(this, queue, name, data, withTraceContext(opts!)),
+    );
   };
 
   const createBulk = Job.createBulk;
@@ -234,10 +308,19 @@ export function patchBull(): void {
     queue: unknown,
     jobs: Array<{ opts?: Record<string, unknown> }>,
   ) {
-    return createBulk.call(
-      this,
-      queue,
-      jobs.map((job) => ({ ...job, opts: withTraceContext(job.opts) })),
+    if (!trace.getSpan(context.active())) {
+      return createBulk.call(this, queue, jobs);
+    }
+    return sending(queue, jobs.length, () =>
+      createBulk.call(
+        this,
+        queue,
+        jobs.map((job) =>
+          shouldTrace(job.opts)
+            ? { ...job, opts: withTraceContext(job.opts!) }
+            : job,
+        ),
+      ),
     );
   };
 }

@@ -1,4 +1,4 @@
-import { context, metrics, trace } from '@opentelemetry/api';
+import { context, metrics, SpanKind, trace } from '@opentelemetry/api';
 import { metrics as sdkMetrics, node, tracing } from '@opentelemetry/sdk-node';
 import Queue from 'bull';
 
@@ -84,7 +84,25 @@ describe('bull telemetry', () => {
     const [span] = spans.getFinishedSpans();
     expect(span.name).toBe('process notifications');
     expect(span.attributes['messaging.destination.name']).toBe('notifications');
+    expect(span.attributes['messaging.operation.name']).toBe('process');
     expect(span.attributes['vantik.queue.attempt']).toBe(1);
+  });
+
+  // The messaging convention names the span after the operation and the queue
+  // only, so the job name must not leak into it.
+  it('keeps a named job in an attribute, not in the span name', async () => {
+    const queue = fakeQueue('pages');
+    (
+      Queue.prototype as unknown as {
+        setHandler(name: string, handler: unknown): void;
+      }
+    ).setHandler.call(queue, 'refresh', async () => 'ok');
+
+    await queue.handlers['refresh'](job({ name: 'refresh' }));
+
+    const [span] = spans.getFinishedSpans();
+    expect(span.name).toBe('process pages');
+    expect(span.attributes['vantik.queue.job']).toBe('refresh');
   });
 
   it('marks the span as an error and rethrows when the job fails', async () => {
@@ -99,43 +117,56 @@ describe('bull telemetry', () => {
     expect(span.events[0].name).toBe('exception');
   });
 
-  it('records duration by outcome, wait time and queue depth', async () => {
+  it('records duration, wait time and queue depth', async () => {
     const run = register(fakeQueue('cycles'), async () => 'ok');
     await run(job());
+    const failing = register(fakeQueue('cycles-failing'), async () => {
+      throw new TypeError('bad');
+    });
+    await expect(failing(job())).rejects.toThrow('bad');
 
     const all = await collect();
     const duration = all.find(
-      (m) => m.descriptor.name === 'vantik.queue.job.duration',
+      (m) => m.descriptor.name === 'messaging.process.duration',
     );
-    expect(
-      duration?.dataPoints.some(
-        (p) =>
-          p.attributes.queue === 'cycles' &&
-          p.attributes.outcome === 'completed',
-      ),
-    ).toBe(true);
+    const ok = duration?.dataPoints.find(
+      (p) => p.attributes['messaging.destination.name'] === 'cycles',
+    );
+    expect(ok?.attributes).toEqual({
+      'messaging.system': 'bull',
+      'messaging.operation.name': 'process',
+      'messaging.destination.name': 'cycles',
+      'vantik.queue.job': 'default',
+    });
+    const failed = duration?.dataPoints.find(
+      (p) => p.attributes['messaging.destination.name'] === 'cycles-failing',
+    );
+    expect(failed?.attributes['error.type']).toBe('TypeError');
 
     const wait = all.find((m) => m.descriptor.name === 'vantik.queue.job.wait');
     const waitPoint = wait?.dataPoints.find(
-      (p) => p.attributes.queue === 'cycles',
+      (p) => p.attributes['messaging.destination.name'] === 'cycles',
     );
     expect((waitPoint?.value as { sum: number }).sum).toBeGreaterThan(1);
 
     const depth = all.find((m) => m.descriptor.name === 'vantik.queue.jobs');
     const waiting = depth?.dataPoints.find(
       (p) =>
-        p.attributes.queue === 'cycles' && p.attributes.state === 'waiting',
+        p.attributes['messaging.destination.name'] === 'cycles' &&
+        p.attributes['vantik.queue.state'] === 'waiting',
     );
     expect(waiting?.value).toBe(3);
     expect(
-      depth?.dataPoints.some((p) => p.attributes.state === 'completed'),
+      depth?.dataPoints.some(
+        (p) => p.attributes['vantik.queue.state'] === 'completed',
+      ),
     ).toBe(false);
   });
 
   it('carries the trace of the caller into the job, and back out of it', async () => {
     const tracer = trace.getTracer('test');
     await tracer.startActiveSpan('POST /issues', async (request) => {
-      await Job.create({}, 'name', {}, { attempts: 1 });
+      await Job.create({ name: 'issues' }, 'name', {}, { attempts: 1 });
       request.end();
     });
 
@@ -150,7 +181,11 @@ describe('bull telemetry', () => {
 
     const finished = spans.getFinishedSpans();
     const parent = finished.find((s) => s.name === 'POST /issues')!;
+    const send = finished.find((s) => s.name === 'send issues')!;
     const child = finished.find((s) => s.name === 'process issues')!;
+    expect(send.kind).toBe(SpanKind.PRODUCER);
+    expect(send.parentSpanContext?.spanId).toBe(parent.spanContext().spanId);
+    expect(child.parentSpanContext?.spanId).toBe(send.spanContext().spanId);
     expect(child.spanContext().traceId).toBe(parent.spanContext().traceId);
   });
 
@@ -168,6 +203,7 @@ describe('bull telemetry', () => {
 
     expect(create.mock.calls[0][3]).toBe(repeat);
     expect(create.mock.calls[1][3]).toEqual({ attempts: 2 });
+    expect(spans.getFinishedSpans().map((s) => s.name)).toEqual(['cron']);
   });
 
   it('adds the trace context to each job of a bulk add', async () => {
@@ -181,5 +217,24 @@ describe('bull telemetry', () => {
     }>;
     expect(jobs.every((j) => j.opts.traceContext)).toBe(true);
     expect(jobs[1].opts.lifo).toBe(true);
+
+    const send = spans
+      .getFinishedSpans()
+      .find((s) => s.name.startsWith('send'));
+    expect(send?.attributes['messaging.batch.message_count']).toBe(2);
+  });
+
+  it('marks the producer span as an error when the write fails', async () => {
+    create.mockRejectedValueOnce(new Error('redis down'));
+
+    await trace.getTracer('test').startActiveSpan('add', async (span) => {
+      await expect(
+        Job.create({ name: 'mail' }, 'name', {}, {}),
+      ).rejects.toThrow('redis down');
+      span.end();
+    });
+
+    const send = spans.getFinishedSpans().find((s) => s.name === 'send mail');
+    expect(send?.status.code).toBe(2);
   });
 });

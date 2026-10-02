@@ -35,7 +35,7 @@ function serialiseError(error: unknown): SerialisedError | undefined {
  * winston instrumentation in the OTel auto set appends a second transport when
  * an OTLP endpoint is configured, and it builds its attributes from the record's
  * own fields — so anything conjured up inside the printf formatter is invisible
- * to it. Logs reached Grafana with no workspace, request or operation to filter
+ * to it. Logs reached the OTLP backend with no workspace, request or operation to filter
  * on, which is most of what makes a log line worth having.
  *
  * Enriching here instead means both sinks see the same fields. `printLine` keeps

@@ -498,49 +498,52 @@ Jaeger, Sentry, or a local collector that sends the data to several backends.
 If you set an endpoint and no data arrives, set `OTEL_LOG_LEVEL=debug`. The
 exporter then shows its own diagnostics, which are silent at the other levels.
 
-### A local Grafana
+### A backend in the stack
 
-You do not need your own backend to read this data. An overlay file gives you
-Grafana, Prometheus, Tempo, and an OTel collector in one container. The
-datasources are connected, and a Vantik dashboard is ready:
+Vantik includes no observability backend, and it prefers none. To run a
+backend next to Vantik, write a `docker-compose.override.yaml` file at the root
+of the repository. Docker Compose and podman-compose read this file
+automatically. In the file, set `OTEL_EXPORTER_OTLP_ENDPOINT` on the server, and
+add the service of your backend:
 
-```bash
-docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d
+```yaml
+# docker-compose.override.yaml
+services:
+  server:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
+      # Optional. The default is 60 seconds, which makes you wait one minute
+      # to see a metric change when you test an endpoint by hand.
+      OTEL_METRIC_EXPORT_INTERVAL: 5000
+  collector:
+    image: otel/opentelemetry-collector-contrib
+    volumes:
+      - ./observability/collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    networks:
+      - vantik
 ```
 
-Grafana is on [http://localhost:3002](http://localhost:3002), with anonymous
-admin access. For that reason, every port of the overlay is bound to
-`127.0.0.1`. The overlay sets `OTEL_EXPORTER_OTLP_ENDPOINT` on the server for
-you. It also lowers `OTEL_METRIC_EXPORT_INTERVAL` to 5 seconds, because the
-default of 60 seconds makes you wait one minute to see a panel move when you
-test an endpoint by hand.
+The repository ignores `docker-compose.override.yaml` and the `observability/`
+directory. Thus, your dashboards and the configuration of your backend stay
+yours, and you can change to a different backend without a change to a tracked
+file. A backend that takes OTLP directly needs no collector: point the endpoint
+at the backend.
 
-The **Vantik → Vantik Server** dashboard covers the rate, the errors, and the
-latency of the requests, for the whole server and for each route. It also covers
-the latency of the outbound call to each dependency, and the health of the Node
-runtime. The traces are in Explore → Tempo. A search for
-`{span.http.route="/some/route"}` takes you from a slow route to the Prisma and
-Redis calls below it.
+Bind the ports of a local backend to `127.0.0.1`. Many development images have
+no authentication.
 
-The logs arrive in Loki over the same connection. A slow trace and its log lines
-are therefore two clicks apart, in both directions. No service reads the
-containers to make this work. See [Logs](#logs) above.
+A backend that wants a different URL for each signal, for example a URL that
+holds an organisation in its path, takes `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`,
+`OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, and `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` as
+full URLs. These variables come from the OpenTelemetry specification, and the
+server and the browser relay both read them.
 
-The overlay also starts Bull Board on
-[http://localhost:3003](http://localhost:3003). The server does its background
-work in Bull queues in Redis: triage, citation checks, page refreshes, agent
-runs, and cycles. Bull Board shows the waiting, active, delayed, and failed jobs
-of each queue. For a failed job, it shows the error, the stack trace, and the
-payload, and you can retry the job. Most jobs set `removeOnComplete`, so Bull
-deletes a job when it completes, and the dashboard does not show it. Bull Board
-has no login, and it can delete jobs. Its port is bound to `127.0.0.1` for that
-reason.
-
-Do not use this overlay in production. The upstream image is for development and
-for a demonstration. It has no authentication, no policy
-for retention, and all four components in one container. For a real deployment,
-point `OTEL_EXPORTER_OTLP_ENDPOINT` at your own collector. Nothing in the app
-changes.
+**Background jobs.** The server does its background work in Bull queues in
+Redis: triage, citation checks, page refreshes, agent runs, and cycles. Each
+attempt of a job is a span named `process <queue>`, and the span is a child of
+the request that added the job. The `vantik.queue.*` metrics give the jobs in
+each state, the duration, and the wait time. Any backend that shows traces and
+metrics thus shows the jobs, with no queue dashboard.
 
 ### Health endpoints
 

@@ -20,3 +20,9 @@ dist
 
 # Local attachment storage for a dev server (LOCAL_STORAGE_PATH)
 .attachments/
+
+# Your own additions to the stack, such as an observability backend. Compose
+# loads docker-compose.override.yaml by itself, and observability/ holds the
+# files it mounts. See "Observability" in README.md.
+docker-compose.override.yaml
+/observability/

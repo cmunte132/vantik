@@ -273,60 +273,46 @@ are refused, and the Agents page says why.
 
 ### Observability
 
-The server has OpenTelemetry instrumentation, but it exports no data until you
-give it an endpoint. To get the metrics and the traces in a local Grafana with a
-dashboard, add the observability overlay:
+Vantik sends OpenTelemetry data, and it uses no other format. It does not
+select a backend for you. The server sends no data until you give it an OTLP
+endpoint. When you set the endpoint, the server sends its traces, metrics, and
+logs to it. The browser sends its traces, errors, and Web Vitals to the server,
+and the server sends them to the same endpoint. Thus, one setting controls all
+of the data, and any backend that accepts OTLP can receive it.
 
-```bash
-docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d
+Put your backend in a `docker-compose.override.yaml` file at the root of the
+repository. Compose reads this file automatically, and `.gitignore` lists it,
+so your choice of backend stays out of the repository. Put the files that your
+backend mounts, for example dashboards, in `observability/`. That directory is
+also in `.gitignore`. This example sends the data to a collector that runs in
+the stack:
+
+```yaml
+# docker-compose.override.yaml
+services:
+  server:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
+  collector:
+    image: otel/opentelemetry-collector-contrib
+    volumes:
+      - ./observability/collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    networks:
+      - vantik
 ```
 
-To rebuild the application and Bull Board from this checkout, use the same overlay:
+To use a different backend, change the override file. You do not change any
+tracked file. `pnpm stack:rebuild` and `docker compose up -d` use the override
+file without more configuration.
 
-```bash
-COMPOSE_FILE=docker-compose.yaml:docker-compose.observability.yaml \
-  pnpm stack:rebuild server webapp bull-board
-```
-
-The rebuild script stops the stack, builds one image at a time, and starts the stack again.
-
-Grafana is on [localhost:3002](http://localhost:3002) and needs no login. The
-overlay includes Prometheus, Tempo, and Loki. These all work with no more setup:
-the rate, the errors, and the latency of the requests, the health of the Node
-event loop and of the heap, the request traces, and the logs. Every log line
-holds its `traceId`, so you can go from a slow trace to the log lines of that
-trace, and back again. The logs use the same OTLP connection as the other data.
-No service reads your containers directly.
-
-The dashboard also shows these items:
-
-- The memory of the whole process, with the V8 heap and the native part, and
-  the CPU time.
-- The Bull queues: the jobs in each state, the duration and the wait time of
-  each job, and the failures. Each job has a span in Tempo. The span is a child
-  of the request that added the job.
-- The model calls: the calls for each feature, the duration for each model,
-  the tokens, and the failures. Each call has a span in Tempo, with the HTTP
-  calls to the model as its children.
+If you run the apps on the host, set `OTEL_EXPORTER_OTLP_ENDPOINT` in `.env`
+to an address that the host can reach, for example `http://localhost:4318`.
 
 The server does not send a trace for a health check, because the traces of the
-probes hide the real requests.
+probes hide the real requests. Each background job and each model call has a
+span, so a backend that shows traces also shows the jobs and the model calls.
 
-The overlay also starts Bull Board on [localhost:3003](http://localhost:3003).
-It shows the background jobs of the server for each queue, and the error of
-each failed job. Bull deletes most jobs when they complete, so the dashboard
-does not show a job after it completes.
-
-If you run the apps on the host, start the observability stack together with the
-service containers. Then set the exporter to the published port, and not to the
-container:
-
-```bash
-docker compose -f docker-compose.yaml -f docker-compose.observability.yaml up -d postgres redis lgtm
-echo 'OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318' >> .env
-```
-
-To read what the server collects, and what the maintainer left out, see
+To read what Vantik sends, see
 [Observability](apps/docs/docs/oss/self-deployment.mdx).
 
 ## Documentation

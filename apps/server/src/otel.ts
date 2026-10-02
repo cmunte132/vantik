@@ -89,7 +89,8 @@ function isHealthCheck(path: unknown): boolean {
  * server span, and the parent-based sampler then drops its children too.
  *
  * The http instrumentation still records the request duration metric for a
- * probe. The dashboard removes the health routes from its queries.
+ * probe and for a relayed export. A request panel should leave out `/`,
+ * `/health/*` and `/v1/telemetry/*`.
  */
 export class HealthCheckSampler implements tracing.Sampler {
   shouldSample(

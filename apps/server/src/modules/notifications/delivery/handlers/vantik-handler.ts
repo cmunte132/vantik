@@ -6,6 +6,7 @@ import {
   NotificationActionType,
   NotificationActionTypeEnum,
   NotificationEventFrom,
+  wantsNotification,
 } from '@vantikhq/types';
 
 import { getNotificationCreateData } from '../utils';
@@ -44,9 +45,21 @@ export const vantikHandler = async (
         );
 
       if (subscriberIds.length > 0 && type) {
-        const notificationPromises = subscriberIds
-          .filter((userId) => userId !== createdById)
-          .map(async (userId) => {
+        // Only people who still want this kind of notification in the inbox.
+        const recipients = await prisma.user.findMany({
+          where: {
+            id: {
+              in: subscriberIds.filter((userId) => userId !== createdById),
+            },
+          },
+          select: { id: true, notificationPreferences: true },
+        });
+
+        const notificationPromises = recipients
+          .filter((user) =>
+            wantsNotification(user.notificationPreferences, type, 'inApp'),
+          )
+          .map(async ({ id: userId }) => {
             let existingNotification: Notification;
             if (
               type === NotificationActionType.IssueStatusChanged ||

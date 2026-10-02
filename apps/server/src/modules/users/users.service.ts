@@ -10,14 +10,17 @@ import {
   CodeDtoWithWorkspace,
   DEFAULT_AGENT_SCOPES,
   GetUsersDto,
+  NotificationCategory,
+  NotificationCategoryPreference,
+  NotificationPreferences,
   PublicUser,
   RoleEnum,
   User,
   UserTypeEnum,
+  sanitizeNotificationPreferences,
 } from '@vantikhq/types';
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
-import { AuthService, sha256Hex } from 'modules/auth/auth.service';
 
 import { generatePersonalAccessToken } from 'common/authentication';
 import { PatPrincipal, resolvePatPrincipal } from 'common/pat-session';
@@ -28,6 +31,7 @@ import {
 } from 'common/workspace-access';
 
 import { agentSettings } from 'modules/auth/agent-scope';
+import { AuthService, sha256Hex } from 'modules/auth/auth.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import {
@@ -125,12 +129,20 @@ export class UsersService {
     return user ? userSerializer(user) : null;
   }
   async updateUser(id: string, updateData: UpdateUserBody) {
+    const { notificationPreferences, ...rest } = updateData;
+
     const user = await this.prisma.user.update({
       where: {
         id,
       },
       data: {
-        ...updateData,
+        ...rest,
+        ...(notificationPreferences && {
+          notificationPreferences: await this.mergeNotificationPreferences(
+            id,
+            notificationPreferences,
+          ),
+        }),
       },
       include: {
         usersOnWorkspaces: {
@@ -141,6 +153,30 @@ export class UsersService {
       },
     });
     return userSerializer(user);
+  }
+
+  /**
+   * Lays the categories sent over the stored ones, channel by channel, so
+   * turning off comment email does not reset somebody's other choices.
+   */
+  private async mergeNotificationPreferences(
+    id: string,
+    update: NotificationPreferences,
+  ): Promise<NotificationPreferences> {
+    const current = await this.prisma.user.findUnique({
+      where: { id },
+      select: { notificationPreferences: true },
+    });
+    const stored =
+      sanitizeNotificationPreferences(current?.notificationPreferences) ?? {};
+
+    const merged: NotificationPreferences = { ...stored };
+    for (const [category, forCategory] of Object.entries(
+      sanitizeNotificationPreferences(update) ?? {},
+    ) as Array<[NotificationCategory, NotificationCategoryPreference]>) {
+      merged[category] = { ...stored[category], ...forCategory };
+    }
+    return merged;
   }
 
   async getInvitesForUser(email: string) {
@@ -872,7 +908,12 @@ export class UsersService {
    * used to take the database password, so on an install left with the
    * documented default anyone signed in could become anyone.
    */
-  async impersonate(key: string, userId: string, res: Response, _req?: unknown) {
+  async impersonate(
+    key: string,
+    userId: string,
+    res: Response,
+    _req?: unknown,
+  ) {
     const configured = process.env.IMPERSONATION_KEY;
     if (!configured || !sameSecret(key, configured)) {
       throw new NotFoundException();

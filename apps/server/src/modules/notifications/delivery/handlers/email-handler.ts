@@ -6,6 +6,7 @@ import {
   NotificationActionType,
   User,
   Workspace,
+  wantsNotification,
 } from '@vantikhq/types';
 import nodemailer from 'nodemailer';
 
@@ -81,10 +82,20 @@ export const emailHandler = async (
         notificationData,
       );
 
-      if (unassignedData) {
-        const user = await prisma.user.findUnique({
+      const unassignedUser =
+        unassignedData &&
+        (await prisma.user.findUnique({
           where: { id: unassignedData.fromAssigneeId },
-        });
+        }));
+
+      if (
+        unassignedUser &&
+        wantsNotification(
+          unassignedUser.notificationPreferences,
+          NotificationActionType.IssueUnAssigned,
+          'email',
+        )
+      ) {
         const { url: issueUrl, identifier: issueIdentifier } =
           getIssueIdentifier(unassignedData.issue, workspace);
 
@@ -98,7 +109,7 @@ export const emailHandler = async (
         };
 
         mailService.sendMail({
-          to: user.email,
+          to: unassignedUser.email,
           subject: `${createdBy.fullname} unassigned an issue from you: [${templateData.issueNumber}]`,
           html: generateEmailTemplate(templateData),
         });
@@ -112,12 +123,17 @@ export const emailHandler = async (
         (userId) => userId !== createdById,
       );
 
-      // Fetch all users in one query
-      const users = await prisma.user.findMany({
-        where: {
-          id: { in: relevantSubscribers },
-        },
-      });
+      // Fetch all users in one query, then drop anyone who turned this kind
+      // of email off.
+      const users = (
+        await prisma.user.findMany({
+          where: {
+            id: { in: relevantSubscribers },
+          },
+        })
+      ).filter((user) =>
+        wantsNotification(user.notificationPreferences, type, 'email'),
+      );
 
       // Send notifications in parallel
       await Promise.all(

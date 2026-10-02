@@ -44,6 +44,10 @@ export const ACCOUNT_LINKS: LinkItem[] = [
     href: 'preferences',
   },
   {
+    title: 'Notifications',
+    href: 'notifications',
+  },
+  {
     title: 'API',
     href: 'api',
   },

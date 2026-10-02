@@ -1,4 +1,5 @@
 import { API } from './api';
+import { Notifications } from './notifications';
 import { Preferences } from './preferences';
 import { Profile } from './profile';
 import { Security } from './security';
@@ -6,6 +7,7 @@ import { Security } from './security';
 export const SECTION_COMPONENTS = {
   profile: Profile,
   preferences: Preferences,
+  notifications: Notifications,
   security: Security,
   api: API,
 };
@@ -13,6 +15,7 @@ export const SECTION_COMPONENTS = {
 export const SECTION_TITLES = {
   profile: 'Profile',
   preferences: 'Preferences',
+  notifications: 'Notifications',
   security: 'Security',
   api: 'Api',
 };

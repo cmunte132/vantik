@@ -4,7 +4,11 @@ import {
   AgentOwnership,
   AgentScope,
   Invite,
+  NOTIFICATION_CATEGORIES,
+  NOTIFICATION_CHANNELS,
+  NotificationPreferences,
   User,
+  sanitizeNotificationPreferences,
 } from '@vantikhq/types';
 import {
   IsArray,
@@ -12,7 +16,30 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  ValidateBy,
 } from 'class-validator';
+
+/**
+ * Only known categories, only known channels, only booleans. Anything else is
+ * a client bug, and storing it would leave keys in the column nothing reads.
+ */
+function isNotificationPreferences(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  return Object.entries(value).every(
+    ([category, forCategory]) =>
+      (NOTIFICATION_CATEGORIES as readonly string[]).includes(category) &&
+      !!forCategory &&
+      typeof forCategory === 'object' &&
+      !Array.isArray(forCategory) &&
+      Object.entries(forCategory).every(
+        ([channel, setting]) =>
+          (NOTIFICATION_CHANNELS as readonly string[]).includes(channel) &&
+          typeof setting === 'boolean',
+      ),
+  );
+}
 
 export class UserIdParams {
   @IsString()
@@ -31,6 +58,21 @@ export class UpdateUserBody {
   @IsOptional()
   @IsBoolean()
   hideEmail?: boolean;
+
+  /**
+   * A partial update: the categories and channels sent are merged over the
+   * stored ones, so a single switch can be saved on its own.
+   */
+  @IsOptional()
+  @ValidateBy({
+    name: 'isNotificationPreferences',
+    validator: {
+      validate: isNotificationPreferences,
+      defaultMessage: () =>
+        `notificationPreferences must map ${NOTIFICATION_CATEGORIES.join(', ')} to { inApp?: boolean, email?: boolean }`,
+    },
+  })
+  notificationPreferences?: NotificationPreferences;
 }
 
 export class CreateAgentDto {
@@ -97,6 +139,8 @@ export function userSerializer(user: User) {
     initialSetupComplete: user.initialSetupComplete,
     anonymousDataCollection: user.anonymousDataCollection,
     hideEmail: user.hideEmail,
+    notificationPreferences:
+      sanitizeNotificationPreferences(user.notificationPreferences) ?? {},
 
     workspaces: user.usersOnWorkspaces.map((uWorkspace) => ({
       ...uWorkspace.workspace,

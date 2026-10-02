@@ -25,6 +25,7 @@ import {
   NotificationActionTypeEnum,
   NotificationData,
   NotificationEventFrom,
+  wantsNotification,
 } from '@vantikhq/types';
 import TurndownService from 'turndown';
 
@@ -262,6 +263,20 @@ async function createUnassignedNotification(
 ) {
   const { issueId, fromAssigneeId, sourceMetadata, workspaceId } =
     notificationData;
+
+  const fromAssignee = await prisma.user.findUnique({
+    where: { id: fromAssigneeId },
+    select: { notificationPreferences: true },
+  });
+  if (
+    !wantsNotification(
+      fromAssignee?.notificationPreferences,
+      NotificationActionType.IssueUnAssigned,
+      'inApp',
+    )
+  ) {
+    return;
+  }
 
   await prisma.notification.create({
     data: {

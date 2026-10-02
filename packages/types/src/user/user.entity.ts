@@ -19,6 +19,12 @@ export class User {
   anonymousDataCollection: boolean;
   /** Keep the email address out of the app's navigation. */
   hideEmail: boolean;
+  /**
+   * Which notifications reach this person, and where. The raw JSON column, so
+   * read it through `wantsNotification` or `sanitizeNotificationPreferences`
+   * rather than trusting its shape.
+   */
+  notificationPreferences: unknown;
   usersOnWorkspaces?: UsersOnWorkspaces[];
   template?: Template[];
   createdBy?: Issue[];

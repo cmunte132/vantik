@@ -2024,6 +2024,11 @@ model User {
   /// people share their screen, and not everyone wants the address on show.
   hideEmail Boolean @default(false)
 
+  /// Which notifications reach this person, and where: category → { inApp,
+  /// email }. Sparse; an absent category or channel is on. Shape and reader
+  /// live in `@vantikhq/types` (notification-preferences.ts).
+  notificationPreferences Json @default("{}")
+
   image String?
 
   usersOnWorkspaces   UsersOnWorkspaces[]

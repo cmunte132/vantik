@@ -1,4 +1,4 @@
-import type { Role, UserType } from '@vantikhq/types';
+import type { NotificationPreferences, Role, UserType } from '@vantikhq/types';
 
 interface Workspace {
   name: string;
@@ -31,4 +31,6 @@ export interface User {
   image?: string;
   /** Keep the email address out of the app's navigation. */
   hideEmail?: boolean;
+  /** Which notifications reach this person, and where. Absent keys are on. */
+  notificationPreferences?: NotificationPreferences;
 }

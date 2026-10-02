@@ -134,9 +134,9 @@ services:
     healthcheck:
       # Readiness, not liveness: the webapp waits on this, and it must not
       # start against a server whose database or search index is unreachable.
-      # /health/ready returns 503 until every dependency answers, so wget's
-      # non-zero exit on a 503 is the signal.
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health/ready | grep -q '\"status\":\"ready\"'"]
+      # /health/ready returns 503 until every dependency answers. The check
+      # uses node, because the server image has no wget or curl.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health/ready').then((r) => r.json()).then((b) => process.exit(b.status === 'ready' ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 30

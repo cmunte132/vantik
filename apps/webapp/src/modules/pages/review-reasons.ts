@@ -22,7 +22,7 @@ export const REASON_LABELS: Record<KnowledgeReviewReasonEnum, string> = {
   [KnowledgeReviewReasonEnum.PIN_REQUEST]: 'A convention',
   [KnowledgeReviewReasonEnum.SUPERSEDE_REQUEST]: 'Corrects a fact not in use',
   [KnowledgeReviewReasonEnum.BROAD_SCOPE]: 'Applies widely',
-  [KnowledgeReviewReasonEnum.JUDGES_DISAGREE]: 'The checks disagreed',
+  [KnowledgeReviewReasonEnum.JUDGES_DISAGREE]: 'The two checks did not agree',
   [KnowledgeReviewReasonEnum.NO_LLM]: 'Could not be checked',
   [KnowledgeReviewReasonEnum.EXTERNAL_INPUT]: 'Rests on outside text',
   [KnowledgeReviewReasonEnum.UNKNOWN_SOURCE]:
@@ -30,6 +30,8 @@ export const REASON_LABELS: Record<KnowledgeReviewReasonEnum, string> = {
   [KnowledgeReviewReasonEnum.HARMFUL_SIGNAL]: 'Runs went wrong with it',
   [KnowledgeReviewReasonEnum.AUDIT]: 'Audit',
   [KnowledgeReviewReasonEnum.LOW_AGREEMENT]: 'Triage is holding back',
+  [KnowledgeReviewReasonEnum.EVIDENCE_DISPUTED]:
+    'One check read its source as saying otherwise',
   [KnowledgeReviewReasonEnum.CITATION_CONTRADICTED]: 'The code now disagrees',
   [KnowledgeReviewReasonEnum.CITATION_MISSING]: 'Its cited file is gone',
   [KnowledgeReviewReasonEnum.CITATION_UNJUDGED]: 'Its cited code changed',

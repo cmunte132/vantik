@@ -43,6 +43,8 @@ export enum KnowledgeReviewReasonEnum {
   HARMFUL_SIGNAL = 'HARMFUL_SIGNAL',
   AUDIT = 'AUDIT',
   LOW_AGREEMENT = 'LOW_AGREEMENT',
+  /** One judgment found the entry's own evidence says otherwise; the other did not. */
+  EVIDENCE_DISPUTED = 'EVIDENCE_DISPUTED',
   /**
    * The code now contradicts an entry the gardener asks about rather than
    * disputing: a person verified it, its page is locked, or a person put it

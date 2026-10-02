@@ -3,6 +3,7 @@ import {
   KnowledgeInboxChoiceEnum,
   KnowledgeInboxKindEnum,
   RoleEnum,
+  type KnowledgeInboxCheck,
   type KnowledgeInboxDetail,
   type KnowledgeInboxItem,
   type KnowledgeInboxView,
@@ -562,6 +563,8 @@ const Detail = observer(
 
             <Subject data={data} nameOf={nameOf} onOpen={setOpened} />
 
+            {!isDone && <Checks checks={data.checks ?? []} />}
+
             {!isDone && item.kind === KnowledgeInboxKindEnum.GAP && (
               <AnswerGap
                 query={item.gap?.query ?? ''}
@@ -615,6 +618,70 @@ const Detail = observer(
     );
   },
 );
+
+/** What each check said, in the words a person weighs, with its own reason. */
+const VERDICTS: Record<
+  NonNullable<KnowledgeInboxCheck['verdict']> | 'unread',
+  { label: string; dot: string }
+> = {
+  accept: {
+    label: 'Its source confirms it',
+    dot: 'bg-[oklch(64.93%_0.107_154)]',
+  },
+  escalate: {
+    label: 'Its source does not settle it',
+    dot: 'bg-[oklch(70%_0_0)]',
+  },
+  contradicted: {
+    label: 'Its source says otherwise',
+    dot: 'bg-[oklch(61.34%_0.162_23.58)]',
+  },
+  unread: {
+    label: 'Gave no answer that could be read',
+    dot: 'bg-[oklch(70%_0_0)]',
+  },
+};
+
+/**
+ * What the two checks of its last triage said. A model's reason is what a
+ * person needs to judge whether the check was right, for example when it
+ * read the problem an issue describes as how things are now.
+ */
+function Checks({ checks }: { checks: KnowledgeInboxCheck[] }) {
+  if (!checks.length) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-2 max-w-[560px]">
+      <span className="text-xs font-semibold text-foreground/80">
+        What the checks said
+      </span>
+      {checks.map((check, index) => {
+        const verdict = VERDICTS[check.verdict ?? 'unread'];
+
+        return (
+          <div key={index} className="flex gap-2.5">
+            <span
+              className={cn(
+                'mt-[7px] size-[7px] shrink-0 rounded-full',
+                verdict.dot,
+              )}
+            />
+            <div className="flex flex-col">
+              <span className="text-sm">{verdict.label}</span>
+              {check.reason && (
+                <span className="text-xs text-muted-foreground leading-normal">
+                  {check.reason}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** The fact, the facts it contradicts, or the rewrite, as deciding needs them. */
 function Subject({

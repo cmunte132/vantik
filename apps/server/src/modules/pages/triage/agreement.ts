@@ -112,14 +112,18 @@ export const MEASURED_DECISIONS = [
 
 /**
  * Escalation reasons that are triage's judgment of the entry: the two
- * acceptance judgments did not both accept it, or two judgments of how it
+ * acceptance judgments did not both accept it (or only one found its evidence
+ * says otherwise), or two judgments of how it
  * relates to a neighbour differed. Every other reason is a rule that sends an
  * entry to a person whatever a person then makes of it (it cites nothing, it
  * contradicts a verified entry, it came from outside, a check could not run),
  * so a person accepting it does not say triage should have: triage never may.
  */
 export const JUDGMENT_REASONS: ReadonlySet<KnowledgeEscalationReason> = new Set(
-  [KnowledgeEscalationReason.JUDGES_DISAGREE],
+  [
+    KnowledgeEscalationReason.JUDGES_DISAGREE,
+    KnowledgeEscalationReason.EVIDENCE_DISPUTED,
+  ],
 );
 
 /** A decision as agreement reads it. */

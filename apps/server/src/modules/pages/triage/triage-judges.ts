@@ -114,6 +114,11 @@ const ACCEPT_SYSTEM = [
   'name or behaviour. Evidence that is missing, unclear, or about something',
   'else does not contradict it; answer "escalate" for that.',
   '',
+  'An issue usually states the problem before it is fixed, then the change',
+  'that fixes it. A problem an issue describes is not the state after it: a',
+  'claim of what is true now contradicts an issue only where the issue says',
+  'that is not what was done or decided.',
+  '',
   'Answer with one JSON object and nothing else:',
   '{"verdict": "accept" | "escalate" | "contradicted", "reason": "<one sentence>"}',
 ].join('\n');

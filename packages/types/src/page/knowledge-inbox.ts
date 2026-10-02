@@ -136,6 +136,15 @@ export interface KnowledgeInboxDetail {
   contradicts: PageEntry[];
   /** For a REWRITE: the proposed body. */
   rewrite: PageProposal | null;
+  /** For a waiting fact: what each acceptance check of its last triage said. */
+  checks: KnowledgeInboxCheck[];
+}
+
+/** What one acceptance check said of a fact, in its own words. */
+export interface KnowledgeInboxCheck {
+  /** Null when its answer could not be read. */
+  verdict: 'accept' | 'escalate' | 'contradicted' | null;
+  reason: string | null;
 }
 
 export class KnowledgeInboxQueryDto {

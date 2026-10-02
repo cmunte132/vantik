@@ -30,6 +30,44 @@ const DOT = {
   retired: 'bg-[oklch(61.34%_0.162_23.58)]',
 } as const;
 
+/** The dialog's title: what kind of knowledge it is. */
+const KIND_TITLE: Record<string, string> = {
+  FACT: 'Fact',
+  DECISION: 'Decision',
+  CONVENTION: 'Convention',
+};
+
+/**
+ * What the server found when it last read the citations, said for what they
+ * are: lines of code are read at a commit, an issue or a page only exists.
+ */
+function citationDetail(fact: ProvenEntry): string {
+  const citations = fact.citations ?? [];
+  const results = citations.map((citation) => citation.result);
+
+  if (results.some((result) => result === 'CHANGED' || result === 'MISSING')) {
+    return 'A citation no longer holds: what it points at changed or is gone.';
+  }
+
+  if (results.some((result) => !result || result === 'UNKNOWN')) {
+    return 'The server has not been able to read every citation yet.';
+  }
+
+  if (fact.lastCheckedSha && fact.lastCheckedAt) {
+    return `The server read the lines itself at ${fact.lastCheckedSha.slice(0, 8)}, ${ago(fact.lastCheckedAt)}.`;
+  }
+
+  const checkedAt = citations
+    .map((citation) => citation.checkedAt)
+    .filter((at): at is string => Boolean(at))
+    .sort()
+    .pop();
+
+  return `The server found ${citations.length > 1 ? 'them' : 'it'}${
+    checkedAt ? ` ${ago(checkedAt)}` : ''
+  }. Whether ${citations.length > 1 ? 'they say' : 'it says'} what this claims is for the checks to judge.`;
+}
+
 interface Step {
   key: string;
   dot: keyof typeof DOT;
@@ -60,7 +98,9 @@ export const FactTrailDialog = observer(
       <Dialog open={Boolean(fact)} onOpenChange={(open) => !open && onClose()}>
         <DialogContent className="p-0 gap-0 min-w-[min(520px,calc(100vw-32px))] sm:max-w-[520px]">
           <DialogHeader className="text-left px-5 h-[50px] justify-center border-b border-border">
-            <DialogTitle className="text-sm font-semibold">Fact</DialogTitle>
+            <DialogTitle className="text-sm font-semibold">
+              {KIND_TITLE[fact?.kind ?? 'FACT'] ?? 'Fact'}
+            </DialogTitle>
           </DialogHeader>
           {fact && <Trail fact={fact} />}
         </DialogContent>
@@ -108,10 +148,7 @@ const Trail = observer(({ fact }: { fact: ProvenEntry }) => {
         fact.trust === 'GROUNDED'
           ? 'The cited lines hold'
           : `It cites ${citations.map(citationLabel).join(', ')}`,
-      detail:
-        fact.lastCheckedSha && fact.lastCheckedAt
-          ? `The server read them itself at ${fact.lastCheckedSha.slice(0, 8)}, ${ago(fact.lastCheckedAt)}`
-          : 'The server has not read the cited lines yet.',
+      detail: citationDetail(fact),
     });
   }
 
@@ -193,7 +230,10 @@ const Trail = observer(({ fact }: { fact: ProvenEntry }) => {
 
       <div className="flex flex-col">
         <span className="text-xs font-semibold text-foreground/80 mb-2.5">
-          Why it is trusted
+          {fact.status === PageEntryStatus.STANDING &&
+          fact.trust !== 'PROVISIONAL'
+            ? 'Why it is trusted'
+            : 'Where it stands'}
         </span>
         {steps.map((step, index) => (
           <div key={step.key} className="flex gap-3">

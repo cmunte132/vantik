@@ -3481,7 +3481,7 @@ describe('provisional knowledge', () => {
 
     await expect(t.service.triage('new', ON)).resolves.toMatchObject({
       decision: Decision.ESCALATE,
-      reasons: [Reason.JUDGES_DISAGREE],
+      reasons: [Reason.EVIDENCE_DISPUTED],
       applied: false,
     });
     expect(t.entries.get('new')?.status).toBe('PROPOSED');

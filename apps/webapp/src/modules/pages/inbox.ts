@@ -3,6 +3,7 @@ import type { TrustTone } from './trust';
 import {
   KnowledgeInboxChoiceEnum,
   KnowledgeInboxKindEnum,
+  PageEntryKindEnum,
   KnowledgeReviewReasonEnum,
   KnowledgeTriageDecisionEnum,
   type KnowledgeInboxEvent,
@@ -40,7 +41,11 @@ export function inboxTitle(item: KnowledgeInboxItem): string {
 
   switch (item.kind) {
     case KnowledgeInboxKindEnum.RULE:
-      return `Is “${content}” the rule?`;
+      return isDecision(item)
+        ? `Did the team decide “${content}”?`
+        : `Is “${content}” the rule?`;
+    case KnowledgeInboxKindEnum.FACT:
+      return `Is “${content}” true?`;
     case KnowledgeInboxKindEnum.AUDIT:
       return `Was it right to ${
         (item.decision && AUDIT_VERB[item.decision.decision]) ?? 'settle'
@@ -57,6 +62,11 @@ export function inboxTitle(item: KnowledgeInboxItem): string {
     default:
       return content;
   }
+}
+
+/** A waiting rule that records a decision, rather than a convention to follow. */
+function isDecision(item: KnowledgeInboxItem): boolean {
+  return item.entry?.kind === PageEntryKindEnum.DECISION;
 }
 
 /** The longest a title quotes of a fact before it stops at a word. */
@@ -124,9 +134,11 @@ export function inboxExplanation(item: KnowledgeInboxItem): string {
     case KnowledgeInboxKindEnum.CONTRADICTION:
       return 'An agent wrote the fact on the right. It contradicts the fact on the left, which agents are given now. Both cannot be served.';
     case KnowledgeInboxKindEnum.RULE:
-      return 'An agent wrote this down as a rule of the team. No agent follows it until a person decides.';
+      return isDecision(item)
+        ? 'An agent wrote this down as something the team decided. No agent is given it until a person says the team did.'
+        : 'An agent wrote this down as a rule the team follows. No agent is handed it until a person makes it the rule.';
     case KnowledgeInboxKindEnum.FACT:
-      return 'An agent wrote this as it worked. No agent is given it until a person decides.';
+      return 'An agent wrote this as it worked. No agent is given it until a person says it is true.';
     case KnowledgeInboxKindEnum.AUDIT:
       return item.decision
         ? auditPrompt({ decisionId: item.decision.id, ...item.decision })
@@ -161,14 +173,31 @@ export function inboxChoices(item: KnowledgeInboxItem): InboxChoice[] {
         },
       ];
     case KnowledgeInboxKindEnum.RULE:
-      return [
-        { choice: KnowledgeInboxChoiceEnum.USE, label: 'Make it the rule' },
-        { choice: KnowledgeInboxChoiceEnum.SET_ASIDE, label: 'Set it aside' },
-      ];
+      return isDecision(item)
+        ? [
+            {
+              choice: KnowledgeInboxChoiceEnum.USE,
+              label: 'We decided this · use it',
+            },
+            {
+              choice: KnowledgeInboxChoiceEnum.SET_ASIDE,
+              label: 'We did not · set it aside',
+            },
+          ]
+        : [
+            { choice: KnowledgeInboxChoiceEnum.USE, label: 'Make it the rule' },
+            {
+              choice: KnowledgeInboxChoiceEnum.SET_ASIDE,
+              label: 'It is not the rule · set it aside',
+            },
+          ];
     case KnowledgeInboxKindEnum.FACT:
       return [
-        { choice: KnowledgeInboxChoiceEnum.USE, label: 'Use it' },
-        { choice: KnowledgeInboxChoiceEnum.SET_ASIDE, label: 'Set it aside' },
+        { choice: KnowledgeInboxChoiceEnum.USE, label: 'It is true · use it' },
+        {
+          choice: KnowledgeInboxChoiceEnum.SET_ASIDE,
+          label: 'It is wrong · set it aside',
+        },
       ];
     case KnowledgeInboxKindEnum.AUDIT: {
       const prompt = item.decision

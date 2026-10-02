@@ -766,7 +766,7 @@ export default class KnowledgeTriageService {
             contradicted = true;
           } else if (against.length > 0) {
             needsPerson = true;
-            reasons.add(KnowledgeEscalationReason.JUDGES_DISAGREE);
+            reasons.add(KnowledgeEscalationReason.EVIDENCE_DISPUTED);
           } else if (!judgments.every((judgment) => judgment.accept)) {
             reasons.add(KnowledgeEscalationReason.JUDGES_DISAGREE);
           }

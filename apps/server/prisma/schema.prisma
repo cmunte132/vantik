@@ -2608,6 +2608,9 @@ enum KnowledgeEscalationReason {
   /// People have lately disagreed with decisions of the type it reached, so
   /// a person decides instead (see KnowledgeBackoffChange).
   LOW_AGREEMENT
+  /// One acceptance judgment found its own evidence says otherwise, and the
+  /// other did not: whether the claim is wrong is a person's to settle.
+  EVIDENCE_DISPUTED
 }
 
 /// What the gardener did to an entry, or asks a person to do.

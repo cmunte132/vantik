@@ -14,6 +14,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import {
+  type KnowledgeInboxCheck,
   type KnowledgeInboxDetail,
   type KnowledgeInboxItem,
   type KnowledgeInboxList,
@@ -310,7 +311,39 @@ export default class KnowledgeInboxService {
       fact: fact ?? null,
       contradicts,
       rewrite: rewrite ? proposalResponse(rewrite) : null,
+      checks:
+        row.entryId && WAITING_KINDS.has(row.kind) && !row.doneAt
+          ? await this.checksOf(row.entryId)
+          : [],
     };
+  }
+
+  /**
+   * What the acceptance checks of an entry's last triage said, so a person
+   * reads why it waits rather than only that the checks did not agree.
+   */
+  private async checksOf(entryId: string): Promise<KnowledgeInboxCheck[]> {
+    const decision = await this.prisma.knowledgeTriageDecision.findFirst({
+      where: { entryId },
+      orderBy: { createdAt: 'desc' },
+      select: { outputs: true },
+    });
+    const accept = (decision?.outputs as { accept?: unknown } | null)?.accept;
+
+    if (!Array.isArray(accept)) {
+      return [];
+    }
+
+    return accept.map((judgment: Record<string, unknown>) => ({
+      verdict: !judgment.readable
+        ? null
+        : judgment.accept
+          ? 'accept'
+          : judgment.contradicted
+            ? 'contradicted'
+            : 'escalate',
+      reason: typeof judgment.reason === 'string' ? judgment.reason : null,
+    }));
   }
 
   /** Puts a person on an item, or, with null, takes everyone off it. */

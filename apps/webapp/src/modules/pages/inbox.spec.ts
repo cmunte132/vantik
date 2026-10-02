@@ -49,14 +49,26 @@ function item(overrides: Partial<KnowledgeInboxItem>): KnowledgeInboxItem {
   };
 }
 
+function decision(): KnowledgeInboxItem {
+  const base = item({ kind: KnowledgeInboxKindEnum.RULE });
+
+  return {
+    ...base,
+    entry: { ...base.entry, kind: 'DECISION' } as KnowledgeInboxItem['entry'],
+  };
+}
+
 const names: Record<string, string> = { sam: 'Sam', chris: 'Chris' };
 const nameOf = (userId: string | null) => (userId ? names[userId] : null);
 
 describe('an inbox item as a question', () => {
   it('asks each kind the way a person answers it', () => {
-    expect(inboxTitle(item({}))).toBe('Redis holds only cache');
+    expect(inboxTitle(item({}))).toBe('Is “Redis holds only cache” true?');
     expect(inboxTitle(item({ kind: KnowledgeInboxKindEnum.RULE }))).toBe(
       'Is “Redis holds only cache” the rule?',
+    );
+    expect(inboxTitle(decision())).toBe(
+      'Did the team decide “Redis holds only cache”?',
     );
     expect(
       inboxTitle(
@@ -150,6 +162,20 @@ describe('the answers an item takes', () => {
     expect(inboxChoices(item({ kind })).map(({ choice }) => choice)).toEqual(
       expected,
     );
+  });
+
+  it('answers a fact as true or wrong, and a decision as made or not', () => {
+    expect(inboxChoices(item({})).map(({ label }) => label)).toEqual([
+      'It is true · use it',
+      'It is wrong · set it aside',
+    ]);
+    expect(inboxChoices(decision()).map(({ label }) => label)).toEqual([
+      'We decided this · use it',
+      'We did not · set it aside',
+    ]);
+    expect(
+      inboxChoices(item({ kind: KnowledgeInboxKindEnum.RULE }))[0].label,
+    ).toBe('Make it the rule');
   });
 
   it('puts the answer triage expects first for an audit', () => {

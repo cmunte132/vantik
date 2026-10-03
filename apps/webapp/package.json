@@ -1,6 +1,6 @@
 {
   "name": "webapp",
-  "version": "2026.10.0",
+  "version": "2026.10.1",
   "private": true,
   "scripts": {
     "dev": "vite",

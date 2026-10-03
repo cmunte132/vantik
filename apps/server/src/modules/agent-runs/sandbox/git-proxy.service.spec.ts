@@ -350,3 +350,131 @@ describe('GitProxyService with a local directory', () => {
     ).toBe('Vantik Agent <agent@vantik.local>\nENG-1: Change a');
   });
 });
+
+describe('cleaning up after a run', () => {
+  function branchAt(name: string): string {
+    run(origin, 'branch', name);
+    return run(origin, 'rev-parse', name);
+  }
+
+  const request = (extra: object) => ({
+    workspaceId: 'ws',
+    source: SOURCE,
+    comment: 'Closed from Vantik.',
+    ...extra,
+  });
+
+  it('deletes the branch while it still ends at the run’s commit', async () => {
+    const head = branchAt('agent/eng-1');
+
+    const outcome = await build().cleanUp(
+      request({ branch: 'agent/eng-1', headCommit: head }),
+    );
+
+    expect(outcome).toEqual({ pullRequest: 'none', branch: 'deleted' });
+    expect(run(origin, 'branch', '--list', 'agent/eng-1')).toBe('');
+  });
+
+  it('keeps a branch someone pushed to since, and says so', async () => {
+    const head = branchAt('agent/eng-1');
+    run(origin, 'checkout', '--quiet', 'agent/eng-1');
+    writeFileSync(join(origin, 'README.md'), 'more\n');
+    run(origin, 'commit', '--quiet', '-am', 'a person’s fix');
+    run(origin, 'checkout', '--quiet', 'main');
+
+    const outcome = await build().cleanUp(
+      request({ branch: 'agent/eng-1', headCommit: head }),
+    );
+
+    expect(outcome.branch).toBe('kept_moved');
+    expect(outcome.detail).toContain('moved on');
+    expect(run(origin, 'branch', '--list', 'agent/eng-1')).toContain(
+      'agent/eng-1',
+    );
+  });
+
+  it('is content with a branch that is already gone', async () => {
+    const outcome = await build().cleanUp(
+      request({ branch: 'agent/eng-1', headCommit: 'a'.repeat(40) }),
+    );
+
+    expect(outcome.branch).toBe('already_gone');
+  });
+
+  it('keeps a branch when the run recorded no commit to check it against', async () => {
+    branchAt('agent/eng-1');
+
+    const outcome = await build().cleanUp(request({ branch: 'agent/eng-1' }));
+
+    expect(outcome.branch).toBe('kept');
+    expect(run(origin, 'branch', '--list', 'agent/eng-1')).toContain(
+      'agent/eng-1',
+    );
+  });
+
+  it('closes the pull request with the comment, then deletes the branch', async () => {
+    const head = branchAt('agent/eng-1');
+    const local = new LocalDirectorySource();
+    const closeChangeRequest = jest.fn(async () => 'closed' as const);
+    const source = Object.assign(Object.create(local), { closeChangeRequest });
+
+    const outcome = await build(source).cleanUp(
+      request({
+        branch: 'agent/eng-1',
+        headCommit: head,
+        prUrl: 'https://forgejo.test/o/app/pulls/12',
+      }),
+    );
+
+    expect(outcome).toEqual({ pullRequest: 'closed', branch: 'deleted' });
+    expect(closeChangeRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ fullName: 'app' }),
+      'https://forgejo.test/o/app/pulls/12',
+      'Closed from Vantik.',
+    );
+  });
+
+  it('leaves a merged pull request and its branch alone', async () => {
+    const head = branchAt('agent/eng-1');
+    const local = new LocalDirectorySource();
+    const source = Object.assign(Object.create(local), {
+      closeChangeRequest: async () => 'merged' as const,
+    });
+
+    const outcome = await build(source).cleanUp(
+      request({
+        branch: 'agent/eng-1',
+        headCommit: head,
+        prUrl: 'https://forgejo.test/o/app/pulls/12',
+      }),
+    );
+
+    expect(outcome).toMatchObject({ pullRequest: 'merged', branch: 'kept' });
+    expect(run(origin, 'branch', '--list', 'agent/eng-1')).toContain(
+      'agent/eng-1',
+    );
+  });
+
+  it('reports a pull request the host would not close, and still deletes the branch', async () => {
+    const head = branchAt('agent/eng-1');
+    const local = new LocalDirectorySource();
+    const source = Object.assign(Object.create(local), {
+      closeChangeRequest: async () => {
+        throw Object.assign(new Error('Request failed'), {
+          response: { status: 403 },
+        });
+      },
+    });
+
+    const outcome = await build(source).cleanUp(
+      request({
+        branch: 'agent/eng-1',
+        headCommit: head,
+        prUrl: 'https://forgejo.test/o/app/pulls/12',
+      }),
+    );
+
+    expect(outcome).toMatchObject({ pullRequest: 'failed', branch: 'deleted' });
+    expect(outcome.detail).toContain('403');
+  });
+});

@@ -1,4 +1,4 @@
-import type { KnowledgeArmComparison } from '@vantikhq/types';
+import type { AgentRunCleanup, KnowledgeArmComparison } from '@vantikhq/types';
 
 import { useQuery } from '@tanstack/react-query';
 
@@ -49,6 +49,20 @@ export function retryRun({
 }
 
 export const useRetryRunMutation = mutationHook(retryRun);
+
+// Closes the run's pull request and deletes its branch on the git host, and
+// resolves to what was done: the server says, per half, what it found.
+export function cleanUpRun({
+  runId,
+}: {
+  runId: string;
+}): Promise<AgentRunCleanup> {
+  return ajaxPost({ url: `/api/v1/agent_runs/${runId}/clean_up`, data: {} });
+}
+
+export const useCleanUpRunMutation = mutationHook(cleanUpRun, {
+  fallback: 'Could not clean up after this run.',
+});
 
 /**
  * Which backends this deployment can run work on, and whether each is usable.

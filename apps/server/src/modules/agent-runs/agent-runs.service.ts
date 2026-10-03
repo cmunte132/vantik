@@ -7,6 +7,7 @@ import {
 import { type AgentRun, type KnowledgeArm, UserType } from '@prisma/client';
 import {
   AGENT_RUN_TRANSITIONS,
+  type AgentRunCleanup,
   AgentRunFailure,
   AgentRunStatus,
   AppendAgentRunEventDto,
@@ -499,6 +500,50 @@ export class AgentRunsService {
         result: { ...result, costUsd: spent.costUsd, turns: spent.turns },
       },
     });
+  }
+
+  /** One run the caller may see. */
+  async getRun(runId: string, scope: AgentRunScope) {
+    return this.requireRun(runId, scope);
+  }
+
+  /**
+   * Puts a cleanup on a finished run: on its result, where the run page reads
+   * it, and on its timeline, which says what was removed in words.
+   *
+   * The one write a finished run accepts after the transition that ended it.
+   * It changes nothing about how the run went, only what is left of it on the
+   * git host, so it is merged into the result rather than refused.
+   */
+  async recordCleanup(
+    runId: string,
+    cleanup: AgentRunCleanup,
+    message: string,
+  ) {
+    const run = await this.requireRunUnscoped(runId);
+    const result =
+      run.result && typeof run.result === 'object' && !Array.isArray(run.result)
+        ? (run.result as Record<string, unknown>)
+        : {};
+    const failed =
+      cleanup.pullRequest === 'failed' || cleanup.branch === 'failed';
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = { result: { ...result, cleanedUp: cleanup } as any };
+
+    await this.prisma.$transaction([
+      this.prisma.agentRun.update({ where: { id: runId }, data }),
+      this.prisma.agentRunEvent.create({
+        data: {
+          runId,
+          message,
+          level: failed ? 'WARN' : 'INFO',
+          phase: 'cleanup',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          data: { cleanup } as any,
+        },
+      }),
+    ]);
   }
 
   async cancelRun(runId: string, scope: AgentRunScope, reason?: string) {

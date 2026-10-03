@@ -6,11 +6,14 @@ import { CredentialsService } from 'modules/agent-runs/credentials/credentials.s
 import { anonymousRemote, tokenRemote, type GitRemote } from '../git-command';
 import {
   type ChangeRequest,
+  type ChangeRequestClosed,
+  changeRequestNumber,
   type CommitIdentity,
   type GitSource,
   type SourceRepo,
 } from '../git-source';
 import {
+  closeHostPullRequest,
   isOnHost,
   normaliseBaseUrl,
   openHostPullRequest,
@@ -99,6 +102,38 @@ export class GitRemoteSource implements GitSource {
       baseBranch: request.baseBranch,
       title: request.title,
       body: request.body,
+    });
+  }
+
+  async closeChangeRequest(
+    repo: SourceRepo,
+    url: string,
+    comment: string,
+  ): Promise<ChangeRequestClosed> {
+    const host = hostOf(repo);
+    const number = changeRequestNumber(
+      repo,
+      url,
+      new URL(host.baseUrl).pathname.replace(/\/+$/, ''),
+    );
+    const token = await this.token(repo);
+
+    // The URL has to be on the connected host as well as name the
+    // repository: the token goes with the request.
+    if (number === null || !isOnHost(url, host.baseUrl)) {
+      throw new Error(`${url} is not a pull request of ${repo.fullName}.`);
+    }
+    if (!token || host.kind === 'generic') {
+      throw new Error(
+        `The connection to ${host.baseUrl} cannot close pull requests.`,
+      );
+    }
+
+    return await closeHostPullRequest(host, token, {
+      fullName: repo.fullName,
+      repositoryId: repo.externalRepoId,
+      number,
+      comment,
     });
   }
 

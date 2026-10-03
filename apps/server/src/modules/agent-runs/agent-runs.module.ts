@@ -21,6 +21,7 @@ import { CredentialsModule } from './credentials/credentials.module';
 import { ExecutorRegistry } from './executors/executor.registry';
 import { HostedExecutor } from './executors/hosted.executor';
 import { KnowledgeArmsService } from './knowledge-arms.service';
+import { RunCleanupService } from './run-cleanup.service';
 import { RunHandbackService } from './run-handback.service';
 import { RunOutboxService } from './run-outbox';
 import { GitProxyService } from './sandbox/git-proxy.service';
@@ -48,6 +49,7 @@ import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
     ContextPackService,
     KnowledgeArmsService,
     RunHandbackService,
+    RunCleanupService,
     RunOutboxService,
     ExecutorRegistry,
     HostedExecutor,

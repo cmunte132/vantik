@@ -23,6 +23,7 @@ import {
 
 import { useContextStore } from 'store/global-context-provider';
 
+import { CleanUpRun } from './clean-up-run';
 import { Header } from './header';
 import { RunActivity } from './run-activity';
 import {
@@ -194,6 +195,11 @@ export const RunView = withApplicationStore(
                     Stop
                   </Button>
                 )}
+
+                <CleanUpRun
+                  run={run}
+                  onRetry={() => retryRun({ runId: run.id })}
+                />
 
                 {/* Retry only where the server allows it. Re-running a success
                     would open a second pull request for the same work. */}

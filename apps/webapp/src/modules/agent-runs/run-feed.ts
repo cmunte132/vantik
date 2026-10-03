@@ -474,6 +474,6 @@ export function diffLines(
 
 /** The pull request's number, from its url. */
 export function pullNumber(url: string | undefined): string | null {
-  const match = url ? /\/pull\/(\d+)/.exec(url) : null;
+  const match = url ? /\/(?:pull|pulls|merge_requests)\/(\d+)/.exec(url) : null;
   return match ? match[1] : null;
 }

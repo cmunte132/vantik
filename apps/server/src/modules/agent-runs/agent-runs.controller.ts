@@ -31,6 +31,7 @@ import { ContextPackService } from './context-pack.service';
 import { CredentialsService } from './credentials/credentials.service';
 import { ExecutorRegistry } from './executors/executor.registry';
 import { KnowledgeArmsService } from './knowledge-arms.service';
+import { RunCleanupService } from './run-cleanup.service';
 import { runIdentityName } from './run-identity';
 
 /**
@@ -65,6 +66,7 @@ export class AgentRunsController {
     private users: UsersService,
     private prisma: PrismaService,
     private knowledgeArms: KnowledgeArmsService,
+    private cleanups: RunCleanupService,
   ) {}
 
   @Get()
@@ -263,6 +265,30 @@ export class AgentRunsController {
     forPeople(role);
 
     return this.delegation.retry(
+      params.agentRunId,
+      this.scope(workspace, userId, role),
+      userId,
+    );
+  }
+
+  /**
+   * Closes the pull request a finished run opened and deletes its branch.
+   *
+   * For a person who has decided against the work: a run awaiting review they
+   * reject, or a failed one that pushed before it failed. Only a person, like
+   * a retry, since it acts on the git host with the workspace's credential.
+   */
+  @Post(':agentRunId/clean_up')
+  @UseGuards(AuthGuard, WorkspaceResourceGuard)
+  async cleanUpRun(
+    @Workspace() workspace: string,
+    @UserId() userId: string,
+    @Role() role: string,
+    @Param() params: AgentRunRequestParamsDto,
+  ) {
+    forPeople(role);
+
+    return this.cleanups.cleanUp(
       params.agentRunId,
       this.scope(workspace, userId, role),
       userId,

@@ -258,6 +258,7 @@ export const PHASE_LABEL: Record<string, string> = {
   verify: 'Ran the checks',
   review: 'Reviewed the work',
   report: 'Handed the work back',
+  cleanup: 'Cleaned up after the run',
 };
 
 /**
@@ -299,7 +300,8 @@ export function phaseLabel(phase: string): string {
  * Ordered by pass first and step second, so pass two's work lands after pass
  * one's review rather than being merged into pass one's work — which is what
  * grouping on the bare name did. `setup` and `report` are outside the cycle and
- * anchor the two ends whatever pass count sits between them.
+ * anchor the two ends whatever pass count sits between them; a `cleanup` a
+ * person asks for later comes after even the report.
  */
 export function phaseRank(phase: string): number {
   const { base, pass } = splitPhase(phase);
@@ -308,8 +310,12 @@ export function phaseRank(phase: string): number {
     return Number.MIN_SAFE_INTEGER;
   }
 
-  if (base === 'report') {
+  if (base === 'cleanup') {
     return Number.MAX_SAFE_INTEGER;
+  }
+
+  if (base === 'report') {
+    return Number.MAX_SAFE_INTEGER - 1;
   }
 
   const index = CYCLE_ORDER.indexOf(base);
@@ -318,7 +324,7 @@ export function phaseRank(phase: string): number {
   // rather than being dropped: a newer server can emit one, and losing those
   // lines would lose exactly the progress a reader came for.
   return index === -1
-    ? Number.MAX_SAFE_INTEGER - 1
+    ? Number.MAX_SAFE_INTEGER - 2
     : pass * CYCLE_ORDER.length + index;
 }
 

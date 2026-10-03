@@ -13,6 +13,7 @@ import { useCancelRunMutation, useRetryRunMutation } from 'services/agent-runs';
 
 import { useContextStore } from 'store/global-context-provider';
 
+import { CleanUpRun } from './clean-up-run';
 import { failureProse, PHASE_LABEL, duration, isLive } from './run-vocabulary';
 import { StatusDot } from './status-dot';
 
@@ -188,6 +189,8 @@ export const RunCard = observer(({ run, user }: Props) => {
             Try again
           </Button>
         )}
+
+        <CleanUpRun run={run} onRetry={() => retryRun({ runId: run.id })} />
 
         <Button variant="ghost" size="sm" onClick={() => router.push(runHref)}>
           See what it did

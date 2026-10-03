@@ -8,6 +8,7 @@ import {
   stagesOf,
   toFeed,
   toSteps,
+  pullNumber,
 } from './run-feed';
 import { costOf, formatCost, phaseLabel, phaseRank } from './run-vocabulary';
 
@@ -190,6 +191,15 @@ describe('phase ordering', () => {
       'implement',
       'verify',
       'report',
+    ]);
+  });
+
+  it('puts a cleanup after the report, and an unknown phase before it', () => {
+    expect(sorted(['cleanup', 'report', 'mystery', 'implement'])).toEqual([
+      'implement',
+      'mystery',
+      'report',
+      'cleanup',
     ]);
   });
 
@@ -405,5 +415,14 @@ describe('spend', () => {
     expect(formatCost(0.004)).toBe('<$0.01');
     expect(formatCost(0)).toBe('$0.00');
     expect(formatCost(1.456)).toBe('$1.46');
+  });
+});
+
+describe('pullNumber', () => {
+  it('reads the number from every host the server opens pull requests on', () => {
+    expect(pullNumber('https://github.com/o/r/pull/7')).toBe('7');
+    expect(pullNumber('https://forgejo.example/o/r/pulls/12')).toBe('12');
+    expect(pullNumber('https://gitlab.com/g/r/-/merge_requests/3')).toBe('3');
+    expect(pullNumber(undefined)).toBeNull();
   });
 });

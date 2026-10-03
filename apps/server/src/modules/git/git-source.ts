@@ -87,6 +87,17 @@ export interface GitSource {
   ): Promise<string | undefined>;
 
   /**
+   * Closes the pull request (or merge request) at `url`, leaving `comment` on
+   * it first, and says what it found. One that is already closed or merged is
+   * left as it is. Absent where `openChangeRequest` is.
+   */
+  closeChangeRequest?(
+    repo: SourceRepo,
+    url: string,
+    comment: string,
+  ): Promise<ChangeRequestClosed>;
+
+  /**
    * This method returns true if `openChangeRequest` can open a pull request
    * for this repository. A source that has no such method does not need it.
    * The git remote source needs it, because a generic host has no API.
@@ -102,6 +113,40 @@ export interface GitSource {
 
   /** Where the repository is, for a person: a URL or a path. Never a secret. */
   location(repo: SourceRepo): string;
+}
+
+/** What closing a change request found. */
+export type ChangeRequestClosed = 'closed' | 'already_closed' | 'merged';
+
+/**
+ * The number of the change request at `url`, when the URL is one of
+ * `repo`'s: `/pull/N` on GitHub, `/pulls/N` on Forgejo and Gitea, and
+ * `/-/merge_requests/N` on GitLab. `basePath` is the path a host is served
+ * under, if any. Null for any other address, so a URL written into a run
+ * cannot point a close at a different repository.
+ */
+export function changeRequestNumber(
+  repo: Pick<SourceRepo, 'fullName'>,
+  url: string,
+  basePath = '',
+): number | null {
+  let path: string;
+
+  try {
+    path = decodeURIComponent(new URL(url).pathname);
+  } catch {
+    return null;
+  }
+
+  const match = /^(.*?)(?:\/-)?\/(?:pull|pulls|merge_requests)\/(\d+)\/?$/.exec(
+    path,
+  );
+
+  if (!match || match[1] !== `${basePath}/${repo.fullName}`) {
+    return null;
+  }
+
+  return Number(match[2]);
 }
 
 /**

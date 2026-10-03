@@ -1,4 +1,8 @@
-import type { AgentRunDelivery, AgentRunRepoSource } from '@vantikhq/types';
+import type {
+  AgentRunCleanup,
+  AgentRunDelivery,
+  AgentRunRepoSource,
+} from '@vantikhq/types';
 
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -77,6 +81,22 @@ export interface PushResult {
   delivery: AgentRunDelivery;
   prUrl?: string;
 }
+
+export interface CleanupRequest {
+  workspaceId: string;
+  source: AgentRunRepoSource;
+  branch?: string;
+  /** The commit the run pushed. The branch is deleted only while it ends here. */
+  headCommit?: string;
+  prUrl?: string;
+  /** Left on the pull request before it is closed. */
+  comment: string;
+}
+
+export type CleanupOutcome = Pick<
+  AgentRunCleanup,
+  'pullRequest' | 'branch' | 'detail'
+>;
 
 export interface CheckoutRequest {
   workspaceId: string;
@@ -248,6 +268,129 @@ export class GitProxyService {
   }
 
   /**
+   * Removes what a run left on the git host: closes its pull request and
+   * deletes its branch.
+   *
+   * The pull request goes first, so the comment saying why lands on it before
+   * the branch it shows disappears. The branch is deleted with a lease on the
+   * run's own commit, so the host refuses the delete if anyone pushed on top
+   * of it since; that work is kept. Never throws for what the host says: each
+   * half reports what happened to it, and a half that failed says why.
+   */
+  async cleanUp(request: CleanupRequest): Promise<CleanupOutcome> {
+    const resolved = await this.gitSources.require({
+      workspaceId: request.workspaceId,
+      ...request.source,
+    });
+    const notes: string[] = [];
+
+    let pullRequest: CleanupOutcome['pullRequest'] = 'none';
+    if (request.prUrl) {
+      if (!resolved.source.closeChangeRequest) {
+        pullRequest = 'failed';
+        notes.push(
+          `${resolved.source.location(resolved.repo)} has no pull requests to close.`,
+        );
+      } else {
+        try {
+          pullRequest = await resolved.source.closeChangeRequest(
+            resolved.repo,
+            request.prUrl,
+            request.comment,
+          );
+          if (pullRequest === 'merged') {
+            notes.push('The pull request was already merged, so it was left.');
+          }
+        } catch (error) {
+          pullRequest = 'failed';
+          notes.push(`Could not close the pull request: ${reasonOf(error)}`);
+        }
+      }
+    }
+
+    let branch: CleanupOutcome['branch'] = 'none';
+    if (request.branch && pullRequest === 'merged') {
+      branch = 'kept';
+      notes.push(`Kept ${request.branch}, because it was merged.`);
+    } else if (request.branch && !request.headCommit) {
+      branch = 'kept';
+      notes.push(
+        `Kept ${request.branch}: the run recorded no commit, so there is no way to tell its work from anyone else's.`,
+      );
+    } else if (request.branch && request.headCommit) {
+      branch = await this.deleteBranch(
+        resolved,
+        request.branch,
+        request.headCommit,
+        notes,
+      );
+    }
+
+    return {
+      pullRequest,
+      branch,
+      ...(notes.length ? { detail: notes.join(' ') } : {}),
+    };
+  }
+
+  private async deleteBranch(
+    resolved: ResolvedRepo,
+    branch: string,
+    headCommit: string,
+    notes: string[],
+  ): Promise<CleanupOutcome['branch']> {
+    const scratch = await mkdtemp(join(tmpdir(), 'vantik-cleanup-'));
+    let remote: GitRemote | undefined;
+
+    try {
+      remote = await resolved.source.pushRemote(resolved.repo);
+      // `push` needs a repository to run in; an empty one will do, since it
+      // sends no objects to delete a ref.
+      await git(['init', '--quiet'], { cwd: scratch });
+
+      const ref = `refs/heads/${branch}`;
+      const listed = await git(['ls-remote', '--heads', remote.url, ref], {
+        cwd: scratch,
+        remote,
+      });
+      const current = listed.trim().split(/\s+/)[0];
+
+      if (!current) {
+        return 'already_gone';
+      }
+      if (current !== headCommit) {
+        notes.push(
+          `Kept ${branch}: it has moved on from the run's commit ${headCommit.slice(0, 8)} to ${current.slice(0, 8)}, so someone else's work is on it.`,
+        );
+        return 'kept_moved';
+      }
+
+      // The lease makes the check and the delete one step on the host: a
+      // push that lands in between makes the host refuse the delete.
+      await git(
+        [
+          'push',
+          '--quiet',
+          `--force-with-lease=${ref}:${headCommit}`,
+          remote.url,
+          `:${ref}`,
+        ],
+        { cwd: scratch, remote },
+      );
+
+      return 'deleted';
+    } catch (error) {
+      notes.push(`Could not delete ${branch}: ${reasonOf(error)}`);
+      return 'failed';
+    } finally {
+      await remote?.dispose();
+      await rm(scratch, { recursive: true, force: true }).catch(
+        (): undefined => undefined,
+      );
+    }
+  }
+
+  /**
    * A branch name nothing is already using.
    *
    * A second run on the same issue would otherwise push to the branch the
@@ -400,4 +543,16 @@ export function commitMessage(
   }
 
   return `${message}\n\nCo-authored-by: ${coAuthor.name} <${coAuthor.email}>`;
+}
+
+/** A short reason for a failure, for a person. Never holds a credential. */
+function reasonOf(error: unknown): string {
+  const status = (error as { response?: { status?: number } })?.response
+    ?.status;
+
+  if (status) {
+    return `the host answered ${status}.`;
+  }
+
+  return error instanceof Error ? error.message.slice(0, 300) : String(error);
 }

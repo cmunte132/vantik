@@ -9,6 +9,8 @@ import { CredentialsService } from 'modules/agent-runs/credentials/credentials.s
 import { tokenRemote, type GitRemote } from '../git-command';
 import {
   type ChangeRequest,
+  type ChangeRequestClosed,
+  changeRequestNumber,
   type GitSource,
   type SourceRepo,
 } from '../git-source';
@@ -66,6 +68,44 @@ export class GithubSource implements GitSource {
     );
 
     return typeof data?.html_url === 'string' ? data.html_url : undefined;
+  }
+
+  async closeChangeRequest(
+    repo: SourceRepo,
+    url: string,
+    comment: string,
+  ): Promise<ChangeRequestClosed> {
+    const number = changeRequestNumber(repo, url);
+
+    if (number === null || new URL(url).origin !== 'https://github.com') {
+      throw new Error(`${url} is not a pull request of ${repo.fullName}.`);
+    }
+
+    const api = `https://api.github.com/repos/${repo.fullName}`;
+    const config = {
+      headers: {
+        ...githubHeaders,
+        Authorization: `Bearer ${await this.pushToken(repo)}`,
+      },
+      timeout: 30_000,
+    };
+    const { data } = await axios.get(`${api}/pulls/${number}`, config);
+
+    if (data?.merged) {
+      return 'merged';
+    }
+    if (data?.state !== 'open') {
+      return 'already_closed';
+    }
+
+    await axios.post(
+      `${api}/issues/${number}/comments`,
+      { body: comment },
+      config,
+    );
+    await axios.patch(`${api}/pulls/${number}`, { state: 'closed' }, config);
+
+    return 'closed';
   }
 
   location(repo: SourceRepo): string {

@@ -1,6 +1,8 @@
 import { type GitRemoteKind } from '@vantikhq/types';
 import axios, { type AxiosRequestConfig } from 'axios';
 
+import { type ChangeRequestClosed } from '../git-source';
+
 /** How long one call to the API of a host can take. */
 const API_TIMEOUT_MS = 15_000;
 
@@ -231,6 +233,65 @@ export async function openHostPullRequest(
   );
 
   return typeof data?.html_url === 'string' ? data.html_url : undefined;
+}
+
+/**
+ * This function closes a pull request (a merge request on GitLab), leaving a
+ * comment on it first. One that is already closed or merged is left alone.
+ */
+export async function closeHostPullRequest(
+  host: RemoteHost,
+  token: string,
+  input: {
+    fullName: string;
+    repositoryId: string;
+    number: number;
+    comment: string;
+  },
+): Promise<ChangeRequestClosed> {
+  if (host.kind === 'gitlab') {
+    const base = apiUrl(
+      host,
+      `/projects/${encodeURIComponent(input.repositoryId)}/merge_requests/${input.number}`,
+    );
+    const { data } = await axios.get(base, request(host, token));
+
+    if (data?.state === 'merged') {
+      return 'merged';
+    }
+    if (data?.state !== 'opened') {
+      return 'already_closed';
+    }
+
+    await axios.post(
+      `${base}/notes`,
+      { body: input.comment },
+      request(host, token),
+    );
+    await axios.put(base, { state_event: 'close' }, request(host, token));
+
+    return 'closed';
+  }
+
+  const repo = repoPath(input.fullName);
+  const pull = apiUrl(host, `/repos/${repo}/pulls/${input.number}`);
+  const { data } = await axios.get(pull, request(host, token));
+
+  if (data?.merged) {
+    return 'merged';
+  }
+  if (data?.state !== 'open') {
+    return 'already_closed';
+  }
+
+  await axios.post(
+    apiUrl(host, `/repos/${repo}/issues/${input.number}/comments`),
+    { body: input.comment },
+    request(host, token),
+  );
+  await axios.patch(pull, { state: 'closed' }, request(host, token));
+
+  return 'closed';
 }
 
 /**

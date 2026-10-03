@@ -146,6 +146,66 @@ export interface AgentRunResult {
    * signed it off" are different claims about the same diff.
    */
   reviewPasses?: number;
+  /** What a person removed from the git host after the run, when they did. */
+  cleanedUp?: AgentRunCleanup;
+}
+
+/**
+ * The runs a person may clean up after: ones whose work nobody is going to
+ * take. A run that succeeded is excluded, because its pull request is the
+ * deliverable, and a run still going is excluded because it may yet push.
+ */
+export const CLEANABLE_AGENT_RUN_STATUSES: AgentRunStatus[] = [
+  'FAILED',
+  'CANCELED',
+  'EXPIRED',
+  'NEEDS_REVIEW',
+];
+
+/**
+ * What cleaning up after a run did on the git host.
+ *
+ * The pull request is closed with a comment saying why. The branch is deleted
+ * only while it still ends at the run's own commit, so work a person pushed
+ * on top of it is never thrown away.
+ */
+export interface AgentRunCleanup {
+  /** ISO time of the cleanup. */
+  at: string;
+  /** The member who asked for it. */
+  byUserId: string;
+  pullRequest: 'closed' | 'already_closed' | 'merged' | 'none' | 'failed';
+  branch: 'deleted' | 'already_gone' | 'kept_moved' | 'kept' | 'none' | 'failed';
+  /** For a person: what was left, and why. */
+  detail?: string;
+}
+
+/**
+ * Whether a run left something on the git host that cleaning up would
+ * remove: a branch or a pull request, not yet removed or last removed only
+ * in part.
+ */
+export function needsAgentRunCleanup(run: {
+  status: AgentRunStatus | string;
+  result?: unknown;
+}): boolean {
+  if (!CLEANABLE_AGENT_RUN_STATUSES.includes(run.status as AgentRunStatus)) {
+    return false;
+  }
+
+  const result = (run.result ?? {}) as AgentRunResult;
+
+  if (!result.branch && !result.prUrl) {
+    return false;
+  }
+  if (!result.cleanedUp) {
+    return true;
+  }
+
+  return (
+    result.cleanedUp.pullRequest === 'failed' ||
+    result.cleanedUp.branch === 'failed'
+  );
 }
 
 /**

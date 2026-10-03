@@ -69,6 +69,13 @@ simply has not been signed off, and both the pull request body and the issue
 comment say so — along with whatever the last review still objected to, so the
 person picking it up starts from what is wrong rather than from the diff.
 
+If you decide against the work, **Reject** on the run page closes the pull
+request with a comment saying why and deletes the branch, and **Reject and
+retry** then starts a fresh attempt. A branch that someone has added commits
+to since the run is kept, and the run itself stays on record. The same button
+reads **Clean up** on a run that failed, timed out or was stopped after
+pushing. Retrying never needs it: each attempt pushes to a branch of its own.
+
 **It fails** only when the first pass crashes or the agent changed nothing. A
 crash on a *later* pass stops the loop and delivers what the earlier passes
 built — throwing away three passes of real work to report the fourth one's exit

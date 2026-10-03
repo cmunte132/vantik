@@ -19,6 +19,12 @@ describe('AgentRunsController delegation', () => {
     const users = {
       provisionRunIdentity: jest.fn(async () => ({ id: 'run-identity' })),
     };
+    const cleanups = {
+      cleanUp: jest.fn(async () => ({
+        pullRequest: 'closed',
+        branch: 'deleted',
+      })),
+    };
 
     const controller = new AgentRunsController(
       {} as never,
@@ -29,9 +35,10 @@ describe('AgentRunsController delegation', () => {
       users as never,
       {} as never,
       {} as never,
+      cleanups as never,
     );
 
-    return { controller, delegation };
+    return { controller, delegation, cleanups };
   }
 
   it('lets a person delegate an issue', async () => {
@@ -66,5 +73,16 @@ describe('AgentRunsController delegation', () => {
       } as never),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(delegation.retry).not.toHaveBeenCalled();
+  });
+
+  it('refuses an agent that tries to clean up after a run', async () => {
+    const { controller, cleanups } = build();
+
+    await expect(
+      controller.cleanUpRun(WORKSPACE, 'agent-1', RoleEnum.AGENT, {
+        agentRunId: 'run-1',
+      } as never),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(cleanups.cleanUp).not.toHaveBeenCalled();
   });
 });

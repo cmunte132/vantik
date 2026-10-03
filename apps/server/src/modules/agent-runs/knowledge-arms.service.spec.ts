@@ -247,6 +247,7 @@ describe('the comparison over HTTP', () => {
       {} as never,
       {} as never,
       { compare } as unknown as KnowledgeArmsService,
+      {} as never,
     );
 
     return { controller, compare };

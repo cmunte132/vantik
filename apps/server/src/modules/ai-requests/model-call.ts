@@ -10,7 +10,7 @@ import { generateText, stepCountIs, streamText } from 'ai';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import { getLanguageModel, resolveModel } from './llm-provider';
-import { startModelTelemetry } from './model-telemetry';
+import { billedCost, startModelTelemetry } from './model-telemetry';
 
 const logger = new LoggerService('LLM');
 
@@ -74,7 +74,12 @@ export async function generateModelText(call: ModelCall): Promise<ModelAnswer> {
         ...input(call),
       }),
     );
-    telemetry.finish(result.totalUsage, result.finishReason);
+    telemetry.finish(
+      result.totalUsage,
+      result.finishReason,
+      undefined,
+      billedCost(result.steps),
+    );
 
     const fields = {
       purpose: call.purpose,
@@ -152,6 +157,7 @@ export async function generateWorkspaceModelText(
       result.totalUsage,
       result.finishReason,
       result.steps.length,
+      billedCost(result.steps),
     );
 
     logFinish(fields(), result.totalUsage, result.finishReason);
@@ -205,7 +211,12 @@ export function streamModelText(
       model: getLanguageModel(model),
       ...input(call),
       onFinish: async (event) => {
-        telemetry.finish(event.totalUsage, event.finishReason);
+        telemetry.finish(
+          event.totalUsage,
+          event.finishReason,
+          undefined,
+          billedCost(event.steps),
+        );
         logFinish(fields(), event.totalUsage, event.finishReason);
         logExchange(call, fields(), event.text);
         await onFinish?.(event.text, model);

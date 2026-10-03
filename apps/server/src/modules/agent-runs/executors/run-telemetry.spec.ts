@@ -118,7 +118,12 @@ describe('run telemetry', () => {
     const chats = finished.filter((s) => s.name.startsWith('chat '));
     expect(chats).toHaveLength(1);
     expect(chats[0].parentSpanContext?.spanId).toBe(implementId);
-    expect(chats[0].attributes['gen_ai.usage.input_tokens']).toBe(1200);
+    // Input counts the cache reads too, as the semantic conventions do.
+    expect(chats[0].attributes['gen_ai.usage.input_tokens']).toBe(2100);
+    expect(chats[0].attributes['gen_ai.usage.cache_read.input_tokens']).toBe(
+      900,
+    );
+    expect(chats[0].attributes['gen_ai.usage.cost']).toBe(0.004);
     expect(chats[0].attributes['gen_ai.response.model']).toBe(
       'anthropic/claude-sonnet-5',
     );
@@ -136,7 +141,7 @@ describe('run telemetry', () => {
         p.attributes['vantik.llm.purpose'] === 'agent_run',
     );
     expect(input?.attributes['vantik.llm.role']).toBe('implement');
-    expect((input?.value as { sum: number }).sum).toBe(1200);
+    expect((input?.value as { sum: number }).sum).toBe(2100);
   });
 
   it('ends model and tool calls the phase left open', () => {

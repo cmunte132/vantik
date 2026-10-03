@@ -3,7 +3,7 @@ import type { LanguageModelUsage } from 'ai';
 import { metrics, trace } from '@opentelemetry/api';
 import { metrics as sdkMetrics, node, tracing } from '@opentelemetry/sdk-node';
 
-import { startModelTelemetry } from './model-telemetry';
+import { billedCost, startModelTelemetry } from './model-telemetry';
 
 const spans = new tracing.InMemorySpanExporter();
 new node.NodeTracerProvider({
@@ -59,6 +59,35 @@ describe('model telemetry', () => {
       'vantik.llm.purpose': 'triage.pair',
       'vantik.llm.role': 'decisions',
     });
+  });
+
+  it('records the cost the provider billed, summed over the steps', () => {
+    const steps = [
+      { usage: { raw: { cost: 0.0012, prompt_tokens: 900 } } },
+      { usage: { raw: { prompt_tokens: 40 } } },
+      { usage: { raw: { cost: 0.0003 } } },
+    ];
+    const call = startModelTelemetry('triage.pair', 'decisions', 'model-a');
+    call.finish(usage, 'stop', 3, billedCost(steps));
+
+    const [span] = spans.getFinishedSpans();
+    expect(span.attributes['gen_ai.usage.cost']).toBeCloseTo(0.0015);
+  });
+
+  it('records no cost when the provider reports none', () => {
+    expect(billedCost([{ usage: { raw: { prompt_tokens: 1 } } }])).toBe(
+      undefined,
+    );
+    expect(billedCost(undefined)).toBe(undefined);
+
+    startModelTelemetry('triage.pair', 'decisions', 'model-a').finish(
+      usage,
+      'stop',
+      1,
+      billedCost([{ usage: {} }]),
+    );
+    const [span] = spans.getFinishedSpans();
+    expect(span.attributes['gen_ai.usage.cost']).toBeUndefined();
   });
 
   it('records the duration and the tokens by purpose, model and type', async () => {

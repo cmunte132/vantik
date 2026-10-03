@@ -205,7 +205,21 @@ export function startOtel(): void {
       // without this the database layer is missing from every trace. Verified
       // against the running stack — `pg` spans alone produced zero children
       // under a request.
-      new PrismaInstrumentation(),
+      //
+      // Each query is seven spans. Four of them are serialization and
+      // connection checkout, a few microseconds each, and they were most of
+      // what the server exported: enough to overflow a small backend and lose
+      // an agent run's spans with them (ENG-220). What is left is the
+      // operation, the engine query and the SQL. An ignored span drops its
+      // children too, so only leaves are listed.
+      new PrismaInstrumentation({
+        ignoreSpanTypes: [
+          'prisma:client:serialize',
+          'prisma:engine:connection',
+          'prisma:engine:serialize',
+          'prisma:engine:response_json_serialization',
+        ],
+      }),
       // Event loop lag, heap and GC. The symptom of most trouble in a Node
       // process is a stalled event loop, and no amount of request-level
       // instrumentation shows it — the slow request and the one blocking it

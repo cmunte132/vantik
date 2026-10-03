@@ -527,12 +527,21 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
             message.stopReason,
           ]);
         }
+        // Pi's `input` is only the part of the prompt that missed the cache;
+        // reads and writes are counted apart. The semantic conventions count
+        // all of it as input, and so does every backend that adds input and
+        // output into a total: with a warm cache, Pi's figure is a few tokens
+        // against thousands read, and the total came out fifty times too low.
         if (typeof usage.input === 'number') {
-          tokens.record(usage.input, {
+          const input =
+            usage.input +
+            (typeof usage.cacheRead === 'number' ? usage.cacheRead : 0) +
+            (typeof usage.cacheWrite === 'number' ? usage.cacheWrite : 0);
+          tokens.record(input, {
             ...attributes,
             'gen_ai.token.type': 'input',
           });
-          span.setAttribute('gen_ai.usage.input_tokens', usage.input);
+          span.setAttribute('gen_ai.usage.input_tokens', input);
         }
         if (typeof usage.output === 'number') {
           tokens.record(usage.output, {
@@ -553,8 +562,11 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
             usage.cacheWrite,
           );
         }
+        // Not in the semantic conventions yet, but the name backends read:
+        // without it they price the call themselves from the model name, and
+        // a name they do not know, such as an OpenRouter alias, prices at 0.
         if (typeof usage.cost?.total === 'number') {
-          span.setAttribute('vantik.llm.cost_usd', usage.cost.total);
+          span.setAttribute('gen_ai.usage.cost', usage.cost.total);
         }
         if (failed) {
           span.setAttribute('error.type', 'model_error');

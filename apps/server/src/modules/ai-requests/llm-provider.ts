@@ -83,6 +83,9 @@ export function getLLMClient(): OpenAICompatibleProvider {
     // key stays required and self-hosters set a placeholder. An install that
     // forgot to configure a provider should say so, not answer badly.
     apiKey: readEnv('LLM_API_KEY'),
+    // A streamed answer carries usage only when asked for it. Without this,
+    // every streamed call reached telemetry with no tokens and no cost.
+    includeUsage: true,
     ...(Object.keys(headers).length ? { headers } : {}),
   });
 

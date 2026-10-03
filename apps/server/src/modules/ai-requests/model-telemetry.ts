@@ -83,6 +83,7 @@ export interface ModelTelemetry {
     usage: LanguageModelUsage | undefined,
     finishReason: string | undefined,
     steps?: number,
+    costUsd?: number,
   ): void;
   fail(error: unknown): void;
 }
@@ -135,7 +136,7 @@ export function startModelTelemetry(
       return context.with(trace.setSpan(context.active(), span), fn);
     },
 
-    finish(usage, finishReason, steps) {
+    finish(usage, finishReason, steps, costUsd) {
       if (ended) {
         return;
       }
@@ -168,6 +169,10 @@ export function startModelTelemetry(
       if (steps !== undefined) {
         span.setAttribute('vantik.llm.steps', steps);
       }
+      // The name backends read for cost, as on an agent's model calls.
+      if (costUsd !== undefined) {
+        span.setAttribute('gen_ai.usage.cost', costUsd);
+      }
       span.end();
     },
 
@@ -192,4 +197,27 @@ export function startModelTelemetry(
       span.end();
     },
   };
+}
+
+/**
+ * What the provider billed for a call, in USD, when it says.
+ *
+ * OpenRouter puts the charge for each request in its usage block as `cost`,
+ * and the SDK keeps that block on each step as `usage.raw`. It is the billed
+ * figure, after cache discounts and the routing it chose, so it is preferred to
+ * any price list. The SDK's `totalUsage` drops `raw`, so the steps are summed
+ * here. Undefined when no step carries a cost, as with a provider that reports
+ * none: a zero would claim the call was free.
+ */
+export function billedCost(
+  steps: ReadonlyArray<{ usage?: { raw?: unknown } }> | undefined,
+): number | undefined {
+  let total: number | undefined;
+  for (const step of steps ?? []) {
+    const raw = step.usage?.raw as { cost?: unknown } | undefined;
+    if (typeof raw?.cost === 'number' && Number.isFinite(raw.cost)) {
+      total = (total ?? 0) + raw.cost;
+    }
+  }
+  return total;
 }

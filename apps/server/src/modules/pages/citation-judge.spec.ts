@@ -6,7 +6,7 @@ import { PageEntryCitationJudgmentEnum } from '@vantikhq/types';
 
 import CitationJudge, {
   Complete,
-  judgeRole,
+  judgeTier,
   parseVerdict,
 } from './citation-judge';
 
@@ -23,8 +23,8 @@ describe('the citation judge', () => {
   const saved = { ...process.env };
 
   beforeEach(() => {
-    process.env.LLM_MODEL_FAST = 'vendor/fast-model';
-    process.env.LLM_MODEL_SMART = 'vendor/smart-model';
+    process.env.LLM_MODEL = 'vendor/default-model';
+    process.env.LLM_MODEL_DECISIONS = 'vendor/decisions-model';
   });
 
   afterEach(() => {
@@ -35,7 +35,7 @@ describe('the citation judge', () => {
     const run = jest.fn<ReturnType<Complete>, Parameters<Complete>>(
       async () => ({
         text: '{"verdict": "contradicted", "lines": "41-43", "reason": "It now deletes them."}',
-        model: 'vendor/smart-model',
+        model: 'vendor/decisions-model',
       }),
     );
 
@@ -43,7 +43,7 @@ describe('the citation judge', () => {
       verdict: PageEntryCitationJudgmentEnum.CONTRADICTED,
       lines: '41-43',
       reason: 'It now deletes them.',
-      model: 'vendor/smart-model',
+      model: 'vendor/decisions-model',
     });
 
     const [, system, prompt] = run.mock.calls[0];
@@ -54,25 +54,25 @@ describe('the citation judge', () => {
     expect(prompt).toContain('44: e');
   });
 
-  it('[KG-2.5] uses the smart role by default, and the other role when the writer ran on it', async () => {
-    const roles: string[] = [];
-    const run: Complete = async (role) => {
-      roles.push(role);
-      return { text: '{"verdict": "holds"}', model: `model-for-${role}` };
+  it('[KG-2.5] uses the decisions tier, and the default tier when the decisions model wrote the claim', async () => {
+    const tiers: string[] = [];
+    const run: Complete = async (tier) => {
+      tiers.push(tier);
+      return { text: '{"verdict": "holds"}', model: `model-for-${tier}` };
     };
     const judge = CitationJudge.using(run);
 
     await judge.judge(REQUEST);
-    await judge.judge({ ...REQUEST, writerModel: 'vendor/fast-model' });
+    await judge.judge({ ...REQUEST, writerModel: 'vendor/default-model' });
     const result = await judge.judge({
       ...REQUEST,
-      writerModel: 'vendor/smart-model',
+      writerModel: 'vendor/decisions-model',
     });
 
-    expect(roles).toEqual(['smart', 'smart', 'fast']);
-    expect(result.model).toBe('model-for-fast');
-    expect(judgeRole('vendor/smart-model')).toBe('fast');
-    expect(judgeRole('someone-elses-model')).toBe('smart');
+    expect(tiers).toEqual(['decisions', 'decisions', 'default']);
+    expect(result.model).toBe('model-for-default');
+    expect(judgeTier('vendor/decisions-model')).toBe('default');
+    expect(judgeTier('someone-elses-model')).toBe('decisions');
   });
 
   it('[KG-2.5] is unclear, having asked no model, when none is configured', async () => {

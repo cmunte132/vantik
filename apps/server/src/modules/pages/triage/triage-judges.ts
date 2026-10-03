@@ -8,12 +8,9 @@ import {
   triageAccept,
   triagePair,
 } from '@vantikhq/llm-tasks';
-import { LLMRole } from '@vantikhq/types';
+import { LLMTier } from '@vantikhq/types';
 
-import {
-  isLLMConfigured,
-  resolveModel,
-} from 'modules/ai-requests/llm-provider';
+import { isLLMConfigured } from 'modules/ai-requests/llm-provider';
 import { generateModelText } from 'modules/ai-requests/model-call';
 
 /**
@@ -23,9 +20,9 @@ import { generateModelText } from 'modules/ai-requests/model-call';
  * whether an entry that passed every check in code should be accepted. Each
  * is asked twice, independently, and the answers must agree: one model's
  * opinion of text is not a signal to act on, and a model asked about its own
- * claim is the least reliable judge there is. The two judgments are the fast
- * and smart roles, or, when a deployment serves both roles with one model,
- * that model twice at a temperature where its answers can differ.
+ * claim is the least reliable judge there is. Both judgments come from the
+ * decisions tier (LLM_MODEL_DECISIONS, or LLM_MODEL when that is unset), at a
+ * temperature where its answers can differ.
  *
  * Entries are agent-written text, handed to the judges as data to assess and
  * never as instructions. An answer that cannot be read is the cautious one:
@@ -34,17 +31,17 @@ import { generateModelText } from 'modules/ai-requests/model-call';
 
 /** One completion: which model answered, and what it said. */
 export type Complete = (
-  role: LLMRole,
+  tier: LLMTier,
   system: string,
   prompt: string,
   temperature: number,
 ) => Promise<{ text: string; model: string }>;
 
-const complete: Complete = (role, system, prompt, temperature) =>
+const complete: Complete = (tier, system, prompt, temperature) =>
   generateModelText({
     purpose:
       system === triagePair.system ? triagePair.purpose : triageAccept.purpose,
-    role,
+    tier,
     system,
     prompt,
     temperature,
@@ -89,21 +86,15 @@ const RELATIONS: Record<string, PageEntryRelationType> = {
 export default class TriageJudges {
   private run: Complete = complete;
   private configured: () => boolean = isLLMConfigured;
-  private modelOf: (role: LLMRole) => string = (role) =>
-    resolveModel(role).modelId;
 
   /** Judges over a given completion, for tests: no model is ever called. */
   static using(
     run: Complete,
-    options: {
-      configured?: () => boolean;
-      modelOf?: (role: LLMRole) => string;
-    } = {},
+    options: { configured?: () => boolean } = {},
   ): TriageJudges {
     return Object.assign(new TriageJudges(), {
       run,
       configured: options.configured ?? (() => true),
-      modelOf: options.modelOf ?? ((role: LLMRole) => `${role}-model`),
     });
   }
 
@@ -142,38 +133,27 @@ export default class TriageJudges {
   }
 
   /**
-   * The two judgments to ask: two roles on two models, or one model twice at
-   * a temperature where its answers can differ. Asking one model twice at
-   * temperature 0 would be one judgment counted twice.
+   * The two judgments to ask: the decisions tier twice, at a temperature
+   * where its answers can differ. Asking one model twice at temperature 0
+   * would be one judgment counted twice.
    */
-  private judges(): Array<{ role: LLMRole; temperature: number }> {
-    let same = false;
+  private judges(): Array<{ tier: LLMTier; temperature: number }> {
+    const judge = {
+      tier: triagePair.tier,
+      temperature: SAME_MODEL_TEMPERATURE,
+    };
 
-    try {
-      same = this.modelOf('fast') === this.modelOf('smart');
-    } catch {
-      same = false;
-    }
-
-    return same
-      ? [
-          { role: 'smart', temperature: SAME_MODEL_TEMPERATURE },
-          { role: 'smart', temperature: SAME_MODEL_TEMPERATURE },
-        ]
-      : [
-          { role: 'fast', temperature: 0 },
-          { role: 'smart', temperature: 0 },
-        ];
+    return [judge, judge];
   }
 
   private async ask(
-    judge: { role: LLMRole; temperature: number },
+    judge: { tier: LLMTier; temperature: number },
     system: string,
     prompt: string,
   ): Promise<{ text: string | null; model: string | null; error?: string }> {
     try {
       const { text, model } = await this.run(
-        judge.role,
+        judge.tier,
         system,
         prompt,
         judge.temperature,

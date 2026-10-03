@@ -4,7 +4,7 @@ import {
   type WriterEntry,
   type WriterInput,
 } from '@vantikhq/llm-tasks';
-import { type LLMRole } from '@vantikhq/types';
+import { type LLMTier } from '@vantikhq/types';
 
 import { isLLMConfigured } from 'modules/ai-requests/llm-provider';
 import { generateModelText } from 'modules/ai-requests/model-call';
@@ -22,15 +22,15 @@ import { generateModelText } from 'modules/ai-requests/model-call';
 
 /** One completion: which model answered, and what it said. */
 export type WriterComplete = (
-  role: LLMRole,
+  tier: LLMTier,
   system: string,
   prompt: string,
 ) => Promise<{ text: string; model: string }>;
 
-const complete: WriterComplete = (role, system, prompt) =>
+const complete: WriterComplete = (tier, system, prompt) =>
   generateModelText({
     purpose: pageRefresh.purpose,
-    role,
+    tier,
     system,
     prompt,
     temperature: pageRefresh.temperature,
@@ -68,7 +68,7 @@ export default class PageWriter {
   /** The edits the model proposes. Throws when the model cannot be reached. */
   async operations(input: WriterInput): Promise<WriterAnswer> {
     const { text, model } = await this.run(
-      'smart',
+      pageRefresh.tier,
       pageRefresh.system,
       pageRefresh.prompt(input),
     );

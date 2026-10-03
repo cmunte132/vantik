@@ -1893,10 +1893,10 @@ model Prompt {
 
   name        String
   prompt      String
-  // A role — "fast" or "smart" — not a model name. Which model serves each
-  // role is deployment configuration (LLM_MODEL_FAST / LLM_MODEL_SMART), so
-  // reaching a new model is not a schema change.
-  model       String    @default("fast")
+  // A tier — "default" or "decisions" — not a model name. Which model serves
+  // each tier is deployment configuration (LLM_MODEL / LLM_MODEL_DECISIONS),
+  // so reaching a new model is not a schema change.
+  model       String    @default("default")
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
 

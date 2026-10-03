@@ -88,44 +88,43 @@ export const promptsSeedData = [
   {
     name: 'IssueTitle',
     prompt: issueTitlePrompt,
-    model: 'fast',
+    model: 'default',
   },
   {
     name: 'IssueLabels',
     prompt: issueLabelPrompt,
-    model: 'fast',
+    model: 'decisions',
   },
   {
     name: 'IssueSummary',
     prompt: issueSummarizePrompt,
-    model: 'fast',
+    model: 'default',
   },
   {
     name: 'Filter',
     prompt: filterPrompt,
-    model: 'smart',
+    model: 'default',
   },
   {
     name: 'SubIssues',
     prompt: subIssuesPrompt,
-    model: 'smart',
+    model: 'default',
   },
   {
     name: 'ViewNameDescription',
     prompt: viewNameDescriptionPrompt,
-    model: 'fast',
+    model: 'default',
   },
   {
     name: 'IssueDescription',
     prompt: issueDescriptionPrompt,
-    model: 'smart',
+    model: 'default',
   },
   {
-    // Names the modules an issue would change. `fast` on purpose: the answer
-    // is a suggestion a person accepts or dismisses, never a write to the
-    // issue, so the cost of a wrong one is a chip nobody clicks.
+    // Names the modules an issue would change. A suggestion a person accepts
+    // or dismisses, so it is a decision, like the labels.
     name: 'ModuleClassifier',
     prompt: moduleClassifierPrompt,
-    model: 'fast',
+    model: 'decisions',
   },
 ];

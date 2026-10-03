@@ -66,8 +66,8 @@ describe('AIRequestsService against an OpenAI-compatible endpoint', () => {
       ...env,
       LLM_BASE_URL: `http://127.0.0.1:${port}/v1`,
       LLM_API_KEY: 'stub-key',
-      LLM_MODEL_FAST: 'stub/fast-model',
-      LLM_MODEL_SMART: 'stub/smart-model',
+      LLM_MODEL: 'stub/default-model',
+      LLM_MODEL_DECISIONS: 'stub/decisions-model',
     };
 
     const prisma = {
@@ -87,41 +87,43 @@ describe('AIRequestsService against an OpenAI-compatible endpoint', () => {
       'ws-1',
     );
 
-  it('serves each role with the model that role is configured for', async () => {
-    await ask('fast');
-    await ask('smart');
+  it('serves each tier with the model that tier is configured for', async () => {
+    await ask('default');
+    await ask('decisions');
 
     expect(seen).toEqual([
       {
         path: '/v1/chat/completions',
         auth: 'Bearer stub-key',
-        model: 'stub/fast-model',
+        model: 'stub/default-model',
       },
       {
         path: '/v1/chat/completions',
         auth: 'Bearer stub-key',
-        model: 'stub/smart-model',
+        model: 'stub/decisions-model',
       },
     ]);
   });
 
   // The AI endpoint is public API, so a current server has to keep serving
   // callers written long before it.
-  it('still serves a legacy model id from an older caller', async () => {
-    await ask('gpt-3.5-turbo');
+  it('still serves a legacy role or model id from an older caller', async () => {
+    await ask('fast');
+    await ask('smart');
     await ask('gpt-4o');
 
     expect(seen.map((request) => request.model)).toEqual([
-      'stub/fast-model',
-      'stub/smart-model',
+      'stub/default-model',
+      'stub/default-model',
+      'stub/default-model',
     ]);
   });
 
-  it('records the model that answered, not the role that was asked for', async () => {
-    await ask('fast');
+  it('records the model that answered, not the tier that was asked for', async () => {
+    await ask('default');
 
     expect(records).toEqual([
-      expect.objectContaining({ llmModel: 'stub/fast-model' }),
+      expect.objectContaining({ llmModel: 'stub/default-model' }),
     ]);
   });
 
@@ -129,9 +131,9 @@ describe('AIRequestsService against an OpenAI-compatible endpoint', () => {
   // could not resolve one, so a half-configured install answered with something
   // nobody had chosen and said nothing about it.
   it('fails naming the unset variable instead of falling back', async () => {
-    delete process.env.LLM_MODEL_SMART;
+    delete process.env.LLM_MODEL;
 
-    await expect(ask('smart')).rejects.toThrow('LLM_MODEL_SMART');
+    await expect(ask('default')).rejects.toThrow('LLM_MODEL');
     expect(seen).toHaveLength(0);
   });
 });

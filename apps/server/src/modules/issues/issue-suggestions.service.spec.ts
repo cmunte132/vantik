@@ -52,7 +52,7 @@ function buildService(
     prompt: {
       findUnique: jest
         .fn()
-        .mockResolvedValue({ prompt: 'classify', model: 'fast' }),
+        .mockResolvedValue({ prompt: 'classify', model: 'decisions' }),
     },
     issue: {
       findFirst: jest
@@ -95,8 +95,8 @@ function buildService(
 beforeAll(() => {
   process.env.LLM_BASE_URL = 'http://llm.test';
   process.env.LLM_API_KEY = 'test-key';
-  process.env.LLM_MODEL_FAST = 'fast-model';
-  process.env.LLM_MODEL_SMART = 'smart-model';
+  process.env.LLM_MODEL = 'default-model';
+  process.env.LLM_MODEL_DECISIONS = 'decisions-model';
 });
 
 describe('IssuesAIService.issueSuggestions', () => {

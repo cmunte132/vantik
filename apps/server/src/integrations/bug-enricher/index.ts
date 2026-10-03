@@ -92,7 +92,7 @@ async function enrich(ctx: PluginContext, issueId?: string) {
         content: `[INPUT] bug_description: ${issue.description ?? ''}`,
       },
     ],
-    llmModel: 'fast',
+    llmModel: 'default',
     model: 'BugSuggestion',
   });
 

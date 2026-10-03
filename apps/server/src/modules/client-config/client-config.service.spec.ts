@@ -7,8 +7,8 @@ describe('ClientConfigService', () => {
   const withLLM = {
     LLM_BASE_URL: 'https://example.test/v1',
     LLM_API_KEY: 'key',
-    LLM_MODEL_FAST: 'fast-model',
-    LLM_MODEL_SMART: 'smart-model',
+    LLM_MODEL: 'default-model',
+    LLM_MODEL_DECISIONS: 'decisions-model',
   };
 
   afterAll(() => {
@@ -40,7 +40,8 @@ describe('ClientConfigService', () => {
 
     expect(serialised).not.toContain('example.test');
     expect(serialised).not.toContain('key');
-    expect(serialised).not.toContain('fast-model');
+    expect(serialised).not.toContain('default-model');
+    expect(serialised).not.toContain('decisions-model');
   });
 
   // The browser starts its SDK on this flag, and the flag must not disclose

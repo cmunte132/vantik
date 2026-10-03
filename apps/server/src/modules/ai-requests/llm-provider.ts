@@ -1,4 +1,4 @@
-import type { LLMRole } from '@vantikhq/types';
+import type { LLMTier } from '@vantikhq/types';
 import type { LanguageModel } from 'ai';
 
 import {
@@ -15,13 +15,14 @@ const logger = new LoggerService('LLMProvider');
  * OpenAI — speaks the OpenAI API, so the provider is configuration rather than
  * code: one client pointed at LLM_BASE_URL with LLM_API_KEY.
  *
- * Callers ask for a role, never a model name. Which concrete model serves each
- * role is the deployment's business, not the caller's.
+ * Callers ask for a tier, never a model name. Which concrete model serves each
+ * tier is the deployment's business, not the caller's: LLM_MODEL serves every
+ * built-in text task, and LLM_MODEL_DECISIONS, when set, takes the decisions
+ * the server acts on (triage, the citation judge, label and module
+ * suggestions). Unset, the decisions go to LLM_MODEL too.
  */
-const MODEL_ENV: Record<LLMRole, string> = {
-  fast: 'LLM_MODEL_FAST',
-  smart: 'LLM_MODEL_SMART',
-};
+const MODEL_ENV = 'LLM_MODEL';
+const DECISIONS_ENV = 'LLM_MODEL_DECISIONS';
 
 let client: OpenAICompatibleProvider | undefined;
 
@@ -31,7 +32,7 @@ function readEnv(name: string): string {
   if (!value) {
     throw new Error(
       `${name} is not set. AI features need an OpenAI-compatible endpoint: ` +
-        `set LLM_BASE_URL, LLM_API_KEY, LLM_MODEL_FAST and LLM_MODEL_SMART. ` +
+        `set LLM_BASE_URL, LLM_API_KEY and LLM_MODEL. ` +
         `See docs/oss/self-deployment for the supported setups.`,
     );
   }
@@ -48,12 +49,9 @@ function readEnv(name: string): string {
  * feature is not the same as pretending it worked.
  */
 export function isLLMConfigured(): boolean {
-  return [
-    'LLM_BASE_URL',
-    'LLM_API_KEY',
-    'LLM_MODEL_FAST',
-    'LLM_MODEL_SMART',
-  ].every((name) => Boolean(process.env[name]?.trim()));
+  return ['LLM_BASE_URL', 'LLM_API_KEY', MODEL_ENV].every((name) =>
+    Boolean(process.env[name]?.trim()),
+  );
 }
 
 /**
@@ -92,63 +90,50 @@ export function getLLMClient(): OpenAICompatibleProvider {
 }
 
 /**
- * Coerce whatever a caller sent into one of the two roles.
+ * Coerce whatever a caller sent into one of the two tiers.
  *
  * The AI endpoint is public API, so a server upgrade meets requests from
- * scripts written against an older one that still send wire model IDs — as the
- * retired Actions did. This layer is permanent, not a migration shim: it is
- * what keeps those callers working.
+ * scripts written against an older one that still send a role (`fast`,
+ * `smart`) or a wire model id, as the retired Actions did. Those callers asked
+ * for text, not for a decision the server acts on, so all of them get the
+ * default tier. This layer is permanent, not a migration shim: it is what
+ * keeps those callers working.
  */
-export function coerceRole(requested?: string | null): LLMRole {
+export function coerceTier(requested?: string | null): LLMTier {
   const value = requested?.trim();
 
-  if (!value) {
-    return 'fast';
-  }
-
-  if (value === 'fast' || value === 'smart') {
+  if (value === 'default' || value === 'decisions') {
     return value;
   }
 
-  const lowered = value.toLowerCase();
+  if (value) {
+    logger.debug({
+      message: `Coercing legacy model '${value}' to the default tier`,
+      where: 'llm-provider.coerceTier',
+    });
+  }
 
-  // Only ids we recognise as one of the big models take the paid role. Anything
-  // else — a small local model like llama3 or gemma2:2b, a wrong-cased 'Fast',
-  // an id we have never seen — takes the cheap one, which is the same default
-  // an empty value gets and the same role the migration gave LLAMA3. When we
-  // are guessing, guess cheap.
-  const small =
-    /^gpt-3\.5/.test(lowered) ||
-    lowered.includes('mini') ||
-    lowered.includes('haiku');
-  const large =
-    lowered.includes('gpt-4') ||
-    lowered.includes('opus') ||
-    lowered.includes('sonnet');
-
-  const role: LLMRole = large && !small ? 'smart' : 'fast';
-
-  logger.debug({
-    message: `Coercing legacy model id '${value}' to role '${role}'`,
-    where: 'llm-provider.coerceRole',
-  });
-
-  return role;
+  return 'default';
 }
 
 /**
- * Resolve a requested role (or legacy model id) to the concrete model this
- * deployment serves it with. Throws naming the missing variable rather than
- * falling back — a misconfigured install must fail loudly, not answer with
- * whatever model happens to be reachable.
+ * Resolve a requested tier (or legacy role or model id) to the concrete model
+ * this deployment serves it with. The decisions tier falls back to LLM_MODEL
+ * when LLM_MODEL_DECISIONS is unset. Throws naming the missing variable rather
+ * than falling back further: a misconfigured install must fail loudly, not
+ * answer with whatever model happens to be reachable.
  */
 export function resolveModel(requested?: string | null): {
-  role: LLMRole;
+  tier: LLMTier;
   modelId: string;
 } {
-  const role = coerceRole(requested);
+  const tier = coerceTier(requested);
+  const decisions = process.env[DECISIONS_ENV]?.trim();
 
-  return { role, modelId: readEnv(MODEL_ENV[role]) };
+  return {
+    tier,
+    modelId: tier === 'decisions' && decisions ? decisions : readEnv(MODEL_ENV),
+  };
 }
 
 export function getLanguageModel(modelId: string): LanguageModel {

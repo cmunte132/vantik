@@ -56,8 +56,8 @@ describe('generateModelText', () => {
       ...env,
       LLM_BASE_URL: `http://127.0.0.1:${port}/v1`,
       LLM_API_KEY: 'stub-key',
-      LLM_MODEL_FAST: 'stub/fast-model',
-      LLM_MODEL_SMART: 'stub/smart-model',
+      LLM_MODEL: 'stub/default-model',
+      LLM_MODEL_DECISIONS: 'stub/decisions-model',
     };
   });
 
@@ -82,21 +82,24 @@ describe('generateModelText', () => {
   it('logs the feature, the model, the duration and the tokens of a call', async () => {
     const answer = await generateModelText({
       purpose: 'triage.pair',
-      role: 'smart',
+      tier: 'decisions',
       system: 'be brief',
       prompt: 'hello',
     });
 
-    expect(answer).toEqual({ text: 'stub answer', model: 'stub/smart-model' });
+    expect(answer).toEqual({
+      text: 'stub answer',
+      model: 'stub/decisions-model',
+    });
     expect(info).toHaveBeenCalledTimes(1);
     expect(info.mock.calls[0][0]).toMatchObject({
       message: expect.stringMatching(
-        /^triage\.pair: stub\/smart-model answered in \d+ ms$/,
+        /^triage\.pair: stub\/decisions-model answered in \d+ ms$/,
       ),
       payload: {
         purpose: 'triage.pair',
-        role: 'smart',
-        model: 'stub/smart-model',
+        role: 'decisions',
+        model: 'stub/decisions-model',
         durationMs: expect.any(Number),
         inputTokens: 7,
         outputTokens: 3,
@@ -112,7 +115,7 @@ describe('generateModelText', () => {
 
     expect(debug.mock.calls[0][0].payload).toMatchObject({
       purpose: 'page.refresh',
-      model: 'stub/fast-model',
+      model: 'stub/default-model',
       prompt: 'hello',
       answer: 'stub answer',
     });
@@ -129,22 +132,22 @@ describe('generateModelText', () => {
     expect(error).toHaveBeenCalledTimes(1);
     expect(error.mock.calls[0][0]).toMatchObject({
       message: expect.stringMatching(
-        /^citation\.judge: stub\/fast-model failed after \d+ ms$/,
+        /^citation\.judge: stub\/default-model failed after \d+ ms$/,
       ),
-      payload: { purpose: 'citation.judge', model: 'stub/fast-model' },
+      payload: { purpose: 'citation.judge', model: 'stub/default-model' },
       error: expect.any(Error),
     });
   });
 
   it('logs a call that has no model configured', async () => {
-    process.env.LLM_MODEL_FAST = '';
+    process.env.LLM_MODEL = '';
 
     try {
       await expect(
         generateModelText({ purpose: 'triage.accept', prompt: 'hello' }),
-      ).rejects.toThrow('LLM_MODEL_FAST is not set');
+      ).rejects.toThrow('LLM_MODEL is not set');
     } finally {
-      process.env.LLM_MODEL_FAST = 'stub/fast-model';
+      process.env.LLM_MODEL = 'stub/default-model';
     }
 
     expect(error.mock.calls[0][0]).toMatchObject({

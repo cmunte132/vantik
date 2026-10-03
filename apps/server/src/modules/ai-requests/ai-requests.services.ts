@@ -88,12 +88,12 @@ export default class AIRequestsService {
     purpose = purpose || 'ai-request';
 
     if (stream) {
-      return streamModelText({ purpose, role: model, messages }, onFinish);
+      return streamModelText({ purpose, tier: model, messages }, onFinish);
     }
 
     const { text, model: finalModel } = await generateModelText({
       purpose,
-      role: model,
+      tier: model,
       messages,
     });
 

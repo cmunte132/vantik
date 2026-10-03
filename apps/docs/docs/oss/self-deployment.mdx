@@ -152,15 +152,21 @@ be a hosted service or your own hardware, and you set it in one place:
 LLM_BASE_URL=https://openrouter.ai/api/v1
 LLM_API_KEY=your-key
 
-# Vantik asks for a role, and never for the name of a model. Point each role
-# where you want. The ids are the ids that your endpoint serves.
-LLM_MODEL_FAST=openai/gpt-4o-mini
-LLM_MODEL_SMART=openai/gpt-4o
+# Vantik asks for a tier, and never for the name of a model. The ids are the
+# ids that your endpoint serves.
+LLM_MODEL=google/gemini-3.8-flash
+# Optional. Without it, the decisions use LLM_MODEL too.
+# LLM_MODEL_DECISIONS=
 ```
 
-`fast` does the short, frequent calls: the titles, the labels, and the filters.
-`smart` does the calls with a higher value: the descriptions and the sub-issues.
-You can point both roles at the same model.
+| Tier | Setting | Serves | If not set |
+| --- | --- | --- | --- |
+| Default (required) | `LLM_MODEL` | Every built-in text task: issue titles, summaries, descriptions, sub-issues and filters, and generated pages | The AI features are off |
+| Decisions (optional) | `LLM_MODEL_DECISIONS` | The decisions the server acts on: knowledge triage, the citation judge, and label and module suggestions | Uses `LLM_MODEL` |
+
+Point the decisions tier at a different model when you want the server's
+judgments from a stronger or more careful model than the one that writes text.
+Triage asks the decisions model twice and acts only when both answers agree.
 
 People use these four setups:
 

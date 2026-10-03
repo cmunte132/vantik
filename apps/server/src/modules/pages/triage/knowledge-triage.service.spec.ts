@@ -676,8 +676,6 @@ interface Setup {
   accept?: Answer;
   /** False when no model is configured. */
   llm?: boolean;
-  /** One model serving both roles. */
-  sameModel?: boolean;
   /** Decision types stopped or resumed in the workspace. */
   backoff?: Backoff[];
   /** Knowledge gaps, with the issues opened for them. */
@@ -695,7 +693,7 @@ function triage(setup: Setup) {
       gaps: setup.gaps,
     });
   const calls: Array<{
-    role: string;
+    tier: string;
     system: string;
     prompt: string;
     temperature: number;
@@ -706,9 +704,10 @@ function triage(setup: Setup) {
   const answer = (value: Answer, index: number) =>
     Array.isArray(value) ? value[index] : value;
 
-  const complete: Complete = async (role, system, prompt, temperature) => {
+  // Each judgment says which one it was, so a record can be traced back.
+  const complete: Complete = async (tier, system, prompt, temperature) => {
     const index = calls.filter((call) => call.prompt === prompt).length;
-    calls.push({ role, system, prompt, temperature });
+    calls.push({ tier, system, prompt, temperature });
 
     if (system.includes('NEWER claim')) {
       const existingClaim = /EXISTING claim:\n"""\n([\s\S]*?)\n"""/.exec(
@@ -720,7 +719,7 @@ function triage(setup: Setup) {
 
       return {
         text: answer(reply, index),
-        model: setup.sameModel ? 'one-model' : `${role}-model`,
+        model: `${tier}-model-${index + 1}`,
       };
     }
 
@@ -729,13 +728,12 @@ function triage(setup: Setup) {
         setup.accept ?? '{"verdict": "accept", "reason": "the lines say so"}',
         index,
       ),
-      model: setup.sameModel ? 'one-model' : `${role}-model`,
+      model: `${tier}-model-${index + 1}`,
     };
   };
 
   const judges = TriageJudges.using(complete, {
     configured: () => setup.llm ?? true,
-    ...(setup.sameModel && { modelOf: () => 'one-model' }),
   });
   const findNearEntries = jest.fn(
     async (): Promise<Array<{ entryId: string; similarity: number }>> => {
@@ -1184,7 +1182,7 @@ describe('near neighbours', () => {
         toId: 'neighbour',
         type: Relation.REFINES,
         decidedBy: Decider.MODEL,
-        models: ['fast-model', 'smart-model'],
+        models: ['decisions-model-1', 'decisions-model-2'],
         similarity: 0.82,
       }),
     ]);
@@ -1463,7 +1461,12 @@ describe('the triage job and its record', () => {
       mode: KnowledgeTriageMode.ON,
       applied: true,
       // The pair was asked about, then acceptance: every model, in order.
-      models: ['fast-model', 'smart-model', 'fast-model', 'smart-model'],
+      models: [
+        'decisions-model-1',
+        'decisions-model-2',
+        'decisions-model-1',
+        'decisions-model-2',
+      ],
     });
     expect(decision.inputs).toMatchObject({
       contentHash: contentHashOf(NEW_CONTENT),
@@ -1506,10 +1509,10 @@ describe('the triage job and its record', () => {
       accept: [
         expect.objectContaining({
           accept: true,
-          model: 'fast-model',
+          model: 'decisions-model-1',
           raw: '{"verdict": "accept", "reason": "the lines say so"}',
         }),
-        expect.objectContaining({ accept: true, model: 'smart-model' }),
+        expect.objectContaining({ accept: true, model: 'decisions-model-2' }),
       ],
     });
     // The judges were shown what the citation reads, as the server read it.
@@ -1897,16 +1900,15 @@ describe('auto-accept', () => {
     expect(t.relations[0]).toMatchObject({ type: Relation.DISTINCT });
   });
 
-  it('[KG-4.4] asks one model twice, at a temperature where it can disagree, when it serves both roles', async () => {
-    const t = triage({ rows: [fresh()], sameModel: true });
+  it('[KG-4.4] asks the decisions tier twice, at a temperature where it can disagree', async () => {
+    const t = triage({ rows: [fresh()] });
 
     await t.service.triage('new', ON);
 
-    expect(t.calls.map((call) => [call.role, call.temperature])).toEqual([
-      ['smart', 0.7],
-      ['smart', 0.7],
+    expect(t.calls.map((call) => [call.tier, call.temperature])).toEqual([
+      ['decisions', 0.7],
+      ['decisions', 0.7],
     ]);
-    expect(t.decisions[0].models).toEqual(['one-model', 'one-model']);
   });
 });
 

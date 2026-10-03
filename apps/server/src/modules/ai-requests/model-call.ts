@@ -33,8 +33,8 @@ const logger = new LoggerService('LLM');
 export interface ModelCall {
   /** The feature that makes the call, for example `triage.pair`. */
   purpose: string;
-  /** A role, or a legacy model id that `resolveModel` accepts. */
-  role?: string | null;
+  /** A tier, or a legacy role or model id that `resolveModel` accepts. */
+  tier?: string | null;
   system?: string;
   temperature?: number;
   /** Give `prompt` or `messages`, not the two. */
@@ -65,7 +65,7 @@ export async function generateModelText(call: ModelCall): Promise<ModelAnswer> {
   const telemetry = startModelTelemetry(call.purpose);
 
   try {
-    ({ role, modelId: model } = resolveModel(call.role));
+    ({ tier: role, modelId: model } = resolveModel(call.tier));
     telemetry.setModel(role, model);
 
     const result = await telemetry.run(() =>
@@ -185,7 +185,7 @@ export function streamModelText(
   const telemetry = startModelTelemetry(call.purpose);
 
   try {
-    ({ role, modelId: model } = resolveModel(call.role));
+    ({ tier: role, modelId: model } = resolveModel(call.tier));
     telemetry.setModel(role, model);
   } catch (error) {
     telemetry.fail(error);

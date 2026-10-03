@@ -4,7 +4,7 @@ import {
   type CitationJudgeInput,
   readCitationVerdict,
 } from '@vantikhq/llm-tasks';
-import { LLMRole, PageEntryCitationJudgmentEnum } from '@vantikhq/types';
+import { LLMTier, PageEntryCitationJudgmentEnum } from '@vantikhq/types';
 
 import {
   isLLMConfigured,
@@ -20,8 +20,8 @@ import { generateModelText } from 'modules/ai-requests/model-call';
  * its answer is recorded beside the check rather than replacing it.
  *
  * The judge is not the writer. A model asked whether its own claim holds is
- * the least reliable judge available, so when the writer's model is known the
- * judge is the role that is not it. The claim itself is agent-written text,
+ * the least reliable judge available, so the decisions tier judges unless its
+ * model wrote the claim, and then the default tier does. The claim itself is agent-written text,
  * handed to the judge as data to assess and never as instructions.
  */
 
@@ -41,15 +41,15 @@ export interface JudgeResult {
 
 /** One completion: which model answered, and what it said. */
 export type Complete = (
-  role: LLMRole,
+  tier: LLMTier,
   system: string,
   prompt: string,
 ) => Promise<{ text: string; model: string }>;
 
-const complete: Complete = (role, system, prompt) =>
+const complete: Complete = (tier, system, prompt) =>
   generateModelText({
     purpose: citationJudge.purpose,
-    role,
+    tier,
     system,
     prompt,
     temperature: citationJudge.temperature,
@@ -75,11 +75,9 @@ export default class CitationJudge {
       };
     }
 
-    const role = judgeRole(request.writerModel);
-
     try {
       const { text, model } = await this.run(
-        role,
+        judgeTier(request.writerModel),
         citationJudge.system,
         citationJudge.prompt(request),
       );
@@ -97,21 +95,21 @@ export default class CitationJudge {
 }
 
 /**
- * The role that is not the writer's.
- *
- * A writer's model is recorded as a model id, and the deployment maps each
- * role to one. A writer on the smart model is judged by the fast one; anyone
- * else, including a writer on a model neither role serves, by the smart one.
+ * The tier that judges a claim: the decisions tier, unless its model is the
+ * one that wrote the claim. Then the default tier judges, which is the same
+ * model again only when the deployment runs one model for both.
  */
-export function judgeRole(writerModel?: string | null): LLMRole {
+export function judgeTier(writerModel?: string | null): LLMTier {
   if (!writerModel) {
-    return 'smart';
+    return citationJudge.tier;
   }
 
   try {
-    return resolveModel('smart').modelId === writerModel ? 'fast' : 'smart';
+    return resolveModel(citationJudge.tier).modelId === writerModel
+      ? 'default'
+      : citationJudge.tier;
   } catch {
-    return 'smart';
+    return citationJudge.tier;
   }
 }
 

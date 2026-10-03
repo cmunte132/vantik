@@ -51,12 +51,12 @@ describe('the writer of a generated page', () => {
       operations: [{ op: 'remove_section', id: 'sec_deploy' }],
       model: 'scripted',
     });
-    const [role, system, prompt] = run.mock.calls[0] as unknown as [
+    const [tier, system, prompt] = run.mock.calls[0] as unknown as [
       string,
       string,
       string,
     ];
-    expect(role).toBe('smart');
+    expect(tier).toBe('default');
     expect(system).toContain('replace_section');
     expect(system).toContain('insert_section');
     expect(system).toContain('remove_section');

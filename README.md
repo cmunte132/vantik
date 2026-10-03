@@ -143,8 +143,8 @@ log and continues:
 
 - **an LLM endpoint** runs the AI features. Any endpoint with the OpenAI
   interface works: OpenRouter, OpenAI, or a local LM Studio, Ollama, or vLLM
-  server. Set `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL_FAST`, and
-  `LLM_MODEL_SMART`. If you do not set them, the webapp hides all the AI
+  server. Set `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL`, and optionally
+  `LLM_MODEL_DECISIONS`. If you do not set them, the webapp hides all the AI
   controls, and the other features work as normal. If you set them later, the
   controls appear on the next page load.
 - **SMTP** sends real email. Set the `SMTP_*` variables.

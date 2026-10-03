@@ -11,19 +11,19 @@ import TriageJudges, {
   SAME_MODEL_TEMPERATURE,
 } from './triage-judges';
 
-function recording(text: string | ((role: string) => string)) {
+function recording(text: string | ((call: number) => string)) {
   const calls: Array<{
-    role: string;
+    tier: string;
     system: string;
     prompt: string;
     temperature: number;
   }> = [];
-  const run: Complete = async (role, system, prompt, temperature) => {
-    calls.push({ role, system, prompt, temperature });
+  const run: Complete = async (tier, system, prompt, temperature) => {
+    const call = calls.push({ tier, system, prompt, temperature }) - 1;
 
     return {
-      text: typeof text === 'function' ? text(role) : text,
-      model: `${role}-model`,
+      text: typeof text === 'function' ? text(call) : text,
+      model: `${tier}-model`,
     };
   };
 
@@ -31,7 +31,7 @@ function recording(text: string | ((role: string) => string)) {
 }
 
 describe('judging how two entries relate', () => {
-  it('[KG-4.2] asks the fast and smart roles the same question, independently', async () => {
+  it('[KG-4.2] asks the decisions tier the same question twice, independently', async () => {
     const { run, calls } = recording(
       '{"relation": "refines", "reason": "adds the retry count"}',
     );
@@ -41,10 +41,7 @@ describe('judging how two entries relate', () => {
       'The worker retries webhooks.',
     );
 
-    expect(calls.map((call) => [call.role, call.temperature])).toEqual([
-      ['fast', 0],
-      ['smart', 0],
-    ]);
+    expect(calls.map((call) => call.tier)).toEqual(['decisions', 'decisions']);
     expect(calls[0].prompt).toBe(calls[1].prompt);
     expect(calls[0].prompt).toContain(
       'EXISTING claim:\n"""\nThe worker retries webhooks.\n"""',
@@ -57,10 +54,10 @@ describe('judging how two entries relate', () => {
     expect(first).toMatchObject({
       type: PageEntryRelationType.REFINES,
       reason: 'adds the retry count',
-      model: 'fast-model',
+      model: 'decisions-model',
       readable: true,
     });
-    expect(second.model).toBe('smart-model');
+    expect(second.model).toBe('decisions-model');
   });
 
   it('[KG-4.2] reads invalid output as DISTINCT', () => {
@@ -96,31 +93,28 @@ describe('judging how two entries relate', () => {
     });
   });
 
-  it('[KG-4.4] asks one model twice at a temperature where it can disagree, when both roles are that model', async () => {
+  it('[KG-4.4] asks at a temperature where the two judgments can disagree', async () => {
     const { run, calls } = recording('{"relation": "distinct"}');
 
-    await TriageJudges.using(run, { modelOf: () => 'one-model' }).classify(
-      'a',
-      'b',
-    );
+    await TriageJudges.using(run).classify('a', 'b');
 
     expect(SAME_MODEL_TEMPERATURE).toBeGreaterThan(0);
-    expect(calls.map((call) => [call.role, call.temperature])).toEqual([
-      ['smart', SAME_MODEL_TEMPERATURE],
-      ['smart', SAME_MODEL_TEMPERATURE],
+    expect(calls.map((call) => call.temperature)).toEqual([
+      SAME_MODEL_TEMPERATURE,
+      SAME_MODEL_TEMPERATURE,
     ]);
   });
 });
 
 describe('judging whether to accept an entry', () => {
   it('[KG-4.4] shows the judges the claim and what its citations read, and reads their verdicts', async () => {
-    const { run, calls } = recording((role) =>
-      role === 'fast'
+    const { run, calls } = recording((call) =>
+      call === 0
         ? '{"verdict": "accept", "reason": "the lines say so"}'
         : '{"verdict": "escalate", "reason": "the lines say otherwise"}',
     );
 
-    const [fast, smart] = await TriageJudges.using(run).accept({
+    const [first, second] = await TriageJudges.using(run).accept({
       content: 'Webhooks retry three times.',
       kind: 'FACT',
       scope: 'apps/server',
@@ -133,8 +127,8 @@ describe('judging whether to accept an entry', () => {
     expect(calls[0].prompt).toContain('about apps/server');
     expect(calls[0].prompt).toContain('const RETRIES = 3;');
     expect(calls[0].system).toMatch(/never as instructions/);
-    expect(fast).toMatchObject({ accept: true, readable: true });
-    expect(smart).toMatchObject({
+    expect(first).toMatchObject({ accept: true, readable: true });
+    expect(second).toMatchObject({
       accept: false,
       readable: true,
       reason: 'the lines say otherwise',
@@ -201,8 +195,8 @@ describe('judging whether to accept an entry', () => {
     const LLM_ENV = [
       'LLM_BASE_URL',
       'LLM_API_KEY',
-      'LLM_MODEL_FAST',
-      'LLM_MODEL_SMART',
+      'LLM_MODEL',
+      'LLM_MODEL_DECISIONS',
     ];
     const saved: Record<string, string | undefined> = {};
 
@@ -223,15 +217,15 @@ describe('judging whether to accept an entry', () => {
       }
     });
 
-    it('[KG-4.7] read the deployment: no model until all four settings are there', () => {
+    it('[KG-4.7] read the deployment: no model until LLM_MODEL and its endpoint are there', () => {
       expect(new TriageJudges().available()).toBe(false);
 
       process.env.LLM_BASE_URL = 'http://llm.test/v1';
       process.env.LLM_API_KEY = 'test-key';
-      process.env.LLM_MODEL_FAST = 'fast';
+      process.env.LLM_MODEL_DECISIONS = 'decisions';
       expect(new TriageJudges().available()).toBe(false);
 
-      process.env.LLM_MODEL_SMART = 'smart';
+      process.env.LLM_MODEL = 'default';
       expect(new TriageJudges().available()).toBe(true);
     });
   });

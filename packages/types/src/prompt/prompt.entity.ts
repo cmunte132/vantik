@@ -1,12 +1,13 @@
 import { Workspace } from '../workspace/workspace.entity';
 
 /**
- * A prompt asks for a class of model, not a named one. Which model serves each
- * role is deployment configuration (LLM_MODEL_FAST / LLM_MODEL_SMART).
+ * A prompt asks for a tier, not a named model. Which model serves each tier is
+ * deployment configuration: LLM_MODEL for the default tier, and
+ * LLM_MODEL_DECISIONS, when set, for the decisions the server acts on.
  */
-export const LLMRoles = ['fast', 'smart'] as const;
+export const LLMTiers = ['default', 'decisions'] as const;
 
-export type LLMRole = (typeof LLMRoles)[number];
+export type LLMTier = (typeof LLMTiers)[number];
 
 export class Prompt {
   id: string;
@@ -16,7 +17,7 @@ export class Prompt {
   name: string;
   prompt: string;
 
-  model: LLMRole;
+  model: LLMTier;
   workspace?: Workspace;
   workspaceId: string;
 }

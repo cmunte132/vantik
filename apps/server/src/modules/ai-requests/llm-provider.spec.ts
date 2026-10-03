@@ -1,41 +1,31 @@
-import { coerceRole, isLLMConfigured, resolveModel } from './llm-provider';
+import { coerceTier, isLLMConfigured, resolveModel } from './llm-provider';
 
-describe('coerceRole', () => {
-  it.each(['fast', 'smart'] as const)('passes %s through', (role) => {
-    expect(coerceRole(role)).toBe(role);
+describe('coerceTier', () => {
+  it.each(['default', 'decisions'] as const)('passes %s through', (tier) => {
+    expect(coerceTier(tier)).toBe(tier);
   });
 
-  // The AI endpoint is public API, so a server can always be asked for a model
-  // id that was current whenever its caller was written. Nothing here is a
-  // temporary shim.
+  // The AI endpoint is public API, so a server can always be asked for a role
+  // or a model id that was current whenever its caller was written. Those
+  // callers asked for text, not for a decision, so they all get the default
+  // tier. Nothing here is a temporary shim.
   it.each([
-    ['gpt-3.5-turbo', 'fast'],
-    ['gpt-3.5-turbo-0125', 'fast'],
-    ['gpt-4o-mini', 'fast'],
-    ['claude-3-haiku-20240307', 'fast'],
-    ['gpt-4-turbo', 'smart'],
-    ['gpt-4o', 'smart'],
-    ['claude-3-opus-20240229', 'smart'],
-    ['llama3', 'fast'],
-  ])('maps the legacy id %s to %s', (legacy, role) => {
-    expect(coerceRole(legacy)).toBe(role);
+    'fast',
+    'smart',
+    'gpt-3.5-turbo',
+    'gpt-4o',
+    'claude-3-opus-20240229',
+    'llama3',
+    'Decisions',
+    'some-model-we-have-never-seen',
+  ])('takes the default tier for the legacy value %s', (legacy) => {
+    expect(coerceTier(legacy)).toBe('default');
   });
-
-  // An id we cannot place is a guess, and a guess that picks the paid model
-  // bills the install for it silently. 'llama3' and 'gemma2:2b' were the local
-  // fallback models, and the migration reads LLAMA3 as fast for the same
-  // reason.
-  it.each(['gemma2:2b', 'Fast', 'some-model-we-have-never-seen'])(
-    'takes the cheap role for the unrecognised id %s',
-    (unknown) => {
-      expect(coerceRole(unknown)).toBe('fast');
-    },
-  );
 
   it.each([undefined, null, '', '   '])(
-    'falls back to fast when given %p',
+    'falls back to default when given %p',
     (empty) => {
-      expect(coerceRole(empty)).toBe('fast');
+      expect(coerceTier(empty)).toBe('default');
     },
   );
 });
@@ -45,16 +35,16 @@ describe('isLLMConfigured', () => {
   const complete = {
     LLM_BASE_URL: 'https://example.test/v1',
     LLM_API_KEY: 'key',
-    LLM_MODEL_FAST: 'fast-model',
-    LLM_MODEL_SMART: 'smart-model',
+    LLM_MODEL: 'default-model',
   };
 
   afterAll(() => {
     process.env = env;
   });
 
-  it('is true once all four variables are set', () => {
+  it('is true once all three variables are set', () => {
     process.env = { ...env, ...complete };
+    delete process.env.LLM_MODEL_DECISIONS;
 
     expect(isLLMConfigured()).toBe(true);
   });
@@ -81,23 +71,34 @@ describe('resolveModel', () => {
 
   beforeEach(() => {
     process.env = { ...env };
+    delete process.env.LLM_MODEL_DECISIONS;
   });
 
   afterAll(() => {
     process.env = env;
   });
 
-  it('resolves each role through its own variable', () => {
-    process.env.LLM_MODEL_FAST = 'openai/gpt-5-mini';
-    process.env.LLM_MODEL_SMART = 'anthropic/claude-opus-4.5';
+  it('resolves each tier through its own variable', () => {
+    process.env.LLM_MODEL = 'openai/gpt-oss-120b';
+    process.env.LLM_MODEL_DECISIONS = 'google/gemini-3.8-flash';
 
-    expect(resolveModel('fast')).toEqual({
-      role: 'fast',
-      modelId: 'openai/gpt-5-mini',
+    expect(resolveModel('default')).toEqual({
+      tier: 'default',
+      modelId: 'openai/gpt-oss-120b',
     });
-    expect(resolveModel('smart')).toEqual({
-      role: 'smart',
-      modelId: 'anthropic/claude-opus-4.5',
+    expect(resolveModel('decisions')).toEqual({
+      tier: 'decisions',
+      modelId: 'google/gemini-3.8-flash',
+    });
+  });
+
+  it('serves the decisions with LLM_MODEL when LLM_MODEL_DECISIONS is unset', () => {
+    process.env.LLM_MODEL = 'openai/gpt-oss-120b';
+    process.env.LLM_MODEL_DECISIONS = '  ';
+
+    expect(resolveModel('decisions')).toEqual({
+      tier: 'decisions',
+      modelId: 'openai/gpt-oss-120b',
     });
   });
 
@@ -105,8 +106,8 @@ describe('resolveModel', () => {
   // not resolve one, so a half-configured install kept answering with something
   // nobody had chosen. A missing variable has to say which one it is.
   it('throws naming the unset variable rather than falling back', () => {
-    delete process.env.LLM_MODEL_SMART;
+    delete process.env.LLM_MODEL;
 
-    expect(() => resolveModel('smart')).toThrow('LLM_MODEL_SMART');
+    expect(() => resolveModel('decisions')).toThrow('LLM_MODEL');
   });
 });

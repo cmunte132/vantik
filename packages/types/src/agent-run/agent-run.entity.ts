@@ -459,6 +459,8 @@ export class AgentRun {
 
   harnessVersion: string | null;
   modelId: string | null;
+  /** The OpenTelemetry trace the run reported to, when it exported one. */
+  traceId: string | null;
   configHash: string | null;
   iterationCount: number;
   phaseTimings: AgentRunPhaseTimings | null;

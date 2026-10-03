@@ -380,4 +380,20 @@ describe('run telemetry', () => {
       ['python', 'timeout', 60],
     ]);
   });
+
+  it('names the trace it reports to, for the run row', () => {
+    const telemetry = startRunTelemetry({
+      runId: 'run-7',
+      issueId: 'issue-1',
+      agentUserId: 'agent-1',
+      executor: 'hosted',
+    });
+    telemetry.end({ status: 'SUCCEEDED' });
+
+    const root = spans
+      .getFinishedSpans()
+      .find((s) => s.name === 'invoke_agent hosted');
+    expect(telemetry.traceId).toMatch(/^[0-9a-f]{32}$/);
+    expect(telemetry.traceId).toBe(root?.spanContext().traceId);
+  });
 });

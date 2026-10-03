@@ -105,6 +105,10 @@ model AgentRun {
 
   /// Pinned harness build, e.g. `pi@0.82.1`.
   harnessVersion String?
+  /// The OpenTelemetry trace the run reported to, so its timeline can be
+  /// found in whatever backend the deployment exports to. Null for a run
+  /// that exported nothing: telemetry off, or an executor that reports none.
+  traceId        String?
   /// The model the harness actually ran, as the provider names it.
   modelId        String?
   /// Hash over the effective config — harness, limits, phase flags. Two runs

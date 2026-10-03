@@ -42,6 +42,7 @@ export interface TransitionPatch {
   result?: any;
   harnessVersion?: string;
   modelId?: string;
+  traceId?: string;
   baseCommit?: string;
   iterationCount?: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

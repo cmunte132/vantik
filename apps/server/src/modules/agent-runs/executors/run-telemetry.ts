@@ -34,6 +34,7 @@ import {
   SpanStatusCode,
   trace,
   ValueType,
+  isSpanContextValid,
 } from '@opentelemetry/api';
 
 import {
@@ -216,6 +217,12 @@ export interface RunTelemetry {
   }): void;
   /** The provider and model, once the run has resolved them. */
   setModel(provider: string | null, model: string | null): void;
+  /**
+   * The run's trace, to store on the run row. Undefined when nothing is
+   * exported: with no tracer provider registered, the span is a no-op and its
+   * id is all zeros, which would point at nothing.
+   */
+  traceId: string | undefined;
 }
 
 export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
@@ -314,7 +321,11 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
       }
     };
 
+  const rootSpan = root.spanContext();
+
   return {
+    traceId: isSpanContextValid(rootSpan) ? rootSpan.traceId : undefined,
+
     setModel: safely(setModel),
 
     phase: safely((name: string) => {

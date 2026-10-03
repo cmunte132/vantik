@@ -34,6 +34,7 @@ export async function saveAgentRunData(
         result: record.data.result,
         config: record.data.config,
         harnessVersion: record.data.harnessVersion,
+        traceId: record.data.traceId,
         modelId: record.data.modelId,
         iterationCount: record.data.iterationCount,
         phaseTimings: record.data.phaseTimings,
@@ -52,8 +53,7 @@ export async function saveAgentRunData(
         case 'D': {
           await vantikDatabase.agentRuns.delete(record.data.id);
           return (
-            agentRunsStore &&
-            (await agentRunsStore.deleteById(record.data.id))
+            agentRunsStore && (await agentRunsStore.deleteById(record.data.id))
           );
         }
       }

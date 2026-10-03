@@ -31,6 +31,7 @@ export const AgentRun = types.model({
   result: types.frozen(),
   config: types.frozen(),
   harnessVersion: types.union(types.string, types.null, types.undefined),
+  traceId: types.union(types.string, types.null, types.undefined),
   modelId: types.union(types.string, types.null, types.undefined),
   iterationCount: types.union(types.number, types.null, types.undefined),
   // How long each phase took. The timeline reads it to put a duration beside

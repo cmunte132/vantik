@@ -814,6 +814,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       await this.agentRuns.transition(run.id, 'RUNNING', {
         startedAt: new Date(),
         baseCommit,
+        traceId: this.traces.get(run.id)?.traceId,
       });
 
       // ---- Phase 2: the cycle. Reduced egress, no install credentials. ----
@@ -1708,6 +1709,9 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       .transition(run.id, 'FAILED', {
         failure,
         error: error.slice(0, 4000),
+        // Set here too: a run refused before it started running has a trace
+        // as well, and it is the one most worth finding.
+        traceId: this.traces.get(run.id)?.traceId,
         ...(summary ? { summary } : {}),
         result: { egressDenied, ...spentFields(spent) },
       })

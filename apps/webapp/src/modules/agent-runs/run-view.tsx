@@ -288,6 +288,11 @@ export const RunView = withApplicationStore(
                 ...(run.result?.branch
                   ? [{ label: 'Branch', value: run.result.branch, mono: true }]
                   : []),
+                // Neutral on purpose: the id, not a link into one vendor's
+                // backend. Paste it into whichever one the deployment uses.
+                ...(run.traceId
+                  ? [{ label: 'Trace', value: run.traceId, mono: true }]
+                  : []),
               ]}
             />
           </aside>

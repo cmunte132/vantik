@@ -261,14 +261,20 @@ export async function provisionTeammate(
  */
 export async function provisionAccount(
   request: APIRequestContext,
-  options: { email: string; fullname: string; workspaceName: string; teamIdentifier: string },
+  options: {
+    email: string;
+    fullname: string;
+    workspaceName: string;
+    teamIdentifier: string;
+    teamName?: string;
+  },
 ): Promise<Account> {
   const { session } = await signIn(request, options.email);
 
   const onboarded = await onboard(request, session, {
     workspaceName: options.workspaceName,
     fullname: options.fullname,
-    teamName: `${options.fullname}'s team`,
+    teamName: options.teamName ?? `${options.fullname}'s team`,
     teamIdentifier: options.teamIdentifier,
   });
 

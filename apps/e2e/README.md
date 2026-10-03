@@ -197,3 +197,39 @@ Not yet covered:
 
 - a second person, such as Carol, seeing Alice's change on her screen;
 - the local database after a reload, after a schema upgrade, or offline.
+
+## Docs screenshots
+
+The screenshots on the docs site come from this package, not from someone's
+workspace. `screenshots/docs.setup.ts` signs up Ada Lovelace, adds two
+teammates, and seeds a small web shop through the API (`screenshots/seed.ts`):
+a cycle, a project with milestones, a product with modules and a capability,
+a dozen issues, a view and a knowledge page. `screenshots/app.capture.ts` then
+opens one page for each screenshot and saves it under
+`apps/docs/static/img/docs/<section>/<name>.png`.
+
+It needs the same stack as the tests, Mailpit included:
+
+```bash
+pnpm --filter @vantikhq/e2e screenshots
+```
+
+```bash
+pnpm --filter @vantikhq/e2e screenshots:check
+```
+
+The first writes every screenshot. The second compares them with the committed
+ones and fails on any that changed, with a diff in the report
+(`screenshots-report/`). Run the check after a UI change to see which docs
+images it touched, then run the first and review the new images before you
+commit them.
+
+Each run seeds a new workspace and renames it to "Acme", so issue numbers,
+names and titles come out the same every time. The browser clock is fixed to
+the next whole hour, and the per-run email addresses are shown as
+`ada@acme.dev`. Dates are still relative to the day of the run, so a check run
+on a later day than the capture reports the screenshots that show a date.
+
+To add a screenshot, seed what it needs in `seed.ts`, add a test to
+`app.capture.ts` that opens the page and calls `shot(page, '<section>/<name>')`,
+and reference it from the docs as `/img/docs/<section>/<name>.png`.

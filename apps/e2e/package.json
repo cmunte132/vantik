@@ -6,7 +6,9 @@
   "scripts": {
     "e2e": "playwright test",
     "e2e:report": "playwright show-report",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "screenshots": "playwright test -c playwright.screenshots.config.ts --update-snapshots=all",
+    "screenshots:check": "playwright test -c playwright.screenshots.config.ts"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

@@ -16,7 +16,7 @@ export function unique(prefix: string): string {
   return `${prefix} ${process.pid}-${Date.now().toString(36)}-${sequence}`;
 }
 
-async function ok<T>(response: APIResponse, what: string): Promise<T> {
+export async function ok<T>(response: APIResponse, what: string): Promise<T> {
   expect(
     response,
     `${what} failed: ${response.status()} ${await response.text()}`,

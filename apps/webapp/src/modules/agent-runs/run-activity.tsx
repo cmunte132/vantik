@@ -259,9 +259,12 @@ const Title = ({
   mono?: boolean;
 }) => (
   <div className="flex min-w-0 items-baseline gap-2">
+    {/* Rigid only beside a meta column, which truncates instead. A line
+        that is all title (a cleanup, an error) can be a sentence and wraps. */}
     <span
       className={cn(
-        'shrink-0 font-medium',
+        'font-medium',
+        meta ? 'shrink-0' : 'min-w-0',
         failed && 'text-destructive',
         running && 'text-primary',
       )}

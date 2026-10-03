@@ -4,6 +4,7 @@ import { type CredentialsService } from 'modules/agent-runs/credentials/credenti
 
 import { deliversPullRequest, type SourceRepo } from '../git-source';
 import {
+  hostErrorReason,
   isOnHost,
   listHostRepositories,
   normaliseBaseUrl,
@@ -319,5 +320,84 @@ describe('host API', () => {
       name: 'project_3_bot_ab12',
       email: 'project_3_bot_ab12@noreply.gitlab.example.com',
     });
+  });
+});
+
+describe('hostErrorReason', () => {
+  function refusal(status: number, data: unknown) {
+    const { AxiosError } = jest.requireActual('axios');
+
+    return new AxiosError('refused', 'ERR_BAD_REQUEST', undefined, undefined, {
+      status,
+      data,
+      statusText: '',
+      headers: {},
+      config: {},
+    });
+  }
+
+  it('names the scope a Forgejo token lacks', () => {
+    expect(
+      hostErrorReason(
+        refusal(403, {
+          message:
+            'token does not have at least one of required scope(s): [read:user]',
+        }),
+      ),
+    ).toBe(
+      'the token is missing the scope "read:user". Make a token that has it',
+    );
+  });
+
+  it('names the scopes in the newer Gitea wording', () => {
+    expect(
+      hostErrorReason(
+        refusal(403, {
+          message:
+            'token does not have at least one of required scope(s), required=[read:user], token scope=write:issue,write:repository',
+        }),
+      ),
+    ).toBe(
+      'the token is missing the scope "read:user". Make a token that has it',
+    );
+  });
+
+  it('names the scopes a GitLab token lacks', () => {
+    expect(
+      hostErrorReason(
+        refusal(403, { error: 'insufficient_scope', scope: 'api read_api' }),
+      ),
+    ).toBe(
+      'the token is missing the scope "api" or "read_api". Make a token that has it',
+    );
+  });
+
+  it('points at the connect form when a 403 names no scope', () => {
+    expect(hostErrorReason(refusal(403, { message: 'Forbidden' }))).toBe(
+      'the token has no permission for this. Give it the scopes listed in the connect form',
+    );
+  });
+
+  it('never repeats the body of a 401, where Forgejo echoes the token', () => {
+    const reason = hostErrorReason(
+      refusal(401, {
+        message: 'access token does not exist [sha: secret-token-1234]',
+      }),
+    );
+
+    expect(reason).toBe(
+      'the host does not know the token. It is wrong, revoked or expired',
+    );
+    expect(reason).not.toContain('secret-token-1234');
+  });
+
+  it('ignores a bracketed value that is not a list of scopes', () => {
+    expect(
+      hostErrorReason(
+        refusal(403, { message: 'scope check failed [sha: abc/def+ghi==]' }),
+      ),
+    ).toBe(
+      'the token has no permission for this. Give it the scopes listed in the connect form',
+    );
   });
 });

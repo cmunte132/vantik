@@ -382,7 +382,9 @@ function ConnectForm({ instruction }: { instruction?: string }) {
         Use a token that belongs to a bot account, not to a person: on Forgejo
         or Gitea, a user such as vantik-bot in a team with write access to the
         repositories; on GitLab, a project or group access token. Commits and
-        pull requests then name the bot.
+        pull requests then name the bot. The token needs these scopes: on
+        Forgejo or Gitea, write:repository, write:issue and read:user; on
+        GitLab, api and write_repository.
       </p>
       <div className="flex gap-2">
         <div className="w-44 shrink-0">

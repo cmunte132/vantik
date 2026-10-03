@@ -305,8 +305,18 @@ export function hostErrorReason(error: unknown): string {
     const message =
       error.response?.data?.message ?? error.response?.data?.error;
 
-    if (status === 401 || status === 403) {
-      return 'the host refused the token';
+    // Never quote the body of a 401 or 403: Forgejo repeats the token it
+    // refused there ("access token does not exist [sha: …]").
+    if (status === 401) {
+      return 'the host does not know the token. It is wrong, revoked or expired';
+    }
+
+    if (status === 403) {
+      const scopes = missingScopes(error.response?.data);
+
+      return scopes
+        ? `the token is missing the scope ${scopes}. Make a token that has it`
+        : 'the token has no permission for this. Give it the scopes listed in the connect form';
     }
 
     if (status === 404) {
@@ -321,6 +331,34 @@ export function hostErrorReason(error: unknown): string {
   }
 
   return String((error as Error)?.message ?? error);
+}
+
+/**
+ * This function reads the scopes that a 403 says the token lacks. Forgejo and
+ * Gitea put them in brackets ("required scope(s): [read:user]" or
+ * "required=[read:user]"); GitLab puts them in `scope` next to
+ * `insufficient_scope`. It returns only text that looks like scope names, so
+ * nothing else from the body reaches the person.
+ */
+function missingScopes(data: unknown): string | null {
+  const body = (data ?? {}) as Record<string, unknown>;
+  const candidate =
+    body.error === 'insufficient_scope' && typeof body.scope === 'string'
+      ? body.scope
+      : typeof body.message === 'string' && /scope/i.test(body.message)
+        ? /\[([^\]]+)\]/.exec(body.message)?.[1]
+        : undefined;
+
+  if (!candidate || !/^[\w:.\- ,]{1,120}$/.test(candidate)) {
+    return null;
+  }
+
+  const scopes = candidate
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((scope) => `"${scope}"`);
+
+  return scopes.length ? scopes.join(' or ') : null;
 }
 
 async function giteaPage(

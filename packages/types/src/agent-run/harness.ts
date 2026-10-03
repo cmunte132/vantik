@@ -17,6 +17,17 @@ export const PI_PACKAGE = `@earendil-works/pi-coding-agent@${PI_VERSION}`;
  * version (apps/sandbox-host/guest writes /opt/vantik/pi-version), and npx
  * otherwise. Unquoted on purpose, so the fallback splits into its words.
  */
+/**
+ * The most output tokens one model call of a hosted run may ask for.
+ *
+ * Pi otherwise asks for the model's catalog maximum (128k for Sonnet), and a
+ * gateway like OpenRouter reserves credit for every one of those tokens before
+ * it answers. With less than about two dollars left, no call goes through at
+ * all. An agent turn writes a few thousand tokens; this leaves ample room and
+ * keeps the reservation small.
+ */
+export const AGENT_MAX_OUTPUT_TOKENS = 32000;
+
 export const PI_LAUNCHER = `$(test "$(cat /opt/vantik/pi-version 2>/dev/null)" = '${PI_VERSION}' && echo pi || echo npx --yes ${PI_PACKAGE})`;
 
 /**

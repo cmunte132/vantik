@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import React from 'react';
 
 import { Link as RouterLink, useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
@@ -9,7 +8,7 @@ import { workspaceHref } from 'common/workspace-href';
 import { useContextStore } from 'store/global-context-provider';
 
 import {
-  FAILURE_PROSE,
+  failureProse,
   STATUS_LABEL,
   age,
   costOf,
@@ -140,7 +139,7 @@ const Row = observer(
     ordinal: number;
     onOpen: () => void;
   }) => {
-    const failure = run.failure ? FAILURE_PROSE[run.failure] : undefined;
+    const failure = failureProse(run);
     const where = whereTheWorkWent(run.result ?? {});
     const took = duration(run);
     const cost = costOf(run);

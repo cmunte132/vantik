@@ -13,7 +13,7 @@ import { useCancelRunMutation, useRetryRunMutation } from 'services/agent-runs';
 
 import { useContextStore } from 'store/global-context-provider';
 
-import { FAILURE_PROSE, PHASE_LABEL, duration, isLive } from './run-vocabulary';
+import { failureProse, PHASE_LABEL, duration, isLive } from './run-vocabulary';
 import { StatusDot } from './status-dot';
 
 interface Props {
@@ -61,7 +61,7 @@ export const RunCard = observer(({ run, user }: Props) => {
   }, [live]);
 
   const result = run.result ?? {};
-  const failure = run.failure ? FAILURE_PROSE[run.failure] : undefined;
+  const failure = failureProse(run);
   const took = duration(run);
   const runHref = workspaceHref(
     router.query.workspaceSlug,

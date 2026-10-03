@@ -1,7 +1,11 @@
 /* eslint-disable turbo/no-undeclared-env-vars -- VANTIK_POLICY is the guest's, set here as the host would. */
+import { AGENT_MAX_OUTPUT_TOKENS } from '@vantikhq/types';
+
 import { extensionFiles, guardrailPolicy, POLICY_PATH } from './seed';
 import vantik, {
   blockedReason,
+  capModelCalls,
+  capOutputTokens,
   checkReminder,
   checkToolCall,
   describeIssue,
@@ -428,5 +432,114 @@ describe('the Vantik tools', () => {
         citations: [{ path: 'src/importer.ts', lines: '80-90' }],
       },
     ]);
+  });
+});
+
+/**
+ * Pi asks for the model's catalog maximum on every call, and a gateway
+ * reserves credit for all of it: 128k Sonnet tokens is about $1.92 held per
+ * call, so an account with $0.91 left could make none.
+ */
+describe('capping what a call asks for', () => {
+  const CAP = 32000;
+
+  it.each([
+    ['chat completions', { max_tokens: 128000 }, { max_tokens: CAP }],
+    [
+      'chat completions, newer field',
+      { max_completion_tokens: 128000 },
+      { max_completion_tokens: CAP },
+    ],
+    ['responses', { max_output_tokens: 128000 }, { max_output_tokens: CAP }],
+    [
+      'Google',
+      { generationConfig: { maxOutputTokens: 65536, temperature: 1 } },
+      { generationConfig: { maxOutputTokens: CAP, temperature: 1 } },
+    ],
+    [
+      'Bedrock',
+      { inferenceConfig: { maxTokens: 64000 } },
+      { inferenceConfig: { maxTokens: CAP } },
+    ],
+  ])('lowers %s', (_api, payload, expected) => {
+    expect(capOutputTokens({ model: 'm', ...payload }, CAP)).toEqual({
+      model: 'm',
+      ...expected,
+    });
+  });
+
+  it('leaves a call that already asks for less alone', () => {
+    expect(capOutputTokens({ max_tokens: 4096 }, CAP)).toBeUndefined();
+    expect(capOutputTokens({ messages: [] }, CAP)).toBeUndefined();
+    expect(capOutputTokens('not a payload', CAP)).toBeUndefined();
+  });
+
+  it.each([
+    [
+      'Anthropic thinking',
+      {
+        max_tokens: 128000,
+        thinking: { type: 'enabled', budget_tokens: 30000 },
+      },
+      'max_tokens',
+    ],
+    [
+      'OpenRouter reasoning',
+      { max_tokens: 128000, reasoning: { max_tokens: 30000 } },
+      'max_tokens',
+    ],
+  ])('keeps room to answer above the %s budget', (_api, payload, field) => {
+    const capped = capOutputTokens(payload, CAP) as Record<string, unknown>;
+
+    expect(capped[field]).toBe(30000 + 4096);
+  });
+
+  it('keeps room above a Google thinking budget', () => {
+    expect(
+      capOutputTokens(
+        {
+          generationConfig: {
+            maxOutputTokens: 65536,
+            thinkingConfig: { thinkingBudget: 32768 },
+          },
+        },
+        CAP,
+      ),
+    ).toEqual({
+      generationConfig: {
+        maxOutputTokens: 32768 + 4096,
+        thinkingConfig: { thinkingBudget: 32768 },
+      },
+    });
+  });
+
+  it('is applied to every call when the policy sets it, and the host sets it', () => {
+    const handlers: Array<(event: unknown) => unknown> = [];
+    const { writeFileSync, mkdtempSync } = jest.requireActual('node:fs');
+    const { join } = jest.requireActual('node:path');
+    const { tmpdir } = jest.requireActual('node:os');
+    const path = join(mkdtempSync(join(tmpdir(), 'vantik-cap-')), 'p.json');
+    const env = process.env.VANTIK_POLICY;
+
+    writeFileSync(path, JSON.stringify({ ...POLICY, maxOutputTokens: CAP }));
+    process.env.VANTIK_POLICY = path;
+    capModelCalls({
+      on: (name, handler) => {
+        if (name === 'before_provider_request') {
+          handlers.push(handler as (event: unknown) => unknown);
+        }
+      },
+      sendUserMessage: () => undefined,
+      appendEntry: () => undefined,
+    });
+    process.env.VANTIK_POLICY = env;
+
+    expect(handlers).toHaveLength(1);
+    expect(handlers[0]({ payload: { max_tokens: 128000 } })).toEqual({
+      max_tokens: CAP,
+    });
+    expect(guardrailPolicy({} as never).maxOutputTokens).toBe(
+      AGENT_MAX_OUTPUT_TOKENS,
+    );
   });
 });

@@ -832,6 +832,39 @@ describe('when the model never answers', () => {
 
     expect(harness.guest.sandbox.disposed).toBe(true);
   });
+
+  it('files it as a refusal, with the provider’s sentence rather than its body', async () => {
+    const harness = build({
+      verdicts: {},
+      modelFailure: {
+        'prompt.md':
+          '402 {"error":{"message":"This request requires more credits, or fewer max_tokens.","code":402,"metadata":{"provider_name":null}}}',
+      },
+    });
+
+    await harness.execute();
+
+    expect(harness.final().patch).toMatchObject({
+      failure: 'MODEL_REFUSED',
+      error: '402: This request requires more credits, or fewer max_tokens.',
+    });
+  });
+
+  it('says the provider refused the reviewer, rather than that the reviewer was silent', async () => {
+    const harness = build({
+      verdicts: {},
+      modelFailure: { 'review-1.md': '429: {"message":"rate limited"}' },
+    });
+
+    await harness.execute();
+
+    expect(harness.final().status).toBe('NEEDS_REVIEW');
+    const summary = String(harness.handbacks[0].summary);
+    expect(summary).toContain('refused the reviewer');
+    expect(summary).toContain('429: rate limited');
+    // Another pass would be refused the same way.
+    expect(harness.guest.passes()).toEqual({ implement: 1, review: 1 });
+  });
 });
 
 /**

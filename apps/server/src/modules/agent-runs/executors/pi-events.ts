@@ -40,8 +40,15 @@ export interface ParsedStep {
 export interface RunFailure {
   /** Pi's own stop reason. `error` is the only one that lands here. */
   reason: string;
-  /** The provider's message, e.g. `400: … is not a valid model ID`. */
+  /**
+   * The provider's message, read out of whatever body it came in, e.g.
+   * `402: This request requires more credits`.
+   */
   message: string;
+  /** The HTTP status the provider answered with, when it said. */
+  status: number | null;
+  /** Pi's error as it reported it: the provider's whole body, for the record. */
+  raw: string;
 }
 
 export interface ParsedRun {
@@ -218,13 +225,63 @@ export function failureOf(event: PiEvent): RunFailure | null {
     return null;
   }
 
+  const raw =
+    typeof message.errorMessage === 'string' && message.errorMessage.trim()
+      ? message.errorMessage.trim().slice(0, 1000)
+      : 'The model call failed, and the harness did not say why.';
+
   return {
     reason: 'error',
-    message:
-      typeof message.errorMessage === 'string' && message.errorMessage.trim()
-        ? message.errorMessage.trim().slice(0, 1000)
-        : 'The model call failed, and the harness did not say why.',
+    message: readableError(raw),
+    status: statusOfError(raw),
+    raw,
   };
+}
+
+/**
+ * A provider error as a sentence rather than a body.
+ *
+ * Pi reports a refused call as the status and the body verbatim —
+ * `402 {"error":{"message":"This request requires more credits…","code":402,
+ * "metadata":{…}}}` — and that is what a person was shown as the reason their
+ * run failed. The message inside is the part they need; the rest stays on the
+ * timeline. Anything that is not a JSON body with a message is kept as it is.
+ */
+export function readableError(raw: string): string {
+  const match = /^\s*(?:([1-5]\d\d)\b[\s:]*)?([[{][\s\S]*)$/.exec(raw);
+  if (!match) {
+    return raw;
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(match[2]);
+  } catch {
+    return raw;
+  }
+
+  const said = messageIn(body);
+  if (!said) {
+    return raw;
+  }
+
+  return match[1] ? `${match[1]}: ${said}` : said;
+}
+
+function messageIn(body: unknown): string | null {
+  const first = Array.isArray(body) ? body[0] : body;
+  if (typeof first !== 'object' || first === null) {
+    return null;
+  }
+
+  const record = first as { message?: unknown; error?: unknown };
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message.trim();
+  }
+  if (typeof record.error === 'string' && record.error.trim()) {
+    return record.error.trim();
+  }
+  return messageIn(record.error);
 }
 
 export type PiEvent = Record<string, unknown>;
@@ -522,6 +579,23 @@ export function describe(event: PiEvent): ParsedStep | null {
           },
         }
       : null;
+  }
+
+  // The provider's whole answer, kept where a person debugging the run will
+  // look; the run's own error carries only the sentence inside it. A warning
+  // rather than an error, because Pi may retry the call and the retry answer.
+  const failure = type === 'message_end' ? failureOf(event) : null;
+  if (failure) {
+    return {
+      message: `A model call failed: ${failure.message}`,
+      level: 'WARN',
+      phase: 'implement',
+      data: {
+        kind: 'note' as AgentStepKind,
+        ok: false,
+        output: failure.raw,
+      },
+    };
   }
 
   if (type === 'tool_execution_end' && event.isError) {

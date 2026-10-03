@@ -4,6 +4,8 @@ import type { GuardrailPolicy } from './vantik-extension';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { AGENT_MAX_OUTPUT_TOKENS } from '@vantikhq/types';
+
 import { verificationCommands } from '../agent-prompt';
 
 /** Where the policy is seeded, relative to the guest's `/workspace`. */
@@ -60,6 +62,7 @@ export function guardrailPolicy(
     reachableHosts: ['registry.npmjs.org', ...egressHosts],
     contextPath: `/workspace/${CONTEXT_PATH}`,
     outboxPath: `/workspace/${OUTBOX_PATH}`,
+    maxOutputTokens: AGENT_MAX_OUTPUT_TOKENS,
   };
 }
 

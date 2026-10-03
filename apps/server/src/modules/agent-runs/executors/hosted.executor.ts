@@ -51,7 +51,7 @@ import {
 } from '../review-cycle';
 import { buildReviewPrompt, buildRevisionPrompt } from '../review-prompt';
 import { PROVIDE_PACKAGE_MANAGER } from './package-manager';
-import { PiEventReader, type ParsedStep } from './pi-events';
+import { PiEventReader, type ParsedStep, type RunFailure } from './pi-events';
 import { RunTelemetry, startRunTelemetry } from './run-telemetry';
 import { type Spend, SpendMeter } from './spend-meter';
 import { RunHandbackService } from '../run-handback.service';
@@ -306,6 +306,8 @@ type CycleResult =
     }
   | {
       kind: 'failed';
+      /** A provider that refused the call, or a harness that broke. */
+      failure: 'MODEL_REFUSED' | 'HARNESS_CRASHED';
       error: string;
       summary: string | null;
       costUsd: number;
@@ -316,6 +318,8 @@ type CycleResult =
 interface Invocation {
   exitCode: number;
   stderr: string;
+  /** Why the provider would not answer, when that is why it stopped. */
+  refusal: RunFailure | null;
   summary: string | null;
   modelId: string | null;
   costUsd: number;
@@ -841,7 +845,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       if (cycle.kind === 'failed') {
         await this.fail(
           run,
-          'HARNESS_CRASHED',
+          cycle.failure,
           cycle.error,
           egressDenied,
           cycle.summary,
@@ -1133,6 +1137,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         if (pass === 1) {
           return {
             kind: 'failed',
+            failure: attempt.refusal ? 'MODEL_REFUSED' : 'HARNESS_CRASHED',
             error: attempt.stderr,
             summary,
             costUsd: spend.costUsd,
@@ -1141,9 +1146,12 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         }
 
         needsReview = true;
-        reason =
-          `The harness crashed on pass ${pass}, so the work from the earlier ` +
-          `passes is delivered as it stood.`;
+        reason = attempt.refusal
+          ? `The model provider refused the call on pass ${pass} ` +
+            `(${attempt.refusal.message}), so the work from the earlier ` +
+            `passes is delivered as it stood.`
+          : `The harness crashed on pass ${pass}, so the work from the earlier ` +
+            `passes is delivered as it stood.`;
         break;
       }
 
@@ -1193,6 +1201,17 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       spend.turns += review.turns;
       modelId = review.modelId ?? modelId;
       phaseTimings[reviewPhase] = Date.now() - reviewStart;
+
+      // A reviewer whose provider refused it said nothing, and recording that
+      // as "no readable verdict" would blame the reviewer for the provider.
+      // Another pass would be refused the same way.
+      if (review.refusal && !review.verdict) {
+        needsReview = true;
+        reason =
+          `The model provider refused the reviewer's call on pass ${pass} ` +
+          `(${review.refusal.message}), so the work is delivered unreviewed.`;
+        break;
+      }
 
       findings = keepEvidenced(review.verdict?.findings ?? []);
       reviewSummary = review.verdict?.summary;
@@ -1416,6 +1435,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           }`,
           cx.secrets,
         ),
+        refusal: null,
         summary: null,
         modelId: partial.modelId,
         costUsd: partial.costUsd,
@@ -1448,12 +1468,19 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         result.exitCode === 0 && parsed.failure
           ? MODEL_FAILED
           : result.exitCode,
+      // The provider's own sentence, which says what to fix — "requires more
+      // credits", "invalid API key". Its whole body is on the timeline.
       stderr: scrubSecrets(
-        parsed.failure
-          ? `The model did not answer: ${parsed.failure.message}`
-          : result.stderr,
+        parsed.failure ? parsed.failure.message : result.stderr,
         cx.secrets,
       ),
+      refusal: parsed.failure
+        ? {
+            ...parsed.failure,
+            message: scrubSecrets(parsed.failure.message, cx.secrets),
+            raw: scrubSecrets(parsed.failure.raw, cx.secrets),
+          }
+        : null,
       summary: parsed.summary,
       modelId: parsed.modelId,
       costUsd: parsed.costUsd,
@@ -1581,6 +1608,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     phase: string,
   ): Promise<{
     verdict: ReturnType<typeof parseReviewVerdict>;
+    refusal: RunFailure | null;
     costUsd: number;
     turns: number;
     modelId: string | null;
@@ -1615,6 +1643,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
 
     return {
       verdict: parseReviewVerdict(raw) ?? parseReviewVerdict(attempt.summary),
+      refusal: attempt.refusal,
       costUsd: attempt.costUsd,
       turns: attempt.turns,
       modelId: attempt.modelId,
@@ -1694,6 +1723,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     failure:
       | 'ENVIRONMENT_SETUP_FAILED'
       | 'HARNESS_CRASHED'
+      | 'MODEL_REFUSED'
       | 'NO_DIFF_PRODUCED'
       | 'PUSH_REJECTED',
     error: string,

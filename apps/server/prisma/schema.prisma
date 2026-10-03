@@ -2343,6 +2343,9 @@ enum AgentRunFailure {
   /// Δ widened while the visible pass rate climbed: the run was optimising the
   /// tests it could see rather than the spec. Routes to human review.
   REWARD_HACK_SUSPECTED
+  /// The model provider refused the call: out of credit, a rejected key, a
+  /// rate limit. Nothing in the repository or the harness to fix.
+  MODEL_REFUSED
 }
 
 /// What kind of secret a workspace credential holds.

@@ -232,6 +232,7 @@ export class RunHandbackService {
 const FAILURE_PROSE: Record<AgentRunFailure, string> = {
   ENVIRONMENT_SETUP_FAILED: 'the environment would not build',
   HARNESS_CRASHED: 'the harness crashed',
+  MODEL_REFUSED: 'the model provider refused the call',
   BUDGET_EXHAUSTED: 'it ran out of budget',
   NO_DIFF_PRODUCED: 'it finished without changing anything',
   VERIFICATION_FAILED: 'the checks did not pass',

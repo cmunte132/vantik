@@ -52,6 +52,11 @@ export const FAILURE_PROSE: Record<
     what: 'the agent crashed',
     next: 'Try again, or run the harness by hand against the same checkout.',
   },
+  MODEL_REFUSED: {
+    short: 'model provider refused',
+    what: 'the model provider refused the call',
+    next: 'Check the provider account and key in agent settings, then retry.',
+  },
   BUDGET_EXHAUSTED: {
     short: 'out of budget',
     what: 'it ran out of time or budget',
@@ -98,6 +103,49 @@ export const FAILURE_PROSE: Record<
     next: 'Read the diff carefully before merging any of it.',
   },
 };
+
+/**
+ * What to do about a refused call, by the status the provider gave.
+ *
+ * The provider's own sentence is on the run as its error; this is the remedy,
+ * which the sentence rarely says and which differs completely between a
+ * provider that wants money and one that does not know the key.
+ */
+const REFUSAL_NEXT: Array<[RegExp, string]> = [
+  [
+    /^402\b/,
+    'The provider account is out of credit. Add credit, or switch to another provider in agent settings.',
+  ],
+  [
+    /^40[13]\b/,
+    'The provider rejected the key. Update it in agent settings, then retry.',
+  ],
+  [
+    /^429\b/,
+    'The provider is rate-limiting this key. Wait a minute and retry.',
+  ],
+  [
+    /^404\b/,
+    'The provider does not know this model. Pick another one when you delegate.',
+  ],
+];
+
+/** A run's failure in words, with the remedy its error points at. */
+export function failureProse(run: {
+  failure?: string | null;
+  error?: string | null;
+}): { short: string; what: string; next: string } | undefined {
+  const prose = run.failure ? FAILURE_PROSE[run.failure] : undefined;
+  if (!prose || run.failure !== 'MODEL_REFUSED') {
+    return prose;
+  }
+
+  const next = REFUSAL_NEXT.find(([status]) =>
+    status.test((run.error ?? '').trim()),
+  )?.[1];
+
+  return next ? { ...prose, next } : prose;
+}
 
 /** A duration in the shortest form that is still exact enough to act on. */
 export function elapsed(from?: string | null, to?: string | null): string {

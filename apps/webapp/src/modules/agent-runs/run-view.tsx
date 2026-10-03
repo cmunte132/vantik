@@ -43,7 +43,7 @@ import {
   SpendCard,
   Stepper,
 } from './run-parts';
-import { FAILURE_PROSE, STATUS_LABEL, costOf, isLive } from './run-vocabulary';
+import { failureProse, STATUS_LABEL, costOf, isLive } from './run-vocabulary';
 
 /**
  * One agent run: who is working on what, where it is, and what it did.
@@ -130,7 +130,7 @@ export const RunView = withApplicationStore(
     const files = changesOf(toSteps(events));
     const criteria =
       checklistItemsStore?.getChecklistItems?.(run.issueId) ?? [];
-    const failure = run.failure ? FAILURE_PROSE[run.failure] : undefined;
+    const failure = failureProse(run);
     const start = runStart(run);
     const ended = run.finishedAt ? Date.parse(run.finishedAt) : null;
     const took = live ? now - start : ended ? ended - start : null;

@@ -1,4 +1,9 @@
-import { PiEventReader, parsePiEvents } from './pi-events';
+import {
+  describe as describeEvent,
+  PiEventReader,
+  parsePiEvents,
+  readableError,
+} from './pi-events';
 
 /** One event per line, the way Pi's `--mode json` writes them. */
 function stream(...events: unknown[]): string {
@@ -381,6 +386,55 @@ describe('a model call that never answered', () => {
 
     expect(failure).toBeNull();
     expect(summary).toBe('Done anyway.');
+  });
+
+  it('reads the provider’s sentence out of the body it came in', () => {
+    const { failure } = parsePiEvents(
+      stream(
+        errored(
+          '402 {"error":{"message":"This request requires more credits, or fewer max_tokens. You requested up to 128000 tokens, but can only afford 74030.","code":402,"metadata":{"provider_name":null}}}',
+        ),
+      ),
+    );
+
+    expect(failure).toMatchObject({
+      status: 402,
+      message:
+        '402: This request requires more credits, or fewer max_tokens. You requested up to 128000 tokens, but can only afford 74030.',
+    });
+    expect(failure?.raw).toContain('"metadata"');
+  });
+
+  it.each([
+    [
+      '401: {"message":"Missing Authentication header"}',
+      '401: Missing Authentication header',
+    ],
+    ['[{"error":{"code":429,"message":"Quota exceeded"}}]', 'Quota exceeded'],
+    [
+      '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      'Overloaded',
+    ],
+    ['429: rate limited', '429: rate limited'],
+    ['500: {"broken json', '500: {"broken json'],
+    ['400: {"code":400}', '400: {"code":400}'],
+  ])('reads %s as %s', (raw, readable) => {
+    expect(readableError(raw)).toBe(readable);
+  });
+
+  it('keeps the provider’s whole answer on the timeline', () => {
+    const step = describeEvent(
+      errored('402 {"error":{"message":"needs credit","code":402}}'),
+    );
+
+    expect(step).toMatchObject({
+      message: 'A model call failed: 402: needs credit',
+      level: 'WARN',
+      data: {
+        ok: false,
+        output: '402 {"error":{"message":"needs credit","code":402}}',
+      },
+    });
   });
 
   it('still reports a failure the harness gave no reason for', () => {

@@ -41,6 +41,8 @@ export interface GuardrailPolicy {
   contextPath?: string;
   /** Where the Vantik tools queue what the agent writes to Vantik. */
   outboxPath?: string;
+  /** The most output tokens one model call may ask for. */
+  maxOutputTokens?: number;
 }
 
 /**
@@ -350,6 +352,11 @@ function readPolicy(): GuardrailPolicy | null {
       ...(typeof parsed.outboxPath === 'string'
         ? { outboxPath: parsed.outboxPath }
         : {}),
+      ...(typeof parsed.maxOutputTokens === 'number' &&
+      Number.isInteger(parsed.maxOutputTokens) &&
+      parsed.maxOutputTokens > 0
+        ? { maxOutputTokens: parsed.maxOutputTokens }
+        : {}),
     };
   } catch {
     return null;
@@ -357,10 +364,112 @@ function readPolicy(): GuardrailPolicy | null {
 }
 
 export default function vantik(pi: PiApi) {
+  capModelCalls(pi);
   reportModelCalls(pi);
   enforceGuardrails(pi);
   registerVantikTools(pi);
   registerCodeTools(pi, readPolicy()?.repoRoot ?? process.cwd());
+}
+
+/**
+ * Lowers what each model call asks for in output tokens.
+ *
+ * Pi asks for the model's whole catalog maximum on every call — 128k for
+ * Sonnet — and gateways reserve credit for all of it before answering, at
+ * the output price. An account with less than that reservation left cannot
+ * make a call at all, however little the call would have cost. An agent turn
+ * never needs that much, so the cap here is generous for the work and small
+ * for the reservation.
+ *
+ * Only ever lowers, and never below the call's thinking budget plus room to
+ * answer: a provider rejects a ceiling under the thinking it was promised.
+ * Cost control, not a boundary — the host's budget holds either way.
+ */
+export function capModelCalls(pi: PiApi) {
+  const cap = readPolicy()?.maxOutputTokens;
+  if (!cap) {
+    return;
+  }
+  pi.on('before_provider_request', (event: { payload?: unknown }) =>
+    capOutputTokens(event.payload, cap),
+  );
+}
+
+/** Room to answer above a thinking budget. */
+const ANSWER_ROOM = 4096;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const count = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+
+/**
+ * The payload with its output-token ceiling lowered to `cap`, or undefined
+ * when there is nothing to lower. Knows each API Pi speaks: chat completions
+ * (`max_tokens` or `max_completion_tokens`), responses (`max_output_tokens`),
+ * Anthropic messages (`max_tokens`), Google (`generationConfig`) and Bedrock
+ * (`inferenceConfig`).
+ */
+export function capOutputTokens(
+  payload: unknown,
+  cap: number,
+): Record<string, unknown> | undefined {
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+
+  const thinking = isRecord(payload.thinking) ? payload.thinking : {};
+  const reasoning = isRecord(payload.reasoning) ? payload.reasoning : {};
+  const generation = isRecord(payload.generationConfig)
+    ? payload.generationConfig
+    : undefined;
+  const thinkingConfig = isRecord(generation?.thinkingConfig)
+    ? generation.thinkingConfig
+    : {};
+  const bedrockThinking = isRecord(payload.additionalModelRequestFields)
+    ? payload.additionalModelRequestFields.thinking
+    : undefined;
+  const budget = Math.max(
+    count(thinking.budget_tokens) ?? 0,
+    count(reasoning.max_tokens) ?? 0,
+    count(thinkingConfig.thinkingBudget) ?? 0,
+    count(isRecord(bedrockThinking) ? bedrockThinking.budget_tokens : 0) ?? 0,
+  );
+  const ceiling = Math.max(cap, budget ? budget + ANSWER_ROOM : 0);
+  const lower = (value: unknown) => {
+    const asked = count(value);
+    return asked !== undefined && asked > ceiling ? ceiling : undefined;
+  };
+
+  let changed = false;
+  const next: Record<string, unknown> = { ...payload };
+  for (const field of [
+    'max_tokens',
+    'max_completion_tokens',
+    'max_output_tokens',
+  ]) {
+    const lowered = lower(payload[field]);
+    if (lowered !== undefined) {
+      next[field] = lowered;
+      changed = true;
+    }
+  }
+  for (const [container, field] of [
+    ['generationConfig', 'maxOutputTokens'],
+    ['inferenceConfig', 'maxTokens'],
+  ] as const) {
+    const inner = payload[container];
+    const lowered = isRecord(inner) ? lower(inner[field]) : undefined;
+    if (isRecord(inner) && lowered !== undefined) {
+      next[container] = { ...inner, [field]: lowered };
+      changed = true;
+    }
+  }
+
+  return changed ? next : undefined;
 }
 
 /**

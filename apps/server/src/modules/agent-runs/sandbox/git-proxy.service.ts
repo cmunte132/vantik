@@ -23,6 +23,7 @@ import {
 } from 'modules/git/repo-mirror.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
+import { PushScopeError, scopeViolations } from './push-scope';
 import { GENERATED_DIRS } from './tree-tools';
 
 const exec = promisify(execFile);
@@ -55,6 +56,12 @@ export interface PushRequest {
    * while the author stays the agent or the connection's bot account.
    */
   coAuthor?: CommitIdentity | null;
+  /**
+   * What the run may change: the issue's modules' path prefixes in this
+   * repository, empty for a module that is the whole repository. Checked
+   * against the staged files before anything is committed; see push-scope.ts.
+   */
+  scope: { pathPrefixes: string[] };
 }
 
 /** The author of a commit when the source names no bot account. */
@@ -90,7 +97,9 @@ export interface CheckoutRequest {
  * So the git token never enters the guest. The guest produces a working
  * tree; the host commits it in a directory the guest cannot see, and pushes
  * with a credential the guest never held. The strongest thing an injected agent can
- * do is write a bad patch, which a human reviews.
+ * do is write a bad patch, which a human reviews — provided the patch stays
+ * inside the issue's modules and out of CI configuration, which runs before any
+ * review. `scope` enforces both on the staged files.
  *
  * The same pattern every production implementation converged on independently:
  * Codex removes secrets before the agent phase, Claude Code on the web keeps
@@ -177,6 +186,18 @@ export class GitProxyService {
 
       if (!staged.trim()) {
         return undefined;
+      }
+
+      // Checked on what is staged, host-side, after the guest is gone — the
+      // one place a prompt-injected agent cannot reach. Refused before the
+      // commit, so nothing out of scope ever exists on the remote.
+      const violations = scopeViolations(
+        staged.split('\n').filter(Boolean),
+        request.scope.pathPrefixes,
+      );
+
+      if (violations.length) {
+        throw new PushScopeError(violations, request.scope.pathPrefixes);
       }
 
       const author =

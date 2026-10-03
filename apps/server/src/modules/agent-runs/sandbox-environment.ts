@@ -27,6 +27,7 @@ export const GUEST_TOOLS: Array<{ packages: string[]; name: string }> = [
 export function sandboxEnvironment(pack: ContextPack): string[] {
   const setup = pack.repo?.setupCommands ?? [];
   const hosts = pack.repo?.egressHosts ?? [];
+  const scope = pack.repo?.pathPrefixes ?? [];
 
   return [
     '## Your environment',
@@ -53,5 +54,10 @@ export function sandboxEnvironment(pack: ContextPack): string[] {
       ' a git host) fails. Do not retry a download that was refused.',
     '- Look before you read: `ls` a directory before you `cat` files in it.',
     '  One command that fails makes the whole line fail.',
+    scope.length
+      ? `- Change files only under ${scope.map((prefix) => `\`${prefix}\``).join(', ')}. The host refuses to push work that changes anything else, so a change outside those paths loses the whole run.`
+      : '- You may change any file in the repository.',
+    '- Never change CI configuration (`.github/workflows`, `.forgejo/workflows`,',
+    '  `.gitlab-ci.yml` and the like). The host refuses to push it.',
   ];
 }

@@ -131,6 +131,7 @@ describe('GitProxyService with a local directory', () => {
 
     const pushed = await proxy.pushWorkTree({
       workspaceId: 'ws',
+      scope: { pathPrefixes: [] },
       source: SOURCE,
       branch: 'agent/eng-1',
       baseBranch: checkout.baseBranch,
@@ -177,6 +178,7 @@ describe('GitProxyService with a local directory', () => {
     // What the guest packs: everything but the generated directories.
     const pushed = await proxy.pushWorkTree({
       workspaceId: 'ws',
+      scope: { pathPrefixes: [] },
       source: SOURCE,
       branch: 'agent/eng-1',
       baseBranch: checkout.baseBranch,
@@ -197,6 +199,42 @@ describe('GitProxyService with a local directory', () => {
     );
   });
 
+  it('refuses a push that reaches outside the issue’s modules, or into CI', async () => {
+    const proxy = build();
+    const checkout = await proxy.materializeCheckout({
+      workspaceId: 'ws',
+      source: SOURCE,
+    });
+    const push = (tree: Record<string, string>, pathPrefixes: string[]) =>
+      proxy.pushWorkTree({
+        workspaceId: 'ws',
+        scope: { pathPrefixes },
+        source: SOURCE,
+        branch: 'agent/eng-1',
+        baseBranch: checkout.baseBranch,
+        baseCommit: checkout.baseCommit,
+        treeBase64: treeOf({
+          'src/a.ts': 'export const a = 1;\n',
+          'README.md': 'app\n',
+          ...tree,
+        }),
+        commitMessage: 'ENG-1',
+        issueKey: 'ENG-1',
+        issueTitle: 'x',
+        summary: 'x',
+      });
+
+    await expect(push({ 'README.md': 'changed\n' }, ['src/'])).rejects.toThrow(
+      /outside this issue's modules \(README\.md\); the modules cover src\//,
+    );
+    // A whole-repository module still never pushes CI configuration.
+    await expect(
+      push({ '.forgejo/workflows/ci.yml': 'on: push\n' }, []),
+    ).rejects.toThrow(/CI configuration \(\.forgejo\/workflows\/ci\.yml\)/);
+
+    expect(run(origin, 'branch', '--list', 'agent/eng-1')).toBe('');
+  });
+
   it('takes the next free branch name rather than overwrite one', async () => {
     const proxy = build();
     const checkout = await proxy.materializeCheckout({
@@ -207,6 +245,7 @@ describe('GitProxyService with a local directory', () => {
 
     const pushed = await proxy.pushWorkTree({
       workspaceId: 'ws',
+      scope: { pathPrefixes: [] },
       source: SOURCE,
       branch: 'agent/eng-1',
       baseBranch: checkout.baseBranch,
@@ -230,6 +269,7 @@ describe('GitProxyService with a local directory', () => {
 
     const pushed = await proxy.pushWorkTree({
       workspaceId: 'ws',
+      scope: { pathPrefixes: [] },
       source: SOURCE,
       branch: 'agent/eng-1',
       baseBranch: checkout.baseBranch,
@@ -263,6 +303,7 @@ describe('GitProxyService with a local directory', () => {
 
     await proxy.pushWorkTree({
       workspaceId: 'ws',
+      scope: { pathPrefixes: [] },
       source: SOURCE,
       branch: 'agent/eng-1',
       baseBranch: checkout.baseBranch,
@@ -292,6 +333,7 @@ describe('GitProxyService with a local directory', () => {
 
     await proxy.pushWorkTree({
       workspaceId: 'ws',
+      scope: { pathPrefixes: [] },
       source: SOURCE,
       branch: 'agent/eng-1',
       baseBranch: checkout.baseBranch,

@@ -50,6 +50,7 @@ import { RunHandbackService } from '../run-handback.service';
 import { RunTelemetry, startRunTelemetry } from './run-telemetry';
 import { GitProxyService } from '../sandbox/git-proxy.service';
 import { RemoteSandboxRuntime } from '../sandbox/remote.runtime';
+import { PushScopeError } from '../sandbox/push-scope';
 import { scrubSecrets } from '../sandbox/scrub';
 import {
   BASE_DIR,
@@ -897,6 +898,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         issueTitle: pack.issue?.title ?? 'Agent work',
         summary: pullRequestBody(cycle),
         coAuthor: await this.agentRuns.delegator(run),
+        scope: { pathPrefixes: pack.repo?.pathPrefixes ?? [] },
       });
 
       if (!pushed) {
@@ -972,7 +974,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
 
       await this.fail(
         run,
-        isPushRejection(message)
+        error instanceof PushScopeError || isPushRejection(message)
           ? 'PUSH_REJECTED'
           : sandbox
             ? 'HARNESS_CRASHED'

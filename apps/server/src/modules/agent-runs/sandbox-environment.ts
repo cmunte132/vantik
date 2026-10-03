@@ -7,12 +7,25 @@ import type { ContextPack } from './context-pack.service';
  * the prompt cannot promise a tool the image dropped or keep quiet about one
  * it added.
  */
-export const GUEST_TOOLS: Array<{ packages: string[]; name: string }> = [
+export const GUEST_TOOLS: Array<{
+  packages: string[];
+  /** Installed globally from npm by the image's post-build step. */
+  npm?: string[];
+  name: string;
+}> = [
   { packages: ['bash'], name: 'bash' },
   { packages: ['nodejs', 'npm'], name: 'Node.js with npm' },
   { packages: ['python3', 'uv'], name: 'Python 3 with uv' },
   { packages: ['ripgrep'], name: 'ripgrep (`rg`)' },
   { packages: ['curl'], name: 'curl' },
+  { packages: ['fd'], name: 'fd' },
+  { packages: ['ast-grep'], name: 'ast-grep (`sg`, structural search)' },
+  { packages: ['jq'], name: 'jq' },
+  {
+    packages: [],
+    npm: ['typescript', 'pyright'],
+    name: 'TypeScript (`tsc`) and Pyright (`pyright`) for type checking',
+  },
 ];
 
 /**

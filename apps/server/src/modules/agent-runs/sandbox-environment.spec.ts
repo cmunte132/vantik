@@ -68,6 +68,26 @@ describe('what the agent is told about its sandbox', () => {
     ).toEqual([]);
   });
 
+  it('names only npm tools the image bakes in', () => {
+    const config = JSON.parse(
+      readFileSync(
+        join(__dirname, '../../../../sandbox-host/guest/build-config.json'),
+        'utf8',
+      ),
+    );
+    const install: string = config.postBuild.commands.find((command: string) =>
+      command.startsWith('npm install -g'),
+    );
+    const baked = install
+      .split(' ')
+      .filter((word) => /^@?[\w./-]+@/.test(word))
+      .map((word) => word.slice(0, word.lastIndexOf('@')));
+
+    for (const name of GUEST_TOOLS.flatMap((tool) => tool.npm ?? [])) {
+      expect(baked).toContain(name);
+    }
+  });
+
   it('says the checkout has no git, so the agent does not try', () => {
     const text = sandboxEnvironment(pack()).join('\n');
 

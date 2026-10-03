@@ -6,6 +6,10 @@
 // The image adds `resize2fs` (in `e2fsprogs-extra`) to the stock set, so the
 // guest's root disk can grow to the run's `diskMb`. Without it, the checkout
 // and its dependencies live in the guest's memory.
+//
+// It also bakes in Pi, at the version the server pins, and the code tools the
+// agent is given: TypeScript and Python language servers, ast-grep, fd and
+// jq. Nothing a run needs is fetched at run time when the image is current.
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -19,6 +23,22 @@ const config = JSON.parse(
 );
 
 config.arch = process.arch === "arm64" ? "aarch64" : "x86_64";
+
+// The Pi the server asks for, read from where the server reads it, so the
+// image cannot bake a different one. A run checks /opt/vantik/pi-version and
+// fetches Pi itself when they differ, so a stale image is slow, not wrong.
+const harness = readFileSync(
+  join(here, "../../../packages/types/src/agent-run/harness.ts"),
+  "utf8",
+);
+const piVersion = /export const PI_VERSION = '([^']+)'/.exec(harness)?.[1];
+if (!piVersion || !/^[\w.-]+$/.test(piVersion)) {
+  console.error("Could not read PI_VERSION from packages/types.");
+  process.exit(1);
+}
+config.postBuild.commands = config.postBuild.commands.map((command) =>
+  command.replaceAll("${PI_VERSION}", piVersion),
+);
 
 // macOS has no `mke2fs`, so Gondolin builds the filesystem in a container.
 // Linux builds it directly, which needs e2fsprogs on the machine.

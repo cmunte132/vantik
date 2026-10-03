@@ -1,4 +1,4 @@
-import { PI_PACKAGE } from '@vantikhq/types';
+import { PI_PACKAGE, PI_VERSION } from '@vantikhq/types';
 
 import {
   BUNDLED_SKILLS,
@@ -59,6 +59,19 @@ describe('the bundled harness command', () => {
     // unpinned package makes that record a guess.
     expect(piCommand({})).toContain(PI_PACKAGE);
     expect(piCommand({})).toContain('@');
+  });
+
+  it('runs the baked Pi only when the image holds this version', () => {
+    // The guest image writes the version it baked to /opt/vantik/pi-version.
+    // A stale image must fall back to fetching the pinned package, never run
+    // the Pi it happens to hold.
+    const command = piCommand({});
+    expect(command.startsWith('$(test "$(cat /opt/vantik/pi-version')).toBe(
+      true,
+    );
+    expect(command).toContain(
+      `= '${PI_VERSION}' && echo pi || echo npx --yes ${PI_PACKAGE})`,
+    );
   });
 
   it('passes the model choice through', () => {

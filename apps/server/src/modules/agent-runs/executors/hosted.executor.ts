@@ -13,7 +13,7 @@ import type { SandboxHandle } from '@vantikhq/types';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
   type AgentRunRepoSource,
-  PI_PACKAGE,
+  PI_LAUNCHER,
   PI_REQUIRED_FLAGS,
   THINKING_LEVELS,
   isSafeModelId,
@@ -124,7 +124,7 @@ export function piCommand(options: {
   /** The Vantik extension's absolute guest path. Additive under `--no-extensions`. */
   extension?: string;
 }): string {
-  const args = ['npx', '--yes', PI_PACKAGE, ...PI_REQUIRED_FLAGS];
+  const args = [PI_LAUNCHER, ...PI_REQUIRED_FLAGS];
 
   // Ours, by path, and nothing else: `--no-extensions` still stops Pi loading
   // one from the checkout, and `-e` adds exactly this file, which the host
@@ -172,8 +172,9 @@ function egressAllowlist(
   return [
     // The provider this run calls, and only that one.
     ...(modelHost ? [modelHost] : []),
-    // npm, unconditionally: the harness itself is fetched with `npx`, so a run
-    // that cannot reach the npm registry has no agent at all.
+    // npm, unconditionally: on an image without this Pi baked in, the harness
+    // is fetched with `npx`, and a run that cannot reach the registry then has
+    // no agent at all.
     'registry.npmjs.org',
     // What this run's module declared, and nothing else. The module already
     // owns how it installs itself; this is the half of that statement a

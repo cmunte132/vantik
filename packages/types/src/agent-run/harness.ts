@@ -13,6 +13,13 @@ export const PI_VERSION = '0.82.1';
 export const PI_PACKAGE = `@earendil-works/pi-coding-agent@${PI_VERSION}`;
 
 /**
+ * Pi as a run starts it: the copy baked into the guest image when it is this
+ * version (apps/sandbox-host/guest writes /opt/vantik/pi-version), and npx
+ * otherwise. Unquoted on purpose, so the fallback splits into its words.
+ */
+export const PI_LAUNCHER = `$(test "$(cat /opt/vantik/pi-version 2>/dev/null)" = '${PI_VERSION}' && echo pi || echo npx --yes ${PI_PACKAGE})`;
+
+/**
  * The flags Pi is always given, whatever else a run asks for.
  *
  * `--no-extensions` is a security control, not a preference: Pi otherwise

@@ -120,7 +120,8 @@ known rather than guessed. Your job is to read them, not write them.
 
 **Change the map only when it is wrong or a person asks.** The map itself has
 tools: `create_product`, `create_module`, `add_module_repo` and
-`create_capability`, each with an `update_` tool. Use them when a person asks
+`create_capability`. Change them with `update_product`, `update_module`,
+`update_module_repo` and `update_capability`. Use them when a person asks
 you to, or when the code you work in has no module. A repository with no module
 also blocks every fact that cites its code. Read the lists first and extend
 what exists. A module has one owner, a team or a product. `add_module_repo`

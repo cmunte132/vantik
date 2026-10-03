@@ -273,6 +273,40 @@ describe('a command', () => {
   });
 });
 
+describe('metered model calls', () => {
+  it('asks for the calls after the last one it read', async () => {
+    const page = { calls: [{ seq: 3, responseId: 'gen-1' }], next: 4 };
+    const { runtime: remote, calls } = runtime({
+      'GET /v1/availability': AVAILABLE,
+      'POST /v1/sandboxes': CREATED,
+      'GET /v1/sandboxes/sb-1/model-calls': () => json(200, page),
+    });
+
+    const sandbox = await remote.create(SPEC);
+
+    await expect(sandbox.modelCalls!(3)).resolves.toEqual(page);
+    expect(calls.find((call) => call.key.includes('model-calls'))?.url).toBe(
+      `${URL_}/v1/sandboxes/sb-1/model-calls?since=3`,
+    );
+    await sandbox.dispose();
+  });
+
+  it('reads a sandbox host from before metering as having metered nothing', async () => {
+    const { runtime: remote } = runtime({
+      'GET /v1/availability': AVAILABLE,
+      'POST /v1/sandboxes': CREATED,
+    });
+
+    const sandbox = await remote.create(SPEC);
+
+    await expect(sandbox.modelCalls!(2)).resolves.toEqual({
+      calls: [],
+      next: 2,
+    });
+    await sandbox.dispose();
+  });
+});
+
 describe('disposal', () => {
   it('happens once, and never throws', async () => {
     const { runtime: remote, calls } = runtime({

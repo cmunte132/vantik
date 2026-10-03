@@ -1,3 +1,5 @@
+import type { SandboxHostModelCalls } from './metering';
+
 /**
  * The isolation boundary a hosted run executes inside.
  *
@@ -125,6 +127,12 @@ export interface SandboxHandle {
   exec(command: string, options?: SandboxExecOptions): Promise<SandboxExecResult>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, contents: string): Promise<void>;
+  /**
+   * The model calls the egress metered, from the `since`-th on. Absent from a
+   * runtime that cannot see the guest's traffic; the harness's own figures
+   * then stand.
+   */
+  modelCalls?(since: number): Promise<SandboxHostModelCalls>;
   dispose(): Promise<void>;
 }
 

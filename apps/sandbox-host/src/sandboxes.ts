@@ -1,6 +1,7 @@
 import type {
   SandboxHandle,
   SandboxHostExecStatus,
+  SandboxHostModelCalls,
   SandboxHostSandbox,
   SandboxRuntime,
   SandboxSpec,
@@ -262,6 +263,18 @@ export class Sandboxes {
         exec.waiters.delete(waiter);
       }
     }
+  }
+
+  /**
+   * The model calls the sandbox's egress metered after `since`. A runtime that
+   * meters nothing answers with none, so the server falls back to what the
+   * harness reported.
+   */
+  async modelCalls(id: string, since: number): Promise<SandboxHostModelCalls> {
+    const handle = this.entry(id).handle;
+    return handle.modelCalls
+      ? handle.modelCalls(since)
+      : { calls: [], next: since };
   }
 
   readFile(id: string, path: string): Promise<string> {

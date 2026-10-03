@@ -159,6 +159,17 @@ export function createSandboxHostServer(
       );
     }
 
+    // /sandboxes/:id/model-calls?since=
+    if (parts.length === 3 && parts[2] === "model-calls" && method === "GET") {
+      const since = Number(url.searchParams.get("since") ?? 0);
+
+      if (!(Number.isInteger(since) && since >= 0)) {
+        throw new HttpError(400, "since must be a whole number, 0 or more.");
+      }
+
+      return send(response, 200, await sandboxes.modelCalls(id, since));
+    }
+
     // /sandboxes/:id/files?path=
     if (parts.length === 3 && parts[2] === "files") {
       const path = url.searchParams.get("path");

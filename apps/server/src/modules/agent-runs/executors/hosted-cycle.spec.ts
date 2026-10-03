@@ -29,7 +29,10 @@ const WORKSPACE = 'workspace-1';
 const RUN = 'run-1';
 
 /** A Pi event stream, as the harness would print it. */
+let generation = 0;
+
 function piOutput(summary: string): string {
+  generation += 1;
   return [
     JSON.stringify({ type: 'turn_end' }),
     JSON.stringify({
@@ -37,6 +40,7 @@ function piOutput(summary: string): string {
       message: {
         role: 'assistant',
         model: 'claude-opus-5',
+        responseId: `gen-${generation}`,
         content: [{ type: 'text', text: summary }],
         usage: { cost: { total: 0.5 } },
       },
@@ -68,6 +72,11 @@ function piRefusal(errorMessage: string): string {
 }
 
 interface GuestScript {
+  /**
+   * What the sandbox host's meter answers: the provider's billed cost for
+   * every call it saw. Absent means a runtime that meters nothing.
+   */
+  billedPerCall?: number;
   /** Verdict JSON per pass, keyed by pass number. Absent means no file. */
   verdicts: Record<number, string | undefined>;
   /** A model refusal instead of an answer, keyed by the prompt file. */
@@ -111,6 +120,7 @@ function buildGuest(script: GuestScript) {
   let implementPasses = 0;
   let reviewPasses = 0;
 
+  const firstGeneration = generation;
   const sandbox: SandboxHandle & { disposed: boolean } = {
     id: RUN,
     tier: 'microvm',
@@ -213,6 +223,31 @@ function buildGuest(script: GuestScript) {
 
       return ok;
     },
+
+    ...(script.billedPerCall !== undefined
+      ? {
+          async modelCalls(since: number) {
+            // Every call the harness has reported so far was metered.
+            const calls = Array.from(
+              { length: generation - since - firstGeneration },
+              (_, index) => {
+                const seq = since + index;
+                return {
+                  seq,
+                  host: 'openrouter.ai',
+                  api: 'openai-chat' as const,
+                  status: 200,
+                  startedAt: 0,
+                  durationMs: 1,
+                  responseId: `gen-${firstGeneration + seq + 1}`,
+                  costUsd: script.billedPerCall,
+                };
+              },
+            );
+            return { calls, next: generation - firstGeneration };
+          },
+        }
+      : {}),
 
     async readFile(path: string) {
       const held = files.get(path);
@@ -980,6 +1015,22 @@ describe('when a pass crashes', () => {
     ]);
     expect(harness.final().patch).toMatchObject({
       result: { costUsd: 1, turns: 2 },
+    });
+  });
+
+  it('counts each call at what the provider billed, when the sandbox host metered it', async () => {
+    // The harness prices each pass at $0.50 from its catalog; the gateway
+    // billed $0.70.
+    const harness = build({ verdicts: { 1: ACCEPTED }, billedPerCall: 0.7 });
+
+    await harness.execute();
+
+    expect(harness.spends).toEqual([
+      { costUsd: 0.7, turns: 1 },
+      { costUsd: 1.4, turns: 2 },
+    ]);
+    expect(harness.final().patch).toMatchObject({
+      result: { costUsd: 1.4, turns: 2 },
     });
   });
 

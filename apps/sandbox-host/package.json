@@ -16,7 +16,8 @@
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {
-    "@earendil-works/gondolin": "0.12.0"
+    "@earendil-works/gondolin": "0.12.0",
+    "undici": "^6.21.0"
   },
   "devDependencies": {
     "@vantikhq/eslint-config": "workspace:*",

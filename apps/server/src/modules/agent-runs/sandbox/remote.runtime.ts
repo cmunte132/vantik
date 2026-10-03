@@ -8,6 +8,7 @@ import {
   type SandboxHostCreated,
   type SandboxHostExecStarted,
   type SandboxHostExecStatus,
+  type SandboxHostModelCalls,
   type SandboxHostSandbox,
   type SandboxHostStream,
   type SandboxRuntime,
@@ -225,6 +226,28 @@ export class RemoteSandboxRuntime implements SandboxRuntime {
     return Math.max(since, stream.from + stream.text.length);
   }
 
+  /**
+   * @internal
+   *
+   * A sandbox host from before metering answers 404 for the route, and its
+   * calls are then simply unmetered: the run is billed by what the harness
+   * reported, as it was.
+   */
+  async modelCalls(id: string, since: number): Promise<SandboxHostModelCalls> {
+    try {
+      return await this.request<SandboxHostModelCalls>(
+        'GET',
+        `/v1/sandboxes/${encodeURIComponent(id)}/model-calls?since=${since}`,
+        { timeoutMs: 30_000 },
+      );
+    } catch (error) {
+      if (error instanceof SandboxHostError && error.status === 404) {
+        return { calls: [], next: since };
+      }
+      throw error;
+    }
+  }
+
   /** @internal */
   async readFile(id: string, path: string): Promise<string> {
     return this.request<string>('GET', this.filePath(id, path), {
@@ -357,6 +380,10 @@ class RemoteSandboxHandle implements SandboxHandle {
       options.timeoutMs ?? this.spec.limits.maxDurationMs,
       options.onStdout,
     );
+  }
+
+  modelCalls(since: number): Promise<SandboxHostModelCalls> {
+    return this.runtime.modelCalls(this.id, since);
   }
 
   readFile(path: string): Promise<string> {

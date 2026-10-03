@@ -8,7 +8,7 @@ import type {
 } from '../review-cycle';
 import type { VerificationOutcome } from '../review-prompt';
 import type { AgentRun } from '@prisma/client';
-import type { SandboxHandle } from '@vantikhq/types';
+import type { MeteredModelCall, SandboxHandle } from '@vantikhq/types';
 
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
@@ -32,6 +32,7 @@ import {
   skillArguments,
   skillFiles,
 } from '../agent-skills';
+import { reconcileSpend } from './metered-spend';
 import { CredentialsService } from '../credentials/credentials.service';
 import { evidencePaths } from '../evidence-paths';
 import {
@@ -361,6 +362,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
 
   /** Live guests, so cancel can actually kill one. */
   private readonly running = new Map<string, SandboxHandle>();
+  /** Where each sandbox's metered calls were last read up to. */
+  private readonly meteredSince = new WeakMap<SandboxHandle, number>();
 
   constructor(
     private registry: ExecutorRegistry,
@@ -1342,6 +1345,43 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     }
   }
 
+  /**
+   * What one harness command spent, by the provider's bill where there is one.
+   *
+   * The harness prices each call from its own catalog and keeps no cost a
+   * provider sends. The sandbox host meters the same calls from the
+   * provider's responses, so each call the meter has a billed cost for is
+   * counted at that, and the chat spans waiting on usage are settled with the
+   * provider's figures. A sandbox host that meters nothing, or cannot be
+   * asked, leaves the harness's figures standing.
+   */
+  private async billedSpend(
+    cx: CycleContext,
+    reader: PiEventReader,
+  ): Promise<Spend> {
+    let calls: MeteredModelCall[] = [];
+
+    if (cx.sandbox.modelCalls) {
+      try {
+        const since = this.meteredSince.get(cx.sandbox) ?? 0;
+        const metered = await cx.sandbox.modelCalls(since);
+        this.meteredSince.set(cx.sandbox, metered.next);
+        calls = metered.calls;
+      } catch (error) {
+        this.logger.warn({
+          message: `Could not read the metered model calls of run ${cx.run.id}; its spend is the harness's own`,
+          where: 'HostedExecutor.billedSpend',
+          error: error instanceof Error ? error : undefined,
+        });
+      }
+    }
+
+    cx.telemetry.meter(calls);
+    const spend = reconcileSpend(reader.calls, calls);
+
+    return { costUsd: spend.costUsd, turns: reader.spent.turns };
+  }
+
   private async runHarness(
     cx: CycleContext,
     options: {
@@ -1423,7 +1463,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
 
       // What it spent before it was stopped is still spent.
       const partial = reader.result();
-      await cx.meter.settle(reader.spent);
+      const billed = await this.billedSpend(cx, reader);
+      await cx.meter.settle(billed);
 
       return {
         exitCode: TIMED_OUT,
@@ -1438,7 +1479,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         refusal: null,
         summary: null,
         modelId: partial.modelId,
-        costUsd: partial.costUsd,
+        costUsd: billed.costUsd,
         turns: partial.iterations,
         egressDenied: 0,
       };
@@ -1455,7 +1496,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     await recorded;
 
     const parsed = reader.result();
-    await cx.meter.settle(reader.spent);
+    const billed = await this.billedSpend(cx, reader);
+    await cx.meter.settle(billed);
 
     return {
       // A model that never answered is a failed invocation, whatever the
@@ -1483,7 +1525,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         : null,
       summary: parsed.summary,
       modelId: parsed.modelId,
-      costUsd: parsed.costUsd,
+      costUsd: billed.costUsd,
       turns: parsed.iterations,
       egressDenied: result.egressDenied,
     };

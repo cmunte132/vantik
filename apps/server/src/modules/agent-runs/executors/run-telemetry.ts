@@ -15,6 +15,13 @@
  * calls use, with `vantik.llm.purpose` set to `agent_run` so a dashboard can
  * tell the two apart.
  *
+ * A chat span's usage is written last. The sandbox host meters each model
+ * call from the provider's own response, and `meter` hands those records over
+ * when the harness command ends: a span whose response id matches takes the
+ * provider's tokens and, from a gateway, its billed cost. The span still ends
+ * at the moment the message settled. A span nothing matched, or one whose
+ * phase ended first, keeps what the harness reported.
+ *
  * The run-level metrics — finished, duration, cost, turns — are recorded by
  * `recordRunFinished`, which `AgentRunsService.transition` calls on every
  * terminal state, so a run that ends without its executor (swept, cancelled)
@@ -23,6 +30,8 @@
  * Nothing here holds a prompt, a message, a command or a tool's output. Those
  * are on the run's timeline, scrubbed, where access to them is checked.
  */
+import type { MeteredModelCall } from '@vantikhq/types';
+
 import {
   context,
   Context,
@@ -58,6 +67,7 @@ let instruments:
       timeToFirstToken: Histogram;
       languageServers: Histogram;
       retries: Counter;
+      callCost: Counter;
     }
   | undefined;
 
@@ -136,6 +146,12 @@ function getInstruments() {
       unit: '{retry}',
       valueType: ValueType.INT,
     }),
+    callCost: meter.createCounter('vantik.llm.cost', {
+      description:
+        'What agent-run model calls cost: billed by the provider when it says, otherwise priced by the harness from its catalog.',
+      unit: '{USD}',
+      valueType: ValueType.DOUBLE,
+    }),
   };
   return instruments;
 }
@@ -207,6 +223,12 @@ export interface RunTelemetry {
   phase(name: string): void;
   /** Feeds one harness event; builds model-call and tool-call spans. */
   observe(event: PiEvent): void;
+  /**
+   * Settles the chat spans waiting on usage, with what the sandbox host
+   * metered from the provider. Call it when a harness command ends, before
+   * its phase does.
+   */
+  meter(calls: readonly MeteredModelCall[]): void;
   /** Ends the open phase span. Model and tool calls still open are ended too. */
   endPhase(): void;
   /** Ends the trace with the run's outcome. */
@@ -249,6 +271,10 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
   let phaseSpan: Span | null = null;
   let phaseContext: Context = rootContext;
   let chat: { span: Span; started: number } | null = null;
+  // Settled chat calls whose usage waits on the sandbox host's meter.
+  let pending: PendingChat[] = [];
+  let meteredCalls = 0;
+  let unmatchedMetered = 0;
   const tools = new Map<string, Span>();
   let guardrailHits = 0;
   // What the extension said about the call now in flight, and how many calls
@@ -273,7 +299,113 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
   };
   setModel(provider, model);
 
+  const settle = (call: PendingChat, metered?: MeteredModelCall) => {
+    const { tokens } = genAiInstruments();
+    const { span, usage: pi, attributes } = call;
+    const measured = metered?.usage;
+
+    // Pi's `input` is only the part of the prompt that missed the cache;
+    // reads and writes are counted apart. The semantic conventions count all
+    // of it as input, and so does every backend that adds input and output
+    // into a total: with a warm cache, Pi's figure is a few tokens against
+    // thousands read, and the total came out fifty times too low. The meter
+    // counts it the conventions' way already.
+    const input = measured
+      ? measured.input
+      : typeof pi.input === 'number'
+        ? pi.input + num(pi.cacheRead) + num(pi.cacheWrite)
+        : undefined;
+    const output = measured ? measured.output : pi.output;
+    const cacheRead = measured ? measured.cacheRead : pi.cacheRead;
+    const cacheWrite = measured ? measured.cacheWrite : pi.cacheWrite;
+    const catalog =
+      typeof pi.cost?.total === 'number' ? pi.cost.total : undefined;
+    const cost = metered?.costUsd ?? catalog;
+
+    if (typeof input === 'number') {
+      tokens.record(input, { ...attributes, 'gen_ai.token.type': 'input' });
+      span.setAttribute('gen_ai.usage.input_tokens', input);
+    }
+    if (typeof output === 'number') {
+      tokens.record(output, { ...attributes, 'gen_ai.token.type': 'output' });
+      span.setAttribute('gen_ai.usage.output_tokens', output);
+    }
+    if (typeof cacheRead === 'number') {
+      span.setAttribute('gen_ai.usage.cache_read.input_tokens', cacheRead);
+    }
+    if (typeof cacheWrite === 'number') {
+      span.setAttribute('gen_ai.usage.cache_creation.input_tokens', cacheWrite);
+    }
+    // Not in the semantic conventions yet, but the name backends read:
+    // without it they price the call themselves from the model name, and a
+    // name they do not know, such as an OpenRouter alias, prices at 0.
+    if (cost !== undefined) {
+      span.setAttribute('gen_ai.usage.cost', cost);
+      span.setAttribute(
+        'vantik.llm.cost_source',
+        metered?.costUsd !== undefined ? 'provider' : 'catalog',
+      );
+      getInstruments().callCost.add(cost, attributes);
+    }
+    if (call.responseId) {
+      span.setAttribute('gen_ai.response.id', call.responseId);
+    }
+    span.setAttribute('vantik.llm.metered', Boolean(metered));
+    if (metered) {
+      if (catalog !== undefined && metered.costUsd !== undefined) {
+        span.setAttribute('vantik.llm.catalog_cost', catalog);
+      }
+      if (metered.upstreamProvider) {
+        span.setAttribute(
+          'vantik.llm.upstream_provider',
+          metered.upstreamProvider,
+        );
+      }
+      if (measured?.reasoning !== undefined) {
+        span.setAttribute(
+          'gen_ai.usage.reasoning.output_tokens',
+          measured.reasoning,
+        );
+      }
+      if (measured?.webSearches !== undefined) {
+        span.setAttribute(
+          'vantik.llm.web_search_requests',
+          measured.webSearches,
+        );
+      }
+      if (metered.byok !== undefined) {
+        span.setAttribute('vantik.llm.byok', metered.byok);
+      }
+    }
+    span.end(call.endedAt);
+  };
+
+  const settlePending = (calls: readonly MeteredModelCall[] = []) => {
+    const byId = new Map<string, MeteredModelCall>();
+    for (const call of calls) {
+      meteredCalls += 1;
+      if (call.responseId) {
+        byId.set(call.responseId, call);
+      }
+    }
+    const matched = new Set<string>();
+    for (const call of pending) {
+      const metered = call.responseId ? byId.get(call.responseId) : undefined;
+      if (metered?.responseId) {
+        matched.add(metered.responseId);
+      }
+      settle(call, metered);
+    }
+    pending = [];
+    // A call the harness never settled a message for: a stream cut off, or a
+    // request it retried. The provider may still have billed it.
+    unmatchedMetered += calls.filter(
+      (call) => !call.responseId || !matched.has(call.responseId),
+    ).length;
+  };
+
   const closeChildren = () => {
+    settlePending();
     if (chat) {
       chat.span.setStatus({
         code: SpanStatusCode.ERROR,
@@ -349,6 +481,8 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
     }),
 
     endPhase: safely(endPhase),
+
+    meter: safely((calls: readonly MeteredModelCall[]) => settlePending(calls)),
 
     observe: safely((event: PiEvent) => {
       const type = event.type;
@@ -429,6 +563,7 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
             usage?: unknown;
             stopReason?: unknown;
             errorMessage?: unknown;
+            responseId?: unknown;
           }
         | undefined;
 
@@ -456,15 +591,9 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
       if (type === 'message_end' && message?.role === 'assistant') {
         const responseModel =
           typeof message.model === 'string' ? message.model : null;
-        const usage = (message.usage ?? {}) as {
-          input?: unknown;
-          output?: unknown;
-          cacheRead?: unknown;
-          cacheWrite?: unknown;
-          cost?: { total?: unknown };
-        };
+        const usage = (message.usage ?? {}) as PiUsage;
         const attributes = metricAttributes(responseModel);
-        const { duration, tokens } = genAiInstruments();
+        const { duration } = genAiInstruments();
         const span =
           chat?.span ??
           tracer.startSpan(
@@ -527,47 +656,6 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
             message.stopReason,
           ]);
         }
-        // Pi's `input` is only the part of the prompt that missed the cache;
-        // reads and writes are counted apart. The semantic conventions count
-        // all of it as input, and so does every backend that adds input and
-        // output into a total: with a warm cache, Pi's figure is a few tokens
-        // against thousands read, and the total came out fifty times too low.
-        if (typeof usage.input === 'number') {
-          const input =
-            usage.input +
-            (typeof usage.cacheRead === 'number' ? usage.cacheRead : 0) +
-            (typeof usage.cacheWrite === 'number' ? usage.cacheWrite : 0);
-          tokens.record(input, {
-            ...attributes,
-            'gen_ai.token.type': 'input',
-          });
-          span.setAttribute('gen_ai.usage.input_tokens', input);
-        }
-        if (typeof usage.output === 'number') {
-          tokens.record(usage.output, {
-            ...attributes,
-            'gen_ai.token.type': 'output',
-          });
-          span.setAttribute('gen_ai.usage.output_tokens', usage.output);
-        }
-        if (typeof usage.cacheRead === 'number') {
-          span.setAttribute(
-            'gen_ai.usage.cache_read.input_tokens',
-            usage.cacheRead,
-          );
-        }
-        if (typeof usage.cacheWrite === 'number') {
-          span.setAttribute(
-            'gen_ai.usage.cache_creation.input_tokens',
-            usage.cacheWrite,
-          );
-        }
-        // Not in the semantic conventions yet, but the name backends read:
-        // without it they price the call themselves from the model name, and
-        // a name they do not know, such as an OpenRouter alias, prices at 0.
-        if (typeof usage.cost?.total === 'number') {
-          span.setAttribute('gen_ai.usage.cost', usage.cost.total);
-        }
         if (failed) {
           span.setAttribute('error.type', 'model_error');
           span.setStatus({
@@ -578,7 +666,16 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
                 : 'The model call failed.',
           });
         }
-        span.end();
+        pending.push({
+          span,
+          endedAt: new Date(),
+          responseId:
+            typeof message.responseId === 'string'
+              ? message.responseId
+              : undefined,
+          usage,
+          attributes,
+        });
         return;
       }
 
@@ -625,6 +722,13 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
       root.setAttribute('vantik.agent_run.guardrail_hits', guardrailHits);
       root.setAttribute('vantik.agent_run.model_calls', modelCalls);
       root.setAttribute('vantik.agent_run.model_retries', retries);
+      root.setAttribute('vantik.agent_run.metered_calls', meteredCalls);
+      if (unmatchedMetered > 0) {
+        root.setAttribute(
+          'vantik.agent_run.metered_calls_unmatched',
+          unmatchedMetered,
+        );
+      }
       root.setAttribute(
         'vantik.agent_run.model_calls_unreported',
         modelCalls - reportedCalls,
@@ -652,4 +756,25 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
       root.end();
     }),
   };
+}
+
+/** Pi's usage on an assistant message, as it reports it. */
+interface PiUsage {
+  input?: unknown;
+  output?: unknown;
+  cacheRead?: unknown;
+  cacheWrite?: unknown;
+  cost?: { total?: unknown };
+}
+
+interface PendingChat {
+  span: Span;
+  endedAt: Date;
+  responseId?: string;
+  usage: PiUsage;
+  attributes: Record<string, string>;
+}
+
+function num(value: unknown): number {
+  return typeof value === 'number' ? value : 0;
 }

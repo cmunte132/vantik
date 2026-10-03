@@ -51,6 +51,13 @@ export interface RunFailure {
   raw: string;
 }
 
+/** One model call as the harness reported it. */
+export interface HarnessCall {
+  responseId?: string;
+  /** The harness's price for it: its catalog × the tokens it counted. */
+  costUsd: number;
+}
+
 export interface ParsedRun {
   steps: ParsedStep[];
   /** The agent's own closing prose. What the handback comment is rendered from. */
@@ -102,6 +109,7 @@ export class PiEventReader {
   private readonly assistantText: string[] = [];
   private modelId: string | null = null;
   private costUsd = 0;
+  private readonly priced: HarnessCall[] = [];
   private iterations = 0;
   // Overwritten by every settled message, so what survives is the state of the
   // *last* one. That is what makes a retried call that then answered read as a
@@ -124,6 +132,14 @@ export class PiEventReader {
   /** What the messages read so far cost, and how many turns they took. */
   get spent(): { costUsd: number; turns: number } {
     return { costUsd: this.costUsd, turns: this.iterations };
+  }
+
+  /**
+   * Each assistant message settled so far, with the provider's id for it and
+   * what the harness priced it at, for joining to the sandbox host's meter.
+   */
+  get calls(): readonly HarnessCall[] {
+    return this.priced;
   }
 
   /** The steps of every line this chunk completed. */
@@ -192,7 +208,15 @@ export class PiEventReader {
       this.modelId = model;
     }
 
-    this.costUsd += costOf(event);
+    const cost = costOf(event);
+    this.costUsd += cost;
+    if (isAssistantEnd(event)) {
+      const responseId = (event.message as { responseId?: unknown }).responseId;
+      this.priced.push({
+        ...(typeof responseId === 'string' ? { responseId } : {}),
+        costUsd: cost,
+      });
+    }
 
     const text = assistantTextOf(event);
     if (text) {
@@ -905,4 +929,11 @@ export function assistantTextOf(event: PiEvent): string | null {
     .trim();
 
   return text || null;
+}
+
+function isAssistantEnd(event: PiEvent): boolean {
+  return (
+    event.type === 'message_end' &&
+    (event.message as { role?: unknown } | undefined)?.role === 'assistant'
+  );
 }

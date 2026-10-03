@@ -144,6 +144,105 @@ describe('run telemetry', () => {
     expect((input?.value as { sum: number }).sum).toBe(2100);
   });
 
+  it('settles a chat span with what the provider billed, at the time it ended', async () => {
+    const telemetry = startRunTelemetry({
+      runId: 'run-m',
+      issueId: 'issue-1',
+      agentUserId: 'agent-1',
+      executor: 'hosted',
+      provider: 'openrouter',
+      model: '~anthropic/claude-sonnet-latest',
+    });
+    telemetry.phase('implement');
+
+    const pi = new PiEventReader((event) => telemetry.observe(event));
+    const billed = {
+      role: 'assistant',
+      responseId: 'gen-1',
+      stopReason: 'stop',
+      usage: { input: 2, output: 80, cacheRead: 900, cost: { total: 0.004 } },
+    };
+    const unmetered = { ...billed, responseId: 'gen-2' };
+    pi.push(
+      line({ type: 'message_start', message: billed }) +
+        line({ type: 'message_end', message: billed }) +
+        line({ type: 'message_start', message: unmetered }) +
+        line({ type: 'message_end', message: unmetered }),
+    );
+
+    // Not ended until the meter has spoken.
+    expect(
+      spans.getFinishedSpans().filter((s) => s.name.startsWith('chat ')),
+    ).toHaveLength(0);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    telemetry.meter([
+      {
+        seq: 0,
+        host: 'openrouter.ai',
+        api: 'openai-chat',
+        status: 200,
+        startedAt: 0,
+        durationMs: 10,
+        responseId: 'gen-1',
+        upstreamProvider: 'Anthropic',
+        usage: { input: 1000, output: 85, cacheRead: 900, reasoning: 5 },
+        costUsd: 0.0061,
+        byok: false,
+      },
+      {
+        seq: 1,
+        host: 'openrouter.ai',
+        api: 'openai-chat',
+        status: 200,
+        startedAt: 0,
+        durationMs: 10,
+        responseId: 'gen-cut-off',
+        costUsd: 0.001,
+      },
+    ]);
+    telemetry.end({ status: 'SUCCEEDED' });
+
+    const finished = spans.getFinishedSpans();
+    const chats = finished.filter((s) => s.name.startsWith('chat '));
+    const [metered, fallback] = chats;
+
+    expect(metered.attributes).toMatchObject({
+      'gen_ai.response.id': 'gen-1',
+      'gen_ai.usage.input_tokens': 1000,
+      'gen_ai.usage.output_tokens': 85,
+      'gen_ai.usage.cost': 0.0061,
+      'vantik.llm.cost_source': 'provider',
+      'vantik.llm.catalog_cost': 0.004,
+      'vantik.llm.upstream_provider': 'Anthropic',
+      'vantik.llm.metered': true,
+      'vantik.llm.byok': false,
+    });
+    // Ended when the message settled, not when the meter answered.
+    const endMs = (span: (typeof chats)[number]) =>
+      span.endTime[0] * 1000 + span.endTime[1] / 1e6;
+    const root = finished.find((s) => s.name === 'invoke_agent hosted')!;
+    expect(endMs(root) - endMs(metered)).toBeGreaterThanOrEqual(15);
+
+    expect(fallback.attributes).toMatchObject({
+      'gen_ai.response.id': 'gen-2',
+      'gen_ai.usage.input_tokens': 902,
+      'gen_ai.usage.cost': 0.004,
+      'vantik.llm.cost_source': 'catalog',
+      'vantik.llm.metered': false,
+    });
+
+    expect(root.attributes['vantik.agent_run.metered_calls']).toBe(2);
+    expect(root.attributes['vantik.agent_run.metered_calls_unmatched']).toBe(1);
+
+    const cost = await metric('vantik.llm.cost');
+    const total = cost?.dataPoints.reduce(
+      (sum, point) => sum + (point.value as number),
+      0,
+    );
+    expect(total).toBeCloseTo(0.0101 + 0.004, 6);
+  });
+
   it('ends model and tool calls the phase left open', () => {
     const telemetry = startRunTelemetry({
       runId: 'run-2',

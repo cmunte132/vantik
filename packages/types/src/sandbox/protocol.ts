@@ -22,6 +22,7 @@ import type { SandboxExecResult, SandboxTier } from './sandbox';
  * - `GET    /v1/sandboxes/:id/exec/:execId`      `SandboxHostExecStatus` (`?waitMs=`, `?since=`)
  * - `GET    /v1/sandboxes/:id/files?path=`       the file, as UTF-8 text
  * - `PUT    /v1/sandboxes/:id/files?path=`       the body is the file, as UTF-8 text
+ * - `GET    /v1/sandboxes/:id/model-calls`       `SandboxHostModelCalls` (`?since=`)
  *
  * An error is a non-2xx status with a `SandboxHostError` body.
  */

@@ -3,6 +3,7 @@ import type {
   SandboxExecOptions,
   SandboxExecResult,
   SandboxHandle,
+  SandboxHostModelCalls,
   SandboxRuntime,
   SandboxSpec,
 } from "@vantikhq/types";
@@ -19,6 +20,7 @@ import {
 } from "@earendil-works/gondolin";
 
 import { log } from "./log";
+import { ModelCallMeter } from "./meter";
 
 /**
  * Gondolin: a microVM sandbox with a TypeScript control plane.
@@ -91,9 +93,23 @@ export class GondolinRuntime implements SandboxRuntime {
     });
 
     const image = guestImage();
+    const counted = countDenials(httpHooks, denials);
+
+    // The only secrets a guest is given are model keys, so the hosts they are
+    // substituted into are the model providers, and those are the responses
+    // the usage is read from. The same guard decides every connection.
+    const meter = new ModelCallMeter(
+      new Set(
+        Object.values(spec.secrets).flatMap((secret) =>
+          secret.hosts.map((host) => host.toLowerCase()),
+        ),
+      ),
+      counted.isIpAllowed,
+    );
 
     const vm = await VM.create({
-      httpHooks: countDenials(httpHooks, denials),
+      httpHooks: counted,
+      fetch: meter.fetch,
       // Workspace paths sit underneath, so a caller that sets one of them
       // wins, and the substituted secrets win over everything.
       env: { ...workspaceEnv(), ...spec.env, ...secretEnv },
@@ -113,7 +129,7 @@ export class GondolinRuntime implements SandboxRuntime {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
-    const handle = new GondolinHandle(vm, spec, denials);
+    const handle = new GondolinHandle(vm, spec, denials, meter);
 
     try {
       // Before the files are seeded, so the run's own files land on the
@@ -334,6 +350,7 @@ class GondolinHandle implements SandboxHandle {
     private vm: VM,
     private spec: SandboxSpec,
     private denials: { count: number },
+    private meter: ModelCallMeter,
   ) {}
 
   get id(): string {
@@ -389,6 +406,10 @@ class GondolinHandle implements SandboxHandle {
     };
   }
 
+  modelCalls(since: number): Promise<SandboxHostModelCalls> {
+    return this.meter.modelCalls(since);
+  }
+
   readFile(path: string): Promise<string> {
     return this.vm.fs.readFile(guestPath(path), { encoding: "utf-8" });
   }
@@ -424,6 +445,8 @@ class GondolinHandle implements SandboxHandle {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+
+    await this.meter.close();
   }
 }
 

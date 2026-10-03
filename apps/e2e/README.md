@@ -208,7 +208,15 @@ a dozen issues, a view and a knowledge page. `screenshots/app.capture.ts` then
 opens one page for each screenshot and saves it under
 `apps/docs/static/img/docs/<section>/<name>.png`.
 
-It needs the same stack as the tests, Mailpit included:
+Every release retakes them. Once the release's images are published,
+`.github/workflows/docs-screenshots.yml` boots the stack from them, runs the
+capture from the release tag, commits the screenshots that changed to main,
+and deploys the docs. A UI change therefore reaches the docs with the release
+that ships it, and nobody takes a screenshot by hand. To retake them for a
+release again, run that workflow from the Actions tab with its version.
+
+To run the capture locally, start the same stack as the tests, Mailpit
+included:
 
 ```bash
 pnpm --filter @vantikhq/e2e screenshots
@@ -220,15 +228,17 @@ pnpm --filter @vantikhq/e2e screenshots:check
 
 The first writes every screenshot. The second compares them with the committed
 ones and fails on any that changed, with a diff in the report
-(`screenshots-report/`). Run the check after a UI change to see which docs
-images it touched, then run the first and review the new images before you
-commit them.
+(`screenshots-report/`). You do not need either for a UI change, which the
+next release captures. Run them when you add or change a capture, and commit
+the new image with the docs page that shows it, so the page has its image
+before the release retakes it.
 
 Each run seeds a new workspace and renames it to "Acme", so issue numbers,
 names and titles come out the same every time. The browser clock is fixed to
 the next whole hour, and the per-run email addresses are shown as
-`ada@acme.dev`. Dates are still relative to the day of the run, so a check run
-on a later day than the capture reports the screenshots that show a date.
+`ada@acme.dev`. Dates such as a project's target date are relative to the day
+of the run, so the few screenshots that show one change with every release,
+and a check run on a later day than the capture reports them.
 
 To add a screenshot, seed what it needs in `seed.ts`, add a test to
 `app.capture.ts` that opens the page and calls `shot(page, '<section>/<name>')`,

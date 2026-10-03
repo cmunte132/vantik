@@ -167,3 +167,16 @@ jobs:
 
       - name: Inspect
         run: docker buildx imagetools inspect "${IMAGE}:${{ github.ref_name }}"
+
+  # The docs show the UI of the latest release, so a release retakes them from
+  # the images it just published.
+  docs-screenshots:
+    name: Docs screenshots
+    needs: [merge]
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+      actions: write
+    uses: ./.github/workflows/docs-screenshots.yml
+    with:
+      version: ${{ github.ref_name }}

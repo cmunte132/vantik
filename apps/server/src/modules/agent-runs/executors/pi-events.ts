@@ -5,6 +5,10 @@ import {
   MODEL_CALL_ENTRY,
   REMINDER_TAG,
 } from '../pi-extension/vantik-extension';
+import {
+  LANGUAGE_SERVER_ENTRY,
+  LANGUAGE_SERVERS,
+} from '../pi-extension/vantik-lsp';
 
 /**
  * What Pi's JSON event stream says a run did.
@@ -360,6 +364,53 @@ export function modelCallOf(
   }
 
   return timings;
+}
+
+/** A language server starting, or failing to, as the extension reported it. */
+export interface LanguageServerStart {
+  server: string;
+  outcome: 'started' | 'failed' | 'timeout';
+  ms: number;
+}
+
+const SERVER_IDS = new Set(LANGUAGE_SERVERS.map((spec) => spec.id));
+const OUTCOMES = new Set(['started', 'failed', 'timeout']);
+
+/**
+ * The extension's record of a language server starting, if `event` is one.
+ * Checked like a model-call record: the server and outcome must be ones the
+ * extension can name, so a forged record cannot mint metric labels.
+ */
+export function languageServerOf(
+  event: PiEvent,
+): LanguageServerStart | null | undefined {
+  if (event.type !== 'entry_appended') {
+    return undefined;
+  }
+  const entry = event.entry as
+    { customType?: unknown; data?: unknown } | undefined;
+  if (entry?.customType !== LANGUAGE_SERVER_ENTRY) {
+    return undefined;
+  }
+
+  const data = entry.data as Record<string, unknown> | undefined;
+  if (
+    !data ||
+    data.v !== 1 ||
+    typeof data.server !== 'string' ||
+    !SERVER_IDS.has(data.server) ||
+    typeof data.outcome !== 'string' ||
+    !OUTCOMES.has(data.outcome) ||
+    !isMs(data.ms)
+  ) {
+    return null;
+  }
+
+  return {
+    server: data.server,
+    outcome: data.outcome as LanguageServerStart['outcome'],
+    ms: data.ms,
+  };
 }
 
 /**

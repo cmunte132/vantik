@@ -18,11 +18,14 @@
  * host's spans cannot see, and reports it as a content-free record.
  *
  * Self-contained on purpose: the guest has no node_modules of ours, so this
- * file imports nothing at run time but Node's own `fs`. The rules are exported so the server's
- * tests exercise exactly what the guest runs.
+ * file imports nothing at run time but Node's own modules and its sibling
+ * `vantik-lsp`, which the host seeds beside it. The rules are exported so the
+ * server's tests exercise exactly what the guest runs.
  */
 /* eslint-disable turbo/no-undeclared-env-vars -- VANTIK_POLICY is set in the guest by the host, not read by the server. */
 import { appendFileSync, readFileSync } from 'node:fs';
+
+import { registerCodeTools } from './vantik-lsp';
 
 /** What the host tells the extension about this run, as JSON. */
 export interface GuardrailPolicy {
@@ -292,7 +295,7 @@ export function checkReminder(policy: GuardrailPolicy): string {
 // ------------------------------------------------------------------ wiring
 
 /** The slice of Pi's ExtensionAPI this uses, so nothing is imported at run time. */
-interface PiApi {
+export interface PiApi {
   // The handlers below narrow the event to what they read.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   on(event: string, handler: (event: any, ctx: unknown) => unknown): void;
@@ -357,6 +360,7 @@ export default function vantik(pi: PiApi) {
   reportModelCalls(pi);
   enforceGuardrails(pi);
   registerVantikTools(pi);
+  registerCodeTools(pi, readPolicy()?.repoRoot ?? process.cwd());
 }
 
 /**

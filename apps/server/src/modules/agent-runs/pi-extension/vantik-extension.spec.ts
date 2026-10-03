@@ -220,6 +220,7 @@ describe('seeding the guest', () => {
 
     expect(Object.keys(files).sort()).toEqual([
       'vantik-extension.ts',
+      'vantik-lsp.ts',
       POLICY_PATH,
     ]);
     expect(files['vantik-extension.ts']).toContain(
@@ -373,7 +374,11 @@ describe('the Vantik tools', () => {
   }
 
   it('registers the read and write tools', () => {
-    expect(Object.keys(loadTools().tools).sort()).toEqual([
+    expect(
+      Object.keys(loadTools().tools)
+        .filter((name) => name.startsWith('vantik_'))
+        .sort(),
+    ).toEqual([
       'vantik_criterion_met',
       'vantik_issue',
       'vantik_knowledge',

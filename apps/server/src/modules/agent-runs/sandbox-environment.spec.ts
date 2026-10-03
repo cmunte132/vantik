@@ -123,4 +123,17 @@ describe('what the agent is told about its sandbox', () => {
       }),
     ).toContain('## Your environment');
   });
+
+  it('names every code tool the extension registers', () => {
+    const text = sandboxEnvironment(pack()).join('\n');
+    for (const tool of [
+      'code_definition',
+      'code_references',
+      'code_hover',
+      'code_symbols',
+      'code_diagnostics',
+    ]) {
+      expect(text).toContain(`\`${tool}\``);
+    }
+  });
 });

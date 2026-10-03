@@ -76,5 +76,12 @@ export function sandboxEnvironment(pack: ContextPack): string[] {
     '  the issue and its Definition of Done, and `vantik_knowledge` what the',
     '  workspace knows. `vantik_note`, `vantik_criterion_met` and',
     '  `vantik_remember` queue writes the host applies for you.',
+    '- For TypeScript, JavaScript and Python, ask the language server instead',
+    '  of grepping: `code_definition`, `code_references` (before you change a',
+    '  signature), `code_hover` for a type, `code_symbols` for an outline or a',
+    '  declaration by name, and `code_diagnostics` for a file. Each takes a',
+    '  path, a line, and the name on it. Errors in a file you write or edit are',
+    '  shown with the result, so fix them before you move on. If a tool says',
+    '  its server is unavailable, use `rg` and the checks.',
   ];
 }

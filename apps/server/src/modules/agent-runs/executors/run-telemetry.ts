@@ -39,6 +39,7 @@ import {
 import {
   guardrailOf,
   ModelCallTimings,
+  languageServerOf,
   modelCallOf,
   statusOfError,
 } from './pi-events';
@@ -54,6 +55,7 @@ let instruments:
       turns: Histogram;
       guardrails: Counter;
       timeToFirstToken: Histogram;
+      languageServers: Histogram;
       retries: Counter;
     }
   | undefined;
@@ -115,6 +117,18 @@ function getInstruments() {
         explicitBucketBoundaries: [0.1, 0.25, 0.5, 1, 2, 4, 8, 15, 30, 60, 120],
       },
     }),
+    languageServers: meter.createHistogram(
+      'vantik.agent_run.language_server.start',
+      {
+        description:
+          'Time for a language server in an agent run to start, or to be given up on, by server and outcome.',
+        unit: 's',
+        valueType: ValueType.DOUBLE,
+        advice: {
+          explicitBucketBoundaries: [0.25, 0.5, 1, 2, 4, 8, 15, 30, 60],
+        },
+      },
+    ),
     retries: meter.createCounter('vantik.agent_run.model_retries', {
       description:
         'Model calls an agent run retried after the provider failed them.',
@@ -348,6 +362,24 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
           'vantik.guardrail.action': hit.action,
         });
       }
+      const server = languageServerOf(event);
+      if (server === null) {
+        invalidRecords += 1;
+        return;
+      }
+      if (server) {
+        const attributes = {
+          'vantik.language_server': server.server,
+          'vantik.language_server.outcome': server.outcome,
+        };
+        (phaseSpan ?? root).addEvent('vantik.language_server', {
+          ...attributes,
+          'vantik.language_server.ms': server.ms,
+        });
+        getInstruments().languageServers.record(server.ms / 1000, attributes);
+        return;
+      }
+
       const record = modelCallOf(event);
       if (record === null) {
         invalidRecords += 1;

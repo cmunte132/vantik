@@ -321,4 +321,63 @@ describe('run telemetry', () => {
       'vantik.agent_run.extension_records_invalid': 2,
     });
   });
+
+  it('records each language server starting, and drops a forged one', async () => {
+    const telemetry = startRunTelemetry({
+      runId: 'run-6',
+      issueId: 'issue-1',
+      agentUserId: 'agent-1',
+      executor: 'hosted',
+    });
+    const entry = (data: unknown) => ({
+      type: 'entry_appended',
+      entry: { customType: 'vantik.language_server', data },
+    });
+
+    telemetry.observe(
+      entry({ v: 1, server: 'typescript', outcome: 'started', ms: 2400 }),
+    );
+    telemetry.observe(
+      entry({ v: 1, server: 'python', outcome: 'timeout', ms: 60000 }),
+    );
+    telemetry.observe(
+      entry({ v: 1, server: 'rm -rf', outcome: 'started', ms: 1 }),
+    );
+    telemetry.end({ status: 'SUCCEEDED' });
+
+    const root = spans
+      .getFinishedSpans()
+      .find((s) => s.name === 'invoke_agent hosted');
+    expect(
+      root?.events
+        .filter((e) => e.name === 'vantik.language_server')
+        .map((e) => e.attributes),
+    ).toEqual([
+      {
+        'vantik.language_server': 'typescript',
+        'vantik.language_server.outcome': 'started',
+        'vantik.language_server.ms': 2400,
+      },
+      {
+        'vantik.language_server': 'python',
+        'vantik.language_server.outcome': 'timeout',
+        'vantik.language_server.ms': 60000,
+      },
+    ]);
+    expect(root?.attributes).toMatchObject({
+      'vantik.agent_run.extension_records_invalid': 1,
+    });
+
+    const starts = await metric('vantik.agent_run.language_server.start');
+    expect(
+      starts?.dataPoints.map((point) => [
+        point.attributes['vantik.language_server'],
+        point.attributes['vantik.language_server.outcome'],
+        (point.value as { sum: number }).sum,
+      ]),
+    ).toEqual([
+      ['typescript', 'started', 2.4],
+      ['python', 'timeout', 60],
+    ]);
+  });
 });

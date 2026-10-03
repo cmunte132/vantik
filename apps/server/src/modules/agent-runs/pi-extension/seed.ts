@@ -16,23 +16,29 @@ export const OUTBOX_PATH = 'vantik-outbox.jsonl';
 export const CONTEXT_PATH = 'context.json';
 
 /**
- * The extension as it is on disk beside this file: the compiled `.js` in a
- * built server, the `.ts` source under ts-jest or a dev server. Pi loads
- * either, so the guest file keeps the extension it was read with.
+ * The extension's files as they are on disk beside this one: the compiled
+ * `.js` in a built server, the `.ts` source under ts-jest or a dev server. Pi
+ * loads either, and the entry point's `./vantik-lsp` import resolves to the
+ * sibling seeded in the same form.
  *
- * Read once. It is part of this build, not something that changes under it.
+ * Read once. They are part of this build, not something that changes under it.
  */
-let cached: { name: string; source: string } | undefined;
+const MODULES = ['vantik-extension', 'vantik-lsp'];
 
-export function extensionFile(): { name: string; source: string } {
+let cached: Array<{ name: string; source: string }> | undefined;
+
+export function extensionSources(): Array<{ name: string; source: string }> {
   if (cached) {
     return cached;
   }
 
-  for (const name of ['vantik-extension.js', 'vantik-extension.ts']) {
-    const path = join(__dirname, name);
-    if (existsSync(path)) {
-      cached = { name, source: readFileSync(path, 'utf8') };
+  for (const extension of ['.js', '.ts']) {
+    const paths = MODULES.map((module) => join(__dirname, module + extension));
+    if (paths.every((path) => existsSync(path))) {
+      cached = paths.map((path, index) => ({
+        name: MODULES[index] + extension,
+        source: readFileSync(path, 'utf8'),
+      }));
       return cached;
     }
   }
@@ -62,15 +68,15 @@ export function extensionFiles(
   pack: ContextPack,
   egressHosts: string[] = [],
 ): Record<string, string> {
-  const { name, source } = extensionFile();
-
   return {
-    [name]: source,
+    ...Object.fromEntries(
+      extensionSources().map(({ name, source }) => [name, source]),
+    ),
     [POLICY_PATH]: JSON.stringify(guardrailPolicy(pack, egressHosts), null, 2),
   };
 }
 
 /** The extension's absolute path in the guest, for `-e`. */
 export function extensionGuestPath(): string {
-  return `/workspace/${extensionFile().name}`;
+  return `/workspace/${extensionSources()[0].name}`;
 }

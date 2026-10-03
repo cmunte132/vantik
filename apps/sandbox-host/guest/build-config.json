@@ -31,7 +31,7 @@
   },
   "postBuild": {
     "commands": [
-      "npm install -g --no-fund --no-audit --omit=dev @earendil-works/pi-coding-agent@${PI_VERSION} typescript@5.9.3 typescript-language-server@6.0.1 pyright@1.1.414",
+      "npm install -g --prefix /usr --no-fund --no-audit --omit=dev @earendil-works/pi-coding-agent@${PI_VERSION} typescript@5.9.3 typescript-language-server@6.0.1 pyright@1.1.414",
       "npm cache clean --force",
       "mkdir -p /opt/vantik && echo ${PI_VERSION} > /opt/vantik/pi-version"
     ]

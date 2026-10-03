@@ -19,7 +19,7 @@ export const GUEST_TOOLS: Array<{
   { packages: ['ripgrep'], name: 'ripgrep (`rg`)' },
   { packages: ['curl'], name: 'curl' },
   { packages: ['fd'], name: 'fd' },
-  { packages: ['ast-grep'], name: 'ast-grep (`sg`, structural search)' },
+  { packages: ['ast-grep'], name: 'ast-grep (structural search)' },
   { packages: ['jq'], name: 'jq' },
   {
     packages: [],

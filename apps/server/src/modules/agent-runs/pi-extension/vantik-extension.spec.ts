@@ -7,9 +7,11 @@ import vantik, {
   GuardrailPolicy,
   hostsIn,
   isCheckCommand,
+  MODEL_CALL_ENTRY,
   repoRelative,
+  reportModelCalls,
 } from './vantik-extension';
-import { guardrailOf } from '../executors/pi-events';
+import { guardrailOf, modelCallOf } from '../executors/pi-events';
 
 const POLICY: GuardrailPolicy = {
   repoRoot: '/workspace/repo',
@@ -110,6 +112,7 @@ describe('the Vantik extension in Pi', () => {
         handlers[name] = handler as (event: unknown) => unknown;
       },
       sendUserMessage: (content) => sent.push(content),
+      appendEntry: () => undefined,
     });
     process.env.VANTIK_POLICY = env;
 
@@ -179,7 +182,7 @@ describe('the Vantik extension in Pi', () => {
   });
 
   it('does nothing without a policy, rather than stop the run', () => {
-    expect(load(null).handlers).toEqual({});
+    expect(Object.keys(load(null).handlers)).not.toContain('tool_call');
   });
 
   it('does not mistake a tool’s own failure for a guardrail', () => {
@@ -223,5 +226,78 @@ describe('seeding the guest', () => {
       guardrailPolicy(pack, ['proxy.golang.org']),
     );
     expect(guardrailPolicy(pack).checks).toEqual(['npm test', 'npm run lint']);
+  });
+});
+
+describe('timing model calls', () => {
+  function run(events: Array<[string, object]>) {
+    const handlers: Record<string, (event: unknown) => unknown> = {};
+    const entries: Array<{ customType: string; data: unknown }> = [];
+    let clock = 1000;
+
+    reportModelCalls(
+      {
+        on: (name, handler) => {
+          handlers[name] = handler as (event: unknown) => unknown;
+        },
+        sendUserMessage: () => undefined,
+        appendEntry: (customType, data) => entries.push({ customType, data }),
+      },
+      () => clock,
+    );
+    for (const [name, event] of events) {
+      if (name === 'tick') {
+        clock += (event as { ms: number }).ms;
+      } else {
+        handlers[name]?.(event);
+      }
+    }
+    return entries;
+  }
+
+  const assistant = { message: { role: 'assistant' } };
+
+  it('reports each call from the moment the request left, and the host reads it back', () => {
+    const entries = run([
+      ['before_provider_request', {}],
+      ['tick', { ms: 300 }],
+      ['after_provider_response', { status: 200, headers: { secret: 'x' } }],
+      ['message_start', assistant],
+      ['tick', { ms: 5 }],
+      ['message_update', assistant],
+      ['tick', { ms: 200 }],
+      ['message_update', assistant],
+      ['message_end', assistant],
+    ]);
+
+    expect(entries).toEqual([
+      {
+        customType: MODEL_CALL_ENTRY,
+        data: {
+          v: 1,
+          status: 200,
+          responseMs: 300,
+          ttftMs: 305,
+          durationMs: 505,
+        },
+      },
+    ]);
+    expect(modelCallOf({ type: 'entry_appended', entry: entries[0] })).toEqual({
+      status: 200,
+      responseMs: 300,
+      ttftMs: 305,
+      durationMs: 505,
+    });
+  });
+
+  it('reports a refused call with only its duration, and nothing for user messages', () => {
+    const entries = run([
+      ['message_end', { message: { role: 'user' } }],
+      ['before_provider_request', {}],
+      ['tick', { ms: 16 }],
+      ['message_end', assistant],
+    ]);
+
+    expect(entries.map((e) => e.data)).toEqual([{ v: 1, durationMs: 16 }]);
   });
 });

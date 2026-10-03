@@ -200,4 +200,125 @@ describe('run telemetry', () => {
     const turns = await metric('vantik.agent_run.turns');
     expect((turns?.dataPoints[0].value as { sum: number }).sum).toBe(12);
   });
+
+  it('times each model call from the request, with its status and retries', async () => {
+    const telemetry = startRunTelemetry({
+      runId: 'run-4',
+      issueId: 'issue-1',
+      agentUserId: 'agent-1',
+      executor: 'hosted',
+      provider: 'openrouter',
+      model: 'm',
+    });
+    telemetry.phase('implement');
+    const pi = new PiEventReader((event) => telemetry.observe(event));
+    const refused = {
+      role: 'assistant',
+      stopReason: 'error',
+      errorMessage: '429: {"message":"rate limited"}',
+    };
+    const answered = { role: 'assistant', stopReason: 'stop' };
+    const record = (data: object) =>
+      line({
+        type: 'entry_appended',
+        entry: { type: 'custom', customType: 'vantik.model_call', data },
+      });
+
+    // The order Pi 0.82.1 writes them in: the extension's record lands just
+    // before the message_end it describes, and a retry follows the failure.
+    pi.push(
+      line({ type: 'message_start', message: refused }) +
+        record({ v: 1, durationMs: 16 }) +
+        line({ type: 'message_end', message: refused }) +
+        line({
+          type: 'auto_retry_start',
+          attempt: 1,
+          maxAttempts: 3,
+          delayMs: 2000,
+          errorMessage: refused.errorMessage,
+        }) +
+        line({ type: 'message_start', message: answered }) +
+        record({
+          v: 1,
+          status: 200,
+          responseMs: 305,
+          ttftMs: 306,
+          durationMs: 506,
+        }) +
+        line({ type: 'message_end', message: answered }) +
+        line({ type: 'auto_retry_end', success: true, attempt: 1 }),
+    );
+    telemetry.end({ status: 'SUCCEEDED' });
+
+    const finished = spans.getFinishedSpans();
+    const chats = finished.filter((s) => s.name === 'chat m');
+    expect(chats.map((s) => s.attributes['http.response.status_code'])).toEqual(
+      [429, 200],
+    );
+    expect(chats[1].attributes).toMatchObject({
+      'vantik.llm.duration': 0.506,
+      'vantik.llm.response_time': 0.305,
+      'vantik.llm.time_to_first_token': 0.306,
+    });
+
+    const phase = finished.find((s) => s.name === 'agent_phase implement');
+    expect(phase?.events.map((e) => [e.name, e.attributes])).toEqual([
+      [
+        'vantik.model_retry',
+        {
+          'vantik.retry.attempt': 1,
+          'http.response.status_code': 429,
+          'vantik.retry.delay_ms': 2000,
+        },
+      ],
+    ]);
+
+    const root = finished.find((s) => s.name === 'invoke_agent hosted');
+    expect(root?.attributes).toMatchObject({
+      'vantik.agent_run.model_calls': 2,
+      'vantik.agent_run.model_retries': 1,
+      'vantik.agent_run.model_calls_unreported': 0,
+    });
+    expect(
+      root?.attributes['vantik.agent_run.extension_went_silent'],
+    ).toBeUndefined();
+
+    const ttft = await metric('vantik.llm.time_to_first_token');
+    expect((ttft?.dataPoints[0].value as { sum: number }).sum).toBeCloseTo(
+      0.306,
+    );
+    const retried = await metric('vantik.agent_run.model_retries');
+    expect(retried?.dataPoints[0].attributes['error.type']).toBe('429');
+  });
+
+  it('flags an extension that stops reporting, and drops records that do not parse', () => {
+    const telemetry = startRunTelemetry({
+      runId: 'run-5',
+      issueId: 'issue-1',
+      agentUserId: 'agent-1',
+      executor: 'hosted',
+    });
+    const answered = { role: 'assistant', stopReason: 'stop' };
+    const entry = (data: unknown) => ({
+      type: 'entry_appended',
+      entry: { customType: 'vantik.model_call', data },
+    });
+
+    telemetry.observe(entry({ v: 1, durationMs: 100, ttftMs: 40 }));
+    telemetry.observe({ type: 'message_end', message: answered });
+    telemetry.observe(entry({ v: 1, durationMs: 'soon' }));
+    telemetry.observe(entry({ v: 2, durationMs: 1 }));
+    telemetry.observe({ type: 'message_end', message: answered });
+    telemetry.end({ status: 'SUCCEEDED' });
+
+    const root = spans
+      .getFinishedSpans()
+      .find((s) => s.name === 'invoke_agent hosted');
+    expect(root?.attributes).toMatchObject({
+      'vantik.agent_run.model_calls': 2,
+      'vantik.agent_run.model_calls_unreported': 1,
+      'vantik.agent_run.extension_went_silent': true,
+      'vantik.agent_run.extension_records_invalid': 2,
+    });
+  });
 });

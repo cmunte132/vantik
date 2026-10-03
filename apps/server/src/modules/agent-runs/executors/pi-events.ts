@@ -1,6 +1,10 @@
 import type { AgentStepKind } from '@vantikhq/types';
 
-import { BLOCKED_TAG, REMINDER_TAG } from '../pi-extension/vantik-extension';
+import {
+  BLOCKED_TAG,
+  MODEL_CALL_ENTRY,
+  REMINDER_TAG,
+} from '../pi-extension/vantik-extension';
 
 /**
  * What Pi's JSON event stream says a run did.
@@ -295,6 +299,79 @@ function userTextOf(content: unknown): string {
         )
         .join('')
     : '';
+}
+
+/** One model call's timings, as the Vantik extension reported them. */
+export interface ModelCallTimings {
+  status?: number;
+  responseMs?: number;
+  ttftMs?: number;
+  durationMs: number;
+}
+
+/** Longer than any deadline a run can have, so anything above it is a lie. */
+const MAX_MS = 6 * 60 * 60 * 1000;
+
+const isMs = (value: unknown): value is number =>
+  typeof value === 'number' &&
+  Number.isFinite(value) &&
+  value >= 0 &&
+  value <= MAX_MS;
+
+/**
+ * The Vantik extension's record of one model call, if `event` is one.
+ *
+ * The record comes out of the guest, where the agent could write its own, so
+ * it is checked field by field and only known numbers survive: `undefined` for
+ * an event that is not a record, `null` for one that claims to be and is not
+ * well-formed. Nothing in it is trusted beyond being a plausible number.
+ */
+export function modelCallOf(
+  event: PiEvent,
+): ModelCallTimings | null | undefined {
+  if (event.type !== 'entry_appended') {
+    return undefined;
+  }
+  const entry = event.entry as
+    { customType?: unknown; data?: unknown } | undefined;
+  if (entry?.customType !== MODEL_CALL_ENTRY) {
+    return undefined;
+  }
+
+  const data = entry.data as Record<string, unknown> | undefined;
+  if (!data || data.v !== 1 || !isMs(data.durationMs)) {
+    return null;
+  }
+
+  const timings: ModelCallTimings = { durationMs: data.durationMs };
+  if (
+    typeof data.status === 'number' &&
+    Number.isInteger(data.status) &&
+    data.status >= 100 &&
+    data.status <= 599
+  ) {
+    timings.status = data.status;
+  }
+  if (isMs(data.responseMs) && data.responseMs <= data.durationMs) {
+    timings.responseMs = data.responseMs;
+  }
+  if (isMs(data.ttftMs) && data.ttftMs <= data.durationMs) {
+    timings.ttftMs = data.ttftMs;
+  }
+
+  return timings;
+}
+
+/**
+ * The HTTP status at the head of a provider error, e.g. `429: rate limited`.
+ *
+ * A call the provider refused never reaches the extension's response hook, so
+ * this is where its status comes from — Pi's own message, not the guest's.
+ */
+export function statusOfError(message: unknown): number | null {
+  const match =
+    typeof message === 'string' ? /^\s*([1-5]\d\d)\b/.exec(message) : null;
+  return match ? Number(match[1]) : null;
 }
 
 /** Turns one harness event into a progress line worth storing, or nothing. */

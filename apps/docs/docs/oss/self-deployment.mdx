@@ -534,6 +534,10 @@ receives.
 | `send <queue>` | Producer | A job added to a Bull queue, with `messaging.system=bull` and `messaging.destination.name` |
 | `process <queue>` | Consumer | Each attempt of a job, as a child of the `send` span. `vantik.queue.job` names the job, and `vantik.queue.attempt` counts the attempts. |
 | `chat <model>` | Client | Each model call, with the `gen_ai.*` attributes: the provider, the model, the tokens, and the finish reason. `vantik.llm.purpose` names the feature, and `vantik.llm.role` names the agent role. The span holds no prompt and no answer. |
+| `invoke_agent <executor>` | Internal | Each agent run, as the root of its own trace. `vantik.agent_run.id` and `vantik.issue.id` identify the run. When the run ends, the span has its status and the counts of its model calls, retries, and guardrail hits. `vantik.agent_run.extension_went_silent` is set when the Vantik extension stops reporting partway through a run. |
+| `agent_phase <phase>` | Internal | Each phase of an agent run: `setup`, `implement`, `verify`, `review`, `revise-N`, and `handback`. A `vantik.model_retry` event marks each model call that the harness retries, and a `vantik.guardrail` event marks each time the Vantik extension stops a tool call or asks the agent to continue. |
+| `chat <model>` in an agent run | Client | Each model call that the agent makes in its sandbox, as a child of its phase, with `vantik.llm.purpose=agent_run`. `http.response.status_code` is the status of the provider. The Vantik extension times the call from the moment the request leaves the sandbox: `vantik.llm.duration`, `vantik.llm.response_time` (until the response headers), and `vantik.llm.time_to_first_token`, all in seconds. |
+| `execute_tool <tool>` | Internal | Each tool call of the agent, with `gen_ai.tool.name`. The span holds no command and no output. |
 | `replicate <Model> <op>` | Consumer | Each change that the server sends to the browsers |
 | `send /` | Producer | Each socket.io message to the browsers, with `messaging.system=socket.io`. Some backends show socket.io as a queue for this reason. |
 | `documentLoad`, `documentFetch`, `resourceFetch` | Internal | The load of a page in the browser |
@@ -552,6 +556,11 @@ receives.
 | `vantik.queue.jobs` | The jobs in each state (`vantik.queue.state`), for each queue |
 | `gen_ai.client.operation.duration` | The time of each model call |
 | `gen_ai.client.token.usage` | The input and the output tokens of each model call |
+| `vantik.llm.time_to_first_token` | The time from the request of an agent's model call to the first streamed update |
+| `vantik.agent_run.finished` | The agent runs that ended, for each executor, status, and failure |
+| `vantik.agent_run.duration`, `vantik.agent_run.cost`, `vantik.agent_run.turns` | The time, the cost in USD, and the model turns of each agent run |
+| `vantik.agent_run.model_retries` | The model calls that an agent run retried, with the status as `error.type` |
+| `vantik.agent_run.guardrail` | The times the Vantik extension stopped a tool call or asked an agent to continue, for each rule. A sudden rise can be a sign of prompt injection. |
 
 **Logs.** The server sends each log line, with the `traceId` and the `spanId` of
 the span that wrote it. The browser sends two kinds of record:

@@ -36,7 +36,12 @@ import {
   ValueType,
 } from '@opentelemetry/api';
 
-import { guardrailOf } from './pi-events';
+import {
+  guardrailOf,
+  ModelCallTimings,
+  modelCallOf,
+  statusOfError,
+} from './pi-events';
 import { genAiInstruments } from '../../ai-requests/model-telemetry';
 
 const tracer = trace.getTracer('vantik-agent');
@@ -48,6 +53,8 @@ let instruments:
       cost: Histogram;
       turns: Histogram;
       guardrails: Counter;
+      timeToFirstToken: Histogram;
+      retries: Counter;
     }
   | undefined;
 
@@ -97,6 +104,21 @@ function getInstruments() {
       description:
         'Times the Vantik extension stopped a tool call or asked an agent to continue. A spike is a prompt-injection signal.',
       unit: '{hit}',
+      valueType: ValueType.INT,
+    }),
+    timeToFirstToken: meter.createHistogram('vantik.llm.time_to_first_token', {
+      description:
+        'From an agent run sending a model request to the first streamed update, as the Vantik extension measured it in the sandbox.',
+      unit: 's',
+      valueType: ValueType.DOUBLE,
+      advice: {
+        explicitBucketBoundaries: [0.1, 0.25, 0.5, 1, 2, 4, 8, 15, 30, 60, 120],
+      },
+    }),
+    retries: meter.createCounter('vantik.agent_run.model_retries', {
+      description:
+        'Model calls an agent run retried after the provider failed them.',
+      unit: '{retry}',
       valueType: ValueType.INT,
     }),
   };
@@ -208,6 +230,14 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
   let chat: { span: Span; started: number } | null = null;
   const tools = new Map<string, Span>();
   let guardrailHits = 0;
+  // What the extension said about the call now in flight, and how many calls
+  // it did and did not report: a run whose records stop partway has had its
+  // extension disabled, which is worth knowing whatever the reason.
+  let timings: ModelCallTimings | null = null;
+  let modelCalls = 0;
+  let reportedCalls = 0;
+  let invalidRecords = 0;
+  let retries = 0;
   let ended = false;
 
   const setModel = (nextProvider: string | null, nextModel: string | null) => {
@@ -318,6 +348,37 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
           'vantik.guardrail.action': hit.action,
         });
       }
+      const record = modelCallOf(event);
+      if (record === null) {
+        invalidRecords += 1;
+        return;
+      }
+      if (record) {
+        timings = record;
+        return;
+      }
+
+      if (type === 'auto_retry_start') {
+        retries += 1;
+        const status = statusOfError(event.errorMessage);
+        const attributes = {
+          'vantik.retry.attempt': Number(event.attempt) || 0,
+          ...(status ? { 'http.response.status_code': status } : {}),
+        };
+        (phaseSpan ?? root).addEvent('vantik.model_retry', {
+          ...attributes,
+          ...(typeof event.delayMs === 'number'
+            ? { 'vantik.retry.delay_ms': event.delayMs }
+            : {}),
+        });
+        getInstruments().retries.add(1, {
+          'gen_ai.provider.name': provider ?? 'unknown',
+          'gen_ai.request.model': model ?? 'unknown',
+          'error.type': status ? String(status) : 'model_error',
+        });
+        return;
+      }
+
       const message = event.message as
         | {
             role?: unknown;
@@ -370,12 +431,50 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
           );
         const started = chat?.started ?? Date.now();
         chat = null;
+        const reported = timings;
+        timings = null;
+        modelCalls += 1;
 
         const failed = message.stopReason === 'error';
-        duration.record((Date.now() - started) / 1000, {
-          ...attributes,
-          ...(failed ? { 'error.type': 'model_error' } : {}),
-        });
+        const status =
+          reported?.status ??
+          (failed ? statusOfError(message.errorMessage) : null);
+
+        // The extension's clock starts when the request left; the span's only
+        // when the answer began to stream, so prefer the extension's.
+        duration.record(
+          (reported ? reported.durationMs : Date.now() - started) / 1000,
+          {
+            ...attributes,
+            ...(failed
+              ? { 'error.type': status ? String(status) : 'model_error' }
+              : {}),
+          },
+        );
+
+        if (status) {
+          span.setAttribute('http.response.status_code', status);
+        }
+        if (reported) {
+          reportedCalls += 1;
+          span.setAttribute('vantik.llm.duration', reported.durationMs / 1000);
+          if (reported.responseMs !== undefined) {
+            span.setAttribute(
+              'vantik.llm.response_time',
+              reported.responseMs / 1000,
+            );
+          }
+          if (reported.ttftMs !== undefined) {
+            span.setAttribute(
+              'vantik.llm.time_to_first_token',
+              reported.ttftMs / 1000,
+            );
+            getInstruments().timeToFirstToken.record(
+              reported.ttftMs / 1000,
+              attributes,
+            );
+          }
+        }
 
         if (responseModel) {
           span.setAttribute('gen_ai.response.model', responseModel);
@@ -469,6 +568,22 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
       ended = true;
       root.setAttribute('vantik.agent_run.status', outcome.status);
       root.setAttribute('vantik.agent_run.guardrail_hits', guardrailHits);
+      root.setAttribute('vantik.agent_run.model_calls', modelCalls);
+      root.setAttribute('vantik.agent_run.model_retries', retries);
+      root.setAttribute(
+        'vantik.agent_run.model_calls_unreported',
+        modelCalls - reportedCalls,
+      );
+      // Reported some calls, then stopped: the extension was disabled partway.
+      if (reportedCalls > 0 && reportedCalls < modelCalls) {
+        root.setAttribute('vantik.agent_run.extension_went_silent', true);
+      }
+      if (invalidRecords > 0) {
+        root.setAttribute(
+          'vantik.agent_run.extension_records_invalid',
+          invalidRecords,
+        );
+      }
       if (outcome.failure) {
         root.setAttribute('vantik.agent_run.failure', outcome.failure);
         root.setAttribute('error.type', outcome.failure);

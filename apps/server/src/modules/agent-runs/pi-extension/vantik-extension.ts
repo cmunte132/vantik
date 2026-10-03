@@ -14,6 +14,9 @@
  * them from a failure — and a record of every time it happened, because a
  * run that keeps hitting them is either lost or being steered.
  *
+ * It also times each model call from the moment the request leaves, which the
+ * host's spans cannot see, and reports it as a content-free record.
+ *
  * Self-contained on purpose: the guest has no node_modules of ours, so this
  * file imports nothing at run time but Node's own `fs`. The rules are exported so the server's
  * tests exercise exactly what the guest runs.
@@ -51,6 +54,28 @@ export interface Verdict {
  */
 export const BLOCKED_TAG = 'Blocked by Vantik';
 export const REMINDER_TAG = 'Vantik: before you finish';
+
+/**
+ * The record the extension appends for each model call, read back by the host
+ * from Pi's `entry_appended` events (`modelCallOf` in executors/pi-events.ts).
+ *
+ * Timings only: no prompt, no message, no header. Durations are measured from
+ * the moment Pi sent the request, which the host cannot see — its own chat span
+ * starts when the first byte of the answer reaches the stream.
+ */
+export const MODEL_CALL_ENTRY = 'vantik.model_call';
+
+export interface ModelCallRecord {
+  v: 1;
+  /** HTTP status of the provider's response, when one arrived. */
+  status?: number;
+  /** Request sent to response headers received. */
+  responseMs?: number;
+  /** Request sent to the first streamed update. */
+  ttftMs?: number;
+  /** Request sent to the message settling. */
+  durationMs: number;
+}
 
 /** The text a blocked call fails with. */
 export function blockedReason(verdict: Verdict): string {
@@ -251,6 +276,7 @@ interface PiApi {
     content: string,
     options?: { deliverAs?: 'steer' | 'followUp' },
   ): void;
+  appendEntry(customType: string, data?: unknown): void;
 }
 
 function readPolicy(): GuardrailPolicy | null {
@@ -280,6 +306,74 @@ function readPolicy(): GuardrailPolicy | null {
 }
 
 export default function vantik(pi: PiApi) {
+  reportModelCalls(pi);
+  enforceGuardrails(pi);
+}
+
+/**
+ * Times each model call from the moment Pi sends it. Runs with or without a
+ * policy: the host's monitoring should not depend on the guardrails' input.
+ *
+ * Pi runs extension handlers before it writes the event they handle, so the
+ * record lands in the stream just ahead of the `message_end` it describes,
+ * while the host still has that call's span open.
+ */
+export function reportModelCalls(pi: PiApi, now: () => number = Date.now) {
+  let call: {
+    sentAt: number;
+    status?: number;
+    respondedAt?: number;
+    firstAt?: number;
+  } | null = null;
+
+  pi.on('before_provider_request', () => {
+    call = { sentAt: now() };
+    return undefined;
+  });
+
+  pi.on('after_provider_response', (event: { status?: unknown }) => {
+    if (call && typeof event.status === 'number') {
+      call.status = event.status;
+      call.respondedAt = now();
+    }
+  });
+
+  pi.on('message_update', (event: { message?: { role?: unknown } }) => {
+    if (
+      call &&
+      call.firstAt === undefined &&
+      event.message?.role === 'assistant'
+    ) {
+      call.firstAt = now();
+    }
+  });
+
+  pi.on('message_end', (event: { message?: { role?: unknown } }) => {
+    if (!call || event.message?.role !== 'assistant') {
+      return;
+    }
+
+    const { sentAt, status, respondedAt, firstAt } = call;
+    call = null;
+    const record: ModelCallRecord = {
+      v: 1,
+      durationMs: now() - sentAt,
+      ...(status !== undefined ? { status } : {}),
+      ...(respondedAt !== undefined
+        ? { responseMs: respondedAt - sentAt }
+        : {}),
+      ...(firstAt !== undefined ? { ttftMs: firstAt - sentAt } : {}),
+    };
+
+    try {
+      pi.appendEntry(MODEL_CALL_ENTRY, record);
+    } catch {
+      // Telemetry is bookkeeping.
+    }
+  });
+}
+
+function enforceGuardrails(pi: PiApi) {
   const policy = readPolicy();
 
   // No policy, no guardrails: a broken policy file must not stop the run, and

@@ -17,6 +17,7 @@ import {
   Prisma,
   UserType,
 } from '@prisma/client';
+import { factualDifference, formatEvidence } from '@vantikhq/llm-tasks';
 import { KnowledgeTrustEnum } from '@vantikhq/types';
 import { Queue } from 'bull';
 import { PrismaService } from 'nestjs-prisma';
@@ -44,7 +45,6 @@ import {
 import { auditDraw, isActing } from './agreement';
 import { backoffState, type BackoffState } from './knowledge-agreement.service';
 import { preferred } from './precedence';
-import { factualDifference } from './relation-guard';
 import TriageJudges, {
   type AcceptJudgment,
   type PairJudgment,
@@ -1789,48 +1789,15 @@ export function wantsVerifier(
 /** Results under which a citation no longer supports its claim. */
 const FAILED = new Set<string>(['CHANGED', 'MISSING']);
 
-/**
- * A citation as the acceptance judges are shown it: the lines as the server
- * read them, or the issue or comment as it reads now. Any credential in them
- * is withheld; the entry passed that check, what it cites did not have to.
- */
+/** A citation as the acceptance judges are shown it; see `formatEvidence`. */
 function evidenceOf(
   citation: TriagedEntry['citations'][number],
   texts: Map<string, string>,
 ): string {
-  const result = (citation.checkResult ?? 'unchecked').toLowerCase();
-
-  if (citation.kind === PageEntryCitationKind.CODE) {
-    const lines =
-      citation.startLine && citation.endLine
-        ? `:${citation.startLine}-${citation.endLine}`
-        : '';
-
-    return `${citation.path ?? '(no path)'}${lines} (${result})\n${
-      citation.snippet === null ? '(not read)' : redactSecrets(citation.snippet)
-    }`;
-  }
-
-  if (citation.kind === PageEntryCitationKind.URL) {
-    const read = citation.checkedAt
-      ? `, read ${citation.checkedAt.toISOString().slice(0, 10)}`
-      : '';
-
-    return `page ${citation.targetLabel ?? '(no URL)'}${read} (${result})\n${
-      citation.snippet === null
-        ? '(not read)'
-        : `"${redactSecrets(citation.snippet)}"`
-    }`;
-  }
-
-  const label = `${citation.kind.toLowerCase().replace('_', ' ')} ${
-    citation.targetLabel ?? '(unknown)'
-  } (${result})`;
-  const text = citation.targetId ? texts.get(citation.targetId) : undefined;
-
-  return text === undefined
-    ? `${label}; its text is not shown`
-    : `${label}\n${text}`;
+  return formatEvidence({
+    ...citation,
+    text: citation.targetId ? texts.get(citation.targetId) : undefined,
+  });
 }
 
 /**

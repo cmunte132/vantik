@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 
+import { formatLineRange, type LineRange } from '@vantikhq/llm-tasks';
 import { PageEntryCitationCheckEnum } from '@vantikhq/types';
 
 /**
@@ -16,28 +17,11 @@ import { PageEntryCitationCheckEnum } from '@vantikhq/types';
 /** The most lines one citation may span. A claim rests on a few lines. */
 export const MAX_CITED_LINES = 200;
 
-export interface LineRange {
-  start: number;
-  end: number;
-}
-
-/** "40-52" or "40", 1-based and inclusive, or null if it is neither. */
-export function parseLineRange(text: string | undefined): LineRange | null {
-  const match = /^\s*(\d{1,7})\s*(?:-\s*(\d{1,7})\s*)?$/.exec(text ?? '');
-
-  if (!match) {
-    return null;
-  }
-
-  const start = Number(match[1]);
-  const end = match[2] === undefined ? start : Number(match[2]);
-
-  return start >= 1 && end >= start ? { start, end } : null;
-}
-
-export function formatLineRange({ start, end }: LineRange): string {
-  return start === end ? `${start}` : `${start}-${end}`;
-}
+export {
+  formatLineRange,
+  type LineRange,
+  parseLineRange,
+} from '@vantikhq/llm-tasks';
 
 /** One line as it is compared: trimmed, with whitespace runs collapsed. */
 export function normaliseLine(line: string): string {
@@ -59,8 +43,7 @@ export function fileLines(content: string): string[] {
 }
 
 export type SnippetResult =
-  | { snippet: string; snippetHash: string }
-  | { error: string };
+  { snippet: string; snippetHash: string } | { error: string };
 
 /**
  * The snippet for a range of a file, or why the range cannot be cited.

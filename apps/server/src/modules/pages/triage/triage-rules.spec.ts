@@ -3,10 +3,10 @@
  * which of two contradicting entries stands, and the policies an entry is
  * held to before any model sees it.
  */
+import { factualDifference } from '@vantikhq/llm-tasks';
 import { KnowledgeTrustEnum } from '@vantikhq/types';
 
 import { preferred } from './precedence';
-import { factualDifference } from './relation-guard';
 import {
   externalSourceOf,
   type IssueProvenance,

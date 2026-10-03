@@ -22,6 +22,7 @@ COPY apps/server/package.json               apps/server/
 COPY apps/webapp/package.json               apps/webapp/
 COPY packages/agent-core/package.json       packages/agent-core/
 COPY packages/cli/package.json              packages/cli/
+COPY packages/llm-tasks/package.json        packages/llm-tasks/
 COPY packages/types/package.json            packages/types/
 COPY packages/ui/package.json               packages/ui/
 COPY tooling/eslint-config/package.json     tooling/eslint-config/
@@ -74,6 +75,7 @@ COPY --from=production-deps --chown=node:node /app .
 COPY --from=builder --chown=node:node /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=builder --chown=node:node /app/packages/types/dist ./apps/server/node_modules/@vantikhq/types/dist
 COPY --from=builder --chown=node:node /app/packages/agent-core/dist ./apps/server/node_modules/@vantikhq/agent-core/dist
+COPY --from=builder --chown=node:node /app/packages/llm-tasks/dist ./apps/server/node_modules/@vantikhq/llm-tasks/dist
 COPY --from=builder --chown=node:node /app/apps/server/package.json ./apps/server/package.json
 COPY --from=builder --chown=node:node /app/apps/server/dist ./apps/server/dist
 COPY --from=builder --chown=node:node /app/apps/server/prisma ./apps/server/prisma

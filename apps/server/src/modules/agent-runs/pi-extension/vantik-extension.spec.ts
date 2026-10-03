@@ -4,8 +4,11 @@ import vantik, {
   blockedReason,
   checkReminder,
   checkToolCall,
+  describeIssue,
+  findKnowledge,
   GuardrailPolicy,
   hostsIn,
+  PiTool,
   isCheckCommand,
   MODEL_CALL_ENTRY,
   repoRelative,
@@ -299,5 +302,126 @@ describe('timing model calls', () => {
     ]);
 
     expect(entries.map((e) => e.data)).toEqual([{ v: 1, durationMs: 16 }]);
+  });
+});
+
+describe('the Vantik tools', () => {
+  const PACK = {
+    issue: {
+      key: 'ENG-42',
+      title: 'Keep the last row',
+      description: 'It drops it.',
+    },
+    definitionOfDone: [
+      { id: 'c1', body: 'Keeps the last row', completed: false },
+    ],
+    knowledge: [
+      {
+        entryId: 'e1',
+        kind: 'GOTCHA',
+        scope: 'src/importer',
+        body: 'Rows are paged by 500.',
+      },
+      {
+        entryId: 'e2',
+        kind: 'FACT',
+        scope: null,
+        body: 'Deploys go through Forgejo.',
+      },
+    ],
+  };
+
+  function loadTools() {
+    const { mkdtempSync, writeFileSync, readFileSync, existsSync } =
+      jest.requireActual('node:fs');
+    const { join } = jest.requireActual('node:path');
+    const { tmpdir } = jest.requireActual('node:os');
+    const dir = mkdtempSync(join(tmpdir(), 'vantik-tools-'));
+    const policyPath = join(dir, 'policy.json');
+    const outboxPath = join(dir, 'outbox.jsonl');
+    writeFileSync(join(dir, 'context.json'), JSON.stringify(PACK));
+    writeFileSync(
+      policyPath,
+      JSON.stringify({
+        ...POLICY,
+        contextPath: join(dir, 'context.json'),
+        outboxPath,
+      }),
+    );
+
+    const tools: Record<string, PiTool> = {};
+    const env = process.env.VANTIK_POLICY;
+    process.env.VANTIK_POLICY = policyPath;
+    vantik({
+      on: () => undefined,
+      sendUserMessage: () => undefined,
+      appendEntry: () => undefined,
+      registerTool: (tool) => {
+        tools[tool.name] = tool;
+      },
+    });
+    process.env.VANTIK_POLICY = env;
+
+    const outbox = () =>
+      existsSync(outboxPath)
+        ? (readFileSync(outboxPath, 'utf8') as string)
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line))
+        : [];
+    return { tools, outbox };
+  }
+
+  it('registers the read and write tools', () => {
+    expect(Object.keys(loadTools().tools).sort()).toEqual([
+      'vantik_criterion_met',
+      'vantik_issue',
+      'vantik_knowledge',
+      'vantik_note',
+      'vantik_remember',
+    ]);
+  });
+
+  it('reads the issue and the knowledge from the pack', async () => {
+    const { tools } = loadTools();
+
+    const issue = (await tools.vantik_issue.execute('t', {})).content[0].text;
+    expect(issue).toContain('# ENG-42: Keep the last row');
+    expect(issue).toContain('- [ ] Keeps the last row (id: c1)');
+    expect(findKnowledge(PACK, 'paged rows')).toBe(
+      '- GOTCHA (src/importer): Rows are paged by 500.',
+    );
+    expect(findKnowledge(PACK, '')).toContain('Deploys go through Forgejo.');
+    expect(describeIssue({})).toContain('(No description.)');
+  });
+
+  it('queues writes to the outbox, and refuses a criterion the issue does not have', async () => {
+    const { tools, outbox } = loadTools();
+
+    await tools.vantik_note.execute('t', { body: 'Found it.' });
+    await tools.vantik_criterion_met.execute('t', {
+      id: 'c1',
+      evidence: 'spec passes',
+    });
+    await tools.vantik_remember.execute('t', {
+      content: 'Rows are paged by 500.',
+      kind: 'GOTCHA',
+      citations: [{ path: 'src/importer.ts', lines: '80-90' }],
+    });
+    await expect(
+      tools.vantik_criterion_met.execute('t', { id: 'nope', evidence: 'x' }),
+    ).rejects.toThrow('No criterion has the id nope');
+
+    expect(outbox()).toEqual([
+      { v: 1, type: 'note', body: 'Found it.' },
+      { v: 1, type: 'criterion', id: 'c1', evidence: 'spec passes' },
+      {
+        v: 1,
+        type: 'remember',
+        content: 'Rows are paged by 500.',
+        kind: 'GOTCHA',
+        citations: [{ path: 'src/importer.ts', lines: '80-90' }],
+      },
+    ]);
   });
 });

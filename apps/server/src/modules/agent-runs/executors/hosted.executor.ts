@@ -35,8 +35,10 @@ import {
 import { CredentialsService } from '../credentials/credentials.service';
 import { evidencePaths } from '../evidence-paths';
 import {
+  CONTEXT_PATH,
   extensionFiles,
   extensionGuestPath,
+  OUTBOX_PATH,
   POLICY_PATH,
 } from '../pi-extension/seed';
 import {
@@ -53,6 +55,15 @@ import { PiEventReader, type ParsedStep } from './pi-events';
 import { RunTelemetry, startRunTelemetry } from './run-telemetry';
 import { type Spend, SpendMeter } from './spend-meter';
 import { RunHandbackService } from '../run-handback.service';
+import {
+  newOutboxState,
+  OUTBOX_LIMITS,
+  OutboxBatch,
+  OutboxResult,
+  OutboxState,
+  readOutbox,
+  RunOutboxService,
+} from '../run-outbox';
 import { GitProxyService } from '../sandbox/git-proxy.service';
 import { PushScopeError } from '../sandbox/push-scope';
 import { RemoteSandboxRuntime } from '../sandbox/remote.runtime';
@@ -259,6 +270,8 @@ interface CycleContext {
   meter: SpendMeter;
   /** The run's trace, which the harness's events are fed into. */
   telemetry: RunTelemetry;
+  /** What the agent has asked to write to Vantik so far. */
+  outbox: OutboxState;
 }
 
 /** What the whole cycle came to. */
@@ -351,6 +364,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     private gitProxy: GitProxyService,
     private handback: RunHandbackService,
     private agentRuns: AgentRunsService,
+    private outbox: RunOutboxService,
   ) {}
 
   async onModuleInit() {
@@ -655,10 +669,10 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           // appears in a process listing the guest can read — and so nothing
           // from an issue body is ever interpolated into a shell command.
           'prompt.md': buildAgentPrompt(pack),
-          // The pack itself, for the record. Nothing reads it; it is here so
-          // that "what was this run given" is answerable from inside a guest
-          // somebody is debugging.
-          'context.json': JSON.stringify(pack, null, 2),
+          // The pack itself. The Vantik tools read the issue and the knowledge
+          // from it, and it answers "what was this run given" from inside a
+          // guest somebody is debugging.
+          [CONTEXT_PATH]: JSON.stringify(pack, null, 2),
           // What the agent knows before it reads the repository: how to read a
           // Vantik issue, how to write a change worth reviewing, and — for the
           // review pass only — how to review one.
@@ -802,6 +816,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       });
 
       // ---- Phase 2: the cycle. Reduced egress, no install credentials. ----
+      const outbox = newOutboxState();
       const cycle = await this.runCycle(
         {
           run,
@@ -814,6 +829,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           note,
           meter,
           telemetry,
+          outbox,
         },
         reviewing,
       );
@@ -965,6 +981,13 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           ...spentFields(meter.total),
         },
       });
+
+      // Only now: a criterion the agent called met is a claim, and a run its
+      // checks and reviewer signed off is what stands behind it.
+      if (status === 'SUCCEEDED' && outbox.criteria.size) {
+        const ticked = await this.outbox.tickCriteria(run, outbox);
+        await note(describeOutbox({ ticked }), 'handback');
+      }
 
       await this.handback.post(run.issueId, run.agentUserId, run.id, {
         status,
@@ -1247,8 +1270,58 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
    * but a command substitution inside double quotes expands to a single word
    * that the shell never rescans for operators, so nothing in the file can
    * become part of the command.
+   *
+   * After it, whatever the agent queued for Vantik is checked and applied, so
+   * its notes reach the issue while the run is still working.
    */
   private async invoke(
+    cx: CycleContext,
+    options: {
+      promptPath: string;
+      skills: string[];
+      phase: string;
+      timeoutMs: number;
+    },
+  ): Promise<Invocation> {
+    const invocation = await this.runHarness(cx, options);
+    await this.drainOutbox(cx, options.phase);
+    return invocation;
+  }
+
+  /**
+   * Reads the outbox lines the agent added since the last pass, and applies
+   * what passes the checks in run-outbox.ts. Never throws: Vantik writes are
+   * a courtesy to the people tracking the issue, not part of the work.
+   */
+  private async drainOutbox(cx: CycleContext, phase: string): Promise<void> {
+    try {
+      // Bounded in the guest, so an outbox the agent filled with junk costs
+      // the host nothing to read.
+      const read = await cx.sandbox.exec(
+        `head -n ${OUTBOX_LIMITS.lines} /workspace/${OUTBOX_PATH} 2>/dev/null | head -c 1048576`,
+        { timeoutMs: 15_000 },
+      );
+      if (!read.stdout) {
+        return;
+      }
+
+      const batch = readOutbox(read.stdout, cx.pack, cx.outbox);
+      const applied = await this.outbox.apply(
+        cx.run,
+        batch,
+        factScope(cx.pack),
+        (text) => scrubSecrets(text, cx.secrets),
+      );
+      const message = describeOutbox({ batch, applied });
+      if (message) {
+        await cx.note(message, phase);
+      }
+    } catch {
+      // Reported nowhere on purpose: a missing outbox is the normal case.
+    }
+  }
+
+  private async runHarness(
     cx: CycleContext,
     options: {
       promptPath: string;
@@ -1827,4 +1900,59 @@ function spentFields(spent: Spend): { costUsd?: number; turns?: number } {
     ...(spent.costUsd ? { costUsd: spent.costUsd } : {}),
     ...(spent.turns ? { turns: spent.turns } : {}),
   };
+}
+
+/** Where an agent's facts are scoped when they name no page. */
+function factScope(pack: ContextPack): string {
+  return pack.repo?.pathPrefixes?.[0] ?? pack.repo?.location ?? 'repository';
+}
+
+/** One timeline line for what came of the agent's writes to Vantik. */
+export function describeOutbox(outcome: {
+  batch?: OutboxBatch;
+  applied?: OutboxResult;
+  ticked?: OutboxResult;
+}): string {
+  const count = (n: number, one: string, many = `${one}s`) =>
+    `${n} ${n === 1 ? one : many}`;
+  const parts: string[] = [];
+  const applied = outcome.applied?.applied ?? [];
+  const notes = applied.filter((a) => a === 'note').length;
+  const facts = applied.filter((a) => a === 'fact').length;
+
+  if (notes) {
+    parts.push(`posted ${count(notes, 'note')} on the issue`);
+  }
+  if (facts) {
+    parts.push(`proposed ${count(facts, 'fact')}`);
+  }
+  if (outcome.batch?.criteria.length) {
+    parts.push(
+      `claimed ${count(outcome.batch.criteria.length, 'criterion', 'criteria')} met, to tick if the run succeeds`,
+    );
+  }
+  if (outcome.ticked?.applied.length) {
+    parts.push(
+      `ticked ${count(outcome.ticked.applied.length, 'criterion', 'criteria')} the agent showed were met`,
+    );
+  }
+  const failed = [
+    ...(outcome.applied?.failed ?? []),
+    ...(outcome.ticked?.failed ?? []),
+  ];
+  if (failed.length) {
+    parts.push(`could not apply ${failed.length} (${failed.join('; ')})`);
+  }
+  if (outcome.batch?.rejected.length) {
+    const reasons = [...new Set(outcome.batch.rejected.map((r) => r.reason))];
+    parts.push(
+      `refused ${count(outcome.batch.rejected.length, 'line')} of the outbox (${reasons.join(', ')})`,
+    );
+  }
+
+  if (!parts.length) {
+    return '';
+  }
+  const text = parts.join('; ');
+  return `Vantik: ${text}.`;
 }

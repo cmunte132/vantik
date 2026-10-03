@@ -59,5 +59,9 @@ export function sandboxEnvironment(pack: ContextPack): string[] {
       : '- You may change any file in the repository.',
     '- Never change CI configuration (`.github/workflows`, `.forgejo/workflows`,',
     '  `.gitlab-ci.yml` and the like). The host refuses to push it.',
+    '- You have no Vantik account here, and need none. `vantik_issue` reads',
+    '  the issue and its Definition of Done, and `vantik_knowledge` what the',
+    '  workspace knows. `vantik_note`, `vantik_criterion_met` and',
+    '  `vantik_remember` queue writes the host applies for you.',
   ];
 }

@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
+import { ChecklistItemsModule } from 'modules/checklist-items/checklist-items.module';
 import { GitModule } from 'modules/git/git.module';
 import { IssueCommentsModule } from 'modules/issue-comments/issue-comments.module';
 import { IssuesModule } from 'modules/issues/issues.module';
@@ -21,6 +22,7 @@ import { ExecutorRegistry } from './executors/executor.registry';
 import { HostedExecutor } from './executors/hosted.executor';
 import { KnowledgeArmsService } from './knowledge-arms.service';
 import { RunHandbackService } from './run-handback.service';
+import { RunOutboxService } from './run-outbox';
 import { GitProxyService } from './sandbox/git-proxy.service';
 import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
 
@@ -30,6 +32,8 @@ import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
     IssuesModule,
     IssueCommentsModule,
     LinkedIssueModule,
+    // What an agent writes to Vantik from its sandbox, applied as the agent.
+    ChecklistItemsModule,
     // What the workspace knows, for the run's pack, and what came of it.
     PagesModule,
     KnowledgeSignalsModule,
@@ -44,6 +48,7 @@ import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
     ContextPackService,
     KnowledgeArmsService,
     RunHandbackService,
+    RunOutboxService,
     ExecutorRegistry,
     HostedExecutor,
     RemoteSandboxRuntime,

@@ -22,7 +22,7 @@
  * tests exercise exactly what the guest runs.
  */
 /* eslint-disable turbo/no-undeclared-env-vars -- VANTIK_POLICY is set in the guest by the host, not read by the server. */
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 
 /** What the host tells the extension about this run, as JSON. */
 export interface GuardrailPolicy {
@@ -34,7 +34,31 @@ export interface GuardrailPolicy {
   checks: string[];
   /** Hosts the sandbox can reach besides the model provider. */
   reachableHosts: string[];
+  /** The run's context pack, which the Vantik tools read. */
+  contextPath?: string;
+  /** Where the Vantik tools queue what the agent writes to Vantik. */
+  outboxPath?: string;
 }
+
+/**
+ * One thing the agent asked to write to Vantik, as a line of the outbox.
+ *
+ * The guest holds no Vantik credential, so the tools only queue. The host
+ * reads the outbox after each pass, checks every line against the run (see
+ * run-outbox.ts) and applies what passes as the run's agent. The agent can
+ * write this file with its shell as easily as with the tools, which is why
+ * the checks are on the host and not here.
+ */
+export type OutboxItem =
+  | { v: 1; type: 'note'; body: string }
+  | { v: 1; type: 'criterion'; id: string; evidence: string }
+  | {
+      v: 1;
+      type: 'remember';
+      content: string;
+      kind?: 'FACT' | 'DECISION' | 'CONVENTION' | 'GOTCHA';
+      citations?: Array<{ path: string; lines?: string }>;
+    };
 
 export interface Verdict {
   rule: 'no-git' | 'egress' | 'scope' | 'ci' | 'destructive';
@@ -277,6 +301,24 @@ interface PiApi {
     options?: { deliverAs?: 'steer' | 'followUp' },
   ): void;
   appendEntry(customType: string, data?: unknown): void;
+  registerTool?(tool: PiTool): void;
+}
+
+/** The slice of Pi's ToolDefinition the Vantik tools use. */
+export interface PiTool {
+  name: string;
+  label: string;
+  description: string;
+  promptSnippet?: string;
+  /** JSON Schema. Pi validates plain JSON Schema as well as TypeBox. */
+  parameters: Record<string, unknown>;
+  execute(
+    toolCallId: string,
+    params: Record<string, unknown>,
+  ): Promise<{
+    content: Array<{ type: 'text'; text: string }>;
+    details: unknown;
+  }>;
 }
 
 function readPolicy(): GuardrailPolicy | null {
@@ -299,6 +341,12 @@ function readPolicy(): GuardrailPolicy | null {
       reachableHosts: Array.isArray(parsed.reachableHosts)
         ? parsed.reachableHosts.map(String)
         : [],
+      ...(typeof parsed.contextPath === 'string'
+        ? { contextPath: parsed.contextPath }
+        : {}),
+      ...(typeof parsed.outboxPath === 'string'
+        ? { outboxPath: parsed.outboxPath }
+        : {}),
     };
   } catch {
     return null;
@@ -308,6 +356,7 @@ function readPolicy(): GuardrailPolicy | null {
 export default function vantik(pi: PiApi) {
   reportModelCalls(pi);
   enforceGuardrails(pi);
+  registerVantikTools(pi);
 }
 
 /**
@@ -416,5 +465,285 @@ function enforceGuardrails(pi: PiApi) {
 
     reminded = true;
     pi.sendUserMessage(checkReminder(policy), { deliverAs: 'followUp' });
+  });
+}
+
+// ------------------------------------------------------------- vantik tools
+
+/** The parts of the context pack the tools read. Shaped loosely: it is JSON. */
+interface PackView {
+  issue?: { key?: string; title?: string; description?: string; url?: string };
+  definitionOfDone?: Array<{ id: string; body: string; completed: boolean }>;
+  guidance?: string;
+  subTasks?: Array<{ key: string; title: string; done: boolean }>;
+  relations?: Array<{ type: string; key: string; title: string }>;
+  comments?: Array<{ author: string | null; at: string; body: string }>;
+  knowledge?: Array<{
+    entryId: string;
+    kind: string;
+    scope: string | null;
+    body: string;
+  }>;
+}
+
+const text = (value: string) => ({
+  content: [{ type: 'text' as const, text: value }],
+  details: {},
+});
+
+/** The issue as the agent needs it to work, as text. */
+export function describeIssue(pack: PackView): string {
+  const lines: string[] = [
+    `# ${pack.issue?.key ?? 'Issue'}: ${pack.issue?.title ?? ''}`.trim(),
+    '',
+    pack.issue?.description?.trim() || '(No description.)',
+  ];
+
+  if (pack.definitionOfDone?.length) {
+    lines.push('', '## Definition of Done', '');
+    for (const criterion of pack.definitionOfDone) {
+      lines.push(
+        `- [${criterion.completed ? 'x' : ' '}] ${criterion.body} (id: ${criterion.id})`,
+      );
+    }
+  }
+  if (pack.guidance?.trim()) {
+    lines.push(
+      '',
+      '## What the person delegating asked',
+      '',
+      pack.guidance.trim(),
+    );
+  }
+  if (pack.subTasks?.length) {
+    lines.push('', '## Sub-tasks', '');
+    for (const task of pack.subTasks) {
+      lines.push(`- [${task.done ? 'x' : ' '}] ${task.key} ${task.title}`);
+    }
+  }
+  if (pack.relations?.length) {
+    lines.push('', '## Related issues', '');
+    for (const relation of pack.relations) {
+      lines.push(`- ${relation.type}: ${relation.key} ${relation.title}`);
+    }
+  }
+  if (pack.comments?.length) {
+    lines.push('', '## Latest notes', '');
+    for (const comment of pack.comments.slice(-5)) {
+      lines.push(
+        `- ${comment.author ?? 'Someone'}, ${comment.at}: ${comment.body.slice(0, 1500)}`,
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+/** The knowledge items that share a word with the query; all of them without one. */
+export function findKnowledge(pack: PackView, query: string): string {
+  const items = pack.knowledge ?? [];
+  if (!items.length) {
+    return 'The workspace gave this run no knowledge. Read the repository instead.';
+  }
+
+  const words = query
+    .toLowerCase()
+    .split(/\W+/)
+    .filter((w) => w.length > 2);
+  const scored = items
+    .map((item) => ({
+      item,
+      score: words.length
+        ? words.filter((w) =>
+            `${item.scope ?? ''} ${item.body}`.toLowerCase().includes(w),
+          ).length
+        : 1,
+    }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12);
+
+  if (!scored.length) {
+    return `Nothing the workspace knows matches "${query}". ${items.length} items exist; call again with no query to see them all.`;
+  }
+  return scored
+    .map(
+      ({ item }) =>
+        `- ${item.kind}${item.scope ? ` (${item.scope})` : ''}: ${item.body}`,
+    )
+    .join('\n');
+}
+
+function registerVantikTools(pi: PiApi) {
+  const policy = readPolicy();
+  const { contextPath, outboxPath } = policy ?? {};
+  if (!pi.registerTool || !contextPath || !outboxPath) {
+    return;
+  }
+
+  const pack = (): PackView => {
+    try {
+      return JSON.parse(readFileSync(contextPath, 'utf8')) as PackView;
+    } catch {
+      return {};
+    }
+  };
+  const queue = (item: OutboxItem) =>
+    appendFileSync(outboxPath, `${JSON.stringify(item)}\n`);
+  const required = (value: unknown, name: string): string => {
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new Error(`${name} is required.`);
+    }
+    return value.trim();
+  };
+
+  pi.registerTool({
+    name: 'vantik_issue',
+    label: 'Vantik issue',
+    description:
+      'The Vantik issue this run works: its description, Definition of Done with criterion ids, sub-tasks, related issues and latest notes. Read it before you start and whenever you are unsure what done means.',
+    promptSnippet:
+      'vantik_issue: the issue you are working, with its Definition of Done',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+    execute: async () => text(describeIssue(pack())),
+  });
+
+  pi.registerTool({
+    name: 'vantik_knowledge',
+    label: 'Vantik knowledge',
+    description:
+      'What the workspace already knows that bears on this issue: facts, decisions, conventions and gotchas, each written by a person or an earlier agent. Search it before you guess how something works here.',
+    promptSnippet: 'vantik_knowledge: what the workspace knows about this area',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Words to match. Leave empty for everything.',
+        },
+      },
+      additionalProperties: false,
+    },
+    execute: async (_id, params) =>
+      text(
+        findKnowledge(
+          pack(),
+          typeof params.query === 'string' ? params.query : '',
+        ),
+      ),
+  });
+
+  pi.registerTool({
+    name: 'vantik_note',
+    label: 'Note on the issue',
+    description:
+      'Post a note on the issue for the people tracking it: what you found, a decision you made and why, or something they need to know. Not a progress log, and not your final summary, which the host posts for you.',
+    parameters: {
+      type: 'object',
+      properties: { body: { type: 'string', description: 'Markdown.' } },
+      required: ['body'],
+      additionalProperties: false,
+    },
+    execute: async (_id, params) => {
+      queue({ v: 1, type: 'note', body: required(params.body, 'body') });
+      return text('Queued. The host posts it on the issue after this pass.');
+    },
+  });
+
+  pi.registerTool({
+    name: 'vantik_criterion_met',
+    label: 'Criterion met',
+    description:
+      'Mark one Definition of Done criterion as met, by its id from vantik_issue, with the evidence: the test or check that shows it. It is ticked on the issue only if the run finishes and its checks pass.',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The criterion id from vantik_issue.',
+        },
+        evidence: { type: 'string', description: 'What shows it is met.' },
+      },
+      required: ['id', 'evidence'],
+      additionalProperties: false,
+    },
+    execute: async (_id, params) => {
+      const id = required(params.id, 'id');
+      if (!pack().definitionOfDone?.some((c) => c.id === id)) {
+        throw new Error(
+          `No criterion has the id ${id}. Call vantik_issue for the ids.`,
+        );
+      }
+      queue({
+        v: 1,
+        type: 'criterion',
+        id,
+        evidence: required(params.evidence, 'evidence'),
+      });
+      return text(
+        'Queued. The host ticks it if the run finishes with its checks passing.',
+      );
+    },
+  });
+
+  pi.registerTool({
+    name: 'vantik_remember',
+    label: 'Remember',
+    description:
+      'Record one durable fact about this codebase for the next person or agent: how something works, a decision and its reason, a convention, or a gotcha that cost you time. One fact per call. Cite the files that prove it. It is proposed, not trusted, until it is checked.',
+    parameters: {
+      type: 'object',
+      properties: {
+        content: {
+          type: 'string',
+          description: 'The fact, in one or two sentences.',
+        },
+        kind: {
+          type: 'string',
+          enum: ['FACT', 'DECISION', 'CONVENTION', 'GOTCHA'],
+        },
+        citations: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              path: {
+                type: 'string',
+                description: 'A path in the repository.',
+              },
+              lines: { type: 'string', description: 'For example 10-24.' },
+            },
+            required: ['path'],
+          },
+        },
+      },
+      required: ['content'],
+      additionalProperties: false,
+    },
+    execute: async (_id, params) => {
+      const kind = params.kind;
+      const citations = Array.isArray(params.citations)
+        ? (params.citations as Array<{ path?: unknown; lines?: unknown }>)
+            .filter((c) => typeof c?.path === 'string')
+            .map((c) => ({
+              path: String(c.path),
+              ...(typeof c.lines === 'string' ? { lines: c.lines } : {}),
+            }))
+        : undefined;
+      queue({
+        v: 1,
+        type: 'remember',
+        content: required(params.content, 'content'),
+        ...(kind === 'FACT' ||
+        kind === 'DECISION' ||
+        kind === 'CONVENTION' ||
+        kind === 'GOTCHA'
+          ? { kind }
+          : {}),
+        ...(citations?.length ? { citations } : {}),
+      });
+      return text(
+        'Queued. The host records it as a proposed fact after this pass.',
+      );
+    },
   });
 }

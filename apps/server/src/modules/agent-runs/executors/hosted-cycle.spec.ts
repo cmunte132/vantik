@@ -5,6 +5,7 @@ import type {
 } from '@vantikhq/types';
 
 import { HostedExecutor } from './hosted.executor';
+import { RunOutboxService } from '../run-outbox';
 
 /**
  * The implement → verify → review → revise cycle, driven end to end against a
@@ -100,6 +101,8 @@ interface GuestScript {
   stoppedAfterSpending?: boolean;
   /** What packing the tree for the push answers, when not plain success. */
   packed?: { exitCode: number; stderr: string };
+  /** The outbox as it stands after each implementing pass, keyed by pass. */
+  outbox?: Record<number, string>;
 }
 
 function buildGuest(script: GuestScript) {
@@ -183,6 +186,10 @@ function buildGuest(script: GuestScript) {
           exitCode,
           stdout: piOutput(`Did pass ${implementPasses}.`),
         };
+      }
+
+      if (command.includes('vantik-outbox.jsonl')) {
+        return { ...ok, stdout: script.outbox?.[implementPasses] ?? '' };
       }
 
       if (command.startsWith('tar czf') && script.packed) {
@@ -272,6 +279,37 @@ function build(
     ),
   };
 
+  // The real outbox service over fake writers, so these tests hold the
+  // checks in run-outbox.ts to what the executor actually feeds them.
+  const vantikWrites = {
+    notes: [] as string[],
+    facts: [] as string[],
+    ticks: [] as string[],
+  };
+  const outbox = new RunOutboxService(
+    {
+      createIssueComment: jest.fn(
+        async (_p: unknown, _u: unknown, body: { bodyMarkdown: string }) => {
+          vantikWrites.notes.push(body.bodyMarkdown);
+        },
+      ),
+    } as never,
+    {
+      createEntry: jest.fn(
+        async (_p: unknown, _w: unknown, data: { content: string }) => {
+          vantikWrites.facts.push(data.content);
+        },
+      ),
+    } as never,
+    {
+      updateChecklistItem: jest.fn(
+        async (params: { checklistItemId: string }) => {
+          vantikWrites.ticks.push(params.checklistItemId);
+        },
+      ),
+    } as never,
+  );
+
   const pushWorkTree = jest.fn(async (request: { summary: string }) => {
     void request;
     // The proxy answers null when the tree matches the base: nothing to push.
@@ -314,6 +352,7 @@ function build(
       }),
     } as never,
     agentRuns as never,
+    outbox as never,
   );
 
   const run = {
@@ -361,6 +400,7 @@ function build(
     events,
     handbacks,
     spends,
+    vantikWrites,
     final: () => transitions[transitions.length - 1],
   };
 }
@@ -1119,5 +1159,62 @@ describe('a run is answerable for its own liveness', () => {
     await harness.executor.onModuleInit();
 
     expect(harness.transitions).toEqual([]);
+  });
+});
+
+describe('what the agent writes to Vantik from the sandbox', () => {
+  const OUTBOX = [
+    {
+      v: 1,
+      type: 'note',
+      body: 'The importer drops the last row on a short page.',
+    },
+    {
+      v: 1,
+      type: 'remember',
+      content: 'Rows are paged by 500.',
+      citations: [{ path: 'src/importer.ts', lines: '80-90' }],
+    },
+    {
+      v: 1,
+      type: 'criterion',
+      id: 'c1',
+      evidence: 'importer.spec keeps the last row',
+    },
+    { v: 1, type: 'criterion', id: 'someone-elses', evidence: 'trust me' },
+  ]
+    .map((item) => JSON.stringify(item))
+    .concat('not json')
+    .join('\n')
+    .concat('\n');
+
+  it('posts notes and proposes facts after the pass, and ticks a criterion once the run succeeds', async () => {
+    const harness = build({ verdicts: { 1: ACCEPTED }, outbox: { 1: OUTBOX } });
+
+    await harness.execute();
+
+    expect(harness.final().status).toBe('SUCCEEDED');
+    expect(harness.vantikWrites).toEqual({
+      notes: ['The importer drops the last row on a short page.'],
+      facts: ['Rows are paged by 500.'],
+      ticks: ['c1'],
+    });
+    const said = harness.events.map((e) => e.message);
+    expect(said).toContainEqual(
+      expect.stringContaining(
+        'refused 2 lines of the outbox (not a criterion of this issue, not JSON)',
+      ),
+    );
+    expect(said).toContainEqual(expect.stringContaining('ticked 1 criterion'));
+  });
+
+  it('does not tick a criterion on a run nobody signed off', async () => {
+    const harness = build({ verdicts: {}, outbox: { 1: OUTBOX } });
+
+    await harness.execute();
+
+    expect(harness.final().status).toBe('NEEDS_REVIEW');
+    expect(harness.vantikWrites.ticks).toEqual([]);
+    expect(harness.vantikWrites.notes).toHaveLength(1);
   });
 });

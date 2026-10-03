@@ -39,7 +39,12 @@ export function cancelRun({
 
 export const useCancelRunMutation = mutationHook(cancelRun);
 
-export function retryRun({ runId }: { runId: string }) {
+// Resolves to the new run the retry opened, so the caller can go to it.
+export function retryRun({
+  runId,
+}: {
+  runId: string;
+}): Promise<{ id: string }> {
   return ajaxPost({ url: `/api/v1/agent_runs/${runId}/retry`, data: {} });
 }
 

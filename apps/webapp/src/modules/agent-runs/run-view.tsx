@@ -68,7 +68,12 @@ export const RunView = withApplicationStore(
     const { data: executors } = useExecutors();
 
     const { mutate: cancelRun } = useCancelRunMutation();
-    const { mutate: retryRun } = useRetryRunMutation();
+    // A retry is a new run with its own page; go there, or the button looks
+    // as if it did nothing.
+    const { mutate: retryRun } = useRetryRunMutation({
+      onSuccess: (next) =>
+        router.push(workspaceHref(workspaceSlug, 'agent-runs', next.id)),
+    });
 
     const run = agentRunsStore.getRunById(String(runId ?? ''));
     const live = run ? isLive(run.status) : false;

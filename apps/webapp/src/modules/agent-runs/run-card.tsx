@@ -39,7 +39,14 @@ export const RunCard = observer(({ run, user }: Props) => {
   const { agentRunsStore } = useContextStore();
 
   const { mutate: cancelRun } = useCancelRunMutation();
-  const { mutate: retryRun } = useRetryRunMutation();
+  // A retry is a new run with its own page; go there, or the button looks
+  // as if it did nothing.
+  const { mutate: retryRun } = useRetryRunMutation({
+    onSuccess: (next) =>
+      router.push(
+        workspaceHref(router.query.workspaceSlug, 'agent-runs', next.id),
+      ),
+  });
 
   const live = isLive(run.status);
 

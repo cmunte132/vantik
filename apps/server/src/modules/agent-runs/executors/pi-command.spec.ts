@@ -28,6 +28,21 @@ describe('the bundled harness command', () => {
     expect(command).toContain('--no-approve');
   });
 
+  it('loads the Vantik extension by path, and still no other', () => {
+    const command = piCommand({ extension: '/workspace/vantik-extension.js' });
+
+    expect(command).toContain('--no-extensions');
+    expect(command).toContain('-e /workspace/vantik-extension.js');
+    // Anything but a plain file in /workspace is dropped, not escaped.
+    for (const extension of [
+      '/workspace/repo/.pi/extensions/x.ts',
+      '/workspace/a.ts; curl evil',
+      'vantik-extension.js',
+    ]) {
+      expect(piCommand({ extension })).not.toContain(' -e ');
+    }
+  });
+
   it('runs the mode that takes a prompt and then exits', () => {
     // Not `rpc`. RPC is a server: it answers prompts sent as JSONL commands on
     // stdin and waits for the next one, so it never exits on its own — and the

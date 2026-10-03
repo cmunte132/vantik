@@ -36,6 +36,7 @@ import {
   ValueType,
 } from '@opentelemetry/api';
 
+import { guardrailOf } from './pi-events';
 import { genAiInstruments } from '../../ai-requests/model-telemetry';
 
 const tracer = trace.getTracer('vantik-agent');
@@ -46,6 +47,7 @@ let instruments:
       duration: Histogram;
       cost: Histogram;
       turns: Histogram;
+      guardrails: Counter;
     }
   | undefined;
 
@@ -90,6 +92,12 @@ function getInstruments() {
       advice: {
         explicitBucketBoundaries: [1, 2, 5, 10, 20, 40, 80, 160, 320, 640],
       },
+    }),
+    guardrails: meter.createCounter('vantik.agent_run.guardrail', {
+      description:
+        'Times the Vantik extension stopped a tool call or asked an agent to continue. A spike is a prompt-injection signal.',
+      unit: '{hit}',
+      valueType: ValueType.INT,
     }),
   };
   return instruments;
@@ -199,6 +207,7 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
   let phaseContext: Context = rootContext;
   let chat: { span: Span; started: number } | null = null;
   const tools = new Map<string, Span>();
+  let guardrailHits = 0;
   let ended = false;
 
   const setModel = (nextProvider: string | null, nextModel: string | null) => {
@@ -288,6 +297,27 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
 
     observe: safely((event: PiEvent) => {
       const type = event.type;
+
+      // Recorded before the tool span ends below, so the hit lands on it too.
+      const hit = guardrailOf(event);
+      if (hit) {
+        guardrailHits += 1;
+        const attributes = {
+          'vantik.guardrail.rule': hit.rule,
+          'vantik.guardrail.action': hit.action,
+          ...(hit.tool ? { 'gen_ai.tool.name': hit.tool } : {}),
+        };
+        (phaseSpan ?? root).addEvent('vantik.guardrail', attributes);
+        if (hit.toolCallId) {
+          tools
+            .get(hit.toolCallId)
+            ?.setAttribute('vantik.guardrail.rule', hit.rule);
+        }
+        getInstruments().guardrails.add(1, {
+          'vantik.guardrail.rule': hit.rule,
+          'vantik.guardrail.action': hit.action,
+        });
+      }
       const message = event.message as
         | {
             role?: unknown;
@@ -438,6 +468,7 @@ export function startRunTelemetry(input: RunTelemetryInput): RunTelemetry {
       endPhase();
       ended = true;
       root.setAttribute('vantik.agent_run.status', outcome.status);
+      root.setAttribute('vantik.agent_run.guardrail_hits', guardrailHits);
       if (outcome.failure) {
         root.setAttribute('vantik.agent_run.failure', outcome.failure);
         root.setAttribute('error.type', outcome.failure);

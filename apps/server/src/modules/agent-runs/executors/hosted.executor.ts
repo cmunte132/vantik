@@ -35,6 +35,11 @@ import {
 import { CredentialsService } from '../credentials/credentials.service';
 import { evidencePaths } from '../evidence-paths';
 import {
+  extensionFiles,
+  extensionGuestPath,
+  POLICY_PATH,
+} from '../pi-extension/seed';
+import {
   MIN_USEFUL_MS,
   decideCycle,
   keepEvidenced,
@@ -45,12 +50,12 @@ import {
 import { buildReviewPrompt, buildRevisionPrompt } from '../review-prompt';
 import { PROVIDE_PACKAGE_MANAGER } from './package-manager';
 import { PiEventReader, type ParsedStep } from './pi-events';
+import { RunTelemetry, startRunTelemetry } from './run-telemetry';
 import { type Spend, SpendMeter } from './spend-meter';
 import { RunHandbackService } from '../run-handback.service';
-import { RunTelemetry, startRunTelemetry } from './run-telemetry';
 import { GitProxyService } from '../sandbox/git-proxy.service';
-import { RemoteSandboxRuntime } from '../sandbox/remote.runtime';
 import { PushScopeError } from '../sandbox/push-scope';
+import { RemoteSandboxRuntime } from '../sandbox/remote.runtime';
 import { scrubSecrets } from '../sandbox/scrub';
 import {
   BASE_DIR,
@@ -105,8 +110,18 @@ export function piCommand(options: {
   thinking?: string;
   /** Absolute guest paths. Additive even under `--no-skills`. */
   skills?: string[];
+  /** The Vantik extension's absolute guest path. Additive under `--no-extensions`. */
+  extension?: string;
 }): string {
   const args = ['npx', '--yes', PI_PACKAGE, ...PI_REQUIRED_FLAGS];
+
+  // Ours, by path, and nothing else: `--no-extensions` still stops Pi loading
+  // one from the checkout, and `-e` adds exactly this file, which the host
+  // wrote outside it. Checked rather than quoted, like a skill path — it is a
+  // constant, so the check never fails, and it is cheap to keep.
+  if (options.extension && /^\/workspace\/[\w.-]+$/.test(options.extension)) {
+    args.push('-e', options.extension);
+  }
 
   // Explicit, because discovery is off. `--no-skills` stops Pi reading skills
   // out of the checkout — where they would be instructions written by whoever
@@ -651,8 +666,12 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           // How the reviewer sees a change rather than a directory. Only
           // seeded when there is going to be a reviewer.
           ...(reviewing ? { [TREE_TOOLS_PATH]: TREE_TOOLS_SCRIPT } : {}),
+          // The Vantik extension and what it is told about this run. Outside
+          // the checkout, so it is never part of the work and never pushed.
+          ...extensionFiles(pack, config.egressHosts),
         },
         env: {
+          VANTIK_POLICY: `/workspace/${POLICY_PATH}`,
           // The provider's own variable, for the providers that have one.
           // There is no generic base-url variable Pi reads.
           ...(model.baseUrl && provider.baseUrl
@@ -1248,6 +1267,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         model: cx.config.model,
         thinking: cx.config.thinking,
         skills: options.skills,
+        extension: extensionGuestPath(),
       });
 
     // Each step goes to the timeline as the harness reports it, so a person

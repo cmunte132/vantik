@@ -1,5 +1,7 @@
 import type { AgentStepKind } from '@vantikhq/types';
 
+import { BLOCKED_TAG, REMINDER_TAG } from '../pi-extension/vantik-extension';
+
 /**
  * What Pi's JSON event stream says a run did.
  *
@@ -236,9 +238,95 @@ function parseLine(line: string): PiEvent | null {
   }
 }
 
+/** A guardrail the Vantik extension applied, as the stream shows it. */
+export interface GuardrailHit {
+  rule: string;
+  action: 'blocked' | 'continued';
+  tool?: string;
+  toolCallId?: string;
+}
+
+const BLOCKED = new RegExp(`^${BLOCKED_TAG} \\(([a-z-]{1,32})\\):`);
+
+/**
+ * The guardrail an event records, if it records one.
+ *
+ * Read from the text the extension tags its interventions with, because Pi
+ * keeps its stdout for its own events (see vantik-extension.ts). The agent can
+ * print the same tag, so this is a signal to count, never a fact to act on.
+ */
+export function guardrailOf(event: PiEvent): GuardrailHit | null {
+  if (event.type === 'tool_execution_end' && event.isError) {
+    const match = BLOCKED.exec(textOf(event.result));
+    return match
+      ? {
+          rule: match[1],
+          action: 'blocked',
+          tool: String(event.toolName ?? 'unknown'),
+          ...(event.toolCallId ? { toolCallId: String(event.toolCallId) } : {}),
+        }
+      : null;
+  }
+
+  if (event.type === 'message_end') {
+    const message = event.message as
+      { role?: unknown; content?: unknown } | undefined;
+    if (
+      message?.role === 'user' &&
+      userTextOf(message.content).startsWith(REMINDER_TAG)
+    ) {
+      return { rule: 'unchecked', action: 'continued' };
+    }
+  }
+
+  return null;
+}
+
+function userTextOf(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  return Array.isArray(content)
+    ? content
+        .map((part) =>
+          part && typeof part === 'object'
+            ? String((part as { text?: unknown }).text ?? '')
+            : '',
+        )
+        .join('')
+    : '';
+}
+
 /** Turns one harness event into a progress line worth storing, or nothing. */
 export function describe(event: PiEvent): ParsedStep | null {
   const type = String(event.type ?? '');
+
+  // Before the generic failure below: a call the extension refused did not
+  // fail, it was stopped, and a reader should see which rule stopped it.
+  const guardrail = guardrailOf(event);
+  if (guardrail?.action === 'blocked') {
+    const name = guardrail.tool ?? 'a tool';
+    return {
+      message: `Vantik stopped ${name} (${guardrail.rule})`,
+      level: 'WARN',
+      phase: 'implement',
+      data: {
+        kind: kindOf(name, null),
+        ...(guardrail.toolCallId ? { ref: guardrail.toolCallId } : {}),
+        ok: false,
+        guardrail: guardrail.rule,
+        output: textOf(event.result).slice(0, OUTPUT_LIMIT),
+      },
+    };
+  }
+  if (guardrail?.action === 'continued') {
+    return {
+      message: 'Vantik asked the agent to run the checks before finishing',
+      level: 'WARN',
+      phase: 'implement',
+      data: { kind: 'note' as AgentStepKind, guardrail: guardrail.rule },
+    };
+  }
 
   if (type === 'tool_execution_start') {
     const name = String(event.toolName ?? 'a tool');

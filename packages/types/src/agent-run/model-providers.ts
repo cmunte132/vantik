@@ -128,6 +128,21 @@ export const MODEL_PROVIDERS: ModelProvider[] = [
     },
   },
   {
+    id: 'vercel-ai-gateway',
+    label: 'Vercel AI Gateway',
+    envVar: 'AI_GATEWAY_API_KEY',
+    host: 'ai-gateway.vercel.sh',
+    chatBaseUrl: 'https://ai-gateway.vercel.sh/v1',
+    placeholder: 'vck_…',
+    catalogue: {
+      url: 'https://ai-gateway.vercel.sh/v1/models',
+      auth: 'bearer',
+      // Like OpenRouter's, the model list answers anyone. The credits
+      // endpoint needs the key, so it is the one that checks it.
+      verifyUrl: 'https://ai-gateway.vercel.sh/v1/credits',
+    },
+  },
+  {
     id: 'google',
     label: 'Google Gemini',
     // Not `GOOGLE_API_KEY`. Pi reads this one, and the two names are close

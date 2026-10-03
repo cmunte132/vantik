@@ -44,7 +44,13 @@ import {
   SpendCard,
   Stepper,
 } from './run-parts';
-import { failureProse, STATUS_LABEL, costOf, isLive } from './run-vocabulary';
+import {
+  failureProse,
+  STATUS_LABEL,
+  costOf,
+  isLive,
+  shownStatus,
+} from './run-vocabulary';
 
 /**
  * One agent run: who is working on what, where it is, and what it did.
@@ -241,7 +247,7 @@ export const RunView = withApplicationStore(
                 </div>
 
                 <StatusPill
-                  status={run.status}
+                  status={shownStatus(run)}
                   failed={Boolean(failure)}
                   took={took}
                 />
@@ -257,7 +263,16 @@ export const RunView = withApplicationStore(
             {live ? (
               current && <NowCard item={current} now={now} />
             ) : (
-              <OutcomeCard run={run} failure={failure} feed={feed} />
+              <OutcomeCard
+                run={run}
+                failure={failure}
+                feed={feed}
+                cleanedUpBy={
+                  users?.find(
+                    (user: any) => user.id === run.result?.cleanedUp?.byUserId,
+                  )?.fullname
+                }
+              />
             )}
 
             <RunActivity

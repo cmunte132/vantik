@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import React from 'react';
 
 import {
+  shownStatus,
   STATUS_LABEL,
   duration,
   isLive,
@@ -66,13 +67,13 @@ export const AgentRunPanel = observer(() => {
         }
         className="flex w-full min-w-0 items-center gap-2 rounded p-1.5 pl-0 text-left hover:bg-grayAlpha-100"
       >
-        <StatusDot status={run.status} className="ml-1.5" />
+        <StatusDot status={shownStatus(run)} className="ml-1.5" />
 
         {/* Truncated rather than wrapped: the longest label here is "The
             runner went away", and a rail row that grows to two lines stops
             reading like the rows above it. */}
         <span className="truncate">
-          {STATUS_LABEL[run.status] ?? run.status}
+          {STATUS_LABEL[shownStatus(run)] ?? run.status}
         </span>
 
         {took && (

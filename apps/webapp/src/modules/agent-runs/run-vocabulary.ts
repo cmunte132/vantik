@@ -25,7 +25,26 @@ export const STATUS_LABEL: Record<string, string> = {
   CANCELED: 'Stopped',
   EXPIRED: 'The runner went away',
   NEEDS_REVIEW: 'Needs a human',
+  REJECTED: 'Rejected',
 };
+
+/**
+ * The status a person sees, which is the run's own status except for one case.
+ *
+ * A run awaiting review that somebody cleaned up has been rejected. The server
+ * keeps NEEDS_REVIEW, because that is the verdict the agent's work earned and
+ * what the knowledge signals measure, but nobody is waiting on it any more,
+ * and saying "Needs a human" after the human answered reads as if the reject
+ * did nothing.
+ */
+export function shownStatus(run: {
+  status: string;
+  result?: { cleanedUp?: unknown } | null;
+}): string {
+  return run.status === 'NEEDS_REVIEW' && run.result?.cleanedUp
+    ? 'REJECTED'
+    : run.status;
+}
 
 /**
  * A failure category, said the way you would say it to someone.

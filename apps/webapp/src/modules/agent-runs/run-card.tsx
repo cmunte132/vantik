@@ -14,7 +14,13 @@ import { useCancelRunMutation, useRetryRunMutation } from 'services/agent-runs';
 import { useContextStore } from 'store/global-context-provider';
 
 import { CleanUpRun } from './clean-up-run';
-import { failureProse, PHASE_LABEL, duration, isLive } from './run-vocabulary';
+import {
+  failureProse,
+  PHASE_LABEL,
+  duration,
+  isLive,
+  shownStatus,
+} from './run-vocabulary';
 import { StatusDot } from './status-dot';
 
 interface Props {
@@ -86,12 +92,12 @@ export const RunCard = observer(({ run, user }: Props) => {
         <div className="flex min-w-0 items-center gap-1">
           {getUserIcon(user)}
           <span className="truncate">
-            {user?.fullname ?? 'The agent'} {verb(run.status)} this issue
+            {user?.fullname ?? 'The agent'} {verb(shownStatus(run))} this issue
           </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-2 font-mono text-xs text-muted-foreground">
-          <StatusDot status={run.status} />
+          <StatusDot status={shownStatus(run)} />
           {took && <span>{took}</span>}
           <ReactTimeAgo date={new Date(run.createdAt)} timeStyle="twitter" />
         </div>
@@ -211,6 +217,8 @@ function verb(status: string): string {
       return 'finished';
     case 'NEEDS_REVIEW':
       return 'needs a hand with';
+    case 'REJECTED':
+      return 'had its work rejected on';
     case 'CANCELED':
       return 'was stopped on';
     default:

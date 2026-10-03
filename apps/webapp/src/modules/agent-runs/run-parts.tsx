@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { AgentRunCleanup } from '@vantikhq/types';
+
 import {
   RiArrowDownSLine,
   RiArrowRightSLine,
@@ -13,6 +15,7 @@ import { Button } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
 import React from 'react';
 
+import { describe as describeCleanup } from './clean-up-run';
 import { Counts } from './run-activity';
 import {
   type FeedItem,
@@ -23,7 +26,7 @@ import {
   doing,
   pullNumber,
 } from './run-feed';
-import { formatCost, whereTheWorkWent } from './run-vocabulary';
+import { formatCost, shownStatus, whereTheWorkWent } from './run-vocabulary';
 
 /**
  * The five stages of a run, as one bar each.
@@ -144,15 +147,25 @@ export const OutcomeCard = ({
   run,
   failure,
   feed,
+  cleanedUpBy,
 }: {
   run: any;
   failure?: { what: string; next: string };
   feed: FeedItem[];
+  /** Who cleaned up after the run, when somebody did and is known. */
+  cleanedUpBy?: string;
 }) => {
   const where = whereTheWorkWent(run.result ?? {});
   const { tone, heading } = verdict(run, failure);
   const pr = pullNumber(run.result?.prUrl);
   const facts = outcomeFacts(feed);
+  const cleanup: AgentRunCleanup | undefined = run.result?.cleanedUp;
+  // What the cleanup removed is no longer a place to go: a closed pull request
+  // is still worth a look, but not as the card's call to action, and a deleted
+  // branch is nothing to copy.
+  const prOpen = !cleanup || cleanup.pullRequest === 'merged';
+  const branchLeft =
+    !cleanup || !['deleted', 'already_gone'].includes(cleanup.branch);
 
   return (
     <div
@@ -195,15 +208,29 @@ export const OutcomeCard = ({
         failure && <p className="text-muted-foreground">{failure.next}</p>
       )}
 
+      {cleanup && (
+        <p className="text-muted-foreground">
+          {shownStatus(run) === 'REJECTED' ? 'Rejected' : 'Cleaned up'}
+          {cleanedUpBy ? ` by ${cleanedUpBy}` : ''}{' '}
+          {new Date(cleanup.at).toLocaleString()}. {describeCleanup(cleanup)}
+        </p>
+      )}
+
       {run.summary && <Summary text={run.summary} />}
 
       {(where || facts) && (
         <div className="flex flex-wrap items-center gap-2">
           {where?.kind === 'pull_request' && (
-            <Button asChild>
+            <Button variant={prOpen ? 'default' : 'secondary'} asChild>
               <a href={where.value} target="_blank" rel="noreferrer">
                 <RiGitPullRequestLine className="mr-1.5" size={15} />
-                {pr ? `Review pull request #${pr}` : 'Review the pull request'}
+                {!prOpen
+                  ? pr
+                    ? `Closed pull request #${pr}`
+                    : 'The closed pull request'
+                  : pr
+                    ? `Review pull request #${pr}`
+                    : 'Review the pull request'}
               </a>
             </Button>
           )}
@@ -222,7 +249,7 @@ export const OutcomeCard = ({
           {/* Beside the pull request rather than instead of it: a reviewer
               opens the PR, and somebody pulling the work locally wants the
               branch. */}
-          {run.result?.branch && where?.kind !== 'worktree' && (
+          {run.result?.branch && branchLeft && where?.kind !== 'worktree' && (
             <Button
               variant="secondary"
               onClick={() => navigator.clipboard?.writeText(run.result.branch)}
@@ -300,6 +327,9 @@ function verdict(
           : 'Finished the work',
       };
     case 'NEEDS_REVIEW':
+      if (run.result?.cleanedUp) {
+        return { tone: 'muted', heading: 'Rejected: the work was not kept' };
+      }
       return {
         tone: 'warning',
         heading: 'Finished, but somebody has to judge whether it is right',

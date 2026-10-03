@@ -1,5 +1,4 @@
 import { cn } from '@vantikhq/ui/lib/utils';
-import React from 'react';
 
 import { isLive } from './run-vocabulary';
 
@@ -24,7 +23,7 @@ export const StatusDot = ({
       status === 'SUCCEEDED' && 'bg-green-500',
       status === 'NEEDS_REVIEW' && 'bg-amber-500',
       ['FAILED', 'EXPIRED'].includes(status) && 'bg-destructive',
-      status === 'CANCELED' && 'bg-muted-foreground',
+      ['CANCELED', 'REJECTED'].includes(status) && 'bg-muted-foreground',
       className,
     )}
   />

@@ -9,6 +9,7 @@ import { useContextStore } from 'store/global-context-provider';
 
 import {
   failureProse,
+  shownStatus,
   STATUS_LABEL,
   age,
   costOf,
@@ -169,11 +170,11 @@ const Row = observer(
             failure && 'text-destructive',
           )}
         >
-          <StatusDot status={run.status} />
+          <StatusDot status={shownStatus(run)} />
           <span className="truncate">
             {failure
               ? sentenceCase(failure.short)
-              : (STATUS_LABEL[run.status] ?? run.status)}
+              : (STATUS_LABEL[shownStatus(run)] ?? run.status)}
           </span>
         </span>
 

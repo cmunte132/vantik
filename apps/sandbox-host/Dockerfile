@@ -12,10 +12,13 @@ FROM node:24-bookworm-slim AS base
 WORKDIR /app
 RUN npm install -g pnpm@10.34.5
 
-## Workspace manifests, and nothing else, as in the server image: this layer is
-## the cache key for every install below.
+## Workspace manifests and dependency patches, and nothing else, as in the
+## server image: this layer is the cache key for every install below. pnpm
+## reads every patch in patchedDependencies even when the filtered install does
+## not need the patched package.
 FROM base AS manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
 COPY apps/docs/package.json                 apps/docs/
 COPY apps/sandbox-host/package.json         apps/sandbox-host/
 COPY apps/server/package.json               apps/server/

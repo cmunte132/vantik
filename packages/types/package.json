@@ -4,6 +4,11 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "module": "./dist/index.mjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cmunte132/vantik.git",
+    "directory": "packages/types"
+  },
   "publishConfig": {
     "access": "public"
   },

@@ -114,5 +114,5 @@ console.log(`Released ${version} and tagged it. To publish it:
 
   git push origin HEAD ${version}
 
-The tag push builds and publishes the images. The npm packages are not
-published by CI; publish them from packages/ after the push.`);
+The tag push builds and publishes the images, retakes the docs screenshots,
+and publishes the npm packages (see .github/workflows/publish-packages.yml).`);

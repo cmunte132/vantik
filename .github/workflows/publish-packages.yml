@@ -1,0 +1,79 @@
+name: Publish packages
+
+# Publishes the npm packages a release versions: @vantikhq/cli, and the
+# @vantikhq/agent-core and @vantikhq/types it is built on. `pnpm release` sets
+# one version in all of them, and pushing its tag publishes them here, beside
+# the images.
+#
+# It does nothing until the repository variable NPM_PUBLISH is "true", so a
+# fork, or this repository before the npm side is set up, releases without it.
+# The npm side, once:
+#
+#   1. Create the vantikhq organisation on npmjs.com.
+#   2. Either add an automation token as the NPM_TOKEN secret, or, once each
+#      package exists, add this workflow as its trusted publisher (npmjs.com >
+#      package > Settings > Trusted publishing: cmunte132/vantik,
+#      publish-packages.yml) and delete the token.
+#   3. Set NPM_PUBLISH to "true".
+#
+# Each version is published with provenance, which links it to the commit and
+# the run that built it. A re-run skips versions the registry already has.
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: npm
+    if: vars.NPM_PUBLISH == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # The images are built from the same tag, and the release workflow
+      # refuses one that disagrees with package.json. So does this, so that a
+      # hand-made tag cannot publish packages that name themselves wrongly.
+      - name: Tag matches package.json
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      # pnpm hands the tarball to npm, and npm signs in through the workflow's
+      # identity token only from 11.5.
+      - run: npm install -g npm@11
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm turbo run build --filter=@vantikhq/cli... --filter=@vantikhq/types
+
+      # Recursive, so the packages go out in dependency order and each
+      # workspace:* range becomes the version it points at.
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+        run: >
+          pnpm -r publish --no-git-checks --access public
+          --filter @vantikhq/types
+          --filter @vantikhq/agent-core
+          --filter @vantikhq/cli

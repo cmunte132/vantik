@@ -417,7 +417,7 @@ test.describe('settings', () => {
     test(name, async ({ page }) => {
       await page.goto(`${workspace}/${path}`);
       await expect(section(page, title)).toBeVisible();
-      await shot(page, name, { focus: content(page) });
+      await shot(page, name, { focus: content(page), padding: 0 });
     });
   }
 

@@ -83,7 +83,8 @@ keeps **Workspace default**:
   workspace has keys for more than one provider.
 - **Model.** The model of the runs. Runs do not fall back to a different
   model. If no model is set, a run with **Workspace default** fails.
-- **Reasoning.** The reasoning effort of the runs. The default is **Medium**.
+- **Reasoning.** How much the model reasons before it answers. The default is
+  **Medium**.
 
 ## How the work is checked
 
@@ -159,10 +160,12 @@ number and its kappa is below the limit, a person makes that decision. This
 stays so until the agreement recovers. The text above the table gives the limit
 and the minimum number.
 
-If triage is in shadow, triage only records what it would do. A person makes
-each decision. The **Now** column then shows **Not acting while triage is in
+If triage is in shadow, triage records its decision but does not apply it. A
+person makes each decision. The **Now** column then shows **Not acting while triage is in
 shadow**. A decision to send a fact to a person always shows **Always a
 person**.
+
+If triage is off, the section shows only a note, and no table.
 
 ![The Can triage decide alone? section, with triage in shadow and no
 verdicts](/img/docs/settings/triage-agreement.png)

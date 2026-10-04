@@ -3,8 +3,6 @@ title: 'Workspace settings'
 sidebar_label: "Workspace"
 ---
 
-## Overview
-
 The workspace settings apply to all members of the workspace. To open them,
 open **Settings**. Then click an item under **Workspace** in the settings
 sidebar: **Overview**, **Labels**, **Members**, **Agents**, **Integrations** or
@@ -96,9 +94,13 @@ Only an admin sees the menu on the row of a member.
 
 The webapp does not let a suspended member open the workspace.
 
-> **Warning:** Do not rely on a suspension to stop the access tokens of a
-> member. Vantik does not check the suspension when a token is used. The
-> tokens of a suspended member still work.
+Vantik also refuses most requests from the access tokens of a suspended
+member. Some actions do not check the suspension, for example the CSV export.
+
+> **Warning:** Do not rely on a suspension to stop the personal agents of a
+> member. Each agent has its own membership, and a suspension does not change
+> it. To stop these agents, revoke them in
+> [Agent accounts](/settings/agents#agent-accounts).
 
 The webapp has no way to undo a suspension. It also has no way to change the role of a member, or to remove a
 member from the workspace.

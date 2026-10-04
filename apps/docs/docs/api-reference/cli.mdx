@@ -164,8 +164,9 @@ command prints the raw result as JSON. Without it, the command prints a table
 or text. `knowledge pull`, `knowledge push` and `knowledge generate` have no
 `--json`.
 
-If the API refuses a request, the command prints `Error:` and the message from
-the server, and it exits with code 1.
+If the API refuses a request, the command prints the message from the server,
+and it exits with code 1. The commands of tasks, projects and knowledge put
+`Error:` before the message.
 
 A reference to an item takes these values:
 
@@ -192,7 +193,7 @@ vantik project create Search rewrite --description - < plan.md
 
 | Command | What it does |
 | --- | --- |
-| `task list` | Lists tasks, the newest first. It shows 50 rows unless you give `--limit`. |
+| `task list` | Lists tasks, the most recently updated first. It shows 50 rows unless you give `--limit`. |
 | `task get <task>` | Shows one task: the description, the sub-tasks, the relations and the notes. With `--json`, it gives all of the task, with the Definition of Done and the history. |
 | `task search <query...>` | Searches the titles, the descriptions and the notes. |
 | `task similar <task>` | Shows earlier tasks that are similar to one task, with the resolution of each. |
@@ -281,8 +282,8 @@ vantik task update ENG-42 --no-capability
 - `task pick-up` takes `-a, --assignee <who>`. The default is the owner of the
   token.
 - `task close` takes `-r, --resolution <markdown>` and `-s, --state <state>`.
-  `--state` names a completed state other than the first one, for example
-  `Shipped`.
+  Without `--state`, the task moves to the first completed state of its team.
+  `--state` names another state, for example `Shipped`.
 - `task get`, `task similar`, `task note` and `task runs` take only `--json`.
 
 ```bash
@@ -305,18 +306,21 @@ vantik task close ENG-42 --resolution "Bumped the pool to 20"
 | --- | --- | --- | --- |
 | `--name <name>` | | Yes | A new name. |
 | `-d, --description <markdown>` | Yes | Yes | The description, or `-` for standard input. |
-| `-s, --status <status>` | Yes | Yes | A workspace status, for example `In Progress`. The default for `create` is the first status of the workspace. |
+| `-s, --status <status>` | Yes | Yes | The status, as text. The default for `create` is `Backlog`. |
 | `--start <date>` | Yes | Yes | The start date, in ISO format. |
 | `--end <date>` | Yes | Yes | The end date, in ISO format. |
 | `--lead <userId>` | | Yes | The member id of the lead. |
 | `--team <team...>` | Yes | Yes | The teams of the project. With `update`, it replaces the teams. |
 
-Give a project its teams. A project with no team does not show in the project
-picker of an issue.
+The webapp offers the statuses `Backlog`, `Planned`, `In Progress`, `Done` and
+`Canceled`. The server keeps the text that you give, so use one of these.
+
+A project with no team belongs to every team. The webapp shows it in the
+project picker of each issue.
 
 ```bash
 vantik project create Search rewrite --team ENG --start 2026-11-01
-vantik project update "Search rewrite" --status Completed
+vantik project update "Search rewrite" --status Done
 ```
 
 ## The product axis
@@ -430,7 +434,7 @@ The command group is `knowledge`, and its short name is `kb`. Read
 | `knowledge pull` | Writes the pages to a local folder as markdown. |
 | `knowledge push` | Sends the edits in that folder back to the bank. |
 | `knowledge generate` | Writes a block of knowledge into an instruction file, for example `AGENTS.md`. |
-| `knowledge gaps` | Lists the questions that the bank could not answer, the most asked first. |
+| `knowledge gaps` | Lists the questions that the bank had no answer for, the most asked first. |
 
 ### knowledge search and context
 

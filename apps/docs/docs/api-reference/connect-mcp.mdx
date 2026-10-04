@@ -140,7 +140,7 @@ id:
 
 | Tool | What it does | Parameters |
 | --- | --- | --- |
-| `list_tasks` | Lists the tasks as small rows, the newest first. | `team`, `assignee` (an email, a name, or `me`), `stateCategory`, `labels`, `priority`, `project`, `product`, `modules`, `capability`, `page`, `perPage` (1 to 200). All are optional. `product` finds the tasks in the modules of the product. |
+| `list_tasks` | Lists the tasks as small rows, the most recently updated first. | `team`, `assignee` (an email, a name, or `me`), `stateCategory`, `labels`, `priority`, `project`, `product`, `modules`, `capability`, `page`, `perPage` (1 to 200). All are optional. `product` finds the tasks in the modules of the product. |
 | `get_task` | Gives all of one task in one call. That is the description, the Definition of Done, the notes and the history. It also gives the sub-tasks, the relations, the links, the modules and the capability. | `task` |
 | `search_tasks` | Searches the titles, the descriptions, **and the notes**. Set `stateCategory: ["COMPLETED"]` to find an earlier fix with its resolution. | `query`, and optional `stateCategory`, `limit` (1 to 100, default 10), `modules`, `capability` |
 | `find_similar_tasks` | Gives the earlier tasks that are similar to one task, and the resolution of each. | `task` |
@@ -159,7 +159,7 @@ and `CANCELED`. `priority` takes `none`, `urgent`, `high`, `medium` and `low`.
 | Tool | What it does | Parameters |
 | --- | --- | --- |
 | `list_projects` | Gives the projects of the workspace. A project is an objective, and the issues group under it. | None |
-| `create_project` | Opens a project for an objective that truly needs several issues. Give it `teams`. A project with no team does not show in the project picker of an issue. | `name`, and optional `description`, `status`, `startDate`, `endDate`, `teams` |
+| `create_project` | Opens a project for an objective that truly needs several issues. A project with no `teams` belongs to every team. | `name`, and optional `description`, `status`, `startDate`, `endDate`, `teams` |
 | `update_project` | Changes a project. `teams` replaces the teams of the project. | `project`, and optional `name`, `description`, `status`, `startDate`, `endDate`, `leadUserId`, `teams` |
 
 ### Product axis

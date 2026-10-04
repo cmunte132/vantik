@@ -48,8 +48,7 @@ them. A service in a profile starts only when you name its profile:
 - `sandbox` starts the sandbox host. Hosted agent runs work in the microVMs that
   the sandbox host starts. This container needs `/dev/kvm`, so it is for Linux
   hosts. On macOS, run the sandbox host natively. Read
-  [Hosted agent runs](https://github.com/cmunte132/vantik#hosted-agent-runs) in
-  the README for the two methods.
+  [Agent sandbox](/oss/agent-sandbox) for the two methods.
 - `s3` starts MinIO and `minio-bucket`, which makes the bucket. MinIO is an
   object store that uses the S3 protocol. Use it to try the S3 backend for file
   attachments. Read

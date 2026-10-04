@@ -283,6 +283,10 @@ after the server stops. When the server starts, it disposes of the sandboxes of
 runs that have ended. When the server cannot reach a sandbox host, agent runs
 are refused, and the Agents page says why.
 
+The [Agent sandbox](https://docs.vantik.dev/oss/agent-sandbox) page
+of the documentation tells all the settings, the guest image, and how to find a
+fault.
+
 ### Observability
 
 Vantik sends OpenTelemetry data, and it uses no other format. It does not

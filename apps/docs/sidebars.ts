@@ -70,6 +70,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'oss/local-setup',
         'oss/self-deployment',
+        'oss/agent-sandbox',
         'oss/contributing',
       ],
     },

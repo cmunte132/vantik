@@ -49,9 +49,18 @@ Vantik does not send a notification for a change that you make yourself. It
 does not send one for other changes, for example a new label or a change to a
 status that is not completed.
 
-One change to an issue sends a maximum of one notification. If a change does
-more than one of these things, the assignment wins. Then the status, and then
-the priority.
+One change to an issue can do more than one of these things. Then Vantik
+sends only one of these notifications:
+
+1. If the change assigns the issue to a person, the assignment notification.
+2. Else, if the change sets a status, the status notification. This applies
+   only if the status is completed.
+3. Else, the priority notification.
+
+A change of status thus stops the priority notification, also when the new
+status is not completed. When the issue gets a different assignee, the old
+assignee also gets a notification. The old assignee gets none if that person
+made the change.
 
 If you already have a notification for an issue, a change of status or of
 priority does not add a second notification.

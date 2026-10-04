@@ -36,7 +36,9 @@ A template keeps these values:
 - The status, the labels, the priority and the assignee.
 - The project and the project milestone.
 
-A template does not keep a Definition of Done, a cycle or a due date.
+A template does not keep a Definition of Done, a cycle, a due date, modules or
+a capability. The template form lets you add sub-issues, but Vantik does not
+add them to the form when you use the template.
 
 ## How to use a template
 
@@ -47,9 +49,10 @@ A template does not keep a Definition of Done, a cycle or a due date.
 ![The new issue dialog, with the Template menu open. The menu shows two
 templates.](/img/docs/everyday/template-picker.png)
 
-Vantik puts the values of the template in the form. These values replace the
-values that the form had. You can change the values before you create the
-issue.
+Vantik puts each value that the template keeps in the form. Each value
+replaces the value that the form had. If the template has no title, the form
+keeps the title that you typed. You can change the values before you create
+the issue.
 
 The **Template** button shows only when the team of the issue has templates.
 The menu shows only the templates of that team.

@@ -69,7 +69,7 @@ weaker sandbox in place of a microVM.
   Its disk can grow to 30720 MB with the review, or 20480 MB without it. The
   disk is sparse, so a run uses only the space that it writes.
 - To build the guest image: podman or Docker on macOS, or `e2fsprogs` on
-  Linux.
+  Linux. Only a native sandbox host can use the guest image.
 
 ## Bring up the sandbox host
 
@@ -115,6 +115,15 @@ is the default in `docker-compose.yaml`. If you run the server with
 echo "SANDBOX_HOST_URL=http://127.0.0.1:3004" >> .env
 ```
 
+4. Make the server read the new values. If the server runs in a container,
+   create the container again:
+
+```bash
+docker compose up -d --no-deps --force-recreate server
+```
+
+   If you run the server with `pnpm dev`, stop it and start it again.
+
 ### 3. On Linux, run the container
 
 1. Tell the server container the address of the sandbox host.
@@ -123,10 +132,11 @@ echo "SANDBOX_HOST_URL=http://127.0.0.1:3004" >> .env
 echo "SANDBOX_HOST_CONTAINER_URL=http://sandbox-host:3004" >> .env
 ```
 
-2. Start the sandbox host with the `sandbox` compose profile.
+2. Start the sandbox host with the `sandbox` compose profile. The command also
+   creates the server container again, so that the server reads the new values.
 
 ```bash
-docker compose --profile sandbox up -d sandbox-host
+docker compose --profile sandbox up -d --no-deps --force-recreate server sandbox-host
 ```
 
 The container needs `/dev/kvm`. The entrypoint starts as root only to find the
@@ -138,6 +148,7 @@ The container image does not include the Vantik guest image. So the container
 uses the stock image of Gondolin, the library that starts the microVMs. The
 first run downloads that image into the `sandbox-images` volume, so that run
 takes longer. With the stock image, each run keeps its checkout in memory.
+A native sandbox host on Linux can use the guest image, as on macOS.
 Read [Without the guest image](#without-the-guest-image).
 
 ### 4. Do a check of the sandbox host
@@ -195,7 +206,7 @@ of the memory of the guest, so 3072 MB.
 The checkout, its dependencies, and the harness then share the memory that the
 commands of the agent use. A repository with a large `node_modules` fills most
 of it. The guest then uses its time to get memory back, not to run the tests.
-The run then looks like a model that stopped. Build the guest image to prevent
+The run then looks like a model that stopped. Build the guest image to stop
 this fault.
 
 With the Vantik image, the root disk grows to the disk limit of the run, and
@@ -292,32 +303,39 @@ cost when the provider reported one, and the catalog price if not. A metered
 call that the harness did not record, for example a cut stream, still adds its
 billed cost.
 
-The page of the run shows the spend while the run works. The server writes it
-a maximum of one time in 3 seconds. The review cycle compares the spend with
+The page of the run shows the spend while the run works. While a pass works, the
+server writes it a maximum of one time in 3 seconds. When a pass ends, the
+server writes it immediately. The review cycle compares the spend with
 **Spend per issue (USD)** in **Settings → Agents** between passes. The default
 is $5. Read [The budget](/agents/review-cycle#the-budget).
 
-The same figures go to your telemetry backend. Each model call is a `chat`
+The same figures go to your telemetry backend. Each model call is a `chat <model>`
 span with `gen_ai.usage.cost`. The attribute `vantik.llm.cost_source` tells if
 the cost is `provider` or `catalog`. Read
 [The telemetry contract](/oss/self-deployment#the-telemetry-contract).
 
-## Troubleshooting
+## How to find a fault
+
+Compose reads `.env` only when it creates a container. A restart of a
+container does not read it again. So to apply a change to `.env`, create the
+container again with `docker compose up -d --no-deps --force-recreate <service>`.
+For a native process, stop it and start it again.
 
 | What you see | Cause | What to do |
 | --- | --- | --- |
-| The delegate control says "No sandbox host is configured". | The server has no `SANDBOX_HOST_URL` or no `SANDBOX_HOST_TOKEN`. | Set both for the server, and restart it. |
+| The delegate control says "No sandbox host is configured". | The server has no `SANDBOX_HOST_URL` or no `SANDBOX_HOST_TOKEN`. | Set both for the server. Then create the server container again. |
 | The delegate control says "The sandbox host at `<url>` did not answer". | The sandbox host does not run, or the address is wrong. | Start the sandbox host. In a container, `127.0.0.1` is the container itself, so use `host.docker.internal` or the name of the service. |
-| The delegate control says "The sandbox host refused the server's token". | The two tokens are different. | Set the same `SANDBOX_HOST_TOKEN` for both. Then restart both. |
+| The delegate control says "The sandbox host refused the server's token". | The two tokens are different. | Set the same `SANDBOX_HOST_TOKEN` for both. Then apply the change to both. |
 | The sandbox host stops when it starts, with a message about `SANDBOX_HOST_TOKEN`. | The token is not set, or it has fewer than 24 characters. | Make a token as in [Make the token](#1-make-the-token). |
-| The reason says that the sandbox host has no `qemu-img` or `qemu-system-*` on its `PATH`. | QEMU is not installed for the process of the sandbox host. | Install QEMU on the machine of the sandbox host. Then restart the sandbox host. |
+| The reason says that the sandbox host has no `qemu-img` or `qemu-system-*` on its `PATH`. | QEMU is not installed for the process of the sandbox host. | Install QEMU on the machine of the native sandbox host. Then stop the sandbox host and start it again. |
 | The container logs "No /dev/kvm in this container". | The container has no hardware virtualisation. | On Linux, give the container `/dev/kvm`. On macOS, run the sandbox host natively. |
-| A run on a large repository becomes very slow, and the model looks stopped. | The sandbox host has no guest image, so the checkout is in memory. | Build the guest image. The next run uses it. |
+| A run on a large repository becomes very slow, and the model looks stopped. | The sandbox host has no guest image, so the checkout is in memory. | For a native sandbox host, build the guest image. The next run uses it. The container cannot use the guest image. |
 | After an upgrade, each pass of a run starts slowly. | The guest image has a different Pi version from the server, so each pass fetches Pi with `npx`. | Build the guest image again. |
-| A run fails, and the reason says that the request body is larger than a number of bytes. | The checkout is larger than `SANDBOX_HOST_MAX_BODY_MB`. | Increase `SANDBOX_HOST_MAX_BODY_MB` for the sandbox host. Then restart it. |
+| A run fails, and the reason says that the request body is larger than a number of bytes. | The checkout is larger than `SANDBOX_HOST_MAX_BODY_MB`. | Increase `SANDBOX_HOST_MAX_BODY_MB` for the sandbox host. Then apply the change to the sandbox host. |
 | A setup command cannot get its packages. | The host of the package registry is not on the allowlist. | Add the host in **How to verify the work** on the page of the module. |
+| A run starts a new attempt after the server stopped during the run. | The lease of the run expired. The lease sweep starts the next attempt, to a maximum of `AGENT_RUN_MAX_ATTEMPTS`. | Nothing. Read [Scheduled jobs](/oss/self-deployment#scheduled-jobs) for the lease settings. |
 | The first pass fails with a message from the provider, for example "invalid API key". | The provider refused the key or the model. | Correct the key or the model in **Settings → Agents**. |
-| The telemetry backend shows no `chat` spans or no costs. | The backend dropped the batches, for example at its memory limit. | Look at the logs of the backend first. |
+| The telemetry backend shows no `chat <model>` spans or no costs. | The backend dropped the batches, for example at its memory limit. | Look at the logs of the backend first. |
 
 After a server stops during a run, its sandbox stays until
 `SANDBOX_HOST_IDLE_MS` ends. When the server starts again, it disposes of the

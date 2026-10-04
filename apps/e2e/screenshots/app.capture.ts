@@ -293,6 +293,27 @@ test.describe('product axis', () => {
     await shot(page, 'product-axis/module', { focus: content(page), padding: 0 });
   });
 
+  test('module suggestions', async ({ page }) => {
+    await page.goto(
+      `${workspace}/issue/${run.owner.teamIdentifier}-${run.seeded.suggestedIssueNumber}`,
+    );
+    const field = page.getByRole('group', { name: 'Modules' });
+    await expect(field.getByText('Suggested')).toBeVisible();
+    await shot(page, 'product-axis/module-suggestions', { focus: field, padding: 8 });
+  });
+
+  test('grouped by module', async ({ page }) => {
+    await allIssues(page);
+    const trigger = page
+      .locator('[role="combobox"]')
+      .filter({ hasText: 'Status' })
+      .first();
+    await trigger.click();
+    await page.getByRole('option', { name: 'Module', exact: true }).click();
+    await expect(page.getByText('No module', { exact: true }).first()).toBeVisible();
+    await shot(page, 'product-axis/grouped-by-module', { focus: content(page), padding: 0 });
+  });
+
   test('capability', async ({ page }) => {
     await page.goto(`${workspace}/capability/${run.seeded.capabilityId}`);
     await expect(page.getByText('Checkout').first()).toBeVisible();

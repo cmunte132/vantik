@@ -27,6 +27,8 @@ export interface Seeded {
   viewId: string;
   /** The issue the issue-page screenshots open. */
   featuredIssueTitle: string;
+  /** A triage issue with suggested modules, by its number in the team. */
+  suggestedIssueNumber: number;
   agents: SeededAgents;
 }
 
@@ -310,10 +312,31 @@ export async function seedWorkspace(
     state: 'Triage',
     labels: ['Bug'],
   });
-  await issue('Checkout button does nothing in Safari 17', {
+  const safari = await issue('Checkout button does nothing in Safari 17', {
     state: 'Triage',
     labels: ['Bug', 'Frontend'],
   });
+  // The modules the classifier would suggest. The capture has no LLM, so the
+  // server's triage job writes an empty suggestion for the issue. The seed
+  // waits for that row, then fills in the modules, on IssueSuggestion and
+  // never on the issue, as the classifier does.
+  let suggestionId: string | undefined;
+  for (let tries = 0; tries < 50 && !suggestionId; tries++) {
+    const [row] = await db.query<{ id: string }>(
+      `SELECT "issueSuggestionId" AS "id" FROM "Issue"
+        WHERE "id" = $1 AND "issueSuggestionId" IS NOT NULL`,
+      [safari.id],
+    );
+    if (row) suggestionId = row.id;
+    else await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  if (!suggestionId) throw new Error('the triage job wrote no suggestion');
+  await db.query(
+    `UPDATE "IssueSuggestion"
+        SET "suggestedModuleIds" = $1, "updatedAt" = now()
+      WHERE "id" = $2`,
+    [[web.id, catalog.id], suggestionId],
+  );
   await issue('Apple Pay at checkout', {
     state: 'Triage',
     labels: ['Feature'],
@@ -493,5 +516,6 @@ export async function seedWorkspace(
     capabilityId: capability.id,
     viewId: view.id,
     featuredIssueTitle,
+    suggestedIssueNumber: safari.number,
   };
 }

@@ -16,6 +16,7 @@ const sidebars: SidebarsConfig = {
         'fundamentals/triage',
         'fundamentals/cycles',
         'fundamentals/projects',
+        'fundamentals/product-axis',
         'fundamentals/views',
         'fundamentals/inbox',
         'fundamentals/my-issues',

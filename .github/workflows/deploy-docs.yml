@@ -41,7 +41,7 @@ jobs:
 
       - name: Generate API reference docs
         working-directory: apps/docs
-        run: pnpm run gen-api-docs vantik
+        run: pnpm run gen-api-docs
 
       - name: Build docs site
         working-directory: apps/docs

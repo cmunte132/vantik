@@ -46,9 +46,8 @@ export const ViewsStore: IAnyStateTreeNode = types
     const load = flow(function* () {
       const views: SnapshotIn<typeof Views> = yield vantikDatabase.views.toArray();
 
-      // applySnapshot keeps the same view object for each id that stays, so a
-      // reload of the local database does not detach a view that a page has
-      // open.
+      // applySnapshot keeps the same view object for each id that stays. Thus
+      // a reload of the local database does not detach an open view.
 
       applySnapshot(
         self.views,

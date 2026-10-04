@@ -70,7 +70,7 @@ In development mode, the server does these things:
   email, and the log holds the only copy of the code.
 
 In production mode, the cookie has the `Secure` attribute, so the webapp must
-use HTTPS. `localhost` is an exception. The log holds no login codes. If SMTP is
+use HTTPS. The log holds no login codes. If SMTP is
 not set, a request for a login email gets an error, so people sign in with a
 passkey.
 
@@ -113,9 +113,9 @@ occurs only when you change the tag. Read
 
 ## The credential key
 
-`CREDENTIAL_ENCRYPTION_KEY` encrypts the credentials that agent runs use. These
-are the model keys and the git token in **Settings → Agents**, and the token of
-each git host in **Settings → Integrations → Git remote**. The server does not
+`CREDENTIAL_ENCRYPTION_KEY` encrypts the credentials that agent runs use. The
+model keys and the git token are in **Settings → Agents**. The token of each
+git host is in **Settings → Integrations → Git remote**. The server does not
 start without the key. The key must have 32 characters or more.
 
 ### Back up the key
@@ -280,10 +280,10 @@ log. To see if a job runs, read
 | Job | Default | Variable | What it does |
 | --- | --- | --- | --- |
 | Cycle maintenance | `0 * * * *` (hourly) | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
-| Knowledge decay | `0 3 * * *` (nightly) | `PAGE_DECAY_CRON` | This job archives a proposed entry that waited too long for a person. It also archives a standing or provisional entry that no agent run used for too long. Read [Decay](/fundamentals/knowledge#decay). |
+| Knowledge decay | `0 3 * * *` (nightly) | `PAGE_DECAY_CRON` | This job archives a proposed entry that waited too long for a person. It also archives a standing or provisional entry that no agent run used for too long. In addition, it archives a provisional entry that went wrong more often than well. Read [Decay](/fundamentals/knowledge#decay). |
 | Knowledge gap issues | `0 4 * * 1` (Monday 04:00) | `KNOWLEDGE_GAP_ISSUES_CRON` | This job opens one issue for each question that agents asked the knowledge often and that it could not answer. It opens the issue on the team that owns the module of the question. It never opens a second issue for the same question. |
 | Generated page refresh | `23 * * * *` (hourly) | `KNOWLEDGE_PAGE_REFRESH_CRON` | This job finds each generated page whose cited entries changed, and it builds the page again. Read [Generated pages](/fundamentals/knowledge/gardener#generated-pages). |
-| Agent run lease sweep | `* * * * *` (each minute) | `AGENT_RUN_LEASE_SWEEP_CRON` | This job expires each agent run that did not renew its lease in time, and it starts the next attempt if the run has attempts left. It also fails each run that stayed queued for longer than one lease. |
+| Agent run lease sweep | `* * * * *` (each minute) | `AGENT_RUN_LEASE_SWEEP_CRON` | This job expires each agent run that did not renew its lease in time. It starts the next attempt if the run has attempts left. It also fails each run that stayed queued for longer than one lease. |
 
 To stop a job, set its variable to `off`.
 
@@ -830,8 +830,9 @@ corrects nothing.
 
 ## Environment reference
 
-`.env.example` holds each setting, with a comment that tells what it does. This
-table lists the settings that the sections above do not tell about.
+`.env.example` holds the usual settings, with a comment that tells what each
+one does. This table lists more settings that the sections above do not tell
+about.
 
 | Variable | Default | What it does |
 | --- | --- | --- |

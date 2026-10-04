@@ -19,10 +19,10 @@ This guide gives the process for a contribution to this project. Read the
 A good first issue is an easy way to make your first contribution and to learn
 the codebase. To find one, do these steps:
 
-1. Open the "[Issues](https://github.com/vantikhq/vantik/issues)" tab in the
-   main [repository](https://github.com/vantikhq/vantik).
+1. Open the "[Issues](https://github.com/cmunte132/vantik/issues)" tab in the
+   main [repository](https://github.com/cmunte132/vantik).
 2. In the "Labels" filter, select
-   "[Good First Issue](https://github.com/vantikhq/vantik/labels/good%20first%20issue)".
+   "[Good First Issue](https://github.com/cmunte132/vantik/labels/good%20first%20issue)".
    The list then shows only the tasks for a beginner.
 3. Select an issue that interests you.
 4. Fork the project.
@@ -94,7 +94,7 @@ friendly community that accepts every contributor.
 ## How to report a problem
 
 If you find a problem, or if you have an idea for an improvement,
-[create an issue in the GitHub repository of Vantik](https://github.com/vantikhq/vantik/issues/new).
+[create an issue in the GitHub repository of Vantik](https://github.com/cmunte132/vantik/issues/new).
 Give as much detail as you can. The detail helps the maintainers to understand
 the problem and to correct it.
 

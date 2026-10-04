@@ -31,11 +31,11 @@
 # Not included (optional — the server logs an error and continues without them):
 #   - an LLM endpoint for the AI features — any OpenAI-compatible one, hosted or
 #     local; point LLM_BASE_URL at it (see .env.example)
-#   - SMTP — without it, and with NODE_ENV=development (the .env.example
-#     value), magic-link login emails are printed to the server log
-#     (docker compose logs server | grep -A5 "magic link"). With
-#     NODE_ENV=production, which a real deployment must set, email sign-in
-#     needs SMTP and people sign in with a passkey.
+#   - SMTP. In development mode, the .env.example value of NODE_ENV, the
+#     server writes each login email to its log:
+#     docker compose logs server | grep -A5 "magic link"
+#     A real deployment must set NODE_ENV=production. Then email sign-in needs
+#     SMTP. Without it, people sign in with a passkey.
 
 name: vantik
 

@@ -93,8 +93,8 @@ version control, and this file holds a token that reads and writes the
 workspace. Keep the file out of version control, or register the server for your
 user only. `claude mcp add` writes to `~/.claude.json`, which is not in the
 repository. If a commit does hold a token, revoke it, and make a new one. Click
-**revoke** on its row in **Access tokens**. An admin can also revoke or disable any agent
-in the **Agent accounts** section of **Settings → Agents**.
+**revoke** on its row in **Access tokens**. An admin can also revoke or
+disable any agent in the **Agent accounts** section of **Settings → Agents**.
 :::
 
 ## How to connect another client
@@ -174,7 +174,7 @@ Read [Products, modules and capabilities](/fundamentals/product-axis).
 | `create_product` | Adds a product. | `name`, and optional `key`, `description`, `status` |
 | `update_product` | Changes a product. | `product`, and optional `name`, `key`, `description`, `status` |
 | `create_module` | Adds a module. A module has one owner: a team or a product. | `name`, and optional `key`, `description`, `status`, `ownerTeam` or `ownerProduct`, `linkedTeams`, `linkedProducts` |
-| `update_module` | Changes a module. A new owner replaces the old owner. The linked teams and products replace the old ones. | `module`, and the optional fields of `create_module` |
+| `update_module` | Changes a module. A new owner replaces the old owner. The linked teams and products replace the old ones. | `module`, and optional `name` and the optional fields of `create_module` |
 | `add_module_repo` | Links a repository to a module. A connected source must offer the repository. If no source offers it, a person must connect the source in **Settings → Integrations**. | `module`, `repository` (`owner/name`), and optional `pathPrefixes`, `isDefault` |
 | `update_module_repo` | Changes the paths of a linked repository, or makes it the default. | `module`, `repository`, and optional `pathPrefixes`, `isDefault` |
 | `create_capability` | Adds a capability. | `name`, and optional `description`, `status` (`planned`, `active`, `live` or `deprecated`; default `planned`), `modules` |
@@ -231,13 +231,13 @@ these endpoints:
 
 | Tools | Endpoints |
 | --- | --- |
-| Tasks | `/v1/issues`, `/v1/issues/filter`, `/v1/issues/{id}`, `/v1/issues/{id}/context`, `/v1/issues/number/{number}`, `/v1/issue_comments`, `/v1/search`, `/v1/search/similar_issues`, `/v1/checklist_items` |
+| Tasks | `/v1/issues`, `/v1/issues/filter`, `/v1/issues/{id}`, `/v1/issues/{id}/context`, `/v1/issues/number/{number}`, `/v1/issue_comments`, `/v1/search`, `/v1/search/similar_issues`, `/v1/checklist_items`, `/v1/checklist_items/{id}` |
 | Projects | `/v1/projects`, `/v1/projects/{id}` |
-| Names of teams, members, labels and projects | `/v1/teams`, `/v1/teams/{id}/members`, `/v1/users`, `/v1/labels`, `/v1/projects` |
-| Product axis | `/v1/products`, `/v1/modules`, `/v1/modules/{id}/repos`, `/v1/modules/available_repos`, `/v1/capabilities` |
-| Knowledge | `/v1/knowledge/context`, `/v1/knowledge/search`, `/v1/knowledge/gaps`, `/v1/pages`, `/v1/pages/related`, `/v1/pages/{id}/links`, `/v1/pages/{id}/consolidate`, `/v1/page_entries` |
+| Product axis | `/v1/products`, `/v1/products/{id}`, `/v1/modules`, `/v1/modules/{id}`, `/v1/modules/{id}/repos`, `/v1/modules/{id}/repos/{repoId}`, `/v1/modules/available_repos`, `/v1/capabilities`, `/v1/capabilities/{id}` |
+| Knowledge | `/v1/knowledge/context`, `/v1/knowledge/search`, `/v1/knowledge/gaps`, `/v1/pages`, `/v1/pages/{id}`, `/v1/pages/related`, `/v1/pages/{id}/links`, `/v1/pages/{id}/consolidate`, `/v1/page_entries`, `/v1/page_entries/{id}`, `/v1/page_entries/bulk` |
 | Agent runs | `GET /v1/agent_runs?issueId=` |
 | Hooks | `POST /v1/agent-hooks/{event}` |
+| Names of teams, states, members, labels and projects | `/v1/teams`, `/v1/teams/{id}/members`, `/v1/{teamId}/workflows`, `/v1/users`, `/v1/labels`, `/v1/projects` |
 
 ## Rate limits
 

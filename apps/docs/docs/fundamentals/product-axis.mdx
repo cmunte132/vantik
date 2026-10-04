@@ -31,7 +31,7 @@ Each module has exactly one owner:
 - A **product** owns a module that goes to customers.
 - A **team** owns a module that holds internal tools.
 
-To decide the owner, ask which product or team keeps the responsibility for the
+The owner is the product or the team that keeps the responsibility for the
 module if all other things change.
 
 A module can also have links to other teams and products. A link shows that a
@@ -40,13 +40,14 @@ does not change who can see the issues of the module.
 
 ### Capabilities
 
-A capability usually needs code in more than one module. Thus a capability has
+A capability usually needs code in more than one module. So a capability has
 a list of modules, and no product. To find the products of a capability, look
 at the owners of its modules. A capability with no modules is a capability
 that nobody built yet.
 
 A capability has a status: **planned**, **active**, **live** or
-**deprecated**. A new capability is **planned**.
+**deprecated**. A new capability is **planned**. The webapp shows the status,
+but it has no control to change it.
 
 ## Where the product axis shows in the webapp
 
@@ -93,7 +94,7 @@ The page of a module has these sections:
   work. Read [How to verify the work](#how-to-verify-the-work).
 - **Capabilities.** The capabilities that the module helps to do. Click **Add a
   capability** to add one, or to make a new one.
-- **Knowledge.** The pages that are linked to the module, and the standing
+- **Knowledge.** The pages that people linked to the module, and the standing
   facts about its code.
 
 At the bottom, a link shows the number of issues that touch the module. Click
@@ -126,7 +127,8 @@ project.
 
 To archive a product, a module or a capability, click **Archive** on its page.
 An archived record goes out of the sidebar and out of every picker. Its issues
-and its history stay. To undo, click **Restore**.
+and its history stay. To undo, click **Restore**. Restore sets the status to
+the status of a new record.
 
 ## How the modules get onto an issue
 
@@ -137,7 +139,8 @@ they are a suggestion, a pull request, and a person.
 
 When an issue is in triage and has no modules, Vantik can suggest modules. An
 LLM reads the description of the issue and the names and descriptions of the
-modules. The workspace must have an LLM configured.
+modules. The operator of the server must configure the system LLM. Read
+[Self-deployment](/oss/self-deployment#ai-features).
 
 A suggestion never goes onto the issue by itself. It shows under **Modules** as
 **Suggested**:
@@ -160,8 +163,9 @@ the issue.
 
 - The pull request names the issue by its key, for example `ENG-42`. The key
   can be in the title, the description or the branch name.
-- A file belongs to a module if the module is linked to the repository, and
-  the path of the file starts with one of the paths of the module.
+- A file belongs to a module if a person linked the module to its
+  repository. The path of the file must also start with one of the paths of
+  the module. A module with no paths gets each file of the repository.
 - This works for GitHub repositories only.
 
 A pull request only adds modules. It never removes a module from the issue.
@@ -172,10 +176,11 @@ To set the modules yourself, open the issue. Under **Modules**, select one or
 more modules. The field shows only when the workspace has modules.
 
 A pull request never removes a module that a person set, because a pull request
-only adds modules. Thus the choice of a person stays.
+only adds modules. But if a person removes a module, a later event of the same
+pull request can add it again.
 
-You can set the **Capability** of the issue under the modules, in the same way.
-An issue has one capability or none.
+If the workspace has capabilities, the **Capability** field shows under the
+modules. An issue has one capability or none.
 
 ## How to link a module to a repository
 
@@ -188,8 +193,8 @@ host, or the GitHub integration. Connect the source first. Read
 2. Under **Repositories**, click **Connect a repository**.
 3. Select the repository.
 
-A new repository holds the whole module. The badge on its row shows **whole
-repository**. If the module is only a part of the repository, click the badge.
+At first, the module gets the whole repository. The badge on the row of the
+repository shows **whole repository**. If the module is only a part of the repository, click the badge.
 Then select the folders that hold the code of the module, and click **Save**.
 
 To disconnect a repository, click the delete button on its row.
@@ -214,7 +219,7 @@ row of the repository stays on the module page. But Vantik cannot use it:
 
 - The row shows the name of the repository, without a path or a URL.
 - If you open the folders of the row, Vantik shows "The server could not read
-  this repository, so its folders are unknown."
+  this repository, so its folders are unknown. Type a path below."
 - An agent run on an issue of the module fails, because the run has no
   repository.
 - The knowledge verifier does not read this repository.
@@ -230,21 +235,21 @@ agent run uses to check its work: **Tests**, **Typecheck**, **Lint** and
 hosts that the setup can reach. A run skips each empty field. Click **Save**
 to save the commands.
 
-If an issue has more than one module, the run uses a command only if the
-modules agree on it. The run uses the setup commands and the hosts of all the
+If an issue has more than one module, and two modules give different values
+for a command, the run does not use that command. The run uses the setup commands and the hosts of all the
 modules.
 
 ## Filter and group issues
 
 In an issue list, click **Filter**. The filters **Product**, **Module** and
-**Capability** are below the other filters.
+**Capability** are in their own group, below the filters of the issue fields.
 
 - **Product** shows the issues that touch a module that the product owns or
   links to. An issue does not name a product itself.
 - **Module** shows the issues that name one of the selected modules.
 - **Capability** shows the issues of the selected capability.
 
-To group the list, open the grouping control, and select **Module** or
+To group the list, open the control that shows **Status**, and select **Module** or
 **Capability**. An issue with two modules shows in the group of each module.
 Issues without a module show under **No module**. You cannot group by product.
 
@@ -256,9 +261,10 @@ No module.](/img/docs/product-axis/grouped-by-module.png)
 An agent that works in a checkout can find its module. The MCP tool
 `list_modules` returns each module with its repositories and their paths. The
 agent compares its checkout with these repositories and paths. The module with
-the matching repository and path is the module of the work.
+the same repository and path is the module of the work.
 
 The MCP tool `get_task` returns the modules and the capability of an issue.
-`list_tasks` and `search_tasks` can filter by module, capability and product.
+`list_tasks` can filter by module, capability and product. `search_tasks` can
+filter by module and capability.
 
 Read [How to connect an MCP client](/api-reference/connect-mcp).

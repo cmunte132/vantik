@@ -10,8 +10,8 @@ loads on demand and keeps context free until issue work actually comes up.
 ## Working Vantik issues
 
 You reach Vantik's issue tracker through its MCP server. Connect once with a
-token from **Vantik → Settings → Agents** (it acts as its own identity, so your
-edits are attributed to the agent, not to a person). Tools: `search_tasks`,
+token from **Vantik → Settings → My account → API** (make it act as its own
+identity, so your edits are attributed to the agent, not to a person). Tools: `search_tasks`,
 `get_task`, `find_similar_tasks`, `list_tasks`, `create_task`, `update_task`,
 `update_criteria`, `pick_up_task`, `add_note`, `close_task`, `list_projects`,
 `create_project`, `update_project`, `list_products`, `list_modules`,

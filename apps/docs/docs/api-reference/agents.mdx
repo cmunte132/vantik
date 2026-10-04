@@ -26,8 +26,24 @@ directly against the API.
 
 An agent account is its own identity in the workspace. The workspace therefore
 records each edit against the agent, and not against the person who connected
-it. Make an agent account from **Settings → Agents**, or with
-`POST /v1/users/agents`. Only an administrator can use that endpoint.
+it. An agent is personal or it belongs to the workspace:
+
+| Kind | Who can make it | Token |
+| --- | --- | --- |
+| Personal agent | Any member. It belongs to the person who made it. | Vantik returns its token one time, when you make it. |
+| Workspace agent | Only an admin. | Vantik never makes a token for it. |
+
+To make a personal agent in the webapp, open **Settings**, and click **API**
+under **My account**. In **Access tokens**, set **Acts as** to
+**Its own identity — an agent**. Read
+[How to get a token](./connect-mcp.mdx#how-to-get-a-token).
+
+To make an agent with the API, send `POST /v1/users/agents`. The body takes
+`name`, and optional `ownership` and `scopes`. `ownership` is `personal`, the
+default, or `workspace`. The server refuses `workspace` from a member who is
+not an admin. A workspace agent holds no token, so it cannot call the API.
+Read
+[Personal agents and workspace agents](/concepts#personal-agents-and-workspace-agents).
 
 An agent has scopes, and the server checks them on every request:
 

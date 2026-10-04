@@ -84,10 +84,10 @@ Hosted models receive the search text and document text. See
 
 ### How to connect your own agent
 
-**Settings → Agents** makes a token for an agent, and gives the MCP
-configuration for Claude Code, Codex, Cursor, and other clients. Three
-[agent skills](./skills/README.md) then teach the agent to use the tracker, the
-knowledge bank, and delegation well. Install them from your server, which gives
+**Settings → My account → API** (the **API & Agents** page) makes a token for
+an agent, and gives the MCP configuration for Claude Code, Codex, Cursor, and
+other clients. Two [agent skills](./skills/README.md) then teach the agent to
+use the tracker and the knowledge bank well. Install them from your server, which gives
 the copy that matches it:
 
 ```bash

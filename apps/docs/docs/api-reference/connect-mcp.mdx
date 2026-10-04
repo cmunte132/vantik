@@ -26,18 +26,42 @@ of the API. The token travels in the `Authorization` header.
 
 ## How to get a token
 
-Make a token in **Vantik → Settings → Agents**. An agent account is a separate
-identity in the workspace. The workspace therefore records each issue and each
-note against the agent, and not against you. When you make the account, the page
-shows the token one time. It also shows a `.mcp.json` file and a `claude mcp add`
-command that you can copy. Copy them at that moment, because you cannot read the
-token again.
+Make the token on your own account settings:
 
-:::note
-Only an administrator can make an agent. If you do not see **Settings →
-Agents**, ask an administrator of the workspace to make the agent and to give
-you its configuration.
-:::
+1. Open **Settings**.
+2. Under **My account**, click **API**. The page is **API & Agents**.
+3. In **Access tokens**, type a **Name**, for example `Claude Code`.
+4. In **Acts as**, keep **Its own identity — an agent**.
+5. Select the **Role**. The default is **Read and write**.
+6. Click **Create**.
+7. Copy the token. Vantik shows it one time only.
+
+![The Access tokens section on the API & Agents page, with the Name, Acts as
+and Role fields, and a list of tokens](/img/docs/settings/access-tokens.png)
+
+With **Its own identity — an agent**, Vantik makes a personal agent. An agent
+is a separate identity in the workspace. The workspace therefore records each
+issue and each note against the agent, and not against you. With **You**, the
+token acts as you, with your permissions.
+
+Below the tokens, **Connecting a client** shows the `.mcp.json` file, the
+`claude mcp add` command, the skills and the hooks for each client. After you
+make a token, these blocks contain it until you click **Done**. Copy them at
+that moment, because you cannot read the token again.
+
+![The Connecting a client section, with the tabs for each client and the MCP
+configuration block](/img/docs/settings/connect-client.png)
+
+### Personal agents and workspace agents
+
+| Kind | Who can make it | Token |
+| --- | --- | --- |
+| Personal agent | Any member of the workspace. It belongs to the person who made it. | Vantik shows its token one time, when you make it. |
+| Workspace agent | Only an admin, with `"ownership": "workspace"` on `POST /v1/users/agents`. The webapp has no control for it. | Vantik never makes a token for it. |
+
+Connect your MCP client with a personal agent. A workspace agent has no token,
+so it cannot connect. Read
+[Personal agents and workspace agents](/concepts#personal-agents-and-workspace-agents).
 
 ## How to connect Claude Code
 
@@ -68,8 +92,9 @@ Do not commit a live token. The `.mcp.json` file of a project usually goes into
 version control, and this file holds a token that reads and writes the
 workspace. Keep the file out of version control, or register the server for your
 user only. `claude mcp add` writes to `~/.claude.json`, which is not in the
-repository. If a commit does hold a token, revoke that agent in **Settings →
-Agents** and make a new one.
+repository. If a commit does hold a token, revoke it, and make a new one. Click
+**revoke** on its row in **Access tokens**. An admin can also revoke or disable any agent
+in the **Agent accounts** section of **Settings → Agents**.
 :::
 
 ## How to connect another client
@@ -99,23 +124,109 @@ If the agent names no session, the record holds only the token.
 
 ## The tools
 
-| Tool | What it does |
-| --- | --- |
-| `list_tasks` | Lists the tasks as small rows. You can filter by team, assignee, state, labels, priority, and project. |
-| `get_task` | Gives everything about one task in one call: the description, the notes, the history, the sub-tasks, and the relations. |
-| `search_tasks` | Searches the titles, the descriptions, **and the notes**. Set `stateCategory: ["COMPLETED"]` to find an earlier fix with its resolution. |
-| `find_similar_tasks` | Gives the earlier tasks that are similar to one task, and the resolution of each. |
-| `create_task` | Files an issue. It holds an issue to a minimum: a real description, and acceptance criteria for a top-level issue. |
-| `update_task` | Changes the title, the description, the state, the labels, the priority, the assignee, or the project of a task. |
-| `list_projects` | Gives the projects of the workspace. A project is an objective, and the issues group under it. |
-| `create_project` | Opens a project for an objective that truly needs several issues. |
-| `pick_up_task` | Takes ownership of a task. It assigns the task and moves it to the in-progress state. |
-| `add_note` | Puts a markdown note on a task, and the search finds that note. |
-| `close_task` | Closes a task. It first records the resolution as a note, so the search finds the fix later. |
+The server gives 39 tools to each client. A tool that takes a task takes its
+key, for example `ENG-42`, or its id. A tool that takes a project, a team, a
+product, a module, a capability or a page takes its name, its key or its id.
 
-Each tool uses the REST API from
-[How to work with agents](./agents.mdx). Read that page for the endpoints below
-the tools, or for a client that you build directly against the API.
+### Tasks
+
+| Tool | What it does | Parameters |
+| --- | --- | --- |
+| `list_tasks` | Lists the tasks as small rows, the newest first. | `team`, `assignee` (an email, a name, or `me`), `stateCategory`, `labels`, `priority`, `project`, `product`, `modules`, `capability`, `page`, `perPage` (1 to 200). All are optional. `product` finds the tasks in the modules of the product. |
+| `get_task` | Gives everything about one task in one call: the description, the Definition of Done, the notes, the history, the sub-tasks, the relations, the links, the modules and the capability. | `task` |
+| `search_tasks` | Searches the titles, the descriptions, **and the notes**. Set `stateCategory: ["COMPLETED"]` to find an earlier fix with its resolution. | `query`, and optional `stateCategory`, `limit` (1 to 100, default 10), `modules`, `capability` |
+| `find_similar_tasks` | Gives the earlier tasks that are similar to one task, and the resolution of each. | `task` |
+| `create_task` | Files an issue. It holds an issue to a minimum: a description of 40 characters or more, and acceptance criteria for a top-level issue. Each criterion becomes an item of the Definition of Done. | `title`, `description`, and optional `acceptanceCriteria`, `team`, `state`, `assignee`, `labels`, `priority`, `parent`, `project`, `capability`, `modules` |
+| `update_task` | Changes the title, the description, the state, the labels, the priority, the assignee, the project or the capability of a task. It cannot change the modules. | `task`, and optional `title`, `description`, `state`, `assignee`, `labels`, `priority`, `project`, `capability` |
+| `update_criteria` | Ticks, unticks and adds the criteria of the Definition of Done. It refuses the call, and changes nothing, if an id is not on the task. | `task`, and optional `tick`, `untick` (criterion ids), `add` (new criteria) |
+| `pick_up_task` | Takes ownership of a task. It assigns the task and moves it to the first in-progress state of the team. | `task`, and optional `assignee` (default `me`) |
+| `add_note` | Puts a markdown note on a task, and the search finds that note. | `task`, `body` |
+| `close_task` | Closes a task. It first records the resolution as a note, so the search finds the fix later. It moves the task to a completed state, and returns the Definition of Done. | `task`, and optional `resolution`, `state` |
+
+`stateCategory` takes `TRIAGE`, `BACKLOG`, `UNSTARTED`, `STARTED`, `COMPLETED`
+and `CANCELED`. `priority` takes `none`, `urgent`, `high`, `medium` and `low`.
+
+### Projects
+
+| Tool | What it does | Parameters |
+| --- | --- | --- |
+| `list_projects` | Gives the projects of the workspace. A project is an objective, and the issues group under it. | None |
+| `create_project` | Opens a project for an objective that truly needs several issues. Give it `teams`. A project with no team does not show in the project picker of an issue. | `name`, and optional `description`, `status`, `startDate`, `endDate`, `teams` |
+| `update_project` | Changes a project. `teams` replaces the teams of the project. | `project`, and optional `name`, `description`, `status`, `startDate`, `endDate`, `leadUserId`, `teams` |
+
+### Product axis
+
+Read [Products, modules and capabilities](/fundamentals/product-axis).
+
+| Tool | What it does | Parameters |
+| --- | --- | --- |
+| `list_products` | Gives the products of the workspace. | None |
+| `list_modules` | Gives the modules, each with its repositories and its paths. | None |
+| `list_capabilities` | Gives the capabilities, each with its modules. | None |
+| `create_product` | Adds a product. | `name`, and optional `key`, `description`, `status` |
+| `update_product` | Changes a product. | `product`, and optional `name`, `key`, `description`, `status` |
+| `create_module` | Adds a module. A module has one owner: a team or a product. | `name`, and optional `key`, `description`, `status`, `ownerTeam` or `ownerProduct`, `linkedTeams`, `linkedProducts` |
+| `update_module` | Changes a module. A new owner replaces the old owner. The linked teams and products replace the old ones. | `module`, and the optional fields of `create_module` |
+| `add_module_repo` | Links a repository to a module. A connected source must offer the repository. If no source offers it, a person must connect the source in **Settings → Integrations**. | `module`, `repository` (`owner/name`), and optional `pathPrefixes`, `isDefault` |
+| `update_module_repo` | Changes the paths of a linked repository, or makes it the default. | `module`, `repository`, and optional `pathPrefixes`, `isDefault` |
+| `create_capability` | Adds a capability. | `name`, and optional `description`, `status` (`planned`, `active`, `live` or `deprecated`; default `planned`), `modules` |
+| `update_capability` | Changes a capability. `modules` replaces its modules. | `capability`, and optional `name`, `description`, `status`, `modules` |
+
+### Knowledge
+
+Read [Knowledge](/fundamentals/knowledge).
+
+| Tool | What it does | Parameters |
+| --- | --- | --- |
+| `load_context` | Gives what the bank knows about an area, within a token budget, with the trust and the citations of each item. Call it before the work starts. | Optional `task` (what you are about to do), `scope`, `tokenBudget` (200 to 20000, default 2000), `moduleIds`, `issueId`, `session` |
+| `recall_knowledge` | Answers a question from the page bodies and the facts, with the trust and the citations of each. | `query`, and optional `scope`, `limit` (1 to 50), `kinds`, `moduleIds`, `issueId`, `session` |
+| `list_pages` | Gives the pages of the workspace. | None |
+| `read_page` | Reads one page: its body, its parents and its facts in use. For a generated page, it also gives the question, the sections and the facts that each section cites. | `page` |
+| `pages_for` | Gives the pages that are linked to one item. | `entityType` (`TEAM`, `PROJECT`, `ISSUE`, `PAGE`, `PRODUCT`, `MODULE` or `CAPABILITY`), `entityId` |
+| `link_page` | Links a page to an item. | `page`, `entityType`, `entityId` |
+| `remember` | Writes one fact. The fact must be 15 to 600 characters, and a fact with no page needs a scope. If the server finds a fact that says nearly the same thing, it writes nothing and returns it. | `content`, and optional `page`, `scope`, `kind` (`FACT`, `DECISION`, `CONVENTION` or `GOTCHA`; default `FACT`), `session`, `supersedes`, `distinct`, `citations` |
+| `write_page` | Makes a page, or writes the body of the page with the same title again. | `title`, `body`, and optional `parent`, `entryPolicy` (`OPEN`, `CURATED` or `LOCKED`) |
+| `consolidate_knowledge` | Proposes a new page body that folds facts into it. The page does not change until a person accepts the proposal in [Needs you](/fundamentals/knowledge/needs-you). | `page`, `body`, and optional `entryIds` (default: every fact in use on the page) |
+| `knowledge_gaps` | Gives the questions that the bank could not answer, the most asked first. | None |
+
+A fact that an agent writes with `remember` waits for triage or a person
+before agents get it.
+
+### Agent runs
+
+| Tool | What it does | Parameters |
+| --- | --- | --- |
+| `list_agent_runs` | Gives the agent runs on one task, the newest first, with the status, the output and the stop reason of each. It only reads. An agent token sees only its own runs. | `task` |
+
+No tool starts an agent run. Only a person starts a run, from the issue in
+Vantik. Read [Delegate an issue to an agent](/agents/delegating-an-issue).
+
+### Hooks
+
+| Tool | What it does | Parameters |
+| --- | --- | --- |
+| `hook_session_start` | Gives the agent the list of its issues in progress again, after a compaction. | `session_id`, and optional `harness`, `source` |
+| `hook_prompt_submit` | Gives the first prompt the list of issues in progress, and gives each prompt the pages that match it. | `session_id`, and optional `harness`, `prompt` |
+| `hook_tool_use` | Counts the changes to files. | `session_id`, and optional `harness`, `tool_name` |
+| `hook_stop` | Holds the agent one time if an issue in progress has no update. | `session_id`, and optional `harness` |
+
+The hooks of your client call these tools. An agent must not call them. Read
+[Optional: hooks that keep the tracker current](#optional-hooks-that-keep-the-tracker-current).
+`harness` takes `claude-code` or `codex`. The default is `claude-code`.
+
+### The REST endpoints below the tools
+
+Each tool calls the REST API with your token. The scopes of an agent token
+therefore apply to each tool. The tools of tasks and projects use the
+endpoints in [How to work with agents](./agents.mdx). The other tools use
+these endpoints:
+
+| Tools | Endpoints |
+| --- | --- |
+| Product axis | `/v1/products`, `/v1/modules`, `/v1/modules/{id}/repos`, `/v1/modules/available_repos`, `/v1/capabilities` |
+| Knowledge | `/v1/knowledge/context`, `/v1/knowledge/search`, `/v1/knowledge/gaps`, `/v1/pages`, `/v1/pages/related`, `/v1/pages/{id}/links`, `/v1/pages/{id}/consolidate`, `/v1/page_entries` |
+| Agent runs | `GET /v1/agent_runs?issueId=` |
+| Hooks | `POST /v1/agent-hooks/{event}` |
 
 ## Rate limits
 
@@ -141,7 +252,7 @@ issue. But an agent alone files many small issues. It opens a new issue where a
 note on an issue that exists is enough, and it divides one piece of work into
 six issues.
 
-Vantik has three short guides that correct this. Each guide is an
+Vantik has two short guides that correct this. Each guide is an
 [agent skill](https://agentskills.io):
 
 - **working-vantik-issues** says to file fewer and larger issues. It says to
@@ -150,9 +261,6 @@ Vantik has three short guides that correct this. Each guide is an
   definition of "done" before you file the issue.
 - **working-vantik-knowledge** says to load the context of the knowledge bank
   before the work starts, and to record one fact at a time.
-- **delegating-vantik-work** says when an issue is ready to give to the agent
-  of Vantik with `delegate_task`, and how to read the runs that
-  `list_agent_runs` gives.
 
 The issues guide sits above the `create_task` tool, and that tool already
 refuses an issue with no description or no acceptance criteria. The tool sets
@@ -170,7 +278,7 @@ The command asks which guides to install, for which agents, and whether to
 install them for this project or for all your projects. It knows where each
 agent keeps its skills: Claude Code, Codex, Cursor, and many more. To name the
 agent, add `--agent claude-code`, `--agent codex`, or `--agent cursor`. Each tab
-in **Settings → Agents** shows the command with its agent.
+in **Connecting a client** shows the command with its agent.
 
 After you upgrade Vantik, run `npx skills update`. The guides name the tools of
 your server, so the copy from your server is the copy that matches it.
@@ -259,8 +367,8 @@ hooks only relay the answer. The hooks write nothing to the tracker. If Vantik
 does not answer, the hook prints `{}`, and the agent continues as if there were
 no hooks.
 
-**Settings → Agents** shows the hooks for each agent, with your host already in
-them.
+Each tab in **Connecting a client** shows the hooks for its agent, with your
+host already in them.
 
 ### Claude Code and Codex
 

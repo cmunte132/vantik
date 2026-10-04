@@ -11,9 +11,10 @@ Each task command needs a token. The command looks for a token in this order:
 2. The profile that `vantik-cli login` writes.
 3. `VANTIK_TOKEN`, with `VANTIK_URL`. agent-core reads the same two variables.
 
-Make a token under **Vantik → Settings → Agents**. The workspace then records
-the work against an agent identity. You can also use a personal token from
-**Settings → API**. `VANTIK_URL` points at the root of the API. Give the address
+Make a token in Vantik under **Settings → My account → API**, in
+**Access tokens**. Set **Acts as** to **Its own identity — an agent**, and the
+workspace records the work against that agent. Set it to **You** for a token
+that acts as you. `VANTIK_URL` points at the root of the API. Give the address
 of the server (`http://localhost:3001`), or the address of the webapp proxy
 (`https://vantik.example.com/api`).
 

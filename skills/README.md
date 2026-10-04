@@ -11,10 +11,13 @@ agents load a skill on demand, so it costs no context until the work starts.
 
 ## How to install
 
-Each guide needs an agent that reaches Vantik over MCP. Make a token in
-**Vantik → Settings → Agents**, and copy the configuration from that page into
-your client. That page makes an agent identity, so the workspace records the
-work against the agent and not against you.
+Each guide needs an agent that reaches Vantik over MCP. In Vantik, open
+**Settings**, and click **API** under **My account**. The page is
+**API & Agents**. Make a token in **Access tokens**, with **Acts as** set to
+**Its own identity — an agent**. Then copy the configuration from
+**Connecting a client** into your client. The token belongs to a new agent
+identity, so the workspace records the work against the agent and not against
+you.
 
 Then install the guides with the
 [skills CLI](https://github.com/vercel-labs/skills). The better source is your
@@ -27,8 +30,8 @@ DISABLE_TELEMETRY=1 npx skills add https://your-vantik-host
 The guides name the MCP tools of the server, so the copy from your server is the
 copy that matches it. After you upgrade Vantik, run `npx skills update`.
 `DISABLE_TELEMETRY=1` stops the CLI from sending a report of the install. For a
-source like this one, that report holds the name of your host. **Settings →
-Agents** shows this command for each agent.
+source like this one, that report holds the name of your host.
+**Connecting a client** shows this command for each agent.
 
 You can also install the guides from this repository:
 
@@ -101,7 +104,7 @@ The rules are on the server, so the hooks only relay the answer. The hooks
 write nothing to the tracker. If Vantik does not answer, the agent continues as
 if there were no hooks.
 
-**Settings → Agents** shows the hooks for each agent:
+**Connecting a client** shows the hooks for each agent:
 
 | Agent | How the hook reaches Vantik | Where the file goes |
 | --- | --- | --- |

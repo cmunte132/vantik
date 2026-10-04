@@ -1,0 +1,69 @@
+---
+id: delete-page
+title: "Delete page"
+description: "This call deletes the page, all the pages below it and all their entries. The server keeps the rows and sets their deleted date. The response is the deleted page."
+sidebar_label: "Delete page"
+hide_title: true
+hide_table_of_contents: true
+api: eJzVV1tv2zYU/iuEnjbAtZOu2IPf3MRbs7ZJkMuKIcgDLdIWa4pUScqOYfi/9zuk5EusommxPexJEslz/77Do3UmpM+dqoKyJhtmd4XyLOdaMyG1DNKzUEhW8ZnsMVptvzybSG2XTAXGjWi3lGPSBKek77M7nPTSLaRjcymrpMjZpY8CXgbfSCRDggkeZBJz0lfWeMlUkmpPkOF+1ssq7niJFeez4cM6M/iA67R7IbCtTPwKBd6d/FIrJ0U2DK6WvcznhSx5NlxnYVWRlIe7ZpZtNo90ONn1tP/65IQeh+m5rfNcej+t9dZJGMmtCYibjvOq0irndHzw2ZPM+timnXyWeaBAnK2kCypZVKLDL2h3EpkRo3C828um1pUcOxll71VQyARE6kr8qEiT4xcK9DJTa80nWqbEQkFQgb46AjhI4bH6Q029I0BKNrFixTiwgFVesb9ury777N4TMLZHP3I3F3ZpmDI+SC76zyy3+10efNti2UhFbYAdqnzRmaOjdHjrwpUT0u2dVoDJDCsdx4k2q2sL7Ky+7+E7EI+28qBXW0YyQqGz2jMjlzsaXl2PLxkHaisQjmi63Tm7vxndjc+xgALnDdOdrIA2BsTm80jUqF66V8HOpWFalSr02Yers/eQBD0him1bacms0ate6gYzGKE2YowNbOlUkK1ZFix6BpFYmroEfTNyEJ+NN3hLyrPHLaSyaygc7xI0JknkbKG8miitQmfKWv2frm7e316PzsbZI2TmynTW7zDB1ymi5Pno/u7d1Q3CjX3voLFNaqUF0sr+HF+OUzZjKabOljFz26gLJFXyvIBkTkZYDtV+Pw+tGSxttT1Pwnt430b/pZb+5ynVSifPjgLgxi/RXiPsG4/9niHuHF+9nLp22mHBt6mIWUA2Sv/TLbIA4em1a488+H7FP+4TPZLxQnRF/NzPb3S5GPtB8UNETao9eEPQwp0RkZJsLpSQJu/qoJtDENwmLXGdUCTG/5G7qasknEJiie7vqCH+/B3RBvmO++JFXdTJKe7Z4geusu+B8lMhTVOMSGHNfYg8PmZBitq6ua94Lrv6/u52frt64b3QXM0vPP+s9Kg5Lb05OT0eTdLgFHnNCrDLWLbgWqGDx86NPo3BxuNs/9+bWEpoJLe62u8TL6vo+L3hdSisUx7jxWbThvDmOIRL3BZTWxuRMM9nNN/FwD11Qox8hRVU7TirxEEQQ94wGyxOB7E5D9ZpCNxk1LaovmlCrJ3GsTV8mCmzGfBKHTWAf2zt2N/cBDWPIwQHTHsAirP1rIiAWcoJcpX6f3pnyMbTClkv7aK5P0k3luVUPTVzrhHtzZpqgwtwBz+qxYI7RSWPGU0uptRMea0J3EUI1XAw0BZzeWF9GP52gtm0i8JcCNDFU8PdeYyLma0oujasPlWh12alS/tpp/bkco8JDNQ0ehxchQ3k9uJPI1qgH4qtX4l6ZCa1GVcbf5AOGsPRJmsXb3WU7q3E1OVGNRX64XF/+5ZAmrK2f2gLRQosayZ++p7EQxFaCiNPPNlwK9X9KOjRBftDOfh67Szhn33kBvgqwRx2Z62m4gFi6fDrk9e/909P+qdxVESEJY91bP5OziNmY195bme9o+P/4/+rSXCQT2FQaQ68UmMjNK0bSj5ki9PIT6JuLxs2/2aoHtWe9tfrCffy3unNhpbBDUcFf9zxIZZfKE/vYP2Ua/+8m+9n7peb5lfvV/YtF9vL0awi7XRNX3idy9Xu/3Hz2AwUNLrDg7Q5ihP0nthR29zsd6jz8Yfx3RhY+woRqkrz
+sidebar_class_name: "delete api-method"
+info_path: api-reference/vantik
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Delete page"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"delete"}
+  path={"/v1/pages/{pageId}"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+This call deletes the page, all the pages below it and all their entries. The server keeps the rows and sets their deleted date. The response is the deleted page.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./delete-page.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./delete-page.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./delete-page.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

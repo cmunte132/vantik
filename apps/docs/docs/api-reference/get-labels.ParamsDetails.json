@@ -1,1 +1,1 @@
-{"parameters":[{"in":"query","name":"workspaceId","required":true,"schema":{"type":"string"}},{"in":"query","name":"teamId","required":true,"schema":{"type":"string"}}]}
+{"parameters":[{"in":"query","name":"workspaceId","required":false,"description":"The workspace to read. If you do not send it, the server uses the workspace of your token.","schema":{"type":"string"}},{"in":"query","name":"teamId","required":false,"description":"The server accepts this value, but it does not filter on it.","schema":{"type":"string"}}]}

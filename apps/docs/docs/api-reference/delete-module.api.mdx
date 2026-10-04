@@ -1,13 +1,13 @@
 ---
 id: delete-module
 title: "Delete module"
-description: "A soft delete. The server also removes the id from every `Capability.moduleIds` and every `Issue.moduleIds` that held it. No record then points at a module that does not exist."
+description: "The server keeps the row and sets its deleted date. The server also removes the id from every `Capability.moduleIds` and every `Issue.moduleIds` that held it. No record then points at a module that does not exist."
 sidebar_label: "Delete module"
 hide_title: true
 hide_table_of_contents: true
-api: eJzVVk1vGzcQ/SsETy2gruQ2J93cxgUENEHR2L04BjJajryMuSRDzipRBf33zpArRc2qhX3sRdol33xw5s3j7rXB3CYbyQavl/pa5bAhZdAhYaNuO1QZ0xaTApeDStiHLWZFvG6N2qTQK+TdnfrwC0RYW2dp1/TBDA5XJn9Q4M0RsMp5wPM96oBUh84oS416K97bkIw49yoG6ykrRoCqNhVvAof3gRR+sZkaPdMREvScbcp6eb/Xnl/4IMc4DLBysAjU8XPCT4NNaPSS0oAzndsOe9DLvaZdFLtMyfpHfTg8CDjH4DNm2f9xsZC/f5br3dC2mPNmcOoI5iBt8ISeBA4xOtuCwOcfs9jspzHD+iO2xIbf9mI8uM1qyAM4t1PBI0eKIVsKadeoFakWfG3OGrlWck5leeUMNlMhFUtppW25ryfXHeSyEz57FIxjsPSs1LoucnRQhNCLFw6Q2LKlyg3HPWAHG37wT9wXrn3hRuCfVIzy6O64NprnGmHIFV+zkbzEkXq029JlBQN1ITGnVBAOnkGl8SlETGRrf6y50EXuRUIgNNc03Z3pTUg98I42jPmBLDOHTYZoXmpS5+VCBhcNZtoPzsHaYaUhO6isvZD/E+4ueZ1MLZeJSv1niiPydEAfub/vdR3f97pRd95+GlDIIXX8HNJTjsBsqAc48zcNN8k3E9CQnwW17TN9tsGF9CykQzB3fLDVxYpP4IXHt0zGl+B/r0R9ponQFk2NcV4WSAl2okGE/YVyHU6mp3AvtD618VKiAiBLkqd+U+aGl2Tx1eJqKmZ3fhy3v5jJBfRqCnrL0rsJgzfVOTyK6h6ds2ayEnfBCN3LSBR9ZuVd6jlEO99ezev85vn+qNAHxlSSVgEfkmN4RxTzcs5WsdmCJ/vUGNxqkeWM7SCaUNA/IyRM14PEuH84334nMlu14Rx0qpFE0OMNIO/rAirHsn4TCnKs3Z8lgenYrdSvNmVS3DxRcPUGPDyyN0/qNgTHBnKqCl40PzVXC6kryzL1UGZivKxel1qN0vZtmP3X++T/eD2P1Sb8QvPogC9jkVjp8X6kxj3fklZqdcU/Iz34aXm6wrmpHddMkPv9GjLeJXc4yDLrWRIe8OMWkq0jyawwNssz83DDhcH/qOh3f4xfBN+rf0v2OIxeRnELbpA3PUrz1w+NwwNjO1YmJpHkULev+QMh0pnh5IvgcD41r29+u7m9YRL+DWWvUu0=
+api: eJzdVk1vGzcQ/SsETy2gSrIb9KCb27iAgSYoGrtA4RgItRxpGXHJDTmUvRD2v3eGXMkrSy1s9NZDnBX55vvNDHdSQ6yCadF4JxfytgYRIWwhiA1AGwXSQfCPQjlNFxiFoX8aLCBooRXCVIxklI1eBGj8Foqo0WIVfCOAbjvx5RfVqqWxBrtp43WycKPjl6x7ANzEmGB8h7VCUYPVZHgqPrL2ygfNyp1ovXHkDiGUKDIFrz2Zdx4FPJmIUzmRrQqqIZ9DlIv7nXT0g6Ld2yGA4ehbhTV9B/iWTAAtFxgSTGSsamiUXOwkdi3LRQzGrWXfPzA4tt5FiHx/OZ/zf8c5/ZSqCmJcJSv2YDJSeYfgkOGqba2pFMNnXyPL7E5t+uVXqJAEj5Vf7QM3UaSYlLWd8I5qBq2PBn3opuIGRaVcKc4SKFccpzB0MoJNhA9ZkktpKqrrQXWtYr7xjw4YYwnMNcu5LodkXQkE1bAWMhBIssLCDUs1IAUr+nAbqgvlPnPD05+QheKgbn82iMdiIcWCL96wX6xIrM02V1mohLUPxCnhmYMjKBc++BYCmlIfo89UkWoRgJisr/D0diJXPjSKbiSz/Qc0xBwSSa1+q8jQNa8UmEiXrFVLC4WGpKCw9oz/G+jOaX3JlEhpwpz/iSCL1B2qaam+n2Vp389yKu6c+ZaAycF5fPRhE1tFbCgBjPSdmjvxN6LCFF8FNdUrdVbe+vAqpAWl7yiwm7MZP4FnHt8SGd+C/70Q9ZUiTFvQxcY4LSoE1fEMQmjOpKs/iB7MvVH6UMZzjjIADbKf8kPuGzriw3fzi9Nhxg3N8xEi5rlA/bdVlsY8+g1NZGIVjcJI2Ol/mXHHXduQRrU+Q/2JHChMR3dumAORWqzv9yG8Ow3hIy2GlU9Ol9DVmnfCPnSa6LQnaq+5GXPD5u1Be2EhZ9uLWZkscbbb746e7kv7lNWSgiXojhxZG9fPVGtOOvEvn4L4Uzk0G2o06hJXUUdiHXxa16XvYEkJK+OzfPNMfOqOdivrpmNYmadhPTs9LOyhQOjzz+IeF2SrgmFK5rQWF0t+VipZnj81YruYzayvlK19xMWPc1ppLwNgt5TWtM3yXH/2mJaD6Di6fVhTLsVkn5Vz2i/Oai8uT4SmPVyh7Y5eGQPvRvHT3MpLgtfQ3q8ywdhMWSMhuXiUDt7eEarEqyOX7mdQAcJV4mLfP4yvPzFTS9bGoAMfOTA5PBT49zKDMr+MW/mMHFqs1P10Ot+IX00gX6nHuQnEB+WI8w21j7j13nLxiGIFfDm//Gl6MZ9e8FSmBY6NynUcnjXvM2+HJfjS0u65K/+3r72hKghPOGutIpLzxmYK7oZevpdbJt7QzfS1OLwFqexMGsbsdksV4S7YvudjaqrATHl4bqTMG20if9PIWFFK4F8S/t0fw9Pye/FPbu6nuutyv9rEv+Sw459frP0DYWtacUQz9qFcX9FLs8WR4MnY7ccD7v31b9e310TTvwFXAC+W
 sidebar_class_name: "delete api-method"
-info_path: docs/api-reference/vantik
+info_path: api-reference/vantik
 custom_edit_url: null
 ---
 
@@ -29,7 +29,7 @@ import Translate from "@docusaurus/Translate";
 
 <MethodEndpoint
   method={"delete"}
-  path={"/api/v1/modules/{moduleId}"}
+  path={"/v1/modules/{moduleId}"}
   context={"endpoint"}
 >
   
@@ -37,7 +37,7 @@ import Translate from "@docusaurus/Translate";
 
 
 
-A soft delete. The server also removes the id from every `Capability.moduleIds` and every `Issue.moduleIds` that held it. No record then points at a module that does not exist.
+The server keeps the row and sets its deleted date. The server also removes the id from every `Capability.moduleIds` and every `Issue.moduleIds` that held it. No record then points at a module that does not exist.
 
 <Heading
   id={"request"}

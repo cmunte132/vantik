@@ -1,33 +1,98 @@
 ---
 title: Overview and authentication
 sidebar_label: Overview and authentication
-description: How to use the Vantik API
+description: The base address of the Vantik API, how to authenticate, the errors, the agent scopes and the rate limits
 ---
 
 ## Overview
 
-The Vantik REST API creates, reads, updates, and deletes an issue, a comment, a
-label, a linked issue, and more. An agent or a script therefore plans and tracks
-its work through this API. The sidebar holds the reference for every endpoint.
+The Vantik REST API reads and changes the data of a workspace: issues,
+comments, the Definition of Done, labels, teams, projects, pages, knowledge
+entries, products, modules and capabilities. A script or an agent can plan and
+track its work through this API. The sidebar holds the reference for each
+endpoint.
 
-Your own instance serves the API under `/api`. In local development the address
-is `http://localhost:3001/api`. Behind the webapp proxy the address is
-`https://your-domain.com/api`.
+The API cannot start an agent run. Only a person can delegate an issue to an
+agent, with the delegate control on the issue in the webapp.
+
+## Base address
+
+The server has no `/api` prefix. Each path starts with the version, for example
+`/v1/issues`. You can send a request to one of two addresses:
+
+| Address | Example | Use |
+| --- | --- | --- |
+| The server, directly | `http://localhost:3001/v1/issues` | On the host that runs the server. Port `3001` is the default. |
+| The webapp proxy | `https://your-domain.com/api/v1/issues` | From all other places. The proxy removes `/api` and sends the request to the server. |
+
+In local development, the webapp is on `http://localhost:3000`, so the proxied
+address is `http://localhost:3000/api/v1/issues`.
 
 ## Authentication
 
-Make a **personal access token (PAT)** in the webapp, under
-**Settings → My Account → Api**. Then send the token with each request:
+Make a **personal access token** in the webapp:
+
+1. Open **Settings**.
+2. Under **My account**, click **API**.
+3. In **Access tokens**, make a token.
+4. Copy the token. Vantik shows it one time only.
+
+[Connect an MCP client](./connect-mcp.mdx) gives each field of the form. A
+token starts with `tg_pat_`. Send it in the `Authorization` header of each
+request:
 
 ```bash
 curl -H "Authorization: Bearer $VANTIK_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"title": "Issue title", "description": "Issue description", "teamId": "..."}' \
+  -d '{"title": "Issue title", "descriptionMarkdown": "Issue description", "teamId": "...", "stateId": "..."}' \
   https://your-domain.com/api/v1/issues
 ```
 
-A PAT stays valid until you delete it on the same settings page. An agent that
-runs for a long time, and a scheduled job, can therefore use it. Keep a PAT as
-safe as a password, because it holds all the permissions of the user who made
-it.
+A token stays valid until you delete it in the same section of **Settings**.
+Keep a token as safe as a password. A token that acts as you has all of your
+permissions in the workspace.
 
+## Errors
+
+The server sends an error as JSON with an HTTP status code.
+
+| Status | Cause | Body |
+| --- | --- | --- |
+| `400` | A field in the request is not valid. | `{"statusCode": 400, "message": ["..."], "error": "Bad Request"}`. Each item of `message` names a field. |
+| `401` | The request has no token, or the server does not know the token. A deleted token also gets a `401`. | `{"message": "Unauthorised"}` |
+| `403` | The agent does not have the scope that the request needs. An endpoint for admins only also sends a `403` to other members. | `{"statusCode": 403, "message": "...", "error": "Forbidden"}` |
+| `404` | The id in the path does not identify a record in your workspace. | `{"statusCode": 404, "message": "...", "error": "Not Found"}` |
+| `429` | The request is over a rate limit. | See [Rate limits](#rate-limits). |
+
+## Agent scopes
+
+A token that belongs to an agent has scopes. The HTTP method of a request gives
+the scope that the request needs:
+
+| Method | Scope |
+| --- | --- |
+| `GET`, `HEAD`, `OPTIONS` | `read` |
+| `DELETE` | `delete` |
+| All other methods, `POST` included | `write` |
+
+Some `POST` endpoints only read data, for example
+`POST /v1/issues/filter` and `POST /v1/knowledge/context`. These endpoints need
+only the `read` scope. Each of them says so on its page.
+
+By default, an agent gets `read` and `write`, but not `delete`. A token that
+acts as a person has no scopes. [Agent accounts](./agents.mdx) tells how to
+give an agent other scopes.
+
+## Rate limits
+
+The server limits only two endpoints:
+
+| Endpoint | Default limit | Counted for each | Setting |
+| --- | --- | --- | --- |
+| `/v1/mcp` | 120 requests in 60 seconds | token | `MCP_RATE_LIMIT`, `MCP_RATE_LIMIT_WINDOW_MS` |
+| `/v1/telemetry` | 600 requests in 60 seconds | IP address | `TELEMETRY_RATE_LIMIT`, `TELEMETRY_RATE_LIMIT_WINDOW_MS` |
+
+An operator sets these environment variables on the server. The value `0`
+removes the limit. The MCP endpoint sends a `429` with a `Retry-After` header
+and a JSON-RPC error. Each server process keeps its own count. The REST
+endpoints in this reference have no rate limit.

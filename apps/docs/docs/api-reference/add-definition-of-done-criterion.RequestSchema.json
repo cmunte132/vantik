@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","required":["body"],"properties":{"body":{"type":"string"},"completed":{"type":"boolean","default":false},"sortOrder":{"type":"number","description":"The position in the list. Without it, the criterion goes to the end."}},"title":"CreateChecklistItemDto"}}}}}

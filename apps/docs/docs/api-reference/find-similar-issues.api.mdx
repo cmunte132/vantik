@@ -1,0 +1,69 @@
+---
+id: find-similar-issues
+title: "Find similar issues"
+description: "This call returns up to 10 issues that are near in meaning to the issue that you name. The list does not include that issue. If the server cannot find the issue, the list is empty."
+sidebar_label: "Find similar issues"
+hide_title: true
+hide_table_of_contents: true
+api: eJzVV9tu4zYQ/RWCTy2Q9SW9POTNm3pTt7ksYqfAIht0aYm2uJFILUk5MQz/e8+Qsi3bSjZ9KvoQhCKHw5kzZy5e8VS6xKrSK6P5GZ9kyrFE5Dmz0ldWO1aVzBvW7zHlXCUd85nwTFjJtBSWKc0KKbTSc5LymYxiUWppKqZFITtsgoNcOc9SAxXaeFxM8iqtBcOdDhvNggYn7UJaWKFJcKZ0ulN8EpZBFQyVRemXHX7CS2HxjpfW8bP7FadH4Uy4MUpxrsi3b5W0S3xY+a1SVqb8zFto5C7JZCH42Yr7ZUn3nLdwiK/XJ1tVT8Y+ulIkr6qbidxB3yGikm1vMzPb+dJhnwBQUcGXqWQCQBZT+A0R5QMYhJ+TcF8bXXteY1O5EIkDzZC3kHAOLxMqLzv2QGa70mhI0/lpr0f/9i0fV0kCZbOKyBCFoTQx2kvtSVyUZa4SQeLdr47urI7fFNYKgkl5WbjGvpl+lYmn2FlTSutVtESlx/a2QRppptIOX59wr3wuW/w8uPgWvY0dJhybYClK9sf45pp5+Yy4DHSkHYtKmGpElGWC2N1U0jmw4krYx9Q8tVizLzeOm2/DQqfyWabBwA3DDk1wXngib9uz4ewcf3MDRrc8KXVVILH45HY0uBhi4/3g/M/Lmwus7q7Hk8HtZPgb1rvV+c3Vx8thvR5cnw8vw5I/rAPxTF4FH7UqS+m/7+RdqEG/9HosyZDpCSX6xtFcIH+8Kd/lciFzlpiiAD2RUTNjZSM0hVkQRAaJBpkyR7VIWfD8pZhaukrhdFWSbRRHvklRvIAlkEISN44U0mWOHZwFQ64PBV4JLL0DjuNZNVNIe1GXwvjICYOLTD4L8oZ95sPri3f90888mNgsWG12ClSJuZatx4emtMCjzdSky8D3XT0LFEZpFjppZmMNSZuDiXFKg6z1pU0PCaU1dg34nacUBzF1FNc63QrhERNsT5dUA1PQQefLYIGVYAJpGydgwPft6LNC6cqxLxsrvrS//JRJ3RDanXSoU2xqEB8RFGP0xiT7XXkcren057YCO9ILkauUUQeRYHGji4Ur/eMrZNhGvC42UYc3jzDP7NX/f1uqXyjJBTSKeUt9RWGI5KMU1aLymbHKoROu17XbXsypI/OIB0fbgX+ZAef4XIaXhM/w0V30uy7IdJ0qVC7s33HcoC4WWl5s7JXNIb3CM3Ol111RqqNwfqIm+JdAyjyiMMZgUe+0pppnsWfKKeCIQY5rBoeflwCWikRkNOnGtpyp55B21IfjyQb+mqvRPIJ7IawS0zyCFk2MAZyJKkcUeOZ9edbt5gYDVmacP/upB1q05YVIU5TJbY2rrURLCi1+4xYRj2aUiEqb9n6r9mjyCdLOIt55nWn1aFGzquF/h905qqRE+I1dOthFz8QJzlba7cFBI4aTSWWVX4bQvUd4pR1UFO/7h+bxmHgYUWsKbdlGjm2mGfqeBqGQdErPTJCsky/G/biAjdgHZWHrR2uI4uxKaDA6NIqJMTkFDxSLwqe90187/V6nT0lYwsNChDjWk+AHmkdrkrItSQ/mjG3m/V8H6hp6mii6ZS7AZIAReLaqc/aeL/ohO0NmY7Gft4gvsYPkVqupcPLO5us1bce5mSiBWkr58sLk3ETxh9t6yP6RvWTco1zujfwoixVJccqQt7/0H47rr7i1//Nj59rDruqErALoUqQ0XgDeeHWAIb70jVtHrWDdLMsXwwky6x9qZuJn
+sidebar_class_name: "get api-method"
+info_path: api-reference/vantik
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Find similar issues"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/v1/search/similar_issues"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+This call returns up to 10 issues that are near in meaning to the issue that you name. The list does not include that issue. If the server cannot find the issue, the list is empty.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./find-similar-issues.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./find-similar-issues.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./find-similar-issues.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

@@ -1,0 +1,1 @@
+{"parameters":[{"name":"x-vantik-session","in":"header","required":false,"description":"The session of the agent harness. The server records it with each entry that it serves. The server ignores a value longer than 200 characters.","schema":{"type":"string"}}]}

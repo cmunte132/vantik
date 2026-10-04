@@ -1,0 +1,69 @@
+---
+id: create-page-entry
+title: "Create page entry"
+description: "This call writes one claim. With pageId, the entry goes on that page. Without pageId, the entry is loose and must have a scope. An entry from an agent always starts PROPOSED. An agent cannot write to a LOCKED page. On a CURATED page or a loose scope, one token can have at most 10 PROPOSED entries by default. The server refuses a repeat of a known entry unless you send supersedesId or distinct. The server checks each citation before it writes the entry."
+sidebar_label: "Create page entry"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: api-reference/vantik
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Create page entry"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/v1/page_entries"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+This call writes one claim. With pageId, the entry goes on that page. Without pageId, the entry is loose and must have a scope. An entry from an agent always starts PROPOSED. An agent cannot write to a LOCKED page. On a CURATED page or a loose scope, one token can have at most 10 PROPOSED entries by default. The server refuses a repeat of a known entry unless you send supersedesId or distinct. The server checks each citation before it writes the entry.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./create-page-entry.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./create-page-entry.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./create-page-entry.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

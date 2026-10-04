@@ -1,0 +1,69 @@
+---
+id: delete-project
+title: "Delete project"
+description: "The server keeps the rows and sets `deleted` on the project and on its milestones. It also removes the project and the milestone from each issue in the project."
+sidebar_label: "Delete project"
+hide_title: true
+hide_table_of_contents: true
+api: eJzVVk1v4zYQ/SuETi3gyna66ME3L5IFArRF0U0KFEGAjKWRxTVFavnhjWDov3eGlD/lRVN0L3uyTD6SM2/mPXKXlegKK1svjc4W2UONwqHdohUbxNYJTwPWfHECdEkz3omXEhV6LF+E0XG6teYTFj4iaEgSppEKnTcaXS7uaUY5Iyw2ZotutIT/H/CisqYRCEUtpHMBhTw7I88mWQsWGgrAumzxtMs0/aHAB8B9SQjJmbTga/q2+DlIi2W28DbgJHNFjQ1ki13mu5YXOm+lXmd9/8xg1xrt0PH8zWzGP+f8fAxFgc5VQYk9mA4pjPaoPcOhbZUsgOHTT47X7MZnmhXHyrlY06L1Mp0oyytx0e4Wgfhe+vHsJKuMbYBmspIwP3lJZNCS0Jb/dclQ1TcumGQ6KAUrhYlY2iAVYrz6nMBHLT8fy/rF2I1rocA8hXCCHG80OtF58MH9O/Qyhg8WUXh89dSclehMoMamRtRGpB0FeBFJJ/gkxjlIIvX/eyg2yqxfYsy0wvpb4uVNEdMxb8YqhPKRDr6/WpMR3CM0p1yAtdCxGDw2Vzi6pDsqX5ZOmCpmHLejL6KCi3Sh9VwstcCm9Z1Q0nnRIOgBfSrvFSqj1zRhyALUcd/IXAEtrKSSvrsv/2/gh70kXgsjSMWZWVHUoNeYzj/03jWCe2ZUeuY3+yNtQ2M8+m42H9sCx8BOQyYmanDcSltQkszNbFDzyWQqjrD5t3OLhnaE9dVewldo2hj7o4bga2OlI2n3/T6Fd+MUfjdeVCboMuUOa7bXQ+5kjuS5tSnZBaJTRCcmi11k0+18OlDtpruDEfeESLpJRh2sIvCOYllL3U+hlSNz+NsEK/4C7eWGHIKkpQtkAVoT1nUyDFwRZ7l4OHxzlV+7s9uF96ZhrOTrcG3pcrjJhhpRQx5lzTXZgpUsp8hsCjFRVEFQbH219+1iOlWmAFUb5xc/z+h+uNaLUJZ0NRyENERJ+uk4u31aOVdjsmfl2u7zq7unkCeipEut8KpLVAz+NLTeSf65IAuhOKQ7xpWUzMckqdig3RkdfBU6LIIlbcbSvUewaJeBy/30fDr9kZs1sXYKOrQkJ5YNty7/X0VQbDGpKxORg8xS3UdJL+/FB2kp1qEVxW+gqe0bUpB4MEZx8ajFEvhmdvNLPp/lcxZ4Sxk2EOs4PBJuY+fufeHyqN1Rmd/DO2hgmO+xaauAGpYvfm6n3aDMp2w7T7YRtUmfi+MziYrILcCo3W4FDh+t6nseJolYrvvzURaxC0rp+JssoKJELm/VU/Z++HN4df0ovhbo3ux1F9WnAv+jzw12Z6+5/pnANV2F1DUcRJpf0ius9ScrR0banzrW7d2vdw931HX/AGLSzbg=
+sidebar_class_name: "delete api-method"
+info_path: api-reference/vantik
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Delete project"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"delete"}
+  path={"/v1/projects/{projectId}"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+The server keeps the rows and sets `deleted` on the project and on its milestones. It also removes the project and the milestone from each issue in the project.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./delete-project.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./delete-project.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./delete-project.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

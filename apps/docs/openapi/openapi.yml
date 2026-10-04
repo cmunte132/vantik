@@ -5,10 +5,21 @@ info:
   version: 2026.10.1
 
 servers:
-  - url: https://app.vantik.dev
+  - url: "{origin}/api"
+    description: >-
+      Your Vantik instance, through the webapp. The webapp proxy removes the
+      /api prefix and sends the request to the server.
+    variables:
+      origin:
+        default: http://localhost:3000
+        description: The address of the webapp on your instance.
+  - url: http://localhost:3001
+    description: >-
+      The server, directly. The server has no /api prefix. Use this address on
+      the host that runs the server.
 
 paths:
-  /api/v1/integration_definition/{integrationDefinitionId}:
+  /v1/integration_definition/{integrationDefinitionId}:
     get:
       summary: Get integration definition by ID
       parameters:
@@ -27,19 +38,20 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Integration_definition
 
-  /api/v1/integration_definition:
+  /v1/integration_definition:
     get:
       summary: Get integration definitions by workspace ID
       parameters:
         - name: workspaceId
           in: query
-          required: true
+          required: false
+          description: >-
+            The workspace to read. If you do not send it, the server uses the
+            workspace of your token.
           schema:
             type: string
       responses:
@@ -54,13 +66,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Integration_definition
 
-  /api/v1/issue_comments:
+  /v1/issue_comments:
     post:
       summary: Create an issue comment
       parameters:
@@ -75,7 +85,7 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateIssueCommentDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -84,13 +94,36 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Issue_comments
 
-  /api/v1/issue_comments/{issueCommentId}:
+  /v1/issue_comments/{issueCommentId}:
+    delete:
+      summary: Delete issue comment
+      description: >-
+        This call deletes a comment. The server keeps the row and sets its deleted
+        date. The response is the deleted comment.
+      parameters:
+        - in: path
+          name: issueCommentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueComment"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: The comment does not exist, or you cannot see it.
+      tags:
+        - Issue_comments
+
     post:
       summary: Update issue comment
       parameters:
@@ -106,7 +139,7 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateIssueCommentDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -115,13 +148,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Issue_comments
 
-  /api/v1/issue_relation/{issueRelationId}:
+  /v1/issue_relation/{issueRelationId}:
     delete:
       summary: Delete issue relation
       parameters:
@@ -140,13 +171,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Issue_relation
 
-  /api/v1/issues:
+  /v1/issues:
     post:
       summary: Create issue
       requestBody:
@@ -156,7 +185,7 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateIssueDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -165,13 +194,36 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Issue
 
-  /api/v1/issues/{issueId}:
+  /v1/issues/{issueId}:
+    get:
+      summary: Get issue
+      description: >-
+        This call returns one issue with its team. The response also holds the
+        description as Markdown in descriptionMarkdown.
+      parameters:
+        - in: path
+          name: issueId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueWithTeam"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: The issue does not exist, or you cannot see it.
+      tags:
+        - Issue
+
     post:
       summary: Update issue
       parameters:
@@ -192,7 +244,7 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateIssueDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -201,14 +253,13 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Issue
 
     delete:
       summary: Delete issue
+      description: Only a workspace admin can delete an issue.
       parameters:
         - in: path
           name: issueId
@@ -230,15 +281,20 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: The caller is not a workspace admin.
       tags:
         - Issue
 
-  /api/v1/issues/filter:
+  /v1/issues/filter:
     post:
       summary: Get issues by filter
+      description: >-
+        This call reads issues, so an agent token needs only the read scope. If
+        the request has none of page, perPage, orderBy and view, the response is
+        an array of all the issues that match. If the request has one of them, the
+        response is one page of issues.
       requestBody:
         required: true
         content:
@@ -246,24 +302,24 @@ paths:
             schema:
               $ref: "#/components/schemas/GetIssuesByFilterDTO"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Issue"
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: "#/components/schemas/Issue"
+                  - $ref: "#/components/schemas/PaginatedIssues"
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Issue
 
-  /api/v1/issues/{issueId}/move:
+  /v1/issues/{issueId}/move:
     post:
       summary: Move issue to team
       parameters:
@@ -279,7 +335,7 @@ paths:
             schema:
               $ref: "#/components/schemas/TeamRequestParamsDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -288,13 +344,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Issue
 
-  /api/v1/products:
+  /v1/products:
     get:
       summary: List products
       description: >-
@@ -310,7 +364,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/Product"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Product
     post:
@@ -322,7 +376,7 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateProductDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -331,11 +385,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Product
 
-  /api/v1/products/{productId}:
+  /v1/products/{productId}:
     post:
       summary: Update product
       parameters:
@@ -351,21 +405,21 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateProductDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Product"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: Not found
       tags:
         - Product
     delete:
       summary: Delete product
-      description: A soft delete. The row stays, and the server sets `deleted`.
+      description: The server keeps the row and sets `deleted`.
       parameters:
         - name: productId
           in: path
@@ -380,13 +434,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/Product"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: Not found
       tags:
         - Product
 
-  /api/v1/modules:
+  /v1/modules:
     get:
       summary: List modules
       description: >-
@@ -403,7 +457,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/Module"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Module
     post:
@@ -419,7 +473,7 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateModuleDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -428,11 +482,11 @@ paths:
         "400":
           description: Two owners, or no owner
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Module
 
-  /api/v1/modules/{moduleId}:
+  /v1/modules/{moduleId}:
     post:
       summary: Update module
       description: >-
@@ -452,7 +506,7 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateModuleDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -461,7 +515,7 @@ paths:
         "400":
           description: Two owners, or no owner
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: Not found
       tags:
@@ -469,7 +523,7 @@ paths:
     delete:
       summary: Delete module
       description: >-
-        A soft delete. The server also removes the id from every
+        The server keeps the row and sets its deleted date. The server also removes the id from every
         `Capability.moduleIds` and every `Issue.moduleIds` that held it. No
         record then points at a module that does not exist.
       parameters:
@@ -486,13 +540,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/Module"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: Not found
       tags:
         - Module
 
-  /api/v1/modules/{moduleId}/repos:
+  /v1/modules/{moduleId}/repos:
     get:
       summary: List the repositories of a module
       description: >-
@@ -514,7 +568,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/ModuleRepo"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Module
     post:
@@ -532,18 +586,18 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateModuleRepoDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ModuleRepo"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Module
 
-  /api/v1/modules/{moduleId}/repos/{moduleRepoId}:
+  /v1/modules/{moduleId}/repos/{moduleRepoId}:
     post:
       summary: Update a module repository
       parameters:
@@ -564,14 +618,14 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateModuleRepoDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ModuleRepo"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: Not found
       tags:
@@ -597,13 +651,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/ModuleRepo"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: Not found
       tags:
         - Module
 
-  /api/v1/capabilities:
+  /v1/capabilities:
     get:
       summary: List capabilities
       description: >-
@@ -621,7 +675,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/Capability"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Capability
     post:
@@ -633,7 +687,7 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateCapabilityDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -642,11 +696,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Capability
 
-  /api/v1/capabilities/{capabilityId}:
+  /v1/capabilities/{capabilityId}:
     post:
       summary: Update capability
       parameters:
@@ -662,21 +716,21 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateCapabilityDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Capability"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: Not found
       tags:
         - Capability
     delete:
       summary: Delete capability
-      description: A soft delete. An issue that named it keeps the id.
+      description: The server keeps the row and sets its deleted date. An issue that named it keeps the id.
       parameters:
         - name: capabilityId
           in: path
@@ -691,24 +745,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/Capability"
         "401":
-          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: Not found
       tags:
         - Capability
 
-  /api/v1/labels:
+  /v1/labels:
     get:
       summary: Get labels
+      description: >-
+        This call returns all the labels of the workspace.
       parameters:
         - in: query
           name: workspaceId
-          required: true
+          required: false
+          description: >-
+            The workspace to read. If you do not send it, the server uses the
+            workspace of your token.
           schema:
             type: string
         - in: query
           name: teamId
-          required: true
+          required: false
+          description: The server accepts this value, but it does not filter on it.
           schema:
             type: string
       responses:
@@ -723,9 +783,7 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Labels
 
@@ -738,7 +796,7 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateLabelDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -747,13 +805,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Labels
 
-  /api/v1/labels/{labelId}:
+  /v1/labels/{labelId}:
     post:
       summary: Update label
       parameters:
@@ -769,7 +825,7 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateLabelDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -778,9 +834,7 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Labels
 
@@ -802,13 +856,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Labels
 
-  /api/v1/users/pat:
+  /v1/users/pat:
     post:
       summary: Create personal access token (PAT)
       requestBody:
@@ -818,7 +870,7 @@ paths:
             schema:
               $ref: "#/components/schemas/CreatePatDto"
       responses:
-        "200":
+        "201":
           description: Successful response
           content:
             application/json:
@@ -827,13 +879,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Users
 
-  /api/v1/users/pats/{patId}:
+  /v1/users/pats/{patId}:
     delete:
       summary: Delete personal access token (PAT)
       parameters:
@@ -852,13 +902,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Users
 
-  /api/v1/users:
+  /v1/users:
     get:
       summary: Get user
       responses:
@@ -871,13 +919,11 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Users
 
-  /api/v1/{teamId}/workflows:
+  /v1/{teamId}/workflows:
     get:
       summary: Get workflows
       parameters:
@@ -898,11 +944,1863 @@ paths:
         "400":
           description: Invalid request parameters
         "401":
-          description: Unauthorized
-        "422":
-          description: Unprocessable Entity
+          $ref: "#/components/responses/UnauthorizedResponse"
       tags:
         - Teams
+
+  /v1/issues/number/{issueNumber}:
+    get:
+      summary: Get issue by number
+      description: >-
+        This call returns the issue that has this number in the given team. Use it to
+        find an issue from its key, for example ENG-42.
+      parameters:
+        - in: path
+          name: issueNumber
+          required: true
+          description: The number part of the issue key, without the team identifier.
+          schema:
+            type: integer
+        - in: query
+          name: teamId
+          required: true
+          description: The id of the team that owns the issue.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueWithTeam"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: The team does not exist, or you cannot see it.
+      tags:
+        - Issue
+
+  /v1/issues/{issueId}/context:
+    get:
+      summary: Get issue context
+      description: >-
+        This call returns all the context of one issue in one request. The
+        response holds the description, the Definition of Done, comments,
+        history and relations. Each id comes with a readable name.
+      parameters:
+        - in: path
+          name: issueId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueContext"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: The issue does not exist, or you cannot see it.
+      tags:
+        - Issue
+
+  /v1/issues/export:
+    get:
+      summary: Export issues as CSV
+      description: >-
+        This call returns all issues of the workspace as a CSV file. The file holds
+        only issues in teams that you can see. Deleted issues are not in the
+        file.
+      responses:
+        "200":
+          description: >-
+            A CSV file with the columns Number, Title, Description, State,
+            Labels, Priority, Parent Issue, Created At, Updated At, Created By,
+            Team and Assignee.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="issues.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Issue
+
+  /v1/issues/{issueId}/subscribe:
+    post:
+      summary: Subscribe to issue
+      description: >-
+        This call adds you to the subscribers of an issue, or removes you. Set type to
+        SUBSCRIBE or UNSUBSCRIBE.
+      parameters:
+        - in: path
+          name: issueId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscribeIssueInput"
+      responses:
+        "201":
+          description: The updated issue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: The issue does not exist, or you cannot see it.
+      tags:
+        - Issue
+
+  /v1/checklist_items:
+    get:
+      summary: List Definition of Done criteria
+      description: >-
+        This call returns the criteria of the Definition of Done of an issue. The list
+        is in sort order, then in order of creation. Deleted criteria are not
+        in the list.
+      parameters:
+        - in: query
+          name: issueId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChecklistItem"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: The issue does not exist, or you cannot see it.
+      tags:
+        - Definition of Done
+    post:
+      summary: Add Definition of Done criterion
+      description: >-
+        This call adds a criterion to the Definition of Done of an issue. Without
+        sortOrder, the criterion goes to the end of the list. A criterion that
+        you create as completed records you as the person who completed it.
+      parameters:
+        - in: query
+          name: issueId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChecklistItemDto"
+      responses:
+        "201":
+          description: The new criterion.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChecklistItem"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: The issue does not exist, or you cannot see it.
+      tags:
+        - Definition of Done
+
+  /v1/checklist_items/{checklistItemId}:
+    post:
+      summary: Update Definition of Done criterion
+      description: >-
+        This call changes the text, the position or the completed state of a criterion.
+        When completed changes, the server records who changed it and when.
+        Send only the fields that you change.
+      parameters:
+        - in: path
+          name: checklistItemId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChecklistItemDto"
+      responses:
+        "201":
+          description: The updated criterion.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChecklistItem"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: The criterion does not exist, or you cannot see it.
+      tags:
+        - Definition of Done
+    delete:
+      summary: Delete Definition of Done criterion
+      description: >-
+        This call deletes a criterion. The server keeps the row and sets its deleted
+        date. The response is the deleted criterion.
+      parameters:
+        - in: path
+          name: checklistItemId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChecklistItem"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: The criterion does not exist, or you cannot see it.
+      tags:
+        - Definition of Done
+
+  /v1/agent_runs:
+    get:
+      summary: List agent runs
+      description: >-
+        This call returns the agent runs of the workspace, newest first. Filter by
+        issue, agent, status or executor. Pages hold 50 runs by default and
+        200 runs at most. An agent token sees only the runs of its own agent.
+      parameters:
+        - in: query
+          name: issueId
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: agentUserId
+          required: false
+          description: The id of the agent user that the run works as.
+          schema:
+            type: string
+        - in: query
+          name: status
+          required: false
+          description: >-
+            One or more run statuses. The server reads this as a list, so
+            send it in array form, for example status[]=FAILED.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/AgentRunStatus"
+        - in: query
+          name: executor
+          required: false
+          description: The executor key, for example byo or hosted.
+          schema:
+            type: string
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: perPage
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRunPage"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Agent_runs
+
+  /v1/pages:
+    get:
+      summary: List pages
+      description: >-
+        This call returns the pages of the workspace, in tree order. Send summary=true to
+        leave out the bodies. Then each page has a null description, an empty
+        descriptionMarkdown and null sections.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: parentId
+          in: query
+          required: false
+          description: Only the children of this page. Omit it to get all pages.
+          schema:
+            type: string
+        - name: summary
+          in: query
+          required: false
+          description: Send "true" to leave out the page bodies.
+          schema:
+            type: string
+            enum: ["true", "false"]
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Page"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Pages
+    post:
+      summary: Create page
+      description: >-
+        This call creates a page. Send the body as descriptionMarkdown. A GENERATED page
+        must have a question and no body. The server then builds its body from
+        the knowledge in its scope.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePageDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Page"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+
+  /v1/pages/related:
+    get:
+      summary: List pages linked to an entity
+      description: >-
+        This call returns the pages that have a link to one team, project, issue, page,
+        product, module or capability.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: entityType
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/PageLinkTypeEnum"
+        - name: entityId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RelatedPage"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Pages
+
+  /v1/pages/{pageId}:
+    get:
+      summary: Get page
+      description: >-
+        This call returns one page with its body as markdown. The ancestors field holds
+        the parent pages, root first.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageWithAncestors"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+    post:
+      summary: Update page
+      description: >-
+        This call changes the fields that you send. You cannot edit the body of a
+        GENERATED page. A person can send kind AUTHORED to take the page over,
+        and then edit it. An agent token cannot do this.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePageDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Page"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+      tags:
+        - Pages
+    delete:
+      summary: Delete page
+      description: >-
+        This call deletes the page, all the pages below it and all their
+        entries. The server keeps the rows and sets their deleted date. The
+        response is the deleted page.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Page"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+
+  /v1/pages/{pageId}/backlinks:
+    get:
+      summary: List issues that mention a page
+      description: >-
+        This call returns the issues whose description contains the page id, for
+        example a pasted page URL. The newest 50 issues come back.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PageBacklink"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+
+  /v1/pages/{pageId}/links:
+    get:
+      summary: List page links
+      description: >-
+        This call returns the teams, projects, issues, pages, products, modules and
+        capabilities that this page has a link to. A link to a deleted target
+        does not come back.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PageLink"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+    post:
+      summary: Create page link
+      description: >-
+        This call links the page to a team, project, issue, page, product, module or
+        capability. If the link is there already, the call returns it. A page
+        cannot link to itself.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePageLinkDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageLink"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+
+  /v1/pages/{pageId}/links/{linkId}:
+    delete:
+      summary: Delete page link
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: linkId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: The id of the deleted link.
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+
+  /v1/pages/{pageId}/history:
+    get:
+      summary: Get page history
+      description: >-
+        This call returns the newest 50 changes to the page, newest first. Each change
+        holds the body as it was before the change, as markdown.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PageRevision"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+
+  /v1/pages/{pageId}/revert/{historyId}:
+    post:
+      summary: Revert page body
+      description: >-
+        This call puts the body back to what it was before one recorded change. The
+        revert records its own change, so you can revert it too. The change
+        must be a change to the body.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: historyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Page"
+        "400":
+          description: The change did not touch the body
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+
+  /v1/pages/{pageId}/consolidate:
+    post:
+      summary: Propose page consolidation
+      description: >-
+        This call proposes a new page body that folds STANDING entries into it. Nothing
+        changes until a person accepts the proposal. You cannot consolidate
+        into a GENERATED page.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsolidatePageDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageProposal"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+
+  /v1/pages/{pageId}/proposals:
+    get:
+      summary: List page proposals
+      description: >-
+        This call returns the newest 50 proposals for the page, newest first. By default
+        only OPEN proposals come back. Send state=ALL for all proposals.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          description: An unknown value is the same as OPEN.
+          schema:
+            type: string
+            enum: [OPEN, ACCEPTED, DECLINED, ALL]
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PageProposal"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Pages
+
+  /v1/pages/{pageId}/proposals/{proposalId}/accept:
+    post:
+      summary: Accept page proposal
+      description: >-
+        This call writes the proposed body to the page and marks the folded entries
+        CONSOLIDATED. An agent token cannot call this. The call fails if the
+        page changed after the proposal, or an entry is no longer STANDING.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Page"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+        "409":
+          description: The proposal is answered, or the page or its entries changed
+      tags:
+        - Pages
+
+  /v1/pages/{pageId}/proposals/{proposalId}/decline:
+    post:
+      summary: Decline page proposal
+      description: >-
+        This call declines an OPEN proposal. Nothing else changes. An agent token cannot
+        call this.
+      parameters:
+        - name: pageId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageProposal"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+        "409":
+          description: The proposal is answered already
+      tags:
+        - Pages
+
+  /v1/page_entries:
+    get:
+      summary: List page entries
+      description: >-
+        This call returns entries, newest first, each with its proof and its trail of
+        moves, inbox decisions and triage decisions. All filters are optional.
+        A list filter accepts one value, a comma-separated list or a repeated
+        parameter.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: pageId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: loose
+          in: query
+          required: false
+          description: Send true for only the entries that are on no page.
+          schema:
+            type: boolean
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/PageEntryStatusEnum"
+        - name: moduleIds
+          in: query
+          required: false
+          description: Entries that apply to one or more of these modules.
+          schema:
+            type: array
+            items:
+              type: string
+        - name: ids
+          in: query
+          required: false
+          description: Only these entries.
+          schema:
+            type: array
+            items:
+              type: string
+        - name: limit
+          in: query
+          required: false
+          description: The maximum number of entries. There is no limit by default.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PageEntry"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Page_entries
+    post:
+      summary: Create page entry
+      description: >-
+        This call writes one claim. With pageId, the entry goes on that page. Without
+        pageId, the entry is loose and must have a scope. An entry from an
+        agent always starts PROPOSED. An agent cannot write to a LOCKED page.
+        On a CURATED page or a loose scope, one token can have at most 10
+        PROPOSED entries by default. The server refuses a repeat of a known
+        entry unless you send supersedesId or distinct. The server checks each
+        citation before it writes the entry.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: pageId
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePageEntryDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageEntry"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: The page is LOCKED, or the token has too many PROPOSED entries
+        "404":
+          description: Not found
+        "409":
+          description: The entry repeats a known entry
+        "422":
+          description: The content looks like it holds a credential, or a citation does not hold
+      tags:
+        - Page_entries
+
+  /v1/page_entries/bulk:
+    post:
+      summary: Triage page entries in bulk
+      description: >-
+        This call sets one status on a set of entries. The server skips an entry when its
+        current status does not allow the change. An agent token cannot call
+        this. Triage is for people.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkUpdatePageEntriesDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkUpdatePageEntriesResult"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+      tags:
+        - Page_entries
+
+  /v1/page_entries/move:
+    post:
+      summary: Move page entries
+      description: >-
+        This call files entries under a page and records each move on the entry. The
+        server skips CONSOLIDATED entries and entries that are on the page
+        already. An agent token cannot call this.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MovePageEntriesDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovePageEntriesResult"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+      tags:
+        - Page_entries
+
+  /v1/page_entries/{pageEntryId}:
+    post:
+      summary: Update page entry
+      description: >-
+        This call changes the fields that you send. An agent can only edit or archive its
+        own PROPOSED entries. An agent cannot verify an entry. Nothing can go
+        back to PROPOSED, and a SUPERSEDED entry cannot change status.
+      parameters:
+        - name: pageEntryId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePageEntryDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageEntry"
+        "400":
+          description: Invalid request parameters, or a status change that is not allowed
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+        "422":
+          description: The content looks like it holds a credential
+      tags:
+        - Page_entries
+
+  /v1/knowledge/search:
+    get:
+      summary: Search knowledge
+      description: >-
+        This call searches the page bodies and the entries that the knowledge bank serves.
+        The response holds only STANDING and CONSOLIDATED entries. If no page
+        or entry matches, the server records the query as a knowledge gap.
+        The default limit is 20.
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: >-
+            The question. It must not be empty. The value "*" is not
+            permitted.
+          schema:
+            type: string
+        - name: workspaceId
+          in: query
+          required: false
+          description: The workspace. If you do not send it, the server uses the workspace of the session.
+          schema:
+            type: string
+            format: uuid
+        - name: scope
+          in: query
+          required: false
+          description: >-
+            Only facts about this repository path, team or project. A path also
+            includes the facts about its parent paths and its child paths.
+            Entries with no scope are always included.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: >-
+            The maximum number of hits. The default is 20. The server ignores
+            a value that is not a positive integer.
+          schema:
+            type: integer
+            default: 20
+        - name: kind
+          in: query
+          required: false
+          description: >-
+            Only these kinds of entry. Send a list with commas, or send the
+            parameter more than one time. With this filter, the response holds
+            no page bodies.
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/PageEntryKindEnum"
+          style: form
+          explode: false
+        - name: moduleIds
+          in: query
+          required: false
+          description: >-
+            Put knowledge about these modules, and about their neighbour
+            modules, at the top. This parameter changes the order only. It does
+            not remove hits. Send a list with commas.
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+          style: form
+          explode: false
+        - name: issueId
+          in: query
+          required: false
+          description: Put knowledge about the modules and the capability of this issue at the top.
+          schema:
+            type: string
+            format: uuid
+        - name: x-vantik-session
+          in: header
+          required: false
+          description: >-
+            The session of the agent harness. The server records it with each
+            entry that it serves. The server ignores a value longer than 200
+            characters.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeSearchResult"
+        "400":
+          description: Invalid query parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Knowledge
+
+  /v1/knowledge/context:
+    post:
+      summary: Load a context pack
+      description: >-
+        This call returns the knowledge that applies to a piece of work, in the limit of a
+        token budget. This call is a read. An agent token needs only the read
+        scope. The server never records a knowledge gap for this call.
+      parameters:
+        - name: x-vantik-session
+          in: header
+          required: false
+          description: >-
+            The session of the agent harness. The server records it with each
+            entry that it serves. The server ignores a value longer than 200
+            characters.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeContextDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextPack"
+        "400":
+          description: Invalid request body
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Knowledge
+
+  /v1/knowledge/similar:
+    get:
+      summary: Find similar knowledge entries
+      description: >-
+        This call finds up to 5 entries that are near to a fact before you write it.
+        The response also holds PROPOSED entries. A near match is a hint. It
+        does not stop the write.
+      parameters:
+        - name: content
+          in: query
+          required: true
+          description: The text of the fact that you are about to write.
+          schema:
+            type: string
+        - name: pageId
+          in: query
+          required: false
+          description: >-
+            The page that the fact goes on. If you do not send a page, the
+            server looks for near matches in the full workspace.
+          schema:
+            type: string
+            format: uuid
+        - name: workspaceId
+          in: query
+          required: false
+          description: The workspace. If you do not send it, the server uses the workspace of the session.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KnowledgeSearchHit"
+        "400":
+          description: Invalid query parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Knowledge
+
+  /v1/knowledge/gaps:
+    get:
+      summary: List knowledge gaps
+      description: >-
+        This call lists the questions that a search did not answer. The most frequent
+        question is first. The list holds only open gaps, and holds a maximum
+        of 50.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          description: The workspace. If you do not send it, the server uses the workspace of the session.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KnowledgeGap"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Knowledge
+
+  /v1/teams:
+    get:
+      summary: List teams
+      description: >-
+        This call returns the teams in the workspace that you can read. A member gets the
+        teams that they are in. A workspace admin gets all the teams.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Teams
+    post:
+      summary: Create team
+      description: >-
+        Only a workspace admin can call this. The server adds you, all the
+        workspace admins and all the bot users to the new team. It also makes
+        the default workflow states. If `preferences.teamType` is `support`,
+        the team gets the support workflow states.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeamDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Forbidden
+      tags:
+        - Teams
+
+  /v1/teams/{teamId}:
+    post:
+      summary: Update team
+      description: >-
+        This call changes the name, the identifier or the icon of a team. You must be in
+        the team, or you must be a workspace admin.
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTeamDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Teams
+    delete:
+      summary: Delete team
+      description: >-
+        Only a workspace admin can call this. The server keeps the row and
+        sets `deleted`. The server refuses to delete a team that
+        has issues. The server also removes the team from all memberships.
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "400":
+          description: The team has issues
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+      tags:
+        - Teams
+
+  /v1/teams/{teamId}/preferences:
+    post:
+      summary: Update team preferences
+      description: >-
+        This call merges the fields that you send into the preferences of the team. The
+        fields that you do not send keep their values. You must be in the team,
+        or you must be a workspace admin.
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTeamPreferencesDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Teams
+
+  /v1/teams/{teamId}/members:
+    get:
+      summary: List team members
+      description: >-
+        This call returns the workspace memberships of the people in the team, with
+        their user records. You must be in the team, or you must be a
+        workspace admin.
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UsersOnWorkspaces"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Teams
+
+  /v1/teams/{teamId}/add-member:
+    post:
+      summary: Add team member
+      description: >-
+        Only a workspace admin can call this. Adds a member of the workspace
+        to the team. If the person is in the team already, nothing changes.
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamMemberDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsersOnWorkspaces"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Forbidden
+      tags:
+        - Teams
+
+  /v1/teams/{teamId}/remove-member:
+    post:
+      summary: Remove team member
+      description: >-
+        Only a workspace admin can call this. Removes a person from the team.
+        The server refuses the request if the person has assigned issues in
+        the team.
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamMemberDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsersOnWorkspaces"
+        "400":
+          description: Invalid request parameters, or the person has assigned issues in the team
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Forbidden
+      tags:
+        - Teams
+
+  /v1/projects:
+    get:
+      summary: List projects
+      description: >-
+        This call returns the projects in the workspace. The list does not include
+        deleted projects.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Project
+    post:
+      summary: Create project
+      description: >-
+        If you send no `status`, the server sets it to `Backlog`. If you send
+        no `teams`, the project belongs to all the teams. Each team id and
+        each capability id must be in the workspace.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: A team or a capability is not in the workspace
+      tags:
+        - Project
+
+  /v1/projects/{projectId}:
+    post:
+      summary: Update project
+      description: >-
+        This call changes only the fields that you send. A `teams` or a
+        `capabilityIds` list replaces the current list.
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Project
+    delete:
+      summary: Delete project
+      description: >-
+        The server keeps the rows and sets `deleted` on the project and on its
+        milestones. It also removes the project and the milestone from each
+        issue in the project.
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Project
+
+  /v1/projects/{projectId}/milestone:
+    post:
+      summary: Create project milestone
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectMilestoneDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMilestone"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Project
+
+  /v1/projects/milestone/{projectMilestoneId}:
+    post:
+      summary: Update project milestone
+      parameters:
+        - name: projectMilestoneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectMilestoneDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMilestone"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Project
+    delete:
+      summary: Delete project milestone
+      description: >-
+        The server keeps the rows and sets `deleted` on the milestone. It also
+        removes the milestone from each issue that has it. The issues stay in
+        the project.
+      parameters:
+        - name: projectMilestoneId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMilestone"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: Not found
+      tags:
+        - Project
+
+  /v1/search:
+    get:
+      summary: Search issues
+      description: >-
+        This call finds issues by words, by meaning and by issue number, for example
+        `ENG-12`. The results are in order of relevance. You get only issues
+        in the teams that you can see.
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: workspaceId
+          in: query
+          required: false
+          description: >-
+            The workspace to search. You must be a member of it. If you send
+            none, the server uses the workspace of your session.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: The maximum number of results, from 1 to 100.
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: threshold
+          in: query
+          required: false
+          description: >-
+            The maximum cosine distance for a match by meaning, from 0 to 2. A
+            lower value gives fewer, closer matches.
+          schema:
+            type: number
+            default: 0.8
+            minimum: 0
+            maximum: 2
+        - name: stateCategory
+          in: query
+          required: false
+          description: >-
+            A comma-separated list of workflow categories. Send it to get only
+            issues in these categories.
+          schema:
+            type: string
+            example: COMPLETED,CANCELED
+        - name: moduleIds
+          in: query
+          required: false
+          description: >-
+            A comma-separated list of module ids. An issue matches if it names
+            one of these modules. The server ignores a module of another
+            workspace.
+          schema:
+            type: string
+        - name: capabilityId
+          in: query
+          required: false
+          description: >-
+            One capability id. An issue matches if it delivers this capability.
+            The server ignores a capability of another workspace.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IssueSearchHit"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Search
+
+  /v1/search/similar_issues:
+    get:
+      summary: Find similar issues
+      description: >-
+        This call returns up to 10 issues that are near in meaning to the issue that you
+        name. The list does not include that issue. If the server cannot find
+        the issue, the list is empty.
+      parameters:
+        - name: issueId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: workspaceId
+          in: query
+          required: false
+          description: >-
+            The workspace of the issue. You must be a member of it. If you send
+            none, the server uses the workspace of your session.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IssueSearchHit"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Search
 
 components:
   schemas:
@@ -1409,6 +3307,14 @@ components:
       properties:
         body:
           type: string
+          description: >-
+            The comment as a Tiptap JSON document, in a string. Send
+            bodyMarkdown instead to write markdown.
+        bodyMarkdown:
+          type: string
+          description: >-
+            The comment in markdown. The server uses it only when the request
+            has no body.
         parentId:
           type: string
         linkCommentMetadata:
@@ -1527,6 +3433,15 @@ components:
           items:
             type: string
         issueSuggestionId:
+          type: string
+          nullable: true
+        projectId:
+          type: string
+          nullable: true
+        projectMilestoneId:
+          type: string
+          nullable: true
+        cycleId:
           type: string
           nullable: true
         moduleIds:
@@ -1793,6 +3708,7 @@ components:
       required:
         - externalRepoId
         - fullName
+        - integrationAccountId
       properties:
         externalRepoId:
           type: string
@@ -1800,6 +3716,7 @@ components:
           type: string
         integrationAccountId:
           type: string
+          description: The connected source that has the repository.
         pathPrefixes:
           type: array
           items:
@@ -1912,6 +3829,14 @@ components:
       properties:
         body:
           type: string
+          description: >-
+            The comment as a Tiptap JSON document, in a string. Send
+            bodyMarkdown instead to write markdown.
+        bodyMarkdown:
+          type: string
+          description: >-
+            The comment in markdown. The server uses it only when the request
+            has no body.
         parentId:
           type: string
         linkCommentMetadata:
@@ -1959,8 +3884,6 @@ components:
     CreateIssueDto:
       type: object
       required:
-        - title
-        - description
         - stateId
         - teamId
       properties:
@@ -1968,6 +3891,14 @@ components:
           type: string
         description:
           type: string
+          description: >-
+            The description as a Tiptap JSON document, in a string. Send
+            descriptionMarkdown instead to write markdown.
+        descriptionMarkdown:
+          type: string
+          description: >-
+            The description in markdown. The server uses it only when the
+            request has no description.
         priority:
           type: number
         dueDate:
@@ -2020,6 +3951,32 @@ components:
         capabilityId:
           type: string
           description: The capability this issue delivers.
+        projectId:
+          type: string
+        projectMilestoneId:
+          type: string
+        cycleId:
+          type: string
+          description: The cycle that gets the new issue.
+        supportData:
+          $ref: "#/components/schemas/SupportDto"
+
+    SupportDto:
+      type: object
+      description: The support request that the issue comes from.
+      properties:
+        email:
+          type: string
+        name:
+          type: string
+        source:
+          type: string
+        channel:
+          type: string
+        companyId:
+          type: string
+        metadata:
+          type: object
 
     LinkIssueDto:
       type: object
@@ -2075,7 +4032,6 @@ components:
       type: object
       required:
         - filters
-        - workspaceId
       properties:
         filters:
           type: object
@@ -2083,6 +4039,81 @@ components:
             $ref: "#/components/schemas/FilterValue"
         workspaceId:
           type: string
+          description: >-
+            The workspace to read. If you do not send it, the server uses the
+            workspace of your token. You must be a member of the workspace.
+        page:
+          type: integer
+          minimum: 1
+          description: The page to return. The default is 1.
+        perPage:
+          type: integer
+          minimum: 1
+          maximum: 200
+          description: The number of issues on a page. The default is 50.
+        orderBy:
+          type: string
+          enum: [updatedAt, createdAt, number, priority]
+          description: >-
+            The field that sets the order, highest value first. The default is
+            updatedAt.
+        view:
+          type: string
+          enum: [list, full]
+          description: >-
+            The shape of each issue. list gives a short row with no description.
+            full gives all the fields of the issue and descriptionMarkdown. The
+            default is list.
+
+    PaginatedIssues:
+      type: object
+      properties:
+        issues:
+          type: array
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/IssueListItem"
+              - $ref: "#/components/schemas/Issue"
+        page:
+          type: integer
+        perPage:
+          type: integer
+        total:
+          type: integer
+          description: The number of issues that match the filters, on all pages.
+
+    IssueListItem:
+      type: object
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+          description: The team identifier and the issue number, for example ENG-42.
+        title:
+          type: string
+        stateId:
+          type: string
+        stateCategory:
+          type: string
+          nullable: true
+          description: The category of the issue state, for example STARTED.
+        assigneeId:
+          type: string
+          nullable: true
+        priority:
+          type: integer
+          nullable: true
+        labelIds:
+          type: array
+          items:
+            type: string
+        projectId:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
 
     FilterValue:
       type: object
@@ -2147,6 +4178,20 @@ components:
         title:
           type: string
         description:
+          type: string
+          description: >-
+            The description as a Tiptap JSON document, in a string. Send
+            descriptionMarkdown instead to write markdown.
+        descriptionMarkdown:
+          type: string
+          description: >-
+            The description in markdown. The server uses it only when the
+            request has no description.
+        projectId:
+          type: string
+        cycleId:
+          type: string
+        projectMilestoneId:
           type: string
         priority:
           type: number
@@ -2435,6 +4480,1670 @@ components:
           type: string
           nullable: true
 
+    IssueWithTeam:
+      allOf:
+        - $ref: "#/components/schemas/Issue"
+        - type: object
+          properties:
+            descriptionMarkdown:
+              type: string
+              description: The issue description, converted to Markdown.
+            team:
+              $ref: "#/components/schemas/Team"
+
+    SubscribeIssueInput:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - SUBSCRIBE
+            - UNSUBSCRIBE
+
+    WorkflowCategory:
+      type: string
+      enum:
+        - TRIAGE
+        - BACKLOG
+        - UNSTARTED
+        - STARTED
+        - COMPLETED
+        - CANCELED
+
+    IssueContextUser:
+      type: object
+      properties:
+        id:
+          type: string
+        fullname:
+          type: string
+
+    IssueContextNamedEntity:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
+    IssueContextIssueRef:
+      type: object
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+          description: The issue key, for example ENG-42.
+        title:
+          type: string
+        stateCategory:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/WorkflowCategory"
+
+    IssueContextComment:
+      type: object
+      properties:
+        id:
+          type: string
+        author:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/IssueContextUser"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        bodyMarkdown:
+          type: string
+        replies:
+          type: array
+          description: >-
+            The replies to a top-level comment. Replies do not have this field.
+          items:
+            $ref: "#/components/schemas/IssueContextComment"
+
+    IssueContext:
+      type: object
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+          description: The issue key, for example ENG-42.
+        title:
+          type: string
+        descriptionMarkdown:
+          type: string
+        state:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            category:
+              $ref: "#/components/schemas/WorkflowCategory"
+        assignee:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/IssueContextUser"
+        team:
+          type: object
+          properties:
+            id:
+              type: string
+            identifier:
+              type: string
+            name:
+              type: string
+        labels:
+          type: array
+          items:
+            $ref: "#/components/schemas/IssueContextNamedEntity"
+        priority:
+          type: integer
+          nullable: true
+          description: 0 is no priority, 1 is urgent, 2 is high, 3 is medium and 4 is low.
+        estimate:
+          type: integer
+          nullable: true
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        project:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/IssueContextNamedEntity"
+        cycle:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/IssueContextNamedEntity"
+        modules:
+          type: array
+          description: The modules that the issue changes, in the order that the issue records them.
+          items:
+            $ref: "#/components/schemas/IssueContextNamedEntity"
+        capability:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/IssueContextNamedEntity"
+        parent:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/IssueContextIssueRef"
+        subIssues:
+          type: array
+          items:
+            $ref: "#/components/schemas/IssueContextIssueRef"
+        relations:
+          type: array
+          description: >-
+            Relations in both directions. The type is always from the point of
+            view of this issue.
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum:
+                  - BLOCKS
+                  - BLOCKED
+                  - RELATED
+                  - DUPLICATE
+                  - DUPLICATE_OF
+                  - SIMILAR
+              issue:
+                $ref: "#/components/schemas/IssueContextIssueRef"
+        linkedIssues:
+          type: array
+          description: This call links to issues and pull requests in other tools.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              url:
+                type: string
+              title:
+                type: string
+                nullable: true
+        criteria:
+          type: array
+          description: The Definition of Done of the issue, in list order.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              body:
+                type: string
+              completed:
+                type: boolean
+              completedAt:
+                type: string
+                format: date-time
+                nullable: true
+        comments:
+          type: array
+          description: Top-level comments, oldest first. Each comment holds its replies.
+          items:
+            $ref: "#/components/schemas/IssueContextComment"
+        history:
+          type: array
+          description: >-
+            This call changes to the issue, oldest first. One change in one field gives
+            one entry.
+          items:
+            type: object
+            properties:
+              at:
+                type: string
+                format: date-time
+              actor:
+                type: string
+                nullable: true
+                description: The full name of the person who made the change.
+              change:
+                type: string
+                enum:
+                  - state
+                  - assignee
+                  - priority
+                  - estimate
+                  - team
+                  - project
+                  - cycle
+                  - parent
+                  - label
+              from:
+                nullable: true
+                description: The old value as a name, or a number for an estimate.
+                oneOf:
+                  - type: string
+                  - type: number
+              to:
+                nullable: true
+                description: The new value as a name, or a number for an estimate.
+                oneOf:
+                  - type: string
+                  - type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ChecklistItem:
+      type: object
+      description: One criterion of the Definition of Done of an issue.
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+          nullable: true
+        body:
+          type: string
+        completed:
+          type: boolean
+        sortOrder:
+          type: number
+          nullable: true
+          description: The position of the criterion in the list.
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedById:
+          type: string
+          nullable: true
+        issueId:
+          type: string
+        createdById:
+          type: string
+          nullable: true
+        updatedById:
+          type: string
+          nullable: true
+
+    CreateChecklistItemDto:
+      type: object
+      required:
+        - body
+      properties:
+        body:
+          type: string
+        completed:
+          type: boolean
+          default: false
+        sortOrder:
+          type: number
+          description: The position in the list. Without it, the criterion goes to the end.
+
+    UpdateChecklistItemDto:
+      type: object
+      properties:
+        body:
+          type: string
+        completed:
+          type: boolean
+        sortOrder:
+          type: number
+
+    AgentRunStatus:
+      type: string
+      enum:
+        - QUEUED
+        - CLAIMED
+        - RUNNING
+        - SUCCEEDED
+        - FAILED
+        - CANCELED
+        - EXPIRED
+        - NEEDS_REVIEW
+
+    AgentRun:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+          nullable: true
+        workspaceId:
+          type: string
+        issueId:
+          type: string
+        agentUserId:
+          type: string
+          description: The agent user that the work is attributed to.
+        createdById:
+          type: string
+          nullable: true
+          description: The member who delegated the issue.
+        executor:
+          type: string
+          description: The executor key, for example byo or hosted.
+        status:
+          $ref: "#/components/schemas/AgentRunStatus"
+        attempt:
+          type: integer
+          description: 1 for the first try. Each retry adds 1.
+        previousRunId:
+          type: string
+          nullable: true
+          description: The run that this run retries.
+        leaseExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        claimedAt:
+          type: string
+          format: date-time
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        failure:
+          type: string
+          nullable: true
+          enum:
+            - ENVIRONMENT_SETUP_FAILED
+            - HARNESS_CRASHED
+            - BUDGET_EXHAUSTED
+            - NO_DIFF_PRODUCED
+            - VERIFICATION_FAILED
+            - PUSH_REJECTED
+            - PR_CREATION_FAILED
+            - EGRESS_DENIED
+            - LEASE_LOST
+            - NOT_TEST_SPECIFIABLE
+            - REWARD_HACK_SUSPECTED
+            - MODEL_REFUSED
+            - null
+        result:
+          type: object
+          nullable: true
+          description: The branch, the pull request URL, and token and cost counters.
+        config:
+          type: object
+          nullable: true
+        contextPack:
+          type: object
+          nullable: true
+          description: What the agent got at dispatch.
+        harnessVersion:
+          type: string
+          nullable: true
+        traceId:
+          type: string
+          nullable: true
+        modelId:
+          type: string
+          nullable: true
+        configHash:
+          type: string
+          nullable: true
+        iterationCount:
+          type: integer
+        phaseTimings:
+          type: object
+          nullable: true
+          description: Milliseconds for each phase of the run.
+        baseCommit:
+          type: string
+          nullable: true
+        knowledgeArm:
+          type: string
+          nullable: true
+          enum:
+            - TREATMENT
+            - HOLDOUT
+            - null
+        pullRequestOutcome:
+          type: string
+          nullable: true
+          description: Null while the pull request is open, and for a run without a pull request.
+          enum:
+            - MERGED
+            - CLOSED
+            - null
+        pullRequestClosedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AgentRunPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentRun"
+        page:
+          type: integer
+        perPage:
+          type: integer
+        total:
+          type: integer
+          description: The number of runs that match the filter, on all pages.
+
+    PageEntryPolicyEnum:
+      type: string
+      description: >-
+        How strictly the page controls new entries. OPEN accepts all entries.
+        CURATED enforces the repeat check and the per-token limit. LOCKED is for
+        people only, and agents cannot write entries to it.
+      enum: [OPEN, CURATED, LOCKED]
+
+    PageKindEnum:
+      type: string
+      description: >-
+        People write AUTHORED pages. The server builds a GENERATED page
+        from the entries that each section cites.
+      enum: [AUTHORED, GENERATED]
+
+    PageLinkTypeEnum:
+      type: string
+      enum: [TEAM, PROJECT, ISSUE, PAGE, PRODUCT, MODULE, CAPABILITY]
+
+    PageEntryStatusEnum:
+      type: string
+      description: >-
+        PROPOSED entries wait for triage. Retrieval serves STANDING entries.
+        The page body holds the facts of CONSOLIDATED entries. A newer entry
+        replaces a SUPERSEDED entry. Retrieval holds back DISPUTED entries.
+        ARCHIVED entries are out of use.
+      enum: [PROPOSED, STANDING, CONSOLIDATED, SUPERSEDED, DISPUTED, ARCHIVED]
+
+    PageEntryKindEnum:
+      type: string
+      enum: [FACT, DECISION, CONVENTION, GOTCHA]
+
+    PageSection:
+      type: object
+      properties:
+        id:
+          type: string
+        heading:
+          type: string
+        body:
+          type: string
+          description: Markdown.
+        entryIds:
+          type: array
+          items:
+            type: string
+          description: The entries that the section is written from.
+        evidence:
+          type: string
+
+    Page:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+          description: The body as tiptap JSON. Use descriptionMarkdown instead.
+        descriptionMarkdown:
+          type: string
+          description: The body as markdown.
+        parentId:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+          nullable: true
+        entryPolicy:
+          $ref: "#/components/schemas/PageEntryPolicyEnum"
+        visibility:
+          type: string
+          enum: [WORKSPACE]
+        kind:
+          $ref: "#/components/schemas/PageKindEnum"
+        question:
+          type: string
+          nullable: true
+          description: The question that a GENERATED page answers.
+        sections:
+          type: array
+          nullable: true
+          description: The body of a GENERATED page as sections.
+          items:
+            $ref: "#/components/schemas/PageSection"
+        citedEntryIds:
+          type: array
+          items:
+            type: string
+          description: The entries that the page cites.
+        watermark:
+          type: string
+          format: date-time
+          nullable: true
+        evidenceHash:
+          type: string
+          nullable: true
+        refreshedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the server last built a GENERATED page.
+        workspaceId:
+          type: string
+        createdById:
+          type: string
+          nullable: true
+        updatedById:
+          type: string
+          nullable: true
+
+    PageWithAncestors:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - type: object
+          properties:
+            ancestors:
+              type: array
+              description: The parent pages, root first.
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  title:
+                    type: string
+
+    CreatePageDto:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        descriptionMarkdown:
+          type: string
+          description: The body as markdown.
+        description:
+          type: string
+          description: The body as tiptap JSON. Only the webapp uses this field.
+        parentId:
+          type: string
+        sortOrder:
+          type: number
+        entryPolicy:
+          $ref: "#/components/schemas/PageEntryPolicyEnum"
+        kind:
+          $ref: "#/components/schemas/PageKindEnum"
+        question:
+          type: string
+          description: Required for a GENERATED page. At most 500 characters.
+
+    UpdatePageDto:
+      type: object
+      properties:
+        title:
+          type: string
+        descriptionMarkdown:
+          type: string
+        description:
+          type: string
+          description: The body as tiptap JSON. Only the webapp uses this field.
+        parentId:
+          type: string
+          nullable: true
+          description: Send null to move the page to the root.
+        sortOrder:
+          type: number
+        entryPolicy:
+          $ref: "#/components/schemas/PageEntryPolicyEnum"
+        kind:
+          $ref: "#/components/schemas/PageKindEnum"
+        question:
+          type: string
+          description: The question of a GENERATED page. A change rebuilds the page.
+
+    ConsolidatePageDto:
+      type: object
+      required:
+        - descriptionMarkdown
+      properties:
+        entryIds:
+          type: array
+          items:
+            type: string
+          description: The entries to fold in. Omit it to fold all STANDING entries of the page.
+        descriptionMarkdown:
+          type: string
+          description: The new page body, as markdown.
+
+    PageProposal:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        pageId:
+          type: string
+        pageTitle:
+          type: string
+        bodyMarkdown:
+          type: string
+        entryIds:
+          type: array
+          items:
+            type: string
+        proposedById:
+          type: string
+          nullable: true
+        state:
+          type: string
+          enum: [OPEN, ACCEPTED, DECLINED]
+        decidedById:
+          type: string
+          nullable: true
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    PageRevision:
+      type: object
+      properties:
+        id:
+          type: string
+        pageId:
+          type: string
+        userId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        changes:
+          type: object
+          additionalProperties: true
+          description: What the change did, by field.
+        previousBodyMarkdown:
+          type: string
+          nullable: true
+          description: The body before the change. Null when the change did not touch the body.
+
+    CreatePageLinkDto:
+      type: object
+      required:
+        - entityType
+        - entityId
+      properties:
+        entityType:
+          $ref: "#/components/schemas/PageLinkTypeEnum"
+        entityId:
+          type: string
+
+    PageLink:
+      type: object
+      properties:
+        id:
+          type: string
+        pageId:
+          type: string
+        entityType:
+          $ref: "#/components/schemas/PageLinkTypeEnum"
+        entityId:
+          type: string
+        label:
+          type: string
+          description: A display name for the target, for example an issue key or a title.
+        teamId:
+          type: string
+          description: Only for an issue.
+        key:
+          type: string
+          description: >-
+            The URL key of the target, when it is not the id. For example an
+            issue key, a team identifier, or a product or module key.
+
+    RelatedPage:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The page id.
+        title:
+          type: string
+        entityType:
+          $ref: "#/components/schemas/PageLinkTypeEnum"
+        entityId:
+          type: string
+        linkId:
+          type: string
+
+    PageBacklink:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        number:
+          type: integer
+        teamId:
+          type: string
+
+    PageEntryCitationInputDto:
+      type: object
+      description: >-
+        One citation. Give one target only: a file (path with lines), an issue,
+        a pullRequest, a comment, a run, or a url with a quote.
+      properties:
+        path:
+          type: string
+          description: A file path from the repository root.
+        lines:
+          type: string
+          description: The cited lines, for example "40-52". Required with path.
+        sha:
+          type: string
+          description: The commit. If you omit it, the server uses the head of the default branch.
+        repo:
+          type: string
+          description: The full name of the repository. Send it when the path alone does not identify the repository.
+        quote:
+          type: string
+          description: Text that the cited lines or page must contain. Required with url.
+        issue:
+          type: string
+          description: An issue id or key.
+        pullRequest:
+          type: string
+          description: The URL of a pull request that is linked to an issue.
+        comment:
+          type: string
+          description: An issue comment id.
+        run:
+          type: string
+          description: An agent run id.
+        url:
+          type: string
+          description: A public https page.
+
+    PageEntryCitation:
+      type: object
+      description: A citation as the server serves it.
+      properties:
+        kind:
+          type: string
+          enum: [CODE, ISSUE, PULL_REQUEST, COMMENT, RUN, URL]
+        repo:
+          type: string
+          nullable: true
+        path:
+          type: string
+          nullable: true
+        commitSha:
+          type: string
+          nullable: true
+        lines:
+          type: string
+          nullable: true
+        target:
+          type: string
+          nullable: true
+          description: For a citation that is not code, the issue key, pull request URL, comment id, run id or page URL.
+        result:
+          type: string
+          nullable: true
+          enum: [HOLDS, MOVED, CHANGED, MISSING, UNKNOWN]
+          description: The result of the last check.
+        checkedAt:
+          type: string
+          format: date-time
+          nullable: true
+        checkedSha:
+          type: string
+          nullable: true
+        judgment:
+          type: string
+          nullable: true
+          enum: [HOLDS, CONTRADICTED, UNCLEAR]
+        judgeModel:
+          type: string
+          nullable: true
+
+    PageEntryMove:
+      type: object
+      properties:
+        createdAt:
+          type: string
+          format: date-time
+        fromPageId:
+          type: string
+          nullable: true
+        toPageId:
+          type: string
+          nullable: true
+        movedById:
+          type: string
+          nullable: true
+        suggested:
+          type: boolean
+
+    PageEntryInboxDecision:
+      type: object
+      properties:
+        kind:
+          type: string
+        doneAt:
+          type: string
+          format: date-time
+        doneById:
+          type: string
+        resolution:
+          type: string
+          nullable: true
+
+    PageEntryTriageStep:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        decision:
+          type: string
+        reasons:
+          type: array
+          items:
+            type: string
+        policy:
+          type: string
+          nullable: true
+        trigger:
+          type: string
+          nullable: true
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              verdict:
+                type: string
+                nullable: true
+                enum: [accept, escalate, contradicted]
+              reason:
+                type: string
+                nullable: true
+
+    PageEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+          nullable: true
+        content:
+          type: string
+          description: One short claim, as markdown.
+        scope:
+          type: string
+          nullable: true
+          description: The repository path glob, team or project that the claim applies to.
+        moduleIds:
+          type: array
+          items:
+            type: string
+          description: The modules that the scope applies to. The server sets them.
+        kind:
+          $ref: "#/components/schemas/PageEntryKindEnum"
+        status:
+          $ref: "#/components/schemas/PageEntryStatusEnum"
+        sourceUserId:
+          type: string
+          nullable: true
+        sourceSession:
+          type: string
+          nullable: true
+        sourceTokenId:
+          type: string
+          nullable: true
+        supersedesId:
+          type: string
+          nullable: true
+        verifiedByUserId:
+          type: string
+          nullable: true
+        verifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+        provisionalSince:
+          type: string
+          format: date-time
+          nullable: true
+        retrievalCount:
+          type: integer
+        lastServedAt:
+          type: string
+          format: date-time
+          nullable: true
+        helpfulCount:
+          type: number
+        harmfulCount:
+          type: number
+        contentHash:
+          type: string
+          nullable: true
+        corroborationCount:
+          type: integer
+        workspaceId:
+          type: string
+        pageId:
+          type: string
+          nullable: true
+          description: Null for a loose entry.
+        trust:
+          type: string
+          enum: [HUMAN_VERIFIED, GROUNDED, OBSERVED, PROVISIONAL, UNGROUNDED]
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/PageEntryCitation"
+        lastCheckedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastCheckedSha:
+          type: string
+          nullable: true
+        moves:
+          type: array
+          description: Only in a list response.
+          items:
+            $ref: "#/components/schemas/PageEntryMove"
+        inboxItems:
+          type: array
+          description: Only in a list response.
+          items:
+            $ref: "#/components/schemas/PageEntryInboxDecision"
+        triage:
+          type: array
+          description: Only in a list response.
+          items:
+            $ref: "#/components/schemas/PageEntryTriageStep"
+
+    CreatePageEntryDto:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          description: One short claim, as markdown.
+        scope:
+          type: string
+          description: The repository path glob, team or project that the claim applies to. Required for a loose entry.
+        kind:
+          $ref: "#/components/schemas/PageEntryKindEnum"
+        sourceSession:
+          type: string
+          description: A session id from the harness, to trace the claim to a run.
+        supersedesId:
+          type: string
+          description: The entry that this entry replaces.
+        distinct:
+          type: boolean
+          description: Send true to say that the entry is different from the similar entries that the server found.
+        standing:
+          type: boolean
+          description: Send true to start the entry as STANDING. The server ignores it for an agent.
+        citations:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/PageEntryCitationInputDto"
+
+    UpdatePageEntryDto:
+      type: object
+      properties:
+        content:
+          type: string
+        scope:
+          type: string
+        kind:
+          $ref: "#/components/schemas/PageEntryKindEnum"
+        status:
+          $ref: "#/components/schemas/PageEntryStatusEnum"
+        verified:
+          type: boolean
+          description: Only a person can send this.
+
+    BulkUpdatePageEntriesDto:
+      type: object
+      required:
+        - entryIds
+        - status
+      properties:
+        entryIds:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: "#/components/schemas/PageEntryStatusEnum"
+
+    BulkUpdatePageEntriesResult:
+      type: object
+      properties:
+        updated:
+          type: integer
+        skipped:
+          type: integer
+
+    MovePageEntriesDto:
+      type: object
+      required:
+        - entryIds
+        - pageId
+      properties:
+        entryIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: string
+        pageId:
+          type: string
+          description: The page that the entries go under.
+        suggested:
+          type: boolean
+          description: Send true when a person accepts a suggestion from the gardener.
+
+    MovePageEntriesResult:
+      type: object
+      properties:
+        moved:
+          type: array
+          items:
+            type: string
+        skipped:
+          type: integer
+
+    KnowledgeTrustEnum:
+      type: string
+      description: >-
+        HUMAN_VERIFIED: a person confirmed it. GROUNDED: accepted, and each
+        citation holds. OBSERVED: accepted, and it rests on an outside page that
+        the server read. PROVISIONAL: in use, but nothing confirms it yet.
+        UNGROUNDED: all other entries.
+      enum:
+        - HUMAN_VERIFIED
+        - GROUNDED
+        - OBSERVED
+        - PROVISIONAL
+        - UNGROUNDED
+
+    ServedCitation:
+      type: object
+      description: The evidence for an entry, and the result of the last check of it.
+      required:
+        - kind
+        - result
+        - checkedAt
+        - checkedSha
+      properties:
+        kind:
+          type: string
+          enum:
+            - CODE
+            - ISSUE
+            - PULL_REQUEST
+            - COMMENT
+            - RUN
+            - URL
+        repo:
+          type: string
+          nullable: true
+          description: CODE only. The full name of the repository.
+        path:
+          type: string
+          nullable: true
+          description: CODE only. The path from the root of the repository.
+        commitSha:
+          type: string
+          nullable: true
+          description: CODE only. The commit of the cited lines.
+        lines:
+          type: string
+          nullable: true
+          description: CODE only. The cited lines at the last check, for example "40-52".
+        target:
+          type: string
+          nullable: true
+          description: >-
+            All kinds other than CODE. The issue key, the pull request URL, the
+            comment id, the run id or the page URL.
+        result:
+          type: string
+          nullable: true
+          enum:
+            - HOLDS
+            - MOVED
+            - CHANGED
+            - MISSING
+            - UNKNOWN
+        checkedAt:
+          type: string
+          format: date-time
+          nullable: true
+        checkedSha:
+          type: string
+          nullable: true
+        judgment:
+          type: string
+          nullable: true
+          description: CHANGED only. The decision of the judge model.
+          enum:
+            - HOLDS
+            - CONTRADICTED
+            - UNCLEAR
+        judgeModel:
+          type: string
+          nullable: true
+
+    KnowledgeSearchHit:
+      type: object
+      description: >-
+        One page body or one entry. A page body has kind "page", no entryId and
+        a null trust.
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - page
+            - entry
+        pageId:
+          type: string
+          nullable: true
+          description: Null for an entry that is on no page.
+        pageTitle:
+          type: string
+        entryId:
+          type: string
+          nullable: true
+        title:
+          type: string
+        content:
+          type: string
+        scope:
+          type: string
+          nullable: true
+        status:
+          type: string
+          description: The status of the entry. A page body is always STANDING.
+          enum:
+            - PROPOSED
+            - STANDING
+            - CONSOLIDATED
+            - SUPERSEDED
+            - DISPUTED
+            - ARCHIVED
+        sourceUserId:
+          type: string
+          nullable: true
+        verified:
+          type: boolean
+        retrievalCount:
+          type: integer
+        entryKind:
+          allOf:
+            - $ref: "#/components/schemas/PageEntryKindEnum"
+          nullable: true
+        moduleIds:
+          type: array
+          items:
+            type: string
+        evidenceFor:
+          type: object
+          nullable: true
+          description: For a CONSOLIDATED entry, the page whose body holds its fact.
+          properties:
+            pageId:
+              type: string
+            pageTitle:
+              type: string
+        distance:
+          type: number
+          description: The vector distance from the query. Only present for a vector match.
+        relevanceScore:
+          type: number
+          description: 1 minus the distance. Only present for a vector match.
+        trust:
+          allOf:
+            - $ref: "#/components/schemas/KnowledgeTrustEnum"
+          nullable: true
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServedCitation"
+        lastCheckedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: The latest check of a citation.
+        lastCheckedSha:
+          type: string
+          nullable: true
+          description: The commit of the latest check of code.
+
+    KnowledgeSearchResult:
+      type: object
+      properties:
+        hits:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeSearchHit"
+        facets:
+          type: object
+          description: >-
+            The number of matches for each value of a field. The fields are
+            sourceUserId, scope, status, kind and entryKind.
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: integer
+        found:
+          type: integer
+          description: >-
+            The number of groups that match. A group is a page, or a scope for
+            entries on no page.
+
+    KnowledgeContextDto:
+      type: object
+      properties:
+        workspaceId:
+          type: string
+          format: uuid
+          description: The workspace. If you do not send it, the server uses the workspace of the session.
+        query:
+          type: string
+          description: >-
+            The work that you are about to do, in free text. If you do not send
+            a query, the server uses the scope as the query.
+        scope:
+          type: string
+          description: Only facts about this repository path, team or project.
+        tokenBudget:
+          type: number
+          default: 2000
+          minimum: 1
+          maximum: 20000
+          description: >-
+            The maximum number of tokens in the pack. The default is 2000. The
+            server changes a value above 20000 to 20000.
+        moduleIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: >-
+            The modules of the work. Knowledge about them, and about their
+            neighbour modules, goes to the top.
+        issueId:
+          type: string
+          format: uuid
+          description: The issue of the work. Its modules and its capability set the order.
+
+    ContextPack:
+      type: object
+      description: >-
+        Items in order of relevance. PROVISIONAL entries come after all other
+        items, and the pack holds a maximum of 2 of them.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeSearchHit"
+        estimatedTokens:
+          type: integer
+          description: The estimated tokens of the pack. The estimate is 4 characters for each token.
+        tokenBudget:
+          type: integer
+          description: The budget that the server applied.
+        omitted:
+          type: integer
+          description: The number of matches that did not go into the pack.
+
+    KnowledgeGap:
+      type: object
+      properties:
+        query:
+          type: string
+        count:
+          type: integer
+          description: How many times a search asked this question.
+        lastAskedAt:
+          type: string
+          format: date-time
+
+    CreateTeamDto:
+      type: object
+      required:
+        - name
+        - identifier
+      properties:
+        name:
+          type: string
+        identifier:
+          type: string
+          description: The prefix of the issue numbers in the team, for example "ENG".
+        icon:
+          type: string
+        preferences:
+          $ref: "#/components/schemas/UpdateTeamPreferencesDto"
+
+    UpdateTeamDto:
+      type: object
+      properties:
+        name:
+          type: string
+        identifier:
+          type: string
+        icon:
+          type: string
+
+    UpdateTeamPreferencesDto:
+      type: object
+      properties:
+        cyclesEnabled:
+          type: boolean
+        cyclesMode:
+          type: string
+          enum: [auto, manual]
+          description: >-
+            With `auto`, the server makes, closes and continues the cycles. With
+            `manual`, a person makes each cycle.
+        autoRolloverDestination:
+          type: string
+          enum: [next-cycle, backlog]
+          description: >-
+            Where the unfinished issues go when the server closes a cycle. Only
+            the `auto` mode uses it.
+        cyclesFrequency:
+          type: number
+          description: The length of a cycle, in weeks.
+        upcomingCycles:
+          type: number
+          description: The number of future cycles that the server keeps.
+        teamType:
+          type: string
+          enum: [engineering, support]
+          description: The workflow states that a new team gets. Only creation uses it.
+
+    TeamMemberDto:
+      type: object
+      required:
+        - userId
+      properties:
+        userId:
+          type: string
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+          nullable: true
+        name:
+          type: string
+          description: Unique in the workspace.
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+          description: >-
+            Free text. If you send no status at creation, the server sets
+            `Backlog`.
+        startDate:
+          type: string
+          nullable: true
+        endDate:
+          type: string
+          nullable: true
+        leadUserId:
+          type: string
+          nullable: true
+        teams:
+          type: array
+          items:
+            type: string
+          description: >-
+            The ids of the teams that work on the project. An empty list means
+            that the project belongs to all the teams.
+        capabilityIds:
+          type: array
+          items:
+            type: string
+          description: The capabilities that the project builds or changes.
+        workspaceId:
+          type: string
+
+    ProjectMilestone:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deleted:
+          type: string
+          format: date-time
+          nullable: true
+        name:
+          type: string
+          description: Unique in the project.
+        description:
+          type: string
+          nullable: true
+        endDate:
+          type: string
+          nullable: true
+        projectId:
+          type: string
+
+    CreateProjectDto:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          description: Free text. The default is `Backlog`.
+        startDate:
+          type: string
+        endDate:
+          type: string
+        leadUserId:
+          type: string
+        teams:
+          type: array
+          items:
+            type: string
+          description: Team ids. Send none to make the project belong to all the teams.
+        capabilityIds:
+          type: array
+          items:
+            type: string
+
+    UpdateProjectDto:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        leadUserId:
+          type: string
+        teams:
+          type: array
+          items:
+            type: string
+          description: Replaces the list.
+        capabilityIds:
+          type: array
+          items:
+            type: string
+          description: Replaces the list.
+
+    CreateProjectMilestoneDto:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        endDate:
+          type: string
+
+    UpdateProjectMilestoneDto:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        endDate:
+          type: string
+
+    IssueSearchHit:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The issue id.
+        title:
+          type: string
+        description:
+          type: string
+          description: The description as Tiptap JSON text. An empty string if the issue has no description.
+        descriptionMarkdown:
+          type: string
+        descriptionString:
+          type: string
+          description: The indexed text of the description.
+        stateId:
+          type: string
+        stateCategory:
+          type: string
+          enum: [TRIAGE, BACKLOG, UNSTARTED, STARTED, COMPLETED, CANCELED, ""]
+        resolutionSnippet:
+          type: string
+          description: >-
+            Up to 500 characters of the last top-level comment before the issue
+            moved to a completed state. An empty string if there is no such comment.
+        teamId:
+          type: string
+        number:
+          type: integer
+        issueNumber:
+          type: string
+          description: The team identifier and the number, for example "ENG-12".
+        workspaceId:
+          type: string
+        assigneeId:
+          type: string
+          description: An empty string if nobody has the issue.
+        distance:
+          type: number
+          description: >-
+            The cosine distance to the query. The field is absent if the match
+            is by words only.
+        relevanceScore:
+          type: number
+          description: 1 minus `distance`. The field is absent when `distance` is absent.
+
   responses:
     ErrorResponse:
       description: Error response
@@ -2447,15 +6156,15 @@ components:
                 type: string
 
     UnauthorizedResponse:
-      description: Unauthorized response
+      description: The request has no valid token or session.
       content:
         application/json:
           schema:
             type: object
             properties:
-              error:
+              message:
                 type: string
-                example: Unauthorized
+                example: Unauthorised
 
   securitySchemes:
     BearerAuth:

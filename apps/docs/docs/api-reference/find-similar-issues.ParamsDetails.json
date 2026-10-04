@@ -1,0 +1,1 @@
+{"parameters":[{"name":"issueId","in":"query","required":true,"schema":{"type":"string"}},{"name":"workspaceId","in":"query","required":false,"description":"The workspace of the issue. You must be a member of it. If you send none, the server uses the workspace of your session.","schema":{"type":"string"}}]}

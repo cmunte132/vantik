@@ -1,0 +1,1 @@
+{"parameters":[{"in":"path","name":"issueNumber","required":true,"description":"The number part of the issue key, without the team identifier.","schema":{"type":"integer"}},{"in":"query","name":"teamId","required":true,"description":"The id of the team that owns the issue.","schema":{"type":"string"}}]}

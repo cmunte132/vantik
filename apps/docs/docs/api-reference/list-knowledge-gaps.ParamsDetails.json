@@ -1,0 +1,1 @@
+{"parameters":[{"name":"workspaceId","in":"query","required":false,"description":"The workspace. If you do not send it, the server uses the workspace of the session.","schema":{"type":"string","format":"uuid"}}]}

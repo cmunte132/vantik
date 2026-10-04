@@ -37,11 +37,15 @@ button.](/img/docs/issues/issue.png)
 An integration connects Vantik to a tool that you use. Vantik has these
 integrations:
 
-- **GitHub**: two-way sync of issues, comments and pull requests.
+- **GitHub**: a new issue in a team that maps to a repository also opens in
+  GitHub. On an issue that syncs with a GitHub issue, comments go in both
+  directions. A pull request links to the issue that its branch name or its
+  commit messages name.
 - **Git hosts**: a Forgejo, Gitea or GitLab host, or any git host that serves
   HTTP or HTTPS.
 - **Local repositories**: a git repository on the disk of the server machine.
-- **Discord**: a channel thread becomes an issue, and replies go back.
+- **Discord**: a message in a Discord channel that is linked to an issue
+  becomes a comment on that issue.
 - **Email**: an email becomes an issue, with its attachments.
 - **Bug Enricher**: posts a suggested resolution on each new issue with the
   `bug` label. The model of the server writes it.

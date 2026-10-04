@@ -87,7 +87,7 @@ Each member of a workspace has one role.
 | --- | --- |
 | `ADMIN` | The person who made the workspace, and each person that an admin invites as **Admin**. |
 | `USER` | Each person that an admin invites as **User**. This is the default in the invite form. |
-| `BOT` | The account of an integration. Vantik makes one bot for each integration in a workspace, and the bot writes what the integration writes. |
+| `BOT` | The account of an integration. When an integration first writes to a workspace, Vantik makes a bot for it. The bot writes what the integration writes. |
 | `AGENT` | An agent. See [Agents](#agents). |
 
 To invite a person, open **Invite & manage members** and click **Add member**.
@@ -138,8 +138,15 @@ agent runs. It also does not show a revoked agent after an admin clears it.
 
 ### Agent runs
 
-A person starts an agent run from an issue, with the **Delegate to an agent**
-button. There is no other way to start a run. An agent cannot start a run.
+Only a person can start an agent run, and only in the webapp. There are two
+ways:
+
+- On an issue, click **Delegate to an agent**.
+- On a run that failed, expired, or needs review, click **Retry**. This starts
+  a new attempt of the run.
+
+An agent cannot start a run. The server also starts a new attempt by itself in
+one case: the lease of a run expired, and the run has attempts left.
 
 A hosted run uses its own agent identity, one for each issue, with a name such
 as "Fuzzy Zebra". Vantik gives this identity no token. The sandbox of the run

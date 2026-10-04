@@ -45,9 +45,8 @@ team name and a team identifier. Only an admin can make a team. When an admin
 makes a team, Vantik adds the admin, all the other admins, and all the bots of
 the workspace to it.
 
-To see the teams, click **Teams** in the sidebar. An admin sees all the teams
-of the workspace on this page, and uses it to join or to leave a team. A member
-who is not an admin sees only the teams that the member is in.
+To see a list of your teams, click **Teams** in the sidebar. The list shows
+only the teams that you are a member of. This is also true for an admin.
 
 ## Team identifiers and issue keys
 
@@ -123,14 +122,16 @@ There are two kinds of agent.
 
 - **A personal agent** belongs to the person who made it. Any member can make
   one. Open **Settings**, then **API** under **My account**. In the **Access
-  tokens** section, set **Acts as** to **Its own identity — an agent**. Vantik
-  then shows a token one time. Copy the token and paste it into your agent, for
-  example into an MCP client configuration. Vantik keeps only a hash of the
-  token, so it cannot show the token again.
+  tokens** section, set **Acts as** to **Its own identity — an agent**. Then
+  set **Role** to the scopes of the agent: **Read only**, **Read and write**
+  (the default), or **Read, write and delete**. Vantik then shows a token one
+  time. Copy the token and paste it into your agent, for example into an MCP
+  client configuration. Vantik keeps only a hash of the token, so it cannot
+  show the token again.
 - **A workspace agent** belongs to the workspace, not to one person. Only an
   admin can make one, and only an admin can revoke it. Vantik never makes a
-  token for a workspace agent. A token that no person owns has no person to
-  change it or to see a leak, so Vantik does not make one.
+  token for a workspace agent. Thus no credential for it exists to log, to
+  copy, or to leak.
 
 An admin sees the agent accounts of the workspace in the **Agent accounts**
 section of **Settings** → **Agents**. This list does not show the identities of
@@ -138,21 +139,24 @@ agent runs. It also does not show a revoked agent after an admin clears it.
 
 ### Agent runs
 
-Only a person can start an agent run, and only in the webapp. There are two
-ways:
+A person starts an agent run in the webapp. There are three ways:
 
 - On an issue, click **Delegate to an agent**.
 - On a run that failed, expired, or needs review, click **Retry**. This starts
   a new attempt of the run.
+- If such a run left a pull request or a branch, you can click **Clean up**
+  or **Reject** on it. Then, in the dialog, click **Clean up and retry** or
+  **Reject and retry**.
 
 An agent cannot start a run. The server also starts a new attempt by itself in
 one case: the lease of a run expired, and the run has attempts left.
 
-A hosted run uses its own agent identity, one for each issue, with a name such
-as "Fuzzy Zebra". Vantik gives this identity no token. The sandbox of the run
-holds no Vantik credential. The agent writes its notes and facts to a file in
-the sandbox, and the server reads the file, checks each line, and applies it
-as the agent of the run.
+You do not choose an agent when you delegate. Vantik gives the run an agent
+identity of its own, one for each issue, with a name such as "Fuzzy Zebra".
+Each attempt on the same issue uses the same identity. Vantik gives this
+identity no token. The sandbox of the run holds no Vantik credential. The agent
+writes its notes and facts to a file in the sandbox. The server reads the file,
+checks each line, and applies it as the agent of the run.
 
 Read [The review cycle](/agents/review-cycle) to learn how Vantik checks the
 work of a run.

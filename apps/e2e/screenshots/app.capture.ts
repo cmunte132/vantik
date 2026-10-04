@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { SIGNED_OUT, signInInBrowser } from '../src/browser';
 import { runTag } from '../src/env';
 import { shot } from './frame';
-import { loadDocsRun, type DocsRun } from './run';
+import { DOCS_BROWSER_STATE, loadDocsRun, type DocsRun } from './run';
 
 /**
  * Each test opens one page of the seeded workspace and saves one screenshot
@@ -381,6 +381,7 @@ test.describe('settings', () => {
     ['settings/workflow', 'settings/teams/ENG/workflow', 'Workflow'],
     ['settings/cycles', 'settings/teams/ENG/cycles', 'Cycles'],
     ['settings/templates', 'settings/teams/ENG/templates', 'Templates'],
+    ['settings/notifications', 'settings/account/notifications', 'Notifications'],
     ['settings/integrations', 'settings/integrations', 'Integrations'],
   ];
 
@@ -427,6 +428,44 @@ test.describe('everyday', () => {
     await expect(input).toBeVisible();
     await shot(page, 'everyday/command-palette', {
       focus: [input, page.getByRole('listbox')],
+    });
+  });
+
+  test('search', async ({ browser }) => {
+    // The search box debounces with Date.now, which a fixed clock never moves,
+    // so this page keeps the real clock.
+    const context = await browser.newContext({ storageState: DOCS_BROWSER_STATE });
+    const page = await context.newPage();
+    await allIssues(page);
+    await page.keyboard.press('Meta+/');
+    const input = page.getByPlaceholder('Type a command or search...');
+    await expect(input).toBeVisible();
+    await input.fill('checkout');
+    // Issues arrive after the debounce; until then the list reads "No results".
+    await expect(
+      page
+        .getByRole('option')
+        .filter({ hasText: run.seeded.featuredIssueTitle })
+        .first(),
+    ).toBeVisible();
+    await shot(page, 'everyday/search', {
+      focus: [input, page.getByRole('listbox')],
+    });
+    await context.close();
+  });
+
+  test('template picker', async ({ page }) => {
+    await allIssues(page);
+    await page.keyboard.press('c');
+    // An open menu hides the rest of the page from the accessibility tree, so
+    // find the trigger by its text, not by its role.
+    const trigger = page.locator('button', { hasText: /^Template$/ });
+    await trigger.click();
+    const menu = page.getByRole('menu');
+    await expect(menu.getByText('Bug report')).toBeVisible();
+    await shot(page, 'everyday/template-picker', {
+      focus: [trigger, menu, page.getByText('Issue title', { exact: true })],
+      highlight: trigger,
     });
   });
 });

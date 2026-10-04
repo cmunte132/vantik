@@ -1,0 +1,69 @@
+---
+title: 'Search'
+sidebar_label: "Search"
+---
+
+## Overview
+
+Search finds issues and the knowledge bank from one box.
+
+To open search, use one of these methods:
+
+- Press `⌘ /` on a Mac, or `Ctrl /` on a different computer.
+- Click the search icon at the top of the sidebar. Its tooltip is **Search
+  issues (⌘ + /)**.
+
+![The search dialog. The query is checkout. The results show six
+issues.](/img/docs/everyday/search.png)
+
+## How to search
+
+1. Open search.
+2. Type your query in **Type a command or search...**.
+3. Wait a short time. Vantik starts the search when you stop typing.
+4. Select a result to open it.
+
+If nothing agrees with the query, the dialog shows **No results found.**
+
+The dialog has no filters. To filter the issues, use the **Filter** control of
+a list. Read [Views](/fundamentals/views#how-to-filter-the-issues).
+
+## The results
+
+The results of the knowledge bank show first. Each one shows its kind:
+
+- **Page**: a page of the knowledge bank.
+- **Fact**: an entry of the knowledge bank.
+- **Evidence**: an entry that supports a different entry.
+
+A fact that is outside a page shows **Outside any page**. When you select it,
+Vantik opens the **Pages** home. Read [Knowledge](/fundamentals/knowledge).
+
+The issues show after the knowledge results. Each issue shows its status icon,
+its key and its title. Vantik shows a maximum of 10 issues.
+
+## What search finds
+
+Search finds an issue by these parts of the issue:
+
+- The title.
+- The description.
+- The comments.
+
+A match in the title counts more than a match in the description. A match in
+the description counts more than a match in a comment.
+
+Search finds a word, the start of a word, and a word with a small spelling
+error. It also finds an issue by the start of its key or of its number. For
+example, `ENG-12` finds ENG-12, and it also finds ENG-120.
+
+Search shows only the issues of your teams. It shows the pages of the
+knowledge bank for the full workspace.
+
+### Search by meaning
+
+Your instance can also find issues by meaning. This needs an embedding model.
+The operator sets `EMBEDDINGS_SOURCE` to `local` or to `hosted`. Then search
+finds an issue that has the same meaning as the query, with different words.
+
+If `EMBEDDINGS_SOURCE` has no value, search finds only the words of the query.

@@ -63,8 +63,9 @@ weaker sandbox in place of a microVM.
   `qemu-system-x86_64` for the architecture of the machine.
 - Hardware virtualisation. Without it, QEMU emulates the processor. The runs
   then work, but they are very slow.
-- Node.js 23.6 or later, to run the sandbox host natively. The container image
-  has Node.js 24.
+- For a native sandbox host: a checkout of the repository, Node.js 23.6 or
+  later, and pnpm 10. The container image has Node.js 24, and it needs none of
+  these.
 - Memory and disk for each run. Each guest gets 4096 MB of memory and 2 CPUs.
   Its disk can grow to 30720 MB with the review, or 20480 MB without it. The
   disk is sparse, so a run uses only the space that it writes.
@@ -84,10 +85,13 @@ echo "SANDBOX_HOST_TOKEN=$(openssl rand -hex 32)" >> .env
 
 ### 2. On macOS, run it natively
 
-1. Install QEMU.
+Run each command in this section from the root of the checkout.
+
+1. Install QEMU and the dependencies of the workspace.
 
 ```bash
 brew install qemu
+pnpm install
 ```
 
 2. Build the guest image. This step takes a few minutes. Read
@@ -148,18 +152,22 @@ The container image does not include the Vantik guest image. So the container
 uses the stock image of Gondolin, the library that starts the microVMs. The
 first run downloads that image into the `sandbox-images` volume, so that run
 takes longer. With the stock image, each run keeps its checkout in memory.
-A native sandbox host on Linux can use the guest image, as on macOS.
+A native sandbox host on Linux can use the guest image, as on macOS. But with
+the defaults, the server container cannot reach a native sandbox host on
+Linux. The sandbox host listens on `127.0.0.1`, and Docker on Linux does not
+resolve `host.docker.internal`. This page does not give that network setup.
 Read [Without the guest image](#without-the-guest-image).
 
-### 4. Do a check of the sandbox host
+### 4. Check the sandbox host
 
 1. Look at the first log lines of the sandbox host. The line
    `Listening on <address>:<port>` has `available: true` when the sandbox host
    can start a microVM. If `available` is false, the line also has a `reason`.
 2. Look for a warning about the guest image. If it shows, read
    [The guest image](#the-guest-image).
-3. Open an issue in Vantik that has a module with a repository. The delegate
-   control must show no reason.
+3. Open an issue in Vantik that has a module with a repository, and a
+   description of 40 characters or more. The delegate control must show no
+   reason.
 
 ## Configuration
 
@@ -277,9 +285,8 @@ review cycle in a sandbox from the sandbox host. Read
 [The review cycle](/agents/review-cycle).
 
 The server registers the executors when it starts. A run that names no
-executor uses the only one that is registered, so you set nothing. Earlier versions had a
-runner on another machine that asked the server for work. That runner, and the
-endpoints that it used, are not in Vantik now.
+executor uses the only one that is registered, so you set nothing. Vantik has
+no runner on another machine that asks the server for work.
 
 The hosted executor is available to a workspace when two conditions are true:
 
@@ -309,10 +316,10 @@ server writes it immediately. The review cycle compares the spend with
 **Spend per issue (USD)** in **Settings → Agents** between passes. The default
 is $5. Read [The budget](/agents/review-cycle#the-budget).
 
-The same figures go to your telemetry backend. Each model call is a `chat <model>`
-span with `gen_ai.usage.cost`. The attribute `vantik.llm.cost_source` tells if
-the cost is `provider` or `catalog`. Read
-[The telemetry contract](/oss/self-deployment#the-telemetry-contract).
+The same figures go to your telemetry backend. Each model call is a `chat
+<model>` span with `gen_ai.usage.cost`. The attribute `vantik.llm.cost_source`
+tells if the cost is `provider` or `catalog`. Read [The telemetry
+contract](/oss/self-deployment#the-telemetry-contract).
 
 ## How to find a fault
 
@@ -333,7 +340,7 @@ For a native process, stop it and start it again.
 | After an upgrade, each pass of a run starts slowly. | The guest image has a different Pi version from the server, so each pass fetches Pi with `npx`. | Build the guest image again. |
 | A run fails, and the reason says that the request body is larger than a number of bytes. | The checkout is larger than `SANDBOX_HOST_MAX_BODY_MB`. | Increase `SANDBOX_HOST_MAX_BODY_MB` for the sandbox host. Then apply the change to the sandbox host. |
 | A setup command cannot get its packages. | The host of the package registry is not on the allowlist. | Add the host in **How to verify the work** on the page of the module. |
-| A run starts a new attempt after the server stopped during the run. | The lease of the run expired. The lease sweep starts the next attempt, to a maximum of `AGENT_RUN_MAX_ATTEMPTS`. | Nothing. Read [Scheduled jobs](/oss/self-deployment#scheduled-jobs) for the lease settings. |
+| A run starts a new attempt after the server stopped during the run. | The lease of the run expired. The lease sweep starts the next attempt, to a maximum of `AGENT_RUN_MAX_ATTEMPTS`. | Nothing. Read the [Environment reference](/oss/self-deployment#environment-reference) for the lease settings. |
 | The first pass fails with a message from the provider, for example "invalid API key". | The provider refused the key or the model. | Correct the key or the model in **Settings → Agents**. |
 | The telemetry backend shows no `chat <model>` spans or no costs. | The backend dropped the batches, for example at its memory limit. | Look at the logs of the backend first. |
 

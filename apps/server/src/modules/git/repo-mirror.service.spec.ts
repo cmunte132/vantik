@@ -315,10 +315,12 @@ describe('RepoMirrorService', () => {
         cwd: work,
       },
     );
-    await git(['push', '--quiet', origin, 'HEAD:refs/heads/agent/ENG-1']);
+    await git(['push', '--quiet', origin, 'HEAD:refs/heads/agent/ENG-1'], {
+      cwd: work,
+    });
 
-    expect(run(origin, 'branch', '--list', 'agent/ENG-1')).toContain(
-      'agent/ENG-1',
+    expect(run(origin, 'rev-parse', 'agent/ENG-1')).toBe(
+      run(work, 'rev-parse', 'HEAD'),
     );
     expect(run(origin, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('main');
   });

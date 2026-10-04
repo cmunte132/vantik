@@ -1,6 +1,6 @@
 {
   "name": "@vantikhq/cli",
-  "version": "2026.10.1",
+  "version": "2026.10.2",
   "description": "Work Vantik issues, projects and pages from the terminal",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

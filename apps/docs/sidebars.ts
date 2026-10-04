@@ -75,7 +75,7 @@ const sidebars: SidebarsConfig = {
     },
   ],
   // docusaurus-plugin-openapi-docs makes the other entries. The command is
-  // `npm run gen-api-docs vantik`. Do not edit docs/api-reference/sidebar.ts by
+  // `pnpm clean-api-docs && pnpm gen-api-docs`. Do not edit docs/api-reference/sidebar.ts by
   // hand, because that command replaces the file each time that it runs. A
   // person wrote these three pages: 'api-reference/overview',
   // 'api-reference/connect-mcp', and 'api-reference/agents'. If the command

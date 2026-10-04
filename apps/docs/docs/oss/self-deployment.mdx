@@ -148,7 +148,8 @@ Until an admin does these steps, the agent runs of that workspace fail.
 ### Upgrade from a version without the key
 
 Before Vantik required the key, the server encrypted the credentials with a
-fallback value. The fallback value was `SUPERTOKEN_CONNECTION_URI`. Its default,
+fallback value. The fallback value was `SUPERTOKEN_CONNECTION_URI`, or
+`DATABASE_URL` if that was not set. Its default,
 `http://supertokens:3567`, is public, so that encryption protected nothing.
 
 At each start, the server tries these old values on each credential that the
@@ -280,7 +281,7 @@ log. To see if a job runs, read
 | Job | Default | Variable | What it does |
 | --- | --- | --- | --- |
 | Cycle maintenance | `0 * * * *` (hourly) | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
-| Knowledge decay | `0 3 * * *` (nightly) | `PAGE_DECAY_CRON` | This job archives a proposed entry that waited too long for a person. It also archives a standing or provisional entry that no agent run used for too long. In addition, it archives a provisional entry that went wrong more often than well. Read [Decay](/fundamentals/knowledge#decay). |
+| Knowledge decay | `0 3 * * *` (nightly) | `PAGE_DECAY_CRON` | This job archives a proposed entry that waited too long for a person. It also archives a standing or provisional entry that the server did not serve for too long. In addition, it archives a provisional entry that went wrong more often than well. Read [Decay](/fundamentals/knowledge#decay). |
 | Knowledge gap issues | `0 4 * * 1` (Monday 04:00) | `KNOWLEDGE_GAP_ISSUES_CRON` | This job opens one issue for each question that agents asked the knowledge often and that it could not answer. It opens the issue on the team that owns the module of the question. It never opens a second issue for the same question. |
 | Generated page refresh | `23 * * * *` (hourly) | `KNOWLEDGE_PAGE_REFRESH_CRON` | This job finds each generated page whose cited entries changed, and it builds the page again. Read [Generated pages](/fundamentals/knowledge/gardener#generated-pages). |
 | Agent run lease sweep | `* * * * *` (each minute) | `AGENT_RUN_LEASE_SWEEP_CRON` | This job expires each agent run that did not renew its lease in time. It starts the next attempt if the run has attempts left. It also fails each run that stayed queued for longer than one lease. |
@@ -871,8 +872,8 @@ steps:
 The script does not push. The push of the tag makes the release. A workflow then
 builds the images for `linux/amd64` and `linux/arm64`, and it pushes them with
 the version as their tag. It also moves the `latest` tag to them. Other
-workflows publish the npm packages and take the screenshots of the
-documentation again.
+workflows take the screenshots of the documentation again, and they publish
+the npm packages if the repository variable `NPM_PUBLISH` is `true`.
 
 ### How to upgrade
 

@@ -98,7 +98,7 @@ These actions are for admins only:
 - Make or delete a team, and add or remove a member of a team.
 - Invite a person, suspend a member, and change the preferences of the
   workspace.
-- Start automatic cycles, and change, stop or delete a cycle.
+- Start or stop automatic cycles, and change or delete a cycle.
 - Add or remove the model keys that agent runs use.
 - Connect a local repository or a git host.
 - Make a workspace agent, and revoke the agent of a different person.
@@ -129,8 +129,8 @@ There are two kinds of agent.
   show the token again.
 - **A workspace agent** belongs to the workspace, not to one person. Only an
   admin can make one, and only an admin can revoke it. Vantik never makes a
-  token for a workspace agent. Thus no credential for it exists to log, to
-  copy, or to leak.
+  token for a workspace agent. Thus no Vantik credential for it exists to log,
+  to copy, or to leak.
 
 An admin sees the agent accounts of the workspace in the **Agent accounts**
 section of **Settings** → **Agents**. This list does not show the identities of
@@ -141,7 +141,8 @@ agent runs. It also does not show a revoked agent after an admin clears it.
 A person starts an agent run in the webapp. There are three ways:
 
 - On an issue, click **Delegate to an agent**.
-- On a run that failed, expired, or needs review, click **Retry**. This starts
+- On a run that failed, expired, or needs review, click **Retry** on the page
+  of the run, or **Try again** on the card of the run in the issue. This starts
   a new attempt of the run.
 - If such a run left a pull request or a branch, you can click **Clean up**
   or **Reject** on it. Then, in the dialog, click **Clean up and retry** or

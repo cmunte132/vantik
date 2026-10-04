@@ -1,0 +1,232 @@
+---
+title: 'Delegate an issue to an agent'
+sidebar_label: "Delegate an issue"
+---
+
+## Overview
+
+You can give an issue to an agent. The agent works on the issue in a Vantik
+sandbox, in an agent run. When the run ends, the agent gives back a branch or
+a pull request, and a comment on the issue that tells what it did.
+
+Only a person can start an agent run, from the issue in Vantik. An agent
+cannot start a run. When you assign an issue to an agent, Vantik does not start
+a run.
+
+## Before you start
+
+These items must be ready before a run can do work:
+
+- **A model key.** A workspace admin adds a key for a model provider in
+  **Settings → Agents**, under **Model access**. Without a key, the delegate
+  control tells you to add one.
+- **A repository.** The run gets its repository from the modules of the issue.
+  Open the page of the module, and click **Connect a repository** under
+  **Repositories**. Then add the module to the issue. If the issue has no module
+  with a repository, the run fails.
+- **A sandbox host.** The operator of your instance runs the sandbox host
+  process. If the server cannot reach it, the delegate control shows the reason,
+  and you cannot start a run.
+- **A clear issue.** The description must say what the problem is and what
+  done looks like. Vantik refuses an issue with a very short description.
+
+## How to delegate an issue
+
+1. Open the issue.
+2. At the right, below the status, the priority and the assignee, click
+   **Delegate to an agent**.
+3. Optional: in **Anything the issue does not already say**, type guidance that
+   the issue does not give.
+4. Select the **Provider**. The list shows the providers that the workspace has
+   a key for.
+5. Select the **Model**, or keep **Workspace default**.
+6. Optional: select the **Reasoning effort**.
+7. Click **Start run**, or press `⌘ Enter`.
+
+![The delegate popover on an issue. It shows the guidance field, the provider,
+the model, the reasoning effort and the Start run
+button.](/img/docs/agents/delegate.png)
+
+**Where it runs** shows the repository and the base branch of the run. Click it
+to see more. The footer shows the ceiling of the run, for example "Stops at 50
+turns or $5.00". It also tells what the run gives back: a pull request, or a
+branch.
+
+When the run starts, the popover closes. The **Delegate to an agent** button
+does not show while a run is live. The issue shows an **Agent** row with the
+status of the run, and a card in its activity.
+
+The run does not change the assignee or the status of the issue.
+
+### When you cannot start a run
+
+The popover shows a message in place of the fields when:
+
+- The description of the issue is too short.
+- The workspace has no model key.
+- The server cannot reach a sandbox host.
+
+A workspace can have a maximum number of live runs. The default is 5. If the
+workspace has that number, the popover shows an error when you click **Start
+run**.
+
+## The list of runs
+
+Click **Agents** in the sidebar to see all agent runs of the workspace.
+
+![The Agents page. Each issue shows its runs, with the status, the model, the
+time, the cost and the pull request.](/img/docs/agents/runs.png)
+
+The page groups the runs by issue. The issue with the newest run is first. The
+heading of each group shows the number of runs, their total cost, and the time
+of the last run.
+
+Each row shows one run:
+
+- The number of the attempt, for example `#1`.
+- The status. A run that failed shows the reason in red, for example **Checks
+  failed**.
+- The model, the time that the run took, and the cost.
+- When the run started.
+- A link to the pull request or the branch, if the run made one.
+
+Click a row to open the page of the run.
+
+## The page of a run
+
+![The page of a run while the agent works. The stepper shows the Check stage,
+and the Now card shows the tests that run.](/img/docs/agents/run-running.png)
+
+The page of a run has these parts:
+
+- **The header.** The agent, the key of the issue, the model and the runner.
+  The status and the time of the run show at the right.
+- **The stepper.** The five stages of the run: **Set up**, **Work**, **Check**,
+  **Review** and **Hand back**. A green stage is done. A blue stage is in
+  progress. A red stage failed. A stage that the run did not need shows
+  **skipped**. The time of a stage adds all the passes of the review cycle.
+- **Now.** While the run is live, this card shows the step that the agent does
+  now, for example **Running the tests**.
+- **The outcome.** When the run ends, this card shows the result. Read
+  [The outcome](#the-outcome).
+- **Activity.** The events of the run, in order. Each event shows the time from
+  the start of the run.
+- **Spend.** The cost of the run, the budget, and the number of turns and
+  passes.
+- **Definition of Done.** The criteria of the issue, if it has criteria.
+- **Changes.** The files that the run changed.
+- **This run.** The model, the runner, the reasoning effort and the branch.
+
+The page updates while the run is live.
+
+### Activity
+
+Use the filters **All**, **Edits**, **Commands** and **Agent notes** to show
+one kind of event. These are the kinds of events:
+
+| Event | What it shows |
+| --- | --- |
+| **Set up the environment** | The sandbox start, the clone of the repository, and the setup commands. |
+| **Read** | The files that the agent read. |
+| **Edited** or **Wrote** | A file that the agent changed, with the diff. |
+| **Searched** | A search in the code. |
+| **Tests passed** or **Tests failed** | A test command and its result. |
+| **Ran a command** or **A command failed** | A different command. |
+| A note | A note from the agent about its work. It shows the initials of the agent. |
+| A step of the cycle | A step of the review cycle, for example "Reviewing the work against the issue". |
+
+A step that failed shows a red mark and its output.
+
+### Spend
+
+The **Spend** card shows the cost in US dollars, and the budget of the run. The
+bar turns amber at 80% of the budget, and red at 100%.
+
+Vantik checks the budget between passes. A pass can thus end a little over the
+budget. Read [The review cycle](/agents/review-cycle#the-budget) for how Vantik
+measures the cost.
+
+## The outcome
+
+When the run ends, the agent posts a comment on the issue. If the run opened a
+pull request, Vantik also links the pull request to the issue. The comment
+gives:
+
+- What the agent did.
+- How many criteria of the Definition of Done are ticked, and which are still
+  open.
+- The pull request, or the branch.
+
+The issue shows the comment as the card of the run, in the activity of the
+issue. The card tells what the agent did, for example "finished this issue".
+Click **See what it did** to open the page of the run.
+
+On the page of the run, the outcome card shows the same result, with
+**Review pull request** and **Copy branch**.
+
+![The page of a run that finished and opened a pull request. The outcome card
+shows the summary of the agent.](/img/docs/agents/run-handback.png)
+
+### The statuses of a run
+
+| Status | What it means |
+| --- | --- |
+| **Waiting for a runner** | The run waits to start. |
+| **Starting** | A runner took the run, and starts it. |
+| **Working** | The agent works on the issue. |
+| **Done** | The work is finished, and nothing objected to it. |
+| **Needs a human** | The work is finished, but no review accepted it. A person must decide if it is right. Read [The review cycle](/agents/review-cycle). |
+| **Rejected** | A person rejected the work of a run that had **Needs a human**. |
+| **Could not finish** | The run failed. The page tells what broke and what to do. |
+| **Stopped** | A person stopped the run. |
+| **The runner went away** | The runner stopped and did not report back. |
+
+A run that failed shows the reason, for example **the environment would not
+build** or **it finished without changing anything**. The outcome card also tells what to
+do next.
+
+![The page of a run that could not finish. The outcome card tells what broke,
+and the Retry and Clean up buttons show at the top.](/img/docs/agents/run-failed.png)
+
+## After a run
+
+These actions are at the top of the page of the run. Some of them are also on
+the card of the run in the activity of the issue.
+
+- **Stop.** This action stops a live run. Vantik does not ask you to confirm.
+- **Retry.** This action starts a new attempt with the same settings. It shows
+  when the run has **Could not finish**, **The runner went away** or **Needs a
+  human**. On the card of the run, it is **Try again**. You can retry each run
+  one time. By default, you cannot retry the third attempt. Then fix the cause,
+  and delegate the issue again.
+- **Reject.** This action shows on a run with **Needs a human**. It removes the
+  work of the run.
+- **Clean up.** This action shows on a run that failed, stopped or went away,
+  if the run left a branch or a pull request.
+
+**Reject** and **Clean up** do the same thing:
+
+1. Click **Reject** or **Clean up**.
+2. Read the dialog. It tells what Vantik will close and delete.
+3. Click **Reject** or **Clean up**. To start a new attempt after it, click
+   **Reject and retry** or **Clean up and retry**.
+
+![The Clean up after this run dialog, with the Cancel, Clean up, and Clean up
+and retry buttons.](/img/docs/agents/clean-up.png)
+
+Vantik then does these things:
+
+- It closes the pull request, with a comment that tells why.
+- It deletes the branch. If a person added commits to the branch after the run,
+  Vantik keeps the branch. It also keeps a branch that was merged.
+- It keeps the run and its record.
+
+A message tells you what Vantik did. After you reject a run, the run shows
+**Rejected**, and the outcome card tells who rejected it and when.
+
+![A rejected run. The status shows Rejected, and the outcome card tells that
+Vantik closed the pull request and deleted the
+branch.](/img/docs/agents/run-rejected.png)
+
+You cannot clean up a run that has **Done**. Its pull request is the work. If
+you do not want it, close the pull request on the host.

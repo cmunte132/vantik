@@ -5,112 +5,160 @@ sidebar_label: The review cycle
 
 # The review cycle
 
-Delegate an issue to an agent running in the hosted sandbox and the work does
-not go straight to a pull request. It goes round a loop first:
+When you delegate an issue to an agent in the hosted sandbox, the work does not
+go directly to a pull request. It goes through a loop first:
 
-1. **Implement** — an agent gets the issue, its Definition of Done, and the
-   repository's own commands. It writes the change.
-2. **Verify** — Vantik runs the repository's test, typecheck, lint and build
-   commands against the tree the agent left. Not the agent: an agent that
-   believes it ran the tests and did not is a common and quiet failure.
-3. **Review** — a *second* agent, in the same sandbox, reads the diff against
-   the issue. It did not write the code, it is not allowed to change it, and it
-   is given the verification result as fact.
-4. **Revise** — what the reviewer found goes back to an implementer to fix, and
-   the loop returns to step 2.
+1. **Implement.** An agent gets the issue, its Definition of Done, and the
+   commands of the repository. It writes the change.
+2. **Verify.** Vantik runs the checks of the module against the tree that the
+   agent left. The checks are the test, typecheck, lint and build commands that
+   the module declares. Vantik runs them, not the agent. An agent can think that
+   it ran the tests when it did not.
+3. **Review.** A *second* agent, in the same sandbox, reads the diff and
+   compares it with the issue. This agent did not write the code, and it must
+   not change it. It gets the result of the checks as fact.
+4. **Revise.** An implementer gets the findings of the reviewer, and fixes
+   them. Then the loop goes back to step 2.
 
-That repeats until the reviewer accepts the work or the issue's budget is spent.
+The loop stops when the reviewer accepts the work, or when one of the
+conditions in [When the loop stops](#when-the-loop-stops) occurs.
 
-## Why a second agent rather than the first one thinking again
+To start a run, read [Delegate an issue to an agent](/agents/delegating-an-issue).
 
-An agent asked to re-examine its own answer is not a check. Self-correction
-without an execution-grounded signal measures flat to negative on code
-generation, and challenging a model on a correct answer makes it abandon the
-answer. The value of the review pass is entirely that it is performed by
-something which never saw the reasoning — it gets the issue and the resulting
-tree, which is what a human reviewer gets.
+## Why a second agent
 
-The two agents are given different instructions and different skills. The
-implementer is never told how to review, because an implementer that starts
-grading its own diff has removed the only independent read. The reviewer is
-never given the skill about writing changes, because making one is the single
-thing it must not do.
+An agent that examines its own answer again is not a check. Without a signal
+from a real execution, self-correction does not make code better, and it can
+make it worse. If you challenge a model about a correct answer, the model can
+abandon the correct answer. The review pass has value because a different agent
+does it. That agent never saw the reasoning. It gets the issue and the tree, as
+a human reviewer does.
 
-## What a finding has to carry
+The two agents get different instructions and different skills. Vantik never
+tells the implementer how to review. An implementer that grades its own diff
+removes the only independent read. Vantik never gives the reviewer the skill
+for writing changes, because the reviewer must not make a change.
 
-A review finding is discarded unread unless it cites a `file.ts:123` or a
-command that fails.
+## What a finding must have
 
-This is not a formatting rule. A reviewer that has opened the file writes a
-different finding from one that has skimmed a diff, and requiring the citation
-is what forces the first kind. It also protects the next pass: an implementer
-handed "consider whether this is idiomatic" will spend a pass — and your money
-— changing something that was never wrong.
+Vantik discards a review finding unless it cites a location, for example
+`file.ts:123`, or a command in backticks. Vantik keeps a maximum of 12 findings,
+the most severe first.
+
+This rule is not about format. A reviewer that opened the file writes a
+different finding from a reviewer that only read the diff. The citation makes
+the reviewer do the first. It also protects the next pass. If an implementer
+gets "consider whether this is idiomatic", it can spend a pass, and your money,
+on a change that nobody needed.
 
 ## When the loop stops
 
-**It accepts** when the reviewer says the work is done *and* the repository's
-checks pass. A reviewer that signs off a tree whose tests are failing has
-contradicted something that was actually executed, and the executed thing wins.
+**It accepts the work** when the reviewer accepts it *and* the checks did not
+fail. If the module declares no checks, the decision of the reviewer is
+sufficient. A finding of high severity stops the acceptance, also when the
+reviewer accepted the work. A reviewer that accepts a tree with failed tests
+contradicts a real execution, and the execution wins.
 
-**It stops and asks for a human** — the run finishes as `Needs review`, with the
-branch pushed and the pull request open — when any of these happen:
+**It stops and asks for a person** in these cases. The run then ends with the
+status **Needs a human**:
 
-- the budget is spent, in passes, money or wall clock;
-- two passes in a row changed neither the tree nor the verification result, so
-  another pass would change nothing either;
-- the reviewer produced no verdict that could be read. "The reviewer did not
-  answer" and "the reviewer said yes" never collapse into the same outcome;
-- the reviewer rejected the work but cited nothing, so there is nothing specific
-  to send back.
+- The reviewer gave no verdict that Vantik can read. "The reviewer did not
+  answer" and "the reviewer said yes" never become the same outcome.
+- The reviewer rejected the work but cited nothing, and the checks did not
+  fail. Then nothing specific can go back to the implementer.
+- The run reached its spend ceiling, its wall clock, or its number of passes.
+- Two passes in a row changed neither the tree nor the result of the checks.
+  Another pass would thus change nothing.
+- Less than 90 seconds remained before a pass or a review.
+- The model provider refused the reviewer.
+- A pass after the first one crashed, or the provider refused it.
 
-In every one of those cases the work is still delivered. It is real work; it
-simply has not been signed off, and both the pull request body and the issue
-comment say so — along with whatever the last review still objected to, so the
-person picking it up starts from what is wrong rather than from the diff.
+If the reviewer rejected the work and cited nothing, but the checks failed,
+the loop does not stop. Another revise pass runs, and it gets the failed checks.
+The ceilings still apply.
 
-If you decide against the work, **Reject** on the run page closes the pull
-request with a comment saying why and deletes the branch, and **Reject and
-retry** then starts a fresh attempt. A branch that someone has added commits
-to since the run is kept, and the run itself stays on record. The same button
-reads **Clean up** on a run that failed, timed out or was stopped after
-pushing. Retrying never needs it: each attempt pushes to a branch of its own.
+In each of these cases, Vantik still delivers the work. Vantik pushes the
+branch, and opens the pull request if the host supports pull requests. The work
+is real, but nothing accepted it. The pull request and the comment on the issue
+say so. They also list the findings that the last review still had. The person
+who takes the work then starts from what is wrong, not from the diff.
 
-**It fails** only when the first pass crashes or the agent changed nothing. A
-crash on a *later* pass stops the loop and delivers what the earlier passes
-built — throwing away three passes of real work to report the fourth one's exit
-code helps nobody.
+If you do not want the work, click **Reject** on the page of the run. Vantik
+closes the pull request with a comment that tells why, and deletes the branch.
+**Reject and retry** then starts a new attempt. If a person added commits to
+the branch after the run, Vantik keeps the branch. Vantik keeps the run and its
+record.
+
+After you reject the work, the run shows the status **Rejected**. The outcome
+card shows "Rejected: the work was not kept", and tells who rejected it and
+when. On the server, the run keeps the status **Needs a human**.
+
+On a run that failed, stopped or went away after it pushed, the same button
+shows **Clean up**. You do not need it before a retry, because each attempt
+pushes to its own branch. Read
+[After a run](/agents/delegating-an-issue#after-a-run).
+
+**It fails** in these cases:
+
+- The first pass crashes, or the model provider refuses it.
+- The agent changed nothing.
+- The environment does not build.
+- The host rejects the push.
+- The tree is too large to push.
+
+A crash on a *later* pass does not fail the run. It stops the loop, and Vantik
+delivers the work of the earlier passes.
 
 ## The budget
 
-Set in **Settings → Agents → How the work is checked**, and overridable per run.
+| Ceiling | Default | What it limits | Where you set it |
+| --- | --- | --- | --- |
+| Review passes | 3 | The number of times through the loop before a person must look. | **Settings → Agents**, in **Review passes**. |
+| Spend per issue | $5 | All the cost of one attempt, in all passes. | **Settings → Agents**, in **Spend per issue (USD)**. |
+| Wall clock | 30 minutes | The full run, with the fetch of the repository. | No control in the webapp. The API can set it for each run. |
 
-| Ceiling | Default | What it bounds |
-| --- | --- | --- |
-| Review passes | 3 | Times round the loop before a person is asked to look |
-| Spend per issue | $5 | Everything one attempt costs, across every pass |
-| Wall clock | 30 minutes | The whole run, including fetching the repository |
+These fields are in the section **How the work is checked**. Only a workspace
+admin can change them.
 
-These are ceilings on the *whole cycle*, not on one agent call. Reviewing
-roughly doubles what an issue costs when the first attempt is accepted, and more
-when it is not — which is the trade the switch exists for.
+The ceilings apply to the *full cycle*, not to one call to the agent. If the
+reviewer accepts the first attempt, the review makes the cost of an issue
+approximately two times larger. If the reviewer does not accept it, the cost
+is more. The switch is there for this trade.
 
-A run that reaches a ceiling does not lose its work. It hands over.
+A run that reaches a ceiling does not lose its work. It hands the work over.
 
-## Turning it off
+### How Vantik measures the spend
 
-The switch in **Settings → Agents** disables the cycle for the workspace: the
-first attempt is delivered as it stands, which is what hosted runs did before
-this existed. It defaults on, because a pull request that nothing has read is
-the failure hosted execution is arranged to avoid — but a workspace that would
-rather have the cheaper thing can say so.
+Vantik adds the cost of each call to the model:
+
+- If the provider reports the cost that it bills, Vantik uses that cost. A
+  gateway, for example OpenRouter, reports it.
+- Else, Vantik uses the price of the model from the catalog of the agent
+  harness, and the token counts.
+
+Vantik checks the spend between passes. A pass can thus end a little over the
+ceiling.
+
+## How to turn it off
+
+In **Settings → Agents**, under **How the work is checked**, turn off **Review
+every change before handing it back**. Then the cycle stops for the workspace.
+Vantik delivers the first attempt as it is. When the switch is off, the fields
+for the passes and the spend do not show.
+
+The switch is on by default. A pull request that nothing read is the failure
+that hosted runs must prevent. But a workspace that wants the less expensive
+method can turn it off.
 
 ## What you can see afterwards
 
-The run timeline groups events by pass, so `Did the work` → `Ran the checks` →
-`Reviewed the work` → `Fixed what the review found (pass 2)` reads in the order
-it happened rather than merging every pass into one heading.
+The page of the run shows the cycle in two places:
 
-Each pass is also recorded on the run: whether verification passed, what the
-reviewer found, and a hash of the tree it produced. That is what makes "why did
-this take four passes" answerable a week later.
+- **The stepper** shows the stages **Set up**, **Work**, **Check**, **Review**
+  and **Hand back**. The time of each stage adds all the passes. A revise pass
+  counts as **Work**.
+- **Activity** shows each event in order, with the steps of the cycle. For
+  example: "Running the repository’s own checks", "Reviewing the work against
+  the issue", and "The reviewer found 2 thing(s) to fix".
+
+Read [The page of a run](/agents/delegating-an-issue#the-page-of-a-run).

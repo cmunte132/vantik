@@ -30,7 +30,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Agents',
-      items: ['agents/review-cycle'],
+      items: ['agents/delegating-an-issue', 'agents/review-cycle'],
     },
     {
       type: 'category',

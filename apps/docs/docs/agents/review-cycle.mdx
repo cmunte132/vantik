@@ -89,6 +89,9 @@ closes the pull request with a comment that tells why, and deletes the branch.
 the branch after the run, Vantik keeps the branch. Vantik keeps the run and its
 record.
 
+![The Reject this work dialog, with the Cancel, Reject, and Reject and retry
+buttons.](/img/docs/agents/clean-up.png)
+
 After you reject the work, the run shows the status **Rejected**. The outcome
 card shows "Rejected: the work was not kept", and tells who rejected it and
 when. On the server, the run keeps the status **Needs a human**.
@@ -101,9 +104,6 @@ On a run that failed, stopped or went away after it pushed, the same button
 shows **Clean up**. You do not need it before a retry, because each attempt
 pushes to its own branch. Read
 [After a run](/agents/delegating-an-issue#after-a-run).
-
-![The Clean up after this run dialog, with the Cancel, Clean up, and Clean up
-and retry buttons.](/img/docs/agents/clean-up.png)
 
 **It fails** in these cases:
 
@@ -122,7 +122,7 @@ delivers the work of the earlier passes.
 | --- | --- | --- | --- |
 | Review passes | 3 | The number of times through the loop before a person must look. | **Settings → Agents**, in **Review passes**. |
 | Spend per issue | $5 | All the cost of one attempt, in all passes. | **Settings → Agents**, in **Spend per issue (USD)**. |
-| Wall clock | 30 minutes | The full run, with the fetch of the repository. | No setting in Vantik changes it. |
+| Wall clock | 30 minutes | The full run, with the fetch of the repository. | No field in **Settings → Agents** changes it. |
 
 These fields are in the section **How the work is checked**. Only a workspace
 admin can change them.

@@ -24,13 +24,17 @@ These items must be ready before a run can do work:
 - **A model key.** A workspace admin adds a key for a model provider in
   **Settings → Agents**, under **Model access**. Without a key, the delegate
   control tells you to add one.
+- **A model.** Select a model when you delegate, or set the default model of
+  the workspace. A workspace admin sets the default in **Model access**, in
+  **Runs use** and **Model**. If the run has no model, it fails when it starts.
 - **A repository.** The run gets its repository from the modules of the issue.
   Open the page of the module, and click **Connect a repository** under
   **Repositories**. Then add the module to the issue. If the issue has no module
-  with a repository, the run fails.
+  with a repository, the run can fail.
 - **A sandbox host.** The operator of your instance runs the sandbox host
   process. If the server cannot reach it, the delegate control shows the reason,
-  and you cannot start a run.
+  and you cannot start a run. Read
+  [Optional compose profiles](/quickstart#optional-compose-profiles).
 - **A clear issue.** The description must say what the problem is and what
   done looks like. Vantik refuses an issue with a very short description.
 
@@ -43,7 +47,8 @@ These items must be ready before a run can do work:
    the issue does not give.
 4. Select the **Provider**. The list shows the providers that the workspace has
    a key for.
-5. Select the **Model**, or keep **Workspace default**.
+5. Select the **Model**, or keep **Workspace default**. **Workspace default**
+   uses the model that **Model access** sets.
 6. Optional: select the **Reasoning effort**. The page of the run shows this
    value as **Thinking**.
 7. Click **Start run**, or press `⌘ Enter`.
@@ -91,8 +96,8 @@ Each row shows one run:
 
 - The number of the run on its issue, for example `#1`. The first run on the
   issue is `#1`.
-- The status. A run that failed shows the reason in red, for example **Checks
-  failed**.
+- The status. A run that failed shows the reason in red, for example
+  **Environment would not build**.
 - The model, the time that the run took, and the cost.
 - When the run started.
 - A link to the pull request or the branch, if the run made one.
@@ -119,7 +124,7 @@ The page of a run has these parts:
 - **Activity.** The events of the run, in order. Each event shows the time from
   the start of the run.
 - **Spend.** The cost of the run, the budget, and the number of turns and
-  passes.
+  passes. Read [Spend](#spend).
 - **Definition of Done.** The criteria of the issue, if it has criteria.
 - **Changes.** The files that the run changed.
 - **This run.** The model, the runner, the reasoning effort (**Thinking**) and
@@ -149,6 +154,12 @@ A step that failed shows a red mark and its output.
 
 The **Spend** card shows the cost in US dollars, and the budget of the run. The
 bar turns amber at 80% of the budget, and red at 100%.
+
+The card also shows the number of turns and the number of passes. A turn is one
+call to the model. A pass is one time through the review cycle. On a run that
+ended with **Done** or **Needs a human**, the number of passes shows the number
+of turns. This is a fault in Vantik. To see the passes of the run, count the
+**Reviewing the work against the issue** events in **Activity**.
 
 Vantik checks the budget between passes. So a pass can end a little over the
 budget. Read
@@ -194,8 +205,12 @@ build** or **it finished without changing anything**. The outcome card shows
 the message of the run. If the run has no message, the card tells what to do
 next.
 
-![The page of a run that could not finish. The outcome card tells what broke,
-and the Retry and Clean up buttons show at the top.](/img/docs/agents/run-failed.png)
+![The page of a run that could not finish. The setup command failed, and the
+outcome card shows its message. The Retry button shows at the
+top.](/img/docs/agents/run-failed.png)
+
+Vantik records no branch for a run that failed. So the run has nothing to clean
+up, and only **Retry** shows.
 
 ## After a run
 
@@ -223,15 +238,15 @@ the card of the run in the activity of the issue.
 The dialog does not show **Clean up and retry** on a run with **Stopped**,
 because you cannot retry that run.
 
-![The Clean up after this run dialog, with the Cancel, Clean up, and Clean up
-and retry buttons.](/img/docs/agents/clean-up.png)
+![The Reject this work dialog, with the Cancel, Reject, and Reject and retry
+buttons. The Clean up dialog has the same parts.](/img/docs/agents/clean-up.png)
 
 Vantik then does these things:
 
 - It closes the pull request, with a comment that tells why.
 - It deletes the branch. Vantik keeps the branch in these cases:
   - A person added commits to the branch after the run.
-  - The branch was merged.
+  - The pull request was merged.
   - The run recorded no last commit for the branch.
 - It keeps the run and its record.
 

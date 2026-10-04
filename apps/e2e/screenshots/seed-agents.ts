@@ -8,8 +8,13 @@ import type { Database } from './db';
 
 /**
  * What the agent pages show: a model the workspace can use, a repository the
- * storefront's code lives in, and runs on four issues, one in each state a
- * reader needs to recognise.
+ * storefront's code lives in, and five runs on four issues, one in each state
+ * a reader needs to recognise.
+ *
+ * Every run is one the hosted executor can produce: its failure category, its
+ * events and its counts are the ones that executor writes. A finished run
+ * carries its turn count in iterationCount too, because the executor writes it
+ * there when the run ends, and the Spend card shows that field as passes.
  *
  * The agent account and the module's repository go through the API. The rest
  * has no endpoint, because only a person delegating and a real executor make
@@ -23,6 +28,7 @@ export interface SeededAgents {
   succeededRunId: string;
   rejectedRunId: string;
   failedRunId: string;
+  handedOverRunId: string;
 }
 
 interface Input {
@@ -122,9 +128,10 @@ export async function seedAgents(
   const runningStart = clockAt - 6 * MINUTE - 40_000;
   const runningRunId = await run(
     issues.running,
-    { status: 'RUNNING', startedAt: runningStart, iterationCount: 1 },
+    { status: 'RUNNING', startedAt: runningStart, iterationCount: 0 },
     [
       ...setup(),
+      [62, 'implement', 'Running the agent'],
       [70, 'implement', 'Read src/payments/webhooks.ts', { kind: 'read', target: 'src/payments/webhooks.ts' }],
       [74, 'implement', 'Read src/payments/provider.ts', { kind: 'read', target: 'src/payments/provider.ts' }],
       [79, 'implement', 'Read src/orders/apply-payment.ts', { kind: 'read', target: 'src/orders/apply-payment.ts' }],
@@ -166,6 +173,7 @@ export async function seedAgents(
       ],
       [250, 'implement', 'Edit src/payments/webhooks.spec.ts', { kind: 'write', ref: 'w3', target: 'src/payments/webhooks.spec.ts' }],
       [251, 'implement', 'Edit src/payments/webhooks.spec.ts', { ref: 'w3', ok: true, added: 34, removed: 0 }],
+      [298, 'verify', 'Running the repository’s own checks'],
       [300, 'verify', 'pnpm test src/payments', { kind: 'test', ref: 't1', command: 'pnpm test src/payments' }],
     ],
   );
@@ -178,12 +186,12 @@ export async function seedAgents(
       status: 'SUCCEEDED',
       startedAt: succeededStart,
       finishedAt: new Date(succeededStart + 14 * MINUTE + 12_000),
-      iterationCount: 1,
+      iterationCount: 23,
       summary:
         'The address form re-rendered on every keystroke because the autofill handler replaced the whole form state, which dropped focus. It now merges the autofilled fields into the existing state. Added a test that autofills the form and checks the focused field keeps focus.',
       result: {
         delivery: 'pull_request',
-        branch: 'vantik/eng-5-address-form-focus',
+        branch: 'agent/eng-5',
         prUrl: 'https://github.com/acme/storefront/pull/42',
         headCommit: '9b1c4e7',
         filesChanged: 2,
@@ -205,6 +213,7 @@ export async function seedAgents(
     },
     [
       ...setup(),
+      [62, 'implement', 'Running the agent'],
       [72, 'implement', 'Read src/checkout/address-form.tsx', { kind: 'read', target: 'src/checkout/address-form.tsx' }],
       [75, 'implement', 'Read src/checkout/use-autofill.ts', { kind: 'read', target: 'src/checkout/use-autofill.ts' }],
       [
@@ -220,12 +229,14 @@ export async function seedAgents(
       [301, 'implement', 'Edit src/checkout/use-autofill.ts', { ref: 'w1', ok: true, added: 9, removed: 7 }],
       [420, 'implement', 'Edit src/checkout/address-form.spec.tsx', { kind: 'write', ref: 'w2', target: 'src/checkout/address-form.spec.tsx' }],
       [421, 'implement', 'Edit src/checkout/address-form.spec.tsx', { ref: 'w2', ok: true, added: 29, removed: 0 }],
+      [560, 'verify', 'Running the repository’s own checks'],
       [562, 'verify', 'pnpm test src/checkout', { kind: 'test', ref: 't1', command: 'pnpm test src/checkout' }],
       [640, 'verify', 'pnpm test src/checkout', { ref: 't1', ok: true, exit: 0, passed: 48, failed: 0 }],
       [683, 'verify', 'pnpm typecheck', { kind: 'bash', ref: 'b1', command: 'pnpm typecheck' }],
       [702, 'verify', 'pnpm typecheck', { ref: 'b1', ok: true, exit: 0 }],
-      [825, 'review', 'The reviewer approved the change: the fix is the smallest one that keeps the inputs mounted, and the test fails without it.'],
-      [852, 'report', 'Opened pull request #42 on acme/storefront'],
+      [705, 'review', 'Reviewing the work against the issue'],
+      [825, 'review', 'The reviewer accepted the work'],
+      [830, 'report', 'Pushing the branch'],
     ],
   );
   await db.insert('LinkedIssue', {
@@ -247,12 +258,12 @@ export async function seedAgents(
       status: 'NEEDS_REVIEW',
       startedAt: rejectedStart,
       finishedAt: new Date(rejectedFinish),
-      iterationCount: 1,
+      iterationCount: 14,
       summary:
         'Listed the eleven checkout events with their properties in docs/analytics/checkout.md.',
       result: {
         delivery: 'pull_request',
-        branch: 'vantik/eng-8-checkout-analytics-events',
+        branch: 'agent/eng-8',
         prUrl: 'https://github.com/acme/storefront/pull/43',
         headCommit: '4e0a2d1',
         filesChanged: 1,
@@ -268,34 +279,60 @@ export async function seedAgents(
           branch: 'deleted',
         },
       },
-      phaseTimings: { setup: 61_000, implement: 402_000, review: 90_000, report: 24_000 },
+      phaseTimings: { setup: 61_000, implement: 340_000, verify: 62_000, review: 90_000, report: 24_000 },
     },
     [
       ...setup(),
+      [62, 'implement', 'Running the agent'],
       [70, 'implement', 'Read src/analytics/events.ts', { kind: 'read', target: 'src/analytics/events.ts' }],
       [74, 'implement', 'Read src/checkout/track.ts', { kind: 'read', target: 'src/checkout/track.ts' }],
       [300, 'implement', 'Created docs/analytics/checkout.md', { kind: 'write', ref: 'w1', target: 'docs/analytics/checkout.md' }],
       [301, 'implement', 'Created docs/analytics/checkout.md', { ref: 'w1', ok: true, added: 96, removed: 0 }],
-      [430, 'review', 'Reviewing the work against the issue'],
-      [515, 'review', 'The reviewer rejected the work but cited no file, line or failing command, so there is nothing specific to send back.'],
+      [400, 'verify', 'Running the repository’s own checks'],
+      [402, 'verify', 'pnpm lint', { kind: 'bash', ref: 'b1', command: 'pnpm lint' }],
+      [460, 'verify', 'pnpm lint', { ref: 'b1', ok: true, exit: 0 }],
+      [462, 'review', 'Reviewing the work against the issue'],
+      [550, 'review', 'The reviewer found 0 thing(s) to fix'],
+      [552, 'report', 'Pushing the branch'],
     ],
   );
 
-  // Failed: the change broke two tests the run could not fix in its budget.
-  const failedStart = clockAt - 4 * 60 * MINUTE;
+  // Failed: the setup command of the repository broke, so the agent never
+  // started. Nothing was pushed, so there is nothing to clean up.
+  const failedStart = clockAt - 6 * 60 * MINUTE;
   const failedRunId = await run(
     issues.failed,
     {
       status: 'FAILED',
-      failure: 'VERIFICATION_FAILED',
+      failure: 'ENVIRONMENT_SETUP_FAILED',
       error:
-        'pnpm test failed after 2 revise passes: 2 of 51 tests in src/catalog/stock.spec.ts still fail ("hides the badge when stock is unknown", "rounds stock above 99 to 99+").',
+        'pnpm install --frozen-lockfile\n ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with "frozen-lockfile" because pnpm-lock.yaml is not up to date with package.json',
       startedAt: failedStart,
-      finishedAt: new Date(failedStart + 22 * MINUTE),
-      iterationCount: 3,
+      finishedAt: new Date(failedStart + 58_000),
+      result: { egressDenied: 0 },
+    },
+    [
+      [2, 'setup', 'Started a sandbox (2 vCPU, 4 GB)'],
+      [9, 'setup', 'Cloned acme/storefront at main (3f2c9e1)'],
+    ],
+  );
+
+  // Handed over: after the lockfile was fixed, the issue was delegated again.
+  // The checks still failed after three passes, which is the limit, so the
+  // cycle gave the work to a person with the pull request open.
+  const handedOverStart = clockAt - 4 * 60 * MINUTE;
+  const handedOverRunId = await run(
+    issues.failed,
+    {
+      status: 'NEEDS_REVIEW',
+      startedAt: handedOverStart,
+      finishedAt: new Date(handedOverStart + 24 * MINUTE + 10_000),
+      iterationCount: 41,
+      summary:
+        'Added a stock badge to the product page. Two tests in src/catalog/stock.spec.ts still fail: the badge shows when stock is unknown, and stock above 99 is not rounded.',
       result: {
         delivery: 'pull_request',
-        branch: 'vantik/eng-9-stock-levels',
+        branch: 'agent/eng-9',
         prUrl: 'https://github.com/acme/storefront/pull/44',
         headCommit: '7f3e9a0',
         filesChanged: 3,
@@ -303,31 +340,61 @@ export async function seedAgents(
         deletions: 12,
         costUsd: 2.84,
         turns: 41,
-        reviewPasses: 0,
+        reviewPasses: 3,
       },
       phaseTimings: {
         setup: 66_000,
-        implement: 501_000,
+        implement: 330_000,
         verify: 98_000,
-        'revise-1': 240_000,
+        review: 92_000,
+        'revise-2': 240_000,
         'verify-2': 95_000,
-        'revise-2': 220_000,
+        'review-2': 88_000,
+        'revise-3': 220_000,
         'verify-3': 97_000,
+        'review-3': 90_000,
+        report: 26_000,
       },
     },
     [
       ...setup(),
+      [62, 'implement', 'Running the agent'],
       [71, 'implement', 'Read src/catalog/product-page.tsx', { kind: 'read', target: 'src/catalog/product-page.tsx' }],
       [75, 'implement', 'Read src/catalog/stock.ts', { kind: 'read', target: 'src/catalog/stock.ts' }],
-      [400, 'implement', 'Created src/catalog/stock-badge.tsx', { kind: 'write', ref: 'w1', target: 'src/catalog/stock-badge.tsx' }],
-      [401, 'implement', 'Created src/catalog/stock-badge.tsx', { ref: 'w1', ok: true, added: 41, removed: 0 }],
-      [1140, 'verify', 'pnpm test src/catalog', { kind: 'test', ref: 't1', command: 'pnpm test src/catalog' }],
+      [300, 'implement', 'Created src/catalog/stock-badge.tsx', { kind: 'write', ref: 'w1', target: 'src/catalog/stock-badge.tsx' }],
+      [301, 'implement', 'Created src/catalog/stock-badge.tsx', { ref: 'w1', ok: true, added: 41, removed: 0 }],
+      [396, 'verify', 'Running the repository’s own checks'],
+      [398, 'verify', 'pnpm test src/catalog', { kind: 'test', ref: 't1', command: 'pnpm test src/catalog' }],
       [
-        1235,
+        494,
         'verify',
         'pnpm test src/catalog',
         {
           ref: 't1',
+          ok: false,
+          exit: 1,
+          passed: 48,
+          failed: 3,
+          output:
+            'FAIL src/catalog/stock.spec.ts\n  ✕ hides the badge when stock is unknown\n  ✕ rounds stock above 99 to 99+\n  ✕ shows the badge for stock of 0\n\nTests: 3 failed, 48 passed, 51 total',
+        },
+        'ERROR',
+      ],
+      [496, 'review', 'Reviewing the work against the issue'],
+      [588, 'review', 'The reviewer found 2 thing(s) to fix'],
+      [590, 'revise-2', 'Fixing 2 finding(s) from the review'],
+      [830, 'verify-2', 'Running the repository’s own checks'],
+      [925, 'review-2', 'Reviewing the work against the issue'],
+      [1013, 'review-2', 'The reviewer found 2 thing(s) to fix'],
+      [1015, 'revise-3', 'Fixing 2 finding(s) from the review'],
+      [1235, 'verify-3', 'Running the repository’s own checks'],
+      [1237, 'verify-3', 'pnpm test src/catalog', { kind: 'test', ref: 't3', command: 'pnpm test src/catalog' }],
+      [
+        1330,
+        'verify-3',
+        'pnpm test src/catalog',
+        {
+          ref: 't3',
           ok: false,
           exit: 1,
           passed: 49,
@@ -337,11 +404,19 @@ export async function seedAgents(
         },
         'ERROR',
       ],
-      [1320, 'report', 'Verification still fails after 2 revise passes; stopping', undefined, 'ERROR'],
+      [1332, 'review-3', 'Reviewing the work against the issue'],
+      [1420, 'review-3', 'The reviewer found 2 thing(s) to fix'],
+      [1424, 'report', 'Pushing the branch'],
     ],
   );
 
-  return { runningRunId, succeededRunId, rejectedRunId, failedRunId };
+  return {
+    runningRunId,
+    succeededRunId,
+    rejectedRunId,
+    failedRunId,
+    handedOverRunId,
+  };
 }
 
 /** The first minute of every run: the sandbox, the clone and the install. */

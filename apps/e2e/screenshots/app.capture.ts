@@ -356,13 +356,15 @@ test.describe('agent runs', () => {
     await shot(page, 'agents/run-failed', { focus: content(page), padding: 0 });
   });
 
+  // The run handed to a person, so the dialog is the Reject one. A failed
+  // hosted run pushed nothing, so it never offers Clean up.
   test('clean up', async ({ page }) => {
     await runPage(
       page,
-      run.seeded.agents.failedRunId,
+      run.seeded.agents.handedOverRunId,
       'Show stock levels on the product page',
     );
-    await page.getByRole('button', { name: 'Clean up' }).first().click();
+    await page.getByRole('button', { name: 'Reject' }).first().click();
     const dialog = page.getByRole('alertdialog').or(page.getByRole('dialog')).first();
     await expect(dialog).toBeVisible();
     await shot(page, 'agents/clean-up', { focus: dialog });

@@ -25,7 +25,15 @@ const sidebars: SidebarsConfig = {
         'fundamentals/templates',
         'fundamentals/search',
         'fundamentals/shortcuts',
-        'fundamentals/knowledge',
+        {
+          type: 'category',
+          label: 'Knowledge',
+          link: { type: 'doc', id: 'fundamentals/knowledge' },
+          items: [
+            'fundamentals/knowledge/needs-you',
+            'fundamentals/knowledge/gardener',
+          ],
+        },
       ],
     },
     {

@@ -19,6 +19,15 @@ the relevant part of it when they start. The server checks each fact against
 the code that it cites. A person decides what agents may use. The bank also
 measures whether the knowledge helps.
 
+This page is the overview. Two more pages give the details:
+
+- [Needs you](/fundamentals/knowledge/needs-you) is the list of the decisions
+  that wait for a person: the kinds of item, the answers, assignment and
+  comments.
+- [The Gardener](/fundamentals/knowledge/gardener) is the set of background
+  jobs that keep the bank current, and the screens that show what they did.
+  It also holds the settings of the bank.
+
 ## Pages
 
 A page is prose for people. You can link a page to a team, a project, an
@@ -34,7 +43,18 @@ Each page has an entry policy, which controls what agents can add to it:
 | `LOCKED` | Read the page, but add nothing. People maintain it by hand. |
 
 A page is **authored** (people write it, the default) or **generated** (the
-server writes it from entries). See [Generated pages](#generated-pages).
+server writes it from entries). See
+[Generated pages](/fundamentals/knowledge/gardener#generated-pages).
+
+On a page, the **Facts behind this page** rail shows the entries of the page.
+Each fact shows its kind, its trust, its author, and how many runs got it. A
+fact in the page body says "in the page body". A fact that waits for a
+person has a **Decide** link to Needs you. On a different fact, use its menu
+to confirm it, to put it in use, to stop using it, to mark it as wrong, or to
+move it to a different page. Click **Add a fact** to add a fact in use.
+
+![A page with the Facts behind this page rail. Two facts are in use, and
+two facts wait for a person.](/img/docs/knowledge/page.png)
 
 ## Entries
 
@@ -67,6 +87,11 @@ Each entry has a status:
 | `SUPERSEDED` | Replaced by a newer entry. Kept for the record. | No |
 | `DISPUTED` | Contradicts the code or another entry. Held back until a person resolves it. | No |
 | `ARCHIVED` | Out of use: rejected, or not used for a long time. | No |
+
+`PROVISIONAL` is not a status. A provisional entry is a `STANDING` or
+`CONSOLIDATED` entry that triage put in use without proof. The server marks
+it with the date that it became provisional, and serves it with the trust tier
+`PROVISIONAL`. See [Provisional facts](#provisional-facts).
 
 An agent that finds an entry is wrong writes a new entry that **supersedes**
 it. The old entry stays in use until a person accepts the correction.
@@ -112,7 +137,7 @@ each citation's last check:
 | `GROUNDED` | The entry is accepted, and every citation was read and still holds. |
 | `OBSERVED` | The entry is accepted, it cites an outside page, and every citation still holds. The citation shows the date that the server last read the page. |
 | `UNGROUNDED` | Nothing that was checked supports the entry, or the code that it cites has changed or gone. An agent checks it against the code before relying on it. |
-| `PROVISIONAL` | The entry is in use, but nothing confirmed it yet. Triage found no reason to refuse it and no reason to ask a person. An agent checks it before relying on it. See [Provisional facts](#provisional-facts). |
+| `PROVISIONAL` | The entry is in use, but nothing confirmed it yet. Triage found no reason to refuse it and no reason to ask a person. An agent checks it before relying on it. A person's confirmation wins over this tier. See [Provisional facts](#provisional-facts). |
 
 Verified entries rank first. Grounded and observed entries rank next, and a
 grounded entry wins over an observed one when the two contradict. Provisional
@@ -169,6 +194,11 @@ entries, and never delete knowledge.
   of two provisional entries follow them, labelled as provisional. Each entry
   shows its citation and its age.
 
+The server reads a maximum of 25 conventions for one run: the conventions
+that a person confirmed first, then the newest. A provisional convention is
+not among them. The token budget can cut a convention, as it can cut any
+entry. An issue with no modules gets no conventions.
+
 `load_context` and `recall_knowledge` also serve a maximum of two provisional
 entries, after the others. A provisional convention is served only when it is
 relevant. It is not given to every run in its modules until it is promoted.
@@ -209,7 +239,7 @@ flowchart TD
 ### The verifier
 
 When triage escalates a fact because it cites no evidence, a verifier agent
-looks for evidence first. The fact stays out of the review queue while the
+looks for evidence first. The fact stays out of Needs you while the
 verifier looks, for a maximum of one hour. The verifier can search and read
 the code of the fact's modules, the workspace's issues, and public pages. It
 cannot change anything. It proposes a maximum of three citations, and the
@@ -240,9 +270,10 @@ flowchart LR
 ```
 
 People also check the decisions that triage makes alone. A share of them goes
-to a person as an audit. When people and triage agree less than the floor for
-one type of decision, that type stops acting and asks a person. See
-[Audits and agreement](#audits-and-agreement).
+to a person as an [audit](/fundamentals/knowledge/needs-you#audits). When
+people and triage agree less than the floor for one type of decision, that
+type stops acting and asks a person. See
+[Agreement](/fundamentals/knowledge/gardener#agreement).
 
 ## Triage and escalation
 
@@ -318,148 +349,19 @@ not trusted yet. Triage records the version of the rules that it decided by.
 When the rules change, a waiting entry that was decided by older rules is
 decided again.
 
-### Escalation reasons
+An escalated entry waits in [Needs you](/fundamentals/knowledge/needs-you),
+with the reasons attached. The reasons in the list above send an entry to a
+person only together with another reason. See
+[Why a fact waits](/fundamentals/knowledge/needs-you#why-a-fact-waits) for
+every reason.
 
-An escalated entry waits in the review queue, with the reasons attached. The
-reasons in the list in [Provisional facts](#provisional-facts) send an entry to
-a person only together with another reason:
+Only people can accept, dispute or verify an entry, answer an audit, or accept
+or decline a proposal. The server refuses these actions from an agent. An
+agent can only change or archive its own entries while they are still
+proposed.
 
-| Reason | Meaning |
-|---|---|
-| `CONTRADICTS_VERIFIED` | It contradicts an entry that a person verified. |
-| `CONTRADICTS_LOCKED` | It contradicts an entry on a locked page. |
-| `UNGROUNDED` | It cites no code, issue, comment or outside page. A run or a pull request is not evidence, because the judges cannot read what it says. The verifier looks for evidence before a person sees the entry. |
-| `CITATION_FAILED` | A citation does not hold, or was not read yet. If a citation no longer holds, the verifier looks for new evidence before a person sees the entry, and the new citations replace the old ones. While a citation is unread, the server reads it again, and then triage decides again. |
-| `PIN_REQUEST` | It is a convention that no evidence confirms. Every run in its modules gets a convention, so a person decides. |
-| `SUPERSEDE_REQUEST` | It replaces an entry that is not in use, or that is gone. When it replaces an entry in use that no person verified, triage decides it like any entry, and its acceptance retires the old one. |
-| `BROAD_SCOPE` | No evidence confirms it, and it has no scope, or its scope reaches more than three modules. |
-| `JUDGES_DISAGREE` | The two model judgments did not agree. |
-| `EVIDENCE_DISPUTED` | One model judgment found that the entry's own evidence says otherwise, and the other did not. A person decides whether the claim is wrong. Needs you shows what each judgment said, and why. |
-| `NO_LLM` | No model is configured, so triage cannot decide. The entry waits for a person, as it does when triage is off. |
-| `EXTERNAL_INPUT` | It rests on an issue or a comment that came from outside the workspace. |
-| `UNKNOWN_SOURCE` | An agent wrote it, and no evidence confirms it. The server cannot yet tell what an agent read. This matters only when the workspace's own code or issues do not confirm the claim. |
-| `HARMFUL_SIGNAL` | Runs that were given it went wrong where it applies. |
-| `AUDIT` | A sample of what triage did alone, for a person to check. See below. |
-| `LOW_AGREEMENT` | People have disagreed with this type of decision lately, so a person decides. See below. |
-
-### The review queue
-
-Open **Review** from the Pages screen, or at `/<workspace>/pages/review`. It
-lists the open page proposals (see [Consolidation](#consolidation)), then every
-proposed entry with the reasons for its escalation, then the open audits.
-Filter the entries by reason. Only people can accept, dispute or verify an
-entry, answer an audit, or accept or decline a proposal. The server refuses
-these actions from an agent. An agent can only change or archive its own
-entries while they are still proposed.
-
-## Audits and agreement
-
-People check triage in turn, so that it acts alone only while people agree
-with it.
-
-### Audits
-
-When triage is `on`, a share of what it does alone goes to a person as an
-audit: `KNOWLEDGE_AUDIT_RATE` of its acceptances, repeats folded in, and
-refusals for holding more than one claim. A refusal for a credential is never
-audited, because a person would be shown the credential. Whether a decision is
-audited follows from its id, so the draw can be worked out again later.
-
-An audit asks one question with two answers. **Agree** keeps what triage did.
-**Disagree** undoes it: an accepted entry is archived, and a folded or refused
-entry is put into use.
-
-### Agreement
-
-A person's action on an entry that triage decided about is a verdict:
-accepted, rejected, or edited. Verdicts come from answers to audits, and from
-people's decisions on the entries that wait for them. In `shadow` mode, every
-entry waits for a person, so every decision can be compared.
-
-For each type of decision (accept, corroborate, refuse, escalate), the server
-measures how far triage and people agree, as Cohen's kappa, over the verdicts
-of the last `KNOWLEDGE_KAPPA_WINDOW_DAYS` days. See it in **Settings → Agents**,
-under "Can triage decide alone?".
-
-### Back-off
-
-When a type's kappa falls below `KNOWLEDGE_KAPPA_FLOOR`, over at least
-`KNOWLEDGE_KAPPA_MIN_SAMPLES` verdicts, that type stops acting. Its entries go
-to a person with the reason `LOW_AGREEMENT`. It acts again when its kappa is
-at the floor or above, over at least the minimum number of verdicts. With
-fewer verdicts, the state stays as it is: a type resumes on evidence, not
-because its old verdicts leave the window. Escalation is measured, but never
-backs off. Each change is recorded with the figures it was made on.
-
-## The holdout
-
-A share of hosted agent runs, `KNOWLEDGE_HOLDOUT_RATE`, is given no knowledge.
-These runs are the **holdout** arm; the other runs are the **treatment** arm.
-The server picks the arm from a hash of the run id, and a holdout run records
-no use of any entry.
-
-**Settings → Agents**, under "Does knowledge help?", compares the two arms:
-finished runs, checks passed, review passes, cost per run, and pull requests
-merged. The sample size comes first. For a long time an arm is only a few
-runs, and a percentage of a few runs is noise. Set the rate to `0` to give
-every run the knowledge, and measure nothing.
-
-## Upkeep
-
-The server also maintains the bank on its own. Everything it proposes goes to
-a person.
-
-- **Conventions from review.** When the reviewer gives the same finding in
-  `KNOWLEDGE_CONVENTION_MIN_RUNS` separate agent runs in one module, the server
-  proposes it as a convention there. A person decides whether to accept it.
-  If a convention proposed this way leads to more harmful outcomes than helpful
-  ones, by `KNOWLEDGE_CONVENTION_HARM_MARGIN`, it is archived, and the module's
-  team gets an issue. A person can put it back.
-- **Knowledge gaps.** The server records the questions that the bank could not
-  answer. A question asked `KNOWLEDGE_GAP_ISSUE_MIN_COUNT` times gets an issue,
-  titled "Knowledge gap:" and the question, on the team that owns the module
-  it names. The job runs on `KNOWLEDGE_GAP_ISSUES_CRON`. The question counts as
-  answered when an entry that cites the issue is accepted.
-
-## Generated pages
-
-A generated page answers a question from the entries in its scope. You make
-one through the API: `POST /api/v1/pages` with `"kind": "GENERATED"` and a
-`question`, and no body. Link it to the modules, products or capabilities that
-it covers.
-
-- **Sections cite entries.** The body is a list of sections. Each section
-  cites the entries that it was written from. Under the body, the webapp
-  lists them section by section, each with its trust tier, and says which are
-  no longer in use. Agents get the same from `read_page`.
-- **Rebuilt only when the evidence changes.** Each hour
-  (`KNOWLEDGE_PAGE_REFRESH_CRON`), the server looks at each generated page. It
-  rebuilds a page only when the entries in its scope changed, and no sooner
-  than `KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL` after the last build.
-- **A new question is a new page.** When you change a page's question, the
-  server rebuilds it for the new one without waiting for an entry to change.
-  The minimum interval still applies: the rebuild runs once it has passed
-  since the last build, even with the hourly look turned off. Every new
-  question gets its own build, even while an earlier one is still waiting
-  or running. A build that cannot reach the search index or the model is
-  tried once more, and after that is left to the hourly look.
-- **Edits, not rewrites.** A model proposes edits to single sections: replace
-  one, insert one, or remove one. A section that no edit names stays exactly
-  as it was. A new section can cite only the entries that the refresh read.
-  If the refresh finds no evidence, it writes nothing. Without a model, the
-  server only removes the sections whose entries are all out of use or out of
-  the page's scope (after a link is removed, for example).
-- **Only what changed is rewritten.** Each section records what it was written
-  from: the question and what its entries said. A refresh can replace or
-  remove a section only when that has changed. The server drops any other
-  replace or remove, so what new entries add goes into new sections, and one
-  refresh can never rewrite the whole page.
-- **History.** Each refresh is recorded in the page's history, with the body
-  from before it. Revert a refresh like any other change.
-- **Take it over by hand.** In the webapp a generated page is read-only. To
-  edit it, take it over from the page menu. It then becomes an authored page,
-  and the server stops rebuilding it. Only a person can take a page over; the
-  server refuses an agent.
+The [Gardener](/fundamentals/knowledge/gardener) holds the settings of
+triage, of the audits and of the context of a run.
 
 ## Consolidation
 
@@ -469,7 +371,8 @@ fold them into the page's body.
 - **A proposal, never a direct change.** Consolidating an authored page, by an
   agent or a person, stores a proposal: the new body, and the entries that it
   folds in. The page does not change. A person accepts or declines the
-  proposal in the review queue. When you consolidate from the page in the
+  proposal in [Needs you](/fundamentals/knowledge/needs-you), as a
+  **Page rewrite** item. When you consolidate from the page in the
   webapp, you propose and accept in one step.
 - **Accepting checks the page again.** The server refuses to accept a proposal
   if the page changed after the proposal was made, if the page is now
@@ -482,7 +385,8 @@ fold them into the page's body.
 - **They are still checked and corrected.** A consolidated entry is checked
   again when the code changes, and triage compares new entries with it, as for
   a standing entry. A correction can supersede it, and a person can dispute or
-  archive it: **Agent memory → In the page** on the page. The page's body keeps
+  archive it from the fact's menu in the **Facts behind this page** rail. The
+  rail marks the fact "in the page body". The page's body keeps
   the old text until a person rewrites it. A consolidated convention is still
   handed to every run on its modules. If runs report it as harmful, a person is
   asked whether to archive it, since the page's body says it too.
@@ -490,42 +394,3 @@ fold them into the page's body.
   body, and puts the entries back in use as standing entries. Undoing that
   revert brings the consolidated body back, and folds back in the entries that
   are still standing, so a fact is never served both in the body and beside it.
-
-## Settings
-
-Set each value on the server as an environment variable. A workspace can set
-its own value, which wins over the server's, under `knowledge` in its
-preferences, with the key shown. An admin sets them with
-`POST /api/v1/workspaces/preferences` and a body such as
-`{"knowledge": {"holdoutRate": 0.2}}`. The `knowledge` object replaces the one
-that is stored, so send every key that you want to keep. A value that cannot be
-read is ignored, and the next layer applies.
-
-| Variable | Default | Workspace key | Meaning |
-|---|---|---|---|
-| `KNOWLEDGE_AUTO_TRIAGE` | `shadow` | `autoTriage` | `off`, `shadow` (decide and record, do not act) or `on`. |
-| `KNOWLEDGE_AUDIT_RATE` | `0.1` | `auditRate` | The share of triage's own decisions sent to a person as audits, from 0 to 1. |
-| `KNOWLEDGE_KAPPA_FLOOR` | `0.6` | `kappaFloor` | Below this kappa, a decision type escalates instead of acting. |
-| `KNOWLEDGE_KAPPA_MIN_SAMPLES` | `20` | `kappaMinSamples` | The verdicts a decision type needs before the floor applies. |
-| `KNOWLEDGE_KAPPA_WINDOW_DAYS` | `30` | `kappaWindowDays` | The days of verdicts that agreement is measured over. |
-| `KNOWLEDGE_HOLDOUT_RATE` | `0.1` | `holdoutRate` | The share of hosted runs given no knowledge, from 0 to 1. |
-| `KNOWLEDGE_CONTEXT_TOP_K` | `5` | `contextTopK` | The relevant entries in a run's context, after the conventions. |
-| `KNOWLEDGE_CONTEXT_TOKEN_BUDGET` | `1500` | `contextTokenBudget` | The tokens that a run's knowledge may take, at most 20000. |
-| `KNOWLEDGE_SIMILARITY_THRESHOLD` | `0.25` | `similarityThreshold` | How alike two entries must be, from 0 to 1, before triage asks a model how they relate. |
-| `KNOWLEDGE_CONVENTION_MIN_RUNS` | `3` | `conventionMinRuns` | The separate runs with the same review finding before it becomes a candidate convention. |
-| `KNOWLEDGE_CONVENTION_HARM_MARGIN` | `3` | `conventionHarmMargin` | How far harmful outcomes must outnumber helpful ones before a candidate convention is archived. |
-| `KNOWLEDGE_GAP_ISSUE_MIN_COUNT` | `5` | `gapIssueMinCount` | How often a question must be asked before it gets an issue. |
-| `KNOWLEDGE_GAP_ISSUES_CRON` | `0 4 * * 1` (weekly, Monday 04:00) | `gapIssuesCron` | When gap issues are opened. `off` disables the job. A workspace can only set `off`: one job serves every workspace. |
-| `KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL` | `6h` | `pageRefreshMinInterval` | The least time between two builds of one generated page, such as `90m`, `6h` or `1d`. |
-| `KNOWLEDGE_PAGE_REFRESH_CRON` | `23 * * * *` (hourly) | none | When the server looks for generated pages to rebuild. `off` disables it, and a page is then built only when it is made or its question changes (after the minimum interval), and a build that failed twice is not tried again. |
-
-These settings of the knowledge bank existed before, and apply to every
-workspace:
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `PAGE_PROPOSED_ENTRY_BUDGET` | `10` | The proposed entries that one token may leave on one curated page. |
-| `PAGE_PROPOSED_ENTRY_EXPIRY_DAYS` | `30` | How long a proposed entry waits before decay archives it. |
-| `PAGE_PROVISIONAL_ENTRY_DECAY_DAYS` | `60` | How long a provisional entry may go unused before decay archives it. |
-| `PAGE_STANDING_ENTRY_DECAY_DAYS` | `90` | How long a standing entry may go unused before decay archives it. |
-| `PAGE_DECAY_CRON` | `0 3 * * *` (nightly) | When the decay pass runs. `off` disables it. |

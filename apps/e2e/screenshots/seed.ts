@@ -432,6 +432,7 @@ export async function seedWorkspace(
       'adding a page entry',
     );
   }
+  await knowledge(api, db, owner, page.id);
 
   // A second team, so the sidebar and the team settings show more than one.
   await ok(
@@ -592,4 +593,77 @@ async function integrations(db: Database, owner: Account) {
     {},
     { teamMappings: [{ source: 'support', teamId: owner.teamId }] },
   );
+}
+
+/**
+ * What waits on a person, for Needs you and the Gardener: two facts an agent
+ * could have written, a rewrite of a second page, and a question agents asked
+ * that nothing answered. Facts a person writes without `standing` wait like
+ * an agent's.
+ */
+async function knowledge(
+  api: APIRequestContext,
+  db: Database,
+  owner: Account,
+  paymentsPageId: string,
+) {
+  for (const [content, kind] of [
+    ['Refunds go back to the original card within five business days.', 'FACT'],
+    [
+      'Log the provider event id with every error from a webhook handler.',
+      'CONVENTION',
+    ],
+  ]) {
+    await ok(
+      await api.post('/v1/page_entries', {
+        params: { pageId: paymentsPageId },
+        data: { content, kind },
+      }),
+      'adding a waiting page entry',
+    );
+  }
+
+  const checkout = await ok<{ id: string }>(
+    await api.post('/v1/pages', {
+      data: {
+        title: 'Checkout',
+        descriptionMarkdown: 'How the one-page checkout keeps the cart.',
+      },
+    }),
+    'creating the checkout page',
+  );
+  const folded: string[] = [];
+  for (const content of [
+    'The cart is kept for 30 days for a signed-in customer.',
+    'A guest cart lives only in the browser session.',
+  ]) {
+    const entry = await ok<{ id: string }>(
+      await api.post('/v1/page_entries', {
+        params: { pageId: checkout.id },
+        data: { content, kind: 'FACT', standing: true },
+      }),
+      'adding a checkout entry',
+    );
+    folded.push(entry.id);
+  }
+  // Proposed through the API, so it waits: the webapp accepts its own at once.
+  await ok(
+    await api.post(`/v1/pages/${checkout.id}/consolidate`, {
+      data: {
+        entryIds: folded,
+        descriptionMarkdown: [
+          'How the one-page checkout keeps the cart.',
+          '',
+          'A signed-in customer keeps the cart for 30 days. A guest cart lives only in the browser session.',
+        ].join('\n'),
+      },
+    }),
+    'proposing a rewrite of the checkout page',
+  );
+
+  await db.insert('PageKnowledgeGap', {
+    query: 'how are partial refunds recorded',
+    count: 3,
+    workspaceId: owner.workspaceId,
+  });
 }

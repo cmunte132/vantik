@@ -1,0 +1,205 @@
+---
+title: 'Needs you'
+sidebar_label: "Needs you"
+---
+
+## Overview
+
+**Needs you** is the list of the knowledge decisions that wait for a person.
+It is one list for the whole workspace. Each member sees the same items.
+
+Agents settle what the evidence can settle. An item comes to Needs you only
+when a person must decide. Read
+[How a fact gets settled](/fundamentals/knowledge#how-a-fact-gets-settled).
+
+Needs you is for people only. The server refuses each Needs you request from
+an agent: to read the list, to assign, to comment, or to decide.
+
+![Needs you, with the list of open items on the left and one item open on the
+right](/img/docs/knowledge/needs-you.png)
+
+## How to open Needs you
+
+- **From the Pages screens.** Click **Needs you** in the header of the Pages
+  home, of a product's pages, or of the Gardener. The badge shows the number
+  of open items. On a wide screen, the header also shows who has the most
+  open items, for example "You have 3".
+- **From a page.** If facts on the page wait for a person, the
+  **Facts behind this page** rail shows a banner. Click **Needs you →** to see
+  only the items of that page. On a fact that waits, click **Decide** to open its
+  item.
+- **From a page with a rewrite.** Click **Read the rewrite** in the banner
+  above the page body.
+
+The **Pages** row in the sidebar shows the same count. It opens the Pages
+home. The **Inbox** row of the sidebar does not count Needs you items.
+
+The old address `/<workspace>/pages/review` sends you to Needs you.
+
+## The list
+
+The list has four views:
+
+| View | What it shows |
+|---|---|
+| **Open** | Every open item, the newest first. Below them, **Done today** shows the items decided today. |
+| **Mine** | The open items assigned to you. |
+| **Unassigned** | The open items that nobody is on. |
+| **Done** | The items that ended in the last 30 days, the most recent first. |
+
+Each view except **Done** shows its count. When you open the list from a
+page, a bar shows **On** and the page title. Click **Show all** to see every
+item again. The list has no other filter.
+
+**Settled by agents** shows how many facts triage settled alone in the last
+7 days. Click it to open the [Gardener](/fundamentals/knowledge/gardener).
+
+Each row shows the kind of the item, its question, its age, and who is on it.
+An orange dot marks an open item that waits for a decision. An audit has no
+dot, because what triage did stays in place until you answer.
+
+## The kinds of item
+
+| Kind | Label | The question | Where it comes from |
+|---|---|---|---|
+| `CONTRADICTION` | **Contradiction** | Which of the two facts is right? | A fact that waits contradicts a fact in use: a fact that a person confirmed, a fact on a locked page, or a fact that the code now disagrees with. |
+| `RULE` | **Team rule** or **Team decision** | Is it the rule? Did the team decide it? | A convention or a decision that waits, and that no evidence settles. |
+| `FACT` | **New fact** | Is it true? | Any other fact that waits. |
+| `AUDIT` | **Audit** | Was triage right? | A decision that triage made alone, drawn for a check. Read [Audits](#audits). |
+| `ARCHIVE` | **Retire?** | Stop using it? | The gardener asks to take a fact in use out of use. Read [What the gardener proposes](/fundamentals/knowledge/gardener#what-the-gardener-proposes). |
+| `REWRITE` | **Page rewrite** | Accept the rewrite of the page? | A proposal to fold facts into a page body. Read [Consolidation](/fundamentals/knowledge#consolidation). |
+| `GAP` | **Knowledge gap** | The question itself | Agents asked a question two or more times, and the bank had no answer. |
+
+A fact waits when its status is `PROPOSED`. One fact that waits keeps one
+item. If the fact moves from one kind to another, for example from
+**New fact** to **Contradiction**, the item keeps its assignee and its
+comments.
+
+## How to decide an item
+
+1. Click the item in the list.
+2. Read the reason, the explanation and the facts in the item.
+3. Click one of the two answers.
+
+The item then moves to **Done**, and the next item opens. The answers are:
+
+| Kind | Answers | What the server does |
+|---|---|---|
+| **Contradiction** | **The new fact is right · retire the old one** | Puts the new fact in use, and archives each old fact that it contradicts. |
+| | **The old fact holds · set the new one aside** | Archives the new fact. |
+| **Team rule** | **Make it the rule** or **It is not the rule · set it aside** | Puts the fact in use, or archives it. |
+| **Team decision** | **We decided this · use it** or **We did not · set it aside** | Puts the fact in use, or archives it. |
+| **New fact** | **It is true · use it** or **It is wrong · set it aside** | Puts the fact in use, or archives it. |
+| **Audit** | Agree, or undo | Keeps what triage did, or undoes it. Read [Audits](#audits). |
+| **Retire?** | **Retire it** or **Keep it in use** | Archives the fact, or keeps it in use. After **Keep it in use**, the gardener does not ask again for the same reason for `PAGE_STANDING_ENTRY_DECAY_DAYS` (90 days by default). |
+| **Page rewrite** | **Accept the rewrite** or **Keep the page as it is** | Replaces the page body and folds the facts in, or changes nothing. |
+| **Knowledge gap** | An answer form | Read [How to answer a gap](#how-to-answer-a-gap). |
+
+For a fact that waits, **What the checks said** shows what each model judgment
+found in the fact's sources.
+
+A decision on a fact that waits is also a verdict on triage. Read
+[Agreement](/fundamentals/knowledge/gardener#agreement).
+
+The server refuses a decision on an item that somebody decided already. It
+also refuses to accept a rewrite if the page changed after the proposal, or
+if a fact that it folds in is no longer in use.
+
+**Open an issue** opens a new issue with the question as its title. The issue
+has no link to the item.
+
+### How to answer a gap
+
+1. Select the page that the answer belongs on.
+2. Write one fact that answers the question.
+3. Click **Answer it**.
+
+The server adds the fact to the page as a fact in use. It marks the question
+as answered. Agents get the fact from then on.
+
+## Assignment
+
+The assignee is the person who is on an item. An item has a maximum of one
+assignee.
+
+1. Open the item.
+2. Click **Assign**, or **Reassign** if somebody is on it.
+3. Select a member. **Me** is you.
+
+To remove the assignee, click **Reassign**, and then click
+**Take everyone off it**.
+
+The list shows only people, not agents. The header of the item says
+"You are on it", the name of the assignee, or "No one is on it". Vantik sends
+no notification when you assign an item.
+
+## Comments
+
+The **Activity** section of an item shows its history, the oldest first:
+assignments, comments, and the decision.
+
+1. Type in **Leave a comment…**.
+2. Click **Comment**, or press Cmd+Enter (Ctrl+Enter on Windows and Linux).
+
+A comment can have a maximum of 4000 characters. Vantik sends no
+notification for a comment. You can comment on an item after it is done.
+
+## How an item ends
+
+- **A person decides it.** The item moves to **Done**, with the decision and
+  the name of the person.
+- **Its subject leaves the queue in a different way.** For example, triage
+  decides the fact again, or decay archives it. The item
+  moves to **Done** as "Settled outside Needs you".
+
+If the subject waits for a person again, the same item opens again. It keeps
+its assignee and its comments.
+
+## Why a fact waits
+
+A fact that waits shows the reasons that triage escalated it. The reasons in
+[Provisional facts](/fundamentals/knowledge#provisional-facts) send a fact to a
+person only together with another reason. The label is what Needs you shows
+for the first reason. A contradiction shows a label that names what the fact
+contradicts.
+
+| Reason | Label | Meaning |
+|---|---|---|
+| `CONTRADICTS_VERIFIED` | Contradicts a confirmed fact | It contradicts an entry that a person verified. |
+| `CONTRADICTS_LOCKED` | Contradicts a locked page | It contradicts an entry on a locked page. |
+| `UNGROUNDED` | Cites nothing that can be checked | It cites no code, issue, comment or outside page. A run or a pull request is not evidence, because the judges cannot read what it says. The verifier looks for evidence before a person sees the entry. |
+| `CITATION_FAILED` | A citation does not hold | A citation does not hold, or was not read yet. If a citation no longer holds, the verifier looks for new evidence before a person sees the entry, and the new citations replace the old ones. While a citation is unread, the server reads it again, and then triage decides again. |
+| `PIN_REQUEST` | A convention | It is a convention that no evidence confirms. Every run in its modules gets a convention, so a person decides. |
+| `SUPERSEDE_REQUEST` | Corrects a fact not in use | It replaces an entry that is not in use, or that is gone. When it replaces an entry in use that no person verified, triage decides it like any entry, and its acceptance retires the old one. |
+| `BROAD_SCOPE` | Applies widely | No evidence confirms it, and it has no scope, or its scope reaches more than three modules. |
+| `JUDGES_DISAGREE` | The two checks did not agree | The two model judgments did not agree. |
+| `EVIDENCE_DISPUTED` | A check read its source as saying otherwise | One model judgment found that the entry's own evidence says otherwise, and the other did not. A person decides whether the claim is wrong. |
+| `NO_LLM` | Could not be checked | No model is configured, so triage cannot decide. The entry waits for a person, as it does when triage is off. |
+| `EXTERNAL_INPUT` | Rests on outside text | It rests on an issue or a comment that came from outside the workspace. |
+| `UNKNOWN_SOURCE` | An agent wrote it, and nothing confirms it | An agent wrote it, and no evidence confirms it. The server cannot yet tell what an agent read. This matters only when the workspace's own code or issues do not confirm the claim. |
+| `HARMFUL_SIGNAL` | Runs went wrong with it | Runs that were given it went wrong where it applies. |
+| `AUDIT` | Audit | A sample of what triage did alone, for a person to check. |
+| `LOW_AGREEMENT` | Triage is holding back | People disagreed with this type of decision lately, so a person decides. Read [Back-off](/fundamentals/knowledge/gardener#back-off). |
+
+A fact with no reason shows "Waits on a person".
+
+## Audits
+
+When triage is `on`, a share of what it does alone goes to a person as an
+audit: `KNOWLEDGE_AUDIT_RATE` of its acceptances, repeats folded in, and
+refusals because an entry held more than one claim. A refusal for a credential is never
+audited, because a person would be shown the credential. A provisional
+decision is never audited. Whether a decision is audited follows from its id,
+so the draw can be worked out again later.
+
+An audit asks one question with two answers. The labels depend on what
+triage did, for example **Right to use it** and **Set it aside**. The first
+answer keeps what triage did. The second undoes it: an accepted entry is
+archived, and a folded or refused entry is put into use.
+
+## What the page rail shows
+
+The **Facts behind this page** rail counts a fact as a fact that waits when its status
+is `PROPOSED` or `DISPUTED`. Needs you lists only the `PROPOSED` facts. So a
+fact that a person marked as wrong shows **Decide** on the rail, but Needs you
+has no item for it.

@@ -321,10 +321,40 @@ test.describe('product axis', () => {
   });
 });
 
-test('knowledge page', async ({ page }) => {
-  await page.goto(`${workspace}/pages/${run.seeded.pageId}`);
-  await expect(page.getByText('Payments').first()).toBeVisible();
-  await shot(page, 'knowledge/page', { focus: content(page), padding: 0 });
+test.describe('knowledge', () => {
+  test('page', async ({ page }) => {
+    await page.goto(`${workspace}/pages/${run.seeded.pageId}`);
+    await expect(page.getByText('Payments').first()).toBeVisible();
+    await expect(page.getByText(/wait on you/)).toBeVisible();
+    await shot(page, 'knowledge/page', { focus: content(page), padding: 0 });
+  });
+
+  test('needs you', async ({ page }) => {
+    await page.goto(`${workspace}/pages/needs-you`);
+    await page.getByText(/Refunds go back to the original card/).first().click();
+    await expect(
+      page.getByRole('heading', { name: /Refunds go back/ }),
+    ).toBeVisible();
+    await shot(page, 'knowledge/needs-you', { focus: content(page), padding: 0 });
+  });
+
+  test('gardener', async ({ page }) => {
+    await page.goto(`${workspace}/pages/gardener`);
+    await expect(page.getByText('Its jobs')).toBeVisible();
+    await shot(page, 'knowledge/gardener', { focus: content(page), padding: 0 });
+  });
+
+  test('gardener map', async ({ page }) => {
+    await page.goto(`${workspace}/pages/gardener/map`);
+    await expect(page.getByText('cites code')).toBeVisible();
+    // By module puts every seeded fact on one hub, as no fact has a scope.
+    await page.getByRole('radio', { name: 'By page' }).click();
+    await expect(page.getByText('Checkout').first()).toBeVisible();
+    await shot(page, 'knowledge/gardener-map', {
+      focus: content(page),
+      padding: 0,
+    });
+  });
 });
 
 test.describe('agent runs', () => {

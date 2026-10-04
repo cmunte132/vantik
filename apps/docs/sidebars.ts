@@ -74,12 +74,12 @@ const sidebars: SidebarsConfig = {
       ],
     },
   ],
-  // docusaurus-plugin-openapi-docs makes the other entries. The command is
-  // `pnpm clean-api-docs && pnpm gen-api-docs`. Do not edit docs/api-reference/sidebar.ts by
-  // hand, because that command replaces the file each time that it runs. A
-  // person wrote these three pages: 'api-reference/overview',
-  // 'api-reference/connect-mcp', and 'api-reference/agents'. If the command
-  // removes them, put them here again.
+  // docusaurus-plugin-openapi-docs makes the other entries. The commands are
+  // `pnpm clean-api-docs && pnpm gen-api-docs`. Do not edit
+  // docs/api-reference/sidebar.ts by hand, because these commands replace the
+  // file each time that they run. A person wrote these three pages:
+  // 'api-reference/overview', 'api-reference/connect-mcp', and
+  // 'api-reference/agents'. If the commands remove them, put them here again.
   apiSidebar: [
     {type: 'doc', id: 'api-reference/overview', label: 'Overview and authentication'},
     {type: 'doc', id: 'api-reference/connect-mcp', label: 'How to connect an MCP client'},

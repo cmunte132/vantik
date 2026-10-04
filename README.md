@@ -31,8 +31,9 @@ In July 2026 the maintainer updated the dependencies to NestJS 11, Prisma 6,
 React 19, TanStack Query 5, Tiptap 3, AI SDK 7, and zod 4. In September 2026
 the webapp moved from Next.js to Vite: it builds in seconds to static files,
 and its image is nginx. The webapp reads its one `NEXT_PUBLIC_*` setting,
-`NEXT_PUBLIC_BACKEND_HOST`, from the server at `/api/v1/config`, so a
-self-hosted installation sets it when the container starts. One update is not complete: the ESLint 9 flat config.
+`NEXT_PUBLIC_BACKEND_HOST`, from the server at `/api/v1/config`. Thus a
+self-hosted installation sets it when the container starts. One update is not
+complete: the ESLint 9 flat config.
 
 The automations subsystem no longer uses trigger.dev, and Actions are gone. An
 integration is one plugin that the server loads from
@@ -139,8 +140,8 @@ To see if a job runs, read `docker compose logs server`.
 | Job | Default | Variable | What it does |
 | --- | --- | --- | --- |
 | Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
-| Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives a proposed entry that waited too long for a person. It also archives a standing or provisional entry that the server did not serve for too long. In addition, it archives a provisional entry that went wrong more often than well. |
-| Knowledge gap issues | `0 4 * * 1` | `KNOWLEDGE_GAP_ISSUES_CRON` | This job opens one issue for each question that agents asked the knowledge often and that it could not answer. It opens the issue on the team that owns the module of the question. It never opens a second issue for the same question. |
+| Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives a proposed entry that waited too long for a person. It also archives a standing or provisional entry that the server did not serve for too long. In addition, it archives a provisional entry that went wrong more often than well. Some entries are exempt. |
+| Knowledge gap issues | `0 4 * * 1` | `KNOWLEDGE_GAP_ISSUES_CRON` | This job opens one issue for each question that agents asked the knowledge often and that it did not answer. It opens the issue on the team that owns the module of the question. It never opens a second issue for the same question. |
 | Generated page refresh | `23 * * * *` | `KNOWLEDGE_PAGE_REFRESH_CRON` | This job finds each generated page whose cited entries changed, and it builds the page again. |
 | Agent run lease sweep | `* * * * *` | `AGENT_RUN_LEASE_SWEEP_CRON` | This job expires each agent run that did not renew its lease in time. It starts the next attempt if the run has attempts left. It also fails each run that stayed queued for longer than one lease. |
 
@@ -161,7 +162,8 @@ log and continues:
 
 You need Node.js 22.12 or later, pnpm 10, and Docker or podman. Vite also
 accepts Node.js 20.19 or a later 20 release: its range is
-`^20.19.0 || >=22.12.0`. The CI workflow uses Node.js 22, and the images use Node.js 24. To install pnpm,
+`^20.19.0 || >=22.12.0`. The CI workflow uses Node.js 22, and the images use
+Node.js 24. To install pnpm,
 run `npm i -g pnpm@10`.
 
 For hot reload, run only the service containers, and run the apps on the host.

@@ -48,7 +48,6 @@ export const ViewsStore: IAnyStateTreeNode = types
 
       // applySnapshot keeps the same view object for each id that stays. Thus
       // a reload of the local database does not detach an open view.
-
       applySnapshot(
         self.views,
         sort(views).asc((view) => new Date(view.createdAt)),

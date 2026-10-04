@@ -36,9 +36,11 @@ first.
 ## Configuration
 
 The webapp reads its runtime configuration from the API server at
-`/api/v1/config`. The one setting is `NEXT_PUBLIC_BACKEND_HOST`, which the
-server reads from its environment. A self-hosted installation therefore sets it
-when the container starts, and no rebuild is necessary.
+`/api/v1/config`. The server reads the values from its own environment. The
+one `NEXT_PUBLIC_*` setting is `NEXT_PUBLIC_BACKEND_HOST`, the address of the
+websocket. The response also tells if the AI features and the telemetry are
+on. A self-hosted installation therefore sets these values when the container
+starts, and no rebuild is necessary.
 
 In the image, nginx serves the build and proxies `/api/*` to the server
 (`nginx.conf.template`). In development, Vite does the same (`vite.config.ts`).

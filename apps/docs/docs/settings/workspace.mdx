@@ -1,0 +1,156 @@
+---
+title: 'Workspace settings'
+sidebar_label: "Workspace"
+---
+
+## Overview
+
+The workspace settings apply to all members of the workspace. To open them,
+open **Settings**. Then click an item under **Workspace** in the settings
+sidebar: **Overview**, **Labels**, **Members**, **Agents**, **Integrations** or
+**Export**.
+
+Each member can see each of these pages. Some actions are for admins only. Read
+[Roles](/concepts#roles). The **Agents** page has its own docs page:
+[Agent settings](/settings/agents).
+
+## Overview
+
+The **Profile** section holds the **Workspace name**.
+
+1. Change the **Workspace name**.
+2. Click **Update**.
+
+You cannot change the URL of the workspace. Vantik makes it from the first name
+of the workspace, when you make the workspace.
+
+![The Overview settings of the workspace, with the Workspace name field and the
+Danger zone section](/img/docs/settings/workspace-overview.png)
+
+The **Danger zone** section shows a **Delete this workspace** button. The
+button does nothing now. Vantik has no way to delete a workspace from the
+webapp.
+
+## Labels
+
+The **Workspace labels** section holds the labels that all teams can use. To
+make a label that only one team can use, open the **Labels** settings of that
+team. Read [Team settings](/settings/team#labels).
+
+![The Workspace labels settings, with a list of
+labels](/img/docs/settings/labels.png)
+
+To make a label:
+
+1. Click **New label**.
+2. Type the **Label name**.
+3. Click **Save**.
+
+Vantik gives the new label a color. You cannot select the color.
+
+To change or delete a label, click **...** on its row. Then select **Edit** or
+**Delete**. **Edit** changes the name only. **Delete** asks you to confirm.
+Click **Continue** to delete the label.
+
+Use **Filter by name** to find a label. Each member can make, change and delete
+a workspace label.
+
+## Members
+
+The **Members** section lists the members of the workspace, with the role of
+each member. A member that an admin suspended shows under **Suspended**. Use
+**Filter by name** to find a member by name or by email.
+
+![The Members settings, with the list of members and their
+roles](/img/docs/settings/members.png)
+
+### How to invite a person
+
+Only an admin can invite a person. The **Add member** button shows for each
+member, but the invite fails if you are not an admin.
+
+1. Click **Add member**.
+2. In **Emails**, type one or more email addresses. Put a comma between two
+   addresses.
+3. In **Invite as**, select **User** or **Admin**. The default is **User**.
+4. In **Add to teams**, select one or more teams. You must select a team.
+5. Click **Invite**.
+
+Vantik sends an email to each address. The email has a link that signs the
+person in. The link works for 7 days.
+
+When the person signs in, Vantik shows the invites of that person. The person
+clicks **Accept** or **Decline**. If the person accepts, Vantik adds the person
+to the workspace with the role and the teams of the invite.
+
+To send the email again, invite the same address again. This does not change
+the role or the teams of the invite. You cannot cancel an invite.
+
+### How to suspend a member
+
+Only an admin sees the menu on the row of a member.
+
+1. Click **...** on the row of the member.
+2. Select **Suspend**.
+
+A suspended member cannot use the workspace. The webapp has no way to undo a
+suspension. It also has no way to change the role of a member, or to remove a
+member from the workspace.
+
+To add a member to a team or to remove a member from a team, use the
+**Members** settings of the team. Read [Team settings](/settings/team#members).
+
+## Integrations
+
+The **Integrations** section shows each integration that the workspace can
+use. Click **View** on an integration to set it up. An integration that needs
+credentials shows **Needs credentials**.
+
+![The Integrations settings, with a card for each
+integration](/img/docs/settings/integrations.png)
+
+Read [Integrations](/integrations/overview).
+
+## Export
+
+The **Export** section makes a CSV file of your issues.
+
+1. Click **Export CSV**.
+2. Your browser downloads the file `issues.csv`.
+
+The file holds the issues of the teams that you are a member of. It does not
+hold deleted issues. Each row is one issue, with these columns:
+
+- Number, Title and Description. The description is plain text.
+- State, Labels and Priority. The priority is a number.
+- Parent Issue.
+- Created At and Updated At.
+- Created By. This is the ID of the user, not the name.
+- Team and Assignee.
+
+The export holds issues only. It does not hold comments, projects, cycles or
+pages. Each member can export.
+
+![The Export settings, with the Export CSV
+button](/img/docs/settings/export.png)
+
+## What a new workspace starts with
+
+When you make an account, Vantik asks for your **Full name**, a **Workspace
+name**, a **Team name** and a **Team identifier**. Then click **Continue**.
+
+![The onboarding form for a new account and its
+workspace](/img/docs/getting-started/onboarding.png)
+
+Vantik then makes these things:
+
+- The workspace. You are its first admin.
+- One team, with the name and the identifier that you gave. You are a member
+  of it.
+- The workflow states of the team: **Triage**, **Unscoped**, **Backlog**,
+  **Todo**, **In Progress**, **In Review**, **Done** and **Canceled**.
+- Six workspace labels: **Bug**, **Feature**, **Design**, **Documentation**,
+  **Frontend** and **Backend**.
+
+If a person invited you to a workspace, Vantik shows the invites, not this
+form.

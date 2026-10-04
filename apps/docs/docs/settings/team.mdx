@@ -1,0 +1,117 @@
+---
+title: 'Team settings'
+sidebar_label: "Team"
+---
+
+## Overview
+
+Each team has its own settings. To open them, open **Settings**. In the
+settings sidebar, open the team. Then click **Overview**, **Members**,
+**Templates**, **Workflow**, **Cycles** or **Labels**.
+
+## Overview
+
+The **Team** section holds the **Team name** and the **Team identifier**.
+
+1. Change the **Team name** or the **Team identifier**.
+2. Click **Update**.
+
+The name must have 2 to 50 characters. The identifier must have 2 to 5
+characters. Each member of the team can change them.
+
+> **Warning:** Do not change the identifier if people use the issue keys of the
+> team. The key of each issue of the team changes with the identifier. Read
+> [Team identifiers and issue keys](/concepts#team-identifiers-and-issue-keys).
+
+![The Overview settings of a team, with the Team name and Team identifier
+fields](/img/docs/settings/team-overview.png)
+
+### Create by email
+
+The **Team preferences** section shows an email address for the team. Each
+email that a person sends to this address becomes an issue in the triage of
+the team. Click the copy button to copy the address. Read
+[Email](/integrations/email).
+
+### How to delete a team
+
+Only a workspace admin can delete a team. You can delete a team only when it
+has no issues.
+
+1. In **Danger zone**, click **Delete this team**.
+2. Click **Yes, delete team**.
+
+If the team has issues, Vantik tells you how many. Move or delete them first.
+
+## Members
+
+The **Team Members** section lists the members of the team.
+
+![The Team Members settings, with the list of members of the
+team](/img/docs/settings/team-members.png)
+
+Only a workspace admin can add or remove a member of a team.
+
+To add a member:
+
+1. Click **Add member**.
+2. Select a member of the workspace. The list shows only the members that are
+   not in the team.
+
+To add a person who is not in the workspace, click **Invite people**. Read
+[How to invite a person](/settings/workspace#how-to-invite-a-person).
+
+To remove a member, click **...** on the row of the member, and select
+**Remove from team**.
+
+## Templates
+
+The **Templates** section holds the issue templates of the team. Read
+[Templates](/fundamentals/templates).
+
+![The Templates settings of a team, with two
+templates](/img/docs/settings/templates.png)
+
+## Workflow
+
+The **Workflow** section holds the states that an issue of the team can have.
+Each state belongs to one category: **Triage**, **Backlog**, **Unstarted**,
+**Started**, **Completed** or **Canceled**. The category tells Vantik what a
+state means, for example that an issue is done.
+
+![The Workflow settings of a team, with the states in each
+category](/img/docs/settings/workflow.png)
+
+To add a state:
+
+1. Click **+** next to a category.
+2. Select a color, and type the **Workflow name**.
+3. Optional: type a **Workflow description**.
+4. Click **Save**.
+
+To change a state, put the pointer on it, and click the pencil. To change the
+order of the states, drag a state. A state stays in its category. You cannot
+delete a state.
+
+The **Triage** category holds the issues that a person must sort. Read
+[Triage](/fundamentals/triage).
+
+## Cycles
+
+The **Cycles** section turns cycles on for the team, and sets how Vantik makes
+them. Read [Cycles](/fundamentals/cycles).
+
+![The Cycles settings of a team, with cycles
+enabled](/img/docs/settings/cycles.png)
+
+## Labels
+
+The **Team labels** section holds the labels that only this team can use. It
+works as the workspace labels do: click **New label**, type the **Label name**,
+and click **Save**. Click **...** on a row to edit or delete a label.
+
+The labels of the workspace do not show here. Read
+[Workspace settings](/settings/workspace#labels).
+
+![The Team labels settings, with the labels of the
+team](/img/docs/settings/team-labels.png)

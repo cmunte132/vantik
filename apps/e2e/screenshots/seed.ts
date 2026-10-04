@@ -73,6 +73,19 @@ export async function seedWorkspace(
     return found.id;
   };
 
+  // Two labels that only the team can use, for the Team labels settings.
+  for (const [name, color] of [
+    ['Mobile', '#5B8DEF'],
+    ['Performance', '#E5A23C'],
+  ]) {
+    await ok(
+      await api.post('/v1/labels', {
+        data: { name, color, workspaceId: owner.workspaceId, teamId },
+      }),
+      `making the ${name} team label`,
+    );
+  }
+
   // Cycles are off until a team turns them on.
   await ok(
     await api.post(`/v1/teams/${teamId}/preferences`, {

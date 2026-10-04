@@ -34,6 +34,16 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Settings',
+      items: [
+        'settings/account',
+        'settings/workspace',
+        'settings/agents',
+        'settings/team',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Integrations',
       items: [
         'integrations/overview',

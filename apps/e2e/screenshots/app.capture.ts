@@ -385,6 +385,15 @@ test.describe('settings', () => {
     ['settings/templates', 'settings/teams/ENG/templates', 'Templates'],
     ['settings/notifications', 'settings/account/notifications', 'Notifications'],
     ['settings/integrations', 'settings/integrations', 'Integrations'],
+    ['settings/profile', 'settings/account/profile', 'Profile'],
+    ['settings/passkeys', 'settings/account/security', 'Passkeys'],
+    ['settings/review-cycle', 'settings/agents', 'How the work is checked'],
+    ['settings/repository-access', 'settings/agents', 'Repository access'],
+    ['settings/knowledge-holdout', 'settings/agents', 'Does knowledge help?'],
+    ['settings/triage-agreement', 'settings/agents', 'Can triage decide alone?'],
+    ['settings/export', 'settings/export', 'Export'],
+    ['settings/team-members', 'settings/teams/ENG/members', 'Team Members'],
+    ['settings/team-labels', 'settings/teams/ENG/labels', 'Team labels'],
   ];
 
   for (const [name, path, title] of sections) {
@@ -395,6 +404,30 @@ test.describe('settings', () => {
       await shot(page, name, { focus: found });
     });
   }
+
+  // These pages have more than one section, and the docs show the whole page.
+  // [image, settings path under the workspace, a section heading on the page]
+  const pages: Array<[string, string, string]> = [
+    ['settings/preferences', 'settings/account/preferences', 'Local data'],
+    ['settings/workspace-overview', 'settings/overview', 'Danger zone'],
+    ['settings/team-overview', 'settings/teams/ENG/overview', 'Danger zone'],
+  ];
+
+  for (const [name, path, title] of pages) {
+    test(name, async ({ page }) => {
+      await page.goto(`${workspace}/${path}`);
+      await expect(section(page, title)).toBeVisible();
+      await shot(page, name, { focus: content(page) });
+    });
+  }
+
+  // The impersonation form. No link goes to it, and it is outside the workspace.
+  test('settings/super-admin', async ({ page }) => {
+    await page.goto('/x/admin');
+    const form = page.locator('form');
+    await expect(form.getByRole('button', { name: 'Submit' })).toBeVisible();
+    await shot(page, 'settings/super-admin', { focus: form });
+  });
 });
 
 test.describe('concepts', () => {

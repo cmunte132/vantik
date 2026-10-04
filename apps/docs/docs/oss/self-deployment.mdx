@@ -105,6 +105,29 @@ Keep the original hostname in `FRONTEND_HOST` so existing passkeys can authentic
 Users must sign in again because the new server does not accept old sessions.
 
 
+### How to sign in as a different user
+
+An operator can sign in as a different user, to see what that user sees. This
+feature is off by default.
+
+> **Warning:** Do not use a short or a shared value for `IMPERSONATION_KEY`. A
+> person with this key and an account can sign in as any user.
+
+1. In `.env`, set `IMPERSONATION_KEY` to a long random value.
+2. Restart the server.
+3. Sign in to the webapp with your own account.
+4. Go to `/x/admin`. No link in the webapp goes to this page.
+5. In **UserId**, type the ID of the user.
+6. In **Key**, type the value of `IMPERSONATION_KEY`.
+7. Click **Submit**.
+
+![The form on /x/admin, with the UserId and Key fields and the Submit
+button](/img/docs/settings/super-admin.png)
+
+The server then replaces your session with a session of that user. If the key
+is not set, or if the key is wrong, the server returns 404. To go back to your
+own account, sign out, and sign in again.
+
 ## Scheduled jobs
 
 Vantik does some of its work on a schedule, and not in response to a request.

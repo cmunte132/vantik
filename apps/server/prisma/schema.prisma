@@ -11,20 +11,24 @@ generator client {
 /// Database triggers keep this text in the same transaction as its source.
 /// The vector worker sets an embedding only when its content hash still matches.
 model SearchDocument {
-  id             String                  @id
+  id             String                   @id
   kind           String
   sourceId       String
   workspaceId    String
   title          String
   body           String
-  comments       String                  @default("")
-  search         Unsupported("tsvector") @default(dbgenerated())
+  comments       String                   @default("")
+  search         Unsupported("tsvector")? @default(dbgenerated())
   embedding      Unsupported("vector")?
   embeddingModel String?
-  contentHash    String                  @default("")
+  contentHash    String                   @default("")
   embeddedHash   String?
 
   @@index([workspaceId, kind])
+  @@index([search], type: Gin)
+  @@index([title(ops: raw("gin_trgm_ops"))], map: "SearchDocument_title_trgm_idx", type: Gin)
+  @@index([body(ops: raw("gin_trgm_ops"))], map: "SearchDocument_body_trgm_idx", type: Gin)
+  @@index([comments(ops: raw("gin_trgm_ops"))], map: "SearchDocument_comments_trgm_idx", type: Gin)
 }
 
 /// One agent's attempt at one issue.
@@ -974,7 +978,7 @@ model PageEntry {
   /// no page that fits, so the fact lives by its scope until a person or the
   /// gardener moves it under one. Retrieval serves a loose fact exactly like a
   /// fact on a page.
-  page   Page?   @relation(fields: [pageId], references: [id])
+  page   Page?   @relation(fields: [pageId], references: [id], onDelete: Restrict)
   pageId String?
 
   /// Each time the fact moved between pages, oldest first.

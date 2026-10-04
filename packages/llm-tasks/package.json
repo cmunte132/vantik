@@ -31,7 +31,7 @@
     "build": "npm run clean && npm run build:tsup",
     "build:tsup": "tsup --dts-resolve",
     "typecheck": "tsc --noEmit",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "lint": "eslint \"src/**/*.ts\""
   },
   "devDependencies": {

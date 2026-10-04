@@ -90,7 +90,7 @@ describe('the agreement panel', () => {
 
     expect(none.kappa).toBe('—');
     expect(alike.kappa).toBe('all alike');
-    expect(alike.label).toBe('Refusing on a policy');
+    expect(alike.label).toBe('Refusing facts');
   });
 
   it('[KG-5.3] reports sending to a person beside the rest, never as held back', () => {

@@ -91,6 +91,8 @@ const NOT_KEPT: Record<string, Record<string, string>> = {
     harmfulCount: NOT_READ,
     contentHash: 'triage bookkeeping',
     corroborationCount: NOT_READ,
+    // The webapp gets the provisional state from the status column.
+    provisionalSince: NOT_READ,
   },
   IntegrationAccount: {
     integrationConfiguration: NOT_READ,

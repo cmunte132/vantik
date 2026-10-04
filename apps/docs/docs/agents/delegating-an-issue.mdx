@@ -13,6 +13,10 @@ Only a person can start an agent run, from the issue in Vantik. An agent
 cannot start a run. When you assign an issue to an agent, Vantik does not start
 a run.
 
+Vantik itself can start a new attempt of a run that a person started. If the
+runner of a run stops and does not report back, Vantik retries that run. By
+default, Vantik does not retry the third attempt.
+
 ## Before you start
 
 These items must be ready before a run can do work:
@@ -40,7 +44,8 @@ These items must be ready before a run can do work:
 4. Select the **Provider**. The list shows the providers that the workspace has
    a key for.
 5. Select the **Model**, or keep **Workspace default**.
-6. Optional: select the **Reasoning effort**.
+6. Optional: select the **Reasoning effort**. The page of the run shows this
+   value as **Thinking**.
 7. Click **Start run**, or press `⌘ Enter`.
 
 ![The delegate popover on an issue. It shows the guidance field, the provider,
@@ -48,9 +53,10 @@ the model, the reasoning effort and the Start run
 button.](/img/docs/agents/delegate.png)
 
 **Where it runs** shows the repository and the base branch of the run. Click it
-to see more. The footer shows the ceiling of the run, for example "Stops at 50
-turns or $5.00". It also tells what the run gives back: a pull request, or a
-branch.
+to see more. The footer tells what the run gives back: a pull request, or a
+branch. The footer always shows the default limits, "Stops at 50 turns or
+$5.00". The run uses the **Spend per issue** of the workspace. Read
+[The budget](/agents/review-cycle#the-budget).
 
 When the run starts, the popover closes. The **Delegate to an agent** button
 does not show while a run is live. The issue shows an **Agent** row with the
@@ -83,7 +89,8 @@ of the last run.
 
 Each row shows one run:
 
-- The number of the attempt, for example `#1`.
+- The number of the run on its issue, for example `#1`. The first run on the
+  issue is `#1`.
 - The status. A run that failed shows the reason in red, for example **Checks
   failed**.
 - The model, the time that the run took, and the cost.
@@ -115,7 +122,8 @@ The page of a run has these parts:
   passes.
 - **Definition of Done.** The criteria of the issue, if it has criteria.
 - **Changes.** The files that the run changed.
-- **This run.** The model, the runner, the reasoning effort and the branch.
+- **This run.** The model, the runner, the reasoning effort (**Thinking**) and
+  the branch.
 
 The page updates while the run is live.
 
@@ -142,9 +150,9 @@ A step that failed shows a red mark and its output.
 The **Spend** card shows the cost in US dollars, and the budget of the run. The
 bar turns amber at 80% of the budget, and red at 100%.
 
-Vantik checks the budget between passes. A pass can thus end a little over the
-budget. Read [The review cycle](/agents/review-cycle#the-budget) for how Vantik
-measures the cost.
+Vantik checks the budget between passes. So a pass can end a little over the
+budget. Read
+[How Vantik measures the spend](/agents/review-cycle#how-vantik-measures-the-spend).
 
 ## The outcome
 
@@ -182,8 +190,9 @@ shows the summary of the agent.](/img/docs/agents/run-handback.png)
 | **The runner went away** | The runner stopped and did not report back. |
 
 A run that failed shows the reason, for example **the environment would not
-build** or **it finished without changing anything**. The outcome card also tells what to
-do next.
+build** or **it finished without changing anything**. The outcome card shows
+the message of the run. If the run has no message, the card tells what to do
+next.
 
 ![The page of a run that could not finish. The outcome card tells what broke,
 and the Retry and Clean up buttons show at the top.](/img/docs/agents/run-failed.png)
@@ -207,9 +216,12 @@ the card of the run in the activity of the issue.
 **Reject** and **Clean up** do the same thing:
 
 1. Click **Reject** or **Clean up**.
-2. Read the dialog. It tells what Vantik will close and delete.
+2. Read the dialog. It tells what Vantik closes and deletes.
 3. Click **Reject** or **Clean up**. To start a new attempt after it, click
    **Reject and retry** or **Clean up and retry**.
+
+The dialog does not show **Clean up and retry** on a run with **Stopped**,
+because you cannot retry that run.
 
 ![The Clean up after this run dialog, with the Cancel, Clean up, and Clean up
 and retry buttons.](/img/docs/agents/clean-up.png)
@@ -217,8 +229,10 @@ and retry buttons.](/img/docs/agents/clean-up.png)
 Vantik then does these things:
 
 - It closes the pull request, with a comment that tells why.
-- It deletes the branch. If a person added commits to the branch after the run,
-  Vantik keeps the branch. It also keeps a branch that was merged.
+- It deletes the branch. Vantik keeps the branch in these cases:
+  - A person added commits to the branch after the run.
+  - The branch was merged.
+  - The run recorded no last commit for the branch.
 - It keeps the run and its record.
 
 A message tells you what Vantik did. After you reject a run, the run shows

@@ -235,20 +235,21 @@ export async function seedAgents(
     issueId: issues.succeeded.id,
   });
 
-  // Finished but not kept: a docs change has no test to hold it to, so it
-  // went to a person, who rejected it and had the branch cleaned up.
+  // Finished but not kept: the reviewer objected without citing anything, so
+  // the cycle handed it to a person, who rejected it and had the branch
+  // cleaned up. No failure category: a rejected run never carries one, and
+  // with one the outcome card reads "Could not finish" instead of "Rejected".
   const rejectedStart = clockAt - DAY - 5 * 60 * MINUTE;
   const rejectedFinish = rejectedStart + 9 * MINUTE;
   const rejectedRunId = await run(
     issues.rejected,
     {
       status: 'NEEDS_REVIEW',
-      failure: 'NOT_TEST_SPECIFIABLE',
       startedAt: rejectedStart,
       finishedAt: new Date(rejectedFinish),
       iterationCount: 1,
       summary:
-        'Listed the eleven checkout events with their properties in docs/analytics/checkout.md. No test can check a document, so this needs a person to read it.',
+        'Listed the eleven checkout events with their properties in docs/analytics/checkout.md.',
       result: {
         delivery: 'pull_request',
         branch: 'vantik/eng-8-checkout-analytics-events',
@@ -259,7 +260,7 @@ export async function seedAgents(
         deletions: 0,
         costUsd: 0.61,
         turns: 14,
-        reviewPasses: 0,
+        reviewPasses: 1,
         cleanedUp: {
           at: new Date(rejectedFinish + 3 * 60 * MINUTE).toISOString(),
           byUserId: owner.userId,
@@ -267,7 +268,7 @@ export async function seedAgents(
           branch: 'deleted',
         },
       },
-      phaseTimings: { setup: 61_000, implement: 402_000, report: 24_000 },
+      phaseTimings: { setup: 61_000, implement: 402_000, review: 90_000, report: 24_000 },
     },
     [
       ...setup(),
@@ -275,7 +276,8 @@ export async function seedAgents(
       [74, 'implement', 'Read src/checkout/track.ts', { kind: 'read', target: 'src/checkout/track.ts' }],
       [300, 'implement', 'Created docs/analytics/checkout.md', { kind: 'write', ref: 'w1', target: 'docs/analytics/checkout.md' }],
       [301, 'implement', 'Created docs/analytics/checkout.md', { ref: 'w1', ok: true, added: 96, removed: 0 }],
-      [520, 'report', 'No executable test follows from the Definition of Done, so this is for a person to review'],
+      [430, 'review', 'Reviewing the work against the issue'],
+      [515, 'review', 'The reviewer rejected the work but cited no file, line or failing command, so there is nothing specific to send back.'],
     ],
   );
 

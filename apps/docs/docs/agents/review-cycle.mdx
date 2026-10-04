@@ -37,7 +37,7 @@ a human reviewer does.
 The two agents get different instructions and different skills. Vantik never
 tells the implementer how to review. An implementer that grades its own diff
 removes the only independent read. Vantik never gives the reviewer the skill
-for writing changes, because the reviewer must not make a change.
+to write changes, because the reviewer must not make a change.
 
 ## What a finding must have
 
@@ -68,7 +68,7 @@ status **Needs a human**:
   fail. Then nothing specific can go back to the implementer.
 - The run reached its spend ceiling, its wall clock, or its number of passes.
 - Two passes in a row changed neither the tree nor the result of the checks.
-  Another pass would thus change nothing.
+  Then another pass cannot change more.
 - Less than 90 seconds remained before a pass or a review.
 - The model provider refused the reviewer.
 - A pass after the first one crashed, or the provider refused it.
@@ -93,10 +93,17 @@ After you reject the work, the run shows the status **Rejected**. The outcome
 card shows "Rejected: the work was not kept", and tells who rejected it and
 when. On the server, the run keeps the status **Needs a human**.
 
+![A rejected run. The reviewer cited nothing, so the run went to a person, who
+rejected it. The outcome card tells that Vantik closed the pull request and
+deleted the branch.](/img/docs/agents/run-rejected.png)
+
 On a run that failed, stopped or went away after it pushed, the same button
 shows **Clean up**. You do not need it before a retry, because each attempt
 pushes to its own branch. Read
 [After a run](/agents/delegating-an-issue#after-a-run).
+
+![The Clean up after this run dialog, with the Cancel, Clean up, and Clean up
+and retry buttons.](/img/docs/agents/clean-up.png)
 
 **It fails** in these cases:
 
@@ -115,15 +122,15 @@ delivers the work of the earlier passes.
 | --- | --- | --- | --- |
 | Review passes | 3 | The number of times through the loop before a person must look. | **Settings → Agents**, in **Review passes**. |
 | Spend per issue | $5 | All the cost of one attempt, in all passes. | **Settings → Agents**, in **Spend per issue (USD)**. |
-| Wall clock | 30 minutes | The full run, with the fetch of the repository. | No control in the webapp. The API can set it for each run. |
+| Wall clock | 30 minutes | The full run, with the fetch of the repository. | No setting in Vantik changes it. |
 
 These fields are in the section **How the work is checked**. Only a workspace
 admin can change them.
 
-The ceilings apply to the *full cycle*, not to one call to the agent. If the
-reviewer accepts the first attempt, the review makes the cost of an issue
-approximately two times larger. If the reviewer does not accept it, the cost
-is more. The switch is there for this trade.
+The ceilings apply to the *full cycle*, not to one call to the agent. Each
+review adds the cost of a second agent to the cost of the issue. Each revise
+pass adds more cost. To stop this cost, turn off the review. Read
+[How to turn it off](#how-to-turn-it-off).
 
 A run that reaches a ceiling does not lose its work. It hands the work over.
 
@@ -133,10 +140,10 @@ Vantik adds the cost of each call to the model:
 
 - If the provider reports the cost that it bills, Vantik uses that cost. A
   gateway, for example OpenRouter, reports it.
-- Else, Vantik uses the price of the model from the catalog of the agent
-  harness, and the token counts.
+- If the provider does not report it, Vantik uses the price of the model from
+  the catalog of the agent harness, and the token counts.
 
-Vantik checks the spend between passes. A pass can thus end a little over the
+Vantik checks the spend between passes. So a pass can end a little over the
 ceiling.
 
 ## How to turn it off
@@ -156,9 +163,12 @@ The page of the run shows the cycle in two places:
 
 - **The stepper** shows the stages **Set up**, **Work**, **Check**, **Review**
   and **Hand back**. The time of each stage adds all the passes. A revise pass
-  counts as **Work**.
+  counts as **Work**. A stage that the run did not need shows **skipped**.
 - **Activity** shows each event in order, with the steps of the cycle. For
   example: "Running the repository’s own checks", "Reviewing the work against
   the issue", and "The reviewer found 2 thing(s) to fix".
+
+![The page of a run while the agent works. The stepper shows the Check stage,
+and Activity shows the steps of the run.](/img/docs/agents/run-running.png)
 
 Read [The page of a run](/agents/delegating-an-issue#the-page-of-a-run).

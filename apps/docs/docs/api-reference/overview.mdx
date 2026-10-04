@@ -6,9 +6,9 @@ description: The base address of the Vantik API, how to authenticate, the errors
 
 ## Overview
 
-The Vantik REST API reads and changes the data of a workspace: issues,
-comments, the Definition of Done, labels, teams, projects, pages, knowledge
-entries, products, modules and capabilities. A script or an agent can plan and
+The Vantik REST API reads and changes the data of a workspace. The data
+includes issues, comments, the Definition of Done, labels, teams, projects,
+pages, knowledge entries, products, modules and capabilities. A script or an agent can plan and
 track its work through this API. The sidebar holds the reference for each
 endpoint.
 
@@ -48,21 +48,22 @@ curl -H "Authorization: Bearer $VANTIK_TOKEN" \
   https://your-domain.com/api/v1/issues
 ```
 
-A token stays valid until you delete it in the same section of **Settings**.
+A token stays valid until you revoke it in the same section of **Settings**.
 Keep a token as safe as a password. A token that acts as you has all of your
 permissions in the workspace.
 
 ## Errors
 
-The server sends an error as JSON with an HTTP status code. Each error body has
-a `message` field.
+The server sends an error as JSON with an HTTP status code. Each error body from
+a REST endpoint has a `message` field.
 
 | Status | Cause | Body |
 | --- | --- | --- |
-| `400` | A field in the request is not valid. | `{"statusCode": 400, "message": ["..."], "error": "Bad Request"}`. Each item of `message` names a field. |
-| `401` | The request has no token, or the server does not know the token. A deleted token also gets a `401`. | `{"message": "Unauthorised"}` |
+| `400` | A field in the request is not valid. | `{"statusCode": 400, "message": ["..."], "error": "Bad Request"}`. Each item of `message` names a field. Other `400` errors have one `message` string. |
+| `401` | The request has no token, or the server does not know the token. A revoked token also gets a `401`. | `{"message": "Unauthorised"}` |
+| `401` | The request names a workspace that you are not an active member of. | `{"message": "You do not have access to this workspace"}` |
 | `403` | The agent does not have the scope that the request needs. | `{"statusCode": 403, "message": "...", "error": "Forbidden"}`. The message names the scope. |
-| `403` | The endpoint is for admins only, and you are not an admin. | `{"statusCode": 403, "message": "Forbidden resource", "error": "Forbidden"}` |
+| `403` | The endpoint is for admins only, and you are not an admin. | `{"statusCode": 403, "message": "Forbidden resource", "error": "Forbidden"}`, or `{"message": "..."}` from some endpoints. |
 | `403` | The endpoint is for people only, and the token belongs to an agent. The page of the endpoint says so. | `{"message": "..."}` |
 | `403` | A browser sent a `POST`, `PUT`, `PATCH` or `DELETE` request from an origin that is not in `FRONTEND_HOST`. A script that sends no `Origin` header does not get this error. | `{"message": "Forbidden: invalid origin"}` |
 | `404` | The id in the path does not identify a record in your workspace. | `{"message": "..."}`. The message names the record, for example `Issue <id> not found`. |

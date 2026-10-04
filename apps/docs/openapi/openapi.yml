@@ -768,7 +768,9 @@ paths:
         - in: query
           name: teamId
           required: false
-          description: The server accepts this value, but it does not filter on it.
+          description: >-
+            The server does not filter on this value. A team of another
+            workspace gets a 404.
           schema:
             type: string
       responses:
@@ -982,8 +984,8 @@ paths:
           description: The team does not exist, or you cannot see it.
         "500":
           description: >-
-            No issue in the team has this number. The server sends a 500 for
-            this case now, not a 404.
+            No issue in the team has this number. For this case the server
+            sends a 500, not a 404.
       tags:
         - Issue
 
@@ -1218,11 +1220,11 @@ paths:
           schema:
             type: string
         - in: query
-          name: status
+          name: status[]
           required: false
           description: >-
-            One or more run statuses. The server reads this as a list, so
-            send it in array form, for example status[]=FAILED.
+            One or more run statuses. Send the name with brackets, for example
+            status[]=FAILED. The server refuses status=FAILED with a 400.
           style: form
           explode: true
           schema:
@@ -4677,7 +4679,7 @@ components:
                 $ref: "#/components/schemas/IssueContextIssueRef"
         linkedIssues:
           type: array
-          description: This call links to issues and pull requests in other tools.
+          description: The links to issues and pull requests in other tools.
           items:
             type: object
             properties:
@@ -4712,7 +4714,7 @@ components:
         history:
           type: array
           description: >-
-            This call changes to the issue, oldest first. One change in one field gives
+            The changes to the issue, oldest first. One change in one field gives
             one entry.
           items:
             type: object

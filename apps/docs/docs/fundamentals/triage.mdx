@@ -24,27 +24,33 @@ the Triage column first.
   an issue in the triage status of the mapped team.
 - **A template.** An issue template can set the triage status. An issue that
   you create from that template then starts in triage.
+- **The knowledge bank.** The **Knowledge gardener** bot opens issues with the
+  `knowledge` label, for example for a gap in the knowledge of the workspace.
+  Such an issue starts in triage. If the team has no triage status, it starts
+  in the backlog.
 - **By hand.** You can set the triage status on any issue.
 
 The new issue dialog starts an issue in **Backlog**, not in triage. An agent
-also creates an issue in the backlog, unless it names a different status. The
+that uses the MCP server also creates an issue in the backlog,
+unless it names a different status. The
 GitHub integration does not make a Vantik issue from a new GitHub issue.
 
 ## What Vantik does with an issue in triage
 
-When an issue goes into the triage status, Vantik looks for help for the person
-who reads it:
+When an issue is in the triage status, Vantik gives help to the person who
+reads it:
 
-- **Similar issues.** Vantik finds issues with a similar text. The issue page
-  then shows a **Similar Issues** panel with a maximum of three issues. Click an
+- **Similar issues.** When you open the issue, Vantik finds issues with a
+  similar text. The issue page then shows a **Similar Issues** panel with a maximum of three issues. Click an
   issue in the panel to open it. If the issue is a duplicate, open the menu of
   the issue and select **Duplicate of...**.
 - **Suggested modules.** If the issue has no modules, Vantik can suggest
   modules. They show under **Modules** at the right of the issue page. Read
   [The issue page](/fundamentals/issues#the-issue-page).
 
-The suggestions need an AI endpoint. When the issue leaves triage, Vantik
-removes the suggestions that remain.
+The module suggestions need an AI endpoint. The similar issues do not. If the
+issue has no embedding, Vantik searches with the title of the issue. When the issue leaves triage, Vantik
+removes the module suggestions that remain.
 
 ## How to triage an issue
 

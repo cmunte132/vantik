@@ -70,12 +70,18 @@ or **Completed**. A cycle that started also shows a progress bar.
 To end the cycle, click **Complete cycle**. A dialog shows how many issues are
 done and how many are not. Select where the unfinished issues go:
 
-- **The next cycle**: Vantik moves them to the next upcoming cycle. If there is
-  no upcoming cycle, you cannot select this option.
+- **The next cycle**: Vantik moves them to the next upcoming cycle. The dialog
+  shows the name of that cycle. If there is no upcoming cycle, you cannot
+  select this option.
 - **The backlog**: Vantik removes them from the cycle. Their status does not
   change.
 
-Then click **Complete cycle**.
+Then click **Complete cycle**. If the dialog does not show these options, the
+cycle has no unfinished issues.
+
+When you complete the current cycle, the next upcoming cycle becomes the
+current cycle. You cannot start a cycle while a different cycle is current.
+Complete the current cycle first.
 
 You can delete an upcoming cycle. You cannot delete a cycle that started.
 
@@ -103,8 +109,10 @@ To turn off the job, set the value to `off`.
 - **When you create the issue.** In the new issue dialog, set the cycle in the
   property row. The default is **No Cycle**.
 - **On the issue page.** Set the **Cycle** property at the right of the page.
-- **From the cycle.** Create an issue in the list of a cycle. The new issue
-  gets that cycle.
+- **From the description of the cycle.** On the **Overview** tab of the
+  cycle, select text in the description. Then click the button whose tooltip
+  is **Create issue**. Vantik makes an issue from the selected text, in the
+  backlog and in that cycle.
 
 There is no action that sets the cycle of many issues at the same time.
 

@@ -153,11 +153,14 @@ No gardener job writes a rewrite. An agent or a person proposes it. Read
 
 ## Upkeep
 
-The gardener also adds to the bank. Everything it proposes goes to a person.
+The gardener also adds to the bank. Triage decides each entry that the
+gardener writes, as it decides an entry from an agent.
 
 - **Conventions from review.** When the reviewer gives the same finding in
   `KNOWLEDGE_CONVENTION_MIN_RUNS` separate agent runs in one module, the server
-  proposes it as a convention there. A person decides whether to accept it.
+  proposes it as a convention there. The server writes it as `PROPOSED`.
+  When triage is `on`, triage can accept it, or put it in use as provisional.
+  In the other modes, a person decides.
   If a convention proposed this way leads to more harmful outcomes than helpful
   ones, by `KNOWLEDGE_CONVENTION_HARM_MARGIN`, it is archived, and the module's
   team gets an issue. A person can put it back. If a person confirmed it, or
@@ -220,7 +223,10 @@ it covers.
   the workspace's agent settings. Read
   [The verifier](/fundamentals/knowledge#the-verifier).
 
-Without a model, triage sends each fact to a person with the reason `NO_LLM`.
+Triage needs a model for two tasks only: to compare a fact with similar
+entries, and to judge the citations that it can read. If a fact needs one of
+these tasks and there is no model, triage sends the fact to a person with the
+reason `NO_LLM`.
 The citation judge cannot judge a changed citation, so the gardener asks a
 person. Decay, gap issues and conventions from review need no model.
 
@@ -235,9 +241,9 @@ accepted, rejected, or edited. Verdicts come from answers to audits, and from
 people's decisions on the entries that wait for them. In `shadow` mode, every
 entry waits for a person, so every decision can be compared.
 
-For each type of decision (accept, corroborate, refuse, escalate), the server
-measures how far triage and people agree, as Cohen's kappa, over the verdicts
-of the last `KNOWLEDGE_KAPPA_WINDOW_DAYS` days. See it in **Settings → Agents**,
+For each type of decision (accept, corroborate, refuse, provisional and
+escalate), the server measures how far triage and people agree, as Cohen's
+kappa, over the verdicts of the last `KNOWLEDGE_KAPPA_WINDOW_DAYS` days. See it in **Settings → Agents**,
 under "Can triage decide alone?".
 
 ### Back-off

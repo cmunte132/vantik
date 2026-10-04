@@ -118,7 +118,11 @@ agent names its session in one of two ways:
   that serves one session and can set a header for it.
 
 Either way, a session is printable ASCII characters with no spaces, at most 200
-of them. Vantik ignores any other value and still serves the knowledge.
+of them. These rules apply to a value that is not correct:
+
+- A `session` argument longer than 200 characters makes the tool call fail.
+- Vantik ignores each other value that is not correct, and it still serves the
+  knowledge. This includes an `X-Vantik-Session` header of any length.
 
 If the agent names no session, the record holds only the token.
 

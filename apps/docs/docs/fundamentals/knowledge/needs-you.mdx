@@ -169,12 +169,12 @@ contradicts.
 | `CONTRADICTS_LOCKED` | Contradicts a locked page | It contradicts an entry on a locked page. |
 | `UNGROUNDED` | Cites nothing that can be checked | It cites no code, issue, comment or outside page. A run or a pull request is not evidence, because the judges cannot read what it says. The verifier looks for evidence before a person sees the entry. |
 | `CITATION_FAILED` | A citation does not hold | A citation does not hold, or was not read yet. If a citation no longer holds, the verifier looks for new evidence before a person sees the entry, and the new citations replace the old ones. While a citation is unread, the server reads it again, and then triage decides again. |
-| `PIN_REQUEST` | A convention | It is a convention that no evidence confirms. Every run in its modules gets a convention, so a person decides. |
+| `PIN_REQUEST` | A convention | It is a convention that no evidence confirms. With no other reason, triage puts it in use as provisional. Every run in its modules gets an accepted convention, but not a provisional one. |
 | `SUPERSEDE_REQUEST` | Corrects a fact not in use | It replaces an entry that is not in use, or that is gone. When it replaces an entry in use that no person verified, triage decides it like any entry, and its acceptance retires the old one. |
 | `BROAD_SCOPE` | Applies widely | No evidence confirms it, and it has no scope, or its scope reaches more than three modules. |
 | `JUDGES_DISAGREE` | The two checks did not agree | The two model judgments did not agree. |
 | `EVIDENCE_DISPUTED` | A check read its source as saying otherwise | One model judgment found that the entry's own evidence says otherwise, and the other did not. A person decides whether the claim is wrong. |
-| `NO_LLM` | Could not be checked | No model is configured, so triage cannot decide. The entry waits for a person, as it does when triage is off. |
+| `NO_LLM` | Could not be checked | Triage needs a model to compare the entry with similar entries, or to judge its citations, and no model is configured. The entry waits for a person, as it does when triage is off. |
 | `EXTERNAL_INPUT` | Rests on outside text | It rests on an issue or a comment that came from outside the workspace. |
 | `UNKNOWN_SOURCE` | An agent wrote it, and nothing confirms it | An agent wrote it, and no evidence confirms it. The server cannot yet tell what an agent read. This matters only when the workspace's own code or issues do not confirm the claim. |
 | `HARMFUL_SIGNAL` | Runs went wrong with it | Runs that were given it went wrong where it applies. |
@@ -196,8 +196,10 @@ A **Retire?** item shows the reason that the gardener asks:
 ## Audits
 
 When triage is `on`, a share of what it does alone goes to a person as an
-audit: `KNOWLEDGE_AUDIT_RATE` of its acceptances, repeats folded in, and
-refusals because an entry held more than one claim. A refusal for a credential is never
+audit: `KNOWLEDGE_AUDIT_RATE` of its acceptances, its repeats folded in, and
+its refusals. A refusal can be for more than one claim in an entry, for
+evidence that contradicts the entry, or for an entry in use that ranks above
+it. A refusal for a credential is never
 audited, because a person would be shown the credential. A provisional
 decision is never audited. Whether a decision is audited follows from its id,
 so the draw can be worked out again later.

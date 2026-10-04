@@ -40,9 +40,12 @@ Each page has an entry policy, which controls what agents can add to it:
 
 | Policy | What agents can do |
 |---|---|
-| `OPEN` | Add entries freely. For scratch work. |
-| `CURATED` | Add entries, with the checks for repeats and the per-token budget. The default. |
+| `OPEN` | Add entries, with the check for repeats. For scratch work. |
+| `CURATED` | Add entries, with the check for repeats and the budget for each token. The default. |
 | `LOCKED` | Read the page, but add nothing. People maintain it by hand. |
+
+The server checks every new entry for repeats, on each page. The budget for
+each token applies only on a `CURATED` page, and to an entry on no page.
 
 A page is **authored** (people write it, the default) or **generated** (the
 server writes it from entries). See
@@ -60,10 +63,13 @@ two facts wait for a person.](/img/docs/knowledge/page.png)
 
 ## Entries
 
-An entry is one fact. An entry that holds six claims cannot be scoped,
-confirmed or corrected one claim at a time, so the server refuses an entry
-that reads as a list or a summary. It also refuses an entry that looks like
-it contains a credential.
+An entry is one fact. If an entry holds six claims, nobody can scope,
+confirm or correct one of the claims alone.
+
+When the server writes an entry, it refuses an entry that looks like it
+contains a credential. It writes a list, or a text of more than 1000
+characters, as `PROPOSED`. When `KNOWLEDGE_AUTO_TRIAGE` is `on`, triage
+refuses that entry (`ONE_FACT`). In the other modes, a person decides.
 
 Each entry has a kind:
 
@@ -96,7 +102,10 @@ it with the date that it became provisional, and serves it with the trust tier
 `PROVISIONAL`. See [Provisional facts](#provisional-facts).
 
 An agent that finds an entry is wrong writes a new entry that **supersedes**
-it. The old entry stays in use until a person accepts the correction.
+it. The old entry stays in use until triage or a person accepts the
+correction. When triage is `on`, it can accept the correction alone, and it
+then retires the old entry as `SUPERSEDED`. A person must decide when the old
+entry is verified, is on a locked page, or is not in use.
 
 Before the server writes an entry, it searches for entries that say nearly the
 same thing. If it finds any, it writes nothing and returns them. The agent
@@ -141,11 +150,13 @@ each citation's last check:
 | `UNGROUNDED` | Nothing that was checked supports the entry, or the code that it cites has changed or gone. An agent checks it against the code before relying on it. |
 | `PROVISIONAL` | The entry is in use, but nothing confirmed it yet. Triage found no reason to refuse it and no reason to ask a person. An agent checks it before relying on it. A person's confirmation wins over this tier. See [Provisional facts](#provisional-facts). |
 
-Verified entries rank first. Grounded and observed entries rank next, and a
-grounded entry wins over an observed one when the two contradict. Provisional
-entries rank last. Apart from the conventions of its modules, a hosted agent
-run is given verified, grounded or observed entries, and a maximum of two
-provisional ones.
+Among entries that match a search equally well, verified entries rank first.
+Grounded and observed entries rank next, and provisional entries rank last.
+A grounded entry wins over an observed one when the two contradict.
+
+Apart from the conventions of its modules, a hosted agent run gets the most
+relevant verified, grounded or observed entries.
+Provisional entries fill only the places that remain, to a maximum of two.
 
 ### Checks when the code changes
 
@@ -181,9 +192,14 @@ Knowledge that nobody uses is not load-bearing, so a nightly pass archives it:
 
 The pass keeps an entry if one of its citations was checked and held within
 that window. It never archives an entry that a person verified; it asks a
-person instead. It never archives an entry that a page cites, because the
-page is read in its place. Outcomes of agent runs archive only provisional
-entries, and never delete knowledge.
+person instead. It does not archive an unused entry that a page cites,
+because agents read the page in its place. But it archives a harmful
+provisional entry, even if a page cites it.
+
+Outcomes of agent runs archive only two types of entry: provisional entries,
+and the conventions that the gardener wrote from review. Read
+[Upkeep](/fundamentals/knowledge/gardener#upkeep). Outcomes never delete
+knowledge.
 
 ## What agents get
 
@@ -191,18 +207,21 @@ entries, and never delete knowledge.
   budget. An agent calls it before it starts work.
 - **`recall_knowledge`** answers a question from the bank.
 - **A hosted agent run** gets the conventions of its issue's modules first,
-  then the `KNOWLEDGE_CONTEXT_TOP_K` most relevant verified, grounded or
-  observed entries, within `KNOWLEDGE_CONTEXT_TOKEN_BUDGET` tokens. A maximum
-  of two provisional entries follow them, labelled as provisional. Each entry
-  shows its citation and its age.
+  then a maximum of `KNOWLEDGE_CONTEXT_TOP_K` relevant entries, within
+  `KNOWLEDGE_CONTEXT_TOKEN_BUDGET` tokens. Verified, grounded and observed
+  entries come first. Provisional entries fill only the places that remain,
+  to a maximum of two, and each has a provisional label. Each entry shows its
+  citation and its age.
 
 The server reads a maximum of 25 conventions for one run: the conventions
 that a person confirmed first, then the newest. A provisional convention is
 not among them. The token budget can cut a convention, as it can cut any
 entry. An issue with no modules gets no conventions.
 
-`load_context` and `recall_knowledge` also serve a maximum of two provisional
-entries, after the others. A provisional convention is served only when it is
+`load_context` also serves a maximum of two provisional entries, after the
+others. `recall_knowledge` has no maximum for provisional entries. It ranks a
+provisional entry below a trusted entry only when the two entries match
+equally well. A provisional convention is served only when it is
 relevant. It is not given to every run in its modules until it is promoted.
 
 The server records each time an entry is served. When a run ends, its checks,
@@ -225,16 +244,16 @@ flowchart TD
   written["An agent or a person writes a fact"] --> cites{"Does it cite code<br/>or an issue?"}
   cites -- yes --> read["The server reads the cited lines<br/>at the commit that the fact names"]
   read -- "a citation does not hold" --> refused(["The server refuses the write"])
-  read -- the lines hold --> judges["Two models judge the claim<br/>against the lines"]
-  judges -- both accept --> confirmed(["In use: the code confirms it"])
+  read -- the lines hold --> judges["One model judges the claim<br/>two times, against the lines"]
+  judges -- both judgments accept --> confirmed(["In use: the code confirms it"])
   judges -- "it contradicts a fact that<br/>a person verified" --> person(["A person decides"])
-  judges -- both find it contradicted --> rejected(["Triage refuses it"])
-  judges -- the models disagree --> provisional
+  judges -- both judgments find it contradicted --> rejected(["Triage refuses it"])
+  judges -- the two judgments disagree --> provisional
   cites -- no --> verifier["A verifier agent searches<br/>the repositories and the issues"]
   verifier -- it finds evidence --> cited["The agent adds the citations"]
   cited -- check it again --> read
   verifier -- it finds nothing --> outside{"Is it about an<br/>outside service?"}
-  outside -- "yes: the service's own page<br/>states it, and both models accept" --> observed(["In use: observed on a date,<br/>checked again after 30 days"])
+  outside -- "yes: the service's own page<br/>states it, and both judgments accept" --> observed(["In use: observed on a date,<br/>checked again after 30 days"])
   outside -- "no: it is a decision,<br/>a rule or a convention" --> provisional(["In use as provisional,<br/>until evidence settles it"])
 ```
 
@@ -390,8 +409,10 @@ fold them into the page's body.
   archive it from the fact's menu in the **Facts behind this page** rail. The
   rail marks the fact "in the page body". The page's body keeps
   the old text until a person rewrites it. A consolidated convention is still
-  handed to every run on its modules. If runs report it as harmful, a person is
-  asked whether to archive it, since the page's body says it too.
+  handed to every run on its modules. If the gardener wrote it from review,
+  and runs report it as harmful, the gardener asks a person whether to archive
+  it. The gardener does not archive it alone, because the page's body says it
+  too.
 - **Undo it with a revert.** Reverting the accepted change restores the old
   body, and puts the entries back in use as standing entries. Undoing that
   revert brings the consolidated body back, and folds back in the entries that

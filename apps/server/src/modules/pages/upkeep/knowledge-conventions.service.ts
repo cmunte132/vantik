@@ -112,9 +112,11 @@ export type Weighed = 'ARCHIVED' | 'PROPOSED' | null;
  * is written with the runs and the code the findings pointed at as its
  * citations. It is written as the gardener's bot, never as standing, so it
  * waits in the inbox and goes through triage like an agent's entry. Triage
- * never accepts a convention alone (PIN_REQUEST): accepting one hands it to
- * every run in its modules, so a person decides. Once accepted it is served
- * both ways, to every run in its modules and to searches it matches.
+ * accepts a convention when its code citations hold and both judgments
+ * accept it. A convention without that evidence gets PIN_REQUEST, which is a
+ * soft reason: triage puts it in use as provisional, and a provisional
+ * convention is not given to every run. When a convention is accepted, the
+ * server gives it to every run in its modules and to the searches it matches.
  *
  * A convention the gardener wrote is weighed after each harmful outcome:
  * when harmful outcomes, counted since a person last put it back, outnumber

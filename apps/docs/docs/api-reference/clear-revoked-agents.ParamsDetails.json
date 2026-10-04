@@ -1,0 +1,1 @@
+{"parameters":[{"in":"query","name":"workspaceId","required":false,"description":"The workspace to change. If you do not send it, the server uses the workspace of your token.","schema":{"type":"string"}}]}

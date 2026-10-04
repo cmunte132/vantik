@@ -1,0 +1,69 @@
+---
+id: revoke-agent-account
+title: "Revoke agent account"
+description: "This call stops an agent. For a personal agent, the server deletes its tokens. For each agent, the server records that the agent is disabled. The server keeps the account, so the past changes of the agent keep their author. The owner of a personal agent can revoke it. To revoke another agent, you must be a workspace admin."
+sidebar_label: "Revoke agent account"
+hide_title: true
+hide_table_of_contents: true
+api: eJztVsFu2zgQ/RWCp13AsJy02INv6aFADost2mSBIshhLI4t1hKpkpQTQdC/7wwp2XKkLbBAe1tfLJHDmTfz3gzVSYU+d7oO2hq5lQ+F9iKHshQ+2NoLMAIOaMJafLROgKjReWugTKsrEQoUHt0JnVBYYkAvdPAi2CManw4h5MWCucPcOkWmBYS4Hk0EhVfaw65EtRYPF/MjYu2TXZ7bhp15G99r8EHkBZgDBbf7iS8+w6+akDehsC55tC+GHJLl23QocUO4TgSesiBjO76BseTHjWm0thFVQ2F3tCVerDv6GnJ6VpU2a7mSNTioqBrOy+1TJzWXtoZQ0JahDXqLnu4VLTj83miHSm6Da3A1IwRFQzUQWl0lx1F8XmAFctvJ0Nbs1AenzUH2/WqI+b1B116CnpG+CbyH0i9GvqR2FVvc72MNlBVUGKLIKCrYFb2EOdF15YIOuSSOH+N/ZnS+toa88P7t5ob/5gDPYmKa1BQi744+RAGekIqdVe1a9iv5/t/8cU2QiB0OnKCkukfAgqRMaDzZMvbcmkBx2AvUdalzYC/ZN8+uunlqdvcN88DScJZUF3RKrCKPBHheg5XEV6jqkpceTZKv9kRWH3+cwrt5Cl8vpJDKL+VYkYJVpAwcxu0F2Uan75frcjEeKpMa5kWHgqJQ02q1Zt3JAAfWvHz0LH7ikdqgsIr1b33Mn9tgK7PTTca69ln05LNu6Ig+S2SyPiK5qYUaV9Kpjopw0KbPoNbyrWC/srj+BhP0UWjjA5gcWZPONociaRF3RFbSRnoWRMdrS7RX9jQIln3TMu71a6waqzvtjOIIdqJ0FsMJnOaRFSlNEFMZ99CUpBFZhFBvs6y0NFoLqsP23WazmSXAsEApUu15kA0orUmtM6bFteYmT1VZ8n6z6D1BXtGIpfEbyvZqxA7MTvJfC6Ix8XvGlVTFYdLodo3xV+Xg5vWYN06HNlL3AUl07q5h3p+ep9tfuEtS1aZG517gxMY5we+7aBR1ps3eRksdYo8k3mdJ392Lj9oR1k/OcgOKP8GQ0CoW74O1JZNHEkvGt5vbP9Y3m/UttwLLtYLI4zA9Pw93QVT+cAu9DdhdBsP/d+nPuUsHLQR8DVldArUWsROF3w3D5EmeWO5xnNB/Gij0sJ1esnGmkPZYuXyk63bg8dGVfc/L6aZkuY4lW74Wrwn+1TfkYu5HbGd3OV1UDVvG7hvH0X9M57fPwwfB7+JHXx2LmIZFMO0UzIh15KF/JtMCQVETM7a0e5fnWIfJudmF2k/vkU9/fXmgEfAPdaC5MQ==
+sidebar_class_name: "post api-method"
+info_path: api-reference/vantik
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Revoke agent account"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/v1/users/agents/{agentId}/revoke"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+This call stops an agent. For a personal agent, the server deletes its tokens. For each agent, the server records that the agent is disabled. The server keeps the account, so the past changes of the agent keep their author. The owner of a personal agent can revoke it. To revoke another agent, you must be a workspace admin.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./revoke-agent-account.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./revoke-agent-account.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./revoke-agent-account.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

@@ -1,0 +1,59 @@
+---
+id: list-the-repositories-that-modules-can-use
+title: "List the repositories that modules can use"
+description: "This call returns each repository that a connected git source of the workspace offers. To link a repository to a module, send its `integrationAccountId`, `externalRepoId` and `fullName` to `POST /v1/modules/{moduleId}/repos`. The list has no repository of a personal integration account, because a module belongs to the workspace."
+sidebar_label: "List the repositories that modules can use"
+hide_title: true
+hide_table_of_contents: true
+api: eJztVU1v4zYQ/SsEz4blpEUPuaVAWwTodhdNUqBIgjUtjSWuaVLlhzeG4P/eN6Q/5I2BBkWPPYkihzNv5r0ZDrKhUHvdR+2svJEPnQ6iVsYITzF5GwSpusNP74KOzm9F7FQUStTOWqojNaLVUQSXfE3CLXFM4qvzq9CrvLEkH6biwQmj7Qr3xp4c/teuSYYmIpBthI5BzLWN1HrFgG7r2iUb75r5RMzpNZK3yvwOD9gRChfmy2TMb2pNc/Y2//Tx/kFUm6uqeA3VUBZ3za7KgeeAAoBGhyg6FYR1Y0CAr0QPwA5hxAiHUAXIRCyoVinQETg2jLNt4PBnqU/lRHoKvbOBgrwZ5PVsxp/zct+nuqYQkIU4GOMeahvJRjZXfW90nUFUXwLfGWSoO1orXsVtT/CivFdb3NOR1mG07xZfQBEOzoN+tPR+Qpk/Tm5fUU6r9w5FirrkdYmuEYYQvbbtGwzMwiniPlpGwrRwJU8Ip3I3kcXkfY6DSe1Bi+XeRCydF/Sq1j04e5ZIsUuLZ5ldnwvrfSF0cwgwqiTQn0Jm1wd5/rPTZ+m+WvKVhfWzFNAcu0KpN7ohD2fwFnU07OJ2o7RRC0OMGCc7Pvx+dvVWXw8Z4F+JTnrfKAPw0a3ICtQE6gywnf4L2R3ldS6INTyq9mLKewKw9WhVip3zOlBTMsgJqhYunuSHLDb5MoEzWIET2VKOpGKHn3GLq0MxPmcmYBTIb6BaOBpk8gb2AwK12u4q1es3lf8TdIk/lI16hZ4PUVnWS+y8S21XmpoWKEgZHWXNxLxuUdq121DRK/vGNi31ax5NPNAOSi4E7EdEgccF3yivGXkuW4FYKFyqZMCD7GLsb6rKOEzkzoV4890MU+SSHlXTYICE4wQuKKGiLWd3SItltJscqnLJ+9XlhsqQJ6LRHoybbSlF2T3oapT/VDwG7mY8JUdcRc8cprS5TzaclWP3wszVyeu4zdT9SMqTv03M+NPL+PielViqNjY66o0TYx1kM/wvslFuIW2XLlvuW6nw/ibp2zvxs/bA+sk7Frn4oCw0vUZ74C1zhsmDxIrx9ez6h+nVbHrNHQ8JxrXKPNrc+PJXHeL5pNBZMijCXsN4cK1IefSfwRhOLfn/w/xfPsx7nUQgr3qj0HZgLjfFsB8xT3LDrbCHi9W3YwZyZDGz5TAsVKBHb3Y73kaze1bwy6nBs4BxgRRmeRb3irYsM7z+fcyTwKT8kn87d3fjGfjLTw8Q8d9hxG3T
+sidebar_class_name: "get api-method"
+info_path: api-reference/vantik
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"List the repositories that modules can use"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/v1/modules/available_repos"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+This call returns each repository that a connected git source of the workspace offers. To link a repository to a module, send its `integrationAccountId`, `externalRepoId` and `fullName` to `POST /v1/modules/{moduleId}/repos`. The list has no repository of a personal integration account, because a module belongs to the workspace.
+
+<ParamsDetails>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./list-the-repositories-that-modules-can-use.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./list-the-repositories-that-modules-can-use.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

@@ -1,0 +1,69 @@
+---
+id: create-agent-account
+title: "Create agent account"
+description: "This call makes an agent account. An agent acts as its own identity in the workspace, so Vantik records its changes against the agent. Any member can make a personal agent. Only an admin can make a workspace agent. The response of a personal agent holds its token. Vantik shows the token this one time only. A workspace agent gets no token."
+sidebar_label: "Create agent account"
+hide_title: true
+hide_table_of_contents: true
+api: eJztV9tuGzcQ/RVinxXJdoo++E1JW8AoigS13SIwgohajrSMdskNybUsCAL6Nf2wfknPkLvSStq6BoKiKFA/WBI5HM6cOXPhNlPkc6froK3JrrO7QnuRy7IUlVyRF9IIuSQThMxz25gwFtPDSsC+Fxofdm2EVljVYSO0EaEgsbZu5WuZ00h4K36R2FwJR7l1Kh3KC2mWfMdSauNDPBRV8yUbUVE1JwdjTLRFSFGT89bIspN6Z8pNtFBVuLMnuL+6k7yDake+tsaTsIszXaKwZWtVsCsy485eX9i1j5bFdXwDPtbgp66gCQbA2NP7xJKgyNhWVzbKaulkRQF3ZtcP20wz1F8achvsGezg517HjcKioy+NdqSy64UsPY3OwtTDVyys64P3wTaiagDonLFoYYTTGns3C7HBtrIwLwhPRmF5FE97co8QbDz54/jxWRxyB3d8XlAls+ttFjY1G++D02aZ7XYfk+nkwxurNixx8CS4Bo7k1gSYyVuyrkudS/Zp8tmzY9tz1Xb+mfJwBMlDwgx31c4ikEGT5xMJyVOjhrBjSTgpe6RrQ92SF2EO1jG7FC/ltqog48fZbpSB7Ahkoeu/v2vW0Wx2mk/xcg4FtI3SNS1vZEfB2T4Cw6eNnQNjVuCPNeyZ9/IMgeVkmoqx7UzG0l6KsVa0kE2JwB0kdkwFRMD3kJDOyc0ZEL8eY82WKPssHXuZNHMk1Sy6OFs7HWiWMrplrKNFJC10NmZluBY9yrIhdgrClX9BnNIN/D+Rf26lU+PuOrHQJQHkplYy8JeOD9GmvLS4HsKKSmJpR5V9hEFtseuDyzcwsKw2WsEnGF1UzpINnLLbtwwqsml3WH+Lk4Hi7nfB8t6OUyKVtOjh1cUlfxw7dtvkOXm/aMp9/cu+IgfPM6nHx14RqaQiLoynVRbtYhapORsqm7wN7nYS2Wl+a/Wy7AYbHNoR161DWWSyDhcIbMBdXQ7uPJvsz6dMd/oe5twMmm6aspRzji/Xxuey6b/N41FWSh+Ag5qGISfQwCrJlYXNesWt9QycU0+n5VpuQBcIxf4nhaF1L9SRQy+jS+rsA1PBKGqmJ1nVJYGWy0+1DJ/++O332cl8oMPgYPAjUc17KL1SeLkgUZdgxjjrJ3YEapqmqzatv7m4OM/kG4OiBlK37VX0Rop4ZCD509STxNvcSjpajx3S1XvIjr+mJhznaAWNAG8wWxKQWLo3sgmFdRqMiD4nr1+fu8CzjPQrUm2QT0pG6nvcQqSj2EOORLjrtWjLJY9eGeeiZ54CusIqbmbWRy9kKPBr8ng54fLhJ1G/52EnlrQ0uDUOVSLbwvKlNruJrPUZoz7wpNSyg8daaXgCDoWzzbJIgxXNgXBqYem7AIZPm32+sRDrxjIt9FP0kXtj2ukiGmyv4nIEH6XTnDAxDsnEBGjXt4sQ6uvJpLQY8Au4ff36AkwbrOpKoV34roK2VlqT5sDOrXFsUR0qQ9ovB7Unk0dCYZzLA2dKr5u3RO35PxaIWkqwvV3tlGZ923tcY/wRHDyJesobFKhNDN0bAkXctOEwP3zsb98ytRNqfaE9gdmxbujl3/MoFGnF2fHzYd79vmN4N4seyN/rI/120RX8tqJyz9BmYePtbYFIXDoDcnojftAO/r93ljNR/CQNOMvlXNxZy8qZtkn46uLq2/HlxfiKawUzvpKmZ2UaLo5feqcXbg8V4v9X4j/zSmz5FugpTNApkL6IVkyubVufHrJHTqlYofDZ1ihwmTOBt7fbufR078rdjpfTG5Ppr7Tn2vAXD8rj4P6rb8tBEFa0OXsixxkfqzHVu9oXcxtwIJmQoux4Ovo2uffqjrUfzp51Oi5n6QRaMtXhWdl+G3n/7vYOwvP21VtZxWecXPPLFf9hJ4pAhDtWmri2xVxklk3sl1nSyX9/AgTZIlo=
+sidebar_class_name: "post api-method"
+info_path: api-reference/vantik
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Create agent account"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/v1/users/agents"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+This call makes an agent account. An agent acts as its own identity in the workspace, so Vantik records its changes against the agent. Any member can make a personal agent. Only an admin can make a workspace agent. The response of a personal agent holds its token. Vantik shows the token this one time only. A workspace agent gets no token.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./create-agent-account.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./create-agent-account.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./create-agent-account.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

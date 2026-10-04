@@ -117,15 +117,21 @@ translate a UUID. No raw Tiptap JSON is in the response.
   "dueDate": null,
   "project": null,
   "cycle": null,
+  "modules": [{ "id": "…", "name": "Server" }],
+  "capability": { "id": "…", "name": "Webhooks" },
   "parent": { "id": "…", "key": "ENG-40", "title": "…" },
   "subIssues": [{ "id": "…", "key": "ENG-43", "title": "…", "stateCategory": "COMPLETED" }],
   "relations": [{ "type": "BLOCKED", "issue": { "id": "…", "key": "ENG-12", "title": "…" } }],
   "linkedIssues": [{ "id": "…", "url": "https://github.com/…", "title": "PR #12" }],
+  "criteria": [
+    { "id": "…", "body": "The pool holds under 200 requests a second", "completed": false, "completedAt": null }
+  ],
   "comments": [
     {
       "id": "…",
       "author": { "id": "…", "fullname": "Jane Doe" },
       "createdAt": "…",
+      "updatedAt": "…",
       "bodyMarkdown": "…",
       "replies": []
     }
@@ -142,6 +148,11 @@ Notes:
 
 - The response holds no deleted comment, no deleted relation, and no deleted
   sub-issue.
+- `modules` holds the modules that the issue names, in the order of the issue.
+  `capability` is null when the issue delivers no capability.
+- `criteria` is the Definition of Done of the issue, in list order. To tick a
+  criterion, send `POST /v1/checklist_items/:checklistItemId` with
+  `{ "completed": true }`.
 - `relations[].type` always takes the point of view of the issue that you ask
   for. The database holds the row `ENG-50 BLOCKS ENG-42`. When you ask for the
   context of ENG-42, that row reads as `BLOCKED`.
@@ -183,6 +194,8 @@ are the parameters:
 | `limit` | The maximum number of hits. The default is 10, and the maximum is 100. |
 | `threshold` | The threshold for the vector distance. The default is 0.8. |
 | `stateCategory` | The workflow categories for the search, with a comma between two of them. For example `COMPLETED`, or `STARTED,COMPLETED`. |
+| `moduleIds` | Module ids, with a comma between two of them. An issue matches if it names one of these modules. |
+| `capabilityId` | One capability id. An issue matches if it delivers this capability. |
 
 Only `query` is necessary. `workspaceId` defaults to the workspace of your
 session. If you omit a numeric parameter, or if the server cannot parse it, the

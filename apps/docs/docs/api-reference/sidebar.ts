@@ -174,6 +174,12 @@ const sidebar: SidebarsConfig = {
         },
         {
           type: "doc",
+          id: "api-reference/list-the-repositories-that-modules-can-use",
+          label: "List the repositories that modules can use",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
           id: "api-reference/update-module",
           label: "Update module",
           className: "api-method post",
@@ -207,6 +213,12 @@ const sidebar: SidebarsConfig = {
           id: "api-reference/unpoint-a-module-from-a-repository",
           label: "Unpoint a module from a repository",
           className: "api-method delete",
+        },
+        {
+          type: "doc",
+          id: "api-reference/list-the-folders-of-a-module-repository",
+          label: "List the folders of a module repository",
+          className: "api-method get",
         },
       ],
     },
@@ -278,6 +290,36 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/create-personal-access-token-pat",
           label: "Create personal access token (PAT)",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/list-personal-access-tokens-pat",
+          label: "List personal access tokens (PAT)",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/create-agent-account",
+          label: "Create agent account",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/list-agent-accounts",
+          label: "List agent accounts",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/clear-revoked-agents",
+          label: "Clear revoked agents",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/revoke-agent-account",
+          label: "Revoke agent account",
           className: "api-method post",
         },
         {

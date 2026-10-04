@@ -28,7 +28,8 @@
 # Values in `environment:` blocks override .env where the in-container network
 # differs from the host view (service names instead of localhost).
 #
-# Not included (optional — the server logs an error and continues without them):
+# Not included. These services are optional. Without a service, the server
+# starts, and the features that need the service are off:
 #   - an LLM endpoint for the AI features — any OpenAI-compatible one, hosted or
 #     local; point LLM_BASE_URL at it (see .env.example)
 #   - SMTP. In development mode, the .env.example value of NODE_ENV, the

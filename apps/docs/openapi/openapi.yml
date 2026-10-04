@@ -486,13 +486,39 @@ paths:
       tags:
         - Module
 
+  /v1/modules/available_repos:
+    get:
+      summary: List the repositories that modules can use
+      description: >-
+        This call returns each repository that a connected git source of the
+        workspace offers. To link a repository to a module, send its
+        `integrationAccountId`, `externalRepoId` and `fullName` to
+        `POST /v1/modules/{moduleId}/repos`. The list has no repository of a
+        personal integration account, because a module belongs to the
+        workspace.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvailableRepo"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Module
+
   /v1/modules/{moduleId}:
     post:
       summary: Update module
       description: >-
         To change the owner, send the new owner, and send null for the old
         owner. The server refuses a change that gives the module two owners, and
-        it refuses a change that gives the module no owner.
+        it refuses a change that gives the module no owner. To set the checks
+        that an agent run uses in the module, send `verification`. The create
+        call does not accept `verification`.
       parameters:
         - name: moduleId
           in: path
@@ -654,6 +680,47 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: Not found
+      tags:
+        - Module
+
+  /v1/modules/{moduleId}/repos/{moduleRepoId}/folders:
+    get:
+      summary: List the folders of a module repository
+      description: >-
+        This call returns the folders that a module can claim as its
+        `pathPrefixes`. The server reads them from its mirror of the default
+        branch, so it shows only committed folders. The list has each folder at
+        the root, and the folders one level inside a root folder that is not a
+        project. It has no folder for dependencies or build output, and no
+        folder with a name that starts with a period. The list has a maximum of
+        300 folders. If the repository has no commits, the list is empty.
+      parameters:
+        - name: moduleId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: moduleRepoId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RepositoryFolder"
+        "400":
+          description: >-
+            No connected source of the workspace offers the repository now.
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          description: The module has no such repository.
       tags:
         - Module
 
@@ -882,6 +949,184 @@ paths:
           description: Invalid request parameters
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Users
+
+  /v1/users/pats:
+    get:
+      summary: List personal access tokens (PAT)
+      description: >-
+        This call returns the live tokens that you made for yourself. It
+        returns the name and the id of each token, and never the token value.
+        The list has no agent token.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PatSummary"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+      tags:
+        - Users
+
+  /v1/users/agents:
+    post:
+      summary: Create agent account
+      description: >-
+        This call makes an agent account. An agent acts as its own identity in
+        the workspace, so Vantik records its changes against the agent. Any
+        member can make a personal agent. Only an admin can make a workspace
+        agent. The response of a personal agent holds its token. Vantik shows
+        the token this one time only. A workspace agent gets no token.
+      parameters:
+        - in: query
+          name: workspaceId
+          required: false
+          description: >-
+            The workspace for the agent. You must be a member of it. If you do
+            not send it, the server uses the workspace of your token.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentDto"
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAccount"
+        "400":
+          description: Invalid request parameters
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: >-
+            You asked for a workspace agent, and you are not a workspace admin.
+      tags:
+        - Users
+    get:
+      summary: List agent accounts
+      description: >-
+        This call returns the agent accounts of the workspace, newest first. It
+        never returns a token. The list has no agent that somebody revoked and
+        then cleared. It has no identity that Vantik makes for one delegated
+        issue.
+      parameters:
+        - in: query
+          name: workspaceId
+          required: false
+          description: >-
+            The workspace to read. If you do not send it, the server uses the
+            workspace of your token.
+          schema:
+            type: string
+        - in: query
+          name: scope
+          required: false
+          description: >-
+            `mine` returns only the agents that you own, and any member can
+            send it. Each other value returns every agent of the workspace, and
+            only an admin can send it.
+          schema:
+            type: string
+            enum:
+              - mine
+              - all
+            default: all
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentSummary"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: You asked for all agents, and you are not a workspace admin.
+      tags:
+        - Users
+
+  /v1/users/agents/clear_revoked:
+    post:
+      summary: Clear revoked agents
+      description: >-
+        This call removes each revoked agent from the list of agents. The
+        server keeps each account, so the issues and the comments of the agent
+        keep their author. The call does not change an active agent. Only a
+        workspace admin can send it.
+      parameters:
+        - in: query
+          name: workspaceId
+          required: false
+          description: >-
+            The workspace to change. If you do not send it, the server uses the
+            workspace of your token.
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hidden:
+                    type: integer
+                    description: The number of agents that the call removed from the list.
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: The caller is not a workspace admin.
+      tags:
+        - Users
+
+  /v1/users/agents/{agentId}/revoke:
+    post:
+      summary: Revoke agent account
+      description: >-
+        This call stops an agent. For a personal agent, the server deletes its tokens.
+        For each agent, the server records that the agent is disabled. The
+        server keeps the account, so the past changes of the agent keep their
+        author. The owner of a personal agent can revoke it. To revoke another
+        agent, you must be a workspace admin.
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          description: The user id of the agent.
+          schema:
+            type: string
+        - in: query
+          name: workspaceId
+          required: false
+          description: >-
+            The workspace of the agent. If you do not send it, the server uses
+            the workspace of your token.
+          schema:
+            type: string
+      responses:
+        "201":
+          description: The server revoked the agent. The response has no body.
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: >-
+            You do not own the agent, and you are not a workspace admin.
+        "404":
+          description: The workspace has no agent with this id.
       tags:
         - Users
 
@@ -3624,8 +3869,90 @@ components:
           type: array
           items:
             type: string
+        verification:
+          description: >-
+            How an agent run checks its work in this module. Null means that
+            the module gives no checks to a run.
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ModuleVerification"
         workspaceId:
           type: string
+
+    ModuleVerification:
+      type: object
+      description: >-
+        The commands that an agent run uses to prepare and check its work in a
+        module. The server keeps the object that you send. When a run reads it,
+        the run ignores a field that has the wrong type. If an issue names more
+        than one module, the run merges their values. If two modules give
+        different values for one command, the run gets no value for that
+        command. The run gets all the setup commands and all the egress hosts
+        of the modules.
+      properties:
+        setupCommands:
+          type: array
+          description: >-
+            The commands that prepare the work, for example `pnpm install`. The
+            run executes them one time, with network access.
+          items:
+            type: string
+        egressHosts:
+          type: array
+          description: >-
+            The host names that the setup commands can connect to in a hosted
+            sandbox, in addition to the model provider and the npm registry.
+            For example, a Go module names `proxy.golang.org`. The run ignores
+            a value that is not a host name.
+          items:
+            type: string
+        testCommand:
+          type: string
+          description: The command that runs the tests.
+        lintCommand:
+          type: string
+          description: The command that runs the linter.
+        typecheckCommand:
+          type: string
+          description: The command that checks the types.
+        buildCommand:
+          type: string
+          description: The command that builds the code.
+
+    AvailableRepo:
+      type: object
+      description: One repository that a connected git source offers to modules.
+      properties:
+        integrationAccountId:
+          type: string
+          description: The connected source that has the repository.
+        source:
+          type: string
+          description: The slug of the source, for example "github".
+        externalRepoId:
+          type: string
+          description: The id of the repository at the source.
+        fullName:
+          type: string
+          description: '"owner/name" on the provider.'
+
+    RepositoryFolder:
+      type: object
+      description: One folder of a repository that a module can claim.
+      properties:
+        path:
+          type: string
+          description: >-
+            The path from the root of the repository. It ends with a slash, for
+            example "apps/server/". This is the form that `pathPrefixes` uses.
+        isProject:
+          type: boolean
+          description: >-
+            True if the folder holds a manifest of a package or an application,
+            for example `package.json` or `go.mod`.
+        depth:
+          type: integer
+          description: 1 for a folder at the root. 2 for a folder in a root folder.
 
     CreateModuleDto:
       type: object
@@ -3695,6 +4022,14 @@ components:
           type: array
           items:
             type: string
+        verification:
+          description: >-
+            Send the full object. The server replaces the stored value, and it
+            does not merge the two. To remove one command, send the object
+            without it. Send null to remove all the checks.
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ModuleVerification"
 
     ModuleRepo:
       type: object
@@ -4360,6 +4695,127 @@ components:
       properties:
         name:
           type: string
+
+    PatSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
+    AgentScope:
+      type: string
+      description: >-
+        `read` reads the board. `write` files, updates, comments and closes.
+        `delete` removes records.
+      enum:
+        - read
+        - write
+        - delete
+
+    CreateAgentDto:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: The name that the agent shows in the history and in comments.
+        ownership:
+          type: string
+          description: >-
+            `personal` makes an agent that you own, and it gets a token.
+            `workspace` makes an agent that nobody owns, and it gets no token.
+            Only an admin can make a workspace agent.
+          enum:
+            - personal
+            - workspace
+          default: personal
+        scopes:
+          type: array
+          description: >-
+            What the agent can do. If you do not send it, the agent gets `read`
+            and `write`. The server refuses an unknown value.
+          items:
+            $ref: "#/components/schemas/AgentScope"
+
+    AgentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The user id of the agent.
+        name:
+          type: string
+        email:
+          type: string
+          description: A made-up address. It receives no email.
+        ownership:
+          type: string
+          enum:
+            - personal
+            - workspace
+        ownerUserId:
+          type: string
+          nullable: true
+          description: The owner of a personal agent. Null for a workspace agent.
+        scopes:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentScope"
+        createdAt:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+          description: >-
+            True if the agent can act. A personal agent is active while it has
+            a live token. A workspace agent is active until somebody revokes
+            it.
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            The last time that a token of the agent authenticated. Null if no
+            token did. A workspace agent has no token, so it always has null.
+
+    AgentAccount:
+      type: object
+      description: >-
+        The agent that the server made. A personal agent has `token`. A
+        workspace agent has no `token`.
+      properties:
+        id:
+          type: string
+          description: The user id of the agent.
+        name:
+          type: string
+        email:
+          type: string
+        ownership:
+          type: string
+          enum:
+            - personal
+            - workspace
+        ownerUserId:
+          type: string
+          nullable: true
+        scopes:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentScope"
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Always null for a new agent.
+        token:
+          type: string
+          description: >-
+            The token of a personal agent, for example `tg_pat_…`. Vantik shows
+            it this one time only. Keep it in a safe place.
 
     View:
       type: object

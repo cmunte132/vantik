@@ -1,0 +1,1 @@
+{"parameters":[{"in":"path","name":"agentId","required":true,"description":"The user id of the agent.","schema":{"type":"string"}},{"in":"query","name":"workspaceId","required":false,"description":"The workspace of the agent. If you do not send it, the server uses the workspace of your token.","schema":{"type":"string"}}]}

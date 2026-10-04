@@ -25,7 +25,7 @@ The help text calls the program `vantik-cli`, for example
 
 ## How to install the CLI
 
-The package is `@vantikhq/cli` in `packages/cli`. It needs Node.js 18 or later.
+The package is `@vantikhq/cli` in `packages/cli`. It needs Node.js 20 or later.
 
 A release publishes the package to npm only when the maintainers turn on the npm
 publish step. If your release is on npm, install it:
@@ -164,9 +164,23 @@ command prints the raw result as JSON. Without it, the command prints a table
 or text. `knowledge pull`, `knowledge push` and `knowledge generate` have no
 `--json`.
 
-If the API refuses a request, the command prints the message from the server,
-and it exits with code 1. The commands of tasks, projects and knowledge put
-`Error:` before the message.
+If the API refuses a request, the command prints
+`<METHOD> <path> failed with <status>: <body>`, and it exits with code 1. The
+body is the response of the server as it is, usually JSON. If the server
+refuses the token, the command prints a message about the token instead. The
+commands of tasks, projects and knowledge put `Error:` before the message.
+
+`knowledge append` has two results that are not errors. The command prints
+them as a yellow warning, and it exits with code 0. It writes nothing in these
+two conditions:
+
+- The bank already holds similar facts. The command shows them. Give
+  `--supersedes` or `--distinct`, and run the command again.
+- A citation is not correct. The command shows which citation, and why.
+
+Read the output, or the `status` field of the `--json` result, to know if the
+command wrote the fact. The value is `written`, `needs-decision` or
+`citation-failed`.
 
 A reference to an item takes these values:
 

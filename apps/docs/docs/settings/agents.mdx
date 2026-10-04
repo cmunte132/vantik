@@ -83,8 +83,9 @@ keeps **Workspace default**:
   workspace has keys for more than one provider.
 - **Model.** The model of the runs. Runs do not fall back to a different
   model. If no model is set, a run with **Workspace default** fails.
-- **Reasoning.** How much the model reasons before it answers. The default is
-  **Medium**.
+- **Reasoning.** How much the model reasons before it answers. If you do not
+  set a level, the run uses the default of the model. The field then shows
+  **Medium**, but the server does not send that level.
 
 ## How the work is checked
 
@@ -175,8 +176,9 @@ Read [Knowledge](/fundamentals/knowledge).
 ## Agent accounts
 
 This section lists the agents of the workspace. For each agent, it shows the
-name, the owner (personal or workspace), the scopes, and when the agent last
-acted.
+name, the owner (personal or workspace), the email, and the scopes. For a
+personal agent, it also shows when the agent last used its token. A workspace
+agent holds no token, so its row shows **holds no token**.
 
 ![The Agent accounts section, with a list of agents](/img/docs/settings/agent-accounts.png)
 

@@ -1,0 +1,69 @@
+---
+id: list-the-folders-of-a-module-repository
+title: "List the folders of a module repository"
+description: "This call returns the folders that a module can claim as its `pathPrefixes`. The server reads them from its mirror of the default branch, so it shows only committed folders. The list has each folder at the root, and the folders one level inside a root folder that is not a project. It has no folder for dependencies or build output, and no folder with a name that starts with a period. The list has a maximum of 300 folders. If the repository has no commits, the list is empty."
+sidebar_label: "List the folders of a module repository"
+hide_title: true
+hide_table_of_contents: true
+api: eJztVk1v4zYQ/SuETi1gSI4b9OBbFugWAbrtIpsUKLIBTEsjixuK1HIoJ4Kh/94ZUrKl2NtDC/RQ9GSZHM7ne488JAVg7lTjlTXJOrmvFIpcai0c+NYZFL4CUVpdgONv6YUUtS1aDWRmRK6lqoVEoTyKTSN99dFBqV4BN6m4p6MIbg+OvMki+KpF6WwdzGvlnHXCliFGAaVstRdbJ01eLQRaMhJY2RcU1uhO5LaulfdQjOnEAFqhFxVlADKvhi1BabJPZ61fCGmKWRXW0CnYgxbKoCqAKmLD8WwokrpgLNfaOPsFcp+K2xjF2NGupNwLaMAUYHIF5NeJbat0IWzrm3YIfLJ/Ub4ih0bWEGOgl47aMKw34JQt3tREvZavqm5r7tIPy+Wp9NvYNQeNReWt68bsYptwEbaDI6oF6sZ3abJIGukovicXyfrxkHAyNPU40NuCDBSjgOdI3w6+tspBkay9a2GRYE7zk8n6kPiu4XPonTK7pO8Xb1zdUVr/wN0TG2NjDQLy/mq55J85VD+1eQ6IZctYjcYUJLfGg/FsLptGq1yyefYF+czhPKZ0TnacqIcaJ+t2y2OnjXnQ38yII56InPb/G+QIXXeWxutVrCa046zqt5EYB2wZ+TKieWTLKW5AJoHwCCTUEok/DE94lXVDyXzmXmAWuZh9ThhlhAo1stvVMfs5gUVL7U+TnpqDHyMNJmlvrdUgzXneNFuhygnjREU/EctGlYA+tq6R+bPcAdOGejUZ1jz3zWCX8gg3bL3Z2ZS6vAmpEQNn3VQ0/h24s7SuglN5QSBSsZrvKTNXhJQBnnjlNQe4O3b+fdilzZ73ry9h9FfmozHUOZIttK3LYZzgi3XPSLXxQhnFdUZnY19CgdfLq3O/98H2awt4VKW91Ip0zj6D4SbR6JBs079BiSP057CtySPN4RJyh1nR0oORra+sU0g874+tub5cwsCVoQJsScAnwI5tlzuWquRDME1IGUi+KksikuwgJBnYlGT7qyy6w+ww6lmfBXfjQlSlPhtElA5HRkQtbJ0mPwfKfadMn8lGnYHoD5qg+F0ar5757vB0UwELrbPtropThS31OKp4/OYb5LWjumq7hzhl9k3LTLNwR2Cgr5/M1NvwN6bHM9xLp+RWx0nEFGNLw6VJqVXeN+ss05Yu78qiX9NtsbwoKrIoSC/xiMOYpTWi4+rGsrj7LOuxK5e8X130HlNeiIKUPve6m70ChkFP6k/FA/J1SFJ0zMuEvDhMVCXXDs+QsR18PyDkrVO+C6N7B9KBu2kZCY9P0+1PDO7YtanREcJcWDJcRUHVglFAnjKlDZYD8ePcz4q+uRXvlaNcB4kUH6QhmtTEOHFPGsnDI4hF49Vy9WN6tUxXzGxCpidJ5BjD5fmLQj9/qpSnG+XEjLc5HE4U//8B9x9/wA249fDqs4ZmZxhJgaTjw+Ix2TM1BzGkr/XkeRfCndaO77RREok6TDz2cjhsJcKD033PyyRMjtn2dBKjwL1CIX+TIJdSI/wFNL+7Gx6A34tvFTI+ykwXNE+3/I8+n6GbPlNZmP71uEOv+ieyr4gNJBNcfzS5obdo4yeHz27afnp1/fzTPWnMnxZ3tQA=
+sidebar_class_name: "get api-method"
+info_path: api-reference/vantik
+custom_edit_url: null
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"List the folders of a module repository"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/v1/modules/{moduleId}/repos/{moduleRepoId}/folders"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+This call returns the folders that a module can claim as its `pathPrefixes`. The server reads them from its mirror of the default branch, so it shows only committed folders. The list has each folder at the root, and the folders one level inside a root folder that is not a project. It has no folder for dependencies or build output, and no folder with a name that starts with a period. The list has a maximum of 300 folders. If the repository has no commits, the list is empty.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./list-the-folders-of-a-module-repository.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./list-the-folders-of-a-module-repository.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./list-the-folders-of-a-module-repository.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

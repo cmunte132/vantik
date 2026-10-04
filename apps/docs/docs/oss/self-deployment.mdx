@@ -297,8 +297,14 @@ The knowledge bank has more settings. Read
 
 ## Optional services
 
-Every service below is optional. If you configure no service, the server writes
-an error to the log and continues.
+Every service below is optional. If you do not configure a service, the server
+starts and writes no message about it. The features that need the service are
+off. If a request needs the service, the server returns an error. Each section
+below tells what changes.
+
+File attachments are different. The default backend needs no settings. But if
+you select a backend and its settings are not correct, the server stops at
+startup. Read [File attachments](#file-attachments).
 
 ### Email (SMTP)
 

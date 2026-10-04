@@ -2,6 +2,8 @@ import { type APIRequestContext } from '@playwright/test';
 
 import { ok, workflows, type Issue, type Label } from '../src/api';
 import type { Account } from '../src/auth';
+import type { Database } from './db';
+import { seedAgents, type SeededAgents } from './seed-agents';
 
 /**
  * The workspace the docs screenshots show: a small team building a web shop,
@@ -25,6 +27,7 @@ export interface Seeded {
   viewId: string;
   /** The issue the issue-page screenshots open. */
   featuredIssueTitle: string;
+  agents: SeededAgents;
 }
 
 /** Priorities as the API stores them. */
@@ -38,9 +41,18 @@ interface People {
   alan: Account;
 }
 
+interface Context {
+  db: Database;
+  /** The frozen clock the capture runs at, in ms. */
+  clockAt: number;
+  /** A client acting as one of the people, for what they do to Ada's work. */
+  as: (person: Account) => APIRequestContext;
+}
+
 export async function seedWorkspace(
   api: APIRequestContext,
   people: People,
+  { db, clockAt, as }: Context,
 ): Promise<Seeded> {
   const { owner, grace, alan } = people;
   const teamId = owner.teamId;
@@ -137,7 +149,11 @@ export async function seedWorkspace(
     'payments',
     'Takes card payments and talks to the payment provider.',
   );
-  await module('Catalog service', 'catalog', 'Products, prices and stock.');
+  const catalog = await module(
+    'Catalog service',
+    'catalog',
+    'Products, prices and stock.',
+  );
   const capability = await ok<{ id: string }>(
     await api.post('/v1/capabilities', {
       data: {
@@ -230,7 +246,7 @@ export async function seedWorkspace(
     inCycle: true,
     modules: [payments.id],
   });
-  await issue('Address form loses focus on autofill', {
+  const addressForm = await issue('Address form loses focus on autofill', {
     state: 'Todo',
     priority: 'high',
     assignee: grace,
@@ -247,24 +263,24 @@ export async function seedWorkspace(
     inProject: true,
     inCycle: true,
   });
-  await issue('Payment provider webhooks arrive twice', {
+  const webhooks = await issue('Payment provider webhooks arrive twice', {
     state: 'Todo',
     priority: 'urgent',
     assignee: alan,
     labels: ['Bug', 'Backend'],
     modules: [payments.id],
   });
-  await issue('Document the checkout events for analytics', {
+  const analytics = await issue('Document the checkout events for analytics', {
     state: 'Backlog',
     priority: 'low',
     labels: ['Documentation'],
   });
-  await issue('Show stock levels on the product page', {
+  const stock = await issue('Show stock levels on the product page', {
     state: 'Backlog',
     priority: 'medium',
     labels: ['Feature'],
   });
-  await issue('Gift cards at checkout', {
+  const giftCards = await issue('Gift cards at checkout', {
     state: 'Backlog',
     priority: 'low',
     labels: ['Feature'],
@@ -280,6 +296,14 @@ export async function seedWorkspace(
   await issue('Customer reports a blank page after paying', {
     state: 'Triage',
     labels: ['Bug'],
+  });
+  await issue('Checkout button does nothing in Safari 17', {
+    state: 'Triage',
+    labels: ['Bug', 'Frontend'],
+  });
+  await issue('Apple Pay at checkout', {
+    state: 'Triage',
+    labels: ['Feature'],
   });
 
   // The featured issue blocks the payment retry.
@@ -362,13 +386,92 @@ export async function seedWorkspace(
     await ok(
       await api.post('/v1/page_entries', {
         params: { pageId: page.id },
-        data: { content, kind: 'FACT' },
+        // Written by a person, so they are facts in use, not proposals.
+        data: { content, kind: 'FACT', standing: true },
       }),
       'adding a page entry',
     );
   }
 
+  // A second team, so the sidebar and the team settings show more than one.
+  await ok(
+    await api.post('/v1/teams', {
+      data: { name: 'Design', identifier: 'DES' },
+    }),
+    'creating a second team',
+  );
+
+  for (const [name, title, labelNames] of [
+    ['Bug report', 'Bug: ', ['Bug']],
+    ['Feature request', 'Feature: ', ['Feature']],
+  ] as const) {
+    await ok(
+      await api.post('/v1/templates', {
+        data: {
+          name,
+          category: 'ISSUE',
+          teamId,
+          templateData: {
+            title,
+            stateId: state('Triage'),
+            labelIds: labelNames.map(label),
+          },
+        },
+      }),
+      `creating the ${name} template`,
+    );
+  }
+
+  // A personal agent beside Ada's token, as the API settings list them.
+  await ok(
+    await api.post('/v1/users/agents', {
+      data: { name: 'Claude Code on my laptop', ownership: 'personal' },
+    }),
+    'creating a personal agent',
+  );
+
+  // What lands in Ada's inbox: her teammates acting on her work.
+  const asGrace = as(grace);
+  const asAlan = as(alan);
+  await ok(
+    await asGrace.post('/v1/issue_comments', {
+      params: { issueId: featured.id },
+      data: {
+        bodyMarkdown:
+          'Guest checkout keeps its own cart, so the merge should skip it. Otherwise this looks good to me.',
+      },
+    }),
+    'commenting as Grace',
+  );
+  await ok(
+    await asGrace.post(`/v1/issues/${giftCards.id}`, {
+      params: { teamId },
+      data: { assigneeId: owner.userId },
+    }),
+    'assigning an issue to Ada as Grace',
+  );
+  await ok(
+    await asAlan.post(`/v1/issues/${addressForm.id}`, {
+      params: { teamId },
+      data: { stateId: state('In Review') },
+    }),
+    'moving an issue as Alan',
+  );
+
+  const agents = await seedAgents(api, db, {
+    owner,
+    clockAt,
+    modules: { web: web.id, payments: payments.id, catalog: catalog.id },
+    issues: {
+      running: webhooks,
+      succeeded: addressForm,
+      rejected: analytics,
+      failed: stock,
+    },
+  });
+
   return {
+    agents,
     projectId: project.id,
     cycleNumber: cycle.number,
     pageId: page.id,

@@ -31,3 +31,12 @@ export function runTag(): string {
     `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
   );
 }
+
+/**
+ * The stack's Postgres, for the records no endpoint makes: the docs seed writes
+ * agent runs straight into it, because a run only ever comes from a real
+ * executor. The default is what docker-compose.yaml publishes.
+ */
+export const DATABASE_URL =
+  process.env.E2E_DATABASE_URL ||
+  'postgresql://docker:docker@localhost:5432/vantik';

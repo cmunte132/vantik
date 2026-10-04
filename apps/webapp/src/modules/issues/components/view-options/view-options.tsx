@@ -26,7 +26,7 @@ export const ViewOptions = observer(() => {
       <Popover>
         <TooltipWrapper tooltip="Display Options">
           <PopoverTrigger asChild>
-            <Button variant="ghost">
+            <Button variant="ghost" aria-label="Display options">
               <RiSettings3Line size={20} />
             </Button>
           </PopoverTrigger>

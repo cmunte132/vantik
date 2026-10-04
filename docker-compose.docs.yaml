@@ -1,0 +1,31 @@
+# Overlay for the docs screenshots, on top of docker-compose.e2e.yaml.
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
+#     -f docker-compose.docs.yaml up -d --wait
+#
+# The screenshots show the control that hands an issue to an agent, and the
+# server offers it only when a sandbox host says it can start a sandbox. This
+# adds a stand-in that says so and does nothing else: it answers the
+# availability check and refuses everything else, so no run can start. Point
+# the server at it in .env:
+#
+#   SANDBOX_HOST_CONTAINER_URL=http://sandbox-stub:3004
+#   SANDBOX_HOST_TOKEN=docs-screenshots
+
+services:
+  sandbox-stub:
+    container_name: vantik-sandbox-stub
+    image: node:24-alpine
+    command:
+      - node
+      - -e
+      - |
+        require('node:http').createServer((req, res) => {
+          const available = req.method === 'GET' && req.url === '/v1/availability';
+          res.writeHead(available ? 200 : 503, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(available
+            ? { available: true }
+            : { error: 'This sandbox host is a stand-in for the docs screenshots and starts nothing.' }));
+        }).listen(3004);
+    networks:
+      - vantik

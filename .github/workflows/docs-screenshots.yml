@@ -36,7 +36,7 @@ permissions:
   actions: write
 
 env:
-  COMPOSE: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml
+  COMPOSE: docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml -f docker-compose.docs.yaml
   VANTIK_IMAGE_TAG: ${{ inputs.version }}
 
 jobs:
@@ -63,6 +63,10 @@ jobs:
         run: |
           cp .env.example .env
           echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
+          # The stand-in sandbox host from docker-compose.docs.yaml, which
+          # makes the delegate control available and can start nothing.
+          echo "SANDBOX_HOST_CONTAINER_URL=http://sandbox-stub:3004" >> .env
+          echo "SANDBOX_HOST_TOKEN=docs-screenshots" >> .env
           $COMPOSE up -d --no-build --wait --wait-timeout 600
 
       - name: Install Chromium

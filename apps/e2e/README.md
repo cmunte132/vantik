@@ -204,9 +204,15 @@ The screenshots on the docs site come from this package, not from someone's
 workspace. `screenshots/docs.setup.ts` signs up Ada Lovelace, adds two
 teammates, and seeds a small web shop through the API (`screenshots/seed.ts`):
 a cycle, a project with milestones, a product with modules and a capability,
-a dozen issues, a view and a knowledge page. `screenshots/app.capture.ts` then
-opens one page for each screenshot and saves it under
-`apps/docs/static/img/docs/<section>/<name>.png`.
+two teams, issue templates, a dozen issues, a view, a knowledge page, and the
+comments and assignments that fill Ada's inbox. A few records have no endpoint
+because only a real executor makes them, so `screenshots/seed-agents.ts`
+writes them straight into the database (`screenshots/db.ts`): agent runs in
+each state the docs show (working, handed back, rejected, failed) with their
+activity, a model key and the repository the runs work in. Replication carries
+those rows to the webapp like any other write.
+`screenshots/app.capture.ts` then opens one page for each screenshot and saves
+it under `apps/docs/static/img/docs/<section>/<name>.png`.
 
 Every release retakes them. Once the release's images are published,
 `.github/workflows/docs-screenshots.yml` boots the stack from them, runs the
@@ -216,7 +222,9 @@ that ships it, and nobody takes a screenshot by hand. To retake them for a
 release again, run that workflow from the Actions tab with its version.
 
 To run the capture locally, start the same stack as the tests, Mailpit
-included:
+included, with `docker-compose.docs.yaml` on top: it adds a stand-in sandbox
+host so the server offers the delegate control, and it starts nothing. Point
+`E2E_DATABASE_URL` at the stack's Postgres if it is not on localhost:5432.
 
 ```bash
 pnpm --filter @vantikhq/e2e screenshots
@@ -240,6 +248,13 @@ the next whole hour, and the per-run email addresses are shown as
 of the run, so the few screenshots that show one change with every release,
 and a check run on a later day than the capture reports them.
 
+A screenshot shows the feature its page is about, not the whole window.
+`shot(page, name, { focus, padding, highlight })` in `screenshots/frame.ts`
+crops to the box around the `focus` locators (plus `padding`, 24px by default)
+and draws a ring in the primary colour around each `highlight` locator, such as
+the button that opened a popover. A whole page is `focus: content(page)` with
+no padding; a settings section is `focus: section(page, '<heading>')`.
+
 To add a screenshot, seed what it needs in `seed.ts`, add a test to
-`app.capture.ts` that opens the page and calls `shot(page, '<section>/<name>')`,
+`app.capture.ts` that opens the page and calls `shot()` with what to focus on,
 and reference it from the docs as `/img/docs/<section>/<name>.png`.

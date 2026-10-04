@@ -17,11 +17,23 @@ it. Some shortcuts work only with `⌘`.
 | --- | --- |
 | `⌘ /` or `Ctrl /` | Open search. Read [Search](/fundamentals/search). |
 | `C` | Open the new issue dialog. |
-| `⌘ B` | Show or hide the sidebar. This shortcut works only with `⌘`. |
+| `⌘ B` | Narrow the sidebar to a row of icons, or make it wide again. This shortcut works only with `⌘`. |
 
 ## Shortcuts on the pages of issues
 
-These shortcuts work on these pages:
+Each of these shortcuts works only on some pages. The **Pages** column tells
+where.
+
+| Key | Action | Pages |
+| --- | --- | --- |
+| `⌘ K` | Open the command palette. This shortcut works only with `⌘`. | All the pages in the list below. |
+| `F` | Open the filter bar. When the filter bar is open, `F` puts the cursor in it. Press `Esc` to leave it. | The **Issues** page of a team, the **All issues** page of the workspace, and the pages of a product, a module and a capability. |
+| `S` | Change the status. The dialog **Change Status...** opens. | The **Issues** page of a team, and the full page of an issue. |
+| `A` | Change the assignee. The dialog **Change Assignee...** opens. | The same pages as `S`. |
+| `L` | Add a label. The dialog **Add Label...** opens. | The same pages as `S`. |
+| `P` | Change the priority. The dialog **Change Priority...** opens. | The same pages as `S`. |
+
+`⌘ K` works on these pages:
 
 - The **Issues** page of a team, and the **All issues** page of the workspace.
 - The full page of an issue.
@@ -30,26 +42,21 @@ These shortcuts work on these pages:
 - The lists of products and of capabilities.
 - The pages of a product, a module and a capability.
 
-They do not work on **My issues**, on a view, on a cycle, on the page of a
-project, or in the inbox.
-
-| Key | Action |
-| --- | --- |
-| `⌘ K` | Open the command palette. This shortcut works only with `⌘`. |
-| `F` | Open the filter bar. When the filter bar is open, `F` puts the cursor in it. Press `Esc` to leave it. |
-| `S` | Change the status. The dialog **Change Status...** opens. |
-| `A` | Change the assignee. The dialog **Change Assignee...** opens. |
-| `L` | Add a label. The dialog **Add Label...** opens. |
-| `P` | Change the priority. The dialog **Change Priority...** opens. |
+None of these shortcuts work on **My issues**, on a view, on a cycle, on the
+page of a project, or in the inbox.
 
 `S`, `A`, `L` and `P` change one of these issues:
 
 - The issues that you select. To select an issue in the list, put the pointer
   on its row, and click its checkbox.
-- If you select no issue, the last issue that the pointer was on.
+- The last issue that the pointer was on. This applies only when you select no
+  issue.
 - On the full page of an issue, that issue.
 
 If no issue agrees, these keys do nothing.
+
+The **Change Status...** dialog does not check the Definition of Done. It
+completes an issue without the **Definition of Done not met** dialog.
 
 ## Other keys
 
@@ -65,6 +72,8 @@ If no issue agrees, these keys do nothing.
 | `Enter` | A text field in a list or on a page, for example a new criterion | Save the text. |
 | `Esc` | The same text field | Cancel. |
 | `↑` and `↓` | The list of people after `@` in a comment | Move through the list. |
+| `Enter` | The same list | Select the person. |
+| `Esc` | The same list | Close the list. |
 
 The lists of issues have no keys to move from one row to the next row. Vantik
 has no help dialog for the shortcuts.
@@ -91,7 +100,8 @@ These commands work:
 on a page of a team.
 
 The palette also shows **Create issue**, **Create new team** and **Go to triage
-issues**. These commands do not work at this time:
+issues**. These commands do nothing, or they open a page that does not exist.
+Use these methods instead:
 
 - To create an issue, press `C`.
 - To create a team, click **Create Team** on the **Teams** page.

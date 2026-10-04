@@ -53,7 +53,7 @@ not find an issue by its key, for example `ENG-12`. Type `12` instead.
 A team of the support type has fewer items. It has no **Parent of...**,
 **Sub-issue of...** or **Blocks...**.
 
-When a person marks an issue as blocked by, or blocking, a different issue, the
+When a person adds a **Blocks** or a **Blocked by** relation to an issue, the
 subscribers of the issue get a notification. Read
 [Inbox and notifications](/fundamentals/inbox).
 
@@ -64,10 +64,11 @@ subscribers of the issue get a notification. Read
 - A sub-issue shows **Sub-issue of** and its parent below its title.
 - **Sub-issues** lists the sub-issues. **Relations** lists the issues that
   block this issue, that it blocks, that duplicate it, and that are related to
-  it. Both lists are closed until you click them. A count shows next to each
-  list.
-- At the right, below the assignee, each relation shows under its name, for
-  example **Blocking** or **Blocked by**.
+  it. Both lists are closed until you click them. While a list is closed, a
+  count shows next to it.
+- At the right, below the assignee, each relation shows under its name:
+  **Blocking**, **Blocked by**, **Duplicate of**, **Duplicated by** or
+  **Related**.
 
 **In the list and on the board:**
 
@@ -75,8 +76,10 @@ subscribers of the issue get a notification. Read
   parent.
 - **Blocked by** and **Blocks** show the number of issues, in red and in
   orange.
-- **Sub-issue** (in the list) or **Sub-issues** (on the board) shows the number
-  of sub-issues.
+- In the list, **Sub-issue** shows the number of sub-issues.
+- On the board, **Sub-issues** shows the number of sub-issues. The board shows
+  it only if the issue also has a parent, or a **Blocks** or **Blocked by**
+  relation.
 
 In the list, click **Blocked by**, **Blocks** or **Sub-issue** to show those
 issues below the row. A related issue and a duplicate do not show in the list

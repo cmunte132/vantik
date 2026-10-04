@@ -43,11 +43,15 @@ Vantik sends a notification only for these events:
 | A person comments on the issue. | The subscribers of the issue. |
 | A person moves the issue to a completed status. | The subscribers of the issue. |
 | A person sets the priority of the issue to **Urgent**. | The subscribers of the issue. |
-| A person marks the issue as blocked by, or blocking, a different issue. | The subscribers of the issue. |
+| A person adds a **Blocks** or a **Blocked by** relation to the issue. | The subscribers of the issue. |
 
 Vantik does not send a notification for a change that you make yourself. It
 does not send one for other changes, for example a new label or a change to a
 status that is not completed.
+
+One change to an issue sends a maximum of one notification. If a change does
+more than one of these things, the assignment wins. Then the status, and then
+the priority.
 
 If you already have a notification for an issue, a change of status or of
 priority does not add a second notification.

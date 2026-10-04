@@ -78,6 +78,27 @@ describe('TeamsService team membership', () => {
     expect(prisma.usersOnWorkspaces.update).not.toHaveBeenCalled();
   });
 
+  it('counts only the issues that are not deleted when it deletes a team', async () => {
+    const { service, prisma } = buildService();
+
+    await service.deleteTeam({ teamId: 'team-1' }, 'user-1', WORKSPACE);
+
+    expect(prisma.issue.findMany).toHaveBeenCalledWith({
+      where: { teamId: 'team-1', deleted: null },
+    });
+    expect(prisma.team.update).toHaveBeenCalled();
+  });
+
+  it('refuses to delete a team that has an issue that is not deleted', async () => {
+    const { service, prisma } = buildService();
+    prisma.issue.findMany.mockResolvedValue([{ id: 'issue-1' }]);
+
+    await expect(
+      service.deleteTeam({ teamId: 'team-1' }, 'user-1', WORKSPACE),
+    ).rejects.toThrow('There are issues in this team');
+    expect(prisma.team.update).not.toHaveBeenCalled();
+  });
+
   it('removes a deleted team from everyone in its workspace in one statement', async () => {
     const { service, prisma } = buildService();
 

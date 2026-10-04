@@ -6,7 +6,11 @@ import { env } from 'std-env';
 import { z } from 'zod';
 
 import { ApiClient } from '../api/client';
-import { CommonCommandOptions, commonOptions } from '../cli/common';
+import {
+  CommonCommandOptions,
+  commonOptions,
+  wrapCommandAction,
+} from '../cli/common';
 import { interceptAxios } from '../utilities/axios';
 import { chalkLink } from '../utilities/cliOutput';
 import {
@@ -31,14 +35,23 @@ export function configureLoginCommand(program: Command) {
       ),
   )
     .version(getVersion(), '-v, --version', 'Display the version number')
-    .action(async () => {
+    .action(async (options) => {
       await printInitialBanner();
-      await loginCommand();
+      await loginCommand(options);
     });
 }
 
-async function loginCommand() {
-  return await login(false);
+// The wrapper applies `--log-level` before the work starts, as it does for
+// `logout`. Without it, `login` accepts the option and does not use it.
+async function loginCommand(options: unknown) {
+  return await wrapCommandAction(
+    'loginCommand',
+    CommonCommandOptions,
+    options,
+    async () => {
+      return await login(false);
+    },
+  );
 }
 
 export async function login(embedded: boolean) {

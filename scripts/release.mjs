@@ -29,6 +29,7 @@ const PACKAGES = [
   "package.json",
   "apps/server/package.json",
   "apps/webapp/package.json",
+  "apps/sandbox-host/package.json",
   "packages/agent-core/package.json",
   "packages/cli/package.json",
   "packages/types/package.json",

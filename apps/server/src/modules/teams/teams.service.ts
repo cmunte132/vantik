@@ -166,9 +166,12 @@ export default class TeamsService {
     await this.assertReadable(teamRequestParams.teamId, userId, workspaceId);
     await assertWorkspaceAdmin(this.prisma, userId, workspaceId);
 
+    // A deleted issue keeps its row. It must not stop the delete, because the
+    // webapp does not count it and offers the delete.
     const teamIssues = await this.prisma.issue.findMany({
       where: {
         teamId: teamRequestParams.teamId,
+        deleted: null,
       },
     });
 

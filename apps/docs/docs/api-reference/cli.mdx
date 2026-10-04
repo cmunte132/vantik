@@ -1,0 +1,561 @@
+---
+title: CLI reference
+sidebar_label: CLI reference
+description: Each command and flag of the vantik command, with sign-in and the order in which it finds a token
+---
+
+## Overview
+
+The `vantik` command works issues, projects, the product axis and the
+knowledge bank from a terminal. It calls the same REST API as the MCP tools,
+through `@vantikhq/agent-core`.
+
+The CLI is neutral. It makes what you tell it to make, and it has no opinion
+about the size of an issue. The MCP tools and the `working-vantik-issues` skill
+hold that opinion.
+
+The CLI cannot start an agent run. `vantik task runs` only shows the runs of a
+task. Only a person starts a run, from the issue in Vantik. Read
+[Delegate an issue to an agent](/agents/delegating-an-issue).
+
+:::note
+The help text calls the program `vantik-cli`, for example
+`Usage: vantik-cli task list`. The command that you type is `vantik`.
+:::
+
+## How to install the CLI
+
+The package is `@vantikhq/cli` in `packages/cli`. It needs Node.js 18 or later.
+
+A release publishes the package to npm only when the maintainers turn on the npm
+publish step. If your release is on npm, install it:
+
+```bash
+npm install -g @vantikhq/cli
+```
+
+To build it from the repository:
+
+1. Install the dependencies:
+
+   ```bash
+   pnpm install --frozen-lockfile
+   ```
+
+2. Build the CLI and the packages under it:
+
+   ```bash
+   pnpm turbo run build --filter=@vantikhq/cli...
+   ```
+
+3. Make an alias for the built file:
+
+   ```bash
+   alias vantik="node $PWD/packages/cli/dist/index.js"
+   ```
+
+`vantik --version` prints the version, and `vantik --help` prints the
+commands.
+
+## How to sign in
+
+Each command, other than `login` and `logout`, needs a token. You can sign in
+with the browser, or give a token in the environment.
+
+### Sign in with the browser
+
+1. If your server is not at `https://app.vantik.dev`, set `BASE_HOST` to the
+   address of your webapp:
+
+   ```bash
+   export BASE_HOST=https://vantik.example.com
+   ```
+
+2. Run the command:
+
+   ```bash
+   vantik login
+   ```
+
+3. The CLI opens `<BASE_HOST>/authorize?code=…` in your browser. Sign in to
+   Vantik there if you are not signed in.
+
+The page approves the code for the first workspace of your account. The CLI
+then collects a token from `POST /api/v1/users/pat-for-code` and writes it to
+your profile. These rules apply:
+
+- The token acts as you, with your permissions.
+- The CLI asks for the token one time each second, for about one minute. After
+  that, it stops with "Failed to get access token".
+- A code stays valid for 10 minutes, and the server gives its token one time.
+- Each new browser sign-in revokes the earlier CLI token of that person in that
+  workspace. One CLI token stays live.
+
+If `ACCESS_TOKEN` is set, or a profile already holds a token, `login` does not
+open the browser. To sign in again, run `vantik logout` first.
+
+### The profile
+
+`login` writes the profile to `default.json` in the `vantik` configuration
+folder of your system:
+
+| System | Folder |
+| --- | --- |
+| macOS | `~/Library/Preferences/vantik` |
+| Linux | `$XDG_CONFIG_HOME/vantik`, or `~/.config/vantik` |
+
+The profile holds the token, the webapp address and the workspace id.
+`vantik logout` removes the profile. If no profile holds a token, it prints
+"You are already logged out".
+
+Both commands take `-l, --log-level <level>`. The values are `debug`, `info`,
+`log`, `warn`, `error` and `none`. The default is `log`. This option sets only
+the log level of the CLI. `login` also takes `-v, --version`.
+
+### Use a token from the environment
+
+To give the CLI a token without a profile, make a token in Vantik:
+
+1. Open **Settings**, and click **API** under **My account**.
+2. In **Access tokens**, set **Acts as**. Select
+   **Its own identity — an agent** if the work must be recorded against an
+   agent. Select **You** if the token must act as you.
+3. Click **Create**, and copy the token.
+
+Read [How to get a token](./connect-mcp.mdx#how-to-get-a-token).
+
+Then set the token and the address:
+
+```bash
+export VANTIK_TOKEN=tg_pat_…
+export VANTIK_URL=https://vantik.example.com/api
+```
+
+### The order in which the CLI finds a token
+
+The CLI finds the token and the address separately.
+
+The token is the first of these that is set:
+
+1. `ACCESS_TOKEN` in the environment.
+2. The token in the profile that `vantik login` writes.
+3. `VANTIK_TOKEN` in the environment.
+
+The address is the first of these that is set:
+
+1. `BASE_HOST` in the environment. This is the address of the webapp. The CLI
+   adds `/api` to it.
+2. The webapp address in the profile. The CLI adds `/api` to it.
+3. `VANTIK_URL` in the environment. This is the root of the API, and the CLI
+   uses it as it is. Give the server (`http://localhost:3001`) or the webapp
+   proxy (`https://vantik.example.com/api`).
+4. `http://localhost:3001`.
+
+> **Warning:** Do not set `VANTIK_TOKEN` and keep a profile at the same time.
+> The profile token comes first, so the CLI ignores `VANTIK_TOKEN`. Run
+> `vantik logout` to use `VANTIK_TOKEN`.
+
+If the CLI finds no token, it stops with "Not logged in".
+
+## Output and errors
+
+Each command that reads or writes data takes `--json`. With `--json`, the
+command prints the raw result as JSON. Without it, the command prints a table
+or text. `knowledge pull`, `knowledge push` and `knowledge generate` have no
+`--json`.
+
+If the API refuses a request, the command prints `Error:` and the message from
+the server, and it exits with code 1.
+
+A reference to an item takes these values:
+
+| Item | It takes |
+| --- | --- |
+| A task | Its key, for example `ENG-42`, or its id. |
+| A team | Its identifier, for example `ENG`, its name, or its id. |
+| A product or a module | Its key, its name, or its id. |
+| A project or a capability | Its name or its id. |
+| A page | Its title or its id. |
+| A member | An email, a full name, or `me` for the owner of the token. |
+
+A flag with `...`, for example `--label <label...>`, takes one or more values,
+separated by spaces.
+
+A `--description` flag of a product, a module, a capability or a project can
+be `-`. The command then reads the description from standard input:
+
+```bash
+vantik project create Search rewrite --description - < plan.md
+```
+
+## Tasks
+
+| Command | What it does |
+| --- | --- |
+| `task list` | Lists tasks, the newest first. It shows 50 rows unless you give `--limit`. |
+| `task get <task>` | Shows one task: the description, the sub-tasks, the relations and the notes. With `--json`, it gives all of the task, with the Definition of Done and the history. |
+| `task search <query...>` | Searches the titles, the descriptions and the notes. |
+| `task similar <task>` | Shows earlier tasks that are similar to one task, with the resolution of each. |
+| `task create <title...>` | Makes a task. |
+| `task update <task>` | Changes the fields of a task. |
+| `task pick-up <task>` | Assigns a task and moves it to the first in-progress state of its team. |
+| `task note <task> <body...>` | Puts a markdown note on a task. |
+| `task runs <task>` | Shows each agent run of a task, the newest first. It only reads. |
+| `task close <task>` | Records the resolution as a note, and moves the task to a completed state. |
+
+### task list
+
+| Flag | Value |
+| --- | --- |
+| `-t, --team <team>` | A team. |
+| `-a, --assignee <who>` | A member. |
+| `-c, --category <category...>` | `TRIAGE`, `BACKLOG`, `UNSTARTED`, `STARTED`, `COMPLETED` or `CANCELED`. |
+| `--label <label...>` | Labels to include. |
+| `-p, --priority <priority>` | `none`, `urgent`, `high`, `medium` or `low`. |
+| `--project <project>` | Only tasks in this project. |
+| `--product <product>` | Only tasks in the modules of this product. |
+| `--module <module...>` | Only tasks in these modules. |
+| `--capability <capability>` | Only tasks that deliver this capability. |
+| `-n, --limit <n>` | The number of rows. |
+
+An issue records its modules, and it never records a product. Therefore
+`--product` finds the modules that the product owns, and the modules that the
+product links to. If you give `--product` and `--module` together, the command
+finds only the modules in both sets.
+
+### task search
+
+| Flag | Value |
+| --- | --- |
+| `-c, --category <category...>` | Only these categories. |
+| `-n, --limit <n>` | The maximum number of results. |
+
+To find an earlier fix with its resolution, search the completed tasks:
+
+```bash
+vantik task search connection pool --category COMPLETED
+```
+
+### task create
+
+| Flag | Value |
+| --- | --- |
+| `-d, --description <markdown>` | The description. |
+| `-t, --team <team>` | The team. |
+| `-s, --state <state>` | A state name or a category. The default is the backlog. |
+| `--label <label...>` | Labels. |
+| `-p, --priority <priority>` | `none`, `urgent`, `high`, `medium` or `low`. |
+| `-a, --assignee <who>` | A member. |
+| `--parent <task>` | Makes the task a sub-task of this task. |
+| `--project <project>` | Puts the task in this project. |
+| `--module <module...>` | The modules that the task changes. |
+| `--capability <capability>` | The capability that the task delivers. |
+
+```bash
+vantik task create Fix the flaky checkout test --team ENG --priority high
+vantik task create Index note bodies --project "Search rewrite" --parent ENG-40
+```
+
+### task update
+
+| Flag | Value |
+| --- | --- |
+| `--title <title>` | A new title. |
+| `-d, --description <markdown>` | A new description. |
+| `-s, --state <state>` | A state name or a category. |
+| `--label <label...>` | Replaces the labels. |
+| `-p, --priority <priority>` | `none`, `urgent`, `high`, `medium` or `low`. |
+| `-a, --assignee <who>` | A member. |
+| `--project <project>` | Moves the task to this project. |
+| `--module <module...>` | Replaces the modules. |
+| `--capability <capability>` | Sets the capability. |
+| `--no-capability` | Removes the capability. |
+
+```bash
+vantik task update ENG-42 --state "In Review" --module server webapp
+vantik task update ENG-42 --no-capability
+```
+
+### task pick-up, note, runs and close
+
+- `task pick-up` takes `-a, --assignee <who>`. The default is the owner of the
+  token.
+- `task close` takes `-r, --resolution <markdown>` and `-s, --state <state>`.
+  `--state` names a completed state other than the first one, for example
+  `Shipped`.
+- `task get`, `task similar`, `task note` and `task runs` take only `--json`.
+
+```bash
+vantik task pick-up ENG-42
+vantik task note ENG-42 Reproduced only under load
+vantik task runs ENG-42
+vantik task close ENG-42 --resolution "Bumped the pool to 20"
+```
+
+## Projects
+
+| Command | What it does |
+| --- | --- |
+| `project list` | Lists the projects of the workspace. |
+| `project show <project>` | Shows one project, with its full description. |
+| `project create <name...>` | Makes a project. |
+| `project update <project>` | Changes the fields of a project. |
+
+| Flag | `create` | `update` | Value |
+| --- | --- | --- | --- |
+| `--name <name>` | | Yes | A new name. |
+| `-d, --description <markdown>` | Yes | Yes | The description, or `-` for standard input. |
+| `-s, --status <status>` | Yes | Yes | A workspace status, for example `In Progress`. The default for `create` is the first status of the workspace. |
+| `--start <date>` | Yes | Yes | The start date, in ISO format. |
+| `--end <date>` | Yes | Yes | The end date, in ISO format. |
+| `--lead <userId>` | | Yes | The member id of the lead. |
+| `--team <team...>` | Yes | Yes | The teams of the project. With `update`, it replaces the teams. |
+
+Give a project its teams. A project with no team does not show in the project
+picker of an issue.
+
+```bash
+vantik project create Search rewrite --team ENG --start 2026-11-01
+vantik project update "Search rewrite" --status Completed
+```
+
+## The product axis
+
+A **product** is what the workspace ships. A **module** is where the code is.
+A **capability** is what the software does for the people who use it. Read
+[Products, modules and capabilities](/fundamentals/product-axis).
+
+### How to read the map
+
+| Command | What it does |
+| --- | --- |
+| `products` | Lists the products. |
+| `modules` | Lists the modules, with the repositories of each module. |
+| `capabilities` | Lists the capabilities. |
+
+`modules` sends one request for each module to get the repositories. Add
+`--no-repos` to leave them out.
+
+```bash
+vantik modules
+vantik task list --module server --category STARTED
+```
+
+### Products
+
+| Command | Flags |
+| --- | --- |
+| `product create <name...>` | `--key <key>`, `-d, --description <markdown>`, `-s, --status <status>` |
+| `product update <product>` | `--name <name>`, `--key <key>`, `-d, --description <markdown>`, `-s, --status <status>` |
+
+If you give no `--key`, the server makes the key from the name. If another
+product has the key, the server changes it to a free key. The status is free
+text. The default is `active`.
+
+### Modules
+
+| Command | What it does |
+| --- | --- |
+| `module create <name...>` | Makes a module. |
+| `module update <module>` | Changes a module. |
+| `module available-repos` | Lists the repositories that the connected sources offer to modules. |
+| `module add-repo <module> <repository>` | Links a repository, or paths in it, to a module. |
+| `module update-repo <module> <repository>` | Changes the paths of a linked repository, or makes it the default. |
+
+`module create` and `module update` take these flags:
+
+| Flag | Value |
+| --- | --- |
+| `--name <name>` | A new name. Only `update` takes it. |
+| `--key <key>` | The key. If you give no key to `create`, the server makes it from the name. |
+| `-d, --description <markdown>` | The description, or `-` for standard input. |
+| `-s, --status <status>` | The status, as free text. The default is `active`. |
+| `--owner-team <team>` | The team that owns the module. |
+| `--owner-product <product>` | The product that owns the module. |
+| `--linked-team <team...>` | Other teams that use the module. With `update`, it replaces the set. |
+| `--linked-product <product...>` | Other products that use the module. With `update`, it replaces the set. |
+
+A module must have one owner. Give `--owner-team` or `--owner-product` to
+`create`, but not both. With `update`, a new owner of one kind removes the
+owner of the other kind.
+
+`module add-repo` and `module update-repo` take these flags:
+
+| Flag | Value |
+| --- | --- |
+| `--path <prefix...>` | The paths in the repository that belong to the module. No path means all of the repository. |
+| `--default` | Makes this the repository that an agent run works in. |
+
+Give the repository as its source names it, `owner/name`. A connected source
+must offer the repository. Run `vantik module available-repos` to see them. If
+no source offers it, a person must connect the source in
+**Settings → Integrations**.
+
+```bash
+vantik module create Server --key server --owner-team ENG
+vantik module add-repo server acme/platform --path apps/server --default
+```
+
+### Capabilities
+
+| Command | Flags |
+| --- | --- |
+| `capability create <name...>` | `-d, --description <markdown>`, `-s, --status <status>`, `--module <module...>` |
+| `capability update <capability>` | `--name <name>`, `-d, --description <markdown>`, `-s, --status <status>`, `--module <module...>` |
+
+The status is `planned`, `active`, `live` or `deprecated`. The default for
+`create` is `planned`. `--module` names the modules that hold the code. With
+`update`, it replaces the set.
+
+```bash
+vantik capability create Webhooks --status active --module server
+```
+
+## Knowledge
+
+The command group is `knowledge`, and its short name is `kb`. Read
+[Knowledge](/fundamentals/knowledge).
+
+| Command | What it does |
+| --- | --- |
+| `knowledge pages` | Lists the pages as a tree. |
+| `knowledge show <page>` | Shows a page: its body, its parents and its facts in use. |
+| `knowledge search <query...>` | Searches the page bodies and the facts in use. |
+| `knowledge context` | Gives what is important for a piece of work, within a token budget. |
+| `knowledge append <page> [content...]` | Writes one fact. |
+| `knowledge write <title...>` | Makes a page, or writes the body of the page with the same title again. |
+| `knowledge entries <page>` | Lists the facts of a page. |
+| `knowledge triage <status> <entryIds...>` | Gives one status to a set of facts. |
+| `knowledge consolidate <page>` | Proposes a new page body that folds facts into it. |
+| `knowledge pull` | Writes the pages to a local folder as markdown. |
+| `knowledge push` | Sends the edits in that folder back to the bank. |
+| `knowledge generate` | Writes a block of knowledge into an instruction file, for example `AGENTS.md`. |
+| `knowledge gaps` | Lists the questions that the bank could not answer, the most asked first. |
+
+### knowledge search and context
+
+| Flag | `search` | `context` | Value |
+| --- | --- | --- | --- |
+| `-s, --scope <scope>` | Yes | Yes | A repository path, a team or a project. |
+| `-n, --limit <n>` | Yes | | The maximum number of results. |
+| `-k, --kind <kinds>` | Yes | | `FACT`, `DECISION`, `CONVENTION` or `GOTCHA`, separated by commas. |
+| `-t, --task <task>` | | Yes | What you are about to do. |
+| `-b, --budget <tokens>` | | Yes | The token budget. The server default is 2000. |
+| `-m, --module <ids>` | Yes | Yes | Module ids, separated by commas. Their knowledge comes first. |
+| `-i, --issue <id>` | Yes | Yes | The id of an issue. Its knowledge comes first. |
+
+```bash
+vantik kb context --scope apps/server --task "Add a rate limit to the webhook"
+vantik kb search connection pool --kind GOTCHA,FACT
+```
+
+### knowledge append
+
+`append` writes one fact on a page. With `--loose`, it writes the fact on no
+page, and each argument is part of the fact. A fact on no page needs
+`--scope`.
+
+| Flag | Value |
+| --- | --- |
+| `--loose` | Writes the fact on no page. |
+| `-s, --scope <scope>` | Where the fact applies. |
+| `-k, --kind <kind>` | `FACT` (the default), `DECISION`, `CONVENTION` or `GOTCHA`. |
+| `--session <id>` | The session id of your harness, for the record of where the fact came from. |
+| `--supersedes <entryId>` | The fact that this fact replaces. |
+| `--distinct` | Writes the fact when similar facts exist. Without it, the command shows the near matches and writes nothing. |
+| `--cite <citation>` | What the fact rests on. You can give it more than one time. |
+
+A citation is one of these:
+
+- `path:40-52`, or `path:40-52@commit`, for lines of code.
+- `issue:ENG-42`.
+- `pr:<url>`.
+- `comment:<id>`.
+- `run:<id>`.
+- A JSON object.
+
+```bash
+vantik kb append Payments "Refunds settle in two business days" \
+  --cite apps/server/src/refunds.ts:40-52
+vantik kb append --loose "The cache key includes the workspace id" \
+  --scope apps/server
+```
+
+A fact that `append` writes starts as `PROPOSED`. Agents get it only after
+triage or a person puts it in use.
+
+### knowledge write, entries and consolidate
+
+- `write` takes `-b, --body <markdown>`, `-p, --parent <page>` and
+  `--policy <policy>`. The policy is `OPEN`, `CURATED` or `LOCKED`.
+- `entries` takes `--status <status...>`. The statuses are `PROPOSED`,
+  `STANDING`, `CONSOLIDATED`, `SUPERSEDED`, `DISPUTED` and `ARCHIVED`.
+- `consolidate` needs `-b, --body <markdown>`, the new page body. It takes
+  `--entry <entryId...>`. Without `--entry`, it folds each fact in use on the
+  page.
+
+`consolidate` changes nothing on the page. It makes a proposal, and a person
+accepts it or refuses it in
+[Needs you](/fundamentals/knowledge/needs-you).
+
+### knowledge triage
+
+`triage` gives one status to a set of facts. The status is one of the statuses
+of `entries`.
+
+```bash
+vantik kb triage STANDING 3f1c… 9a0e…
+```
+
+Triage is for people. The server refuses `triage` from an agent token, and it
+changes nothing. The server skips each fact that cannot move to that status.
+
+### knowledge pull and push
+
+`pull` writes each page to a markdown file. `push` sends your edits back.
+
+| Command | Flag | Value |
+| --- | --- | --- |
+| `pull` | `-d, --dir <dir>` | The folder. The default is `.vantik/knowledge`. |
+| `pull` | `-s, --scope <scope>` | Only pages that have a fact in use with this scope. |
+| `push` | `-d, --dir <dir>` | The folder. The default is `.vantik/knowledge`. |
+| `push` | `--dry-run` | Shows what the push changes, and changes nothing. |
+
+Each file has the page body, and a list of the facts in use between
+`<!-- vantik:entries -->` and `<!-- /vantik:entries -->`. Each fact line keeps
+its id, for example `- [<id>] (apps/server) The text`.
+
+In the file, you can do these things:
+
+- Edit the body. `push` writes the new body to the page.
+- Edit the text or the scope of a fact line. `push` sends the correction.
+- Add a line with no id, for example `- (apps/server) A new fact`. `push`
+  writes it as a new fact.
+
+Do not write an id on a new line. The server gives the id.
+
+`push` compares the revision in the file with the page. If somebody changed
+the page after your pull, `push` does not send that file. Pull again, and make
+your edits again.
+
+After a push, the command writes each changed file again from the bank. A new
+fact leaves the file until triage or a person puts it in use.
+
+### knowledge generate
+
+`generate` writes the knowledge for one scope into a block of an instruction
+file. The block is between `<!-- vantik:knowledge -->` and
+`<!-- /vantik:knowledge -->`. The command replaces the block, and it keeps the
+rest of the file.
+
+| Flag | Value |
+| --- | --- |
+| `-s, --scope <scope>` | Required. The scope to include. |
+| `-f, --file <file>` | The file. The default is `AGENTS.md`. |
+| `-b, --budget <tokens>` | The token budget. The default is 1500. |
+
+```bash
+vantik kb generate --scope apps/server --file CLAUDE.md
+```
+
+If nothing in the bank has that scope, the command writes nothing.

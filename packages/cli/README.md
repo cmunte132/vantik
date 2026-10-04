@@ -1,77 +1,66 @@
 # @vantikhq/cli
 
-The `vantik-cli` command. It works issues, projects and pages from the
-terminal with `task …`, `project …` and `knowledge …`, after `login`.
+The `vantik` command. It works issues, projects, the product axis and the
+knowledge bank from the terminal. The help text calls the program
+`vantik-cli`, but the command that you type is `vantik`.
 
-## Authentication
+The full reference, with each command and flag, is the
+[CLI reference](https://docs.vantik.dev/api-reference/cli). In this
+repository, it is `apps/docs/docs/api-reference/cli.mdx`.
 
-Each task command needs a token. The command looks for a token in this order:
+## How to sign in
 
-1. `ACCESS_TOKEN` in the environment, with `BASE_HOST` for the host.
-2. The profile that `vantik-cli login` writes.
-3. `VANTIK_TOKEN`, with `VANTIK_URL`. agent-core reads the same two variables.
+Run `vantik login`. The command opens Vantik in the browser, and it writes a
+token that acts as you to a local profile. For a server that is not at
+`https://app.vantik.dev`, first set `BASE_HOST` to the address of the webapp.
 
-Make a token in Vantik under **Settings → My account → API**, in
-**Access tokens**. Set **Acts as** to **Its own identity — an agent**, and the
-workspace records the work against that agent. Set it to **You** for a token
-that acts as you. `VANTIK_URL` points at the root of the API. Give the address
-of the server (`http://localhost:3001`), or the address of the webapp proxy
-(`https://vantik.example.com/api`).
+To use a token from the environment, make one in Vantik under
+**Settings → My account → API**, in **Access tokens**. Set **Acts as** to
+**Its own identity — an agent**, and the workspace records the work against
+that agent. Set it to **You** for a token that acts as you.
 
-## How to work issues
+The CLI finds the token in this order:
 
-```bash
-# Read
-vantik-cli task list --team ENG --category STARTED
-vantik-cli task get ENG-42
-vantik-cli task search connection pool --category COMPLETED
-vantik-cli task similar ENG-42
+1. `ACCESS_TOKEN` in the environment.
+2. The profile that `vantik login` writes.
+3. `VANTIK_TOKEN` in the environment.
 
-# Write
-vantik-cli task create Fix the flaky checkout test --team ENG --priority high
-vantik-cli task create Index note bodies --project "Search rewrite"
-vantik-cli task update ENG-42 --state "In Review"
-vantik-cli task pick-up ENG-42
-vantik-cli task note ENG-42 Reproduced only under load
-vantik-cli task close ENG-42 --resolution "Bumped the pool to 20"
-```
+It finds the address in this order: `BASE_HOST`, then the address in the
+profile, then `VANTIK_URL`, then `http://localhost:3001`. The CLI adds `/api`
+to `BASE_HOST` and to the profile address. `VANTIK_URL` is the root of the
+API, for example `https://vantik.example.com/api`.
 
-Every command accepts `--json` and then gives the raw output. For the full list
-of flags, run `vantik-cli task --help`, or `vantik-cli task <command> --help`.
-
-## The product axis
-
-A team says who does the work. The second axis says what the software is made
-of. A **product** is what the workspace ships. A **module** is where the code
-is: a repository, a path in a repository, or a service. A **capability** is what
-the software does for the people who use it.
+## Examples
 
 ```bash
-# Read the map. `modules` gives the repositories of each module, so you can
-# find the module of a checkout.
-vantik-cli products
-vantik-cli modules
-vantik-cli capabilities
+# Issues
+vantik task list --team ENG --category STARTED
+vantik task get ENG-42
+vantik task search connection pool --category COMPLETED
+vantik task create Fix the flaky checkout test --team ENG --priority high
+vantik task pick-up ENG-42
+vantik task note ENG-42 Reproduced only under load
+vantik task close ENG-42 --resolution "Bumped the pool to 20"
 
-# Put work on the map
-vantik-cli task create Rate-limit the webhook --module server --capability "Webhooks"
-vantik-cli task update ENG-42 --module server webapp
-vantik-cli task update ENG-42 --no-capability
+# Projects
+vantik project create Search rewrite --team ENG --description - < plan.md
 
-# Find the other open work on the code that you are about to change
-vantik-cli task list --module server --category STARTED
-vantik-cli task list --product cloud
+# The product axis: read the map, and change it
+vantik modules
+vantik module add-repo server acme/platform --path apps/server
+vantik capability create Webhooks --module server
+vantik task list --module server --category STARTED
+
+# The knowledge bank
+vantik kb context --scope apps/server --task "Add a rate limit"
+vantik kb append Payments "Refunds settle in two business days"
+vantik kb pull
 ```
 
-An issue records its modules, and it never records a product. Therefore
-`--product` finds the modules that the product owns, and also the modules that
-the product links to. If you give `--product` and `--module` together, the
-command finds only the modules in both sets.
+Each command that reads or writes data takes `--json`, and then prints the
+raw result. Run `vantik <command> --help` for the flags of one command.
 
-These listings are read-only, and that is the intent. The people who own the
-code draw the map of a workspace in the app.
-
-### No opinions here
+## No opinions here
 
 The CLI is neutral, and that is the intent. It files what you tell it to file.
 It has no view on the size of an issue, and no view on the work that deserves a
@@ -79,3 +68,6 @@ project. That opinion lives in two places only: the MCP tools `create_task` and
 `create_project`, and the `working-vantik-issues` skill. Those two guide an
 agent to a small number of large issues under projects. A person at a terminal
 knows what that person wants, so `task create tweak` works.
+
+The CLI cannot start an agent run. `vantik task runs` only shows the runs of a
+task.

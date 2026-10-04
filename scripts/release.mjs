@@ -35,16 +35,15 @@ const PACKAGES = [
   "packages/types/package.json",
 ];
 
-// The API reference shows the version too. The .mdx is generated from the
-// .yml, but it is committed, so both are set here. Each pattern has two
-// groups, the text before the version and the text after it.
-const DOCS = [
-  { file: "apps/docs/openapi/openapi.yml", pattern: /^(  version: ).+()$/m },
-  {
-    file: "apps/docs/docs/api-reference/vantik.info.mdx",
-    pattern: /("Version: )[^"]+(")/,
-  },
-];
+// The API reference shows the version too. This script sets the version in
+// the .yml. Each generated page holds a copy of the spec, and the pages are
+// committed, so the script then makes all of them again from the .yml. The
+// pattern has two groups, the text before the version and the text after it.
+const OPENAPI = {
+  file: "apps/docs/openapi/openapi.yml",
+  pattern: /^(  version: ).+()$/m,
+};
+const API_REFERENCE = "apps/docs/docs/api-reference";
 
 const dryRun = process.argv.includes("--dry-run");
 
@@ -92,15 +91,23 @@ for (const file of PACKAGES) {
   if (!dryRun) writeFileSync(path, next);
 }
 
-for (const { file, pattern } of DOCS) {
-  const path = join(ROOT, file);
+{
+  const path = join(ROOT, OPENAPI.file);
   const text = readFileSync(path, "utf8");
-  if (!pattern.test(text)) {
-    fail(`${file} has no version line.`);
+  if (!OPENAPI.pattern.test(text)) {
+    fail(`${OPENAPI.file} has no version line.`);
   }
-  changed.push(file);
+  changed.push(OPENAPI.file, API_REFERENCE);
   if (!dryRun) {
-    writeFileSync(path, text.replace(pattern, `$1${version}$2`));
+    writeFileSync(path, text.replace(OPENAPI.pattern, `$1${version}$2`));
+    // The clean removes the pages of an operation that the spec no longer
+    // has. It does not remove the pages that a person wrote.
+    for (const script of ["clean-api-docs", "gen-api-docs"]) {
+      execFileSync("pnpm", ["--filter", "docs", "run", script], {
+        cwd: ROOT,
+        stdio: "inherit",
+      });
+    }
   }
 }
 
@@ -121,7 +128,8 @@ if (dryRun) {
   process.exit(0);
 }
 
-git("add", ...changed);
+// `--all` also stages the pages that the generator added or removed.
+git("add", "--all", "--", ...changed);
 git("commit", "--quiet", "-m", `Release ${version}`);
 git("tag", "--annotate", version, "--message", `Vantik ${version}`);
 

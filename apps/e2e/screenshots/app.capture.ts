@@ -136,6 +136,37 @@ test.describe('issues', () => {
     await shot(page, 'issues/filter', { focus: [input, options] });
   });
 
+  test('group by', async ({ page }) => {
+    await allIssues(page);
+    // An open Select hides the rest of the page from the accessibility tree,
+    // so find the trigger by its attribute, not by its role.
+    const trigger = page
+      .locator('[role="combobox"]')
+      .filter({ hasText: 'Status' })
+      .first();
+    await trigger.click();
+    await shot(page, 'issues/group-by', {
+      focus: [trigger, page.getByRole('listbox')],
+      highlight: trigger,
+    });
+  });
+
+  test('triage group', async ({ page }) => {
+    await allIssues(page);
+    const header = page.getByText('Triage', { exact: true }).first();
+    await expect(page.getByText('Apple Pay at checkout')).toBeVisible();
+    await shot(page, 'triage/triage-group', {
+      focus: [
+        header,
+        // The whole row, so the labels and the assignee at the right show too.
+        page
+          .getByText('Customer reports a blank page after paying')
+          .locator('xpath=ancestor::a[1]'),
+      ],
+      padding: 8,
+    });
+  });
+
   test('issue page', async ({ page }) => {
     await featuredIssue(page);
     await shot(page, 'issues/issue', { focus: content(page), padding: 0 });
@@ -198,6 +229,27 @@ test.describe('views', () => {
     await page.goto(`${team}/views`);
     await expect(page.getByText('Urgent bugs')).toBeVisible();
     await shot(page, 'views/views', { focus: content(page), padding: 0 });
+  });
+
+  test('save view', async ({ page }) => {
+    await allIssues(page);
+    await page.getByRole('button', { name: 'Filter', exact: true }).click();
+    await page.getByPlaceholder('Type for filters...').click();
+    await page.getByRole('option', { name: 'Status', exact: true }).click();
+    await page.getByRole('option', { name: 'Triage', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Save as view' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByPlaceholder('Name of the view').fill('New bugs');
+    // The dialog role is on the full-screen layer, so frame its contents.
+    await shot(page, 'views/save-view', {
+      focus: [
+        dialog.getByText('Save view', { exact: true }),
+        dialog.getByRole('button', { name: 'Save', exact: true }),
+        dialog.getByPlaceholder('Description of the view'),
+      ],
+      padding: 24,
+    });
   });
 
   test('view', async ({ page }) => {

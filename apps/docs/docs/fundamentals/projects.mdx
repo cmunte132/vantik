@@ -9,27 +9,75 @@ A project groups the issues that give one larger result: a launch, a change to
 the design, or a plan with milestones. A cycle divides the work by time. A
 project divides the work by goal, and a project can include more than one team.
 
-![The projects of a workspace, with their leads, dates and progress](/img/docs/projects/projects.png)
+Projects belong to the workspace. To see them, click **Projects** in the
+sidebar.
+
+![The Projects page. Each row shows the title, the progress, the target date
+and the status of a project.](/img/docs/projects/projects.png)
+
+The list shows four columns: **Title**, **Progress**, **Target date** and
+**Status**. You can change the target date and the status in the list.
 
 ## How to create a project
 
-Press the **+** next to **Projects** in the sidebar. You can also use the
-command bar. A project has these properties:
+1. On the **Projects** page, click **Create project**.
+2. Type the title in **Project title**. The title must have a minimum of three
+   characters.
+3. Optional: type a description in **Describe your project**.
+4. Set the status. The default is **Backlog**.
+5. Select the teams. The default is your first team.
+6. Optional: set the **End date**.
+7. Click **Create project**.
 
-- **A name and a description.** The description is a full rich-text document.
-  You therefore keep the plan, the context, and the decisions with the project.
-- **A status.** For example: Backlog, Planned, In Progress, or Completed.
-- **Two dates.** The start date and the target date show the progress against a
-  deadline.
-- **The teams.** An issue can belong to this project only if its team is in
-  this list.
+## The properties of a project
 
-## How to use projects
+Open a project to see its page. The page has two tabs, **Overview** and
+**Issues**. At the right of the **Overview** tab are the properties:
 
-- **Assign an issue.** Set the project in the properties panel of the issue.
-  You can also set the project when you create the issue.
-- **Add milestones.** Divide a project into milestones, and assign the issues
-  to them. Each milestone is then a target between the start and the end.
-- **See the progress.** The project view calculates the progress from the
-  status of the issues. It also shows the full list of the issues in the
-  project.
+- **Status**: **Backlog**, **Planned**, **In Progress**, **Done** or
+  **Canceled**.
+- **Start Date** and **End Date**. The **Target date** in the list is the end
+  date.
+- **Teams**: the teams that can use the project.
+
+![The page of a project. It shows the progress and the description at the
+left, and the properties and the milestones at the right.](/img/docs/projects/project.png)
+
+The **Project Progress** block shows three numbers. **Scope** is the number of
+issues in the project. **Started** is the percentage of the issues in a
+started status. **Done** is the percentage of the issues in a completed or
+canceled status.
+
+The webapp has no control for a project lead, and no control for the
+capabilities of a project. The REST API can set the capabilities of a project.
+
+To delete a project, click **...** after its name at the top of the page, and
+select **Remove**.
+
+## Teams
+
+The teams of a project tell which issues can use it. The **Project** property
+of an issue shows only the projects for the team of the issue. If no project is for the team, the issue page does not show the
+**Project** property.
+
+A project must have a minimum of one team in the webapp. The API can make a
+project with no teams. The webapp shows such a project to every team.
+
+## Milestones
+
+A milestone is a target in a project, with a name and an end date. To add a
+milestone, click **+** next to **Milestones**, below the properties. Then type
+the name and set the date. To change or delete a milestone, open its menu and
+select **Edit** or **Remove**.
+
+To put an issue in a milestone, first set the project of the issue. The issue
+page then shows the **Project Milestone** property. Vantik does not show the
+progress of each milestone.
+
+## How to put an issue in a project
+
+- **When you create the issue.** Set the project, and then the project
+  milestone, in the property row of the new issue dialog.
+- **On the issue page.** Set the **Project** property at the right of the page.
+
+To see the issues of a project, open the **Issues** tab of the project.

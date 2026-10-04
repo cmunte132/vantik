@@ -5,33 +5,130 @@ sidebar_label: "Cycles"
 
 ## Overview
 
-A cycle is a fixed period of time, and some teams call it a sprint. A cycle
-helps a team to give its attention to one part of the work. The cycle view of
-the team shows the issues in the active cycle. The view also shows the progress
-of the team, because each issue moves through the workflow.
+A cycle is a fixed period of time for the work of a team. Some teams call it a
+sprint. Each cycle has a start date and an end date. You put the issues that the
+team must finish in that period into the cycle.
 
-![The issues of a team's active cycle, grouped by status](/img/docs/cycles/cycle.png)
+Cycles are for one team. Each team turns them on or off for itself.
 
-## How to enable cycles
+![The page of a cycle. It shows the progress of the cycle, and its issues in a
+list.](/img/docs/cycles/cycle.png)
 
-Each team enables cycles for itself:
+## How to turn on cycles
 
-1. Open **Settings → your team → Overview**.
-2. Under **Team preferences**, enable cycles.
+1. Open **Settings**.
+2. In the settings sidebar, open the team, and click **Cycles**.
+3. Turn on **Enable cycles for this team**.
+4. Select the **Mode**: **Manual** or **Automatic**.
 
-A **Cycles** entry then appears in the sidebar of the team, and each issue gets
-a cycle property.
+![The Cycles settings of a team, with cycles enabled](/img/docs/settings/cycles.png)
 
-## How to use cycles
+When you turn off cycles, Vantik hides them in the team. It does not delete a
+cycle, and it does not remove an issue from its cycle. When you turn on cycles
+again, they show as before.
 
-- **Assign an issue.** Set the cycle in the properties panel at the right of
-  the issue. You can also set the cycle for many issues together, from the list
-  view or the board view.
-- **See the progress.** The view of the active cycle groups the issues by
-  status, so you see the work that is not complete.
-- **Move between cycles.** A team with the automatic cadence needs no manual
-  step. A scheduled job in the server completes each cycle after its end date.
-  The job then moves the unfinished issues, as the preference of the team tells
-  it to, and it makes more future cycles. A team that controls its cycles
-  manually keeps full control, and the job never changes it. Read
-  [Scheduled jobs](/oss/self-deployment#scheduled-jobs).
+### Manual mode
+
+In manual mode, you make each cycle. You also start it and complete it. If you
+do not select a mode, the team uses manual mode.
+
+### Automatic mode
+
+In automatic mode, Vantik makes, starts and completes the cycles on a schedule.
+Automatic mode has three more settings:
+
+- **Cycle length**: the number of weeks in each cycle, from 1 to 12. The
+  default is 2.
+- **Upcoming cycles**: the number of future cycles that Vantik keeps ready,
+  from 1 to 12. The default is 2.
+- **Unfinished work**: what Vantik does with an open issue when a cycle ends.
+  Select **Move to the next cycle** (the default) or **Send back to the
+  backlog**.
+
+There is no setting for the start day or for a cooldown period. Each new cycle
+starts when the previous cycle ends.
+
+## Where to find the cycles
+
+When a team uses cycles, the sidebar shows two more links under the team:
+
+- **Cycles** opens the list of all the cycles of the team.
+- **Current** opens the cycle that is in progress now.
+
+The list shows each cycle with its dates and a badge: **Upcoming**, **Current**
+or **Completed**. A cycle that started also shows a progress bar.
+
+## How to make and run a manual cycle
+
+1. On the **Cycles** page, click **New cycle**.
+2. Type a **Name**.
+3. Set **Starts** and **Ends**. The end must be after the start.
+4. Optional: type a **Description**.
+5. Click **Create cycle**. The cycle shows as **Upcoming**.
+6. Click **Start cycle** on the cycle to start it.
+
+To end the cycle, click **Complete cycle**. A dialog shows how many issues are
+done and how many are not. Select where the unfinished issues go:
+
+- **The next cycle**: Vantik moves them to the next upcoming cycle. If there is
+  no upcoming cycle, you cannot select this option.
+- **The backlog**: Vantik removes them from the cycle. Their status does not
+  change.
+
+Then click **Complete cycle**.
+
+You can delete an upcoming cycle. You cannot delete a cycle that started.
+
+## How to run automatic cycles
+
+On the **Cycles** page of a team in automatic mode, click **Start cycles**.
+Vantik then makes the first cycles. The first cycle starts now.
+
+A scheduled job of the server then runs each hour. For each team that uses
+automatic cycles, the job does these steps:
+
+1. It completes each cycle whose end date is in the past. It moves the
+   unfinished issues as the **Unfinished work** setting tells.
+2. It makes new cycles until the team has the number of **Upcoming cycles**.
+
+To stop, click **Stop cycles**. Vantik removes the upcoming cycles. The current
+cycle continues until its end date.
+
+The schedule of the job is in the `CYCLE_MAINTENANCE_CRON` environment variable
+of the server. The default is `0 * * * *`, that is, at the start of each hour.
+To turn off the job, set the value to `off`.
+
+## How to put an issue in a cycle
+
+- **When you create the issue.** In the new issue dialog, set the cycle in the
+  property row. The default is **No Cycle**.
+- **On the issue page.** Set the **Cycle** property at the right of the page.
+- **From the cycle.** Create an issue in the list of a cycle. The new issue
+  gets that cycle.
+
+There is no action that sets the cycle of many issues at the same time.
+
+To see the issues of a cycle in a list of the team, filter the list by
+**Cycle**.
+
+## The page of a cycle
+
+The page of a cycle has two tabs:
+
+- **Overview** shows the title and the description of the cycle.
+- **Issues** shows the issues of the cycle.
+
+The **Cycle Progress** block shows three numbers:
+
+- **Scope**: the number of issues in the cycle.
+- **Started**: the percentage of the issues in a started status.
+- **Done**: the percentage of the issues in a completed or canceled status.
+
+## Who can do what
+
+Any member of the team can make a manual cycle, and start or complete it. Only
+an admin can do these actions:
+
+- Start or stop automatic cycles.
+- Change the title or the description of a cycle.
+- Delete a cycle.

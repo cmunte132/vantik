@@ -14,56 +14,140 @@ If an issue holds more than one task, and each task needs its own record, divide
 the issue into sub-issues. The work is then clear, and you see the progress of
 each smaller step.
 
-
 ## How to create an issue
 
-- **Open the screen for a new issue.** Press the `C` key, or click the `+` icon
-  at the bottom left of the navigation bar.
-- **Let the AI write the title.** The system writes a title from your
-  description. Give a full explanation of the issue, and the system does the
-  rest.
-- **Let the AI help you.** As you write, the system offers a label and an
-  assignee for the issue.
+1. Press `C`. Or click the edit icon at the top of the sidebar, next to the
+   search icon. Its tooltip is **Create new issue (C)**.
+2. In the dialog, select the team. If the team has issue templates, you can
+   also select a **Template**.
+3. Type the title in **Issue title**, and type the description below it.
+4. Set the properties in the row below the description: status, labels,
+   assignee, priority, cycle, project and project milestone. The cycle shows
+   only if the team uses cycles. The milestone shows only after you select a
+   project.
+5. Click **Create issue**, or press `Cmd+Enter` (`Ctrl+Enter` on Windows and
+   Linux).
+
+### The AI features in the dialog
+
+If your instance has an AI endpoint, the dialog has more features:
+
+- **A title from the description.** If you do not type a title, Vantik writes
+  one from the description while you type. To write a new title, click the AI
+  icon in the title field. Its tooltip is **Click to generate title**.
+- **Sub-issues from the description.** In the description, type `/` and select
+  **Break into sub-issues**. Vantik reads the description and adds one sub-issue
+  for each part of the work to the dialog.
 
 :::note
 The AI features need an endpoint with the OpenAI interface. Your instance can
 use a hosted endpoint or a local one. See
 [AI features](/oss/self-deployment#ai-features). If your instance has no
-endpoint, the interface hides these features. It does not show a control that
-cannot work. You then create an issue as normal, and you type the title and the
+endpoint, the interface hides these features. You then type the title and the
 other properties yourself.
 :::
 
+## The issue page
 
-## How to edit an issue
+Click an issue to open its page. The description is at the left, and the
+properties are at the right.
 
-Every member of the workspace can edit the title and the description of any
-issue. Communication is therefore clear, and every person has the latest
-information. You can improve the title that the AI wrote, or add more detail to
-the description.
+![An issue page. At the left are the description, the Definition of Done, the
+sub-issues, the relations and the comments. At the right are the properties of
+the issue.](/img/docs/issues/issue.png)
 
+- **The properties.** Status, Priority, Assignee and Labels. Then Modules and
+  Capability, if the workspace has modules or capabilities. Then Project, if
+  the team has a project, and Project Milestone, after you set a project. Then
+  Due Date, and Cycle if the team uses cycles.
+- **Suggested modules.** When an issue is in triage, Vantik can show
+  **Suggested** modules under **Modules**. Accept a suggestion to add the module
+  to the issue, or dismiss it. Vantik does not show a dismissed suggestion
+  again. Read [Triage](/fundamentals/triage).
+- **Definition of Done.** A list of criteria that the work must meet. Read
+  [Definition of Done](#definition-of-done).
+- **Sub-issues and relations.** Add a sub-issue, or a relation to a different
+  issue: **Blocked by**, **Blocks**, **Duplicates** or **Related to**.
+- **Activity.** The **Comments** tab shows the comments, and the **Activity**
+  tab shows each change to the issue. Click **Subscribe** to get notifications
+  about the issue.
 
-## The board layouts
+A member of the team of an issue can edit its title and its description. Vantik
+saves each change automatically. Only an admin can delete an issue.
 
-A team sees its issues in two layouts: List and Kanban. Both layouts respond to
-you:
+### Definition of Done
 
-- **Change a value directly.** In both layouts, one click changes the status,
-  the assignee, or the priority.
-- **See what is important.** Both layouts mark the sub-tasks, and the issues
-  that block other issues. You therefore find a critical dependency quickly.
+![The Definition of Done of an issue, with one criterion
+done.](/img/docs/issues/definition-of-done.png)
 
-### The list view
+The Definition of Done is the standard for the work. Each criterion is one
+condition. Tick a criterion when the work meets it. An agent reads the criteria
+and ticks them in the same way.
 
-The list view is the best layout to read many issues. It shows them in order,
-and it groups them by status. To make the view smaller, close a group.
+## The layouts
 
-![A team's issues in the list view, grouped by status](/img/docs/issues/list.png)
+The issues of a team show in three layouts. To change the layout, click one of
+the three buttons at the top right: **List view**, **Kanban view** or
+**Spreadsheet view**.
 
-### The Kanban view
+### List
 
-The Kanban view is the best layout to see the workflow. It puts the issues in
-the columns of a Kanban board, usually one column for each status. You then see
-the progress immediately.
+The list is the best layout to read many issues. It shows them in groups, for
+example one group for each status. To make the list shorter, close a group.
 
-![A team's issues on a Kanban board, one column for each status](/img/docs/issues/board.png)
+![A team's issues in the list layout, grouped by
+status](/img/docs/issues/list.png)
+
+### Kanban
+
+The Kanban board is the best layout to see the workflow. It puts the issues in
+columns, for example one column for each status.
+
+![A team's issues on a Kanban board, one column for each
+status](/img/docs/issues/board.png)
+
+### Spreadsheet
+
+The spreadsheet shows one issue on each row and one property in each column.
+
+![A team's issues in the spreadsheet layout](/img/docs/issues/spreadsheet.png)
+
+### What you can change in the list and on the board
+
+In the list and on the board, click the status, the priority or the assignee of
+an issue to change it. Both layouts also show the sub-issues of an issue, and
+the issues that block it or that it blocks.
+
+## How to group, order and show the issues
+
+Two menus at the top of the issues are for the groups and the order:
+
+- **Group by**: Status, Assignee, Priority, Label, Project, Team, Module or
+  Capability. Project does not show on the page of a project, and Team does not
+  show on the page of a team. Module and Capability show only if the workspace
+  has modules or capabilities.
+- **Order by**: Status, Assignee, Priority, Last updated or Last created.
+
+![The Group by menu, open at the top of the issues of a
+team](/img/docs/issues/group-by.png)
+
+The **Display options** button, at the top right, opens more settings:
+
+![The Display options menu, with the Completed filter and the Display
+settings](/img/docs/issues/display-options.png)
+
+- **Completed filter**: show the completed issues of **All** time, of the
+  **Past day**, of the **Past week**, or **None**.
+- **Show sub-issues**: show the issues that have a parent issue. Turn it off
+  to show only the issues that have no parent.
+- **Show empty groups**: show a group that has no issues.
+- **View issue in sidebar**: open an issue in a panel at the side of the list,
+  not on its own page.
+
+Your browser keeps these settings for each page. They are not for other
+people, and they are not in a [view](/fundamentals/views).
+
+## How to filter the issues
+
+Click **Filter**, or press `F`. Read [Views](/fundamentals/views) for the full
+list of filters, and for how to save a filter as a view.

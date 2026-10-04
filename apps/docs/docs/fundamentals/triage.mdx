@@ -5,34 +5,66 @@ sidebar_label: "Triage"
 
 ## Overview
 
-Triage is the central place for a new request. It receives an issue from a
-source outside your team: a GitHub issue, an email, a tool that monitors your
-system, or an agent that files work through the API. No issue enters the backlog
-of a team before a person reviews it.
+Triage is a workflow category for new issues that no person has read yet. Each
+team has a status in this category. A new team gets the status **Triage**. A
+support team gets the status **New**.
 
-## Use triage for this work
+Triage is not a separate inbox. An issue in triage is an ordinary issue of the
+team. The list and the board show it in a status group, with the other issues.
 
-- **A request from outside.** A request for a feature, or a report of a fault,
-  comes to you by email or through an integration. Each one arrives in the same
-  place, and not in many different inboxes.
-- **An open-source project.** You manage a new GitHub issue together with the
-  other requests.
-- **Work from an agent.** An agent creates an issue through the API. Triage
-  sends that issue to a person, who reviews the work before the team accepts
-  it.
+![The Triage group in the list of a team, with three new
+issues](/img/docs/triage/triage-group.png)
 
-## The benefits
+The list shows the Triage group after the Backlog group. The Kanban board shows
+the Triage column first.
 
-- **One inbox.** Every new request comes into one place for each team.
-- **A review before the commitment.** No request enters the workflow of the
-  team before a person accepts it. The backlog therefore holds only the work
-  that the team wants.
+## How an issue gets into triage
 
-## How to review a triage issue
+- **Email.** The [Email](/integrations/email) integration makes each new email
+  an issue in the triage status of the mapped team.
+- **A template.** An issue template can set the triage status. An issue that
+  you create from that template then starts in triage.
+- **By hand.** You can set the triage status on any issue.
 
-- **Read and assess.** Read the issues in the queue, one after the other.
-- **Then make a decision:**
-  - **Decline** a request that is not relevant or not valid.
-  - **Accept** a valid request. Then set its status, for example "Todo" or "In
-    Progress". Also set the other properties, such as the assignee and the
-    priority.
+The new issue dialog starts an issue in **Backlog**, not in triage. An agent
+also creates an issue in the backlog, unless it names a different status. The
+GitHub integration does not make a Vantik issue from a new GitHub issue.
+
+## What Vantik does with an issue in triage
+
+When an issue goes into the triage status, Vantik looks for help for the person
+who reads it:
+
+- **Similar issues.** Vantik finds issues with a similar text. The issue page
+  then shows a **Similar Issues** panel with a maximum of three issues. Click an
+  issue in the panel to open it. If the issue is a duplicate, open the menu of
+  the issue and select **Duplicate of...**.
+- **Suggested modules.** If the issue has no modules, Vantik can suggest
+  modules. They show under **Modules** at the right of the issue page. Read
+  [The issue page](/fundamentals/issues#the-issue-page).
+
+The suggestions need an AI endpoint. When the issue leaves triage, Vantik
+removes the suggestions that remain.
+
+## How to triage an issue
+
+There is no accept or decline control. To triage an issue, do these steps:
+
+1. Open the issue and read it.
+2. Look at the **Similar Issues** panel. If the issue is a duplicate, mark it
+   as a duplicate.
+3. Set the properties: priority, labels, assignee and modules.
+4. Change the status. Use **Backlog** or **Todo** for work that the team
+   accepts. Use **Canceled** for work that the team does not do.
+
+To see only the issues in triage, filter the list by **Status**, and select the
+triage status. You can save this filter as a view. Read
+[Views](/fundamentals/views).
+
+## Triage cannot be turned off
+
+The workflow of each team includes the triage category. You can rename the
+triage status in the **Workflow** settings of the team, but you cannot remove
+it. If no issue is in triage, the list does not show the Triage group. The
+group shows again if you turn on **Show empty groups** in **Display
+options**.

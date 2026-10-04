@@ -5,20 +5,104 @@ sidebar_label: "Views"
 
 ## Overview
 
-A view is a dashboard that you configure. It shows your issues from one point of
-view. Apply a filter, and the view then shows only the issues that you need.
+A view is a saved set of filters. It shows only the issues that agree with its
+filters. For example, a view can show only the urgent bugs of a team.
 
 ![A view that shows only the urgent issues of a team](/img/docs/views/view.png)
 
+## How to filter the issues
 
-## The benefits
+1. Open a list of issues, for example the **Issues** page of a team.
+2. Click **Filter**, or press `F`.
+3. Select a filter, and then select one or more values.
 
-- **See only what is important.** A filter makes a custom view, and that view
-  shows exactly the issues that you want.
-- **Save time, and work with your team.** Save a view that you like, and open
-  it again quickly. You can also share it with your team. Every person then
-  reads the same list. For example, one view can show only the reports of a
-  fault.
-- **Read the view again, and analyse it.** A view that you save is easy to open
-  again. You therefore analyse the same set of issues over a long period, and
-  you see the progress.
+![The Filter menu, with the list of filters](/img/docs/issues/filter.png)
+
+These filters compare a property of the issue with the values that you select:
+
+- **Status**, **Assignee**, **Label**, **Priority**, **Cycle** and **Project**.
+  The page of a project does not show the **Project** filter.
+- **Product**, **Module** and **Capability**. The **Product** filter shows the
+  issues of the modules that belong to the product.
+
+These filters have no values. Each one shows only one kind of issue:
+
+- **Parent issues**: the issues that have sub-issues.
+- **Sub issues**: the issues that have a parent issue.
+- **Blocked issues**: the issues that a different issue blocks.
+- **Blocking issues**: the issues that block a different issue.
+
+Some value lists have a **No …** option, for example **No Assignee**. It shows
+the issues that have no value for that property.
+
+### The operator of a filter
+
+Each filter that you apply shows in the filter bar with its operator. Click the
+operator to change it:
+
+- **Label** and **Module**: **includes** or **excludes**.
+- The other value filters: **is any of** or **is not**.
+
+### An AI filter
+
+If your instance has an AI endpoint, you can type a request in the filter
+field, for example "bugs that nobody works on". Then select the **Ai filter**
+option. Vantik changes the request into filters.
+
+## How to save a view
+
+When a list has filters, the **Save as view** button shows at the top right.
+
+1. Click **Save as view**.
+2. In the **Save view** dialog, type a **Name**.
+3. Optional: type a **Description**.
+4. Click **Save**.
+
+![The Save view dialog, with the name New bugs](/img/docs/views/save-view.png)
+
+If you save the view from a page of a team, the view belongs to that team. If
+you save it from a page of the workspace, for example **My issues**, the view
+belongs to the workspace.
+
+In the command palette, **Create view** opens the **Issues** page of the team.
+Add the filters there, and then click **Save as view**.
+
+### What a view keeps
+
+A view keeps only its filters. It does not keep the layout, the grouping, the
+order or the display options. Your browser keeps those settings for each page.
+Read [How to group, order and show the issues](/fundamentals/issues#how-to-group-order-and-show-the-issues).
+
+## How to find a view
+
+- The **Views** link under a team shows the views of that team.
+- The **Views** link at the top of the sidebar shows the views of the
+  workspace.
+
+![The views of a team](/img/docs/views/views.png)
+
+Each row shows the name and the description of the view, the date of creation,
+and the person who made it.
+
+### Bookmarks
+
+Click the bookmark icon of a view to bookmark it. The list shows the
+bookmarked views first. A bookmark is for all members, not only for you. If
+one person bookmarks a view, all members see the bookmark.
+
+## Who can see a view
+
+A view has no share control. All members of the workspace get all views. A view
+of a team shows in the **Views** list of that team. The view shows only the
+issues that you can see.
+
+## How to change or delete a view
+
+- **Change the filters.** Open the view, and change its filters. Then click
+  **Save view** at the top right.
+- **Change the name or the description.** Open the menu of the view at the top
+  of the page, and select **Edit**.
+- **Delete the view.** Open the menu of the view, and select **Delete**. Then
+  click **Continue**.
+
+Any member can change or delete a view.

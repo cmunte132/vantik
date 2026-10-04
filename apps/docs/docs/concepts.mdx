@@ -45,8 +45,9 @@ team name and a team identifier. Only an admin can make a team. When an admin
 makes a team, Vantik adds the admin, all the other admins, and all the bots of
 the workspace to it.
 
-To see all the teams of the workspace, click **Teams** in the sidebar. An admin
-uses this page to join a team or to leave a team.
+To see the teams, click **Teams** in the sidebar. An admin sees all the teams
+of the workspace on this page, and uses it to join or to leave a team. A member
+who is not an admin sees only the teams that the member is in.
 
 ## Team identifiers and issue keys
 
@@ -57,8 +58,9 @@ issue the next number.
 The key of an issue is the identifier of its team and the number of the issue,
 for example `ENG-123`. Vantik does not keep the key. It makes the key from the
 team identifier each time. Thus, if you change the identifier of a team in the
-team settings, the key of every issue in that team also changes. The old keys
-then find no issue.
+team settings, the key of every issue in that team also changes. Do not use
+the old keys after a change. An old key finds no issue, or it finds the issue
+of a different team that uses the old identifier.
 
 ### How to move an issue to a different team
 
@@ -66,7 +68,9 @@ Open the issue, open its menu, and select **Move to team**. When you move an
 issue, Vantik does these steps:
 
 - It gives the issue the next number in the new team. Thus the issue gets a new
-  key, and the old key finds no issue.
+  key. Do not use the old key after the move. Vantik gives a new issue the
+  highest number in the team plus one. Thus the old key can find a different
+  issue later, or no issue.
 - It changes the state of the issue to the state in the new team with the same
   name and category. If the new team has no state with that name, Vantik uses
   the first state of the same category.
@@ -119,16 +123,18 @@ There are two kinds of agent.
 
 - **A personal agent** belongs to the person who made it. Any member can make
   one. Open **Settings**, then **API** under **My account**. In the **Access
-  tokens** section, set **Acts as** to an agent. Vantik then shows a token one time. Copy the token
-  and paste it into your agent, for example into an MCP client configuration.
-  Vantik keeps only a hash of the token, so it cannot show the token again.
+  tokens** section, set **Acts as** to **Its own identity — an agent**. Vantik
+  then shows a token one time. Copy the token and paste it into your agent, for
+  example into an MCP client configuration. Vantik keeps only a hash of the
+  token, so it cannot show the token again.
 - **A workspace agent** belongs to the workspace, not to one person. Only an
   admin can make one, and only an admin can revoke it. Vantik never makes a
   token for a workspace agent. A token that no person owns has no person to
   change it or to see a leak, so Vantik does not make one.
 
-An admin sees all the agents of the workspace in the **Agent accounts** section
-of **Settings** → **Agents**.
+An admin sees the agent accounts of the workspace in the **Agent accounts**
+section of **Settings** → **Agents**. This list does not show the identities of
+agent runs. It also does not show a revoked agent after an admin clears it.
 
 ### Agent runs
 

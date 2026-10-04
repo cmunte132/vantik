@@ -12,8 +12,9 @@
  * Everything moves together: the server, the webapp, the images and the
  * published packages carry one number. This script is the only thing that
  * writes it. It sets the version in every file below, adds the release notes
- * to the docs changelog, commits, and makes an annotated tag. It does not push; pushing the tag is the release, because the
- * tag is what builds the images.
+ * to the docs changelog, commits, and makes an annotated tag. It does not
+ * push; pushing the tag is the release, because the tag is what builds the
+ * images.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";

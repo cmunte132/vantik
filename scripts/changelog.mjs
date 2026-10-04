@@ -57,9 +57,16 @@ function compare(a, b) {
   return 0;
 }
 
-// MDX reads `<` and `{` as the start of JSX. A backslash makes each one text.
+// MDX reads `<` and `{` as the start of JSX, and Markdown reads `*`, `_` and
+// `[` as formatting. A backslash makes each one text. A code span stays as it
+// is, because MDX and Markdown read the text in a code span as text.
 function escape(subject) {
-  return subject.replace(/([\\<>{}])/g, "\\$1");
+  return subject
+    .split(/(`[^`]*`)/)
+    .map((part, index) =>
+      index % 2 ? part : part.replace(/([\\<>{}*_[\]])/g, "\\$1"),
+    )
+    .join("");
 }
 
 /**

@@ -45,7 +45,7 @@ The list has four views:
 | **Open** | Every open item, the newest first. Below them, **Done today** shows the items decided today. |
 | **Mine** | The open items assigned to you. |
 | **Unassigned** | The open items that nobody is on. |
-| **Done** | The items that ended in the last 30 days, the most recent first. |
+| **Done** | The items that ended in the last 30 days, the most recent first, to a maximum of 50. |
 
 Each view except **Done** shows its count. When you open the list from a
 page, a bar shows **On** and the page title. Click **Show all** to see every
@@ -62,7 +62,7 @@ dot, because what triage did stays in place until you answer.
 
 | Kind | Label | The question | Where it comes from |
 |---|---|---|---|
-| `CONTRADICTION` | **Contradiction** | Which of the two facts is right? | A fact that waits contradicts a fact in use: a fact that a person confirmed, a fact on a locked page, or a fact that the code now disagrees with. |
+| `CONTRADICTION` | **Contradiction** | Which of the two facts is right? | A fact that waits contradicts a fact in use: a fact that a person confirmed, or a fact on a locked page. |
 | `RULE` | **Team rule** or **Team decision** | Is it the rule? Did the team decide it? | A convention or a decision that waits, and that no evidence settles. |
 | `FACT` | **New fact** | Is it true? | Any other fact that waits. |
 | `AUDIT` | **Audit** | Was triage right? | A decision that triage made alone, drawn for a check. Read [Audits](#audits). |
@@ -182,6 +182,16 @@ contradicts.
 | `LOW_AGREEMENT` | Triage is holding back | People disagreed with this type of decision lately, so a person decides. Read [Back-off](/fundamentals/knowledge/gardener#back-off). |
 
 A fact with no reason shows "Waits on a person".
+
+A **Retire?** item shows the reason that the gardener asks:
+
+| Reason | Label | Meaning |
+|---|---|---|
+| `CITATION_CONTRADICTED` | The code now disagrees | A change contradicts the fact, and a person confirmed it, or it is on a locked page, or a person put it back. |
+| `CITATION_MISSING` | Its cited file is gone | A change removed the file that the fact cites. |
+| `CITATION_UNJUDGED` | Its cited code changed | The cited code changed, and no model could judge the change. |
+| `UNUSED` | Nobody uses it | A person confirmed the fact, and nothing used it or checked it for a long time. |
+| `HARMFUL_SIGNAL` | Runs went wrong with it | Runs went wrong with a convention that a person confirmed, or that is in a page body or on a locked page. |
 
 ## Audits
 

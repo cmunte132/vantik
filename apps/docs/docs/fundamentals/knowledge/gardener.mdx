@@ -92,8 +92,8 @@ Gardener screen to open it.
 ![The Gardener map, grouped by page. The Payments page is selected, and two
 of its four facts need you.](/img/docs/knowledge/gardener-map.png)
 
-- **Group the map** puts the facts around their module, their page or their
-  product. **By module** is the default. Facts with no group go under a hub
+- **By module**, **By page** and **By product** put the facts around their
+  module, their page or their product. **By module** is the default. Facts with no group go under a hub
   such as "In no module".
 - Each **circle** is a fact. Its colour is its state: code confirms, a person
   confirmed, observed, provisional, unconfirmed, needs you, waiting, or
@@ -138,8 +138,8 @@ in Needs you, as a **Retire?** item. It asks when:
 - a cited file changed, and no model could judge the change;
 - the code now contradicts the fact, and a person confirmed it, or it is on
   a locked page, or a person put it back after an earlier dispute;
-- a person confirmed the fact, and no run used it for
-  `PAGE_STANDING_ENTRY_DECAY_DAYS`, and no page cites it;
+- a person confirmed the fact, and in `PAGE_STANDING_ENTRY_DECAY_DAYS` no run
+  used it and no check found that a citation holds, and no page cites it;
 - runs went wrong with a convention from review, and a person confirmed it,
   or it is in a page body, or it is on a locked page.
 

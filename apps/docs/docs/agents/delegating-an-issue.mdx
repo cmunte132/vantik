@@ -26,17 +26,20 @@ These items must be ready before a run can do work:
   control tells you to add one.
 - **A model.** Select a model when you delegate, or set the default model of
   the workspace. A workspace admin sets the default in **Model access**, in
-  **Runs use** and **Model**. If the run has no model, it fails when it starts.
+  **Model**. If the workspace has keys for more than one provider, the admin
+  also selects the provider in **Runs use**. If the run has no model, it fails
+  when it starts.
 - **A repository.** The run gets its repository from the modules of the issue.
   Open the page of the module, and click **Connect a repository** under
   **Repositories**. Then add the module to the issue. If the issue has no module
-  with a repository, the run can fail.
+  with a repository, the run fails.
 - **A sandbox host.** The operator of your instance runs the sandbox host
   process. If the server cannot reach it, the delegate control shows the reason,
   and you cannot start a run. Read
   [Optional compose profiles](/quickstart#optional-compose-profiles).
 - **A clear issue.** The description must say what the problem is and what
-  done looks like. Vantik refuses an issue with a very short description.
+  done looks like. Vantik refuses an issue with a description of less than 40
+  characters.
 
 ## How to delegate an issue
 
@@ -106,8 +109,9 @@ Click a row to open the page of the run.
 
 ## The page of a run
 
-![The page of a run while the agent works. The stepper shows the Check stage,
-and the Now card shows the tests that run.](/img/docs/agents/run-running.png)
+![The page of a run while it works. The stepper shows the Check stage, and the
+Now card shows that Vantik runs the checks of the
+repository.](/img/docs/agents/run-running.png)
 
 The page of a run has these parts:
 
@@ -128,7 +132,7 @@ The page of a run has these parts:
 - **Definition of Done.** The criteria of the issue, if it has criteria.
 - **Changes.** The files that the run changed.
 - **This run.** The model, the runner, the reasoning effort (**Thinking**) and
-  the branch.
+  the branch. If the run has a trace, the card also shows the **Trace**.
 
 The page updates while the run is live.
 
@@ -139,16 +143,19 @@ one kind of event. These are the kinds of events:
 
 | Event | What it shows |
 | --- | --- |
-| **Set up the environment** | The sandbox start, the clone of the repository, and the setup commands. |
+| **Set up the environment** | The steps that prepare the run: **Fetching the repository**, **Starting the sandbox** and **Preparing the sandbox**. |
 | **Read** | The files that the agent read. |
 | **Edited** or **Wrote** | A file that the agent changed, with the diff. |
 | **Searched** | A search in the code. |
-| **Tests passed** or **Tests failed** | A test command and its result. |
-| **Ran a command** or **A command failed** | A different command. |
+| **Tests passed** | A test command that the agent ran, with the number of tests that passed. |
+| **Ran the tests** | A check of the repository that Vantik ran, and that passed. The row shows the command, for example `pnpm lint`. |
+| **Tests failed** | A test command or a check of the repository that failed. |
+| **Ran a command** or **A command failed** | A different command that the agent ran. |
 | A note | A note from the agent about its work. It shows the initials of the agent. |
 | A step of the cycle | A step of the review cycle, for example "Reviewing the work against the issue". |
 
-A step that failed shows a red mark and its output.
+A step that failed shows a red mark. If the step has output, the row shows it.
+A check of the repository that failed shows no output.
 
 ### Spend
 
@@ -156,7 +163,8 @@ The **Spend** card shows the cost in US dollars, and the budget of the run. The
 bar turns amber at 80% of the budget, and red at 100%.
 
 The card also shows the number of turns and the number of passes. A turn is one
-call to the model. A pass is one time through the review cycle. On a run that
+call to the model. A pass is one time through the review cycle. While the run
+is live, the card shows the passes after the first pass ends. On a run that
 ended with **Done** or **Needs a human**, the number of passes shows the number
 of turns. This is a fault in Vantik. To see the passes of the run, count the
 **Reviewing the work against the issue** events in **Activity**.
@@ -209,8 +217,8 @@ next.
 outcome card shows its message. The Retry button shows at the
 top.](/img/docs/agents/run-failed.png)
 
-Vantik records no branch for a run that failed. So the run has nothing to clean
-up, and only **Retry** shows.
+The Vantik hosted sandbox records no branch for a run that failed. So the run
+has nothing to clean up, and only **Retry** shows.
 
 ## After a run
 
@@ -226,7 +234,9 @@ the card of the run in the activity of the issue.
 - **Reject.** This action shows on a run with **Needs a human**. It removes the
   work of the run.
 - **Clean up.** This action shows on a run that failed, stopped or went away,
-  if the run left a branch or a pull request.
+  if the run recorded a branch or a pull request. The Vantik hosted sandbox
+  records them only on a run with **Done** or **Needs a human**. So on a run in
+  the hosted sandbox, you see **Reject**, not **Clean up**.
 
 **Reject** and **Clean up** do the same thing:
 
@@ -246,7 +256,7 @@ Vantik then does these things:
 - It closes the pull request, with a comment that tells why.
 - It deletes the branch. Vantik keeps the branch in these cases:
   - A person added commits to the branch after the run.
-  - The pull request was merged.
+  - A person merged the pull request.
   - The run recorded no last commit for the branch.
 - It keeps the run and its record.
 

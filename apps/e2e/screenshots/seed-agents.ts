@@ -12,7 +12,11 @@ import type { Database } from './db';
  * a reader needs to recognise.
  *
  * Every run is one the hosted executor can produce: its failure category, its
- * events and its counts are the ones that executor writes. A finished run
+ * events and its counts are the ones that executor writes. Its own notes and
+ * check results are written as it writes them (one event per check, with no
+ * counts or output); the agent's tool calls as pi-events.ts maps them. The
+ * model id is set only on a run that finished, and a live run carries the
+ * cost and turns its meter has written so far. A finished run
  * carries its turn count in iterationCount too, because the executor writes it
  * there when the run ends, and the Spend card shows that field as passes.
  *
@@ -128,7 +132,13 @@ export async function seedAgents(
   const runningStart = clockAt - 6 * MINUTE - 40_000;
   const runningRunId = await run(
     issues.running,
-    { status: 'RUNNING', startedAt: runningStart, iterationCount: 0 },
+    {
+      status: 'RUNNING',
+      startedAt: runningStart,
+      iterationCount: 0,
+      modelId: null,
+      result: { costUsd: 0.94, turns: 17 },
+    },
     [
       ...setup(),
       [62, 'implement', 'Running the agent'],
@@ -174,7 +184,6 @@ export async function seedAgents(
       [250, 'implement', 'Edit src/payments/webhooks.spec.ts', { kind: 'write', ref: 'w3', target: 'src/payments/webhooks.spec.ts' }],
       [251, 'implement', 'Edit src/payments/webhooks.spec.ts', { ref: 'w3', ok: true, added: 34, removed: 0 }],
       [298, 'verify', 'Running the repository’s own checks'],
-      [300, 'verify', 'pnpm test src/payments', { kind: 'test', ref: 't1', command: 'pnpm test src/payments' }],
     ],
   );
 
@@ -229,11 +238,11 @@ export async function seedAgents(
       [301, 'implement', 'Edit src/checkout/use-autofill.ts', { ref: 'w1', ok: true, added: 9, removed: 7 }],
       [420, 'implement', 'Edit src/checkout/address-form.spec.tsx', { kind: 'write', ref: 'w2', target: 'src/checkout/address-form.spec.tsx' }],
       [421, 'implement', 'Edit src/checkout/address-form.spec.tsx', { ref: 'w2', ok: true, added: 29, removed: 0 }],
+      [450, 'implement', 'bash: pnpm test src/checkout', { kind: 'test', ref: 'a1', command: 'pnpm test src/checkout' }],
+      [528, 'implement', 'Tests passed: 48', { kind: 'test', ref: 'a1', ok: true, passed: 48, failed: 0 }],
       [560, 'verify', 'Running the repository’s own checks'],
-      [562, 'verify', 'pnpm test src/checkout', { kind: 'test', ref: 't1', command: 'pnpm test src/checkout' }],
-      [640, 'verify', 'pnpm test src/checkout', { ref: 't1', ok: true, exit: 0, passed: 48, failed: 0 }],
-      [683, 'verify', 'pnpm typecheck', { kind: 'bash', ref: 'b1', command: 'pnpm typecheck' }],
-      [702, 'verify', 'pnpm typecheck', { ref: 'b1', ok: true, exit: 0 }],
+      [640, 'verify', 'Tests: passed', { kind: 'test', command: 'pnpm test', ok: true, exit: 0 }],
+      [702, 'verify', 'Typecheck: passed', { kind: 'test', command: 'pnpm typecheck', ok: true, exit: 0 }],
       [705, 'review', 'Reviewing the work against the issue'],
       [825, 'review', 'The reviewer accepted the work'],
       [830, 'report', 'Pushing the branch'],
@@ -289,11 +298,16 @@ export async function seedAgents(
       [300, 'implement', 'Created docs/analytics/checkout.md', { kind: 'write', ref: 'w1', target: 'docs/analytics/checkout.md' }],
       [301, 'implement', 'Created docs/analytics/checkout.md', { ref: 'w1', ok: true, added: 96, removed: 0 }],
       [400, 'verify', 'Running the repository’s own checks'],
-      [402, 'verify', 'pnpm lint', { kind: 'bash', ref: 'b1', command: 'pnpm lint' }],
-      [460, 'verify', 'pnpm lint', { ref: 'b1', ok: true, exit: 0 }],
+      [460, 'verify', 'Lint: passed', { kind: 'test', command: 'pnpm lint', ok: true, exit: 0 }],
       [462, 'review', 'Reviewing the work against the issue'],
       [550, 'review', 'The reviewer found 0 thing(s) to fix'],
       [552, 'report', 'Pushing the branch'],
+      [
+        540 + 3 * 60 * 60,
+        'cleanup',
+        'Cleaned up after the run. Closed the pull request. Deleted the branch.',
+        { cleanup: { pullRequest: 'closed', branch: 'deleted' } },
+      ],
     ],
   );
 
@@ -305,6 +319,7 @@ export async function seedAgents(
     {
       status: 'FAILED',
       failure: 'ENVIRONMENT_SETUP_FAILED',
+      modelId: null,
       error:
         'pnpm install --frozen-lockfile\n ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with "frozen-lockfile" because pnpm-lock.yaml is not up to date with package.json',
       startedAt: failedStart,
@@ -312,8 +327,9 @@ export async function seedAgents(
       result: { egressDenied: 0 },
     },
     [
-      [2, 'setup', 'Started a sandbox (2 vCPU, 4 GB)'],
-      [9, 'setup', 'Cloned acme/storefront at main (3f2c9e1)'],
+      [2, 'setup', 'Fetching the repository'],
+      [9, 'setup', 'Starting the sandbox'],
+      [40, 'setup', 'Preparing the sandbox'],
     ],
   );
 
@@ -364,46 +380,21 @@ export async function seedAgents(
       [300, 'implement', 'Created src/catalog/stock-badge.tsx', { kind: 'write', ref: 'w1', target: 'src/catalog/stock-badge.tsx' }],
       [301, 'implement', 'Created src/catalog/stock-badge.tsx', { ref: 'w1', ok: true, added: 41, removed: 0 }],
       [396, 'verify', 'Running the repository’s own checks'],
-      [398, 'verify', 'pnpm test src/catalog', { kind: 'test', ref: 't1', command: 'pnpm test src/catalog' }],
-      [
-        494,
-        'verify',
-        'pnpm test src/catalog',
-        {
-          ref: 't1',
-          ok: false,
-          exit: 1,
-          passed: 48,
-          failed: 3,
-          output:
-            'FAIL src/catalog/stock.spec.ts\n  ✕ hides the badge when stock is unknown\n  ✕ rounds stock above 99 to 99+\n  ✕ shows the badge for stock of 0\n\nTests: 3 failed, 48 passed, 51 total',
-        },
-        'ERROR',
-      ],
+      [494, 'verify', 'Tests: failed', { kind: 'test', command: 'pnpm test', ok: false, exit: 1 }, 'ERROR'],
       [496, 'review', 'Reviewing the work against the issue'],
       [588, 'review', 'The reviewer found 2 thing(s) to fix'],
       [590, 'revise-2', 'Fixing 2 finding(s) from the review'],
+      [700, 'revise-2', 'Edit src/catalog/stock-badge.tsx', { kind: 'write', ref: 'w2', target: 'src/catalog/stock-badge.tsx' }],
+      [701, 'revise-2', 'Edit src/catalog/stock-badge.tsx', { ref: 'w2', ok: true, added: 6, removed: 2 }],
       [830, 'verify-2', 'Running the repository’s own checks'],
+      [923, 'verify-2', 'Tests: failed', { kind: 'test', command: 'pnpm test', ok: false, exit: 1 }, 'ERROR'],
       [925, 'review-2', 'Reviewing the work against the issue'],
       [1013, 'review-2', 'The reviewer found 2 thing(s) to fix'],
       [1015, 'revise-3', 'Fixing 2 finding(s) from the review'],
+      [1120, 'revise-3', 'Edit src/catalog/stock.ts', { kind: 'write', ref: 'w3', target: 'src/catalog/stock.ts' }],
+      [1121, 'revise-3', 'Edit src/catalog/stock.ts', { ref: 'w3', ok: true, added: 17, removed: 10 }],
       [1235, 'verify-3', 'Running the repository’s own checks'],
-      [1237, 'verify-3', 'pnpm test src/catalog', { kind: 'test', ref: 't3', command: 'pnpm test src/catalog' }],
-      [
-        1330,
-        'verify-3',
-        'pnpm test src/catalog',
-        {
-          ref: 't3',
-          ok: false,
-          exit: 1,
-          passed: 49,
-          failed: 2,
-          output:
-            'FAIL src/catalog/stock.spec.ts\n  ✕ hides the badge when stock is unknown\n  ✕ rounds stock above 99 to 99+\n\nTests: 2 failed, 49 passed, 51 total',
-        },
-        'ERROR',
-      ],
+      [1330, 'verify-3', 'Tests: failed', { kind: 'test', command: 'pnpm test', ok: false, exit: 1 }, 'ERROR'],
       [1332, 'review-3', 'Reviewing the work against the issue'],
       [1420, 'review-3', 'The reviewer found 2 thing(s) to fix'],
       [1424, 'report', 'Pushing the branch'],
@@ -419,13 +410,12 @@ export async function seedAgents(
   };
 }
 
-/** The first minute of every run: the sandbox, the clone and the install. */
+/** The first minute of every run, in the notes the hosted executor writes. */
 function setup(): Line[] {
   return [
-    [2, 'setup', 'Started a sandbox (2 vCPU, 4 GB)'],
-    [9, 'setup', 'Cloned acme/storefront at main (3f2c9e1)'],
-    [51, 'setup', 'Installed dependencies with pnpm in 41s'],
-    [60, 'setup', 'Loaded 2 facts from the knowledge bank: Payments'],
+    [2, 'setup', 'Fetching the repository'],
+    [9, 'setup', 'Starting the sandbox'],
+    [40, 'setup', 'Preparing the sandbox'],
   ];
 }
 

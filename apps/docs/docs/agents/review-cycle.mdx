@@ -1,5 +1,5 @@
 ---
-title: How agent work gets checked
+title: How Vantik checks the work of an agent
 sidebar_label: The review cycle
 ---
 
@@ -100,8 +100,9 @@ when. On the server, the run keeps the status **Needs a human**.
 rejected it. The outcome card tells that Vantik closed the pull request and
 deleted the branch.](/img/docs/agents/run-rejected.png)
 
-On a run that failed, stopped or went away after it pushed, the same button
-shows **Clean up**. You do not need it before a retry, because each attempt
+The same dialog shows as **Clean up** on a run that failed, stopped or went
+away, if the run recorded a branch. The hosted sandbox records no branch on
+such a run. You do not need to clean up before a retry, because each attempt
 pushes to its own branch. Read
 [After a run](/agents/delegating-an-issue#after-a-run).
 
@@ -168,7 +169,7 @@ The page of the run shows the cycle in two places:
   example: "Running the repository’s own checks", "Reviewing the work against
   the issue", and "The reviewer found 2 thing(s) to fix".
 
-![The page of a run while the agent works. The stepper shows the Check stage,
-and Activity shows the steps of the run.](/img/docs/agents/run-running.png)
+![The page of a run while it works. The stepper shows the Check stage, and
+Activity shows the steps of the run.](/img/docs/agents/run-running.png)
 
 Read [The page of a run](/agents/delegating-an-issue#the-page-of-a-run).

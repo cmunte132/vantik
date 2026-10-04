@@ -54,14 +54,18 @@ permissions in the workspace.
 
 ## Errors
 
-The server sends an error as JSON with an HTTP status code.
+The server sends an error as JSON with an HTTP status code. Each error body has
+a `message` field.
 
 | Status | Cause | Body |
 | --- | --- | --- |
 | `400` | A field in the request is not valid. | `{"statusCode": 400, "message": ["..."], "error": "Bad Request"}`. Each item of `message` names a field. |
 | `401` | The request has no token, or the server does not know the token. A deleted token also gets a `401`. | `{"message": "Unauthorised"}` |
-| `403` | The agent does not have the scope that the request needs. An endpoint for admins only also sends a `403` to other members. | `{"statusCode": 403, "message": "...", "error": "Forbidden"}` |
-| `404` | The id in the path does not identify a record in your workspace. | `{"statusCode": 404, "message": "...", "error": "Not Found"}` |
+| `403` | The agent does not have the scope that the request needs. | `{"statusCode": 403, "message": "...", "error": "Forbidden"}`. The message names the scope. |
+| `403` | The endpoint is for admins only, and you are not an admin. | `{"statusCode": 403, "message": "Forbidden resource", "error": "Forbidden"}` |
+| `403` | The endpoint is for people only, and the token belongs to an agent. The page of the endpoint says so. | `{"message": "..."}` |
+| `403` | A browser sent a `POST`, `PUT`, `PATCH` or `DELETE` request from an origin that is not in `FRONTEND_HOST`. A script that sends no `Origin` header does not get this error. | `{"message": "Forbidden: invalid origin"}` |
+| `404` | The id in the path does not identify a record in your workspace. | `{"message": "..."}`. The message names the record, for example `Issue <id> not found`. |
 | `429` | The request is over a rate limit. | See [Rate limits](#rate-limits). |
 
 ## Agent scopes

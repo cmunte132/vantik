@@ -980,6 +980,10 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: The team does not exist, or you cannot see it.
+        "500":
+          description: >-
+            No issue in the team has this number. The server sends a 500 for
+            this case now, not a 404.
       tags:
         - Issue
 
@@ -1228,7 +1232,7 @@ paths:
         - in: query
           name: executor
           required: false
-          description: The executor key, for example byo or hosted.
+          description: The executor key, for example hosted.
           schema:
             type: string
         - in: query
@@ -1244,8 +1248,10 @@ paths:
           schema:
             type: integer
             minimum: 1
-            maximum: 200
             default: 50
+          description: >-
+            The number of runs on a page. The server uses 200 for a larger
+            value.
       responses:
         "200":
           description: Successful response
@@ -1264,7 +1270,8 @@ paths:
     get:
       summary: List pages
       description: >-
-        This call returns the pages of the workspace, in tree order. Send summary=true to
+        This call returns the pages of the workspace. The order is by
+        sortOrder, then by creation date. Send summary=true to
         leave out the bodies. Then each page has a null description, an empty
         descriptionMarkdown and null sections.
       parameters:
@@ -1460,7 +1467,8 @@ paths:
       summary: List issues that mention a page
       description: >-
         This call returns the issues whose description contains the page id, for
-        example a pasted page URL. The newest 50 issues come back.
+        example a pasted page URL. The response holds at most 50 issues, the most
+        recently updated first.
       parameters:
         - name: pageId
           in: path
@@ -1504,6 +1512,9 @@ paths:
         - name: workspaceId
           in: query
           required: false
+          description: >-
+            The workspace to read. If you do not send it, the server uses the
+            workspace of your token.
           schema:
             type: string
       responses:
@@ -1536,6 +1547,9 @@ paths:
         - name: workspaceId
           in: query
           required: false
+          description: >-
+            The workspace to read. If you do not send it, the server uses the
+            workspace of your token.
           schema:
             type: string
       requestBody:
@@ -1577,6 +1591,9 @@ paths:
         - name: workspaceId
           in: query
           required: false
+          description: >-
+            The workspace to read. If you do not send it, the server uses the
+            workspace of your token.
           schema:
             type: string
       responses:
@@ -4304,9 +4321,6 @@ components:
 
     GetLabelsDTO:
       type: object
-      required:
-        - workspaceId
-        - teamId
       properties:
         workspaceId:
           type: string
@@ -4845,7 +4859,7 @@ components:
           description: The member who delegated the issue.
         executor:
           type: string
-          description: The executor key, for example byo or hosted.
+          description: The executor key, for example hosted.
         status:
           $ref: "#/components/schemas/AgentRunStatus"
         attempt:

@@ -69,8 +69,8 @@ weaker sandbox in place of a microVM.
 - Memory and disk for each run. Each guest gets 4096 MB of memory and 2 CPUs.
   Its disk can grow to 30720 MB with the review, or 20480 MB without it. The
   disk is sparse, so a run uses only the space that it writes.
-- To build the guest image: podman or Docker on macOS, or `e2fsprogs` on
-  Linux. Only a native sandbox host can use the guest image.
+- To build the guest image: macOS, with podman or Docker. Only a native
+  sandbox host can use the guest image.
 
 ## Bring up the sandbox host
 
@@ -152,22 +152,24 @@ The container image does not include the Vantik guest image. So the container
 uses the stock image of Gondolin, the library that starts the microVMs. The
 first run downloads that image into the `sandbox-images` volume, so that run
 takes longer. With the stock image, each run keeps its checkout in memory.
-A native sandbox host on Linux can use the guest image, as on macOS. But with
-the defaults, the server container cannot reach a native sandbox host on
-Linux. The sandbox host listens on `127.0.0.1`, and Docker on Linux does not
-resolve `host.docker.internal`. This page does not give that network setup.
 Read [Without the guest image](#without-the-guest-image).
+
+This page gives no method for a native sandbox host on Linux. On Linux, the
+build of the guest image must run as root, because it uses `chroot`. The image
+then goes to the image store of root. Also, with the defaults, the server
+container cannot reach a native sandbox host on Linux.
 
 ### 4. Check the sandbox host
 
 1. Look at the first log lines of the sandbox host. The line
-   `Listening on <address>:<port>` has `available: true` when the sandbox host
-   can start a microVM. If `available` is false, the line also has a `reason`.
+   `Listening on <address>:<port>` has `"available":true` when the sandbox
+   host can start a microVM. If `available` is false, the line also has a
+   `reason`. Each log line is a JSON object.
 2. Look for a warning about the guest image. If it shows, read
    [The guest image](#the-guest-image).
-3. Open an issue in Vantik that has a module with a repository, and a
-   description of 40 characters or more. The delegate control must show no
-   reason.
+3. Open an issue in Vantik with a description of 40 characters or more. The
+   delegate control must show no reason. A run also needs a module with a
+   repository. Read [Delegate an issue to an agent](/agents/delegating-an-issue).
 
 ## Configuration
 
@@ -284,9 +286,9 @@ executor, `hosted`, with the label **Vantik hosted sandbox**. It runs the
 review cycle in a sandbox from the sandbox host. Read
 [The review cycle](/agents/review-cycle).
 
-The server registers the executors when it starts. A run that names no
-executor uses the only one that is registered, so you set nothing. Vantik has
-no runner on another machine that asks the server for work.
+The server registers the executors when it starts. A run that names no executor
+uses the only executor that the server registered, so you set nothing. Vantik
+has no runner on another machine that asks the server for work.
 
 The hosted executor is available to a workspace when two conditions are true:
 
@@ -335,8 +337,9 @@ For a native process, stop it and start it again.
 | The delegate control says "The sandbox host refused the server's token". | The two tokens are different. | Set the same `SANDBOX_HOST_TOKEN` for both. Then apply the change to both. |
 | The sandbox host stops when it starts, with a message about `SANDBOX_HOST_TOKEN`. | The token is not set, or it has fewer than 24 characters. | Make a token as in [Make the token](#1-make-the-token). |
 | The reason says that the sandbox host has no `qemu-img` or `qemu-system-*` on its `PATH`. | QEMU is not installed for the process of the sandbox host. | Install QEMU on the machine of the native sandbox host. Then stop the sandbox host and start it again. |
-| The container logs "No /dev/kvm in this container". | The container has no hardware virtualisation. | On Linux, give the container `/dev/kvm`. On macOS, run the sandbox host natively. |
-| A run on a large repository becomes very slow, and the model looks stopped. | The sandbox host has no guest image, so the checkout is in memory. | For a native sandbox host, build the guest image. The next run uses it. The container cannot use the guest image. |
+| The container logs "No /dev/kvm in this container". | The container has no `/dev/kvm`, so QEMU emulates the processor. | Map `/dev/kvm` into the container, as `docker-compose.yaml` does. On macOS, run the sandbox host natively. |
+| Compose does not create the `sandbox-host` container, with an error about `/dev/kvm`. | The machine has no `/dev/kvm`. | Turn on KVM on the machine, or run the sandbox host on a machine with KVM. |
+| A run on a large repository becomes very slow, and the model looks stopped. | The sandbox host has no guest image, so the checkout is in memory. | On macOS, build the guest image. The next run uses it. The container cannot use the guest image. |
 | After an upgrade, each pass of a run starts slowly. | The guest image has a different Pi version from the server, so each pass fetches Pi with `npx`. | Build the guest image again. |
 | A run fails, and the reason says that the request body is larger than a number of bytes. | The checkout is larger than `SANDBOX_HOST_MAX_BODY_MB`. | Increase `SANDBOX_HOST_MAX_BODY_MB` for the sandbox host. Then apply the change to the sandbox host. |
 | A setup command cannot get its packages. | The host of the package registry is not on the allowlist. | Add the host in **How to verify the work** on the page of the module. |
@@ -347,3 +350,4 @@ For a native process, stop it and start it again.
 After a server stops during a run, its sandbox stays until
 `SANDBOX_HOST_IDLE_MS` ends. When the server starts again, it disposes of the
 sandboxes of runs that ended.
+

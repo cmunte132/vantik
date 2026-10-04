@@ -125,15 +125,23 @@ If the agent names no session, the record holds only the token.
 ## The tools
 
 The server gives 39 tools to each client. A tool that takes a task takes its
-key, for example `ENG-42`, or its id. A tool that takes a project, a team, a
-product, a module, a capability or a page takes its name, its key or its id.
+key, for example `ENG-42`, or its id. Each other reference takes a name or an
+id:
+
+| Reference | It takes |
+| --- | --- |
+| A team | Its identifier, for example `ENG`, its name, or its id. |
+| A product or a module | Its key, its name, or its id. |
+| A project or a capability | Its name or its id. |
+| A page | Its title or its id. |
+| An item in `pages_for` and `link_page` | Its id. |
 
 ### Tasks
 
 | Tool | What it does | Parameters |
 | --- | --- | --- |
 | `list_tasks` | Lists the tasks as small rows, the newest first. | `team`, `assignee` (an email, a name, or `me`), `stateCategory`, `labels`, `priority`, `project`, `product`, `modules`, `capability`, `page`, `perPage` (1 to 200). All are optional. `product` finds the tasks in the modules of the product. |
-| `get_task` | Gives everything about one task in one call: the description, the Definition of Done, the notes, the history, the sub-tasks, the relations, the links, the modules and the capability. | `task` |
+| `get_task` | Gives all of one task in one call. That is the description, the Definition of Done, the notes and the history. It also gives the sub-tasks, the relations, the links, the modules and the capability. | `task` |
 | `search_tasks` | Searches the titles, the descriptions, **and the notes**. Set `stateCategory: ["COMPLETED"]` to find an earlier fix with its resolution. | `query`, and optional `stateCategory`, `limit` (1 to 100, default 10), `modules`, `capability` |
 | `find_similar_tasks` | Gives the earlier tasks that are similar to one task, and the resolution of each. | `task` |
 | `create_task` | Files an issue. It holds an issue to a minimum: a description of 40 characters or more, and acceptance criteria for a top-level issue. Each criterion becomes an item of the Definition of Done. | `title`, `description`, and optional `acceptanceCriteria`, `team`, `state`, `assignee`, `labels`, `priority`, `parent`, `project`, `capability`, `modules` |
@@ -217,12 +225,15 @@ The hooks of your client call these tools. An agent must not call them. Read
 ### The REST endpoints below the tools
 
 Each tool calls the REST API with your token. The scopes of an agent token
-therefore apply to each tool. The tools of tasks and projects use the
-endpoints in [How to work with agents](./agents.mdx). The other tools use
+therefore apply to each tool. Read
+[How to work with agents](./agents.mdx) for the issue endpoints. The tools use
 these endpoints:
 
 | Tools | Endpoints |
 | --- | --- |
+| Tasks | `/v1/issues`, `/v1/issues/filter`, `/v1/issues/{id}`, `/v1/issues/{id}/context`, `/v1/issues/number/{number}`, `/v1/issue_comments`, `/v1/search`, `/v1/search/similar_issues`, `/v1/checklist_items` |
+| Projects | `/v1/projects`, `/v1/projects/{id}` |
+| Names of teams, members, labels and projects | `/v1/teams`, `/v1/teams/{id}/members`, `/v1/users`, `/v1/labels`, `/v1/projects` |
 | Product axis | `/v1/products`, `/v1/modules`, `/v1/modules/{id}/repos`, `/v1/modules/available_repos`, `/v1/capabilities` |
 | Knowledge | `/v1/knowledge/context`, `/v1/knowledge/search`, `/v1/knowledge/gaps`, `/v1/pages`, `/v1/pages/related`, `/v1/pages/{id}/links`, `/v1/pages/{id}/consolidate`, `/v1/page_entries` |
 | Agent runs | `GET /v1/agent_runs?issueId=` |

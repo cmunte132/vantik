@@ -426,7 +426,6 @@ test.describe('settings', () => {
   // [image, settings path under the workspace, section heading]
   const sections: Array<[string, string, string]> = [
     ['settings/access-tokens', 'settings/account/api', 'Access tokens'],
-    ['settings/connect-client', 'settings/account/api', 'Connecting a client'],
     ['settings/model-access', 'settings/agents', 'Model access'],
     ['settings/agent-accounts', 'settings/agents', 'Agent accounts'],
     ['settings/members', 'settings/members', 'Members'],
@@ -455,6 +454,20 @@ test.describe('settings', () => {
       await shot(page, name, { focus: found });
     });
   }
+
+  // The docs show the tabs and the MCP config. The skills and hooks below them
+  // have their own text on the page.
+  test('settings/connect-client', async ({ page }) => {
+    await page.goto(`${workspace}/settings/account/api`);
+    const found = section(page, 'Connecting a client');
+    await expect(found).toBeVisible();
+    // Both ends fit in the viewport only with the heading at the top.
+    const heading = found.getByText('Connecting a client', { exact: true });
+    await heading.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    await shot(page, 'settings/connect-client', {
+      focus: [heading, found.getByText(/^claude mcp add --transport/)],
+    });
+  });
 
   // These pages have more than one section, and the docs show the whole page.
   // [image, settings path under the workspace, a section heading on the page]

@@ -87,8 +87,8 @@ Hosted models receive the search text and document text. See
 **Settings → My account → API** (the **API & Agents** page) makes a token for
 an agent, and gives the MCP configuration for Claude Code, Codex, Cursor, and
 other clients. Two [agent skills](./skills/README.md) then teach the agent to
-use the tracker and the knowledge bank well. Install them from your server, which gives
-the copy that matches it:
+use the tracker and the knowledge bank well. Install them from your server,
+which gives the copy that matches it:
 
 ```bash
 DISABLE_TELEMETRY=1 npx skills add https://your-vantik-host

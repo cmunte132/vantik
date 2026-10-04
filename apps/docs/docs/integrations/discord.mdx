@@ -1,0 +1,51 @@
+---
+title: 'Discord'
+sidebar_label: "Discord"
+---
+
+## Overview
+
+The Discord integration adds a Discord bot to a Discord server. The bot reads
+the messages in the channels of that server.
+
+> **Warning:** Do not expect the Discord integration to make issues. The bot
+> only adds a message as a comment to an issue that is linked to its channel.
+> Vantik has no control that links a channel to an issue, so the bot does
+> nothing today.
+
+![The Discord settings on a server without the Discord credentials. The page
+names the two environment variables to set.](/img/docs/integrations/discord.png)
+
+## What the operator must set up
+
+- `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`. These are the client of a
+  Discord application. Without them, the page shows **Not available on this
+  deployment**.
+- The token of the bot. This goes in the `config` of the Discord row in the
+  `IntegrationDefinitionV2` table, as `botToken`. No environment variable sets
+  it. The server starts the bot only if this token is set.
+
+The bot sends each Discord event to `/api/v1/webhook/discord` on the address
+in `FRONTEND_HOST`.
+
+## How to connect Discord
+
+1. Open **Settings → Integrations**, and click **View** on **Discord**.
+2. Click **Connect**.
+3. On Discord, select the server, and allow the bot.
+
+The integration has no team mappings.
+
+To disconnect, click **Disconnect**.
+
+## What the bot does with a message
+
+When a person writes a message in a channel, the bot looks for the issue that
+is linked to that channel.
+
+- If the channel has a linked issue, the message becomes a comment on that
+  issue. The bot does not read an edit of a message.
+- If the channel has no linked issue, the bot does nothing.
+
+The bot ignores a message from a user whose name contains `Vantik`. Nothing
+goes from Vantik back to Discord.

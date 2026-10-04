@@ -3,78 +3,93 @@ title: 'Integrations: Overview'
 sidebar_label: "Overview"
 ---
 
-An **integration** connects Vantik to a tool you already use. It does two
-things, and they used to be two separate systems.
+An **integration** connects Vantik to a different tool. It does two jobs:
 
-- It **connects**: the OAuth flow, the account, the token.
-- It **reacts**: an issue changes and the integration mirrors it out, or a
-  webhook arrives and it mirrors something in.
+- It **connects**. It holds the account, and the OAuth flow or the form that
+  makes the account.
+- It **reacts**. When an issue changes, it sends the change out. When a
+  webhook comes in, it brings the data in.
 
-Both halves live in one directory, `apps/server/src/integrations/<slug>`, and
-ship with the server. The server loads one by the `slug` of its row and calls
-it.
-
-## What an integration can do
-
-An integration receives a context and asks the host to act for it. It holds no
-database connection, and no credential.
-
-| Capability | What it is for |
-| --- | --- |
-| `issues`, `comments` | Create and update the work |
-| `links` | The mapping between an issue and the thing it mirrors |
-| `workspace` | Teams, users, labels, workflows |
-| `account` | The connected account, and a person's own where they have one |
-| `vendor` | Calling the third party |
-| `attachments`, `ai`, `log` | Files, the model, and the log |
-
-`vendor.fetch` is the one to understand. The integration says *what* to call;
-the server attaches the credential and refuses any host the integration did not
-declare. So an integration never holds a token, and where it runs can change
-without the integration changing.
+The code of the two jobs is in one directory,
+`apps/server/src/integrations/<slug>`, and it ships with the server. The
+server loads an integration by the `slug` of its row, and calls it.
 
 ## What ships
 
-| Integration | What it does |
-| --- | --- |
-| GitHub | Two-way sync of issues, comments and pull requests |
-| Discord | Mirrors a channel thread into an issue, and replies back out |
-| Email | Turns an email into an issue, with its attachments |
-| Bug Enricher | Suggests a resolution on an issue labelled `bug`. No third party |
-| Local repository | A git repository on the disk of this machine |
+| Integration | What it does | Read |
+| --- | --- | --- |
+| GitHub | Links pull requests to issues, opens issues in a paired repository, and is a source of repositories | [GitHub](/integrations/github) |
+| Git remote | Repositories on Forgejo, Gitea, GitLab or a different git host over HTTP or HTTPS | [Git hosts](/integrations/git-hosts) |
+| Local repository | A git repository on the disk of the machine that runs the server | [Local repositories](/integrations/local-repositories) |
+| Email | Makes a triage issue from an email in a Gmail mailbox | [Email](/integrations/email) |
+| Discord | Adds the messages of a linked channel as comments | [Discord](/integrations/discord) |
+| Bug Enricher | Writes a possible resolution on a new issue with the `bug` label. No third party | [Bug Enricher](/integrations/bug-enricher) |
 
-## Turning one on
+## How to turn one on
 
-Connecting an integration is the whole configuration. Open **Settings →
-Integrations**, pick one, and connect it. From then on it reacts to what its
-code declares, for this workspace only:
+Open **Settings → Integrations**. Each integration shows as a card. Click
+**View** on a card to open the page of the integration.
 
-- `onRecord` names the changes it wants: an issue created, a comment added, a
-  link made. Every workspace account whose integration declares the change
-  gets it.
-- `webhooks` says it takes its vendor's own deliveries. A delivery reaches the
-  one workspace whose account it names.
+![The Integrations settings, with a card for each
+integration](/img/docs/settings/integrations.png)
 
-What an integration writes, it writes as a bot member named after it, so its
-issues and comments say where they came from. The Bug Enricher has no third
-party to authorise, so it has a **Turn on** button in place of **Connect**.
+The page of an integration shows one of these controls:
+
+- **Connect.** GitHub, Email and Discord start an OAuth flow.
+- **A form.** **Local repository** takes a path. **Git remote** takes the
+  address of a host and a token. These two have no **Connect** button.
+- **Turn on.** The Bug Enricher has no third party, so it needs no account.
+
+An integration that needs credentials from the operator of the server shows
+**Needs credentials** on its card. Its page shows **Not available on this
+deployment**, with the names of the two environment variables to set.
+
+The connection applies to this workspace only. After that, the integration
+reacts to the changes that its code declares:
+
+- `onRecord` names the changes that it wants, for example a new issue or a
+  new comment. Each connected account of the integration gets them.
+- `webhooks` says that it takes the deliveries of its vendor. A delivery goes
+  to the one workspace whose account it names.
+
+An integration writes as a bot member with the name of the integration. So
+its issues and comments show where they came from.
 
 ### Team mappings
 
-GitHub and Email route work to teams. Once the workspace account is connected,
-the integration's page shows **Team mappings**: pair a GitHub repository, or an
-email address tag, with a team. You can pair or unpair only a team you are in,
-because a pair decides where that team's issues are published. Reconnecting an
-account keeps its pairs.
+GitHub and Email send work to teams. After you connect the workspace account,
+the page of the integration shows **Team mappings**. Pair a GitHub repository
+or an email address tag with a team. You can pair or unpair only a team that
+you are a member of, because a pair decides where the issues of that team go.
+When you connect an account again, Vantik keeps its pairs.
 
-## Writing one
+## What an integration can do
 
-Integrations ship with the server, so writing one means adding a directory and
-opening a pull request. There is no separate deployment, no bundle to upload and
-no registry to publish to.
+An integration gets a context, and asks the server to act for it. It holds no
+database connection and no credential.
 
-Each directory exports a `pluginSpec` — the slug, the hosts it may reach, how
-the server builds its credential, and the `onRecord` and `webhooks` it reacts
-to — and a default handler that takes an event and the context.
+| Capability | What it is for |
+| --- | --- |
+| `issues`, `comments` | Make and change the work |
+| `links` | The link between an issue and the thing that it mirrors |
+| `workspace` | Teams, users, labels and workflows |
+| `account` | The connected account |
+| `vendor` | Calls to the third party |
+| `attachments`, `ai`, `log` | Files, the model and the log |
 
-To suggest an integration rather than write one, open an issue on GitHub.
+`vendor.fetch` is the most important capability. The integration says which
+address to call. The server adds the credential, and it refuses each host that
+the integration did not declare. So an integration never holds a token.
+
+## How to write an integration
+
+An integration ships with the server. To write one, add a directory and open a
+pull request. You do not deploy it separately.
+
+Each directory exports a `pluginSpec` and a default handler:
+
+- The `pluginSpec` gives the slug, the hosts that the integration can call,
+  how the server makes its credential, and its `onRecord` and `webhooks`.
+- The handler takes an event and the context.
+
+To suggest an integration, open an issue on GitHub.

@@ -5,33 +5,116 @@ sidebar_label: "GitHub"
 
 ## Overview
 
-The GitHub integration keeps your development process in step with Vantik:
+The GitHub integration connects a workspace to a GitHub App installation. It
+does these things:
 
-- **Link a pull request.** Link a pull request to the related Vantik issue.
-  When a person closes the pull request, the linked Vantik issue moves to
-  "Done".
-- **Open the issue on GitHub too.** A new issue in a team paired with a
-  repository is opened in that repository, and the two are linked.
-- **Keep both sides in step.** A change to a linked issue goes out to GitHub,
-  and a comment on either side appears on the other.
+- **It links pull requests to issues.** When a linked pull request merges,
+  the issue moves to done.
+- **It opens issues on GitHub.** A new issue in a team that is paired with a
+  repository opens in that repository too.
+- **It sends changes of an issue to GitHub.** A change to a linked issue goes
+  out to the GitHub issue.
+- **It is a source of repositories.** Modules and agent runs can use the
+  repositories of the installation. Read
+  [How to link a module to a repository](/fundamentals/product-axis#how-to-link-a-module-to-a-repository).
 
-## How to configure the integration
+![The GitHub settings, with the connected account and one team paired with a
+repository](/img/docs/integrations/github.png)
 
-### Connect GitHub
+## Before you connect
 
-1. Open **Settings → Integrations → GitHub**.
-2. Give Vantik access to your GitHub account.
-3. Select the GitHub organisation for the connection.
-4. Select all the repositories, or select the repositories that you want.
+The operator of the server must set `GITHUB_CLIENT_ID` and
+`GITHUB_CLIENT_SECRET`, and then start the server again. Without them, the
+page shows **Not available on this deployment**.
 
-### Pair teams with repositories
+The **Connect** button opens the installation page of the GitHub App with the
+name `vantik-bot`. The server signs in as this App with an App id and a
+private key. These come from the `config` of the GitHub row in the
+`IntegrationDefinitionV2` table, as `appId` and `privateKey`. No environment
+variable sets them.
 
-1. On the same page, under **Team mappings**, pick a repository and a team,
-   then click **Pair**.
-2. A new issue in that team is now opened in that repository as well.
+GitHub sends its events to `/v1/webhook/github` on the server. Set this
+address as the webhook URL of the App.
 
-Notes:
+## How to connect GitHub
 
-- You can pair or unpair only a team you are in.
-- Reconnecting GitHub, for example to give it another repository, keeps the
-  pairs.
+1. Open **Settings → Integrations**, and click **View** on **GitHub**.
+2. Click **Connect**.
+3. On GitHub, select the organization or the account for the installation.
+4. Select all the repositories, or only the repositories that you want.
+
+Vantik keeps the list of the repositories of the installation. To change the
+list, change the installation on GitHub, and connect again. When you connect
+again, Vantik keeps the team mappings.
+
+To disconnect, click **Disconnect**.
+
+## How a pull request links to an issue
+
+Vantik links a pull request to an issue in two ways:
+
+- **The branch name.** When a person opens a pull request, Vantik reads the
+  name of its branch. The name must have the form `<name>/<team>-<number>`,
+  for example `ada/eng-42`.
+- **The commit messages.** If the branch name does not have that form, Vantik
+  reads the commit messages. It also reads them again after each push. A
+  commit message must name the issue in brackets, for example `(ENG-42)`.
+
+> **Warning:** In both forms, the `<team>` part must be the **name** of the
+> team, not its identifier. The match is exact. A team with the name
+> "Engineering" does not match `eng-42` or `(ENG-42)`.
+
+When Vantik links a pull request, the GitHub App writes a comment on the pull
+request. The comment links to the issue.
+
+## When the issue moves to done
+
+When a pull request closes, Vantik moves the linked issue to the first state
+of the **Completed** category of its team. This occurs only if both of these
+are true:
+
+- the pull request merged;
+- it was the last open pull request that is linked to the issue.
+
+A pull request that closes without a merge does not change the issue.
+
+## What goes from Vantik to GitHub
+
+- **A new issue.** A new issue in a team that is paired with a repository
+  opens in that repository. Vantik links the two issues.
+- **A change to an issue.** Vantik sends the title, the description and the
+  labels to the linked GitHub issue. Vantik also adds the label `Vantik`. An
+  issue in a **Completed** or **Canceled** state closes on GitHub. A change
+  never goes to a pull request.
+- **A reply to a comment.** A reply in Vantik to a comment that came from
+  GitHub goes to GitHub. A new comment in Vantik that is not a reply stays in
+  Vantik.
+
+## What comes from GitHub to Vantik
+
+GitHub sends only two kinds of events to Vantik: pull request events and new
+comments.
+
+- A new comment on a linked GitHub issue becomes a comment on the Vantik
+  issue. An edit or a deletion of a comment on GitHub does not change Vantik.
+- An edit of a GitHub issue does not come back to Vantik. Change the issue in
+  Vantik.
+
+## Pair teams with repositories
+
+The **Team mappings** section shows after you connect.
+
+1. Select a repository in **Pick a repository**.
+2. Select a team in **Pick a team**.
+3. Click **Pair**.
+
+A new issue in that team then opens in that repository too. You can pair or
+unpair only a team that you are a member of. To unpair, click the delete
+button on the row of the pair.
+
+## Agent runs on GitHub repositories
+
+An agent run fetches the code with the token of the installation. To push its
+branch and open its pull request, the run uses the git token in
+[Repository access](/settings/agents#repository-access). If that token is not
+set, the run uses the token of the installation.

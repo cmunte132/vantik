@@ -451,6 +451,50 @@ test.describe('settings', () => {
   });
 });
 
+test.describe('integrations', () => {
+  /** Opens the page of one integration from the list in the settings. */
+  async function integration(page: Page, name: string) {
+    await page.goto(`${workspace}/settings/integrations`);
+    await page.getByText(name, { exact: true }).click();
+    const found = section(page, name);
+    await expect(found).toBeVisible();
+    return found;
+  }
+
+  // [image, card name, whether the page also has a Team mappings section]
+  const integrations: Array<[string, string, boolean]> = [
+    ['integrations/git-hosts', 'Git remote', false],
+    ['integrations/local-repositories', 'Local repository', false],
+    ['integrations/github', 'GitHub', true],
+    ['integrations/email', 'Email', true],
+    ['integrations/discord', 'Discord', false],
+    ['integrations/bug-enricher', 'Bug Enricher', false],
+  ];
+
+  for (const [name, card, mapped] of integrations) {
+    test(name, async ({ page }) => {
+      const found = await integration(page, card);
+      const focus = [found];
+      if (mapped) {
+        const mappings = section(page, 'Team mappings');
+        await expect(mappings).toBeVisible();
+        focus.push(mappings);
+      }
+      await shot(page, name, { focus });
+    });
+  }
+
+  // The list of a module's Connect a repository button, which offers the
+  // repositories of every connected source.
+  test('integrations/repository-picker', async ({ page }) => {
+    await page.goto(`${workspace}/module/${run.seeded.catalogModuleKey}`);
+    await page.getByRole('button', { name: 'Connect a repository' }).click();
+    const list = page.getByRole('dialog');
+    await expect(list.getByText('acme/catalog-service', { exact: true })).toBeVisible();
+    await shot(page, 'integrations/repository-picker', { focus: list, padding: 0 });
+  });
+});
+
 test.describe('concepts', () => {
   test('workspace menu', async ({ page }) => {
     await allIssues(page);

@@ -1,0 +1,105 @@
+---
+title: 'Local repositories'
+sidebar_label: "Local repositories"
+---
+
+## Overview
+
+The **Local repository** integration gives Vantik a git repository that is on
+the disk of the machine that runs the server. It needs no account and no
+token. You give the path of the repository.
+
+A local repository is a source for modules, as a git host is. Read
+[How to link a module to a repository](/fundamentals/product-axis#how-to-link-a-module-to-a-repository).
+
+The server never reads the work tree of the directory. It fetches the
+commits from the directory, and it pushes the branch of an agent run back to
+it. It does not open a pull request.
+
+Only a workspace admin can add or remove a local repository. Each member can
+see the list.
+
+![The Local repository settings, with one repository and the field for a new
+path](/img/docs/integrations/local-repositories.png)
+
+## The directory that the server can read
+
+The server takes a repository only from inside one directory. The operator of
+the server sets this directory with `LOCAL_REPO_ROOT`.
+
+- If `LOCAL_REPO_ROOT` is not set, the server uses the home directory of the
+  account that runs it.
+- In the Docker Compose deployment, Docker mounts `LOCAL_REPO_ROOT` into the
+  server container at the same path. If it is not set, the server gets an
+  empty directory, and you cannot add a local repository.
+
+> **Warning:** Do not set `LOCAL_REPO_ROOT` to your home directory. The server
+> can then read each file in it, for example the files in `~/.ssh`. Set it to
+> the directory that holds your checkouts, for example `/Users/you/Code`.
+
+## How to add a local repository
+
+1. Open **Settings → Integrations**, and click **View** on **Local
+   repository**.
+2. Type the absolute path of the repository, for example
+   `/Users/you/Code/your-project`.
+3. Click **Add**.
+
+The name of the repository in Vantik is the name of its directory.
+
+The server checks the path before it adds it. It refuses the path if:
+
+- the path is relative;
+- the path is not inside `LOCAL_REPO_ROOT`, or it is `LOCAL_REPO_ROOT` itself;
+- the path does not exist, or it is a file;
+- the directory has no `.git`. A `.git` file is correct, so a git worktree can
+  be a local repository;
+- the workspace has the path already.
+
+Vantik shows the reason below the field.
+
+To remove a local repository, click the delete button on its row. This does
+not change the directory on the disk.
+
+## The repository mirror
+
+The server keeps its own copy of each repository that it reads. This
+copy is the **repository mirror**. The server makes a mirror for each source:
+a local repository, a git host, and GitHub.
+
+A mirror is a bare git repository. It holds the branches of the repository,
+and no tags. The server makes it the first time that a part of Vantik needs
+the code.
+
+These parts of Vantik read the code from the mirror:
+
+- **Agent runs in the hosted sandbox.** The server makes the checkout of a run
+  from the mirror. It pushes the branch of the run through the mirror.
+- **The folder picker of a module.** The folders that you can select for a
+  module come from the mirror.
+- **The knowledge bank.** The knowledge verifier and the checks of the
+  citations read the cited files from the mirror. Read
+  [Knowledge](/fundamentals/knowledge).
+
+### How current the mirror is
+
+The server fetches the source again when the mirror is more than 60 seconds
+old. Before the checkout of an agent run, the server always fetches. If a part
+of Vantik asks for a commit that the mirror does not have, the server fetches
+at once. It does this a maximum of one time in 10 seconds.
+
+### The size limit
+
+A hosted agent run can start only from a repository of 256 MB or less, packed.
+For a larger repository, the run fails with a message that gives the size.
+
+### Where the mirror is
+
+The operator of the server sets the directory of the mirrors with
+`REPO_MIRROR_ROOT`. The default is `~/.vantik/repos`. In the Docker Compose
+deployment, the directory is `/data/repos` on the `repo-mirrors` volume.
+
+You can delete this directory. The server then fetches each repository again.
+The server does not delete a mirror when you remove a repository.
+
+No page of the webapp shows the mirror.

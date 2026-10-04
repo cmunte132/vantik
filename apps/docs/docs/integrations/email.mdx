@@ -5,17 +5,86 @@ sidebar_label: "Email"
 
 ## Overview
 
-Send an email to a team's address. The Email integration makes a triage issue
-in that team, with the email thread in the description and its attachments on
-the issue. A reply in the same thread goes onto the same issue.
+The Email integration makes a triage issue from an email. It works only with
+Gmail.
 
-## How to configure the integration
+The deployment has one Gmail mailbox. Each workspace that connects the Email
+integration uses that mailbox. An address tag in the email sends it to a
+workspace and to a team.
 
-1. Open **Settings → Integrations → Email** and connect the mailbox.
-2. Under **Team mappings**, pair an address tag with a team — for example
-   `support` with your Support team.
-3. Mail sent to `you+workspace-support@…` now lands in triage of that team,
-   where `workspace` is this workspace's slug and `you@…` is the mailbox you
-   connected.
+![The Email settings, with the connected account and the address tag support
+paired with a team](/img/docs/integrations/email.png)
 
-Mail whose tag has no pair is left alone.
+## What the operator must set up
+
+The Email integration needs these things from the operator of the server:
+
+- `EMAIL_CLIENT_ID` and `EMAIL_CLIENT_SECRET`. These are the client of a
+  Google OAuth app. The server uses them to get a new Gmail token. Without
+  them, the page shows **Not available on this deployment**.
+- A refresh token for the Gmail mailbox, and a redirect URL. These go in the
+  `config` of the Email row in the `IntegrationDefinitionV2` table, as
+  `refreshToken` and `redirectUrl`. No environment variable sets them.
+- A process that tells Vantik about each new email. Vantik does not watch the
+  mailbox itself. Read [The webhook](#the-webhook).
+
+> **Warning:** The **Connect** button sends the browser to
+> `https://app.vantik.dev/api/v1/oauth/callback/email`. The code holds this
+> address, and no setting changes it. On a server at a different address,
+> the connection does not complete.
+
+## The address of a team
+
+An email must go to an address with this form:
+
+```
+<mailbox>+<workspace>-<tag>@<domain>
+```
+
+- `<workspace>` is the slug of the workspace. Vantik reads the slug up to the
+  first `-`. So a workspace whose slug has a `-` cannot get email.
+- `<tag>` is the tag that you pair with a team.
+
+For example, if the mailbox is `help@acme.example` and the workspace slug is
+`acme`, then `help+acme-support@acme.example` goes to the team that is paired
+with `support`.
+
+## How to pair a tag with a team
+
+The **Team mappings** section shows after you connect.
+
+1. Type the tag, for example `support`.
+2. Select a team in **Pick a team**.
+3. Click **Pair**.
+
+You can pair or unpair only a team that you are a member of. Vantik does not
+use an email whose tag has no pair.
+
+## What Vantik makes from an email
+
+- The issue goes into the first **Triage** state of the team.
+- The title of the issue is the subject of the email.
+- The description is the body of the email. The images and the files of the
+  email go onto the issue.
+- The issue links to the email thread in Gmail.
+
+A reply in the same thread does not make a new issue. It replaces the
+description of the issue with the body of the reply. The images and the files
+that are on the issue stay.
+
+## The webhook
+
+Vantik takes each new email at `POST /v1/webhook/email` on the server. The
+body is JSON with two fields:
+
+```json
+{ "to": "help+acme-support@acme.example", "messageId": "<the Gmail message id>" }
+```
+
+Vantik finds the workspace from `to`. It then reads the message from Gmail
+with `messageId`. It reads the tag from the `Delivered-To` header of the
+message.
+
+Vantik has no Gmail push subscription of its own. You must run a process that
+sends this request for each new email in the mailbox. The webhook does not
+check a signature, so do not expose it to the public network.

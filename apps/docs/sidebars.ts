@@ -49,7 +49,10 @@ const sidebars: SidebarsConfig = {
       items: [
         'integrations/overview',
         'integrations/github',
+        'integrations/git-hosts',
+        'integrations/local-repositories',
         'integrations/email',
+        'integrations/discord',
         'integrations/bug-enricher',
       ],
     },

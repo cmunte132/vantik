@@ -5,15 +5,38 @@ sidebar_label: "Bug Enricher"
 
 ## Overview
 
-A person creates an issue in Vantik with the `bug` label on it. The Bug
-Enricher then does two steps:
+The Bug Enricher writes a possible resolution on a new bug. It does these
+steps when a person makes an issue that has the `bug` label:
 
-1. It sends the description of the issue to this deployment's AI model, and it
-   asks that model for a possible resolution.
-2. It adds the answer as a comment on the issue.
+1. It sends the description of the issue to the AI model of the deployment,
+   and it asks for a possible resolution.
+2. It adds the answer as a comment on the issue. The Bug Enricher bot writes
+   the comment.
 
-It talks to no third party, so it needs no account. Open **Settings →
-Integrations → Bug Enricher** and click **Turn on**.
+It talks to no third party, so it needs no account.
+
+![The Bug Enricher settings, with the Turn on
+button](/img/docs/integrations/bug-enricher.png)
+
+## How to turn it on
+
+1. Open **Settings → Integrations**, and click **View** on **Bug Enricher**.
+2. Click **Turn on**.
+
+The Bug Enricher then acts only for this workspace. To stop it, click **Turn
+off**.
+
+## When it acts
+
+- It acts only when the issue is made. If a person adds the `bug` label
+  later, the Bug Enricher does nothing.
+- The label must have the name `bug`. The case of the letters is not
+  important, so `Bug` also matches.
+- The operator of the server must set the AI model: `LLM_BASE_URL`,
+  `LLM_API_KEY` and `LLM_MODEL`. Without them, the Bug Enricher writes no
+  comment. Read [Self-deployment](/oss/self-deployment#ai-features).
+- If the answer of the model does not have the form that the Bug Enricher
+  asks for, the Bug Enricher writes no comment.
 
 :::tip
 The code is in

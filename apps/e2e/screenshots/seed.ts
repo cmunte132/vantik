@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { type APIRequestContext } from '@playwright/test';
 
 import { ok, workflows, type Issue, type Label } from '../src/api';
@@ -29,6 +31,8 @@ export interface Seeded {
   featuredIssueTitle: string;
   /** A triage issue with suggested modules, by its number in the team. */
   suggestedIssueNumber: number;
+  /** A module with no repository, for the repository picker. */
+  catalogModuleKey: string;
   agents: SeededAgents;
 }
 
@@ -494,6 +498,8 @@ export async function seedWorkspace(
     'moving an issue as Alan',
   );
 
+  await integrations(db, owner);
+
   const agents = await seedAgents(api, db, {
     owner,
     clockAt,
@@ -517,5 +523,73 @@ export async function seedWorkspace(
     viewId: view.id,
     featuredIssueTitle,
     suggestedIssueNumber: safari.number,
+    catalogModuleKey: catalog.key,
   };
+}
+
+/**
+ * The connected integrations that the integration pages show. Each one is a
+ * row, because each real connection reaches outside the stack: GitHub and
+ * Gmail through OAuth, and a git host through its API. The git host has no
+ * token, because a token is an encrypted credential that only the server can
+ * write.
+ */
+async function integrations(db: Database, owner: Account) {
+  const definition = async (slug: string) => {
+    const [found] = await db.query<{ id: string }>(
+      `SELECT id FROM "IntegrationDefinitionV2" WHERE slug = $1 AND deleted IS NULL`,
+      [slug],
+    );
+    if (!found) throw new Error(`the server has no ${slug} integration`);
+    return found.id;
+  };
+  const account = async (
+    slug: string,
+    accountId: string,
+    integrationConfiguration: Record<string, unknown>,
+    settings: Record<string, unknown>,
+  ) =>
+    db.insert('IntegrationAccount', {
+      integrationConfiguration,
+      accountId,
+      settings,
+      integratedById: owner.userId,
+      integrationDefinitionId: await definition(slug),
+      workspaceId: owner.workspaceId,
+    });
+
+  const forgejo = 'https://forgejo.example.com';
+  await account(
+    'git-remote',
+    forgejo,
+    { kind: 'forgejo', baseUrl: forgejo, username: 'vantik-bot' },
+    {
+      repositories: ['catalog-service', 'payments-service'].map((name) => ({
+        id: randomUUID(),
+        fullName: `acme/${name}`,
+        cloneUrl: `${forgejo}/acme/${name}.git`,
+        webUrl: `${forgejo}/acme/${name}`,
+        defaultBranch: 'main',
+        addedAt: new Date().toISOString(),
+      })),
+    },
+  );
+
+  const storefront = { id: '734810233', fullName: 'acme/storefront' };
+  await account(
+    'github',
+    '61022411',
+    {},
+    {
+      repositories: [storefront, { id: '734810877', fullName: 'acme/docs' }],
+      teamMappings: [{ source: storefront.id, teamId: owner.teamId }],
+    },
+  );
+
+  await account(
+    'email',
+    'support@acme.example',
+    {},
+    { teamMappings: [{ source: 'support', teamId: owner.teamId }] },
+  );
 }

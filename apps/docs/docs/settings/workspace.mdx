@@ -58,7 +58,8 @@ a workspace label.
 ## Members
 
 The **Members** section lists the members of the workspace, with the role of
-each member. A member that an admin suspended shows under **Suspended**. Use
+each member. The list also shows the agents of the workspace, with the role
+`AGENT`. Read [Roles](/concepts#roles). A member that an admin suspended shows under **Suspended**. Use
 **Filter by name** to find a member by name or by email.
 
 ![The Members settings, with the list of members and their
@@ -93,8 +94,13 @@ Only an admin sees the menu on the row of a member.
 1. Click **...** on the row of the member.
 2. Select **Suspend**.
 
-A suspended member cannot use the workspace. The webapp has no way to undo a
-suspension. It also has no way to change the role of a member, or to remove a
+The webapp does not let a suspended member open the workspace.
+
+> **Warning:** Do not rely on a suspension to stop the access tokens of a
+> member. Vantik does not check the suspension when a token is used. The
+> tokens of a suspended member still work.
+
+The webapp has no way to undo a suspension. It also has no way to change the role of a member, or to remove a
 member from the workspace.
 
 To add a member to a team or to remove a member from a team, use the

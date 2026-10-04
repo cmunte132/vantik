@@ -114,10 +114,16 @@ feature is off by default.
 > person with this key and an account can sign in as any user.
 
 1. In `.env`, set `IMPERSONATION_KEY` to a long random value.
-2. Restart the server.
+2. Make the server container again, so that it reads `.env`:
+
+   ```bash
+   docker compose up -d server
+   ```
+
 3. Sign in to the webapp with your own account.
 4. Go to `/x/admin`. No link in the webapp goes to this page.
-5. In **UserId**, type the ID of the user.
+5. In **UserId**, type the ID of the user. The ID is in the `id` column of
+   the `User` table of the database.
 6. In **Key**, type the value of `IMPERSONATION_KEY`.
 7. Click **Submit**.
 

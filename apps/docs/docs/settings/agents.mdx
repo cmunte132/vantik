@@ -27,7 +27,7 @@ The page has these sections, in this order:
 ## Model access
 
 This section holds the keys of the model providers that agent runs call.
-Without a key, no agent run can start.
+Without a key, Vantik cannot start a run in its hosted sandbox.
 
 ![The Model access section, with one provider key and the defaults of a
 run](/img/docs/settings/model-access.png)
@@ -39,8 +39,8 @@ who delegated selected. If the person kept **Workspace default**, the run uses
 the model of this section.
 
 An agent run never uses a key from the environment of the server, for example
-from the `.env` file of the deployment. If the workspace has no key here, the
-run does not start.
+from the `.env` file of the deployment. If the workspace has no key here, a
+run in the hosted sandbox does not start.
 
 ### How to add a provider key
 
@@ -48,8 +48,8 @@ run does not start.
    another provider**.
 2. Select the **Provider**.
 3. Paste the key in **API key**.
-4. If the provider needs an endpoint, type it in **Endpoint**. Azure OpenAI
-   needs an endpoint. For some other providers, the endpoint is optional.
+4. If you selected Azure OpenAI, type the endpoint of your deployment in
+   **Endpoint**. Only Azure OpenAI has this field, and it is required.
 5. Click **Check and save**. If the provider has no list of models, the button
    is **Save**.
 
@@ -60,17 +60,19 @@ Before Vantik stores the key, it asks the provider for its list of models. If
 the provider refuses the key, Vantik does not store it. If Vantik cannot reach
 the provider, Vantik stores the key and tells you so.
 
-The workspace has one key for each provider. If you add a key for a provider
-that has a key, the new key replaces the old key.
+The workspace has one key for each provider. The **Provider** list shows only
+the providers that have no key.
 
 Each provider row shows the number of models that the key opens, or **not
-checked**. To remove a key, click **Remove** on its row.
+checked**. To remove a key, click **Remove** on its row. To change a key,
+remove it, and then add the provider again.
 
 ### How Vantik keeps a key
 
 Vantik encrypts each key before it stores it. The server uses the
 `CREDENTIAL_ENCRYPTION_KEY` of the deployment for this. Vantik never shows a
-key again after you save it. It shows only the last four characters of the key.
+key again after you save it. For a key of 12 characters or more, it shows the
+last four characters. For a shorter key, it shows no characters.
 
 ### The defaults of a run
 
@@ -113,7 +115,6 @@ To add the token:
 To change the token, click **Replace**. To delete it, click **Remove**.
 
 If no token is set, Vantik uses the token of the GitHub app of the workspace.
-A runner of your own uses its local git credentials. It does not need this token.
 
 ![The Repository access section, with no token set and the Add
 button](/img/docs/settings/repository-access.png)
@@ -136,8 +137,8 @@ Above the table, the section shows a note about the sample:
 
 - If a row has no finished runs, the note tells you that there is nothing to
   compare.
-- If a row has less than 30 finished runs, the note tells you that a
-  difference can be chance.
+- If the smaller row has less than 30 finished runs, the note tells you that
+  a difference can be chance.
 
 The section also shows the part of the runs that Vantik holds out. The operator
 of the server sets it with `KNOWLEDGE_HOLDOUT_RATE`. This page has no control
@@ -153,9 +154,10 @@ person. This section is read-only.
 
 The table has one row for each kind of decision. For each row, it shows the
 agreement (kappa), the number of verdicts, how the verdicts fell, and what
-triage does now. If the kappa of a row falls below the limit, a person makes
-that decision until the agreement recovers. The text above the table gives the
-limit.
+triage does now. A row needs a minimum number of verdicts. If a row has that
+number and its kappa is below the limit, a person makes that decision. This
+stays so until the agreement recovers. The text above the table gives the limit
+and the minimum number.
 
 If triage is in shadow, triage only records what it would do. A person makes
 each decision. The **Now** column then shows **Not acting while triage is in

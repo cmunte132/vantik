@@ -173,7 +173,7 @@ container cannot reach a native sandbox host on Linux.
 
 ## Configuration
 
-The server reads two of these settings. The sandbox host reads the others. Each
+The **Read by** column tells which part reads each setting. Each
 one goes in `.env`.
 
 | Variable | Read by | Default | What it does |
@@ -264,7 +264,8 @@ Keep `qemu`. In the tests of this project, krun did not make a run faster.
   server. Read [Model access](/settings/agents#model-access).
 - **No git token in the guest.** The server fetches the repository, and sends
   it to the guest as an archive. After the work, the server reads the tree
-  back. Then the server pushes the branch and opens the pull request.
+  back. Then the server pushes the branch. If the git host has pull requests, the
+  server also opens one.
 - **No Vantik token in the guest.** The Vantik tools in the guest write lines
   to an outbox file. After each pass, the server reads the file and checks each
   line. Then it applies the line as the agent of the run. A note becomes a

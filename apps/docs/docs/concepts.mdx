@@ -1,0 +1,168 @@
+---
+title: Concepts
+description: Workspaces, teams, issue keys, roles, and the two kinds of agent
+---
+
+This page tells you the words that the other pages use.
+
+## Workspaces
+
+A workspace is the top level of Vantik. Nothing goes from one workspace to a
+different workspace. A workspace holds its members, its teams, its labels, its
+integrations, its projects, its products, its pages, and its agent runs.
+
+The name of the workspace is at the top of the sidebar, with the number of its
+members. Click it to open a menu with two items:
+
+- **Workspace settings**
+- **Invite & manage members**
+
+![The workspace menu at the top of the sidebar. It shows the workspace Acme
+with 5 members, and the items Workspace settings and Invite & manage
+members.](/img/docs/concepts/workspace-menu.png)
+
+The person who makes a workspace is its first admin.
+
+## Teams
+
+A team is a group of members in a workspace. A team holds its issues, its
+workflow states, its cycles, its views, its issue templates and its own labels.
+
+A team is also the boundary for what a person can see. You can see the issues
+of the teams that you are a member of, and no other issues. A label that
+belongs to the workspace, and a page, are for all members of the workspace.
+
+The sidebar shows your teams under **Your teams**. Click a team to show its
+links: **Issues** and **Views**. If the team uses cycles, the links **Cycles**
+and **Current** also show.
+
+![The Your teams group in the sidebar. The Engineering team is open, and it
+shows the links Issues, Views, Cycles and Current. The Design team is
+closed.](/img/docs/concepts/teams.png)
+
+To make a team, click **+** (**Add team**) next to **Your teams**. Then give a
+team name and a team identifier. Only an admin can make a team. When an admin
+makes a team, Vantik adds the admin, all the other admins, and all the bots of
+the workspace to it.
+
+To see all the teams of the workspace, click **Teams** in the sidebar. An admin
+uses this page to join a team or to leave a team.
+
+## Team identifiers and issue keys
+
+Each team has an identifier, for example `ENG`. Each issue in a team has a
+number. Vantik gives the first issue of a team the number 1, and each new
+issue the next number.
+
+The key of an issue is the identifier of its team and the number of the issue,
+for example `ENG-123`. Vantik does not keep the key. It makes the key from the
+team identifier each time. Thus, if you change the identifier of a team in the
+team settings, the key of every issue in that team also changes. The old keys
+then find no issue.
+
+### How to move an issue to a different team
+
+Open the issue, open its menu, and select **Move to team**. When you move an
+issue, Vantik does these steps:
+
+- It gives the issue the next number in the new team. Thus the issue gets a new
+  key, and the old key finds no issue.
+- It changes the state of the issue to the state in the new team with the same
+  name and category. If the new team has no state with that name, Vantik uses
+  the first state of the same category.
+- It keeps the labels of the workspace, and it removes the labels of the old
+  team.
+- It keeps the assignee only if the assignee is a member of the new team.
+- It moves the sub-issues of the issue to the new team too.
+
+## Roles
+
+Each member of a workspace has one role.
+
+| Role | Who has it |
+| --- | --- |
+| `ADMIN` | The person who made the workspace, and each person that an admin invites as **Admin**. |
+| `USER` | Each person that an admin invites as **User**. This is the default in the invite form. |
+| `BOT` | The account of an integration. Vantik makes one bot for each integration in a workspace, and the bot writes what the integration writes. |
+| `AGENT` | An agent. See [Agents](#agents). |
+
+To invite a person, open **Invite & manage members** and click **Add member**.
+Only an admin can invite a person.
+
+These actions are for admins only:
+
+- Delete an issue.
+- Make or delete a team, and add or remove a member of a team.
+- Invite a person, suspend a member, and change the preferences of the
+  workspace.
+- Start automatic cycles, and change, stop or delete a cycle.
+- Add or remove the model keys that agent runs use.
+- Connect a local repository or a git host.
+- Make a workspace agent, and revoke the agent of a different person.
+
+An admin can read the name and the members of every team. But an admin can see
+only the issues of the teams that the admin is a member of. The role does not
+change that.
+
+## Agents
+
+An agent is a member of the workspace with the `AGENT` role. An agent is not a
+person and not a bot. Its changes show the name of the agent, not the name of
+the person who connected it.
+
+An agent has scopes: read, write, and delete. The default scopes are read and
+write, without delete.
+
+### Personal agents and workspace agents
+
+There are two kinds of agent.
+
+- **A personal agent** belongs to the person who made it. Any member can make
+  one. Open **Settings**, then **API** under **My account**. In the **Access
+  tokens** section, set **Acts as** to an agent. Vantik then shows a token one time. Copy the token
+  and paste it into your agent, for example into an MCP client configuration.
+  Vantik keeps only a hash of the token, so it cannot show the token again.
+- **A workspace agent** belongs to the workspace, not to one person. Only an
+  admin can make one, and only an admin can revoke it. Vantik never makes a
+  token for a workspace agent. A token that no person owns has no person to
+  change it or to see a leak, so Vantik does not make one.
+
+An admin sees all the agents of the workspace in the **Agent accounts** section
+of **Settings** → **Agents**.
+
+### Agent runs
+
+A person starts an agent run from an issue, with the **Delegate to an agent**
+button. There is no other way to start a run. An agent cannot start a run.
+
+A hosted run uses its own agent identity, one for each issue, with a name such
+as "Fuzzy Zebra". Vantik gives this identity no token. The sandbox of the run
+holds no Vantik credential. The agent writes its notes and facts to a file in
+the sandbox, and the server reads the file, checks each line, and applies it
+as the agent of the run.
+
+Read [The review cycle](/agents/review-cycle) to learn how Vantik checks the
+work of a run.
+
+## Products, modules and capabilities
+
+These three records tell where the code is and what it does. Together they are
+the product axis.
+
+- A **product** is a thing that the company ships. It holds no code and no
+  issues. It groups modules.
+- A **module** is where the code is. Usually a module is one repository, but it
+  can also be a path in a repository or one service. A product owns a module
+  that goes to customers. A team owns a module that holds internal tools.
+- A **capability** is what the software does. The modules that it needs give a
+  capability its identity, because one capability usually needs code in more
+  than one module.
+
+The sidebar shows the products under **Products**, and each team shows the
+modules that it owns.
+
+## Pages
+
+Pages are the knowledge bank of the workspace. A page is a document that
+people write and read. An agent adds facts to a page as entries. Each entry is
+one fact, with its source. Read [Knowledge](/fundamentals/knowledge).

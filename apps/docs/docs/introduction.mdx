@@ -4,23 +4,58 @@ slug: /
 sidebar_label: "Home"
 ---
 
-Vantik is an issue tracker for developers, and the open-source community builds
-it. It is simple, it is small, and you can change it.
+Vantik is an issue tracker for people and for agents. You host it yourself, and
+you can change it, because it is open source.
 
+![The issue page of Vantik. The issue has a description, a Definition of Done
+with three criteria, sub-issues, comments, and a Delegate to an agent
+button.](/img/docs/issues/issue.png)
 
-- **[How to start](/quickstart)** - Learn how to use Vantik
+## What Vantik does
 
+- **Issues.** Teams track work as issues, with states, labels, cycles, projects
+  and views. Each issue can have a Definition of Done: a list of criteria that
+  the work must meet. Read [Issues](/fundamentals/issues).
+- **Agents.** An agent is a member of the workspace that does work. You connect
+  your own agent, for example a coding assistant, through the MCP server. Read
+  [How to connect an MCP client](/api-reference/connect-mcp).
+- **Agent runs.** On an issue, a person can delegate the work to an agent. The
+  agent then works on the issue in the background, in an agent run. When the
+  run ends, the agent posts a comment on the issue that tells what it did. If
+  the run opened a pull request, Vantik links the pull request to the issue. Read
+  [The review cycle](/agents/review-cycle).
+- **The knowledge bank.** Pages hold what the workspace knows about its own
+  software. People read and write pages. Agents read pages and add facts to
+  them. Read [Knowledge](/fundamentals/knowledge).
+- **The product axis.** A product is a thing that you ship. A module is where
+  the code is, usually one repository. A capability is what the software does.
+  An issue can name the modules and the capability that it changes. Read
+  [Concepts](/concepts#products-modules-and-capabilities).
 
-  - **[User guide](/fundamentals/issues)** - Read about the features of Vantik and how to use them
+## Integrations
 
+An integration connects Vantik to a tool that you use. Vantik has these
+integrations:
 
-  - **[Integrations](/integrations/overview)** - Connect GitHub, Discord and email to your workflows
+- **GitHub**: two-way sync of issues, comments and pull requests.
+- **Git hosts**: a Forgejo, Gitea or GitLab host, or any git host that serves
+  HTTP or HTTPS.
+- **Local repositories**: a git repository on the disk of the server machine.
+- **Discord**: a channel thread becomes an issue, and replies go back.
+- **Email**: an email becomes an issue, with its attachments.
+- **Bug Enricher**: posts a suggested resolution on each new issue with the
+  `bug` label. The model of the server writes it.
 
+Read [Integrations](/integrations/overview).
 
-  - **[Self-host](/oss/self-deployment)** - Run Vantik on your own cloud
+## Where to start
 
+- **[Quickstart](/quickstart)**: run Vantik on your computer.
+- **[Concepts](/concepts)**: workspaces, teams, issue keys, roles and agents.
+- **[Self-host](/oss/self-deployment)**: run Vantik on your own server.
+- **[API reference](/api-reference/overview)**: the REST API.
 
-### How to contribute
+## How to contribute
 
 Every contribution is welcome, small or large. If you do not know where to
-start, open an issue on GitHub.
+start, open an issue on [GitHub](https://github.com/cmunte132/vantik/issues).

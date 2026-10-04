@@ -342,6 +342,30 @@ test.describe('settings', () => {
   }
 });
 
+test.describe('concepts', () => {
+  test('workspace menu', async ({ page }) => {
+    await allIssues(page);
+    // The trigger names the workspace and counts its members.
+    const trigger = page
+      .locator('[data-sidebar="rail-item"]')
+      .filter({ hasText: /members?$/ });
+    await trigger.click();
+    await expect(page.getByRole('menuitem', { name: 'Workspace settings' })).toBeVisible();
+    await shot(page, 'concepts/workspace-menu', {
+      focus: [trigger, page.getByRole('menu')],
+      highlight: trigger,
+    });
+  });
+
+  test('teams', async ({ page }) => {
+    await allIssues(page);
+    // The label row and the team rows below it are one sidebar group.
+    const group = page.getByText('Your teams', { exact: true }).locator('..');
+    await expect(group.getByText('Design', { exact: true })).toBeVisible();
+    await shot(page, 'concepts/teams', { focus: group, padding: 8 });
+  });
+});
+
 test.describe('everyday', () => {
   test('command palette', async ({ page }) => {
     await allIssues(page);

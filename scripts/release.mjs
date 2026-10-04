@@ -11,14 +11,16 @@
  *
  * Everything moves together: the server, the webapp, the images and the
  * published packages carry one number. This script is the only thing that
- * writes it. It sets the version in every file below, commits, and makes an
- * annotated tag. It does not push; pushing the tag is the release, because the
+ * writes it. It sets the version in every file below, adds the release notes
+ * to the docs changelog, commits, and makes an annotated tag. It does not push; pushing the tag is the release, because the
  * tag is what builds the images.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { CHANGELOG, addRelease } from "./changelog.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -98,6 +100,17 @@ for (const { file, pattern } of DOCS) {
   if (!dryRun) {
     writeFileSync(path, text.replace(pattern, `$1${version}$2`));
   }
+}
+
+// The notes are the commits since the last release. See changelog.mjs.
+changed.push(CHANGELOG);
+if (!dryRun) {
+  const today = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  addRelease(version, "HEAD", today);
 }
 
 if (dryRun) {

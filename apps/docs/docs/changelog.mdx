@@ -1,6 +1,124 @@
 ---
 title: "Changelog"
-url: "https://github.com/vantikhq/vantik/releases"
+description: "What changed in each release of Vantik"
 ---
 
-The [changelog](https://github.com/vantikhq/vantik/releases) shows every recent change to Vantik.
+Vantik uses calendar versions, `YYYY.M.N`. `N` counts the releases in the
+month, from 0. Each version below lists the commits that the release added.
+The release script writes this page when it makes a release. The tags are on
+[GitHub](https://github.com/cmunte132/vantik/tags).
+
+{/* release-notes */}
+
+## 2026.10.1
+
+Released on 2026-10-03.
+
+- Copy the dependency patches into the sandbox-host image
+- Retake the docs screenshots on every release (ENG-231)
+- Capture the docs screenshots from a seeded workspace (ENG-231)
+- Say which scope a git host token is missing
+- Name each update tool for the product axis in the issues skill
+
+## 2026.10.0
+
+Released on 2026-10-03.
+
+- Show a rejected agent run as rejected
+- Let a sentence-long activity line wrap instead of widening the run page
+- Clean up after an agent run, or reject its work and retry (ENG-221)
+- Bill agent runs by what the provider's responses say (ENG-220)
+- Report model spend in the shape backends read (ENG-220)
+- Open the new run when an agent run is retried
+- Pick the server's model by job, not by price (ENG-215)
+- Let a workspace bring a Vercel AI Gateway key for its agents
+- Cap what an agent's model call asks for, and say when the provider refused it
+- Record each agent run's trace id on the run
+- Give hosted agents language-server tools and type errors on every edit
+- Put the baked npm tools on the guest's PATH
+- Bake Pi and the code tools into the guest image
+- Let a hosted agent read its issue and write to Vantik without a credential
+- Time each agent model call from the moment its request leaves the sandbox
+- Tell the agent the sandbox's rules as it is about to break one
+- Refuse to push an agent's changes outside its modules, or to CI
+- Report agent runs over OpenTelemetry, and count each model call's cost once
+- Call a push Forgejo refused a refused push, not a crash
+- Tell the agent what its sandbox is before it starts
+- Accept OpenRouter's ~ model aliases, quoted on the harness command line
+- Say why a run failed, and let a person type to find a model
+- Commit as the connection's bot account, with the delegator as co-author
+- Say a repeat triage decision ran again under changed rules
+- Show on a fact's trail what triage checked and why it decided
+- Call a waiting decision a decision in the Needs you list
+- Never refuse a fact on an issue alone, and show the judges its state
+- Decide again what waits under the judges' old reading of issues
+- Say what a waiting fact asks, and why the checks held it back
+- List the socket.io producer spans in the telemetry contract (ENG-185)
+- Name Bull telemetry after the messaging conventions, and document what Vantik sends (ENG-185)
+- Move the observability backend out of the repository and into an untracked override (ENG-185)
+- Send browser telemetry through the server as OTel, and drop Sentry and PostHog (ENG-185)
+- Put plausible but unproven facts in use as provisional
+- Trace jobs and model calls, and graph process memory, queues and LLM use
+- Triage again what a shadow pass or a failed job left undecided
+- Lay notification settings out as one grid
+- Let people choose which notifications reach them, and where
+- Check server readiness with node, since the image has no wget
+- Connect repositories on Forgejo, Gitea, GitLab or any git host
+- Include dependency patches in container installs
+- Let agents create and edit products, modules, module repos and capabilities (ENG-160)
+- Keep saved views alive through sync and render lists on React 19
+- Remove SuperTokens from the stack and setup guides
+- Sign in and manage passkeys through Vantik's auth endpoints
+- Authenticate API and socket requests without SuperTokens
+- Store sessions, email challenges and passkeys in Postgres
+- Document PostgreSQL search deployment and embedding sources
+- Replace Typesense with PostgreSQL hybrid search
+- Add PostgreSQL search documents and transactional backfill
+- Judge a citation on what it was cited for, and let the pair judges see a correction
+- Share triage's evidence formatting and secret redaction with the evals
+- Move the knowledge judges' prompts and parsers into a shared package
+
+## 2026.9.1
+
+Released on 2026-09-30.
+
+- Send a workspace address the user does not belong to back home
+- Build the webapp with Vite and serve it from nginx
+- Build images one at a time and prune what each build leaves behind
+- Keep generated directories out of the tree a hosted run pushes
+- Show what an agent run is spending while it works, against its budget
+- Redesign the agent run view around stages, the step in flight and a narrated feed
+- Show a hosted run's agent steps on the timeline while it works
+- Give agent runs a real disk instead of keeping the checkout in memory
+- Give the guest the package manager the repository pins
+- Run agent sandboxes in a separate sandbox host, not inside the server
+- Refuse agent runs up front when the server cannot start a sandbox
+- Keep the map's focus to one step from what is selected
+- Pack the map's groups, colour them by product, and word the gardener's figures for shadow triage
+- Show the gardener view, the knowledge map and the trace of a run
+- Serve the gardener's records, its view, the map and the run trace
+- Record every gardener job run, and how each context pack was chosen
+- Let a person keep their email out of the navigation
+- Keep each list's scroll position to its own page
+- Title an inbox item with the first sentence of its fact
+- Make Needs you the one place knowledge decisions are made
+- Give every knowledge decision a row in one shared inbox
+- Read the facts outside any page from the local store when their list opens
+- Show facts outside any page, and let a person move them under one
+- Let a fact live outside any page, and move under one later
+- Keep a product's trust sentence on one line beside its bar
+- Draw a product the way the sidebar does, and leave empty parts out of the week
+- Rebuild the Pages home, page view and product list around trust
+- Serve the Pages home in one read
+- Send a fact whose citations stopped holding to the verifier first
+- Draw the verifier and observed facts as shipped in the knowledge docs
+- Accept a fact about an outside service as observed, and read its page again
+- Look for evidence of an uncited fact before a person sees it
+- Triage an entry again when the evidence it waits on changes
+- Stop recording what an agent is about to do as a knowledge gap
+- Let evidence settle an agent's fact, not who wrote it
+- Give every git source one core, with local directories as a first-class tier
+- Let only a person delegate an issue to Vantik's agent
+- Ask the agent at a stop for what its work taught, not only for its issue
+- Draw how a fact gets settled in the knowledge docs
+- Move every alerted transitive dependency to its patched release

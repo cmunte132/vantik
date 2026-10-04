@@ -40,6 +40,29 @@ Search works without an external service. Set `EMBEDDINGS_SOURCE=local` in `.env
 to add semantic search with a local CPU model. Leave it unset for keyword search only.
 See [Search](/oss/self-deployment#search) for hosted models and offline use.
 
+## Optional compose profiles
+
+Some services are in a compose profile. `docker compose up -d` does not start
+them. A service in a profile starts only when you name its profile:
+
+- `sandbox` starts the sandbox host. Hosted agent runs work in the microVMs that
+  the sandbox host starts. This container needs `/dev/kvm`, so it is for Linux
+  hosts. On macOS, run the sandbox host natively. Read
+  [Hosted agent runs](https://github.com/cmunte132/vantik#hosted-agent-runs) in
+  the README for the two methods.
+- `s3` starts MinIO and `minio-bucket`, which makes the bucket. MinIO is an
+  object store that uses the S3 protocol. Use it to try the S3 backend for file
+  attachments. Read
+  [File attachments](/oss/self-deployment#file-attachments).
+
+To start the services of a profile, add the profile name to the command:
+
+```bash
+docker compose --profile s3 up -d minio minio-bucket
+```
+
+## Next steps
+
 For a deployment like a production one, read
 [How to self-host](/oss/self-deployment). That page covers a custom domain, the
 secrets, and the optional services: SMTP and an AI provider. To

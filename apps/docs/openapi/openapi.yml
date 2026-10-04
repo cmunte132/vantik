@@ -1220,11 +1220,13 @@ paths:
           schema:
             type: string
         - in: query
-          name: status[]
+          name: status
           required: false
           description: >-
-            One or more run statuses. Send the name with brackets, for example
-            status[]=FAILED. The server refuses status=FAILED with a 400.
+            One or more run statuses. The server accepts only a repeated
+            parameter, for example status=FAILED&status=CANCELED. A single
+            status=FAILED gets a 400. For one status, send the parameter two
+            times, for example status=FAILED&status=FAILED.
           style: form
           explode: true
           schema:
@@ -1780,7 +1782,7 @@ paths:
         "404":
           description: Not found
         "409":
-          description: The proposal is answered, or the page or its entries changed
+          description: A person answered the proposal already, or the page or its entries changed
       tags:
         - Pages
 
@@ -1815,7 +1817,7 @@ paths:
         "404":
           description: Not found
         "409":
-          description: The proposal is answered already
+          description: A person answered the proposal already
       tags:
         - Pages
 
@@ -2041,7 +2043,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/PageEntry"
         "400":
-          description: Invalid request parameters, or a status change that is not allowed
+          description: Invalid request parameters, or a status change that the server does not allow
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
@@ -2066,8 +2068,7 @@ paths:
           in: query
           required: true
           description: >-
-            The question. It must not be empty. The value "*" is not
-            permitted.
+            The question. It must not be empty. The server refuses the value "*".
           schema:
             type: string
         - name: workspaceId
@@ -2083,7 +2084,7 @@ paths:
           description: >-
             Only facts about this repository path, team or project. A path also
             includes the facts about its parent paths and its child paths.
-            Entries with no scope are always included.
+            The response always includes entries with no scope.
           schema:
             type: string
         - name: limit
@@ -2443,8 +2444,8 @@ paths:
     post:
       summary: Add team member
       description: >-
-        Only a workspace admin can call this. Adds a member of the workspace
-        to the team. If the person is in the team already, nothing changes.
+        Only a workspace admin can call this. This call adds a member of the
+        workspace to the team. If the person is in the team already, nothing changes.
       parameters:
         - name: teamId
           in: path
@@ -2477,7 +2478,8 @@ paths:
     post:
       summary: Remove team member
       description: >-
-        Only a workspace admin can call this. Removes a person from the team.
+        Only a workspace admin can call this. This call removes a person from
+        the team.
         The server refuses the request if the person has assigned issues in
         the team.
       parameters:
@@ -2705,7 +2707,7 @@ paths:
     get:
       summary: Search issues
       description: >-
-        This call finds issues by words, by meaning and by issue number, for example
+        This call finds issues by words, by semantic similarity and by issue number, for example
         `ENG-12`. The results are in order of relevance. You get only issues
         in the teams that you can see.
       parameters:
@@ -2735,7 +2737,7 @@ paths:
           in: query
           required: false
           description: >-
-            The maximum cosine distance for a match by meaning, from 0 to 2. A
+            The maximum cosine distance for a semantic match, from 0 to 2. A
             lower value gives fewer, closer matches.
           schema:
             type: number
@@ -2788,7 +2790,7 @@ paths:
     get:
       summary: Find similar issues
       description: >-
-        This call returns up to 10 issues that are near in meaning to the issue that you
+        This call returns up to 10 issues that are semantically similar to the issue that you
         name. The list does not include that issue. If the server cannot find
         the issue, the list is empty.
       parameters:
@@ -3358,6 +3360,11 @@ components:
           nullable: true
         body:
           type: string
+        bodyMarkdown:
+          type: string
+          description: >-
+            The comment in markdown. The responses of create and update have
+            this field.
         userId:
           type: string
           nullable: true
@@ -3402,6 +3409,11 @@ components:
         description:
           type: string
           nullable: true
+        descriptionMarkdown:
+          type: string
+          description: >-
+            The description in markdown. The responses of create, update, get
+            by id, get by number and the full filter view have this field.
         priority:
           type: integer
           nullable: true
@@ -4854,7 +4866,7 @@ components:
           type: string
         agentUserId:
           type: string
-          description: The agent user that the work is attributed to.
+          description: The agent user that does the work.
         createdById:
           type: string
           nullable: true
@@ -4980,9 +4992,10 @@ components:
     PageEntryPolicyEnum:
       type: string
       description: >-
-        How strictly the page controls new entries. OPEN accepts all entries.
-        CURATED enforces the repeat check and the per-token limit. LOCKED is for
-        people only, and agents cannot write entries to it.
+        How the page controls new entries. On each policy, the server refuses
+        a repeat of a known entry. On a CURATED page, each token has a limit of
+        PROPOSED entries. An OPEN page has no such limit. On a LOCKED page, only
+        people can write entries.
       enum: [OPEN, CURATED, LOCKED]
 
     PageKindEnum:
@@ -5023,7 +5036,7 @@ components:
           type: array
           items:
             type: string
-          description: The entries that the section is written from.
+          description: The entries that the section comes from.
         evidence:
           type: string
 
@@ -5320,7 +5333,7 @@ components:
           description: An issue id or key.
         pullRequest:
           type: string
-          description: The URL of a pull request that is linked to an issue.
+          description: The URL of a pull request that has a link to an issue.
         comment:
           type: string
           description: An issue comment id.

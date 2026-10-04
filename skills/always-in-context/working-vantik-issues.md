@@ -16,8 +16,9 @@ identity, so the workspace records your edits against the agent.
 Tools: `search_tasks`, `get_task`, `find_similar_tasks`, `list_tasks`,
 `create_task`, `update_task`, `update_criteria`, `pick_up_task`, `add_note`,
 `close_task`, `list_projects`, `create_project`, `update_project`,
-`list_products`, `list_modules`, `list_capabilities`, and the `create_`/`update_` tools for products, modules,
-module repos and capabilities.
+`list_products`, `list_modules`, `list_capabilities`, the `create_` and
+`update_` tools for products, modules and capabilities, `add_module_repo` and
+`update_module_repo`.
 
 Two obligations. **Restraint on filing, generosity on progress** — "few and
 meaty" governs how many issues exist, and says nothing about notes and criteria,

@@ -94,7 +94,7 @@ workspace. Keep the file out of version control, or register the server for your
 user only. `claude mcp add` writes to `~/.claude.json`, which is not in the
 repository. If a commit does hold a token, revoke it, and make a new one. Click
 **revoke** on its row in **Access tokens**. An admin can also revoke or
-disable any agent in the **Agent accounts** section of **Settings → Agents**.
+disable an agent in the **Agent accounts** section of **Settings → Agents**.
 :::
 
 ## How to connect another client
@@ -197,8 +197,8 @@ Read [Knowledge](/fundamentals/knowledge).
 | `consolidate_knowledge` | Proposes a new page body that folds facts into it. The page does not change until a person accepts the proposal in [Needs you](/fundamentals/knowledge/needs-you). | `page`, `body`, and optional `entryIds` (default: every fact in use on the page) |
 | `knowledge_gaps` | Gives the questions that the bank could not answer, the most asked first. | None |
 
-A fact that an agent writes with `remember` waits for triage or a person
-before agents get it.
+A fact that an agent writes with `remember` starts as `PROPOSED`. Other agents
+get it only after triage or a person puts it in use.
 
 ### Agent runs
 
@@ -216,7 +216,7 @@ Vantik. Read [Delegate an issue to an agent](/agents/delegating-an-issue).
 | `hook_session_start` | Gives the agent the list of its issues in progress again, after a compaction. | `session_id`, and optional `harness`, `source` |
 | `hook_prompt_submit` | Gives the first prompt the list of issues in progress, and gives each prompt the pages that match it. | `session_id`, and optional `harness`, `prompt` |
 | `hook_tool_use` | Counts the changes to files. | `session_id`, and optional `harness`, `tool_name` |
-| `hook_stop` | Holds the agent one time if an issue in progress has no update. | `session_id`, and optional `harness` |
+| `hook_stop` | Can hold the agent one time before it stops. The reasons are an issue in progress with no update, work with no issue, and knowledge that the agent did not record. | `session_id`, and optional `harness` |
 
 The hooks of your client call these tools. An agent must not call them. Read
 [Optional: hooks that keep the tracker current](#optional-hooks-that-keep-the-tracker-current).
@@ -234,7 +234,7 @@ these endpoints:
 | Tasks | `/v1/issues`, `/v1/issues/filter`, `/v1/issues/{id}`, `/v1/issues/{id}/context`, `/v1/issues/number/{number}`, `/v1/issue_comments`, `/v1/search`, `/v1/search/similar_issues`, `/v1/checklist_items`, `/v1/checklist_items/{id}` |
 | Projects | `/v1/projects`, `/v1/projects/{id}` |
 | Product axis | `/v1/products`, `/v1/products/{id}`, `/v1/modules`, `/v1/modules/{id}`, `/v1/modules/{id}/repos`, `/v1/modules/{id}/repos/{repoId}`, `/v1/modules/available_repos`, `/v1/capabilities`, `/v1/capabilities/{id}` |
-| Knowledge | `/v1/knowledge/context`, `/v1/knowledge/search`, `/v1/knowledge/gaps`, `/v1/pages`, `/v1/pages/{id}`, `/v1/pages/related`, `/v1/pages/{id}/links`, `/v1/pages/{id}/consolidate`, `/v1/page_entries`, `/v1/page_entries/{id}`, `/v1/page_entries/bulk` |
+| Knowledge | `/v1/knowledge/context`, `/v1/knowledge/search`, `/v1/knowledge/gaps`, `/v1/pages`, `/v1/pages/{id}`, `/v1/pages/related`, `/v1/pages/{id}/links`, `/v1/pages/{id}/consolidate`, `/v1/page_entries` |
 | Agent runs | `GET /v1/agent_runs?issueId=` |
 | Hooks | `POST /v1/agent-hooks/{event}` |
 | Names of teams, states, members, labels and projects | `/v1/teams`, `/v1/teams/{id}/members`, `/v1/{teamId}/workflows`, `/v1/users`, `/v1/labels`, `/v1/projects` |

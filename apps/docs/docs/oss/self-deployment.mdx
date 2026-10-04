@@ -15,16 +15,17 @@ scale of the deployment, the backups, and the security beyond the basic level.
 
 ## Requirements
 
-- Docker, or Podman with the compose provider. A Podman VM needs 8 GB of memory
-  or more to build the images.
+- Docker, or Podman with the compose provider.
 - 4 CPUs and 8 GB of RAM is a comfortable minimum.
+- To build the images from source, a Podman VM needs 8 GB of memory or more.
+  To pull the published images, you build nothing. Read [Images](#images).
 
 ## Instructions
 
 1. Clone the repository, make your `.env` file, and make the key that
    encrypts the credentials of agent runs. The server does not start without
-   the key. Keep it in your backup: with a different key, the server cannot
-   read the credentials already saved.
+   the key. Keep it in your backup. Read
+   [The credential key](#the-credential-key).
 
 ```bash
 git clone https://github.com/cmunte132/vantik.git
@@ -35,6 +36,7 @@ echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env
 
 2. For a deployment that is more than a test on localhost, edit `.env`:
 
+   - Set `NODE_ENV=production`. Read [Production mode](#production-mode).
    - Set `FRONTEND_HOST` and `BACKEND_HOST` to your domain.
    - Change `POSTGRES_PASSWORD`.
 
@@ -48,13 +50,145 @@ docker compose up -d
    Use an email code or a magic link if you configured SMTP.
    Without SMTP, create an account with a passkey.
 
+## Production mode
+
+`.env.example` has `NODE_ENV=development`, for local development. The server
+image sets `NODE_ENV=production`, but the compose file gives the server the
+values in `.env`, and these values replace the value of the image. Thus a
+deployment from an unchanged `.env` runs in development mode.
+
+> **Warning:** Do not run a deployment for real users with
+> `NODE_ENV=development`. Set `NODE_ENV=production` in `.env`.
+
+In development mode, the server does these things:
+
+- It sends the session cookie without the `Secure` attribute. The browser then
+  also sends the cookie over plain HTTP.
+- It writes each login code and each magic link to its log. A person who can
+  read the log can then sign in as any user who asks for a code.
+- It accepts a request for a login email when SMTP is not set. It sends no
+  email, and the log holds the only copy of the code.
+
+In production mode, the cookie has the `Secure` attribute, so the webapp must
+use HTTPS. `localhost` is an exception. The log holds no login codes. If SMTP is
+not set, a request for a login email gets an error, so people sign in with a
+passkey.
+
+After you change `NODE_ENV`, make the server container again:
+
+```bash
+docker compose up -d server
+```
+
+## Images
+
+`docker-compose.yaml` names a published image for the `webapp`, `server` and
+`sandbox-host` services. It also tells Compose how to build each image from
+source. These two variables select the image:
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `REGISTRY` | `ghcr.io/cmunte132` | The registry and the namespace of the images. Set it to use the images of a fork. |
+| `VANTIK_IMAGE_TAG` | `latest` | The release to run, for example `2026.10.1`. `latest` is the newest release. |
+
+Set them in `.env`. Compose reads `.env` for these values.
+
+To use the published images, pull them before you start the stack:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+To build the images from your clone, add `--build`. A build needs much memory.
+Read [Requirements](#requirements).
+
+```bash
+docker compose up -d --build
+```
+
+Use a fixed `VANTIK_IMAGE_TAG` for a production deployment. Then an upgrade
+occurs only when you change the tag. Read
+[Releases and upgrades](#releases-and-upgrades).
+
+## The credential key
+
+`CREDENTIAL_ENCRYPTION_KEY` encrypts the credentials that agent runs use. These
+are the model keys and the git token in **Settings → Agents**, and the token of
+each git host in **Settings → Integrations → Git remote**. The server does not
+start without the key. The key must have 32 characters or more.
+
+### Back up the key
+
+> **Warning:** Do not lose the key. Without it, the server cannot read a stored
+> credential, and nothing can recover the credential.
+
+Keep a copy of the key outside the server, for example in a password manager.
+A backup of the database is not sufficient. The database holds the encrypted
+credentials, but it does not hold the key.
+
+### Change the key
+
+Vantik has no command that encrypts the credentials again with a new key. To
+change the key, the workspaces must enter their credentials again:
+
+1. Set a new value for `CREDENTIAL_ENCRYPTION_KEY` in `.env`.
+2. Make the server container again with `docker compose up -d server`.
+3. Read the server log. A warning gives the number of credentials that the
+   server cannot read.
+4. In each workspace, an admin enters the model keys again, in
+   **Settings → Agents → Model access**.
+5. The admin also enters the git token again, in **Settings → Agents →
+   Repository access**, if the workspace has one.
+6. For each git host, the admin clicks **Change token**, in
+   **Settings → Integrations → Git remote**.
+
+Until an admin does these steps, the agent runs of that workspace fail.
+
+### Upgrade from a version without the key
+
+Before Vantik required the key, the server encrypted the credentials with a
+fallback value. The fallback value was `SUPERTOKEN_CONNECTION_URI`. Its default,
+`http://supertokens:3567`, is public, so that encryption protected nothing.
+
+At each start, the server tries these old values on each credential that the
+key does not open:
+
+- the value of `SUPERTOKEN_CONNECTION_URI`, if it is set
+- the value of `DATABASE_URL`
+- `http://supertokens:3567` and `http://localhost:3567`
+
+The server then encrypts each credential that it can read with
+`CREDENTIAL_ENCRYPTION_KEY`, and it writes the number to the log. If your old
+installation used a different `SUPERTOKEN_CONNECTION_URI`, keep that value in
+`.env` until the log shows the message. Then remove it.
+
+## Integration credentials
+
+The GitHub, Discord and Email integrations need the OAuth client of your own
+app with that provider. Set the two variables of each integration that you
+use:
+
+| Integration | Variables |
+| --- | --- |
+| [GitHub](/integrations/github) | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` |
+| [Discord](/integrations/discord) | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` |
+| [Email](/integrations/email) | `EMAIL_CLIENT_ID`, `EMAIL_CLIENT_SECRET` |
+
+The server copies these values into the database at each start. A value in
+the environment replaces the stored value. If a variable is not set, the
+server keeps the stored value. Without the values, the page of the integration
+shows **Not available on this deployment**. The page of each integration tells
+the other settings that it needs.
+
 ## How to sign in
 
 There are two methods, and a new installation has both.
 
 **An email code, or a magic link.** Type an address. Vantik then sends you an
 email with a code of six digits and a link. This method needs
-[SMTP](#email-smtp). In development, the server also writes the code to its log.
+[SMTP](#email-smtp). In development mode, the server also writes the code to
+its log. In [production mode](#production-mode), it does not.
 If the SMTP server rejects the message, Vantik returns an error instead of a successful login flow.
 Check the server log and the SMTP configuration before you try again.
 
@@ -145,12 +279,19 @@ log. To see if a job runs, read
 
 | Job | Default | Variable | What it does |
 | --- | --- | --- | --- |
-| Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
-| Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives each knowledge entry that no person triaged and that the server never served. |
+| Cycle maintenance | `0 * * * *` (hourly) | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
+| Knowledge decay | `0 3 * * *` (nightly) | `PAGE_DECAY_CRON` | This job archives a proposed entry that waited too long for a person. It also archives a standing or provisional entry that no agent run used for too long. Read [Decay](/fundamentals/knowledge#decay). |
+| Knowledge gap issues | `0 4 * * 1` (Monday 04:00) | `KNOWLEDGE_GAP_ISSUES_CRON` | This job opens one issue for each question that agents asked the knowledge often and that it could not answer. It opens the issue on the team that owns the module of the question. It never opens a second issue for the same question. |
+| Generated page refresh | `23 * * * *` (hourly) | `KNOWLEDGE_PAGE_REFRESH_CRON` | This job finds each generated page whose cited entries changed, and it builds the page again. Read [Generated pages](/fundamentals/knowledge/gardener#generated-pages). |
+| Agent run lease sweep | `* * * * *` (each minute) | `AGENT_RUN_LEASE_SWEEP_CRON` | This job expires each agent run that did not renew its lease in time, and it starts the next attempt if the run has attempts left. It also fails each run that stayed queued for longer than one lease. |
 
 To stop a job, set its variable to `off`.
 
-The knowledge bank has more jobs and more settings. Read
+> **Warning:** Do not set `AGENT_RUN_LEASE_SWEEP_CRON=off` while agent runs
+> can occur. A run whose runner stopped then keeps its state, and it counts
+> against the limit of runs in the workspace.
+
+The knowledge bank has more settings. Read
 [The Gardener](/fundamentals/knowledge/gardener#settings).
 
 ## Optional services
@@ -168,10 +309,16 @@ Any provider with SMTP authentication works, such as Gmail, Amazon SES, or SendG
 ```bash
 SMTP_HOST=your-smtp-host
 SMTP_PORT=587
+SMTP_USE_SLS=false
 SMTP_USER=your-smtp-username
 SMTP_PASSWORD=your-smtp-password
 SMTP_DEFAULT_FROM=noreply@yourdomain.com
 ```
+
+With `SMTP_USE_SLS=false`, the connection starts without encryption. It
+changes to TLS when the SMTP server offers STARTTLS, usually on port 587. Set
+`SMTP_USE_SLS=true` for a server that needs TLS from the start, usually on port
+465. The server always checks the certificate.
 
 ### AI features
 
@@ -649,8 +796,16 @@ no authentication.
 A backend that wants a different URL for each signal, for example a URL that
 holds an organisation in its path, takes `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`,
 `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, and `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` as
-full URLs. These variables come from the OpenTelemetry specification, and the
-server and the browser relay both read them.
+full URLs. These variables come from the OpenTelemetry specification. The
+exporters of the server read all three. The browser relay reads only the
+traces and the logs variables, because the browser sends no metrics.
+
+Each signal can also have its own headers, in
+`OTEL_EXPORTER_OTLP_TRACES_HEADERS`, `OTEL_EXPORTER_OTLP_METRICS_HEADERS`, and
+`OTEL_EXPORTER_OTLP_LOGS_HEADERS`. The exporters of the server read them as the
+specification tells. The relay adds the traces or logs headers to the headers
+in `OTEL_EXPORTER_OTLP_HEADERS`. If both hold the same header, the relay uses
+the value for the signal.
 
 **Background jobs.** The server does its background work in Bull queues in
 Redis: triage, citation checks, page refreshes, agent runs, and cycles. Each
@@ -672,6 +827,97 @@ Point the liveness probe of your orchestrator at `/`, and its readiness probe at
 `/health/ready`. Do not use the readiness endpoint for liveness. A short fault
 in the database then kills the container and restarts it, and that action
 corrects nothing.
+
+## Environment reference
+
+`.env.example` holds each setting, with a comment that tells what it does. This
+table lists the settings that the sections above do not tell about.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `PORT` | `3001` | The port of the server. |
+| `AGENT_RUN_LEASE_MS` | `300000` (5 minutes) | How long the lease of an agent run lasts. A run that does not renew its lease in this time expires. |
+| `AGENT_RUN_MAX_ATTEMPTS` | `3` | The maximum number of attempts for one agent run, the first attempt included. |
+| `AGENT_RUN_WORKSPACE_CONCURRENCY` | `5` | The maximum number of agent runs that one workspace can have at the same time. The server refuses one more delegation. |
+| `AGENT_RUN_EVENT_CAP` | `2000` | The number of activity events that the server keeps for each agent run. The server removes the oldest events. |
+| `MCP_RATE_LIMIT`, `MCP_RATE_LIMIT_WINDOW_MS` | `120`, `60000` | The rate limit of the MCP endpoint, for each token. Read [Rate limits](/api-reference/overview#rate-limits). |
+| `TELEMETRY_RATE_LIMIT`, `TELEMETRY_RATE_LIMIT_WINDOW_MS` | `600`, `60000` | The rate limit of the browser telemetry relay, for each IP address. |
+| `IMPERSONATION_KEY` | not set | The key that lets an operator sign in as a different user. Read [How to sign in as a different user](#how-to-sign-in-as-a-different-user). |
+| `LOCAL_REPO_ROOT` | the home directory of the server account | The directory that holds the local repositories. Read [Local repositories](/integrations/local-repositories). |
+| `REPO_MIRROR_ROOT` | `~/.vantik/repos`, and `/data/repos` in the compose file | Where the server keeps its own copy of each repository. |
+
+The `PAGE_*` and `KNOWLEDGE_*` settings control the knowledge bank. Read
+[The Gardener](/fundamentals/knowledge/gardener#settings).
+
+## Releases and upgrades
+
+Vantik uses calendar versions, `YYYY.M.N`. `N` counts the releases in the
+month, from 0. Thus `2026.10.0` is the first release of October 2026. The
+server, the webapp, the images, and the npm packages of one release have the
+same version. The [changelog](/changelog) lists the changes of each release.
+
+### How a release occurs
+
+The maintainer runs `pnpm release`. The script `scripts/release.mjs` does these
+steps:
+
+1. It calculates the next version from the git tags of the month.
+2. It writes the version into the `package.json` files of the root, the server,
+   the webapp, and the npm packages. It also writes it into the API reference.
+3. It adds the commits since the last release to the changelog.
+4. It makes a commit and an annotated tag with the version.
+
+The script does not push. The push of the tag makes the release. A workflow then
+builds the images for `linux/amd64` and `linux/arm64`, and it pushes them with
+the version as their tag. It also moves the `latest` tag to them. Other
+workflows publish the npm packages and take the screenshots of the
+documentation again.
+
+### How to upgrade
+
+> **Warning:** Back up the database before an upgrade. A migration can change
+> data, and you cannot reverse it.
+
+1. Read the changelog of each release between your version and the new
+   version.
+2. Set `VANTIK_IMAGE_TAG` in `.env` to the new version.
+3. Pull the new images:
+
+   ```bash
+   docker compose pull
+   ```
+
+4. Start the stack with the new images:
+
+   ```bash
+   docker compose up -d
+   ```
+
+5. Read `docker compose logs server`. The server applies each new database
+   migration before it starts.
+
+If you build the images from source, get the tag of the new version with
+`git checkout`, and then run `docker compose up -d --build`.
+
+If a container still runs the old image, make the containers again:
+
+```bash
+docker compose up -d --force-recreate server webapp
+```
+
+### If a migration fails
+
+The server applies the migrations with `prisma migrate deploy` each time it
+starts. If a migration fails, the server stops. The container then restarts
+and fails again. The log of the server shows the error from Prisma.
+
+> **Warning:** Do not run `prisma migrate reset`. This command deletes all the
+> data in the database.
+
+Restore the backup of the database, and go back to the old `VANTIK_IMAGE_TAG`.
+Then open an issue on
+[GitHub](https://github.com/cmunte132/vantik/issues) with the error from the
+log.
 
 ## FAQ
 

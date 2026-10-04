@@ -24,12 +24,15 @@ server shows most changes immediately, and you do not restart it.
 ## How to make the API reference
 
 ```bash
-pnpm run gen-api-docs vantik
+pnpm clean-api-docs
+pnpm gen-api-docs
 ```
 
-This command reads `openapi/openapi.yml` and writes the pages under
-`docs/api-reference`. Do not edit a `*.api.mdx` file by hand, because this
-command replaces it. Edit `openapi/openapi.yml` and run the command again.
+The second command reads `openapi/openapi.yml` and writes the pages under
+`docs/api-reference`. It does not replace a page that exists, so the first
+command removes the generated pages before it. Do not edit a `*.api.mdx` file
+by hand, because these commands replace it. Edit `openapi/openapi.yml` and run
+the commands again.
 
 ## How to build
 
@@ -45,13 +48,13 @@ static site can then serve it.
 The workflow deploys the site for you. To deploy it by hand with SSH, run:
 
 ```bash
-USE_SSH=true pnpm deploy
+USE_SSH=true pnpm run deploy
 ```
 
 To deploy it by hand without SSH, run:
 
 ```bash
-GIT_USER=<Your GitHub username> pnpm deploy
+GIT_USER=<Your GitHub username> pnpm run deploy
 ```
 
 Each command builds the site and pushes it to the `gh-pages` branch.

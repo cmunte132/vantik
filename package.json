@@ -3,7 +3,7 @@
   "version": "2026.10.1",
   "description": "Vantik is an open-source, AI-first alternative to Jira, Linear",
   "main": "index.js",
-  "repository": "https://github.com/vantikhq/vantik.git",
+  "repository": "https://github.com/cmunte132/vantik.git",
   "author": "Vantik <support@vantik.dev>",
   "scripts": {
     "dev-docs": "turbo run start --filter=docs",

@@ -30,9 +30,9 @@ builds and runs on a local machine. Read [How to start](#how-to-start-self-hoste
 In July 2026 the maintainer updated the dependencies to NestJS 11, Prisma 6,
 React 19, TanStack Query 5, Tiptap 3, AI SDK 7, and zod 4. In September 2026
 the webapp moved from Next.js to Vite: it builds in seconds to static files,
-and its image is nginx. The webapp reads the `NEXT_PUBLIC_*` settings from the
-server at `/api/v1/config`, so a self-hosted installation sets them when the
-container starts. One update is not complete: the ESLint 9 flat config.
+and its image is nginx. The webapp reads its one setting,
+`NEXT_PUBLIC_BACKEND_HOST`, from the server at `/api/v1/config`, so a
+self-hosted installation sets it when the container starts. One update is not complete: the ESLint 9 flat config.
 
 The automations subsystem no longer uses trigger.dev, and Actions are gone. An
 integration is one plugin that the server loads from
@@ -62,18 +62,24 @@ echo "CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env   # the one 
 docker compose up -d
 ```
 
-Open http://localhost:3000. Then sign in with any email address. If you
-configure no SMTP server, the server writes the magic login link to its log and
-sends no email:
+Open http://localhost:3000. Then sign in with any email address. The default
+`.env` has `NODE_ENV=development`. In this mode, if you configure no SMTP
+server, the server writes the magic login link to its log and sends no email:
 
 ```bash
 docker compose logs server | grep -A5 "magic link"
 ```
 
-For a deployment that is not on localhost, do these two steps:
+For a deployment that is not on localhost, do these three steps:
 
-1. Set `FRONTEND_HOST` and `BACKEND_HOST` in `.env` to your domain.
-2. Change `POSTGRES_PASSWORD`.
+1. Set `NODE_ENV=production` in `.env`. Development mode sends the session
+   cookie without `Secure`, and it writes each login code to the log.
+2. Set `FRONTEND_HOST` and `BACKEND_HOST` in `.env` to your domain.
+3. Change `POSTGRES_PASSWORD`.
+
+In production mode, a login email needs SMTP. Without SMTP, sign in with a
+passkey. [How to self-host](apps/docs/docs/oss/self-deployment.mdx) tells about
+production mode, the images, the credential key, and upgrades.
 
 Search works without an external service or an API key. Set `EMBEDDINGS_SOURCE=local`
 for semantic search with the local CPU model. Leave it unset for keyword search only.
@@ -133,8 +139,10 @@ To see if a job runs, read `docker compose logs server`.
 | Job | Default | Variable | What it does |
 | --- | --- | --- | --- |
 | Cycle maintenance | hourly | `CYCLE_MAINTENANCE_CRON` | This job applies to a team with the automatic cadence. It completes each cycle after the end date of that cycle. It then moves the unfinished issues, as the preference of the team tells it to, and it makes more future cycles. The job never changes a team that controls its cycles manually. |
-| Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives each knowledge entry that no person triaged and that the server never served. |
+| Knowledge decay | `0 3 * * *` | `PAGE_DECAY_CRON` | This job archives a proposed entry that waited too long for a person. It also archives a standing or provisional entry that no agent run used for too long. |
 | Knowledge gap issues | `0 4 * * 1` | `KNOWLEDGE_GAP_ISSUES_CRON` | This job opens one issue for each question that agents asked the knowledge often and that it could not answer. It opens the issue on the team that owns the module of the question. It never opens a second issue for the same question. |
+| Generated page refresh | `23 * * * *` | `KNOWLEDGE_PAGE_REFRESH_CRON` | This job finds each generated page whose cited entries changed, and it builds the page again. |
+| Agent run lease sweep | `* * * * *` | `AGENT_RUN_LEASE_SWEEP_CRON` | This job expires each agent run that did not renew its lease in time, and it starts the next attempt if the run has attempts left. It also fails each run that stayed queued for longer than one lease. |
 
 To stop a job, set its variable to `off`.
 
@@ -151,7 +159,9 @@ log and continues:
 
 ## Local development
 
-You need Node.js 20 or later, pnpm 10, and Docker or podman. To install pnpm,
+You need Node.js 22.12 or later, pnpm 10, and Docker or podman. Vite also
+accepts Node.js 20.19 or a later 20 release: its range is
+`^20.19.0 || >=22.12.0`. CI uses Node.js 22, and the images use Node.js 24. To install pnpm,
 run `npm i -g pnpm@10`.
 
 For hot reload, run only the service containers, and run the apps on the host.
@@ -333,7 +343,8 @@ To work on the documentation on your machine, run these commands:
 ```bash
 cd apps/docs
 pnpm install
-pnpm run gen-api-docs vantik   # make the API reference again from openapi/openapi.yml
+pnpm clean-api-docs            # remove the generated API reference
+pnpm gen-api-docs              # make the API reference again from openapi/openapi.yml
 pnpm start                     # the local dev server, with hot reload
 ```
 

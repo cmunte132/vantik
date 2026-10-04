@@ -12,10 +12,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/vantikhq/server.git"
+    "url": "https://github.com/cmunte132/vantik.git"
   },
   "bugs": {
-    "url": "https://github.com/vantikhq/server.git/issues"
+    "url": "https://github.com/cmunte132/vantik/issues"
   },
   "scripts": {
     "build": "prisma generate && nest build",

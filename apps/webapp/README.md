@@ -36,8 +36,9 @@ first.
 ## Configuration
 
 The webapp reads its runtime configuration from the API server at
-`/api/v1/config`. A self-hosted installation therefore sets the `NEXT_PUBLIC_*`
-values when the container starts, and no rebuild is necessary.
+`/api/v1/config`. The one setting is `NEXT_PUBLIC_BACKEND_HOST`, which the
+server reads from its environment. A self-hosted installation therefore sets it
+when the container starts, and no rebuild is necessary.
 
 In the image, nginx serves the build and proxies `/api/*` to the server
 (`nginx.conf.template`). In development, Vite does the same (`vite.config.ts`).
@@ -50,4 +51,11 @@ In the image, nginx serves the build and proxies `/api/*` to the server
 | `pnpm build` | Builds the static files into `dist`. |
 | `pnpm test` | Runs the tests one time with Vitest. |
 | `pnpm typecheck` | Checks the types, and emits no output. |
-| `pnpm lint` | Runs ESLint, and corrects what it can. |
+| `pnpm lint` | Runs ESLint. It reports the problems, and it does not correct them. |
+
+## Dependency patches
+
+The repository patches `react-virtualized@9.22.6` for React 19, in
+`patches/react-virtualized@9.22.6.patch`. The patch reads `props.ref`, and not
+`element.ref`. It keeps callback refs and object refs. Remove the patch when an
+upstream release includes the fix.

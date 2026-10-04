@@ -84,15 +84,17 @@ Mailpit stores the test messages. It does not send them to the external inbox of
 | `E2E_SERVER_URL` | `http://localhost:3001` |
 | `E2E_WEBAPP_URL` | `http://localhost:3000` |
 | `E2E_MAILPIT_URL` | `http://localhost:8025` |
+| `E2E_DATABASE_URL` | `postgresql://docker:docker@localhost:5432/vantik` |
+| `E2E_RUN_TAG` | A new random value for each run |
+
+`E2E_RUN_TAG` goes into the names of the workspaces that a run makes. A
+workspace slug must be unique on the server, so each run needs a new tag. Set
+it only to find the records of one run again.
 
 If the test stack uses separate ports, set `FRONTEND_HOST`, `BACKEND_HOST`, and
 `NEXT_PUBLIC_BACKEND_HOST` on the test server. Set `BACKEND_URL` on the webapp.
 Set `PUBLIC_ATTACHMENT_URL` to the frontend address with the `/api` suffix.
 Leave the `LLM_*` settings empty if the test stack has no AI provider.
-
-The repo patches `react-virtualized@9.22.6` for React 19.
-The patch uses `props.ref` instead of `element.ref` and preserves callback and object refs.
-Remove the patch when an upstream release includes the fix.
 
 ## In CI
 
@@ -106,6 +108,16 @@ way `README.md` says to: the defaults from `.env.example`, plus a new
    answers.
 2. It replays the migration history into a scratch database and compares the
    result with `schema.prisma` (`pnpm --filter server migrate:check`).
+
+   `migrate:check` needs `SHADOW_DATABASE_URL`, the address of an empty
+   database for the replay. To run it on your machine, make that database
+   first:
+
+   ```bash
+   docker exec vantik-postgres createdb -U docker vantik_shadow
+   docker exec vantik-postgres psql -U docker -d vantik_shadow -c 'CREATE SCHEMA IF NOT EXISTS vantik'
+   SHADOW_DATABASE_URL='postgresql://docker:docker@localhost:5432/vantik_shadow?schema=vantik' pnpm --filter server migrate:check
+   ```
 3. It runs this suite.
 
 If a check fails, the workflow uploads the Playwright report and the container
@@ -189,9 +201,6 @@ and with a cookie session. There are two kinds:
 The browser project runs one test at a time. Each test works in a team of its
 own, so they could run in parallel, but the editors save half a second after
 the last keystroke, and a page starved of CPU misses that.
-
-When a sync update or a local database reload changes a saved view, the webapp keeps the same view object.
-This prevents detached model errors on an open view.
 
 Not yet covered:
 

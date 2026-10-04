@@ -86,7 +86,8 @@ the integration did not declare. So an integration never holds a token.
 An integration ships with the server. To write one, add a directory and open a
 pull request. You do not deploy it separately.
 
-Each directory exports a `pluginSpec` and a default handler:
+Each directory exports a default handler. An integration that reacts to
+changes or to webhooks also exports a `pluginSpec`:
 
 - The `pluginSpec` gives the slug, the hosts that the integration can call,
   how the server makes its credential, and its `onRecord` and `webhooks`.

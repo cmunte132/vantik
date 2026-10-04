@@ -55,14 +55,15 @@ Vantik links a pull request to an issue in two ways:
 
 - **The branch name.** When a person opens a pull request, Vantik reads the
   name of its branch. The name must have the form `<name>/<team>-<number>`,
-  for example `ada/eng-42`.
+  for example `ada/web-42` for issue 42 of a team with the name `web`.
 - **The commit messages.** If the branch name does not have that form, Vantik
   reads the commit messages. It also reads them again after each push. A
-  commit message must name the issue in brackets, for example `(ENG-42)`.
+  commit message must name the issue in brackets, for example `(web-42)`.
 
 > **Warning:** In both forms, the `<team>` part must be the **name** of the
 > team, not its identifier. The match is exact. A team with the name
-> "Engineering" does not match `eng-42` or `(ENG-42)`.
+> "Engineering" and the identifier `ENG` does not match `eng-42` or
+> `(ENG-42)`.
 
 When Vantik links a pull request, the GitHub App writes a comment on the pull
 request. The comment links to the issue.
@@ -82,18 +83,19 @@ A pull request that closes without a merge does not change the issue.
 
 - **A new issue.** A new issue in a team that is paired with a repository
   opens in that repository. Vantik links the two issues.
-- **A change to an issue.** Vantik sends the title, the description and the
-  labels to the linked GitHub issue. Vantik also adds the label `Vantik`. An
+- **A change to an issue.** While the team of the issue is paired with a
+  repository, Vantik sends the title, the description and the labels to the
+  linked GitHub issue. Vantik also adds the label `Vantik`. An
   issue in a **Completed** or **Canceled** state closes on GitHub. A change
   never goes to a pull request.
 - **A reply to a comment.** A reply in Vantik to a comment that came from
-  GitHub goes to GitHub. A new comment in Vantik that is not a reply stays in
+  GitHub goes to GitHub, if the link still syncs. A new comment in Vantik that is not a reply stays in
   Vantik.
 
 ## What comes from GitHub to Vantik
 
-GitHub sends only two kinds of events to Vantik: pull request events and new
-comments.
+Vantik uses only two kinds of GitHub events: pull request events and new
+comments. It ignores the other events.
 
 - A new comment on a linked GitHub issue becomes a comment on the Vantik
   issue. An edit or a deletion of a comment on GitHub does not change Vantik.

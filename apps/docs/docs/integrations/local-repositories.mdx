@@ -74,7 +74,8 @@ the code.
 These parts of Vantik read the code from the mirror:
 
 - **Agent runs in the hosted sandbox.** The server makes the checkout of a run
-  from the mirror. It pushes the branch of the run through the mirror.
+  from the mirror. To push the branch of the run, it makes a clone of the
+  mirror, and pushes from that clone to the source.
 - **The folder picker of a module.** The folders that you can select for a
   module come from the mirror.
 - **The knowledge bank.** The knowledge verifier and the checks of the
@@ -90,8 +91,9 @@ at once. It does this a maximum of one time in 10 seconds.
 
 ### The size limit
 
-A hosted agent run can start only from a repository of 256 MB or less, packed.
-For a larger repository, the run fails with a message that gives the size.
+To start a hosted agent run, the server makes a compressed archive of the
+files at the start commit. The archive holds no history. If the archive is
+more than 256 MB, the run fails with a message that gives the size.
 
 ### Where the mirror is
 

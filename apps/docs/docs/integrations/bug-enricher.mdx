@@ -6,7 +6,8 @@ sidebar_label: "Bug Enricher"
 ## Overview
 
 The Bug Enricher writes a possible resolution on a new bug. It does these
-steps when a person makes an issue that has the `bug` label:
+steps for each new issue with the `bug` label. A person, an agent or an
+integration can make that issue.
 
 1. It sends the description of the issue to the AI model of the deployment,
    and it asks for a possible resolution.
@@ -28,7 +29,7 @@ off**.
 
 ## When it acts
 
-- It acts only when the issue is made. If a person adds the `bug` label
+- It acts only on a new issue. If a person adds the `bug` label
   later, the Bug Enricher does nothing.
 - The label must have the name `bug`. The case of the letters is not
   important, so `Bug` also matches.

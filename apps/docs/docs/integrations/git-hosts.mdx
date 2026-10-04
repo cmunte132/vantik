@@ -41,14 +41,21 @@ The token must have these scopes:
 | Forgejo or Gitea | `write:repository`, `write:issue` and `read:user` |
 | GitLab | `api` and `write_repository` |
 
-Vantik checks the token when you connect. If the token does not have a
-scope, Vantik names that scope. For example:
+When you connect, Vantik checks only that the token can read its own user.
+On Forgejo and Gitea, this needs the `read:user` scope. Vantik does not check
+the other scopes then. A token without them connects, but a later push or
+pull request fails.
+
+If the host refuses a call and says which scope the token does not have,
+Vantik shows that scope. For example:
 
 ```
 Vantik cannot use this token on https://forgejo.example.com: the token is missing the scope "read:user". Make a token that has it.
 ```
 
-Make a new token that has the scope, and connect again.
+If the host does not name the scope, Vantik tells you to give the token the
+scopes in the connect form. Make a new token that has the scopes, and connect
+again.
 
 Vantik does not check the token of an **Other git host**.
 
@@ -91,8 +98,8 @@ For an **Other git host**, type the clone address of the repository, for
 example `https://git.example.com/owner/name.git`. Then click **Add**. The
 address must be on the host that you connected.
 
-Before Vantik adds a repository, the server fetches from it once. If the
-server cannot fetch it, Vantik does not add it and shows the reason. The row
+Before Vantik adds a repository, the server runs `git ls-remote` on it. If
+the server cannot reach it, Vantik does not add it and shows the reason. The row
 of the repository then shows its default branch.
 
 ## How to use a repository in a module

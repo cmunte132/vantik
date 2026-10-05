@@ -14,6 +14,40 @@ export interface InProgressIssue {
   criteria: { completed: number; total: number };
   /** The last time this agent recorded anything on it, in ms. */
   lastWrite: number | null;
+  /** True when the issue is in a review state and waits for a person. */
+  inReview: boolean;
+  /** The name of the review state of its team, or null if the team has none. */
+  reviewState: string | null;
+}
+
+/**
+ * This text tells the agent when to give an issue to review.
+ *
+ * Without it, an agent has only two outcomes: close the issue, or leave it
+ * in progress. When only a person can do the remainder, the agent then holds
+ * the issue in progress, and the board does not show that it waits.
+ */
+function handToReview(issues: InProgressIssue[]): string {
+  const names = [
+    ...new Set(
+      issues
+        .map((issue) => issue.reviewState)
+        .filter((name): name is string => name !== null),
+    ),
+  ];
+
+  if (names.length === 0) {
+    return '';
+  }
+
+  const state =
+    names.length === 1 ? `"${names[0]}"` : 'the review state of its team';
+
+  return (
+    ' If your part is done and only a person can do the remainder (review ' +
+    `or verification), update_task to ${state} and add_note with what to ` +
+    'review. Do not leave it in progress.'
+  );
 }
 
 /**
@@ -34,28 +68,46 @@ const RECORD_AS_YOU_GO =
  * a hook asking on every session start, with a query nobody chose, would keep
  * entries alive that nobody reads. The agent is pointed at it instead, for the
  * area it is actually about to touch.
+ *
+ * The brief lists the issues in a review state apart from the others. A person
+ * has those issues, so the brief does not ask the agent to update them.
  */
 export function sessionBrief(issues: InProgressIssue[], now: number): string {
-  if (issues.length === 0) {
-    return (
+  const active = issues.filter((issue) => !issue.inReview);
+  const waiting = issues.filter((issue) => issue.inReview);
+
+  const review =
+    waiting.length === 0
+      ? []
+      : [
+          `Awaiting review: ${count(waiting.length, 'issue')} under your name. ` +
+            'A person has them now. If a person asks for changes, ' +
+            'pick_up_task moves the issue back to in progress.',
+          ...waiting.map((issue) => `- ${issue.key} ${issue.title}.`),
+        ];
+
+  if (active.length === 0) {
+    return [
       'Vantik: nothing is in progress under your name. Before substantial ' +
-      'work, find or file its issue (search_tasks), read its Definition of ' +
-      'Done (get_task), and pick_up_task before the first edit. Before ' +
-      `reading code in an area new to you, call load_context with that area. ${RECORD_AS_YOU_GO}`
-    );
+        'work, find or file its issue (search_tasks), read its Definition of ' +
+        'Done (get_task), and pick_up_task before the first edit. Before ' +
+        `reading code in an area new to you, call load_context with that area. ${RECORD_AS_YOU_GO}`,
+      ...review,
+    ].join('\n');
   }
 
-  const lines = issues.map((issue) => `- ${describe(issue, now)}`);
+  const lines = active.map((issue) => `- ${describe(issue, now)}`);
 
   return [
-    `Vantik: you have ${count(issues.length, 'issue')} in progress.`,
+    `Vantik: you have ${count(active.length, 'issue')} in progress.`,
     ...lines,
     'If this session works on one of them, keep it current as you go: ' +
       'update_criteria to tick each criterion the moment it is met, add_note ' +
       'when the approach changes or you stop, and close_task with a ' +
-      'resolution when it is done. If this session is about something else, ' +
-      'leave them be. Before reading code in an area new to you, call ' +
-      `load_context with that area. ${RECORD_AS_YOU_GO}`,
+      `resolution when it is done.${handToReview(active)} If this session ` +
+      'is about something else, leave them be. Before reading code in an ' +
+      `area new to you, call load_context with that area. ${RECORD_AS_YOU_GO}`,
+    ...review,
   ].join('\n');
 }
 
@@ -87,7 +139,8 @@ export function stopReason(
     `If this session worked on ${one ? 'it' : 'one of them'}, record where ` +
       'it stands now: update_criteria for each criterion that is met, ' +
       'add_note with what changed and what is next, or close_task with a ' +
-      `resolution if it is done. If this session did not touch ${one ? 'it' : 'them'}, ` +
+      `resolution if it is done.${handToReview(issues)} ` +
+      `If this session did not touch ${one ? 'it' : 'them'}, ` +
       'say so in one line and stop. Vantik asks this once for each quiet ' +
       'stretch.',
   ].join('\n');

@@ -192,6 +192,8 @@ describe('the stop reason', () => {
     title: 'Some work',
     criteria: { completed: 0, total: 2 },
     lastWrite: null as number | null,
+    inReview: false,
+    reviewState: 'In Review' as string | null,
     quietSince: 0,
   });
 
@@ -204,5 +206,20 @@ describe('the stop reason', () => {
     const several = stopReason([issue('ENG-1'), issue('ENG-2')], now);
     expect(several).toContain('If this session worked on one of them');
     expect(several).toContain('If this session did not touch them, say so');
+  });
+
+  it('offers the review state of the team as a way to hand the issue over', () => {
+    expect(stopReason([issue('ENG-1')], 25 * 60_000)).toContain(
+      'update_task to "In Review" and add_note with what to review',
+    );
+  });
+
+  it('does not offer review when the team has no review state', () => {
+    const reason = stopReason(
+      [{ ...issue('ENG-1'), reviewState: null }],
+      25 * 60_000,
+    );
+
+    expect(reason).not.toContain('update_task');
   });
 });

@@ -13,6 +13,7 @@ import {
   IDLE_MS,
   POINTER_DISTANCE,
   QUIET_MS,
+  reviewStates,
 } from './agent-hooks.service';
 
 const ME = 'agent-1';
@@ -41,6 +42,8 @@ function fakeTracker() {
       assigneeId: ME,
       updatedAt: new Date(T0 - 3 * 60 * MINUTE),
       updatedById: SOMEONE_ELSE,
+      stateId: 'state-started',
+      teamId: 'team-eng',
       team: { identifier: 'ENG' },
     },
   ];
@@ -105,7 +108,20 @@ function fakeTracker() {
         if (failing) {
           throw new Error('database unavailable');
         }
-        return [{ id: 'state-started' }];
+        return [
+          {
+            id: 'state-started',
+            name: 'In Progress',
+            position: 0,
+            teamId: 'team-eng',
+          },
+          {
+            id: 'state-review',
+            name: 'In Review',
+            position: 1,
+            teamId: 'team-eng',
+          },
+        ];
       },
     },
     issue: {
@@ -378,6 +394,47 @@ describe('the session brief', () => {
 
     expect(await hook('prompt')).toContain('your last update was 3 hours ago');
   });
+
+  it('tells the agent to hand finished work to the review state of its team', async () => {
+    const { hook } = setup();
+
+    expect(await hook('prompt')).toContain(
+      'update_task to "In Review" and add_note with what to review',
+    );
+  });
+
+  it('lists an issue in review as awaiting review, not in progress', async () => {
+    const { hook, issues } = setup();
+    issues[0].stateId = 'state-review';
+
+    const brief = await hook('prompt');
+
+    expect(brief).toContain('nothing is in progress under your name');
+    expect(brief).toContain('Awaiting review: 1 issue under your name');
+    expect(brief).toContain('- ENG-42 Rate-limit the webhook.');
+  });
+});
+
+describe('review states', () => {
+  const state = (id: string, position: number, teamId = 'team-a') => ({
+    id,
+    name: id,
+    position,
+    teamId,
+  });
+
+  it('counts every started state after the first of each team as review', () => {
+    const { ids, byTeam } = reviewStates([
+      state('a-progress', 0),
+      state('a-qa', 2),
+      state('a-review', 1),
+      state('b-progress', 0, 'team-b'),
+    ]);
+
+    expect([...ids].sort()).toEqual(['a-qa', 'a-review']);
+    expect(byTeam.get('team-a')).toBe('a-review');
+    expect(byTeam.has('team-b')).toBe(false);
+  });
 });
 
 describe('the stop check', () => {
@@ -405,6 +462,16 @@ describe('the stop check', () => {
     expect(reason).toContain('update_criteria');
     // The way out, for a session that never touched the issue.
     expect(reason).toContain('say so in one line and stop');
+  });
+
+  it('does not ask about an issue that waits for review', async () => {
+    const { hook, issues } = setup();
+    issues[0].stateId = 'state-review';
+
+    await hook('prompt');
+    at(25);
+
+    expect(await hook('stop')).toBeNull();
   });
 
   it('asks only once for each quiet stretch', async () => {

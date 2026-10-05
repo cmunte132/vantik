@@ -834,7 +834,16 @@ export function registerVantikTools(
         task: taskRef,
         title: z.string().optional(),
         description: z.string().optional(),
-        state: z.string().optional(),
+        state: z
+          .string()
+          .optional()
+          .describe(
+            'Workflow state name, for example "In Review". When your part ' +
+              'of the work is done and only a person can do the remainder ' +
+              '(review or verification), set the review state of the team ' +
+              'and add_note with what to review. Do not leave the task in ' +
+              'progress for it. To close the task, use close_task.',
+          ),
         labels: z.array(z.string()).optional(),
         priority: priority.optional(),
         assignee: z.string().optional(),
@@ -889,7 +898,8 @@ export function registerVantikTools(
       description:
         'Take ownership: assigns the task and moves it into the team’s ' +
         'in-progress state. Call this when you start working, so the board ' +
-        'shows the task is being handled.',
+        'shows the task is being handled. Call it again to take a task back ' +
+        'from review when a person asks for changes.',
       inputSchema: {
         task: taskRef,
         assignee: z
@@ -1306,7 +1316,9 @@ export function registerVantikTools(
         'The response reports the Definition of Done as it stood at the close. ' +
         'Criteria left open do not block anything — but closing over them ' +
         'without saying so in the resolution leaves the next reader unable to ' +
-        'tell what was decided from what was missed.',
+        'tell what was decided from what was missed. If the open criteria ' +
+        'wait for a person to review or verify them, do not close: ' +
+        'update_task to the review state of the team instead.',
       inputSchema: {
         task: taskRef,
         resolution: z

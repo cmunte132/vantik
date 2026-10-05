@@ -82,9 +82,17 @@ only view they have of their agents.
    with a closed state: the resolution is posted as a note before the state
    changes, and it is what makes the fix findable the next time this problem
    appears.
-3. **If it is not actually done**, do not close it. `update_task` to the review
-   or blocked state, and `add_note` with what remains. A closed issue that is
-   not finished is worse than an open one.
+3. **If your part is done and a person must do the rest**, give the issue to
+   review. Some criteria need a person, for example a code review or a check
+   in a running stack. When only those criteria are open, `update_task` to the
+   review state of the team ("In Review" in the default workflow). Then
+   `add_note` with what to review and how. Do not hold the issue in progress
+   for this. The board then shows that the issue waits for a person, and the
+   hooks stop asking you about it. If the person asks for changes,
+   `pick_up_task` moves the issue back to in progress.
+4. **If you are blocked or stopped part-way**, do not close the issue. Leave it
+   in progress, and `add_note` with where it stands and what is next. A closed
+   issue that is not finished is worse than an open one.
 
 Only a person can give an issue to the agent of Vantik. The person does this
 from the issue in Vantik. You cannot start an agent run. To see the status of a
@@ -215,6 +223,8 @@ Write it for a future reader who has none of your context.
 - Inferring your own definition of done from the description while an explicit
   one sits on the issue.
 - `update_task` to a closed state, so no resolution is ever recorded.
+- Holding an issue in progress when only a person's review is left. Give it
+  to the review state with a note on what to review.
 - Treating "keep issues few" as a reason to stay quiet on the issue you are in.
 
 **On filing:**

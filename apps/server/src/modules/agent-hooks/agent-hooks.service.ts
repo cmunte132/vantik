@@ -439,7 +439,10 @@ export class AgentHooksService {
     const now = Date.now();
     const issues = await this.inProgress(actor);
 
+    // An issue in review waits for a person. The agent has nothing to record
+    // on it, so the quiet check does not ask about it.
     const stale = issues
+      .filter((issue) => !issue.inReview)
       .map((issue) => ({
         ...issue,
         quietSince: Math.max(state.startedAt, issue.lastWrite ?? 0),
@@ -565,6 +568,8 @@ export class AgentHooksService {
   /**
    * The issues assigned to this agent in a started state, with how far their
    * Definition of Done has got and when the agent last recorded anything.
+   * Each issue also says if it is in a review state, and it gives the name of
+   * the review state of its team.
    *
    * "Recorded anything" is any of the writes the skill asks for — a note, a
    * criterion ticked or added, a change to the issue itself — and only the
@@ -580,12 +585,14 @@ export class AgentHooksService {
         deleted: null,
         team: { workspaceId, deleted: null },
       },
-      select: { id: true },
+      select: { id: true, name: true, position: true, teamId: true },
     });
 
     if (started.length === 0) {
       return [];
     }
+
+    const review = reviewStates(started);
 
     const issues = await this.prisma.issue.findMany({
       where: {
@@ -599,6 +606,8 @@ export class AgentHooksService {
         title: true,
         updatedAt: true,
         updatedById: true,
+        stateId: true,
+        teamId: true,
         team: { select: { identifier: true } },
       },
       orderBy: { updatedAt: 'desc' },
@@ -659,6 +668,8 @@ export class AgentHooksService {
           total: rows.reduce((sum, row) => sum + row._count._all, 0),
         },
         lastWrite: writes.length > 0 ? Math.max(...writes) : null,
+        inReview: review.ids.has(issue.stateId),
+        reviewState: review.byTeam.get(issue.teamId) ?? null,
       };
     });
   }
@@ -737,4 +748,48 @@ function stateKey({ userId }: HookActor, sessionId: string): string {
   const session = createHash('sha256').update(sessionId).digest('hex');
 
   return `agent-hooks:${userId}:${session.slice(0, 32)}`;
+}
+
+/**
+ * This function finds the review states in a list of started states.
+ *
+ * `pick_up_task` moves an issue into the started state of its team with the
+ * lowest position. That state means "in progress". Every other started state
+ * of the team comes after the work, so this function counts it as a review
+ * state. In the default workflow, that state is "In Review". The function does
+ * not use the names, so a custom workflow also works.
+ *
+ * For each team, the function also gives the name of the first review state.
+ */
+export function reviewStates(
+  started: Array<{
+    id: string;
+    name: string;
+    position: number;
+    teamId: string;
+  }>,
+): { ids: Set<string>; byTeam: Map<string, string> } {
+  const ids = new Set<string>();
+  const byTeam = new Map<string, string>();
+  const teams = new Map<string, typeof started>();
+
+  for (const state of started) {
+    teams.set(state.teamId, [...(teams.get(state.teamId) ?? []), state]);
+  }
+
+  for (const [teamId, states] of teams) {
+    const first = Math.min(...states.map((state) => state.position));
+    const later = states
+      .filter((state) => state.position > first)
+      .sort((left, right) => left.position - right.position);
+
+    for (const state of later) {
+      ids.add(state.id);
+    }
+    if (later.length > 0) {
+      byTeam.set(teamId, later[0].name);
+    }
+  }
+
+  return { ids, byTeam };
 }

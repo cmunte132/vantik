@@ -77,7 +77,8 @@ only view they have of their agents.
 ### When you finish
 
 1. `update_criteria` — tick everything genuinely met. Untick anything you
-   discover was not.
+   discover was not. **When every criterion is met, go to step 2. Do not send
+   finished work to review.**
 2. `close_task` **with a resolution.** Always `close_task`, never `update_task`
    with a closed state: the resolution is posted as a note before the state
    changes, and it is what makes the fix findable the next time this problem
@@ -88,8 +89,14 @@ only view they have of their agents.
    review state of the team ("In Review" in the default workflow). Then
    `add_note` with what to review and how. Do not hold the issue in progress
    for this. The board then shows that the issue waits for a person, and the
-   hooks stop asking you about it. If the person asks for changes,
-   `pick_up_task` moves the issue back to in progress.
+   hooks stop asking you about it as quiet work.
+
+   **The review ends with you, not with the person.** A review ends when the
+   person approves the work or asks for changes. The person can approve in
+   chat, in a note on the issue, or with a tick on the last open criterion.
+   After an approval, tick what the person confirmed and `close_task` with a
+   resolution. Do not wait for the person to close the issue. If the person
+   asks for changes, `pick_up_task` moves the issue back to in progress.
 4. **If you are blocked or stopped part-way**, do not close the issue. Leave it
    in progress, and `add_note` with where it stands and what is next. A closed
    issue that is not finished is worse than an open one.
@@ -225,6 +232,8 @@ Write it for a future reader who has none of your context.
 - `update_task` to a closed state, so no resolution is ever recorded.
 - Holding an issue in progress when only a person's review is left. Give it
   to the review state with a note on what to review.
+- Sending an issue to review when every criterion is already met. Close it.
+- Leaving an approved issue in review for the person to close. Close it.
 - Treating "keep issues few" as a reason to stay quiet on the issue you are in.
 
 **On filing:**

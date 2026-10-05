@@ -194,6 +194,7 @@ describe('the stop reason', () => {
     lastWrite: null as number | null,
     inReview: false,
     reviewState: 'In Review' as string | null,
+    lastReply: null as number | null,
     quietSince: 0,
   });
 

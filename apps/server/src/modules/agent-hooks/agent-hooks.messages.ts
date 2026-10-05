@@ -18,7 +18,27 @@ export interface InProgressIssue {
   inReview: boolean;
   /** The name of the review state of its team, or null if the team has none. */
   reviewState: string | null;
+  /** The last note from someone other than this agent, in ms. */
+  lastReply: number | null;
 }
+
+/** True when the issue has a Definition of Done and every criterion is met. */
+export function isComplete({ criteria }: InProgressIssue): boolean {
+  return criteria.total > 0 && criteria.completed === criteria.total;
+}
+
+/**
+ * This text tells the agent who closes an issue after a review, and when.
+ *
+ * Without it, an agent treats an issue in review as the business of the
+ * person, and the issue stays open after the person approves it.
+ */
+const REVIEW_ENDS =
+  'A review ends when a person approves the issue (in chat, in a note, or ' +
+  'with a tick on the last criterion) or asks for changes. After an ' +
+  'approval, close_task with a resolution yourself. Do not wait for the ' +
+  'person to close it. After a request for changes, pick_up_task moves the ' +
+  'issue back to in progress.';
 
 /**
  * This text tells the agent when to give an issue to review.
@@ -44,8 +64,9 @@ function handToReview(issues: InProgressIssue[]): string {
     names.length === 1 ? `"${names[0]}"` : 'the review state of its team';
 
   return (
-    ' If your part is done and only a person can do the remainder (review ' +
-    `or verification), update_task to ${state} and add_note with what to ` +
+    ' If every criterion is met, close_task: review is not for finished ' +
+    'work. If your part is done and open criteria need a person (review or ' +
+    `verification), update_task to ${state} and add_note with what to ` +
     'review. Do not leave it in progress.'
   );
 }
@@ -69,8 +90,9 @@ const RECORD_AS_YOU_GO =
  * entries alive that nobody reads. The agent is pointed at it instead, for the
  * area it is actually about to touch.
  *
- * The brief lists the issues in a review state apart from the others. A person
- * has those issues, so the brief does not ask the agent to update them.
+ * The brief lists the issues in a review state apart from the others, and it
+ * says how a review ends. An issue with every criterion met is marked as ready
+ * to close, in either list.
  */
 export function sessionBrief(issues: InProgressIssue[], now: number): string {
   const active = issues.filter((issue) => !issue.inReview);
@@ -80,10 +102,8 @@ export function sessionBrief(issues: InProgressIssue[], now: number): string {
     waiting.length === 0
       ? []
       : [
-          `Awaiting review: ${count(waiting.length, 'issue')} under your name. ` +
-            'A person has them now. If a person asks for changes, ' +
-            'pick_up_task moves the issue back to in progress.',
-          ...waiting.map((issue) => `- ${issue.key} ${issue.title}.`),
+          `Awaiting review: ${count(waiting.length, 'issue')} under your name. ${REVIEW_ENDS}`,
+          ...waiting.map((issue) => `- ${describeReview(issue, now)}`),
         ];
 
   if (active.length === 0) {
@@ -97,10 +117,17 @@ export function sessionBrief(issues: InProgressIssue[], now: number): string {
   }
 
   const lines = active.map((issue) => `- ${describe(issue, now)}`);
+  const ready = active.some(isComplete)
+    ? [
+        'An issue marked ready to close has every criterion met. Close it ' +
+          'with close_task and a resolution, unless something is still open.',
+      ]
+    : [];
 
   return [
     `Vantik: you have ${count(active.length, 'issue')} in progress.`,
     ...lines,
+    ...ready,
     'If this session works on one of them, keep it current as you go: ' +
       'update_criteria to tick each criterion the moment it is met, add_note ' +
       'when the approach changes or you stop, and close_task with a ' +
@@ -146,13 +173,50 @@ export function stopReason(
   ].join('\n');
 }
 
+/**
+ * This message holds up a stop when the agent wrote to an issue in this
+ * session, every criterion of the issue is met, and the issue is still open.
+ *
+ * The agent ticks the last criterion and then often stops with the issue open.
+ * A person must then close it by hand. The message gives a way out, because a
+ * person can still have to approve the work.
+ */
+export function closeReason(issues: InProgressIssue[]): string {
+  const one = issues.length === 1;
+
+  return [
+    `Before you stop: every criterion is met on ${one ? 'this issue' : 'these issues'}, ` +
+      `and ${one ? 'it is' : 'they are'} still open.`,
+    ...issues.map(
+      (issue) =>
+        `- ${issue.key} ${issue.title}: ${progress(issue)}; ` +
+        `${issue.inReview ? 'awaiting review' : 'in progress'}.`,
+    ),
+    'If nothing is left to do, close_task with a resolution now. If a ' +
+      'person must still approve it, make sure it is in review and say in ' +
+      'one line what they must check. Vantik asks this once for each issue ' +
+      'in a session.',
+  ].join('\n');
+}
+
 function describe(issue: InProgressIssue, now: number): string {
   const touched =
     issue.lastWrite === null
       ? 'you have not updated it'
       : `your last update was ${duration(now - issue.lastWrite)} ago`;
+  const ready = isComplete(issue) ? '; ready to close' : '';
 
-  return `${issue.key} ${issue.title}: ${progress(issue)}; ${touched}.`;
+  return `${issue.key} ${issue.title}: ${progress(issue)}${ready}; ${touched}.`;
+}
+
+function describeReview(issue: InProgressIssue, now: number): string {
+  const replied =
+    issue.lastReply !== null && issue.lastReply > (issue.lastWrite ?? 0)
+      ? `; a person replied ${duration(now - issue.lastReply)} ago, after your last update`
+      : '';
+  const ready = isComplete(issue) ? '; ready to close' : '';
+
+  return `${issue.key} ${issue.title}: ${progress(issue)}${ready}${replied}.`;
 }
 
 function progress({ criteria }: InProgressIssue): string {

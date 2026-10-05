@@ -839,10 +839,12 @@ export function registerVantikTools(
           .optional()
           .describe(
             'Workflow state name, for example "In Review". When your part ' +
-              'of the work is done and only a person can do the remainder ' +
-              '(review or verification), set the review state of the team ' +
-              'and add_note with what to review. Do not leave the task in ' +
-              'progress for it. To close the task, use close_task.',
+              'of the work is done and open criteria need a person (review ' +
+              'or verification), set the review state of the team and ' +
+              'add_note with what to review. Do not leave the task in ' +
+              'progress for it. When every criterion is met, or the person ' +
+              'approves, use close_task instead: review is not for finished ' +
+              'work.',
           ),
         labels: z.array(z.string()).optional(),
         priority: priority.optional(),
@@ -1318,7 +1320,9 @@ export function registerVantikTools(
         'without saying so in the resolution leaves the next reader unable to ' +
         'tell what was decided from what was missed. If the open criteria ' +
         'wait for a person to review or verify them, do not close: ' +
-        'update_task to the review state of the team instead.',
+        'update_task to the review state of the team instead. Once every ' +
+        'criterion is met, or the person approves the review, close it ' +
+        'yourself — do not leave a finished task for a person to close.',
       inputSchema: {
         task: taskRef,
         resolution: z

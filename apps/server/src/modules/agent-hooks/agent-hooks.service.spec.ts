@@ -87,11 +87,19 @@ function fakeTracker() {
       return row ? { id: `${table}-1` } : null;
     };
 
-  const latest = (rows: Write[], ids: string[], userId: string) =>
+  const latest = (
+    rows: Write[],
+    ids: string[],
+    userId: string | { not: string },
+  ) =>
     ids
       .map((issueId) => {
         const mine = rows.filter(
-          (row) => row.issueId === issueId && row.userId === userId,
+          (row) =>
+            row.issueId === issueId &&
+            (typeof userId === 'string'
+              ? row.userId === userId
+              : row.userId !== userId.not),
         );
         return mine.length === 0
           ? null
@@ -181,6 +189,7 @@ function fakeTracker() {
   return {
     prisma: prisma as unknown as PrismaService,
     issues,
+    criteria,
     notes,
     history,
     ticks,
@@ -411,7 +420,9 @@ describe('the session brief', () => {
 
     expect(brief).toContain('nothing is in progress under your name');
     expect(brief).toContain('Awaiting review: 1 issue under your name');
-    expect(brief).toContain('- ENG-42 Rate-limit the webhook.');
+    expect(brief).toContain(
+      '- ENG-42 Rate-limit the webhook: 1 of 3 criteria met.',
+    );
   });
 });
 
@@ -434,6 +445,115 @@ describe('review states', () => {
     expect([...ids].sort()).toEqual(['a-qa', 'a-review']);
     expect(byTeam.get('team-a')).toBe('a-review');
     expect(byTeam.has('team-b')).toBe(false);
+  });
+});
+
+describe('finished issues', () => {
+  const finish = (criteria: Array<{ completed: boolean }>) => {
+    for (const criterion of criteria) {
+      criterion.completed = true;
+    }
+  };
+
+  it('marks an issue in progress with every criterion met as ready to close', async () => {
+    const { hook, criteria } = setup();
+    finish(criteria);
+
+    const brief = await hook('prompt');
+
+    expect(brief).toContain('3 of 3 criteria met; ready to close;');
+    expect(brief).toContain(
+      'An issue marked ready to close has every criterion met.',
+    );
+  });
+
+  it('tells the agent to close a review issue itself once a person approves', async () => {
+    const { hook, issues, criteria, notes } = setup();
+    issues[0].stateId = 'state-review';
+    finish(criteria);
+    notes.push({ issueId: 'issue-42', userId: ME, at: T0 - 3 * 60 * MINUTE });
+    notes.push({
+      issueId: 'issue-42',
+      userId: SOMEONE_ELSE,
+      at: T0 - 60 * MINUTE,
+    });
+
+    const brief = await hook('prompt');
+
+    expect(brief).toContain(
+      '- ENG-42 Rate-limit the webhook: 3 of 3 criteria met; ready to close; ' +
+        'a person replied 60 minutes ago, after your last update.',
+    );
+    expect(brief).toContain('close_task with a resolution yourself');
+  });
+
+  it('does not report a reply that came before the last update of the agent', async () => {
+    const { hook, issues, notes } = setup();
+    issues[0].stateId = 'state-review';
+    notes.push({
+      issueId: 'issue-42',
+      userId: SOMEONE_ELSE,
+      at: T0 - 3 * 60 * MINUTE,
+    });
+    notes.push({ issueId: 'issue-42', userId: ME, at: T0 - 60 * MINUTE });
+
+    expect(await hook('prompt')).not.toContain('a person replied');
+  });
+
+  it('asks to close an issue the agent finished in this session, before it goes quiet', async () => {
+    const { hook, criteria, ticks } = setup();
+
+    await hook('prompt');
+    at(5);
+    finish(criteria);
+    ticks.push({ issueId: 'issue-42', userId: ME, at: T0 + 5 * MINUTE });
+
+    const reason = await hook('stop');
+
+    expect(reason).toContain(
+      'Before you stop: every criterion is met on this issue, and it is still open.',
+    );
+    expect(reason).toContain(
+      '- ENG-42 Rate-limit the webhook: 3 of 3 criteria met; in progress.',
+    );
+    expect(reason).toContain('close_task with a resolution now');
+  });
+
+  it('asks to close an issue in review too', async () => {
+    const { hook, issues, criteria, history } = setup();
+    issues[0].stateId = 'state-review';
+    finish(criteria);
+
+    await hook('prompt');
+    history.push({ issueId: 'issue-42', userId: ME, at: T0 + MINUTE });
+
+    expect(await hook('stop')).toContain(
+      '3 of 3 criteria met; awaiting review.',
+    );
+  });
+
+  it('asks to close only once in a session', async () => {
+    const { hook, criteria, ticks } = setup();
+    finish(criteria);
+
+    await hook('prompt');
+    ticks.push({ issueId: 'issue-42', userId: ME, at: T0 + MINUTE });
+    at(2);
+    expect(await hook('stop')).toContain('every criterion is met');
+
+    // Before the issue goes quiet, so only the close prompt could ask.
+    at(10);
+    expect(await hook('stop')).toBeNull();
+  });
+
+  it('does not ask to close a finished issue the session did not write to', async () => {
+    const { hook, criteria } = setup();
+    finish(criteria);
+
+    await hook('prompt');
+    at(5);
+
+    expect(await hook('stop')).toBeNull();
   });
 });
 

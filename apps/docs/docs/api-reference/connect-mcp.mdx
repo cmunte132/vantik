@@ -351,13 +351,19 @@ of the guidance certain:
   an issue to the review state of its team when only a person can do the
   remainder. An issue in a started state after the first one, for example "In
   Review", is in a review state. The list shows such an issue apart, as an
-  issue that waits for review.
+  issue that waits for review. It tells the agent to close the issue itself
+  when the person approves it. The list marks an issue with every criterion
+  met as ready to close, and it shows when a person replied on an issue in
+  review after the last update of the agent.
 - **On each prompt**, Vantik compares the prompt with the knowledge bank. If
   pages match closely, the agent gets their titles and an instruction to call
   `load_context`. Vantik names each page one time in a session. It sends the
   titles only, and it does not count them as a use of the knowledge.
 - **Before the agent stops**, Vantik examines each issue that the agent has in
-  progress. Vantik does not examine an issue in a review state. If an issue
+  progress. If the agent wrote to an issue in this session, and every
+  criterion of the issue is met, Vantik holds the agent once and asks it to
+  close the issue. Vantik does this for an issue in review too. Vantik does not
+  examine an issue in a review state for updates. If an issue
   has had no update from the agent for 20 minutes of this session, Vantik holds
   the agent once and asks it to record where the issue stands. A note, a ticked criterion, or a change to the issue counts as an
   update. If the session did not touch the issue, the agent can say so in one

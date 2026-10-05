@@ -17,6 +17,8 @@ import {
   KnowledgePointer,
   knowledgePointers,
   knowledgeStopReason,
+  closeReason,
+  isComplete,
   sessionBrief,
   stopReason,
   untrackedStopReason,
@@ -91,6 +93,11 @@ interface SessionState {
   seenAt: number;
   /** Issue id → when this session was last held up over it. */
   nudged: Record<string, number>;
+  /**
+   * Issue id → when this session was held up to close it. The hook asks once
+   * for each issue in a session.
+   */
+  closeNudged: Record<string, number>;
   /** The number of files the agent changed in this stretch. */
   edits: number;
   /** When the hook held up the session for work with no issue, or null. */
@@ -412,6 +419,10 @@ export class AgentHooksService {
    * inherited. After a nudge, only a new word on the issue starts a stretch
    * that can earn another.
    *
+   * The stop also asks the agent to close an issue that it wrote to in this
+   * session when every criterion of the issue is met. It asks once for each
+   * issue in a session.
+   *
    * The same stop also asks for work with no issue, and for knowledge that
    * the agent did not record. The tracker holds what was done. The knowledge
    * bank holds what the next session must know, and only the agent that did
@@ -441,8 +452,19 @@ export class AgentHooksService {
 
     // An issue in review waits for a person. The agent has nothing to record
     // on it, so the quiet check does not ask about it.
+    // These issues have every criterion met, and the agent wrote to them in
+    // this session. The moment the last criterion is met is the moment to
+    // close, so the hook asks once for each issue, quiet or not.
+    const ready = issues.filter(
+      (issue) =>
+        isComplete(issue) &&
+        issue.lastWrite !== null &&
+        issue.lastWrite >= state.startedAt &&
+        state.closeNudged[issue.id] === undefined,
+    );
+
     const stale = issues
-      .filter((issue) => !issue.inReview)
+      .filter((issue) => !issue.inReview && !ready.includes(issue))
       .map((issue) => ({
         ...issue,
         quietSince: Math.max(state.startedAt, issue.lastWrite ?? 0),
@@ -478,7 +500,7 @@ export class AgentHooksService {
       ? { edits: state.edits, at: now }
       : state.knowledgeCheck;
 
-    if (stale.length === 0 && !untracked && !unrecorded) {
+    if (stale.length === 0 && ready.length === 0 && !untracked && !unrecorded) {
       await this.save(actor, sessionId, {
         ...state,
         seenAt: now,
@@ -493,10 +515,17 @@ export class AgentHooksService {
       nudged[issue.id] = now;
     }
 
+    const closeNudged = { ...state.closeNudged };
+
+    for (const issue of ready) {
+      closeNudged[issue.id] = now;
+    }
+
     const recorded = await this.save(actor, sessionId, {
       ...state,
       seenAt: now,
       nudged,
+      closeNudged,
       untrackedNudgedAt: untracked ? now : state.untrackedNudgedAt,
       knowledgeCheck,
     });
@@ -512,9 +541,12 @@ export class AgentHooksService {
     // all the requests in one message.
     const tracker = untracked
       ? untrackedStopReason(state.edits)
-      : stale.length > 0
-        ? stopReason(stale, now)
-        : null;
+      : [
+          ready.length > 0 ? closeReason(ready) : null,
+          stale.length > 0 ? stopReason(stale, now) : null,
+        ]
+          .filter(Boolean)
+          .join('\n\n') || null;
     const knowledge = unrecorded
       ? knowledgeStopReason(editsSinceCheck, { also: tracker !== null })
       : null;
@@ -620,31 +652,39 @@ export class AgentHooksService {
 
     const ids = issues.map((issue) => issue.id);
 
-    const [criteria, notes, history, criteriaWrites] = await Promise.all([
-      this.prisma.checklistItem.groupBy({
-        by: ['issueId', 'completed'],
-        where: { issueId: { in: ids }, deleted: null },
-        _count: { _all: true },
-      }),
-      this.prisma.issueComment.groupBy({
-        by: ['issueId'],
-        where: { issueId: { in: ids }, userId },
-        _max: { createdAt: true },
-      }),
-      this.prisma.issueHistory.groupBy({
-        by: ['issueId'],
-        where: { issueId: { in: ids }, userId },
-        _max: { createdAt: true },
-      }),
-      this.prisma.checklistItem.groupBy({
-        by: ['issueId'],
-        where: {
-          issueId: { in: ids },
-          OR: [{ updatedById: userId }, { createdById: userId }],
-        },
-        _max: { updatedAt: true },
-      }),
-    ]);
+    const [criteria, notes, history, criteriaWrites, replies] =
+      await Promise.all([
+        this.prisma.checklistItem.groupBy({
+          by: ['issueId', 'completed'],
+          where: { issueId: { in: ids }, deleted: null },
+          _count: { _all: true },
+        }),
+        this.prisma.issueComment.groupBy({
+          by: ['issueId'],
+          where: { issueId: { in: ids }, userId },
+          _max: { createdAt: true },
+        }),
+        this.prisma.issueHistory.groupBy({
+          by: ['issueId'],
+          where: { issueId: { in: ids }, userId },
+          _max: { createdAt: true },
+        }),
+        this.prisma.checklistItem.groupBy({
+          by: ['issueId'],
+          where: {
+            issueId: { in: ids },
+            OR: [{ updatedById: userId }, { createdById: userId }],
+          },
+          _max: { updatedAt: true },
+        }),
+        // A note from a person is how a review usually ends: an approval, or a
+        // request for changes.
+        this.prisma.issueComment.groupBy({
+          by: ['issueId'],
+          where: { issueId: { in: ids }, userId: { not: userId } },
+          _max: { createdAt: true },
+        }),
+      ]);
 
     return issues.map((issue) => {
       const rows = criteria.filter((row) => row.issueId === issue.id);
@@ -669,6 +709,10 @@ export class AgentHooksService {
         },
         lastWrite: writes.length > 0 ? Math.max(...writes) : null,
         inReview: review.ids.has(issue.stateId),
+        lastReply:
+          replies
+            .find((row) => row.issueId === issue.id)
+            ?._max.createdAt?.getTime() ?? null,
         reviewState: review.byTeam.get(issue.teamId) ?? null,
       };
     });
@@ -732,6 +776,7 @@ function fresh(now: number): SessionState {
     startedAt: now,
     seenAt: now,
     nudged: {},
+    closeNudged: {},
     edits: 0,
     untrackedNudgedAt: null,
     knowledgeCheck: { edits: 0, at: now },

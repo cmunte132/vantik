@@ -126,13 +126,13 @@ const config: Config = {
           items: [
             {label: 'GitHub', href: 'https://github.com/cmunte132/vantik'},
             {
-              label: 'Original project (RedPlanetHQ/tegon)',
+              label: 'Original project (RedPlanetHQ/tegon, archived)',
               href: 'https://github.com/RedPlanetHQ/tegon',
             },
           ],
         },
       ],
-      copyright: `Vantik is a fork of RedPlanetHQ/tegon, licensed AGPL-3.0. © ${new Date().getFullYear()}.`,
+      copyright: `Vantik continues RedPlanetHQ/tegon, which is archived. Licensed AGPL-3.0. © ${new Date().getFullYear()}.`,
     },
     prism: {
       theme: prismThemes.github,

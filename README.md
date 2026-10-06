@@ -13,7 +13,9 @@ their own work in it. People review that work in a real user interface.
 
 Vantik is a fork of [Tegon](https://github.com/RedPlanetHQ/tegon). Tegon is an
 open-source issue tracker for developers, and an alternative to Jira and Linear.
-RedPlanetHQ, the original maintainer, archived it in June 2025.
+RedPlanetHQ, the original maintainer, archived it in June 2025, and nobody
+develops it now. Vantik does not compete with Tegon. It continues the work from
+the point where Tegon stopped.
 
 The original project has a good core data model: projects, issues, workflows,
 Kanban views, list views, and triage. But the maintainers built it for human
@@ -47,7 +49,8 @@ Vantik is a derivative work of
 [RedPlanetHQ/tegon](https://github.com/RedPlanetHQ/tegon), and the
 [AGPL-3.0](./LICENSE) license applies to it. The Tegon team gets all the credit
 for the original architecture, the data model, and the implementation. The
-maintainer of this fork works independently. RedPlanetHQ and Tegon do not
+Tegon repository is archived, and this fork continues from it. The maintainer of
+this fork works independently. RedPlanetHQ and Tegon do not
 control this fork, and they do not endorse it.
 
 ## How to start (self-hosted)

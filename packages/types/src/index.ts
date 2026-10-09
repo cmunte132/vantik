@@ -4,6 +4,7 @@ export * from './common';
 export * from './integration-account';
 export * from './integration-definition';
 export * from './agent-run';
+export * from './agent-session';
 export * from './ai-request';
 export * from './attachment';
 export * from './checklist-item';

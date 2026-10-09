@@ -1,7 +1,6 @@
 import { ScrollArea } from '@vantikhq/ui/components/scroll-area';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
-import React from 'react';
 
 import {
   IssueAssigneeDropdown,
@@ -35,6 +34,7 @@ import { useUpdateIssueMutation } from 'services/issues';
 import { useContextStore } from 'store/global-context-provider';
 
 import { AgentRunPanel } from './agent-run-panel';
+import { AgentSessionsPanel } from './agent-sessions-panel';
 import { DelegateControl } from './delegate-control';
 import { IssuePages } from './issue-pages';
 import { IssueRelatedProperties } from './issue-related-properties';
@@ -157,6 +157,8 @@ export const RightSide = observer(() => {
             <DelegateControl />
             <AgentRunPanel />
           </div>
+
+          <AgentSessionsPanel />
 
           <IssueRelatedProperties />
 

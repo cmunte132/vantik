@@ -908,9 +908,26 @@ export function registerVantikTools(
           .string()
           .optional()
           .describe('Defaults to the token owner.'),
+        session: z
+          .string()
+          .max(200)
+          .optional()
+          .describe(
+            'Your session id, when the hook brief gave you one. Vantik then ' +
+              'shows this session on the task.',
+          ),
+        harness: z
+          .string()
+          .max(50)
+          .optional()
+          .describe(
+            'The tool you run in, for example claude-code, codex or cursor.',
+          ),
       },
     },
-    handler(({ task, assignee }) => agent.pickUpTask(task, { assignee })),
+    handler(({ task, assignee, session, harness }) =>
+      agent.pickUpTask(task, { assignee, session, harness }),
+    ),
   );
 
   server.registerTool(

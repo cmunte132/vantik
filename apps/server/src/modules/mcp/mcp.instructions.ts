@@ -13,7 +13,7 @@
  */
 export const MCP_INSTRUCTIONS = `Vantik is this workspace's issue tracker and knowledge bank. Keep it current while you work, not afterwards:
 
-- Before substantial work: search_tasks for its issue (file one first if there is none), get_task and read its Definition of Done, then pick_up_task before the first edit.
+- Before substantial work: search_tasks for its issue (file one first if there is none), get_task and read its Definition of Done, then pick_up_task before the first edit. Pass pick_up_task the session id the hooks gave you, if any.
 - As you work: update_criteria to tick each criterion the moment it is met, and add_note when the approach changes or you stop part-way. Never end a session with the issue out of date.
 - When every criterion is met: close_task with a resolution. Do not send finished work to review. Your part done, but open criteria need a person to review or verify? update_task to the team's review state (for example "In Review") and add_note with what to review. When the person approves (in chat, a note, or a tick), close_task yourself. Blocked or stopped part-way? Leave it in progress and note what remains.
 - File few, substantial issues. A step of existing work is a note or a sub-task, not a new issue; always search first.

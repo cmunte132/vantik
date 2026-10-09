@@ -117,6 +117,13 @@ export async function getWorkspaceId(
       });
       return agentRun.workspaceId;
 
+    // A session carries its own workspaceId, like a run.
+    case ModelName.AgentSession:
+      const agentSession = await prisma.agentSession.findUnique({
+        where: { id: modelId },
+      });
+      return agentSession.workspaceId;
+
     case ModelName.AgentRunEvent:
       const agentRunEvent = await prisma.agentRunEvent.findUnique({
         where: { id: modelId },
@@ -361,6 +368,15 @@ export async function getTeamId(
         })
       )?.issue?.teamId;
 
+    // A session is work on one issue, so it takes that issue's team.
+    case ModelName.AgentSession:
+      return (
+        await prisma.agentSession.findUnique({
+          where: { id: modelId },
+          select: { issue: { select: { teamId: true } } },
+        })
+      )?.issue?.teamId;
+
     case ModelName.AgentRunEvent:
       return (
         await prisma.agentRunEvent.findUnique({
@@ -427,6 +443,7 @@ export async function getModelData(
     AgentRun: prisma.agentRun,
     AgentRunEvent: prisma.agentRunEvent,
     AgentRunIteration: prisma.agentRunIteration,
+    AgentSession: prisma.agentSession,
     Conversation: {
       findUnique: () => {
         if (userId) {

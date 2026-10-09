@@ -35,6 +35,7 @@ export const WorkspaceStoreInit = observer(
       companiesStore,
       peopleStore,
       agentRunsStore,
+      agentSessionsStore,
     } = useContextStore();
 
     const currentWorkspace = useCurrentWorkspace();
@@ -66,6 +67,7 @@ export const WorkspaceStoreInit = observer(
         viewsStore.load(),
         issueSuggestionsStore.load(),
         agentRunsStore.load(),
+        agentSessionsStore.load(),
         pagesStore.load(),
         projectsStore.load(),
         projectMilestonesStore.load(),

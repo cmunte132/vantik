@@ -295,6 +295,58 @@ describe('pickUpTask', () => {
       stateId: 'state-progress',
     });
   });
+
+  it('links the harness session to the task when it is given one', async () => {
+    const { agent, calls } = makeAgent({
+      ...baseRoutes,
+      'GET /users': { id: 'user-me', fullname: 'Chris' },
+      'POST /issues/issue-42': issue42,
+      'POST /agent_sessions': { id: 'session-1' },
+    });
+
+    await agent.pickUpTask('ENG-42', {
+      session: 'sess-abc',
+      harness: 'claude-code',
+    });
+
+    const paths = calls.map((call) => call.path);
+    expect(paths.indexOf('/agent_sessions')).toBeGreaterThan(
+      paths.indexOf('/issues/issue-42'),
+    );
+    expect(calls.find((call) => call.path === '/agent_sessions')?.body).toEqual(
+      {
+        issueId: 'issue-42',
+        externalId: 'sess-abc',
+        channel: 'HOOKS',
+        harness: 'claude-code',
+      },
+    );
+  });
+
+  it('records no session when it is given none', async () => {
+    const { agent, calls } = makeAgent({
+      ...baseRoutes,
+      'GET /users': { id: 'user-me', fullname: 'Chris' },
+      'POST /issues/issue-42': issue42,
+    });
+
+    await agent.pickUpTask('ENG-42');
+
+    expect(calls.some((call) => call.path === '/agent_sessions')).toBe(false);
+  });
+
+  it('still picks the task up when the link cannot be recorded', async () => {
+    const { agent } = makeAgent({
+      ...baseRoutes,
+      'GET /users': { id: 'user-me', fullname: 'Chris' },
+      'POST /issues/issue-42': issue42,
+    });
+
+    // The fake API has no route for the link, so it answers 404.
+    await expect(
+      agent.pickUpTask('ENG-42', { session: 'sess-abc' }),
+    ).resolves.toMatchObject({ id: 'issue-42' });
+  });
 });
 
 describe('createTask', () => {

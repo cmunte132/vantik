@@ -67,7 +67,7 @@ export class AgentHooksController {
       event,
       { userId, workspaceId },
       readHookInput(body),
-      { canSay: canSay(harness, event) },
+      { canSay: canSay(harness, event), harness },
     );
 
     return hookOutput(harness, event, text);

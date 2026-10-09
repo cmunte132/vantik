@@ -80,6 +80,8 @@ function makeRun(over: Partial<FakeRun> = {}): FakeRun {
 function buildService(initial: FakeRun[] = [makeRun()]) {
   const rows = new Map(initial.map((run) => [run.id, { ...run }]));
   const events: Array<Record<string, unknown>> = [];
+  // The sessions of the runs, by run id, as the nested create makes them.
+  const sessions = new Map<string, Record<string, unknown>>();
   let created = 0;
 
   /**
@@ -157,9 +159,26 @@ function buildService(initial: FakeRun[] = [makeRun()]) {
       }),
       create: jest.fn(({ data }) => {
         created += 1;
-        const run = makeRun({ ...data, id: `run-new-${created}` });
+        const { session, ...fields } = data;
+        const run = makeRun({ ...fields, id: data.id ?? `run-new-${created}` });
         rows.set(run.id, run);
+        if (session) {
+          sessions.set(run.id, { id: `session-${run.id}`, ...session.create });
+        }
         return Promise.resolve(run);
+      }),
+    },
+    agentSession: {
+      findUnique: jest.fn(({ where }) => {
+        const session = sessions.get(where.agentRunId);
+        return Promise.resolve(session ? { id: session.id } : null);
+      }),
+      updateMany: jest.fn(({ where, data }) => {
+        const session = sessions.get(where.agentRunId);
+        if (session) {
+          Object.assign(session, data);
+        }
+        return Promise.resolve({ count: session ? 1 : 0 });
       }),
     },
     agentRunIteration: {
@@ -187,6 +206,7 @@ function buildService(initial: FakeRun[] = [makeRun()]) {
   return {
     service: new AgentRunsService(prisma, knowledgeSignals, conventions),
     rows,
+    sessions,
     events,
     prisma,
     knowledgeSignals,
@@ -769,5 +789,67 @@ describe('AgentRunsService tenancy', () => {
       service.retryRun(RUN, { workspaceId: WORKSPACE }, 'user-1'),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.agentRun.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('AgentRunsService sessions', () => {
+  it('opens a hosted session with every run, in the same write', async () => {
+    const { service, sessions } = buildService([]);
+
+    const run = await service.createRun({
+      workspaceId: WORKSPACE,
+      issueId: 'issue-1',
+      agentUserId: 'agent-1',
+      createdById: 'user-1',
+      executor: 'hosted',
+    });
+
+    expect(sessions.get(run.id)).toMatchObject({
+      workspaceId: WORKSPACE,
+      issueId: 'issue-1',
+      actorUserId: 'agent-1',
+      externalId: run.id,
+      location: 'HOSTED',
+      channel: 'HOSTED',
+      driver: 'VANTIK',
+    });
+    expect(sessions.get(run.id)?.parentSessionId).toBeUndefined();
+  });
+
+  it('ends the session when the run ends, and keeps it active while it runs', async () => {
+    const { service, sessions } = buildService([
+      makeRun({ status: 'CLAIMED' }),
+    ]);
+    sessions.set(RUN, { id: 'session-1', lastActiveAt: new Date(0) });
+
+    await service.transition(RUN, 'RUNNING');
+    expect(sessions.get(RUN)?.lastActiveAt).not.toEqual(new Date(0));
+    expect(sessions.get(RUN)?.endedAt).toBeUndefined();
+
+    await service.transition(RUN, 'FAILED', { failure: 'HARNESS_CRASHED' });
+    expect(sessions.get(RUN)?.endedAt).toBeInstanceOf(Date);
+  });
+
+  it('continues the previous attempt’s session in a retry', async () => {
+    const { service, sessions } = buildService([makeRun({ status: 'FAILED' })]);
+    sessions.set(RUN, { id: 'session-first' });
+
+    const retry = await service.retryRun(RUN, scope, 'user-1');
+
+    expect(sessions.get(retry.id)).toMatchObject({
+      externalId: retry.id,
+      parentSessionId: 'session-first',
+    });
+  });
+
+  it('never refuses a run its move because its session could not be written', async () => {
+    const { service, prisma } = buildService([makeRun({ status: 'RUNNING' })]);
+    (prisma.agentSession.updateMany as jest.Mock).mockRejectedValueOnce(
+      new Error('database unavailable'),
+    );
+
+    await expect(service.transition(RUN, 'SUCCEEDED')).resolves.toMatchObject({
+      status: 'SUCCEEDED',
+    });
   });
 });

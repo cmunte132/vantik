@@ -2,6 +2,7 @@ import { types, type Instance } from 'mobx-state-tree';
 import React from 'react';
 
 import { AgentRunsStore } from './agent-runs';
+import { AgentSessionsStore } from './agent-sessions';
 import { ApplicationStore, defaultApplicationStoreValue } from './application';
 import { CapabilitiesStore } from './capabilities';
 import { ChecklistItemsStore } from './checklist-items';
@@ -36,6 +37,7 @@ const StoreContextModel = types.model({
   commentsStore: CommentsStore,
   checklistItemsStore: ChecklistItemsStore,
   agentRunsStore: AgentRunsStore,
+  agentSessionsStore: AgentSessionsStore,
   pagesStore: PagesStore,
   pageEntriesStore: PageEntriesStore,
   issuesHistoryStore: IssueHistoryStore,
@@ -78,6 +80,9 @@ export function createStoreContext() {
     agentRunsStore: {
       agentRuns: [],
       events: {},
+    },
+    agentSessionsStore: {
+      agentSessions: [],
     },
     checklistItemsStore: {
       checklistItems: {},

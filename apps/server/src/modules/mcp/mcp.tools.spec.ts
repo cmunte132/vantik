@@ -426,6 +426,47 @@ describe('vantik MCP tools', () => {
     expect(body.descriptionMarkdown).not.toContain('## Acceptance criteria');
   });
 
+  it('passes the session id of pick_up_task on, so the task shows the session', async () => {
+    const { client, requests } = await connect({
+      ...baseRoutes,
+      'GET /team-eng/workflows': [
+        ...engStates,
+        {
+          id: 'state-progress',
+          name: 'In Progress',
+          category: 'STARTED',
+          position: 1,
+          teamId: 'team-eng',
+        },
+      ],
+      'GET /users': { id: 'user-me', fullname: 'Chris' },
+      'GET /issues/number/42': {
+        id: 'issue-42',
+        number: 42,
+        title: 'Pool exhausted',
+        teamId: 'team-eng',
+        stateId: 'state-backlog',
+      },
+      'POST /issues/issue-42': { id: 'issue-42', number: 42 },
+      'POST /agent_sessions': { id: 'session-1' },
+    });
+
+    const result = await client.callTool({
+      name: 'pick_up_task',
+      arguments: { task: 'ENG-42', session: 'sess-abc', harness: 'codex' },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(
+      requests.find((request) => request.path === '/agent_sessions')?.body,
+    ).toEqual({
+      issueId: 'issue-42',
+      externalId: 'sess-abc',
+      channel: 'HOOKS',
+      harness: 'codex',
+    });
+  });
+
   it('closes a task by writing the resolution before the state change', async () => {
     const { client, requests } = await connect({
       ...baseRoutes,
@@ -943,7 +984,6 @@ describe('knowledge tools and the product graph', () => {
 
     expect((unscoped as { isError?: boolean }).isError).toBe(true);
     expect(requests).toEqual([]);
-
   });
 
   it('[KG-1.5] load_context passes the issue and modules the work is in', async () => {

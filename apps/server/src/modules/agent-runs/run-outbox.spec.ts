@@ -1,4 +1,9 @@
-import { newOutboxState, OUTBOX_LIMITS, readOutbox } from './run-outbox';
+import {
+  newOutboxState,
+  OUTBOX_LIMITS,
+  readOutbox,
+  RunOutboxService,
+} from './run-outbox';
 
 const PACK = {
   definitionOfDone: [
@@ -110,5 +115,121 @@ describe('reading an agent’s outbox', () => {
 
     expect(batch.facts).toEqual([]);
     expect(batch.rejected[0].reason).toBe('empty or oversized fact');
+  });
+});
+
+describe('applying an agent’s outbox', () => {
+  const batch = {
+    notes: [{ body: 'Found the cause.' }],
+    facts: [{ content: 'Rows are paged by 500.', kind: 'FACT', citations: [] }],
+    criteria: [],
+    rejected: [],
+  } as never;
+
+  function build() {
+    const comments = { createIssueComment: jest.fn(async () => ({})) };
+    const entries = { createEntry: jest.fn(async () => ({})) };
+    const checklist = { updateChecklistItem: jest.fn(async () => ({})) };
+    const outbox = new RunOutboxService(
+      comments as never,
+      entries as never,
+      checklist as never,
+    );
+
+    return { outbox, comments, entries, checklist };
+  }
+
+  it('writes as the run’s agent and names the run, as before sessions', async () => {
+    const { outbox, comments, entries } = build();
+
+    const result = await outbox.apply(
+      {
+        id: 'run-1',
+        issueId: 'issue-1',
+        workspaceId: 'ws-1',
+        agentUserId: 'agent-1',
+      },
+      batch,
+      'scope',
+      (text) => text,
+    );
+
+    expect(result.applied).toEqual(['note', 'fact']);
+    expect(comments.createIssueComment).toHaveBeenCalledWith(
+      { issueId: 'issue-1' },
+      'agent-1',
+      {
+        bodyMarkdown: 'Found the cause.',
+        sourceMetadata: { source: 'agent-run-note', agentRunId: 'run-1' },
+      },
+    );
+    expect(entries.createEntry).toHaveBeenCalledWith(
+      null,
+      { userId: 'agent-1', tokenId: null },
+      expect.objectContaining({ sourceSession: 'agent-run:run-1' }),
+      'ws-1',
+    );
+  });
+
+  it('applies the entries of a session that has no run, as its actor on its issue', async () => {
+    const { outbox, comments, entries, checklist } = build();
+    const session = {
+      sessionId: 'session-1',
+      issueId: 'issue-2',
+      workspaceId: 'ws-1',
+      actorUserId: 'user-7',
+    };
+    const state = newOutboxState();
+    state.criteria.set('c1', 'the spec passes');
+
+    const applied = await outbox.apply(session, batch, 'scope', (text) =>
+      text.toUpperCase(),
+    );
+    const ticked = await outbox.tickCriteria(session, state);
+
+    expect(applied.applied).toEqual(['note', 'fact']);
+    expect(comments.createIssueComment).toHaveBeenCalledWith(
+      { issueId: 'issue-2' },
+      'user-7',
+      {
+        bodyMarkdown: 'FOUND THE CAUSE.',
+        sourceMetadata: {
+          source: 'agent-session-note',
+          agentSessionId: 'session-1',
+        },
+      },
+    );
+    expect(entries.createEntry).toHaveBeenCalledWith(
+      null,
+      { userId: 'user-7', tokenId: null },
+      expect.objectContaining({ sourceSession: 'agent-session:session-1' }),
+      'ws-1',
+    );
+    expect(ticked.applied).toEqual(['criterion']);
+    expect(checklist.updateChecklistItem).toHaveBeenCalledWith(
+      { checklistItemId: 'c1' },
+      'user-7',
+      { completed: true },
+    );
+  });
+
+  it('reports a write that fails and goes on with the rest', async () => {
+    const { outbox, comments } = build();
+    comments.createIssueComment.mockRejectedValueOnce(new Error('no access'));
+
+    const result = await outbox.apply(
+      {
+        issueId: 'issue-2',
+        workspaceId: 'ws-1',
+        actorUserId: 'user-7',
+        sessionId: 'session-1',
+      },
+      batch,
+      'scope',
+      (text) => text,
+    );
+
+    expect(result.failed).toEqual(['note: no access']);
+    expect(result.applied).toEqual(['fact']);
   });
 });

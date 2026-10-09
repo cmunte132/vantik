@@ -94,7 +94,12 @@ const RECORD_AS_YOU_GO =
  * says how a review ends. An issue with every criterion met is marked as ready
  * to close, in either list.
  */
-export function sessionBrief(issues: InProgressIssue[], now: number): string {
+export function sessionBrief(
+  issues: InProgressIssue[],
+  now: number,
+  sessionId?: string | null,
+): string {
+  const session = sessionLine(sessionId);
   const active = issues.filter((issue) => !issue.inReview);
   const waiting = issues.filter((issue) => issue.inReview);
 
@@ -113,7 +118,10 @@ export function sessionBrief(issues: InProgressIssue[], now: number): string {
         'Done (get_task), and pick_up_task before the first edit. Before ' +
         `reading code in an area new to you, call load_context with that area. ${RECORD_AS_YOU_GO}`,
       ...review,
-    ].join('\n');
+      session,
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   const lines = active.map((issue) => `- ${describe(issue, now)}`);
@@ -135,7 +143,26 @@ export function sessionBrief(issues: InProgressIssue[], now: number): string {
       'is about something else, leave them be. Before reading code in an ' +
       `area new to you, call load_context with that area. ${RECORD_AS_YOU_GO}`,
     ...review,
-  ].join('\n');
+    session,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * The line that links this session to the issue it works on. The hooks do not
+ * know the issue, so the agent says it when it picks the issue up. A session
+ * id that cannot be a valid parameter is left out.
+ */
+function sessionLine(sessionId?: string | null): string | null {
+  if (!sessionId || sessionId.length > 200 || /\s/.test(sessionId)) {
+    return null;
+  }
+
+  return (
+    `Your Vantik session id is ${sessionId}. When you pick_up_task, pass it ` +
+    'as the session parameter. Vantik then shows this session on the issue.'
+  );
 }
 
 /**

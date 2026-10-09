@@ -13,6 +13,7 @@ export enum MODELS {
   ChecklistItem = 'ChecklistItem',
   AgentRun = 'AgentRun',
   AgentRunEvent = 'AgentRunEvent',
+  AgentSession = 'AgentSession',
   IntegrationDefinition = 'IntegrationDefinition',
   IntegrationAccount = 'IntegrationAccount',
   LinkedIssue = 'LinkedIssue',

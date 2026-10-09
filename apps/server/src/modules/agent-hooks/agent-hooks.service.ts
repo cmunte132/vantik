@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
+import { AgentSessionsService } from 'modules/agent-sessions/agent-sessions.service';
 import { CacheService } from 'modules/cache/cache.service';
 import { LoggerService } from 'modules/logger/logger.service';
 import {
@@ -40,6 +41,9 @@ export const IDLE_MS = 60 * 60_000;
 
 /** Long enough to outlive any session worth judging; the store forgets. */
 const STATE_TTL_SECONDS = 2 * 24 * 60 * 60;
+
+/** The most often a hook marks a session as active. */
+const TOUCH_INTERVAL_SECONDS = 60;
 
 /** A brief is a glance, not a board. */
 const MAX_ISSUES = 10;
@@ -154,6 +158,7 @@ export class AgentHooksService {
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
     private readonly vector: VectorService,
+    private readonly sessions: AgentSessionsService,
   ) {}
 
   /**
@@ -171,13 +176,15 @@ export class AgentHooksService {
     event: HookEvent,
     actor: HookActor,
     input: HookInput,
-    { canSay = true }: { canSay?: boolean } = {},
+    { canSay = true, harness }: { canSay?: boolean; harness?: string } = {},
   ): Promise<string | null> {
     const { sessionId } = input;
 
     if (!sessionId) {
       return null;
     }
+
+    await this.touchSessions(actor, sessionId, harness);
 
     try {
       const text = await this.decide(event, actor, sessionId, input, canSay);
@@ -197,6 +204,34 @@ export class AgentHooksService {
     }
 
     return null;
+  }
+
+  /**
+   * Marks the sessions that this harness session has on issues as active. One
+   * write for each minute and session is enough for a "last active" column.
+   * It never throws: a hook must not fail over a bookkeeping write.
+   */
+  private async touchSessions(
+    actor: HookActor,
+    sessionId: string,
+    harness?: string,
+  ): Promise<void> {
+    const key = `${stateKey(actor, sessionId)}:touched`;
+
+    try {
+      if (await this.cache.get(key)) {
+        return;
+      }
+
+      await this.sessions.touchHookSession(actor, sessionId, harness);
+      await this.cache.set(key, '1', TOUCH_INTERVAL_SECONDS);
+    } catch (error) {
+      this.logger.error({
+        message: `Could not mark an agent session active: ${(error as Error).message}`,
+        where: 'AgentHooksService.touchSessions',
+        error: error as Error,
+      });
+    }
   }
 
   private async decide(
@@ -258,7 +293,7 @@ export class AgentHooksService {
         : fresh(now),
     );
 
-    return sessionBrief(await this.inProgress(actor), now);
+    return sessionBrief(await this.inProgress(actor), now, sessionId);
   }
 
   /**
@@ -279,7 +314,9 @@ export class AgentHooksService {
     const [brief, pointers] = await Promise.all([
       continuing
         ? null
-        : this.inProgress(actor).then((issues) => sessionBrief(issues, now)),
+        : this.inProgress(actor).then((issues) =>
+            sessionBrief(issues, now, sessionId),
+          ),
       this.pointers(actor, input.prompt, state.pointed),
     ]);
 

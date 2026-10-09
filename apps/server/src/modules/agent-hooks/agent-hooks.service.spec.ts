@@ -300,16 +300,18 @@ function setup() {
   const tracker = fakeTracker();
   const store = fakeCache();
   const index = fakeIndex();
+  const sessions = { touchHookSession: jest.fn(async () => 1) };
   const service = new AgentHooksService(
     tracker.prisma,
     store.cache,
     index.vector,
+    sessions as never,
   );
 
   const hook = (
     event: HookEvent,
     input: Partial<HookInput> = {},
-    options?: { canSay?: boolean },
+    options?: { canSay?: boolean; harness?: string },
   ) =>
     service.run(
       event,
@@ -338,7 +340,16 @@ function setup() {
     tool: (toolName: string) => hook('tool-use', { toolName }),
   };
 
-  return { ...tracker, ...store, ...index, service, hook, edits, cursor };
+  return {
+    ...tracker,
+    ...store,
+    ...index,
+    sessions,
+    service,
+    hook,
+    edits,
+    cursor,
+  };
 }
 
 function at(minutes: number) {
@@ -1202,5 +1213,53 @@ describe('a harness that cannot add context on every event', () => {
     expect(
       await hook('tool-use', { toolName: 'Edit' }, { canSay: false }),
     ).toBeNull();
+  });
+});
+
+describe('sessions on issues', () => {
+  it('tells the agent its session id, so it can link the session to an issue', async () => {
+    const { hook } = setup();
+
+    expect(await hook('session-start', { source: 'startup' })).toContain(
+      'Your Vantik session id is session-a. When you pick_up_task, pass it as the session parameter.',
+    );
+    at(61);
+    expect(await hook('prompt', { prompt: 'continue' })).toContain(
+      'Your Vantik session id is session-a.',
+    );
+  });
+
+  it('leaves out an id that cannot be a session parameter', async () => {
+    const { hook } = setup();
+
+    expect(
+      await hook('session-start', { sessionId: 'x'.repeat(201) }),
+    ).not.toContain('session id');
+    expect(
+      await hook('session-start', { sessionId: 'two words' }),
+    ).not.toContain('session id');
+  });
+
+  it('marks the session active on a hook, at most once a minute', async () => {
+    const { hook, sessions } = setup();
+
+    await hook('tool-use', { toolName: 'Edit' }, { harness: 'codex' });
+    await hook('tool-use', { toolName: 'Edit' }, { harness: 'codex' });
+
+    expect(sessions.touchHookSession).toHaveBeenCalledTimes(1);
+    expect(sessions.touchHookSession).toHaveBeenCalledWith(
+      actor,
+      'session-a',
+      'codex',
+    );
+  });
+
+  it('does not fail a hook when the session cannot be marked', async () => {
+    const { hook, sessions } = setup();
+    sessions.touchHookSession.mockRejectedValueOnce(new Error('db down'));
+
+    await expect(
+      hook('session-start', { source: 'startup' }),
+    ).resolves.toContain('ENG-42');
   });
 });

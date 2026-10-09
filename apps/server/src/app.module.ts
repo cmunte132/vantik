@@ -12,6 +12,7 @@ import { smtpFrom, smtpTransportOptions } from 'common/smtp';
 
 import { AgentHooksModule } from 'modules/agent-hooks/agent-hooks.module';
 import { AgentRunsModule } from 'modules/agent-runs/agent-runs.module';
+import { AgentSessionsModule } from 'modules/agent-sessions/agent-sessions.module';
 import { AgentSkillModule } from 'modules/agent-skill/agent-skill.module';
 import { AIRequestsModule } from 'modules/ai-requests/ai-requests.module';
 import { ALSModule } from 'modules/als/als.module';
@@ -103,6 +104,7 @@ import { AppService } from './app.service';
     IssueCommentsModule,
     ChecklistItemsModule,
     AgentRunsModule,
+    AgentSessionsModule,
     IssueHistoryModule,
     LinkedIssueModule,
     IssueRelationModule,

@@ -9,8 +9,8 @@ import IssueCommentsService from 'modules/issue-comments/issue-comments.service'
 import PageEntriesService from 'modules/pages/page-entries.service';
 
 /**
- * What an agent asked to write to Vantik during a run, checked and applied on
- * the host.
+ * What an agent asked to write to Vantik during a session, checked and applied
+ * on the host. A hosted run is one kind of session; any channel can use it.
  *
  * The guest holds no Vantik credential. The Vantik tools in the Pi extension
  * append lines to an outbox file in the guest, and the host reads it after
@@ -194,6 +194,25 @@ function citationsOf(value: unknown): Array<{ path: string; lines?: string }> {
     }));
 }
 
+/**
+ * The session an outbox belongs to, as far as applying it is concerned.
+ *
+ * Any channel can apply an outbox, so the checks do not depend on a run. A
+ * hosted run is a session with `runId` set. A session that comes through a
+ * connector or an inbox has no run. Where a run exists, what is written names
+ * the run, exactly as it did before sessions existed.
+ */
+export interface OutboxSession {
+  /** The session row. Absent for a hosted run that is known by its run. */
+  sessionId?: string;
+  issueId: string;
+  workspaceId: string;
+  /** The identity the writes carry. */
+  actorUserId: string;
+  /** Set when the session is a hosted run. */
+  runId?: string;
+}
+
 /** The run an outbox belongs to, as far as applying it is concerned. */
 export interface OutboxRun {
   id: string;
@@ -201,6 +220,17 @@ export interface OutboxRun {
   workspaceId: string;
   agentUserId: string;
 }
+
+/** A hosted run as an outbox session. */
+export const sessionOfRun = (run: OutboxRun): OutboxSession => ({
+  issueId: run.issueId,
+  workspaceId: run.workspaceId,
+  actorUserId: run.agentUserId,
+  runId: run.id,
+});
+
+const isRun = (who: OutboxRun | OutboxSession): who is OutboxRun =>
+  'agentUserId' in who;
 
 export interface OutboxResult {
   applied: string[];
@@ -225,21 +255,27 @@ export class RunOutboxService {
    * `scrub` removes secrets the guest could have seen from anything posted.
    */
   async apply(
-    run: OutboxRun,
+    who: OutboxRun | OutboxSession,
     batch: OutboxBatch,
     scope: string,
     scrub: (text: string) => string,
   ): Promise<OutboxResult> {
+    const session = isRun(who) ? sessionOfRun(who) : who;
     const result: OutboxResult = { applied: [], failed: [] };
 
     for (const note of batch.notes) {
       await this.attempt(result, 'note', () =>
         this.comments.createIssueComment(
-          { issueId: run.issueId },
-          run.agentUserId,
+          { issueId: session.issueId },
+          session.actorUserId,
           {
             bodyMarkdown: scrub(note.body),
-            sourceMetadata: { source: 'agent-run-note', agentRunId: run.id },
+            sourceMetadata: session.runId
+              ? { source: 'agent-run-note', agentRunId: session.runId }
+              : {
+                  source: 'agent-session-note',
+                  agentSessionId: session.sessionId,
+                },
           },
         ),
       );
@@ -249,15 +285,17 @@ export class RunOutboxService {
       await this.attempt(result, 'fact', () =>
         this.entries.createEntry(
           null,
-          { userId: run.agentUserId, tokenId: null },
+          { userId: session.actorUserId, tokenId: null },
           {
             content: scrub(fact.content),
             kind: fact.kind,
             scope,
-            sourceSession: `agent-run:${run.id}`,
+            sourceSession: session.runId
+              ? `agent-run:${session.runId}`
+              : `agent-session:${session.sessionId}`,
             ...(fact.citations.length ? { citations: fact.citations } : {}),
           },
-          run.workspaceId,
+          session.workspaceId,
         ),
       );
     }
@@ -265,18 +303,19 @@ export class RunOutboxService {
     return result;
   }
 
-  /** Ticks the criteria the agent claimed, once the run has succeeded. */
+  /** Ticks the criteria the agent claimed, once the session has succeeded. */
   async tickCriteria(
-    run: OutboxRun,
+    who: OutboxRun | OutboxSession,
     state: OutboxState,
   ): Promise<OutboxResult> {
+    const session = isRun(who) ? sessionOfRun(who) : who;
     const result: OutboxResult = { applied: [], failed: [] };
 
     for (const id of state.criteria.keys()) {
       await this.attempt(result, 'criterion', () =>
         this.checklist.updateChecklistItem(
           { checklistItemId: id },
-          run.agentUserId,
+          session.actorUserId,
           { completed: true },
         ),
       );

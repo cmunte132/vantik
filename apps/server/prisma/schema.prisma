@@ -144,11 +144,91 @@ model AgentRun {
   entrySignals      PageEntrySignal[]
   knowledgeFindings KnowledgeFinding[]
   packTrace         KnowledgePackTrace?
+  /// The session row that lists this run beside the terminal sessions on the
+  /// same issue.
+  session           AgentSession?
 
   @@index([workspaceId, status])
   @@index([issueId])
   @@index([agentUserId])
   @@index([status, leaseExpiresAt])
+}
+
+/// Where a session runs. UNKNOWN is for a channel that cannot tell.
+enum AgentSessionLocation {
+  LOCAL
+  HOSTED
+  UNKNOWN
+}
+
+/// How the session reaches Vantik.
+enum AgentSessionChannel {
+  /// A terminal harness calling the agent hooks.
+  HOOKS
+  /// A connector, such as a chat or a git host app.
+  CONNECTOR
+  /// A mail or git inbox.
+  GIT_INBOX
+  /// A run that Vantik hosts itself.
+  HOSTED
+}
+
+/// Who drives the session now.
+enum AgentSessionDriver {
+  TERMINAL
+  VANTIK
+}
+
+/// One agent session on one issue, from any harness and any channel.
+///
+/// One row per (harness session, issue): a session that works two issues is
+/// two rows, so the issue page lists its own sessions with a plain filter. A
+/// hosted `AgentRun` has a session too (`agentRunId`), so the page reads one
+/// list and not two.
+model AgentSession {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+
+  issue   Issue  @relation(fields: [issueId], references: [id])
+  issueId String
+
+  /// The identity the session acts as. Its notes and ticks carry this user.
+  actor       User   @relation(fields: [actorUserId], references: [id])
+  actorUserId String
+
+  /// The harness's own session id. For a hosted run it is the run id.
+  externalId String
+  /// `omp`, `pi`, `claude-code`, `codex`, `cursor`, or another name. A string
+  /// because harnesses arrive without a migration.
+  harness    String?
+  location   AgentSessionLocation @default(UNKNOWN)
+  channel    AgentSessionChannel
+
+  /// Who holds the wheel. Null while nobody has said.
+  driver               AgentSessionDriver?
+  driverLeaseExpiresAt DateTime?
+
+  /// The session this one forked from.
+  parent          AgentSession?  @relation("AgentSessionParent", fields: [parentSessionId], references: [id])
+  parentSessionId String?
+  children        AgentSession[] @relation("AgentSessionParent")
+
+  agentRun   AgentRun? @relation(fields: [agentRunId], references: [id])
+  agentRunId String?   @unique
+
+  startedAt    DateTime  @default(now())
+  lastActiveAt DateTime  @default(now())
+  endedAt      DateTime?
+
+  @@unique([workspaceId, actorUserId, channel, externalId, issueId])
+  @@index([issueId])
+  @@index([workspaceId, actorUserId, externalId])
+  @@index([parentSessionId])
 }
 
 /// An append-only progress line on a run.
@@ -553,6 +633,7 @@ model Issue {
   comments       IssueComment[]
   checklistItems ChecklistItem[]
   agentRuns      AgentRun[]
+  agentSessions  AgentSession[]
   history        IssueHistory[]
   linkedIssue    LinkedIssue[]
   issueRelations IssueRelation[]
@@ -2055,6 +2136,7 @@ model User {
   passkeys            PasskeyCredential[]
   Conversation        Conversation[]
   ConversationHistory ConversationHistory[]
+  agentSessions       AgentSession[]
 }
 
 /// A live session for an authenticated user or agent.
@@ -2237,6 +2319,7 @@ model Workspace {
   pageEntries           PageEntry[]
   knowledgeInboxItems   KnowledgeInboxItem[]
   agentRuns             AgentRun[]
+  agentSessions         AgentSession[]
   credentials           WorkspaceCredential[]
   webhookSubscription   WebhookSubscription[]
 
@@ -2380,6 +2463,7 @@ enum AgentRunEventLevel {
 /// So a new model's value is added to this enum before any row can carry it.
 enum ModelName {
   AgentRun
+  AgentSession
   AgentRunEvent
   AgentRunIteration
   Attachment

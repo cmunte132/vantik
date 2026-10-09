@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 import {
   BadRequestException,
   ConflictException,
@@ -196,9 +198,22 @@ export class AgentRunsService {
     attempt?: number;
     previousRunId?: string;
   }) {
+    // Each attempt is its own session, and it continues the session of the
+    // attempt before it.
+    const parent = input.previousRunId
+      ? await this.prisma.agentSession.findUnique({
+          where: { agentRunId: input.previousRunId },
+          select: { id: true },
+        })
+      : null;
+    const now = new Date();
+    const id = input.id ?? randomUUID();
+
+    // The session is created with the run, in the same transaction, so a
+    // run never exists without the row that lists it on its issue.
     return this.prisma.agentRun.create({
       data: {
-        ...(input.id ? { id: input.id } : {}),
+        id,
         workspaceId: input.workspaceId,
         issueId: input.issueId,
         agentUserId: input.agentUserId,
@@ -211,6 +226,22 @@ export class AgentRunsService {
         contextPack: input.contextPack ?? undefined,
         configHash: input.configHash,
         knowledgeArm: input.knowledgeArm ?? undefined,
+        session: {
+          create: {
+            workspaceId: input.workspaceId,
+            issueId: input.issueId,
+            actorUserId: input.agentUserId,
+            // The run id is the harness session id of a hosted run.
+            externalId: id,
+            harness: 'pi',
+            location: 'HOSTED',
+            channel: 'HOSTED',
+            driver: 'VANTIK',
+            parentSessionId: parent?.id,
+            startedAt: now,
+            lastActiveAt: now,
+          },
+        },
       },
     });
   }
@@ -286,6 +317,8 @@ export class AgentRunsService {
       });
     }
 
+    await this.touchSession(runId, to);
+
     // A failed run said why only in its own row. Logging it here, the one
     // place every executor's failure passes through, puts the reason in the
     // server log beside everything else that happened at that moment.
@@ -311,6 +344,31 @@ export class AgentRunsService {
     }
 
     return moved;
+  }
+
+  /**
+   * Keeps the run's session in step with the run: active now, and ended when
+   * the run is. Bookkeeping: a move of the run is never refused because the
+   * session could not be written.
+   */
+  private async touchSession(runId: string, to: AgentRunStatus): Promise<void> {
+    const now = new Date();
+
+    try {
+      await this.prisma.agentSession.updateMany({
+        where: { agentRunId: runId },
+        data: {
+          lastActiveAt: now,
+          ...(isTerminalAgentRunStatus(to) ? { endedAt: now } : {}),
+        },
+      });
+    } catch (error) {
+      this.logger.error({
+        message: `The session of agent run ${runId} was not updated: ${error}`,
+        where: 'AgentRunsService.touchSession',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
   }
 
   /**

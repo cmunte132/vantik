@@ -3,6 +3,7 @@ import { runInAction } from 'mobx';
 import type { SyncActionRecord } from 'common/types';
 
 import { saveAgentRunData, saveAgentRunEventData } from 'store/agent-runs';
+import { saveAgentSessionData } from 'store/agent-sessions';
 import { saveCapabilityData } from 'store/capabilities';
 import { saveChecklistItemData } from 'store/checklist-items';
 import { saveCommentsData } from 'store/comments';
@@ -52,6 +53,7 @@ export const SAVE_HANDLERS: Record<string, Function> = {
   [MODELS.ChecklistItem]: saveChecklistItemData,
   [MODELS.AgentRun]: saveAgentRunData,
   [MODELS.AgentRunEvent]: saveAgentRunEventData,
+  [MODELS.AgentSession]: saveAgentSessionData,
   [MODELS.Page]: savePageData,
   [MODELS.PageEntry]: savePageEntryData,
   [MODELS.IntegrationAccount]: saveIntegrationAccountData,
@@ -92,6 +94,7 @@ export function modelStoreMap(stores: StoreContextInstanceType) {
     [MODELS.ChecklistItem]: stores.checklistItemsStore,
     [MODELS.AgentRun]: stores.agentRunsStore,
     [MODELS.AgentRunEvent]: stores.agentRunsStore,
+    [MODELS.AgentSession]: stores.agentSessionsStore,
     [MODELS.Page]: stores.pagesStore,
     [MODELS.PageEntry]: stores.pageEntriesStore,
     [MODELS.IntegrationAccount]: stores.integrationAccountsStore,

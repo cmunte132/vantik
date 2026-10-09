@@ -111,7 +111,10 @@ function toAgentRunSummary(run: RawAgentRun): AgentRunSummary {
   };
 }
 
-function toModuleRepoLink(moduleId: string, row: RawModuleRepo): ModuleRepoLink {
+function toModuleRepoLink(
+  moduleId: string,
+  row: RawModuleRepo,
+): ModuleRepoLink {
   return {
     id: row.id,
     moduleId,
@@ -804,7 +807,9 @@ export class VantikAgent {
         `"${input.repository}" is offered by ${matches.length} connected ` +
           `sources (${matches
             .map((repo) => `${repo.source} ${repo.integrationAccountId}`)
-            .join(', ')}). Link it in the app, where you can choose the source.`,
+            .join(
+              ', ',
+            )}). Link it in the app, where you can choose the source.`,
       );
     }
 
@@ -1281,7 +1286,7 @@ export class VantikAgent {
    */
   async pickUpTask(
     reference: string,
-    options: { assignee?: string } = {},
+    options: { assignee?: string; session?: string; harness?: string } = {},
   ): Promise<TaskRef> {
     const task = await this.resolveTask(reference);
     const [user, state] = await Promise.all([
@@ -1293,6 +1298,23 @@ export class VantikAgent {
       query: { teamId: task.teamId },
       body: { assigneeId: user.id, stateId: state.id },
     });
+
+    // The only effect of a session id is this link, so the task shows the
+    // session. A link that fails does not undo the pick-up.
+    if (options.session) {
+      try {
+        await this.client.post('/agent_sessions', {
+          body: {
+            issueId: task.id,
+            externalId: options.session,
+            channel: 'HOOKS',
+            ...(options.harness ? { harness: options.harness } : {}),
+          },
+        });
+      } catch {
+        // Recording the link is a convenience, not part of taking the task.
+      }
+    }
 
     return task;
   }

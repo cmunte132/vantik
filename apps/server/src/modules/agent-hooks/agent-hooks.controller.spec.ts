@@ -36,7 +36,7 @@ describe('AgentHooksController', () => {
         toolName: null,
         continued: false,
       },
-      { canSay: true },
+      { canSay: true, harness: 'cursor' },
     );
     expect(output).toEqual({ followup_message: 'ENG-42 went quiet.' });
   });

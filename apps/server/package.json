@@ -26,7 +26,7 @@
     "start-prod-with-prisma": "pnpm run start-prod && pnpm prisma:studio",
     "start:debug": "nest start --debug --watch",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
-    "test": "prisma generate && jest",
+    "test": "prisma generate && NODE_OPTIONS=\"$NODE_OPTIONS --max-old-space-size=512\" jest",
     "migrate": "prisma migrate dev",
     "migrate:dev:create": "prisma migrate dev --create-only",
     "migrate:reset": "prisma migrate reset",
@@ -164,27 +164,5 @@
     "supertest": "6.3.4",
     "ts-jest": "^29.4.11",
     "typescript": "^5.4.3"
-  },
-  "jest": {
-    "moduleFileExtensions": [
-      "js",
-      "json",
-      "ts"
-    ],
-    "rootDir": "src",
-    "modulePaths": [
-      "<rootDir>"
-    ],
-    "testRegex": ".*\\.spec\\.ts$",
-    "transform": {
-      "^.+\\.ts$": "ts-jest",
-      "^.+\\.js$": "@swc/jest"
-    },
-    "transformIgnorePatterns": [],
-    "collectCoverageFrom": [
-      "**/*.(t|j)s"
-    ],
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
   }
 }

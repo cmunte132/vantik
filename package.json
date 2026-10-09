@@ -7,7 +7,7 @@
   "author": "Vantik <support@vantik.dev>",
   "scripts": {
     "dev-docs": "turbo run start --filter=docs",
-    "dev": "dotenv -- turbo run migrate dev --parallel --filter=!docs --filter=!sandbox-host",
+    "dev": "dotenv -- turbo run migrate dev --parallel --concurrency=10 --filter=!docs --filter=!sandbox-host",
     "sandbox-host": "turbo run build --filter=sandbox-host... && pnpm --filter sandbox-host start",
     "build": "dotenv -- turbo run build",
     "stack:rebuild": "scripts/rebuild-stack.sh",

@@ -1,5 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // One task at a time. The default is 10, and then the server and webapp
+  // tasks run together. Measured on a 16 GB Mac with `--force` (ENG-333):
+  // typecheck uses 1.6 GB at 1 and 2.9 GB at 10, and lint uses 1.3 GB at 1.
+  // The wall time is 23 s, not 13 s, for the typecheck. Only the server and
+  // the webapp tasks are large, so a value of 2 saves little time.
+  //
+  // This value applies to `--parallel` too, so `pnpm dev` gives
+  // `--concurrency=10` on its command line. Give the same flag to a run of
+  // tasks that do not stop.
+  "concurrency": "1",
   "globalEnv": [
     "VERSION",
     // Part of the hash, not just passed through. The build stamp is baked into

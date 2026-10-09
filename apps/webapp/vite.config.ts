@@ -130,5 +130,9 @@ export default defineConfig({
     setupFiles: ['fake-indexeddb/auto'],
     include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx'],
     alias,
+    // Vitest starts one worker for each core but one. Two workers use
+    // approximately half the memory, and `pnpm test` runs this suite beside
+    // the server suite (ENG-333).
+    maxWorkers: 2,
   },
 });

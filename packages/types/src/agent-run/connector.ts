@@ -27,12 +27,6 @@ export const CONNECTOR_NAMESPACE = '/connector';
  */
 export const CONNECTOR_PROTOCOL_VERSION = 1;
 
-/**
- * The omp version the connector is tested against. The connector runs a
- * different version, but says so in `hello`, and the server shows it.
- */
-export const CONNECTOR_OMP_VERSION = '18.8.6';
-
 /** The executor key a local run carries. */
 export const LOCAL_EXECUTOR_KEY = 'local';
 
@@ -50,6 +44,11 @@ export interface ConnectorHello {
   hostname: string;
   /** The omp version found on the PATH, or null when omp is not installed. */
   ompVersion: string | null;
+  /**
+   * Whether the connector is tested with that omp version. Absent from an
+   * older connector, which the server treats as supported.
+   */
+  ompSupported?: boolean;
   /** Whether `~/.omp/agent` (or `$PI_CODING_AGENT_DIR`) exists. */
   ompAgentDir: boolean;
   /**

@@ -230,4 +230,14 @@ describe('the omp driver', () => {
       jest.useRealTimers();
     }
   });
+
+  it('opts in to ask dialogs', async () => {
+    const fake = new FakeOmp();
+    fake.onCommand = (command) => fake.respond(command, { enabled: true });
+    await new OmpDriver(asChild(fake)).setAskDialog(true);
+    expect(fake.written[0]).toMatchObject({
+      type: 'set_ask_dialog',
+      enabled: true,
+    });
+  });
 });

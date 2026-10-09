@@ -202,6 +202,8 @@ export class LocalExecutor
       available: true,
       models: connector.hello.models ?? [],
       defaultModel: connector.hello.defaultModel ?? null,
+      ompVersion: connector.hello.ompVersion,
+      ompSupported: connector.hello.ompSupported !== false,
     };
   }
 

@@ -199,6 +199,18 @@ describe('LocalExecutor availability', () => {
       available: true,
       models: [],
       defaultModel: null,
+      ompVersion: '18.8.6',
+      ompSupported: true,
+    });
+  });
+
+  it('reports an omp version that the connector is not tested with', async () => {
+    const { executor, connectors } = build();
+    online(connectors, ME, { ompSupported: false });
+
+    await expect(executor.availability(PERSON)).resolves.toMatchObject({
+      available: true,
+      ompSupported: false,
     });
   });
 
@@ -213,6 +225,8 @@ describe('LocalExecutor availability', () => {
       available: true,
       models: [MODEL],
       defaultModel: 'openai-codex/gpt-6.1-sol',
+      ompVersion: '18.8.6',
+      ompSupported: true,
     });
   });
 

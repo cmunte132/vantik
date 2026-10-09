@@ -162,6 +162,7 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
           typeof body.ompVersion === 'string'
             ? body.ompVersion.slice(0, 64)
             : null,
+        ompSupported: body.ompSupported !== false,
         ompAgentDir: body.ompAgentDir === true,
         ...(Array.isArray(body.activeRunIds)
           ? {

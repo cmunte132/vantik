@@ -19,6 +19,7 @@ import { AGENT_QUESTION_EXTERNAL_ID_PATTERN } from '@vantikhq/types';
 
 import {
   dialogResponse,
+  cancelledQuestionId,
   dialogToQuestion,
   type OmpUiRequest,
   type PendingDialog,
@@ -205,6 +206,15 @@ export class LocalRun {
 
   /** A dialog of omp that waits for a person becomes a question. */
   private onDialog(request: OmpUiRequest) {
+    // omp closes a dialog of its own accord (a timeout, a tool that ended).
+    // The question stays open on the server until it expires, but a later
+    // answer finds no dialog here and is dropped.
+    const closed = cancelledQuestionId(request);
+    if (closed) {
+      this.dialogs.delete(closed);
+      return;
+    }
+
     const question = dialogToQuestion(request);
 
     // `notify`, `setStatus` and the like show something and wait for nobody.
@@ -357,6 +367,10 @@ export class LocalRun {
       });
 
       await omp.negotiate();
+      // omp's own multi-question `ask` reaches a person only through Vantik.
+      await omp.setAskDialog(true).catch((e: unknown) => {
+        deps.log(`omp did not accept set_ask_dialog: ${String(e)}`);
+      });
       const state = await omp.getState();
       this.ompSessionId = state.sessionId;
       this.queue.send('run.started', {

@@ -10,7 +10,14 @@ import type { ConnectorModel } from '@vantikhq/types';
  * configured" is a settings page.
  */
 export type ExecutorAvailability =
-  | { available: true; models?: ConnectorModel[]; defaultModel?: string | null }
+  | {
+      available: true;
+      models?: ConnectorModel[];
+      defaultModel?: string | null;
+      /** The omp version of a local connector, and whether it is tested. */
+      ompVersion?: string | null;
+      ompSupported?: boolean;
+    }
   | { available: false; reason: string };
 
 /**

@@ -304,6 +304,12 @@ export const DelegateControl = observer(() => {
                     ? 'Your omp setup, with the models you are signed in to there. The work stays in a git worktree on your machine.'
                     : "A Vantik sandbox, with the workspace's model keys."}
                 </p>
+                {local && localEntry?.ompSupported === false && (
+                  <p className="text-xs text-amber-600">
+                    Your omp {localEntry.ompVersion ?? ''} is not a version
+                    that Vantik is tested with. The run can still work.
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-1">

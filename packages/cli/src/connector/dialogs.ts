@@ -3,8 +3,9 @@
  * the answer of the person back to the reply that omp expects.
  *
  * omp sends `extension_ui_request` with a `method`. The dialog methods
- * (`select`, `confirm`, `input`, `editor`) wait for a person, so they become
- * questions on the server. The other methods only show something (`notify`,
+ * (`select`, `confirm`, `input`, `editor`, and `ask` once the connector has
+ * sent `set_ask_dialog`) wait for a person, so they become questions on the
+ * server. The other methods only show something (`notify`,
  * `setStatus`, `setWidget`, `setTitle`), need no reply, and are ignored.
  */
 import {
@@ -23,15 +24,20 @@ export interface OmpUiRequest {
   options?: unknown;
   optionDetails?: unknown;
   placeholder?: unknown;
+  /** The questions of an `ask`. */
+  questions?: unknown;
+  /** The id of the dialog that a `cancel` closes. */
+  targetId?: unknown;
 }
 
-export type DialogMethod = 'select' | 'confirm' | 'input' | 'editor';
+export type DialogMethod = 'select' | 'confirm' | 'input' | 'editor' | 'ask';
 
 const DIALOG_METHODS: readonly string[] = [
   'select',
   'confirm',
   'input',
   'editor',
+  'ask',
 ];
 
 /** A dialog that waits for a reply, with what is needed to make the reply. */
@@ -41,6 +47,11 @@ export interface PendingDialog {
   method: DialogMethod;
   /** The option labels of a `select`, to match a typed answer against. */
   options: string[];
+  /**
+   * For an `ask`: the id of each omp question and the id of its item in the
+   * Vantik question, in omp's order. The reply lists answers in this order.
+   */
+  asks?: Array<{ ompId: string; itemId: string }>;
 }
 
 export interface DialogQuestion {
@@ -61,6 +72,16 @@ export function questionIdOf(requestId: string): string {
   return `omp-${requestId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 56)}`;
 }
 
+/**
+ * The id of the question whose dialog omp closed, when the request is a
+ * `cancel`, or null for any other request.
+ */
+export function cancelledQuestionId(request: OmpUiRequest): string | null {
+  return request.method === 'cancel' && typeof request.targetId === 'string'
+    ? questionIdOf(request.targetId)
+    : null;
+}
+
 /** The question for a dialog, or null for a method that waits for nobody. */
 export function dialogToQuestion(request: OmpUiRequest): DialogQuestion | null {
   if (
@@ -72,6 +93,9 @@ export function dialogToQuestion(request: OmpUiRequest): DialogQuestion | null {
   }
 
   const method = request.method as DialogMethod;
+  if (method === 'ask') {
+    return askToQuestion(request);
+  }
   const title = text(request.title);
   const message = text(request.message);
   const rawOptions = Array.isArray(request.options)
@@ -108,7 +132,12 @@ export function dialogToQuestion(request: OmpUiRequest): DialogQuestion | null {
         return {
           label,
           ...(description
-            ? { description: description.slice(0, AGENT_QUESTION_LIMITS.description) }
+            ? {
+                description: description.slice(
+                  0,
+                  AGENT_QUESTION_LIMITS.description,
+                ),
+              }
             : {}),
         };
       });
@@ -141,6 +170,98 @@ export function dialogToQuestion(request: OmpUiRequest): DialogQuestion | null {
   };
 }
 
+interface OmpAskQuestion {
+  id?: unknown;
+  question?: unknown;
+  header?: unknown;
+  options?: unknown;
+  multi?: unknown;
+}
+
+/**
+ * The question for an `ask`: omp's questions (one to four) become the items
+ * of one Vantik question. omp always offers free text besides the options, so
+ * every item allows it.
+ */
+function askToQuestion(request: OmpUiRequest): DialogQuestion | null {
+  const asked = Array.isArray(request.questions)
+    ? (request.questions as OmpAskQuestion[]).filter(
+        (q) => q && typeof q === 'object',
+      )
+    : [];
+  if (asked.length === 0) {
+    return null;
+  }
+
+  const used = new Set<string>();
+  const asks: Array<{ ompId: string; itemId: string }> = [];
+  const items = asked
+    .slice(0, AGENT_QUESTION_LIMITS.questions)
+    .map((q, index) => {
+      const ompId = typeof q.id === 'string' ? q.id : '';
+      let itemId = ompId.slice(0, AGENT_QUESTION_LIMITS.id) || `q${index + 1}`;
+      if (used.has(itemId)) {
+        itemId = `q${index + 1}`;
+      }
+      used.add(itemId);
+      asks.push({ ompId, itemId });
+
+      const labels = (Array.isArray(q.options) ? q.options : []).map(
+        (o: { label?: unknown; description?: unknown } | null) => ({
+          label: text(o?.label),
+          description: text(o?.description),
+        }),
+      );
+      const fits =
+        labels.length > 0 &&
+        labels.length <= AGENT_QUESTION_LIMITS.options &&
+        labels.every(
+          (o) => o.label && o.label.length <= AGENT_QUESTION_LIMITS.label,
+        ) &&
+        new Set(labels.map((o) => o.label)).size === labels.length;
+
+      const header = text(q.header);
+      const listed =
+        !fits && labels.length > 0
+          ? `\nChoices: ${labels.map((o) => o.label).join(' | ')}`
+          : '';
+      const item: AgentQuestionItem = {
+        id: itemId,
+        prompt:
+          [header, text(q.question)]
+            .filter(Boolean)
+            .join('\n')
+            .concat(listed)
+            .slice(0, AGENT_QUESTION_LIMITS.prompt) ||
+          'omp asks for your input.',
+        allowOther: true,
+      };
+      if (fits) {
+        item.options = labels.map((o) => ({
+          label: o.label,
+          ...(o.description
+            ? {
+                description: o.description.slice(
+                  0,
+                  AGENT_QUESTION_LIMITS.description,
+                ),
+              }
+            : {}),
+        }));
+        if (q.multi === true) {
+          item.multiple = true;
+        }
+      }
+      return item;
+    });
+
+  return {
+    questionId: questionIdOf(request.id),
+    items,
+    dialog: { requestId: request.id, method: 'ask', options: [], asks },
+  };
+}
+
 /**
  * The body of the `extension_ui_response` for a dialog, without its `type`
  * and `id`. Nobody answered, so the dialog is cancelled, and a timeout says
@@ -152,6 +273,21 @@ export function dialogResponse(
 ): Record<string, unknown> {
   if (answer.status !== 'answered') {
     return { cancelled: true, timedOut: answer.status === 'expired' };
+  }
+
+  if (dialog.method === 'ask') {
+    // One answer per question, in the order of the questions.
+    return {
+      answers: (dialog.asks ?? []).map(({ ompId, itemId }) => {
+        const given = answer.answers.find((a) => a.id === itemId);
+        const other = given?.other?.trim();
+        return {
+          id: ompId,
+          selectedOptions: given?.selected ?? [],
+          ...(other ? { customInput: other } : {}),
+        };
+      }),
+    };
   }
 
   const first = answer.answers[0];

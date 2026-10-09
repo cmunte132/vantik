@@ -346,6 +346,14 @@ export class OmpDriver {
     });
   }
 
+  /**
+   * Opts in to `ask` dialogs. Without it omp does not send `ask` requests to
+   * the client. Call it after `negotiate`.
+   */
+  async setAskDialog(enabled: boolean): Promise<void> {
+    await this.ok({ type: 'set_ask_dialog', enabled });
+  }
+
   async getState(): Promise<{ sessionId: string; sessionFile: string }> {
     const state = (await this.ok({ type: 'get_state' })) as Record<
       string,

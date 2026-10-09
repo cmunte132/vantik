@@ -1,4 +1,9 @@
-import { dialogResponse, dialogToQuestion, questionIdOf } from './dialogs';
+import {
+  cancelledQuestionId,
+  dialogResponse,
+  dialogToQuestion,
+  questionIdOf,
+} from './dialogs';
 
 const req = (extra: Record<string, unknown>) =>
   ({ type: 'extension_ui_request', id: 'r/1', ...extra }) as never;
@@ -53,5 +58,76 @@ describe('dialogs', () => {
     expect(
       dialogResponse(q.dialog, { status: 'cancelled', answers: [] }),
     ).toEqual({ cancelled: true, timedOut: false });
+  });
+
+  it('names the question that a cancel closes', () => {
+    expect(
+      cancelledQuestionId(req({ method: 'cancel', targetId: 'r/1' })),
+    ).toBe('omp-r_1');
+    expect(cancelledQuestionId(req({ method: 'select' }))).toBeNull();
+  });
+
+  describe('ask', () => {
+    const ask = req({
+      method: 'ask',
+      questions: [
+        {
+          id: 'scope',
+          header: 'Scope',
+          question: 'Which part?',
+          options: [
+            { label: 'API', description: 'the server' },
+            { label: 'UI' },
+          ],
+          multi: true,
+        },
+        { id: 'note', question: 'Anything else?', options: [] },
+      ],
+    });
+
+    it('turns the questions into the items of one question', () => {
+      const q = dialogToQuestion(ask)!;
+      expect(q.items).toHaveLength(2);
+      expect(q.items[0]).toMatchObject({
+        id: 'scope',
+        prompt: 'Scope\nWhich part?',
+        multiple: true,
+        allowOther: true,
+        options: [{ label: 'API', description: 'the server' }, { label: 'UI' }],
+      });
+      expect(q.items[1]!.options).toBeUndefined();
+      expect(q.dialog.method).toBe('ask');
+    });
+
+    it('replies with one answer per question, in order', () => {
+      const q = dialogToQuestion(ask)!;
+      expect(
+        dialogResponse(q.dialog, {
+          status: 'answered',
+          answers: [
+            { id: 'note', selected: [], other: ' no ' },
+            { id: 'scope', selected: ['API', 'UI'] },
+          ],
+        }),
+      ).toEqual({
+        answers: [
+          { id: 'scope', selectedOptions: ['API', 'UI'] },
+          { id: 'note', selectedOptions: [], customInput: 'no' },
+        ],
+      });
+    });
+
+    it('cancels an ask nobody answered', () => {
+      const q = dialogToQuestion(ask)!;
+      expect(
+        dialogResponse(q.dialog, { status: 'expired', answers: [] }),
+      ).toEqual({ cancelled: true, timedOut: true });
+    });
+
+    it('ignores an ask without questions', () => {
+      expect(
+        dialogToQuestion(req({ method: 'ask', questions: [] })),
+      ).toBeNull();
+    });
   });
 });

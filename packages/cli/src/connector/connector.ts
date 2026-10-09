@@ -9,7 +9,6 @@ import path from 'node:path';
 
 import {
   CONNECTOR_NAMESPACE,
-  CONNECTOR_OMP_VERSION,
   CONNECTOR_PROTOCOL_VERSION,
   type ConnectorHello,
   type ConnectorHelloAck,
@@ -23,6 +22,7 @@ import { io } from 'socket.io-client';
 
 import { discoverModels, MODEL_REFRESH_MS, modelsChanged } from './models';
 import { discoverOmp, ompAgentDirPath, type OmpInstall } from './omp';
+import { isSupportedOmpVersion, SUPPORTED_OMP_VERSIONS } from './omp-version';
 import { AckedQueue, type QueueTransport } from './queue';
 import { LocalRun, type RunDeps } from './run';
 import {
@@ -475,6 +475,7 @@ export class Connector {
       connectorVersion: this.options.connectorVersion,
       hostname: hostname(),
       ompVersion: install.version,
+      ompSupported: isSupportedOmpVersion(install.version),
       ompAgentDir: install.agentDir,
       activeRunIds: this.activeRunIds(),
       ...(this.models
@@ -502,9 +503,9 @@ export class Connector {
       );
       return;
     }
-    if (install.version !== CONNECTOR_OMP_VERSION) {
+    if (!isSupportedOmpVersion(install.version)) {
       log(
-        `You have omp ${install.version}; this connector is tested with ${CONNECTOR_OMP_VERSION}. It should work, but report anything odd.`,
+        `You have omp ${install.version}; this connector is tested with omp ${SUPPORTED_OMP_VERSIONS}. It can still work, but report anything odd.`,
       );
     }
     if (!install.agentDir) {

@@ -8,6 +8,8 @@
 # to install: the runner is nginx and the files in dist/.
 
 FROM node:24-alpine AS base
+# The label scripts/rebuild-stack.sh prunes by. Later stages inherit it.
+LABEL org.vantik.build="true"
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 # Installed once here rather than in each stage that needs it.
@@ -70,6 +72,7 @@ RUN cd apps/webapp && \
 # Runner. nginx serves the files and proxies /api/* to the server; see
 # nginx.conf.template. The unprivileged image runs as a non-root user.
 FROM nginxinc/nginx-unprivileged:1.29-alpine AS runner
+LABEL org.vantik.build="true"
 COPY --from=builder /app/apps/webapp/dist /usr/share/nginx/html
 COPY apps/webapp/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY apps/webapp/nginx-proxy.conf /etc/nginx/vantik-proxy.conf

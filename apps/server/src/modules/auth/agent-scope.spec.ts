@@ -44,6 +44,7 @@ describe('agentSettings', () => {
       hiddenAt: null,
       disabledAt: null,
       ephemeral: false,
+      connector: false,
     });
   });
 
@@ -80,6 +81,7 @@ describe('agentSettings', () => {
       hiddenAt: null,
       disabledAt: null,
       ephemeral: false,
+      connector: false,
     });
   });
 

@@ -62,7 +62,7 @@ export function lsofHolders(files: string[]): Promise<HolderMap | null> {
       ['-F', 'pn', '--', ...existing],
       { timeout: 10_000, maxBuffer: 4 * 1024 * 1024 },
       (error, stdout) => {
-        if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        if (error && (error as { code?: string }).code === 'ENOENT') {
           resolve(null);
           return;
         }

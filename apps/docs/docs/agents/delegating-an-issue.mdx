@@ -72,6 +72,20 @@ status of the run, and a card in its activity.
 
 The run does not change the assignee or the status of the issue.
 
+### Choose where the run happens
+
+The popover has a **Runs on** field. It offers two places:
+
+| Runner | What it is |
+| --- | --- |
+| **Vantik sandbox** | A Vantik sandbox, with the model keys of the workspace. The run gives back a branch or a pull request, and the review cycle checks the work. |
+| **Your machine (omp)** | Your own omp, with your own model logins, in a git worktree on your computer. The run gives back a local branch. |
+
+**Your machine (omp)** shows only while `vantik connect` runs on your
+computer. A run on your machine does not need the model key or the sandbox
+host from [Before you start](#before-you-start). Read
+[Run an agent on your machine](/agents/running-on-your-machine).
+
 ### When you cannot start a run
 
 The popover shows a message in place of the fields when:
@@ -83,6 +97,22 @@ The popover shows a message in place of the fields when:
 A workspace can have a maximum number of live runs. The default is 5. If the
 workspace has that number, the popover shows an error when you click **Start
 run**.
+
+## Questions from an agent
+
+An agent can stop and ask a person a question when it is blocked on a decision
+that the issue does not give. This works for a run in the sandbox and for a run
+on your machine.
+
+The question goes to **Needs you**, with the label **Agent question**. It is
+assigned to the person who delegated the issue, and that person gets a
+notification. The page of the run shows the form above the activity. Anyone in
+the workspace can answer, and the first answer wins.
+
+An agent waits 30 minutes for an answer. After that, the question expires, and
+the agent goes on with its own judgement. It states what it assumed in its
+comment on the issue. The page shows how long is left, as "Proceeds on its own
+judgement in …". A run can ask a maximum of 5 questions.
 
 ## The list of runs
 

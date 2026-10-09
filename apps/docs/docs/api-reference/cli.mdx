@@ -577,3 +577,48 @@ vantik kb generate --scope apps/server --file CLAUDE.md
 ```
 
 If nothing in the bank has that scope, the command writes nothing.
+
+## Connect
+
+`connect` runs the local connector. It lets you delegate an issue to your own
+machine. The connector stays open, and it runs each issue that you delegate to
+your machine with your own omp. The CLI itself does not start a run. Only a
+person starts a run, from the issue in Vantik. Read
+[Run an agent on your machine](/agents/running-on-your-machine).
+
+```bash
+vantik connect
+```
+
+| Flag | Value |
+| --- | --- |
+| `--api-url <url>` | The Vantik app or server URL, in place of the one that you signed in to. |
+| `--socket-url <url>` | The address of the realtime gateway, when it is not the one that the server announces. |
+| `-l, --log-level <level>` | The log level of the CLI. The default is `log`. |
+
+The command finds its token and its address in its own order:
+
+- The token is `ACCESS_TOKEN` in the environment, or the token in the profile
+  that `vantik login` writes. The command does not read `VANTIK_TOKEN`.
+- The address is `--api-url`, then `BASE_HOST` in the environment, then the
+  address in the profile. The command does not read `VANTIK_URL`.
+- If it finds no token and it runs in a terminal, it starts the browser sign-in.
+  Without a terminal, it stops and tells you to run `vantik login`.
+
+The command asks the server for the address of the gateway
+(`/api/v1/config`). If the server announces none, the server is its own
+gateway. If the server does not answer, the command asks again with longer
+pauses, up to 30 seconds. Give `--socket-url` only when the gateway is at an
+address that the server does not announce.
+
+These variables change where the connector keeps its files:
+
+| Variable | What it sets |
+| --- | --- |
+| `VANTIK_CONFIG_DIR` | The configuration folder of the CLI. It holds the profile and `session-offsets.json`, the file that records how far the connector has read in each omp session. |
+| `VANTIK_HOME` | The folder for worktrees and run files. The default is `~/.vantik`. |
+| `PI_CODING_AGENT_DIR` | The omp agent folder. The default is `~/.omp/agent`. |
+
+The command needs `omp` on your `PATH`. It prints a warning when the version of
+omp is not 18.8.6 up to, but not including, 18.9.0. Press `Ctrl-C` to stop it.
+It exits with code 1 when the server refuses the connector.

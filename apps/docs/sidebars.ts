@@ -39,7 +39,11 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Agents',
-      items: ['agents/delegating-an-issue', 'agents/review-cycle'],
+      items: [
+        'agents/delegating-an-issue',
+        'agents/running-on-your-machine',
+        'agents/review-cycle',
+      ],
     },
     {
       type: 'category',

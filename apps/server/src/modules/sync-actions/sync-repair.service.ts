@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ModelNameEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
@@ -75,7 +76,14 @@ export class SyncRepairService {
       }
 
       try {
-        const changed = await this.changedSince(delegate, cutoff);
+        // An append-only model has no `updatedAt`: its rows never change after
+        // they are written. A row written during the downtime was never
+        // announced, and `record` leaves those alone, so there is no change to
+        // find. Asking anyway fails on the missing column. Deletions are still
+        // possible (a run's events go with the run), so those are looked for.
+        const changed = hasField(modelName, 'updatedAt')
+          ? await this.changedSince(delegate, cutoff)
+          : [];
 
         for (const row of changed) {
           const recorded = await this.record(
@@ -277,6 +285,15 @@ export class SyncRepairService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (this.prisma as any)[property];
   }
+}
+
+/** Whether the Prisma model behind a synced model name has this field. */
+function hasField(modelName: ModelNameEnum, field: string): boolean {
+  const model = Prisma.dmmf.datamodel.models.find(
+    (candidate) => candidate.name === modelName,
+  );
+
+  return model?.fields.some((candidate) => candidate.name === field) ?? false;
 }
 
 /**

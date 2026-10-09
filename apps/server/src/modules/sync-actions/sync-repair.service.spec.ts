@@ -276,3 +276,92 @@ describe('SyncRepairService and the team boundary', () => {
     );
   });
 });
+
+/**
+ * Some synced models are append-only: AgentRunEvent and AgentRunIteration have
+ * a `createdAt` and no `updatedAt`. Asking them for rows updated since the
+ * cutoff fails on the missing column, which used to skip both models and log an
+ * error on every boot.
+ */
+describe('SyncRepairService and append-only models', () => {
+  function buildAppendOnly(alive: string[], announced: string[]) {
+    const written: Written[] = [];
+
+    const rejectsUpdatedAt = (where: Record<string, unknown>) => {
+      if ('updatedAt' in where) {
+        throw new Error('Unknown argument `updatedAt`.');
+      }
+    };
+
+    const prisma = {
+      syncAction: {
+        aggregate: jest.fn(() =>
+          Promise.resolve({ _max: { createdAt: CUTOFF, sequenceId: 100n } }),
+        ),
+        findMany: jest.fn(({ where }) =>
+          Promise.resolve(
+            where.modelName === 'AgentRunEvent'
+              ? announced.map((modelId) => ({ modelId }))
+              : [],
+          ),
+        ),
+        findFirst: jest.fn(({ where }) =>
+          Promise.resolve(
+            announced.includes(where.modelId)
+              ? where.teamId
+                ? { teamId: TEAM }
+                : { workspaceId: WORKSPACE }
+              : null,
+          ),
+        ),
+        upsert: jest.fn(({ create }) => {
+          written.push(create);
+          return Promise.resolve(create);
+        }),
+      },
+      agentRunEvent: {
+        findUnique: jest.fn(() => Promise.resolve(null)),
+        findMany: jest.fn(({ where }) => {
+          rejectsUpdatedAt(where);
+          return Promise.resolve(
+            alive
+              .filter((id) => where.id.in.includes(id))
+              .map((id) => ({ id })),
+          );
+        }),
+      },
+      agentRunIteration: {
+        findMany: jest.fn(({ where }) => {
+          rejectsUpdatedAt(where);
+          return Promise.resolve([]);
+        }),
+      },
+    } as unknown as PrismaService;
+
+    return { service: new SyncRepairService(prisma), written };
+  }
+
+  it('reconciles them instead of skipping them', async () => {
+    const { service } = buildAppendOnly(['event-1'], ['event-1']);
+
+    const summary = await service.reconcile();
+
+    expect(summary.modelsSkipped).not.toContain('AgentRunEvent');
+    expect(summary.modelsSkipped).not.toContain('AgentRunIteration');
+  });
+
+  it('still announces a row that vanished, such as the events of a deleted run', async () => {
+    const { service, written } = buildAppendOnly([], ['event-gone']);
+
+    const summary = await service.reconcile();
+
+    expect(summary.deletesRecovered).toBe(1);
+    expect(written).toContainEqual(
+      expect.objectContaining({
+        modelId: 'event-gone',
+        action: 'D',
+        teamId: TEAM,
+      }),
+    );
+  });
+});

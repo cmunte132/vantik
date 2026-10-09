@@ -114,7 +114,7 @@
     "discord.js": "^14.16.1",
     "dotenv": "^16.6.1",
     "dotenv-expand": "^10.0.0",
-    "handlebars": "^4.7.8",
+    "handlebars": "^4.7.10",
     "happy-dom": "^20.10.6",
     "ioredis": "^5.4.2",
     "jsonwebtoken": "^9.0.2",

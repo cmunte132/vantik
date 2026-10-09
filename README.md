@@ -190,6 +190,14 @@ pnpm dev
 If the full stack already runs in containers, the app ports are in use. To free
 them, run `docker compose stop webapp server`.
 
+To run the full stack in containers on the code of your checkout, run
+`pnpm stack:rebuild`, or `pnpm stack:rebuild server` for one image. The script
+builds one image at a time, so the builds fit in a small podman VM. It refuses
+to start when the VM has less than `VANTIK_MIN_FREE_GB` free (10 by default).
+When it exits, it removes Vantik's old build layers that are older than
+`VANTIK_PRUNE_AFTER_HOURS` (72 by default), and it never touches the images of
+other projects.
+
 ### Tests
 
 ```bash
@@ -197,6 +205,14 @@ pnpm typecheck
 pnpm test   # the unit tests. They need no services.
 pnpm e2e    # the end-to-end tests. They need a running stack.
 ```
+
+The checks are sized for a laptop with 16 GB of memory. Turbo runs one task at
+a time (`pnpm dev` passes `--concurrency=10`), and each jest or vitest suite
+uses two workers. The server's jest also caps each worker's heap at 512 MB and
+does not type-check while it transpiles, because `pnpm typecheck` covers the
+spec files. With these limits, `pnpm test`, `pnpm typecheck` and `pnpm lint`
+can run at the same time in less than 4 GB. On a larger machine, or in CI, pass
+`--concurrency` to turbo to run more tasks at once.
 
 The unit tests include the webapp's sync tests
 (`apps/webapp/src/store/sync-contract.spec.ts`). They run every synced model

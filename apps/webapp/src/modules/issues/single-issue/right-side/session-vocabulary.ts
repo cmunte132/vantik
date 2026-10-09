@@ -1,3 +1,5 @@
+import { effectiveDriver, ompResumeId } from '@vantikhq/types';
+
 /**
  * The words the issue page uses about an agent session.
  *
@@ -29,8 +31,8 @@ const CHANNEL_LABEL: Record<string, string> = {
 };
 
 const DRIVER_LABEL: Record<string, string> = {
-  TERMINAL: 'Terminal',
-  VANTIK: 'Vantik',
+  TERMINAL: 'In your terminal',
+  VANTIK: 'Vantik is driving',
 };
 
 interface SessionLike {
@@ -39,6 +41,8 @@ interface SessionLike {
   location: string;
   channel: string;
   driver?: string | null;
+  driverLeaseExpiresAt?: string | null;
+  endedAt?: string | null;
 }
 
 export const harnessLabel = (harness?: string | null) =>
@@ -53,6 +57,59 @@ export const channelLabel = (channel: string) =>
 export const driverLabel = (driver?: string | null) =>
   driver ? (DRIVER_LABEL[driver] ?? driver) : null;
 
+/**
+ * Who drives the session now, in words, or null when nobody does. A lease that
+ * ran out means the connector stopped saying, and a session that ended has no
+ * driver. A driver this bundle does not know shows as it arrives.
+ */
+export function drivenBy(
+  session: SessionLike,
+  now: Date = new Date(),
+): string | null {
+  if (session.endedAt) {
+    return null;
+  }
+
+  const driver = effectiveDriver(
+    {
+      driver: (session.driver ?? null) as 'TERMINAL' | 'VANTIK' | null,
+      driverLeaseExpiresAt: session.driverLeaseExpiresAt ?? null,
+    },
+    now,
+  );
+
+  return driverLabel(driver);
+}
+
+/**
+ * The shell command that continues an omp session on the person's machine, or
+ * null when the session is not one. omp keys its sessions by the directory they
+ * ran in, so a connector run, which ran in a worktree, starts with `cd`.
+ */
+export function resumeCommand(
+  session: SessionLike & { externalId: string; agentRunId?: string | null },
+  worktreePath?: string | null,
+): string | null {
+  const id = ompResumeId({
+    externalId: session.externalId,
+    harness: session.harness ?? null,
+    location: session.location as 'LOCAL' | 'HOSTED' | 'UNKNOWN',
+    agentRunId: session.agentRunId,
+  });
+
+  if (!id) {
+    return null;
+  }
+
+  const resume = `omp --resume ${id}`;
+
+  return worktreePath ? `cd ${shellQuote(worktreePath)} && ${resume}` : resume;
+}
+
+/** Quotes a path for a shell only when it needs it. */
+const shellQuote = (value: string) =>
+  /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+
 /** The first characters of an id, enough to tell two sessions apart. */
 export const shortId = (id: string) => id.slice(0, 6);
 
@@ -61,8 +118,8 @@ export const sessionTitle = (session: SessionLike) =>
   `${harnessLabel(session.harness)} · ${locationLabel(session.location)}`;
 
 /** "Hooks · Terminal": how it reaches Vantik, and who drives it. */
-export const sessionRoute = (session: SessionLike) =>
-  [channelLabel(session.channel), driverLabel(session.driver)]
+export const sessionRoute = (session: SessionLike, now?: Date) =>
+  [channelLabel(session.channel), drivenBy(session, now)]
     .filter(Boolean)
     .join(' · ');
 

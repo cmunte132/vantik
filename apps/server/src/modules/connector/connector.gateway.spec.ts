@@ -6,6 +6,7 @@ import {
   ConnectorRegistry,
   type ConnectorRunHandler,
 } from './connector.registry';
+import { SessionDriversService } from './session-drivers.service';
 
 /**
  * The connector's door: who gets in, what hello records, and that nothing is
@@ -46,7 +47,14 @@ function gateway(
   } as unknown as PrismaService;
   const registry = new ConnectorRegistry();
 
-  return { gateway: new ConnectorGateway(prisma, registry), registry };
+  return {
+    gateway: new ConnectorGateway(
+      prisma,
+      registry,
+      {} as SessionDriversService,
+    ),
+    registry,
+  };
 }
 
 function socket(token?: unknown, id = 'socket-1') {

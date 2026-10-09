@@ -3,6 +3,7 @@ import type {
   ConnectorAck,
   ConnectorHello,
   ConnectorHelloAck,
+  ConnectorSessionsWatchAck,
 } from '@vantikhq/types';
 
 import {
@@ -31,6 +32,7 @@ import {
   ConnectorSocket,
   sanitizeModels,
 } from './connector.registry';
+import { SessionDriversService } from './session-drivers.service';
 
 /** What the handshake proves, kept on the socket. */
 interface ConnectorSocketData {
@@ -58,6 +60,7 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
   constructor(
     private prisma: PrismaService,
     private registry: ConnectorRegistry,
+    private drivers: SessionDriversService,
   ) {}
 
   afterInit(namespace: Namespace) {
@@ -110,11 +113,24 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
 
   /** The first message: describes the machine, and puts it in the registry. */
   @SubscribeMessage('hello')
-  hello(
+  async hello(
     @ConnectedSocket() socket: Socket,
     @MessageBody() body: ConnectorHello,
-  ): ConnectorHelloAck {
-    return this.accept(socket, body);
+  ): Promise<ConnectorHelloAck> {
+    const ack = this.accept(socket, body);
+
+    if (!ack.ok) {
+      return ack;
+    }
+
+    // The watch list is a convenience: a failed read leaves the connector with
+    // the sessions of its own runs only.
+    const data = socket.data as ConnectorSocketData;
+    const watchSessions = await this.drivers
+      .watchList(data.peer)
+      .catch((): string[] => []);
+
+    return { ...ack, watchSessions };
   }
 
   accept(socket: ConnectorSocketLike, body: ConnectorHello): ConnectorHelloAck {
@@ -200,6 +216,62 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
     }
 
     return { ok: true };
+  }
+
+  /** The connector asks again which sessions to watch. */
+  @SubscribeMessage('sessions.watch')
+  async watch(
+    @ConnectedSocket() socket: Socket,
+  ): Promise<ConnectorSessionsWatchAck> {
+    const peer = this.onlinePeer(socket);
+
+    if (!peer) {
+      return { ok: false, reason: 'Say hello before asking for sessions.' };
+    }
+
+    try {
+      return { ok: true, sessions: await this.drivers.watchList(peer) };
+    } catch {
+      return { ok: false, reason: 'The server could not list the sessions.' };
+    }
+  }
+
+  /** Who holds each watched omp session changed. */
+  @SubscribeMessage('sessions.drivers')
+  async sessionDrivers(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<ConnectorAck> {
+    const peer = this.onlinePeer(socket);
+
+    if (!peer) {
+      return { ok: false, reason: 'Say hello before sending sessions.' };
+    }
+
+    try {
+      return await this.drivers.applyDrivers(
+        peer,
+        (body as { sessions?: unknown } | null)?.sessions,
+      );
+    } catch (error) {
+      this.logger.error({
+        message: `Recording session drivers failed: ${error}`,
+        where: 'ConnectorGateway.sessionDrivers',
+        error: error instanceof Error ? error : undefined,
+      });
+
+      return { ok: false, reason: 'The server could not record the drivers.' };
+    }
+  }
+
+  /** The person behind a socket that has said hello, or undefined. */
+  onlinePeer(socket: Pick<Socket, 'data' | 'id'>): ConnectorPeer | undefined {
+    const data = socket.data as ConnectorSocketData | undefined;
+    const online = data?.peer && this.registry.get(data.peer);
+
+    return data?.peer && online && online.socket.id === socket.id
+      ? data.peer
+      : undefined;
   }
 
   @SubscribeMessage('run.started')

@@ -3,6 +3,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { ConnectorGateway } from './connector.gateway';
 import { ConnectorRegistry, sanitizeModels } from './connector.registry';
+import { SessionDriversService } from './session-drivers.service';
 
 /** The models a connector reports: stored, capped, and replaced on change. */
 
@@ -38,7 +39,11 @@ const asSocket = (value: ReturnType<typeof socket>): any => value;
 
 function setup() {
   const registry = new ConnectorRegistry();
-  const door = new ConnectorGateway({} as PrismaService, registry);
+  const door = new ConnectorGateway(
+    {} as PrismaService,
+    registry,
+    {} as SessionDriversService,
+  );
   return { door, registry, s: socket() };
 }
 

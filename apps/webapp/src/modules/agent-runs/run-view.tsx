@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { AGENT_RUN_DEFAULT_LIMITS } from '@vantikhq/types';
+import { AGENT_RUN_DEFAULT_LIMITS, LOCAL_EXECUTOR_KEY } from '@vantikhq/types';
 import { getInitials } from '@vantikhq/ui/components/avatar';
 import { Button } from '@vantikhq/ui/components/button';
 import { cn } from '@vantikhq/ui/lib/utils';
@@ -7,6 +7,10 @@ import { observer } from 'mobx-react-lite';
 import React from 'react';
 
 import { AgentQuestionCard } from 'modules/agent-questions/agent-question-card';
+import {
+  drivenBy,
+  resumeCommand,
+} from 'modules/issues/single-issue/right-side/session-vocabulary';
 
 import { MainLayout } from 'common/layouts/main-layout';
 import { Link as RouterLink, useRouter } from 'common/router';
@@ -27,6 +31,7 @@ import { useContextStore } from 'store/global-context-provider';
 
 import { CleanUpRun } from './clean-up-run';
 import { Header } from './header';
+import { ResumeCommand } from './resume-command';
 import { RunActivity } from './run-activity';
 import {
   changesOf,
@@ -42,6 +47,7 @@ import {
   DefinitionOfDone,
   NowCard,
   OutcomeCard,
+  RailCard,
   RunFacts,
   SpendCard,
   Stepper,
@@ -73,6 +79,7 @@ export const RunView = withApplicationStore(
     const {
       agentRunsStore,
       agentQuestionsStore,
+      agentSessionsStore,
       issuesStore,
       teamsStore,
       checklistItemsStore,
@@ -145,6 +152,17 @@ export const RunView = withApplicationStore(
     const openQuestions = (agentQuestionsStore.openQuestions as any[]).filter(
       (question) => question.agentRunId === run.id,
     );
+    // The session of a local run, which a person can continue in a terminal.
+    const session =
+      run.executor === LOCAL_EXECUTOR_KEY
+        ? (agentSessionsStore?.getSessionsForIssue?.(run.issueId) ?? []).find(
+            (each: any) => each.agentRunId === run.id,
+          )
+        : undefined;
+    const resume = session
+      ? resumeCommand(session, run.result?.worktreePath)
+      : null;
+    const driver = session ? drivenBy(session) : null;
     const events = agentRunsStore.getEvents(run.id);
     const feed = toFeed(events);
     const current = inFlight(run, feed);
@@ -320,6 +338,16 @@ export const RunView = withApplicationStore(
               live={live}
               agentTotal={agentTotal}
             />
+            {resume && (
+              <RailCard title="Continue in your terminal">
+                <ResumeCommand command={resume} />
+                {/* The connector never writes to a session that a terminal
+                    holds, so this says who has it now. */}
+                {driver && (
+                  <span className="text-muted-foreground">{driver}</span>
+                )}
+              </RailCard>
+            )}
             {criteria.length > 0 && <DefinitionOfDone items={criteria} />}
             {files.length > 0 && <Changes files={files} />}
             <RunFacts

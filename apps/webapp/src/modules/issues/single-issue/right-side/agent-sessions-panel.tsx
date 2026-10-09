@@ -2,6 +2,8 @@
 import { observer } from 'mobx-react-lite';
 import ReactTimeAgo from 'react-time-ago';
 
+import { ResumeCommand } from 'modules/agent-runs/resume-command';
+
 import { useRouter } from 'common/router';
 import { workspaceHref } from 'common/workspace-href';
 
@@ -12,6 +14,7 @@ import { useContextStore } from 'store/global-context-provider';
 
 import {
   continuedFrom,
+  resumeCommand,
   sessionRoute,
   sessionTitle,
 } from './session-vocabulary';
@@ -27,7 +30,7 @@ import {
 export const AgentSessionsPanel = observer(() => {
   const issue = useIssueData();
   const router = useRouter();
-  const { agentSessionsStore } = useContextStore();
+  const { agentSessionsStore, agentRunsStore } = useContextStore();
   const { users } = useAllUsers();
 
   const sessions: any[] = agentSessionsStore.getSessionsForIssue(issue?.id);
@@ -71,6 +74,14 @@ export const AgentSessionsPanel = observer(() => {
             : undefined;
           const continued = continuedFrom(session, parent);
           const run = session.agentRunId;
+          // A connector run ran in a worktree, and omp keys sessions by the
+          // directory they ran in.
+          const resume = resumeCommand(
+            session,
+            run
+              ? agentRunsStore?.getRunById?.(run)?.result?.worktreePath
+              : null,
+          );
 
           const body = (
             <>
@@ -127,6 +138,8 @@ export const AgentSessionsPanel = observer(() => {
                   {body}
                 </div>
               )}
+
+              {resume && <ResumeCommand command={resume} className="pb-1" />}
 
               {continued && (
                 <button

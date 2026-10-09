@@ -54,6 +54,35 @@ export interface RunDeps {
   ) => OmpChildLike;
   /** The batch interval for omp events. */
   eventBatchMs?: number;
+  /**
+   * Whether a process other than this connector's omp holds the omp session.
+   * Without it, a run cannot resume a session.
+   */
+  isHeldByOther?(sessionId: string): Promise<boolean>;
+}
+
+/**
+ * Refuses to open an omp session that a terminal holds, or that cannot be
+ * shown to be free. Every path that resumes a session goes through here.
+ */
+export async function assertSessionFree(
+  sessionId: string,
+  isHeldByOther: RunDeps['isHeldByOther'],
+): Promise<void> {
+  if (!isHeldByOther) {
+    throw new Error('This connector cannot check whether a session is free.');
+  }
+  if (await isHeldByOther(sessionId)) {
+    throw new Error(heldSessionReason(sessionId));
+  }
+}
+
+/** The reason a run gives when a terminal holds the session it should resume. */
+export function heldSessionReason(sessionId: string): string {
+  return (
+    `The omp session ${sessionId} is open in a terminal, so Vantik did not ` +
+    'resume it. Close it there and delegate again.'
+  );
 }
 
 const OUTBOX_POLL_MS = 500;
@@ -74,6 +103,10 @@ export class LocalRun {
   private abortNow: (() => void) | undefined;
   private finished: Promise<void> | undefined;
   private activeDriver: OmpDriver | undefined;
+  /** The omp session id of this run, once omp reported it. */
+  ompSessionId: string | undefined;
+  /** The process id of this run's omp, while it runs. */
+  ompPid: number | undefined;
   /** Dialogs of omp that wait for a person, by the id of their question. */
   private readonly dialogs = new Map<string, PendingDialog>();
 
@@ -163,7 +196,10 @@ export class LocalRun {
       renameSync(temporary, target);
       return { ok: true };
     } catch (error) {
-      return { ok: false, reason: `Could not write the answer: ${String(error)}` };
+      return {
+        ok: false,
+        reason: `Could not write the answer: ${String(error)}`,
+      };
     }
   }
 
@@ -236,14 +272,24 @@ export class LocalRun {
         emptyConfigDir: seeded.emptyConfigDir,
       });
 
+      // The connector never opens a session that a terminal holds: omp would
+      // fork it, and the person would not see the work.
+      const resume = dispatch.resumeSessionId;
+      if (resume) {
+        await assertSessionFree(resume, deps.isHeldByOther);
+      }
+
       const child = (deps.spawnOmp ?? spawnOmp)(
         ompArgs(dispatch, deps.extensionPath),
         { cwd: worktree.path, env },
       );
+      this.ompPid = child.pid;
       driver = new OmpDriver(child);
       const omp = driver;
       this.activeDriver = omp;
-      omp.onUiRequest((request) => this.onDialog(request as unknown as OmpUiRequest));
+      omp.onUiRequest((request) =>
+        this.onDialog(request as unknown as OmpUiRequest),
+      );
 
       // Batched events.
       let events: unknown[] = [];
@@ -312,6 +358,7 @@ export class LocalRun {
 
       await omp.negotiate();
       const state = await omp.getState();
+      this.ompSessionId = state.sessionId;
       this.queue.send('run.started', {
         ompSessionId: state.sessionId,
         sessionFile: state.sessionFile,
@@ -425,6 +472,7 @@ export class LocalRun {
       ]);
       driver.kill('SIGKILL');
     }
+    this.ompPid = undefined;
     restoreMcp?.();
     deps.log(
       `${dispatch.issue.key}: ${outcome}${this.deadlineHit ? ' (deadline)' : ''}${

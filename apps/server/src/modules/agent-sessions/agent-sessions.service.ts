@@ -10,6 +10,17 @@ import { PrismaService } from 'nestjs-prisma';
 import { assertIssuesVisible, visibleTeamIds } from 'common/team-access';
 import { assertIssueInWorkspace } from 'common/workspace-access';
 
+/**
+ * The harness a session id names. The omp hooks extension sends `omp:<uuid>`
+ * but reports to the server as Claude Code, and an agent may name its harness
+ * loosely when it calls `pick_up_task`. The id prefix is the one reliable sign.
+ */
+function harnessOf(externalId: string, harness?: string | null) {
+  return externalId.startsWith('omp:')
+    ? 'omp'
+    : normalizeAgentSessionHarness(harness);
+}
+
 export interface SessionActor {
   userId: string;
   workspaceId: string;
@@ -49,7 +60,7 @@ export class AgentSessionsService {
       await visibleTeamIds(this.prisma, actor.userId, actor.workspaceId),
     );
 
-    const harness = normalizeAgentSessionHarness(input.harness);
+    const harness = harnessOf(externalId, input.harness);
     const now = new Date();
 
     return this.prisma.agentSession.upsert({
@@ -111,13 +122,23 @@ export class AgentSessionsService {
       data: { lastActiveAt: now },
     });
 
-    const name = normalizeAgentSessionHarness(harness);
+    const name = harnessOf(externalId, harness);
 
     // The hook names its harness from a fixed list, so it also corrects an
     // 'other' that a free-text pick_up_task argument wrote.
     if (count > 0 && name && name !== 'other') {
       await this.prisma.agentSession.updateMany({
-        where: { ...where, OR: [{ harness: null }, { harness: 'other' }] },
+        where: {
+          ...where,
+          OR: [
+            { harness: null },
+            { harness: 'other' },
+            // The prefix is certain, so it also corrects a loose name.
+            ...(externalId.startsWith('omp:')
+              ? [{ harness: { not: name } }]
+              : []),
+          ],
+        },
         data: { harness: name },
       });
     }

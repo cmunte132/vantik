@@ -59,7 +59,7 @@ const THINKING_LEVELS = new Set([
  * approve, and the worktree is the boundary.
  */
 export function ompArgs(
-  dispatch: Pick<ConnectorRunDispatch, 'model'>,
+  dispatch: Pick<ConnectorRunDispatch, 'model' | 'resumeSessionId'>,
   extensionPath: string,
 ): string[] {
   const args = [
@@ -73,6 +73,11 @@ export function ompArgs(
     '-e',
     extensionPath,
   ];
+
+  // The caller has checked that no terminal holds this session.
+  if (dispatch.resumeSessionId) {
+    args.push('--resume', dispatch.resumeSessionId);
+  }
 
   const { provider, model, thinking } = dispatch.model;
   if (model) {

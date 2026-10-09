@@ -117,6 +117,21 @@ describe('AgentSessionsService linking a hooks session', () => {
     expect(session.harness).toBe('other');
   });
 
+  it('names an omp session from its id prefix, whatever harness the agent said', async () => {
+    const { service } = build();
+
+    const session = await service.linkHookSession(
+      actor,
+      link({
+        externalId: 'omp:01a11e21-8ec7-763d-b981-ef21a2f3a662',
+        harness: 'claude-code',
+      }),
+    );
+
+    expect(session.harness).toBe('omp');
+    expect(session.externalId).toBe('omp:01a11e21-8ec7-763d-b981-ef21a2f3a662');
+  });
+
   it('refuses an issue in another workspace as if it did not exist', async () => {
     const { service, prisma } = build();
 

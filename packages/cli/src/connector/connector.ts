@@ -17,17 +17,19 @@ import {
   type ConnectorRunAnswer,
   type ConnectorRunCancel,
   type ConnectorRunDispatch,
+  type ConnectorSessionsWatchAck,
 } from '@vantikhq/types';
 import { io } from 'socket.io-client';
 
-import {
-  discoverModels,
-  MODEL_REFRESH_MS,
-  modelsChanged,
-} from './models';
+import { discoverModels, MODEL_REFRESH_MS, modelsChanged } from './models';
 import { discoverOmp, ompAgentDirPath, type OmpInstall } from './omp';
 import { AckedQueue, type QueueTransport } from './queue';
 import { LocalRun, type RunDeps } from './run';
+import {
+  DRIVER_POLL_MS,
+  SessionDrivers,
+  WATCH_REFRESH_MS,
+} from './session-drivers';
 import { vantikHome, worktreePathFor } from './worktree';
 
 export interface ConnectorOptions {
@@ -43,13 +45,16 @@ export interface ConnectorOptions {
   discoverModels?(): Promise<ConnectorModels>;
   /** Replaces `LocalRun`, for tests. */
   createRun?(dispatch: ConnectorRunDispatch, deps: RunDeps): ActiveRun;
+  /** Replaces the lock check, for tests. */
+  drivers?: SessionDrivers;
 }
 
 /** What the connector needs from a run. */
 export type ActiveRun = Pick<
   LocalRun,
   'runId' | 'branch' | 'worktreePath' | 'queue' | 'start' | 'cancel' | 'answer'
->;
+> &
+  Partial<Pick<LocalRun, 'ompSessionId' | 'ompPid'>>;
 
 const defaultCreateRun = (dispatch: ConnectorRunDispatch, deps: RunDeps) =>
   new LocalRun(dispatch, deps);
@@ -153,8 +158,14 @@ export class Connector {
   /** The last models found, or undefined when omp could not list any. */
   private models: ConnectorModels | undefined;
   private modelTimer: ReturnType<typeof setInterval> | undefined;
+  private driverTimer: ReturnType<typeof setInterval> | undefined;
+  private watchTimer: ReturnType<typeof setInterval> | undefined;
+  private checkingDrivers = false;
+  private readonly drivers: SessionDrivers;
 
-  constructor(private readonly options: ConnectorOptions) {}
+  constructor(private readonly options: ConnectorOptions) {
+    this.drivers = options.drivers ?? new SessionDrivers({ log: options.log });
+  }
 
   /** Connects and stays connected. Resolves when `stop` finishes. */
   async run(): Promise<void> {
@@ -213,6 +224,7 @@ export class Connector {
           for (const run of this.runs.values()) {
             run.queue.resume();
           }
+          this.watchSessions(ack.watchSessions ?? []);
         });
       });
 
@@ -321,6 +333,85 @@ export class Connector {
     }
   }
 
+  /**
+   * Starts the lock checks. The server's list of the person's terminal
+   * sessions replaces the old one, and the first check after a connect reports
+   * every session again, because the server may have missed a report.
+   */
+  private watchSessions(sessions: string[]) {
+    this.drivers.setWatched(sessions);
+    this.drivers.resetReported();
+    void this.checkDrivers();
+
+    if (!this.driverTimer) {
+      this.driverTimer = setInterval(
+        () => void this.checkDrivers(),
+        DRIVER_POLL_MS,
+      );
+      this.driverTimer.unref();
+    }
+    if (!this.watchTimer) {
+      this.watchTimer = setInterval(
+        () => this.refreshWatch(),
+        WATCH_REFRESH_MS,
+      );
+      this.watchTimer.unref();
+    }
+  }
+
+  /** Asks the server again for the sessions to watch. */
+  refreshWatch() {
+    if (!this.socket?.connected) {
+      return;
+    }
+    this.socket.emit(
+      'sessions.watch',
+      {},
+      (ack: ConnectorSessionsWatchAck | undefined) => {
+        if (ack?.ok && Array.isArray(ack.sessions)) {
+          this.drivers.setWatched(ack.sessions);
+        }
+      },
+    );
+  }
+
+  /**
+   * One lock check. Sends the changes only, and counts them as sent when the
+   * server acknowledges them; a report that is lost goes again on the next
+   * check.
+   */
+  async checkDrivers(): Promise<void> {
+    if (this.checkingDrivers || !this.socket?.connected) {
+      return;
+    }
+    this.checkingDrivers = true;
+    try {
+      this.drivers.syncRuns(
+        [...this.runs.values()].map((run) => ({
+          sessionId: run.ompSessionId,
+          pid: run.ompPid,
+        })),
+      );
+      const changes = await this.drivers.poll();
+      if (changes.length === 0) {
+        return;
+      }
+      this.socket.emit(
+        'sessions.drivers',
+        { sessions: changes },
+        (ack: { ok?: boolean } | undefined) => {
+          if (ack?.ok) {
+            this.drivers.commit(changes);
+          }
+        },
+      );
+    } catch (error) {
+      this.options.log(`Could not check your omp sessions: ${String(error)}`);
+    } finally {
+      this.checkingDrivers = false;
+    }
+  }
+
   private dispatch(
     dispatch: ConnectorRunDispatch,
     transport: QueueTransport,
@@ -356,6 +447,7 @@ export class Connector {
       transport,
       extensionPath: this.options.extensionPath,
       log,
+      isHeldByOther: (sessionId) => this.drivers.isHeldByOther(sessionId),
     });
     this.runs.set(dispatch.runId, run);
     log(`${dispatch.issue.key}: starting "${dispatch.issue.title}"`);
@@ -430,6 +522,8 @@ export class Connector {
 
   async stop(): Promise<void> {
     clearInterval(this.modelTimer);
+    clearInterval(this.driverTimer);
+    clearInterval(this.watchTimer);
     for (const run of this.runs.values()) {
       run.cancel();
     }

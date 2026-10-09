@@ -56,6 +56,56 @@ export function normalizeAgentSessionHarness(
     : 'other';
 }
 
+const OMP_SESSION_UUID =
+  /^(?:omp:)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+/**
+ * The id that `omp --resume` takes, or null when the session is not an omp
+ * session on the person's machine. The hooks extension reports `omp:<uuid>`;
+ * the connector reports the bare uuid. A hosted run, and a local run that has
+ * not started omp yet, carry the run id as `externalId` and give null.
+ */
+export function ompResumeId(session: {
+  externalId: string;
+  harness: string | null;
+  location: AgentSessionLocation;
+  agentRunId?: string | null;
+}): string | null {
+  if (session.harness !== 'omp' || session.location !== 'LOCAL') {
+    return null;
+  }
+
+  const id = OMP_SESSION_UUID.exec(session.externalId)?.[1];
+
+  return id && id !== session.agentRunId ? id.toLowerCase() : null;
+}
+
+/**
+ * Who drives the session now. A lease that ran out counts as nobody: the
+ * connector renews it, so an old one means the connector is gone. A driver
+ * with no lease at all was set by a channel that has no lease (the hooks, a
+ * run in progress), and counts as set.
+ */
+export function effectiveDriver(
+  session: {
+    driver: AgentSessionDriver | null;
+    driverLeaseExpiresAt: Date | string | null;
+  },
+  now: Date = new Date(),
+): AgentSessionDriver | null {
+  if (!session.driver) {
+    return null;
+  }
+
+  if (!session.driverLeaseExpiresAt) {
+    return session.driver;
+  }
+
+  return new Date(session.driverLeaseExpiresAt).getTime() > now.getTime()
+    ? session.driver
+    : null;
+}
+
 export class AgentSession {
   id: string;
   createdAt: Date;

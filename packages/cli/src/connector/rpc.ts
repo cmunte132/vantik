@@ -13,6 +13,8 @@ export const OMP_RPC_PROTOCOL_VERSION = 2;
 
 /** The slice of a child process the driver uses. */
 export interface OmpChildLike {
+  /** The process id, when the child started. */
+  pid?: number;
   stdin: { write(chunk: string): unknown };
   stdout: { on(event: 'data', cb: (chunk: Buffer | string) => void): unknown };
   stderr: { on(event: 'data', cb: (chunk: Buffer | string) => void): unknown };

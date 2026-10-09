@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { ConnectorGateway } from './connector.gateway';
 import { ConnectorRegistry } from './connector.registry';
+import { SessionDriversService } from './session-drivers.service';
 
 /**
  * The server's end of `vantik connect`: the socket namespace local connectors
@@ -10,7 +11,7 @@ import { ConnectorRegistry } from './connector.registry';
  * registry's handler.
  */
 @Module({
-  providers: [ConnectorRegistry, ConnectorGateway],
+  providers: [ConnectorRegistry, ConnectorGateway, SessionDriversService],
   exports: [ConnectorRegistry],
 })
 export class ConnectorModule {}

@@ -395,7 +395,11 @@ export class AgentRunsService {
         where: { agentRunId: runId },
         data: {
           lastActiveAt: now,
-          ...(isTerminalAgentRunStatus(to) ? { endedAt: now } : {}),
+          // A finished run no longer drives its session, so the person can
+          // take it over in a terminal.
+          ...(isTerminalAgentRunStatus(to)
+            ? { endedAt: now, driver: null, driverLeaseExpiresAt: null }
+            : {}),
         },
       });
     } catch (error) {

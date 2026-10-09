@@ -92,8 +92,51 @@ export interface ConnectorModels {
 }
 
 export type ConnectorHelloAck =
-  | { ok: true; userId: string; workspaceId: string }
+  | {
+      ok: true;
+      userId: string;
+      workspaceId: string;
+      /**
+       * The omp session ids (uuids) of the person's other local sessions, from
+       * the hooks and from earlier connector runs, that were active in the
+       * last 24 hours. The connector checks which of them a terminal holds.
+       * Absent from an older server.
+       */
+      watchSessions?: string[];
+    }
   | { ok: false; reason: string };
+
+/** Who holds an omp session, as the connector finds out from the lock file. */
+export type ConnectorSessionDriverName = 'TERMINAL' | 'VANTIK';
+
+/**
+ * One omp session whose holder changed. `driver` is TERMINAL when an omp that
+ * the connector did not start holds the session, VANTIK when the connector's
+ * own omp holds it, and null when nobody does. `externalId` is the omp session
+ * uuid.
+ */
+export interface ConnectorSessionDriver {
+  externalId: string;
+  driver: ConnectorSessionDriverName | null;
+}
+
+/**
+ * Sent outside any run, so it carries no seq. The server updates the driver of
+ * the person's own sessions only, and acknowledges with {@link ConnectorAck}.
+ */
+export interface ConnectorSessionDrivers {
+  sessions: ConnectorSessionDriver[];
+}
+
+/**
+ * The connector asks again for the sessions to watch (`sessions.watch`, about
+ * once an hour). It carries no body.
+ */
+export type ConnectorSessionsWatchAck =
+  { ok: true; sessions: string[] } | { ok: false; reason: string };
+
+/** The longest a driver lease lives without a new report from the connector. */
+export const SESSION_DRIVER_LEASE_MS = 60_000;
 
 /** The connector has a worktree and an omp session for the run. */
 export interface ConnectorRunStarted {
@@ -220,6 +263,12 @@ export interface ConnectorRunDispatch {
   token: { value: string; apiUrl: string; expiresAt: string };
   /** The time after which the server fails the run and revokes its token. */
   deadlineAt: string;
+  /**
+   * An omp session to continue (`--resume`), by its uuid. The server does not
+   * send this yet. The connector refuses to resume a session that an omp in a
+   * terminal holds, and never writes to it.
+   */
+  resumeSessionId?: string | null;
 }
 
 export interface ConnectorRunCancel {

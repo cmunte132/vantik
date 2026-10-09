@@ -8,7 +8,7 @@ import {
   Workspace,
   wantsNotification,
 } from '@vantikhq/types';
-import nodemailer from 'nodemailer';
+import nodemailer, { type Mail } from 'nodemailer';
 
 import { smtpConfigured, smtpFrom, smtpTransportOptions } from 'common/smtp';
 
@@ -24,7 +24,7 @@ import {
  * one there is nobody to hand the mail to, so nothing is sent.
  */
 class MailService {
-  private transporter: nodemailer.Transporter | undefined;
+  private transporter: Mail | undefined;
 
   async sendMail({
     to,

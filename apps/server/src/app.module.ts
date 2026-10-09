@@ -2,7 +2,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { MailerModule } from '@nestjs-modules/mailer';
+import { MailerModule, type MailerOptions } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 import { PrismaModule } from 'nestjs-prisma';
 
@@ -80,9 +80,12 @@ import { AppService } from './app.service';
 
     MailerModule.forRoot({
       transport: smtpTransportOptions(),
+      // The mailer types its defaults as transport options, which nodemailer
+      // 10's own types keep apart from message defaults such as `from`.
+      // Nodemailer still takes them as message defaults at runtime.
       defaults: {
         from: smtpFrom(),
-      },
+      } as MailerOptions['defaults'],
       template: {
         dir: `${process.cwd()}/templates`,
         adapter: new HandlebarsAdapter(),

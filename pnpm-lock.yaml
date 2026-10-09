@@ -13,7 +13,6 @@ overrides:
   ajv@<6.14.0: ^6.15.0
   ajv@>=7.0.0 <8.18.0: ^8.20.0
   brace-expansion@>=5.0.0 <5.0.9: ^5.0.9
-  fast-uri@>=3.0.0 <3.1.4: ^3.1.4
   glob@>=10.2.0 <10.5.0: ^10.5.0
   js-yaml@>=4.0.0 <4.3.2: ^4.3.2
   linkify-it@>=5.0.0 <5.0.2: ^5.0.2
@@ -49,6 +48,14 @@ overrides:
   svgo@>=3.0.0 <3.3.5: ^3.3.5
   svgo@>=4.0.0 <4.1.0: ^4.1.0
   undici@>=6.0.0 <6.28.0: ^6.28.0
+  fast-uri@>=3.0.0 <3.1.8: ^3.1.8
+  axios@<1.20.0: ^1.20.0
+  nodemailer@<10.0.9: ^10.0.16
+  engine.io@>=6.6.0 <6.6.10: ^6.6.10
+  '@grpc/grpc-js@>=1.14.0 <1.14.5': ^1.14.5
+  markdown-it@<14.3.1: ^14.3.1
+  piscina@<4.9.4: ^4.9.4
+  '@xhmikosr/decompress@>=11.0.0 <11.1.4': ^11.1.4
 
 patchedDependencies:
   react-virtualized@9.22.6:
@@ -207,10 +214,10 @@ importers:
         version: 1.29.0(zod@4.4.3)
       '@nestjs-modules/mailer':
         specifier: ^2.3.7
-        version: 2.3.7(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(chokidar@4.0.3)(nodemailer@9.1.1)(relateurl@0.2.7)(svgo@4.1.0)(terser@5.49.0)(typescript@5.9.3)
+        version: 2.3.7(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(chokidar@4.0.3)(nodemailer@10.0.16)(relateurl@0.2.7)(svgo@4.1.0)(terser@5.49.0)(typescript@5.9.3)
       '@nestjs/axios':
         specifier: ^4.0.0
-        version: 4.0.1(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(axios@1.18.1)(rxjs@7.8.2)
+        version: 4.0.1(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(axios@1.20.0)(rxjs@7.8.2)
       '@nestjs/bull':
         specifier: ^11.0.0
         version: 11.0.4(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(bull@4.16.5)
@@ -361,9 +368,6 @@ importers:
       '@types/multer':
         specifier: ^1.4.11
         version: 1.4.13
-      '@types/nodemailer':
-        specifier: ^8.0.1
-        version: 8.0.1
       '@types/turndown':
         specifier: ^5.0.5
         version: 5.0.6
@@ -380,8 +384,8 @@ importers:
         specifier: ^7.0.31
         version: 7.0.31(zod@4.4.3)
       axios:
-        specifier: ^1.6.7
-        version: 1.18.1
+        specifier: ^1.20.0
+        version: 1.20.0
       body-parser:
         specifier: ^1.20.3
         version: 1.20.6
@@ -437,8 +441,8 @@ importers:
         specifier: ^0.27.0
         version: 0.27.0(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@prisma/client@6.19.3(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3))(chokidar@4.0.3)(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))
       nodemailer:
-        specifier: ^9.1.1
-        version: 9.1.1
+        specifier: ^10.0.16
+        version: 10.0.16
       openai:
         specifier: ^4.28.4
         version: 4.104.0(encoding@0.1.13)(ws@8.21.1)(zod@4.4.3)
@@ -820,8 +824,8 @@ importers:
         specifier: workspace:*
         version: link:../types
       axios:
-        specifier: ^1.6.7
-        version: 1.18.1
+        specifier: ^1.20.0
+        version: 1.20.0
       chalk:
         specifier: ^5.2.0
         version: 5.6.2
@@ -1068,8 +1072,8 @@ importers:
         specifier: ^1.12.12
         version: 1.15.6(@types/react@19.2.17)(react@19.2.7)
       axios:
-        specifier: ^1.6.7
-        version: 1.18.1
+        specifier: ^1.20.0
+        version: 1.20.0
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.1
@@ -3357,8 +3361,8 @@ packages:
   '@fontsource-variable/geist@5.3.0':
     resolution: {integrity: sha512-j0m+vLQuG5XAYoHtGCVu0spvlGreR3EzpECUVzkFmI1mTVnAO38l/NEPDCFgZ177JxzYJCLSmTQibIiYPilGrA==}
 
-  '@grpc/grpc-js@1.14.4':
-    resolution: {integrity: sha512-k9Dj3DV/itK9D06Y8f190Qgop7/Ui+D0njFV3LHMPwPT75DpXLQohE9Wmz0QElrJnzsjB7KPWiKJbOl7IPDArQ==}
+  '@grpc/grpc-js@1.14.6':
+    resolution: {integrity: sha512-SgC/B3/VZ8lTyOZ4Cwk6f1skWhmkNAaVfiX90qd5u1rRXGKk1//8FTUEN9GvOUq7rfWIqAYkA3CoyumYVpOS6g==}
     engines: {node: '>=12.10.0'}
 
   '@grpc/proto-loader@0.8.1':
@@ -4229,7 +4233,7 @@ packages:
       '@nestjs/event-emitter': '>=2.0.0'
       '@nestjs/terminus': '>=10.0.0'
       bullmq: '>=4.0.0'
-      nodemailer: ^9.0.3
+      nodemailer: ^10.0.16
     peerDependenciesMeta:
       '@nestjs/event-emitter':
         optional: true
@@ -4242,7 +4246,7 @@ packages:
     resolution: {integrity: sha512-68pFJgu+/AZbWkGu65Z3r55bTsCPlgyKaV4BSG8yUAD72q1PPuyVRgUwFv6BxdnibTUHlyxm06FmYWNC+bjN7A==}
     peerDependencies:
       '@nestjs/common': ^10.0.0 || ^11.0.0
-      axios: ^1.3.1
+      axios: ^1.20.0
       rxjs: ^7.0.0
 
   '@nestjs/bull-shared@11.0.4':
@@ -7118,9 +7122,6 @@ packages:
   '@types/node@20.19.43':
     resolution: {integrity: sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==}
 
-  '@types/nodemailer@8.0.1':
-    resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
-
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
 
@@ -7662,8 +7663,8 @@ packages:
     resolution: {integrity: sha512-qzNWA0+YUbN3lVz79b2WK+X3QbR8+hmd6nMTAko1F/1jAeK7VbpK7TcfkYU4dL8iaLNNGYL94WsTewwH17jMTQ==}
     engines: {node: '>=20'}
 
-  '@xhmikosr/decompress-tar@9.0.1':
-    resolution: {integrity: sha512-4AkVR1SoqTxYY22IRRYKDeLirPIDGqMqYsqgjKYuwhgRcBb+yDP4t5Xph33UCzL/nahK/aADmlMEjTNstbX7kw==}
+  '@xhmikosr/decompress-tar@9.0.2':
+    resolution: {integrity: sha512-8nPZ6lZ3ExhsSxi/X/PMB3K+Vtsuxk43HowxYpxw4AsCHTYqFBXwC8B3Y+M/meaUOGOVm+2tFNUAfWGRjBt+Ww==}
     engines: {node: '>=20'}
 
   '@xhmikosr/decompress-tarbz2@9.0.2':
@@ -7678,8 +7679,8 @@ packages:
     resolution: {integrity: sha512-2MS94QnmXQwjkKN8WyFiu1sU7J3rcWJcMze4kRYsX7tN+CXpUGECgkh4YSOhujpkWPuVlFudIziJHO/TxOqkQQ==}
     engines: {node: '>=20'}
 
-  '@xhmikosr/decompress@11.1.3':
-    resolution: {integrity: sha512-NiyhJq6z7ERsYghcnXZUI6ooDXgZtoB+G9eUsYhfSM4VLp2rKx9UxhKI1NEf1PqosrNPxG3bnSsr2UBVbNurlg==}
+  '@xhmikosr/decompress@11.1.4':
+    resolution: {integrity: sha512-ZbYL7SAfY37/TMpopqBR3mQiuQ76kI/RNpN4q82YHSw/UxktZNy8P4wgiKPSrTImMAWRaUG8UK1pgEa56YdLaw==}
     engines: {node: '>=20'}
 
   '@xhmikosr/downloader@16.3.0':
@@ -8007,8 +8008,8 @@ packages:
     resolution: {integrity: sha512-s7iGf5GaVMxEG0ENN9x+xTr7GFZCb1ZP/1uATUpCEK2X78nDB3RwbtFCo9pGAf9ru+VwoQ464DkaLEeRM08wJA==}
     engines: {node: '>=4'}
 
-  axios@1.18.1:
-    resolution: {integrity: sha512-3nTvFlvpn9Zu/RkHUqtc7/+al4UpRW5az71ap5zccp6e8RAYEzhMTecX8Dz1wWDYrPpUoB1HAQEGEAEvUr7S9g==}
+  axios@1.20.0:
+    resolution: {integrity: sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg==}
 
   axobject-query@4.1.0:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
@@ -9519,8 +9520,8 @@ packages:
     resolution: {integrity: sha512-HqD3yTBfnBxIrbnM1DoD6Pcq8NECnh8d4As1Qgh0z5Gg3jRRIqijury0CL3ghu/edArpUYiYqQiDUQBIs4np3Q==}
     engines: {node: '>=10.0.0'}
 
-  engine.io@6.6.9:
-    resolution: {integrity: sha512-clKkw4C7nJ22mGgoVcCg6V/W/TxdNyIOTr89k2ONZu81qqkddPFDF0LXcbAwhzPD8DjkiRCjzuiO6Y+fkpD4vg==}
+  engine.io@6.6.11:
+    resolution: {integrity: sha512-z34mGpLoY/82ZbkX1LqGMIaf3wjVMPL6gVC681QDqnmzJ26synI8qAE32P+a7UazmpJZ8UGrFIeAavgRfXzYrg==}
     engines: {node: '>=10.2.0'}
 
   enhanced-resolve@5.24.2:
@@ -10055,8 +10056,8 @@ packages:
   fast-string-width@3.0.2:
     resolution: {integrity: sha512-gX8LrtNEI5hq8DVUfRQMbr5lpaS4nMIWV+7XEbXk2b8kiQIizgnlr12B4dA3ZEx3308ze0O4Q1R+cHts8kyUJg==}
 
-  fast-uri@3.1.7:
-    resolution: {integrity: sha512-dOvZVzjdZdz7phd9v6jCbwxrBW3fK6n8Rc0CtdmM4bumzMnxywBYhuph6J819RRw/ku+rLbelwfMunktuzVVHg==}
+  fast-uri@3.1.8:
+    resolution: {integrity: sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg==}
 
   fast-wrap-ansi@0.2.2:
     resolution: {integrity: sha512-7F2Fl+TjRSenLqlU3UjSH0iyqopqoZIu7eZVpEirP2g1GtWa2G/ecEmBdgz31+Mxr+ELclgg6sokpSFIQiZ02Q==}
@@ -11910,8 +11911,8 @@ packages:
   markdown-it-task-lists@2.1.1:
     resolution: {integrity: sha512-TxFAc76Jnhb2OUu+n3yz9RMu4CwGfaT788br6HhEDlvWfdeJcLUsxk1Hgw2yJio0OXsxv7pyIPmvECY7bMbluA==}
 
-  markdown-it@14.3.0:
-    resolution: {integrity: sha512-RCEsPjR+sr0x+AuYp601tKTkgFG4YEPLCzHST3cQ/fhlJkqAkz1L2/Qbp1j9qw5SBwQHFBoW8+hoN5xssOF0Tw==}
+  markdown-it@14.3.2:
+    resolution: {integrity: sha512-sHHjZ5fJKlgrG4qns2YwVcdNep35h5fERrfkD2YNsb9UFk0UIHarbiTaHKVMlPuWAoiilyK8Fv/jAm11slsY7Q==}
     hasBin: true
 
   markdown-table@3.0.4:
@@ -12595,9 +12596,9 @@ packages:
     resolution: {integrity: sha512-kQK9LGGFiHtrWiNhZtA7Qbw17AQz+dmsEKODRIVTXA9+e5MS/2gZEBhYJt13GrAz5/IOZKddH/0Z3TP/Zgo+yw==}
     engines: {node: '>=18'}
 
-  nodemailer@9.1.1:
-    resolution: {integrity: sha512-izw9mVKFix6YSnC9eLgV6g1opl9DUlRio9ZNcq+Wu9Ujn2UwF+8Nl0B8nz22kEC+CTZCvinkxwJ0DeFbb6NwcQ==}
-    engines: {node: '>=6.0.0'}
+  nodemailer@10.0.16:
+    resolution: {integrity: sha512-VL9xKErxN+el77o8eBOuYKUPMyEx7F9hfnDCuiUKJRp9v3wnWMOudYgP/SWbwSHy8rUL4cylobuXtki1LpQS7A==}
+    engines: {node: '>=20.0.0'}
 
   nopt@7.2.1:
     resolution: {integrity: sha512-taM24ViiimT/XntxbPyJQzCG+p4EKOpgD3mxFwW38mGjVUrfERQOeY4EDHjdnptttfHuHQXFx+lTP08Q+mLa/w==}
@@ -13092,8 +13093,8 @@ packages:
     resolution: {integrity: sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA==}
     engines: {node: '>= 6'}
 
-  piscina@4.9.3:
-    resolution: {integrity: sha512-3e3ka9QCE8RJ5I9uszdAADZnkcYi21cqmF3gxox3u884N72qpFHCsIVhHt8cEQ9t3Auq/NqoiCEuhxlxxQuDWA==}
+  piscina@4.9.4:
+    resolution: {integrity: sha512-RyBDr2VheQ8ZfH3N8SzQZHztqVyOtadTwLnUYof6gdj5161/eu2wNhCbGl5GHnNKDpnkicJYpKtL2J+y/gk6XA==}
 
   pkce-challenge@5.0.1:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
@@ -19638,7 +19639,7 @@ snapshots:
 
   '@fontsource-variable/geist@5.3.0': {}
 
-  '@grpc/grpc-js@1.14.4':
+  '@grpc/grpc-js@1.14.6':
     dependencies:
       '@grpc/proto-loader': 0.8.1
       '@js-sdsl/ordered-map': 4.4.2
@@ -20641,13 +20642,13 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
-  '@nestjs-modules/mailer@2.3.7(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(chokidar@4.0.3)(nodemailer@9.1.1)(relateurl@0.2.7)(svgo@4.1.0)(terser@5.49.0)(typescript@5.9.3)':
+  '@nestjs-modules/mailer@2.3.7(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(chokidar@4.0.3)(nodemailer@10.0.16)(relateurl@0.2.7)(svgo@4.1.0)(terser@5.49.0)(typescript@5.9.3)':
     dependencies:
       '@css-inline/css-inline': 0.20.0
       '@nestjs/common': 11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 11.1.28(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.1.28)(@nestjs/websockets@11.1.28)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       glob: 13.0.6
-      nodemailer: 9.1.1
+      nodemailer: 10.0.16
       tslib: 2.8.1
     optionalDependencies:
       '@types/ejs': 3.1.5
@@ -20670,10 +20671,10 @@ snapshots:
       - typescript
       - uncss
 
-  '@nestjs/axios@4.0.1(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(axios@1.18.1)(rxjs@7.8.2)':
+  '@nestjs/axios@4.0.1(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(axios@1.20.0)(rxjs@7.8.2)':
     dependencies:
       '@nestjs/common': 11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      axios: 1.18.1
+      axios: 1.20.0
       rxjs: 7.8.2
 
   '@nestjs/bull-shared@11.0.4(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)':
@@ -21414,7 +21415,7 @@ snapshots:
 
   '@opentelemetry/otlp-grpc-exporter-base@0.221.0(@opentelemetry/api@1.9.1)':
     dependencies:
-      '@grpc/grpc-js': 1.14.4
+      '@grpc/grpc-js': 1.14.6
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/core': 2.10.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/otlp-exporter-base': 0.221.0(@opentelemetry/api@1.9.1)
@@ -22586,14 +22587,14 @@ snapshots:
   '@redocly/ajv@8.18.1':
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.7
+      fast-uri: 3.1.8
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
   '@redocly/ajv@8.18.3':
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.7
+      fast-uri: 3.1.8
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -23089,7 +23090,7 @@ snapshots:
       '@xhmikosr/bin-wrapper': 14.5.0
       commander: 8.3.0
       minimatch: 9.0.9
-      piscina: 4.9.3
+      piscina: 4.9.4
       semver: 7.8.5
       slash: 3.0.0
       source-map: 0.7.6
@@ -23870,10 +23871,6 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/nodemailer@8.0.1':
-    dependencies:
-      '@types/node': 20.19.43
-
   '@types/normalize-package-data@2.4.4': {}
 
   '@types/oracledb@6.5.2':
@@ -24504,7 +24501,7 @@ snapshots:
       - supports-color
     optional: true
 
-  '@xhmikosr/decompress-tar@9.0.1':
+  '@xhmikosr/decompress-tar@9.0.2':
     dependencies:
       file-type: 21.3.4
       is-stream: 4.0.1
@@ -24517,7 +24514,7 @@ snapshots:
 
   '@xhmikosr/decompress-tarbz2@9.0.2':
     dependencies:
-      '@xhmikosr/decompress-tar': 9.0.1
+      '@xhmikosr/decompress-tar': 9.0.2
       file-type: 21.3.4
       is-stream: 4.0.1
       seek-bzip: 2.0.0
@@ -24530,7 +24527,7 @@ snapshots:
 
   '@xhmikosr/decompress-targz@9.0.1':
     dependencies:
-      '@xhmikosr/decompress-tar': 9.0.1
+      '@xhmikosr/decompress-tar': 9.0.2
       file-type: 21.3.4
       is-stream: 4.0.1
     transitivePeerDependencies:
@@ -24548,9 +24545,9 @@ snapshots:
       - supports-color
     optional: true
 
-  '@xhmikosr/decompress@11.1.3':
+  '@xhmikosr/decompress@11.1.4':
     dependencies:
-      '@xhmikosr/decompress-tar': 9.0.1
+      '@xhmikosr/decompress-tar': 9.0.2
       '@xhmikosr/decompress-tarbz2': 9.0.2
       '@xhmikosr/decompress-targz': 9.0.1
       '@xhmikosr/decompress-unzip': 8.2.1
@@ -24565,7 +24562,7 @@ snapshots:
   '@xhmikosr/downloader@16.3.0':
     dependencies:
       '@xhmikosr/archive-type': 8.1.0
-      '@xhmikosr/decompress': 11.1.3
+      '@xhmikosr/decompress': 11.1.4
       content-disposition: 2.0.1
       ext-name: 5.0.0
       file-type: 21.3.4
@@ -24695,14 +24692,14 @@ snapshots:
   ajv@8.18.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.7
+      fast-uri: 3.1.8
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
   ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.7
+      fast-uri: 3.1.8
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -25009,7 +25006,7 @@ snapshots:
 
   axe-core@4.12.1: {}
 
-  axios@1.18.1:
+  axios@1.20.0:
     dependencies:
       follow-redirects: 1.16.0
       form-data: 4.0.6
@@ -26790,13 +26787,12 @@ snapshots:
 
   engine.io-parser@5.2.3: {}
 
-  engine.io@6.6.9:
+  engine.io@6.6.11:
     dependencies:
       '@types/cors': 2.8.19
       '@types/node': 20.19.43
       '@types/ws': 8.18.1
       accepts: 1.3.8
-      base64id: 2.0.0
       cookie: 0.7.2
       cors: 2.8.6
       debug: 4.4.3
@@ -27639,7 +27635,7 @@ snapshots:
     dependencies:
       fast-string-truncated-width: 3.0.3
 
-  fast-uri@3.1.7: {}
+  fast-uri@3.1.8: {}
 
   fast-wrap-ansi@0.2.2:
     dependencies:
@@ -29859,7 +29855,7 @@ snapshots:
       iconv-lite: 0.7.2
       libmime: 5.3.8
       linkify-it: 5.0.2
-      nodemailer: 9.1.1
+      nodemailer: 10.0.16
       punycode.js: 2.3.1
       tlds: 1.261.0
     optional: true
@@ -29885,7 +29881,7 @@ snapshots:
 
   markdown-it-task-lists@2.1.1: {}
 
-  markdown-it@14.3.0:
+  markdown-it@14.3.2:
     dependencies:
       argparse: 2.0.1
       entities: 4.5.0
@@ -31239,7 +31235,7 @@ snapshots:
 
   node-releases@2.0.57: {}
 
-  nodemailer@9.1.1: {}
+  nodemailer@10.0.16: {}
 
   nopt@7.2.1:
     dependencies:
@@ -31800,7 +31796,7 @@ snapshots:
 
   pirates@4.0.7: {}
 
-  piscina@4.9.3:
+  piscina@4.9.4:
     optionalDependencies:
       '@napi-rs/nice': 1.1.1
     optional: true
@@ -32751,7 +32747,7 @@ snapshots:
       fixpack: 4.0.0
       get-port: 5.1.1
       mailparser: 3.9.8
-      nodemailer: 9.1.1
+      nodemailer: 10.0.16
       open: 7.4.2
       p-event: 4.2.0
       p-wait-for: 3.2.0
@@ -32843,7 +32839,7 @@ snapshots:
   prosemirror-markdown@1.13.5:
     dependencies:
       '@types/markdown-it': 14.1.2
-      markdown-it: 14.3.0
+      markdown-it: 14.3.2
       prosemirror-model: 1.25.11
 
   prosemirror-model@1.25.11:
@@ -34145,7 +34141,7 @@ snapshots:
       base64id: 2.0.0
       cors: 2.8.6
       debug: 4.4.3
-      engine.io: 6.6.9
+      engine.io: 6.6.11
       socket.io-adapter: 2.5.8
       socket.io-parser: 4.2.7
     transitivePeerDependencies:
@@ -34722,7 +34718,7 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.30.5(@tiptap/pm@3.28.0)
       '@types/markdown-it': 13.0.9
-      markdown-it: 14.3.0
+      markdown-it: 14.3.2
       markdown-it-task-lists: 2.1.1
       prosemirror-markdown: 1.13.5
 

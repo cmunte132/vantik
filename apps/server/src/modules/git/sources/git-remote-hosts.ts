@@ -366,10 +366,11 @@ async function giteaPage(
   token: string | null,
   page: number,
 ): Promise<HostRepository[]> {
-  const { data } = await axios.get(apiUrl(host, '/repos/search'), {
+  const config: AxiosRequestConfig = {
     ...request(host, token),
     params: { limit: 50, page },
-  });
+  };
+  const { data } = await axios.get(apiUrl(host, '/repos/search'), config);
 
   return Array.isArray(data?.data) ? data.data.map(fromGitea) : [];
 }
@@ -379,7 +380,7 @@ async function gitlabPage(
   token: string | null,
   page: number,
 ): Promise<HostRepository[]> {
-  const { data } = await axios.get(apiUrl(host, '/projects'), {
+  const config: AxiosRequestConfig = {
     ...request(host, token),
     params: {
       per_page: 50,
@@ -387,7 +388,8 @@ async function gitlabPage(
       simple: true,
       ...(token ? { membership: true } : {}),
     },
-  });
+  };
+  const { data } = await axios.get(apiUrl(host, '/projects'), config);
 
   return Array.isArray(data) ? data.map(fromGitlab) : [];
 }

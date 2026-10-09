@@ -853,6 +853,7 @@ about.
 | `IMPERSONATION_KEY` | not set | The key that lets an operator sign in as a different user. Read [How to sign in as a different user](#how-to-sign-in-as-a-different-user). |
 | `LOCAL_REPO_ROOT` | the home directory of the server account | The directory that holds the local repositories. Read [Local repositories](/integrations/local-repositories). |
 | `REPO_MIRROR_ROOT` | `~/.vantik/repos`, and `/data/repos` in the compose file | Where the server keeps its own copy of each repository. |
+| `GIT_REMOTE_ALLOW_PRIVATE_HOSTS` | `true` | Whether the server can connect to a git host at a private address (10/8, 172.16/12, 192.168/16, 100.64/10, loopback, IPv6 fc00::/7). Set it to `false` to allow public hosts only. The server always refuses link-local and unspecified addresses. |
 
 The `SANDBOX_HOST_*` settings control the sandbox host. Read
 [Agent sandbox](/oss/agent-sandbox#configuration).

@@ -3,6 +3,7 @@ import { GIT_REMOTE_KINDS, type GitRemoteKind } from '@vantikhq/types';
 
 import { CredentialsService } from 'modules/agent-runs/credentials/credentials.service';
 
+import { assertHostAllowed } from './host-address-guard';
 import { anonymousRemote, tokenRemote, type GitRemote } from '../git-command';
 import {
   type ChangeRequest,
@@ -51,6 +52,8 @@ export class GitRemoteSource implements GitSource {
     const url = this.cloneUrl(repo, host);
     const token = await this.token(repo);
 
+    await assertHostAllowed(host.baseUrl);
+
     return token
       ? tokenRemote(url, token, host.username, { followRedirects: false })
       : anonymousRemote(url);
@@ -60,6 +63,8 @@ export class GitRemoteSource implements GitSource {
     const host = hostOf(repo);
     const url = this.cloneUrl(repo, host);
     const token = await this.token(repo);
+
+    await assertHostAllowed(host.baseUrl);
 
     if (!token) {
       throw new Error(

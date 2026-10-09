@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 import { GIT_REMOTE_KINDS, type GitRemoteKind } from './git-remote.entity';
 
@@ -35,6 +35,7 @@ export class AddGitRemoteRepositoryDto {
    */
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   fullName?: string;
 
   /** The clone address. A generic connection needs this field. */

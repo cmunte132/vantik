@@ -2,6 +2,7 @@ import { type GitRemoteKind } from '@vantikhq/types';
 import axios, { type AxiosRequestConfig } from 'axios';
 
 import { type ChangeRequestClosed } from '../git-source';
+import { assertHostAllowed, guardedAgents } from './host-address-guard';
 
 /** How long one call to the API of a host can take. */
 const API_TIMEOUT_MS = 15_000;
@@ -106,6 +107,8 @@ export async function whoAmI(
     return null;
   }
 
+  await assertHostAllowed(host.baseUrl);
+
   const { data } = await axios.get(apiUrl(host, '/user'), request(host, token));
 
   const login = host.kind === 'gitlab' ? data?.username : data?.login;
@@ -139,6 +142,8 @@ export async function listHostRepositories(
     return [];
   }
 
+  await assertHostAllowed(host.baseUrl);
+
   const found: HostRepository[] = [];
 
   for (let page = 1; found.length < MAX_LISTED; page += 1) {
@@ -163,6 +168,8 @@ export async function getHostRepository(
   token: string | null,
   fullName: string,
 ): Promise<HostRepository> {
+  await assertHostAllowed(host.baseUrl);
+
   if (host.kind === 'gitlab') {
     const { data } = await axios.get(
       apiUrl(host, `/projects/${encodeURIComponent(fullName)}`),
@@ -202,6 +209,8 @@ export async function openHostPullRequest(
   if (host.kind === 'generic') {
     return undefined;
   }
+
+  await assertHostAllowed(host.baseUrl);
 
   if (host.kind === 'gitlab') {
     const { data } = await axios.post(
@@ -249,6 +258,8 @@ export async function closeHostPullRequest(
     comment: string;
   },
 ): Promise<ChangeRequestClosed> {
+  await assertHostAllowed(host.baseUrl);
+
   if (host.kind === 'gitlab') {
     const base = apiUrl(
       host,
@@ -437,5 +448,11 @@ function request(host: RemoteHost, token: string | null): AxiosRequestConfig {
   }
 
   // No redirects: a redirect to a different host would carry the token there.
-  return { headers, timeout: API_TIMEOUT_MS, maxRedirects: 0 };
+  // The agents check the address of each connection (see the guard).
+  return {
+    headers,
+    timeout: API_TIMEOUT_MS,
+    maxRedirects: 0,
+    ...guardedAgents,
+  };
 }

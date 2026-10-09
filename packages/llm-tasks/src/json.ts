@@ -6,11 +6,16 @@
 export function parseObject(
   text: string | null,
 ): Record<string, unknown> | null {
-  const json = /\{[\s\S]*\}/.exec(text ?? '')?.[0];
+  const answer = text ?? '';
+  const start = answer.indexOf('{');
+  const end = answer.lastIndexOf('}');
 
-  if (!json) {
+  // No regex here. A regex can take quadratic time on a long answer.
+  if (start === -1 || end < start) {
     return null;
   }
+
+  const json = answer.slice(start, end + 1);
 
   try {
     const value = JSON.parse(json) as unknown;

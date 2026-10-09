@@ -36,6 +36,7 @@ import {
   GitRemoteSource,
   hostOf,
 } from 'modules/git/sources/git-remote.source';
+import { assertHostAllowed } from 'modules/git/sources/host-address-guard';
 
 /** How long the check of a new repository can take. */
 const CHECK_TIMEOUT_MS = 30_000;
@@ -96,6 +97,14 @@ export class GitRemoteService {
     if (!baseUrl) {
       throw new BadRequestException(
         `${dto.baseUrl} is not an http or https address with no user name, query or fragment.`,
+      );
+    }
+
+    try {
+      await assertHostAllowed(baseUrl);
+    } catch (error) {
+      throw new BadRequestException(
+        `Vantik cannot connect to ${baseUrl}: ${(error as Error).message}.`,
       );
     }
 
@@ -307,9 +316,14 @@ export class GitRemoteService {
     token: string | null,
     dto: AddGitRemoteRepositoryDto,
   ): Promise<Omit<GitRemoteRepository, 'addedAt'> & { addedAt: string }> {
-    const fullName = (dto.fullName ?? '').trim().replace(/^\/+|\/+$/g, '');
+    const fullName = trimSlashes((dto.fullName ?? '').trim());
+    const segments = fullName.split('/');
 
-    if (!/^[^/\s]+(\/[^/\s]+)+$/.test(fullName) || fullName.includes('..')) {
+    if (
+      segments.length < 2 ||
+      segments.some((segment) => !segment || /\s/.test(segment)) ||
+      fullName.includes('..')
+    ) {
       throw new BadRequestException(
         'Give the repository as owner/name, as the host shows it.',
       );
@@ -489,4 +503,19 @@ function repositoriesOf(account: AccountRow): GitRemoteRepository[] {
   return Array.isArray(settings?.repositories)
     ? (settings.repositories as GitRemoteRepository[])
     : [];
+}
+
+/** This function removes the slashes at the start and at the end. */
+function trimSlashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+
+  while (start < end && value[start] === '/') {
+    start += 1;
+  }
+  while (end > start && value[end - 1] === '/') {
+    end -= 1;
+  }
+
+  return value.slice(start, end);
 }

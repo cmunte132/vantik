@@ -22,6 +22,12 @@ jest.mock('axios', () => {
   };
 });
 
+// The guard resolves host names. These tests use a name that does not exist.
+jest.mock('./host-address-guard', () => ({
+  ...jest.requireActual('./host-address-guard'),
+  assertHostAllowed: jest.fn().mockResolvedValue(undefined),
+}));
+
 const BASE = 'https://forgejo.example.com';
 
 function repo(overrides: Partial<SourceRepo> = {}): SourceRepo {

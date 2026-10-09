@@ -11,7 +11,7 @@
     "screenshots:check": "playwright test -c playwright.screenshots.config.ts"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@playwright/test": "^1.63.0",
     "@types/node": "^20.11.5",
     "@types/pg": "^8.20.0",

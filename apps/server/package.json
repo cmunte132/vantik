@@ -103,7 +103,7 @@
     "@vantikhq/llm-tasks": "workspace:*",
     "@vantikhq/types": "workspace:*",
     "ai": "^7.0.31",
-    "axios": "^1.6.7",
+    "axios": "^1.20.0",
     "body-parser": "^1.20.3",
     "bull": "^4.12.2",
     "cache-manager": "^7.0.0",

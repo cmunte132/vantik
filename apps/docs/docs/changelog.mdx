@@ -10,6 +10,45 @@ The release script writes this page when it makes a release. The tags are on
 
 {/* release-notes */}
 
+## 2026.10.3
+
+Released on 2026-10-09.
+
+- Document the stack rebuild and the memory limits of the checks
+- Reconcile append-only models without asking for updatedAt (ENG-335)
+- Stop a planted team id from crossing workspaces (ENG-278)
+- Order the imports of the similar issues spec (ENG-278)
+- Document the new error codes, the status filter and the limit (ENG-278)
+- Accept one agent run status and honour the similar issues limit (ENG-278)
+- Answer 404 and 409 where unknown input threw 500 (ENG-278)
+- Judge admins on the workspace and prove a team belongs to it (ENG-278)
+- Make the server suite and lint green on main again (ENG-333)
+- Bound the memory of the test, typecheck and lint checks (ENG-333)
+- Drop 300 MB of unused packages from the server image (ENG-331)
+- Prune Vantik's build layers on every exit and refuse a rebuild on a full VM (ENG-331)
+- Reach a loopback gateway at the server's own address (ENG-326)
+- Stop a local run at its spend limit (ENG-326)
+- Document the local connector and running an agent on your machine (ENG-326)
+- Start a run's terminal work at the person's first prompt (ENG-326)
+- Say each thing about a local run once on its page (ENG-326)
+- Name omp, not the agent, as the one working in a local run (ENG-326)
+- Date the terminal segment by its newest turn, not by the lock (ENG-326)
+- Decide what the terminal owns on the server, not by a guess in the connector (ENG-326)
+- Mirror a terminal's work in an omp session into Vantik (ENG-326)
+- Open a finished run's session again while a terminal resumes it (ENG-326)
+- Pin the omp version and check it against a mock model (ENG-326)
+- Show where an omp session can be resumed and who drives it (ENG-326, phase 2)
+- Let any agent ask a person a question and wait for the answer (ENG-326, phase 3)
+- Run an issue's agent on the person's own machine through omp (ENG-326, phase 1)
+- Record every agent session on its issue, from any harness or channel (ENG-325)
+- Ask agents to close finished issues themselves, in progress or in review (ENG-299)
+- Say that Tegon is archived and that Vantik continues it
+- Tell agents to hand finished work to review instead of holding it in progress (ENG-287)
+- Regenerate the API reference when a release sets its version (ENG-280)
+- Correct the docs where the 2026.10.2 audit found them wrong (ENG-280)
+- Let a team with only deleted issues be deleted, and apply login's log level (ENG-280)
+- Retake the docs screenshots for 2026.10.2
+
 ## 2026.10.2
 
 Released on 2026-10-04.

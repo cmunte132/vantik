@@ -1,6 +1,6 @@
 {
   "name": "vantik",
-  "version": "2026.10.2",
+  "version": "2026.10.3",
   "description": "Vantik is an open-source, AI-first alternative to Jira, Linear",
   "main": "index.js",
   "repository": "https://github.com/cmunte132/vantik.git",

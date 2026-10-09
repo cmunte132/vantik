@@ -37,6 +37,7 @@ describe('answering an invite', () => {
     user: { findUniqueOrThrow: jest.Mock };
     invite: { findFirst: jest.Mock; update: jest.Mock };
     usersOnWorkspaces: { upsert: jest.Mock };
+    team: { findMany: jest.Mock };
   };
   let authService: { updateSessionWorkspace: jest.Mock };
   let invite: typeof INVITE;
@@ -70,6 +71,16 @@ describe('answering an invite', () => {
         }),
       },
       usersOnWorkspaces: { upsert: jest.fn().mockResolvedValue({}) },
+      team: {
+        // Only team-1 is a live team of the invite's workspace.
+        findMany: jest.fn(async ({ where }) =>
+          where.workspaceId === INVITE.workspaceId
+            ? where.id.in
+                .filter((id: string) => id === 'team-1')
+                .map((id: string) => ({ id }))
+            : [],
+        ),
+      },
     };
 
     service = new WorkspacesService(prisma as never, {} as never, {} as never, authService as unknown as AuthService);
@@ -101,6 +112,24 @@ describe('answering an invite', () => {
       'session-of-user-invited',
       INVITE.workspaceId,
       RoleEnum.ADMIN,
+    );
+  });
+
+  it('keeps only the teams of the invite workspace when it joins the person', async () => {
+    // An invite written before invites were checked can hold a foreign id.
+    invite = { ...invite, teamIds: ['team-1', 'team-of-another-workspace'] };
+
+    await service.inviteAction(
+      response(),
+      INVITE.id,
+      sessionOf('user-invited'),
+      true,
+    );
+
+    expect(prisma.usersOnWorkspaces.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ teamIds: ['team-1'] }),
+      }),
     );
   });
 

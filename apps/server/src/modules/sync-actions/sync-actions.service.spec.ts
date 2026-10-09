@@ -129,6 +129,12 @@ function buildService(
         Promise.resolve(exists(where.id) ? { id: where.id } : null),
       ),
     },
+    team: {
+      // Every team named is live in the workspace.
+      findMany: jest.fn(async ({ where }) =>
+        (where.id?.in ?? []).map((id: string) => ({ id })),
+      ),
+    },
     usersOnWorkspaces: {
       // Two callers with two different `select`s: `resolveWorkspaceId` reads
       // the status, and `visibleTeamIds` reads the teams.

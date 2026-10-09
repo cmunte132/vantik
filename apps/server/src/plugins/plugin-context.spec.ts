@@ -23,7 +23,10 @@ describe('the plugin context', () => {
     integrationDefinitionV2: {
       findFirst: jest.fn().mockResolvedValue({ id: 'def-1' }),
     },
-    team: { findMany: jest.fn().mockResolvedValue([]) },
+    team: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
     label: { findMany: jest.fn().mockResolvedValue([]) },
     workflow: { findMany: jest.fn().mockResolvedValue([]) },
     usersOnWorkspaces: { findMany: jest.fn().mockResolvedValue([]) },
@@ -115,6 +118,25 @@ describe('the plugin context', () => {
       { issueId: 'issue-1' },
       'workflow-user',
       { issueId: 'issue-1', bodyMarkdown: 'hi' },
+    );
+  });
+
+  it('looks a team and its workflows up only inside its own workspace', async () => {
+    const ctx = build('ws-42');
+
+    await ctx.workspace.team('team-1');
+    await ctx.workspace.workflows('team-1');
+
+    expect(prisma.team.findFirst).toHaveBeenCalledWith({
+      where: { id: 'team-1', workspaceId: 'ws-42' },
+    });
+    expect(prisma.workflow.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          teamId: 'team-1',
+          team: { workspaceId: 'ws-42' },
+        }),
+      }),
     );
   });
 

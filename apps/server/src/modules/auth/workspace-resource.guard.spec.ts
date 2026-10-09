@@ -110,7 +110,13 @@ function buildPrisma(callerTeamIds: string[] = [OWN_TEAM]) {
       })),
     },
     issue: { findFirst: jest.fn(finder()), findMany: jest.fn(visibleFinder()) },
-    team: { findFirst: jest.fn(finder()) },
+    team: {
+      findFirst: jest.fn(finder()),
+      // Every team named is live in the workspace.
+      findMany: jest.fn(async ({ where }) =>
+        (where.id?.in ?? []).map((id: string) => ({ id })),
+      ),
+    },
     issueComment: {
       findFirst: jest.fn(finder()),
       findMany: jest.fn(visibleFinder()),

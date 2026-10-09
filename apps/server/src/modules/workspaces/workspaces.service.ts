@@ -15,6 +15,8 @@ import {
 } from '@vantikhq/types';
 import { Response } from 'express';
 import { PrismaService } from 'nestjs-prisma';
+
+import { assertTeamInWorkspace } from 'common/workspace-access';
 import { AuthSessionContext } from 'modules/auth/auth.interface';
 import { AuthService } from 'modules/auth/auth.service';
 
@@ -200,6 +202,14 @@ export default class WorkspacesService {
     inviteUsersBody: InviteUsersBody,
   ): Promise<Record<string, string>> {
     const { emailIds, teamIds, role } = inviteUsersBody;
+
+    // A team id goes into the invite as sent, and from there into the
+    // membership. Each must be a live team of this workspace, or an admin of
+    // one workspace could plant the team of another.
+    for (const teamId of new Set(teamIds)) {
+      await assertTeamInWorkspace(this.prisma, teamId, workspaceId);
+    }
+
     const workspace = await this.getWorkspace(workspaceId);
     const iniviter = await this.usersService.getUser(getAppUserId(session));
 
@@ -286,8 +296,19 @@ export default class WorkspacesService {
         data: { status: InviteStatusEnum.ACCEPTED },
       });
 
+      // Only the teams that are live in the invite's workspace. An invite
+      // written before the check could hold the id of a foreign team.
+      const workspaceTeams = await this.prisma.team.findMany({
+        where: {
+          workspaceId: invite.workspaceId,
+          deleted: null,
+          id: { in: invite.teamIds },
+        },
+        select: { id: true },
+      });
+
       await this.addUserToWorkspace(invite.workspaceId, userId, {
-        teamIds: invite.teamIds,
+        teamIds: workspaceTeams.map((team) => team.id),
         joinedAt: new Date().toISOString(),
         role: invite.role as RoleEnum,
         status: WorkspaceStatusEnum.ACTIVE,

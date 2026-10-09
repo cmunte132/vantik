@@ -252,7 +252,11 @@ export class PluginContextFactory {
       // routes.
       workspace: {
         teams: () => prisma.team.findMany({ where: { workspaceId } }),
-        team: (teamId) => prisma.team.findUnique({ where: { id: teamId } }),
+        // With no workspace the scope would drop out of the `where`.
+        team: async (teamId) =>
+          workspaceId
+            ? prisma.team.findFirst({ where: { id: teamId, workspaceId } })
+            : null,
         teamByName: (name) =>
           prisma.team.findFirst({ where: { workspaceId, name } }),
         users: () =>
@@ -261,11 +265,13 @@ export class PluginContextFactory {
             include: { user: true },
           }),
         labels: () => prisma.label.findMany({ where: { workspaceId } }),
-        workflows: (teamId) =>
-          prisma.workflow.findMany({
-            where: { teamId, deleted: null },
-            orderBy: { position: 'asc' },
-          }),
+        workflows: async (teamId) =>
+          workspaceId
+            ? prisma.workflow.findMany({
+                where: { teamId, deleted: null, team: { workspaceId } },
+                orderBy: { position: 'asc' },
+              })
+            : [],
       },
 
       ai: {

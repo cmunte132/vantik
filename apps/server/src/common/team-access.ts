@@ -45,7 +45,31 @@ export async function visibleTeamIds(
     select: { teamIds: true },
   });
 
-  return membership?.teamIds ?? [];
+  return await liveTeamsOf(prisma, workspaceId, membership?.teamIds ?? []);
+}
+
+/**
+ * This function keeps, of some team ids, those of live teams in the workspace.
+ *
+ * A membership holds team ids as plain strings, with no foreign key behind
+ * them. One that names a deleted team, or a team of another workspace, must
+ * grant nothing here.
+ */
+async function liveTeamsOf(
+  prisma: PrismaService,
+  workspaceId: string,
+  teamIds: string[],
+): Promise<string[]> {
+  if (teamIds.length === 0) {
+    return [];
+  }
+
+  const teams = await prisma.team.findMany({
+    where: { workspaceId, deleted: null, id: { in: teamIds } },
+    select: { id: true },
+  });
+
+  return teams.map((team) => team.id);
 }
 
 /**
@@ -87,7 +111,7 @@ export async function readableTeamIds(
   }
 
   if (membership.role !== 'ADMIN') {
-    return membership.teamIds ?? [];
+    return await liveTeamsOf(prisma, workspaceId, membership.teamIds ?? []);
   }
 
   const teams = await prisma.team.findMany({

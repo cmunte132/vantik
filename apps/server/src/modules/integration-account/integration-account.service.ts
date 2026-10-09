@@ -9,7 +9,10 @@ import {
 import { PrismaService } from 'nestjs-prisma';
 
 import { assertTeamsVisible, visibleTeamIds } from 'common/team-access';
-import { resolveWorkspaceId } from 'common/workspace-access';
+import {
+  assertTeamInWorkspace,
+  resolveWorkspaceId,
+} from 'common/workspace-access';
 
 import { IntegrationsService } from 'modules/integrations/integrations.service';
 
@@ -146,6 +149,10 @@ export class IntegrationAccountService {
       ...next.filter((pair) => !before.has(keyOf(pair))),
       ...current.filter((pair) => !after.has(keyOf(pair))),
     ].map((pair) => pair.teamId);
+
+    for (const teamId of new Set(next.map((pair) => pair.teamId))) {
+      await assertTeamInWorkspace(this.prisma, teamId, account.workspaceId);
+    }
 
     await assertTeamsVisible(
       touched,

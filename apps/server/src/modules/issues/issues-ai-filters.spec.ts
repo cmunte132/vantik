@@ -30,6 +30,12 @@ function buildService(teamIds: string[] = [MY_TEAM]) {
       findUnique: jest.fn().mockResolvedValue({ teamIds }),
       findMany: jest.fn().mockResolvedValue([]),
     },
+    team: {
+      // Every team named is live in the workspace.
+      findMany: jest.fn(async ({ where }) =>
+        (where.id?.in ?? []).map((id: string) => ({ id })),
+      ),
+    },
     label: { findMany: jest.fn().mockResolvedValue([]) },
     workflow: { findMany: jest.fn().mockResolvedValue([]) },
     workspace: {

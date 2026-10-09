@@ -114,6 +114,11 @@ export default class TeamsService {
     workspaceId: string,
   ): Promise<Team> {
     await this.assertReadable(teamRequestParams.teamId, userId, workspaceId);
+    await assertTeamInWorkspace(
+      this.prisma,
+      teamRequestParams.teamId,
+      workspaceId,
+    );
 
     return await this.prisma.team.update({
       data: {
@@ -134,6 +139,11 @@ export default class TeamsService {
     workspaceId: string,
   ): Promise<Team> {
     await this.assertReadable(teamRequestParams.teamId, userId, workspaceId);
+    await assertTeamInWorkspace(
+      this.prisma,
+      teamRequestParams.teamId,
+      workspaceId,
+    );
 
     const team = await this.prisma.team.findUniqueOrThrow({
       where: {

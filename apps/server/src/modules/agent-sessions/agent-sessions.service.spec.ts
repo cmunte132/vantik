@@ -35,6 +35,12 @@ function build({ teamIds = ['team-a'] }: { teamIds?: string[] } = {}) {
     usersOnWorkspaces: {
       findUnique: jest.fn(async () => ({ teamIds })),
     },
+    team: {
+      // Every team named is live in the workspace.
+      findMany: jest.fn(async ({ where }) =>
+        (where.id?.in ?? []).map((id: string) => ({ id })),
+      ),
+    },
     agentSession: {
       upsert: jest.fn(async ({ where, create, update }) => {
         const key = JSON.stringify(

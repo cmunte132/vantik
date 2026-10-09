@@ -23,6 +23,7 @@ import TeamsService from './teams.service';
 const WORKSPACE = 'ws-1';
 const MY_TEAM = 'team-mine';
 const OTHER_TEAM = 'team-theirs';
+const FOREIGN_TEAM = 'team-of-another-workspace';
 
 function buildService(role: 'ADMIN' | 'USER', teamIds: string[] = [MY_TEAM]) {
   const prisma = {
@@ -32,11 +33,16 @@ function buildService(role: 'ADMIN' | 'USER', teamIds: string[] = [MY_TEAM]) {
     },
     team: {
       // Every team in the workspace, which is what an admin's read resolves to.
-      findMany: jest
-        .fn()
-        .mockResolvedValue([{ id: MY_TEAM }, { id: OTHER_TEAM }]),
+      findMany: jest.fn(async ({ where }) =>
+        [{ id: MY_TEAM }, { id: OTHER_TEAM }].filter(
+          (team) => !where.id?.in || where.id.in.includes(team.id),
+        ),
+      ),
       findUnique: jest.fn().mockResolvedValue({ id: MY_TEAM }),
-      findFirst: jest.fn().mockResolvedValue(null),
+      // A team of another workspace is not found in this one.
+      findFirst: jest.fn(async ({ where }) =>
+        where.id === FOREIGN_TEAM ? null : { id: where.id },
+      ),
     },
   } as unknown as PrismaService;
 
@@ -224,5 +230,49 @@ describe('TeamsService write boundary', () => {
       data: { name: 'Renamed', identifier: undefined, icon: undefined },
       where: { id: MY_TEAM },
     });
+  });
+});
+
+describe('TeamsService writes to a team of another workspace', () => {
+  // The id sits in the admin's own membership, so the read check passes.
+  function build() {
+    const { service, prisma } = buildService('ADMIN', [FOREIGN_TEAM]);
+    const team = (prisma as unknown as { team: Record<string, jest.Mock> })
+      .team;
+    team.findMany.mockResolvedValue([{ id: FOREIGN_TEAM }]);
+    team.update = jest.fn().mockResolvedValue({ id: FOREIGN_TEAM });
+    team.findUniqueOrThrow = jest
+      .fn()
+      .mockResolvedValue({ id: FOREIGN_TEAM, preferences: {} });
+
+    return { service, team };
+  }
+
+  it('refuses to rename it', async () => {
+    const { service, team } = build();
+
+    await expect(
+      service.updateTeam(
+        { teamId: FOREIGN_TEAM },
+        { name: 'x' },
+        'user-1',
+        WORKSPACE,
+      ),
+    ).rejects.toThrow(NotFoundException);
+    expect(team.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to change its preferences', async () => {
+    const { service, team } = build();
+
+    await expect(
+      service.updateTeamPreferences(
+        { teamId: FOREIGN_TEAM },
+        {},
+        'user-1',
+        WORKSPACE,
+      ),
+    ).rejects.toThrow(NotFoundException);
+    expect(team.update).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import {
   announcementRoom,
+  readableTeamIds,
   assertIssuesVisible,
   assertTeamsVisible,
   syncActionTeamWhere,
@@ -19,6 +20,12 @@ describe('visibleTeamIds', () => {
   function buildPrisma(membership: { teamIds: string[] } | null) {
     return {
       usersOnWorkspaces: { findUnique: jest.fn(async () => membership) },
+      team: {
+        // Every team named is live in the workspace.
+        findMany: jest.fn(async ({ where }) =>
+          (where.id?.in ?? []).map((id: string) => ({ id })),
+        ),
+      },
     } as unknown as PrismaService;
   }
 
@@ -154,5 +161,48 @@ describe('assertTeamsVisible', () => {
 
   it('passes when the request names no team', async () => {
     await expect(assertTeamsVisible([], [])).resolves.toBeUndefined();
+  });
+});
+
+describe('team ids that are not live teams of the workspace', () => {
+  // The team table knows only team-own in this workspace.
+  function buildPrisma(role: string, teamIds: string[]) {
+    return {
+      usersOnWorkspaces: {
+        findUnique: jest.fn(async () => ({ teamIds, role })),
+      },
+      team: {
+        findMany: jest.fn(
+          async ({
+            where,
+          }: {
+            where: { workspaceId: string; id?: unknown };
+          }) =>
+            where.workspaceId === WORKSPACE
+              ? [{ id: TEAM_OWN }].filter(
+                  (team) =>
+                    !where.id ||
+                    (where.id as { in: string[] }).in.includes(team.id),
+                )
+              : [],
+        ),
+      },
+    } as unknown as PrismaService;
+  }
+
+  it('grants no visibility for a planted id of another workspace', async () => {
+    const prisma = buildPrisma('USER', [TEAM_OWN, TEAM_OTHER]);
+
+    await expect(visibleTeamIds(prisma, USER, WORKSPACE)).resolves.toEqual([
+      TEAM_OWN,
+    ]);
+  });
+
+  it('grants no readable team for a planted id of another workspace', async () => {
+    const prisma = buildPrisma('USER', [TEAM_OWN, TEAM_OTHER]);
+
+    await expect(readableTeamIds(prisma, USER, WORKSPACE)).resolves.toEqual([
+      TEAM_OWN,
+    ]);
   });
 });

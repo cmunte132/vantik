@@ -59,6 +59,12 @@ function buildGateway(
           : null;
       }),
     },
+    team: {
+      // Every team named is live in the workspace.
+      findMany: jest.fn(async ({ where }) =>
+        (where.id?.in ?? []).map((id: string) => ({ id })),
+      ),
+    },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 

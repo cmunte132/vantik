@@ -24,6 +24,16 @@ function buildService(
     usersOnWorkspaces: {
       findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE', teamIds }),
     },
+    team: {
+      // A team of another workspace is not found in this one.
+      findFirst: jest.fn(async ({ where }) =>
+        where.id.startsWith('foreign-') ? null : { id: where.id },
+      ),
+      // Every team named is live in the workspace.
+      findMany: jest.fn(async ({ where }) =>
+        (where.id?.in ?? []).map((id: string) => ({ id })),
+      ),
+    },
   } as unknown as PrismaService;
   const integrations = { loadIntegration: jest.fn().mockResolvedValue(spec) };
 
@@ -210,6 +220,22 @@ describe('IntegrationAccountService.updateTeamMappings', () => {
     );
 
     expect(prisma.integrationAccount.update).toHaveBeenCalled();
+  });
+
+  it('refuses to pair a team of another workspace, even one the caller is in', async () => {
+    // A planted id in the membership would pass the visibility check.
+    const { service, prisma } = buildService(workspaceAccount(), {
+      teamIds: ['team-own', 'foreign-team'],
+    });
+
+    await expect(
+      service.updateTeamMappings(
+        id,
+        { teamMappings: [{ source: 'repo-1', teamId: 'foreign-team' }] },
+        'user-1',
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.integrationAccount.update).not.toHaveBeenCalled();
   });
 
   it('refuses a personal account, which routes nothing', async () => {

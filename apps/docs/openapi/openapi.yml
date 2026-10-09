@@ -1226,11 +1226,9 @@ paths:
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
         "404":
-          description: The team does not exist, or you cannot see it.
-        "500":
           description: >-
-            No issue in the team has this number. For this case the server
-            sends a 500, not a 404.
+            The team does not exist, you cannot see it, or no issue in the
+            team has this number.
       tags:
         - Issue
 
@@ -1468,10 +1466,8 @@ paths:
           name: status
           required: false
           description: >-
-            One or more run statuses. The server accepts only a repeated
-            parameter, for example status=FAILED&status=CANCELED. A single
-            status=FAILED gets a 400. For one status, send the parameter two
-            times, for example status=FAILED&status=FAILED.
+            One or more run statuses. To send more than one, repeat the
+            parameter, for example status=FAILED&status=CANCELED.
           style: form
           explode: true
           schema:
@@ -2716,6 +2712,10 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           description: Forbidden
+        "404":
+          description: >-
+            The team is not in your workspace, or the person is not a member of
+            your workspace.
       tags:
         - Teams
 
@@ -2752,6 +2752,10 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           description: Forbidden
+        "404":
+          description: >-
+            The team is not in your workspace, or the person is not a member of
+            your workspace.
       tags:
         - Teams
 
@@ -2799,6 +2803,8 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "404":
           description: A team or a capability is not in the workspace
+        "409":
+          description: A project with this name is in the workspace already
       tags:
         - Project
 
@@ -3035,9 +3041,9 @@ paths:
     get:
       summary: Find similar issues
       description: >-
-        This call returns up to 10 issues that are semantically similar to the issue that you
+        This call returns issues that are semantically similar to the issue that you
         name. The list does not include that issue. If the server cannot find
-        the issue, the list is empty.
+        the issue, the list is empty. The list holds 10 issues by default.
       parameters:
         - name: issueId
           in: query
@@ -3052,6 +3058,15 @@ paths:
             none, the server uses the workspace of your session.
           schema:
             type: string
+        - name: limit
+          in: query
+          required: false
+          description: The maximum number of results, from 1 to 100.
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
       responses:
         "200":
           description: Successful response

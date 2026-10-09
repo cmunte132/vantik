@@ -40,6 +40,7 @@ const NOT_READ = 'nothing in the webapp reads it';
  */
 const NOT_KEPT: Record<string, Record<string, string>> = {
   Team: { icon: NOT_READ },
+  AgentSession: { terminalSeenAt: NOT_READ },
   Workspace: { icon: NOT_READ },
   UsersOnWorkspaces: { externalAccountMappings: NOT_READ, joinedAt: NOT_READ },
   Issue: {

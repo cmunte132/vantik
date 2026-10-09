@@ -7,12 +7,14 @@ import {
   RiFileTextLine,
   RiLoader4Line,
   RiSearchLine,
+  RiTerminalBoxLine,
   RiTerminalLine,
 } from '@remixicon/react';
 import { getInitials } from '@vantikhq/ui/components/avatar';
 import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
+import ReactTimeAgo from 'react-time-ago';
 
 import { AgentQuestionCard } from 'modules/agent-questions/agent-question-card';
 
@@ -39,6 +41,11 @@ interface Props {
   agentName?: string;
   live: boolean;
   setupMs?: number;
+  /**
+   * What the person did in their own terminal, for the heading of that
+   * segment: the turns it took and when it was last active.
+   */
+  terminal?: { turns: number; lastActiveAt?: string | null };
 }
 
 /**
@@ -51,10 +58,22 @@ interface Props {
  * cycle's own milestones show only under All.
  */
 export const RunActivity = observer(
-  ({ feed, start, current, agentName, live, setupMs }: Props) => {
+  ({ feed, start, current, agentName, live, setupMs, terminal }: Props) => {
     const [filter, setFilter] = React.useState<Filter>('All');
     const shown = feed.filter((item) => matches(item, filter));
     const initials = getInitials(agentName ?? 'Agent');
+
+    // The time column counts from the run's start, and from the heading of a
+    // terminal segment inside that segment: hours later it would only show a
+    // big number.
+    const clockStart = new Map<string, number>();
+    let base = start;
+    for (const item of feed) {
+      if (item.type === 'terminal' && item.at) {
+        base = Date.parse(item.at);
+      }
+      clockStart.set(item.id, base);
+    }
 
     return (
       <section className="flex flex-col gap-2">
@@ -93,11 +112,19 @@ export const RunActivity = observer(
               <Row
                 key={item.id}
                 item={item}
-                at={item.at ? clock(Date.parse(item.at) - start) : ''}
+                at={
+                  item.at && item.type !== 'terminal'
+                    ? clock(
+                        Date.parse(item.at) -
+                          (clockStart.get(item.id) ?? start),
+                      )
+                    : ''
+                }
                 running={item === current}
                 last={index === shown.length - 1}
                 initials={initials}
                 setupMs={setupMs}
+                terminal={terminal}
               />
             ))}
           </ol>
@@ -114,6 +141,7 @@ const Row = ({
   last,
   initials,
   setupMs,
+  terminal,
 }: {
   item: FeedItem;
   at: string;
@@ -121,6 +149,7 @@ const Row = ({
   last: boolean;
   initials: string;
   setupMs?: number;
+  terminal?: Props['terminal'];
 }) => {
   return (
     <li className="grid grid-cols-[46px_24px_minmax(0,1fr)] gap-x-2.5">
@@ -151,6 +180,8 @@ const Row = ({
             failed={item.failed}
             running={running}
           />
+        ) : item.type === 'terminal' ? (
+          <TerminalHeading terminal={terminal} />
         ) : (
           <StepBody step={item.step} running={running} />
         )}
@@ -172,6 +203,30 @@ const Node = ({
   const failed = item.type === 'setup' ? item.failed : Boolean(step?.failed);
   const base =
     'relative mt-2 grid size-[22px] place-items-center rounded-full border';
+
+  if (item.type === 'terminal') {
+    return (
+      <span
+        className={cn(base, 'border-border bg-background-3 text-foreground')}
+      >
+        <RiTerminalBoxLine size={13} />
+      </span>
+    );
+  }
+
+  // What the person typed, as opposed to what the agent answered.
+  if (step?.role === 'user') {
+    return (
+      <span
+        className={cn(
+          base,
+          'border-border bg-background-3 text-[8.5px] font-semibold',
+        )}
+      >
+        You
+      </span>
+    );
+  }
 
   if (step?.kind === 'note') {
     return (
@@ -229,6 +284,25 @@ const Node = ({
     </span>
   );
 };
+
+/** The heading of the work a person did in their own terminal. */
+const TerminalHeading = ({ terminal }: { terminal: Props['terminal'] }) => (
+  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+    <span className="font-medium">Continued in your terminal</span>
+    {terminal && (
+      <span className="text-muted-foreground">
+        {terminal.turns} {terminal.turns === 1 ? 'turn' : 'turns'}
+        {terminal.lastActiveAt && (
+          <>
+            {' '}
+            · last active{' '}
+            <ReactTimeAgo date={new Date(terminal.lastActiveAt)} />
+          </>
+        )}
+      </span>
+    )}
+  </div>
+);
 
 const StepIcon = ({ kind }: { kind?: string }) => {
   switch (kind) {

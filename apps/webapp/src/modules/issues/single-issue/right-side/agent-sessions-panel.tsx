@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { observer } from 'mobx-react-lite';
+import React from 'react';
 import ReactTimeAgo from 'react-time-ago';
 
 import { ResumeCommand } from 'modules/agent-runs/resume-command';
@@ -12,11 +13,13 @@ import { useAllUsers } from 'hooks/users';
 
 import { useContextStore } from 'store/global-context-provider';
 
+import { SessionActivityDialog } from './session-activity-dialog';
 import {
   continuedFrom,
   resumeCommand,
   sessionRoute,
   sessionTitle,
+  terminalActivity,
 } from './session-vocabulary';
 
 /**
@@ -32,6 +35,8 @@ export const AgentSessionsPanel = observer(() => {
   const router = useRouter();
   const { agentSessionsStore, agentRunsStore } = useContextStore();
   const { users } = useAllUsers();
+  // The session whose terminal activity is open.
+  const [activityFor, setActivityFor] = React.useState<any>(null);
 
   const sessions: any[] = agentSessionsStore.getSessionsForIssue(issue?.id);
 
@@ -83,6 +88,8 @@ export const AgentSessionsPanel = observer(() => {
               : null,
           );
 
+          const terminal = terminalActivity(session);
+
           const body = (
             <>
               <span className="truncate">{sessionTitle(session)}</span>
@@ -91,6 +98,23 @@ export const AgentSessionsPanel = observer(() => {
                 <span>{sessionRoute(session)}</span>
                 <span>· {actorName(session.actorUserId)}</span>
               </span>
+
+              {terminal && (
+                <span className="flex min-w-0 flex-wrap gap-x-1 text-xs text-muted-foreground">
+                  <span>
+                    {terminal.turns} {terminal.turns === 1 ? 'turn' : 'turns'}{' '}
+                    in your terminal
+                  </span>
+                  <span>
+                    · last active{' '}
+                    <ReactTimeAgo
+                      date={new Date(session.lastActiveAt)}
+                      timeStyle="twitter"
+                    />{' '}
+                    ago
+                  </span>
+                </span>
+              )}
 
               <span className="flex min-w-0 flex-wrap gap-x-1 text-xs text-muted-foreground">
                 <span>
@@ -133,6 +157,14 @@ export const AgentSessionsPanel = observer(() => {
                 >
                   {body}
                 </button>
+              ) : terminal ? (
+                <button
+                  type="button"
+                  onClick={() => setActivityFor(session)}
+                  className="flex w-full min-w-0 flex-col rounded p-1.5 pl-0 text-left hover:bg-grayAlpha-100"
+                >
+                  {body}
+                </button>
               ) : (
                 <div className="flex w-full min-w-0 flex-col p-1.5 pl-0">
                   {body}
@@ -155,6 +187,14 @@ export const AgentSessionsPanel = observer(() => {
           );
         })}
       </ul>
+
+      {activityFor && (
+        <SessionActivityDialog
+          session={activityFor}
+          open
+          setOpen={(value) => !value && setActivityFor(null)}
+        />
+      )}
     </div>
   );
 });

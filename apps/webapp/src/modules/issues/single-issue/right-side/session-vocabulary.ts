@@ -43,6 +43,8 @@ interface SessionLike {
   driver?: string | null;
   driverLeaseExpiresAt?: string | null;
   endedAt?: string | null;
+  terminalTurns?: number | null;
+  lastActiveAt?: string | null;
 }
 
 export const harnessLabel = (harness?: string | null) =>
@@ -79,6 +81,21 @@ export function drivenBy(
   );
 
   return driverLabel(driver);
+}
+
+/**
+ * What a person did in their own terminal in this session: the turns it took
+ * and when it was last active. Null when nothing came from a terminal, so a
+ * session that was never resumed reads as before.
+ */
+export function terminalActivity(
+  session?: SessionLike | null,
+): { turns: number; lastActiveAt: string | null } | null {
+  const turns = session?.terminalTurns ?? 0;
+
+  return session && turns > 0
+    ? { turns, lastActiveAt: session.lastActiveAt ?? null }
+    : null;
 }
 
 /**

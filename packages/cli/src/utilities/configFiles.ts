@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { readJSONFileSync } from './fileSystem.js';
 import { logger } from './logger.js';
 
-function getGlobalConfigFolderPath() {
+export function getGlobalConfigFolderPath() {
   // `vantik connect` points a run at an empty directory, so the run holds only
   // its own token and not the stored login.
   const configDir = env.VANTIK_CONFIG_DIR || xdgAppPaths('vantik').config();

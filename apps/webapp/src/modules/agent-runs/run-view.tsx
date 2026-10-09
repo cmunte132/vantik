@@ -10,6 +10,7 @@ import { AgentQuestionCard } from 'modules/agent-questions/agent-question-card';
 import {
   drivenBy,
   resumeCommand,
+  terminalActivity,
 } from 'modules/issues/single-issue/right-side/session-vocabulary';
 
 import { MainLayout } from 'common/layouts/main-layout';
@@ -163,6 +164,8 @@ export const RunView = withApplicationStore(
       ? resumeCommand(session, run.result?.worktreePath)
       : null;
     const driver = session ? drivenBy(session) : null;
+    // What the person did in their own terminal after the run, if anything.
+    const terminal = terminalActivity(session);
     const events = agentRunsStore.getEvents(run.id);
     const feed = toFeed(events);
     const current = inFlight(run, feed);
@@ -322,6 +325,7 @@ export const RunView = withApplicationStore(
               setupMs={
                 (run.phaseTimings as Record<string, number> | null)?.setup
               }
+              terminal={terminal ?? undefined}
             />
           </div>
 
@@ -339,7 +343,19 @@ export const RunView = withApplicationStore(
               agentTotal={agentTotal}
             />
             {resume && (
-              <RailCard title="Continue in your terminal">
+              <RailCard
+                title={
+                  terminal
+                    ? 'Resumed in your terminal'
+                    : 'Continue in your terminal'
+                }
+              >
+                {terminal && (
+                  <span className="text-muted-foreground">
+                    {terminal.turns} {terminal.turns === 1 ? 'turn' : 'turns'}{' '}
+                    since the run ended.
+                  </span>
+                )}
                 <ResumeCommand command={resume} />
                 {/* The connector never writes to a session that a terminal
                     holds, so this says who has it now. */}

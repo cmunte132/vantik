@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   AGENT_SESSION_EXTERNAL_ID_MAX,
@@ -21,6 +21,9 @@ function harnessOf(externalId: string, harness?: string | null) {
     : normalizeAgentSessionHarness(harness);
 }
 
+/** The most steps one read returns; a session keeps no more than this. */
+const SESSION_EVENT_LIMIT = 2000;
+
 export interface SessionActor {
   userId: string;
   workspaceId: string;
@@ -38,6 +41,37 @@ export interface SessionActor {
 @Injectable()
 export class AgentSessionsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * The steps of a session that has no run, oldest first. They are what a
+   * person did in their own terminal. The session must be in the caller's
+   * workspace and on an issue in a team the caller can see; a hidden session
+   * and a missing one give the same answer.
+   */
+  async listEvents(actor: SessionActor, sessionId: string) {
+    const session = await this.prisma.agentSession.findFirst({
+      where: { id: sessionId, workspaceId: actor.workspaceId, deleted: null },
+      select: { id: true, issueId: true },
+    });
+
+    if (!session) {
+      throw new NotFoundException('No such session.');
+    }
+
+    await assertIssuesVisible(
+      this.prisma,
+      [session.issueId],
+      await visibleTeamIds(this.prisma, actor.userId, actor.workspaceId),
+    );
+
+    const events = await this.prisma.agentSessionEvent.findMany({
+      where: { sessionId },
+      orderBy: { at: 'desc' },
+      take: SESSION_EVENT_LIMIT,
+    });
+
+    return events.reverse();
+  }
 
   /**
    * Records that a harness session works on an issue. It creates the row or

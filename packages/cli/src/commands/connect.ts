@@ -14,7 +14,10 @@ import {
 } from '../cli/common';
 import { Connector, waitForSocketUrl } from '../connector/connector';
 import { PKG_ROOT } from '../consts';
-import { readAuthConfigProfile } from '../utilities/configFiles';
+import {
+  getGlobalConfigFolderPath,
+  readAuthConfigProfile,
+} from '../utilities/configFiles';
 import { getVersion } from '../utilities/getVersion';
 
 const ConnectCommandOptions = CommonCommandOptions.extend({
@@ -93,6 +96,7 @@ async function connect(options: z.infer<typeof ConnectCommandOptions>) {
     token,
     connectorVersion: getVersion(),
     extensionPath: extensionPath(),
+    offsetsFile: path.join(getGlobalConfigFolderPath(), 'session-offsets.json'),
     log,
   });
   await connector.run();

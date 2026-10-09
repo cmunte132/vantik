@@ -230,6 +230,18 @@ model AgentSession {
   lastActiveAt DateTime  @default(now())
   endedAt      DateTime?
 
+  /// What a person did in their own terminal after the session began, as the
+  /// connector read it from the omp session file. A run's own work is in its
+  /// run and is not counted here.
+  terminalTurns   Int                 @default(0)
+  terminalCostUsd Float               @default(0)
+  /// The time of the newest entry applied, so a batch that arrives twice is
+  /// not stored twice.
+  terminalSeenAt  DateTime?
+  /// The steps of a run-less session. A session with a run writes them to the
+  /// run's events instead.
+  events          AgentSessionEvent[]
+
   @@unique([workspaceId, actorUserId, channel, externalId, issueId])
   @@index([issueId])
   @@index([workspaceId, actorUserId, externalId])
@@ -322,6 +334,25 @@ model AgentRunEvent {
   runId String
 
   @@index([runId, at])
+}
+
+/// One step of what happened in a session that has no run: a terminal session
+/// that the hooks linked to an issue. Shaped like AgentRunEvent, so one reader
+/// draws both. Read over REST, because nothing needs it live.
+model AgentSessionEvent {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  at      DateTime           @default(now())
+  level   AgentRunEventLevel @default(INFO)
+  message String
+  phase   String?
+  data    Json?
+
+  session   AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+
+  @@index([sessionId, at])
 }
 
 /// One pass of the ENG-62 implement/score loop.

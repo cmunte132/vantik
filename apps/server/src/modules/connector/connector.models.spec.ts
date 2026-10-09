@@ -3,6 +3,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { ConnectorGateway } from './connector.gateway';
 import { ConnectorRegistry, sanitizeModels } from './connector.registry';
+import { SessionActivityService } from './session-activity.service';
 import { SessionDriversService } from './session-drivers.service';
 
 /** The models a connector reports: stored, capped, and replaced on change. */
@@ -43,6 +44,7 @@ function setup() {
     {} as PrismaService,
     registry,
     {} as SessionDriversService,
+    {} as SessionActivityService,
   );
   return { door, registry, s: socket() };
 }

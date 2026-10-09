@@ -497,3 +497,43 @@ describe('questions to a person', () => {
     }
   });
 });
+
+describe("work in the person's own terminal", () => {
+  const terminal = (
+    id: string,
+    message: string,
+    data?: Record<string, unknown>,
+  ) => ({
+    ...event(id, message, { ...data, source: 'terminal' }),
+    phase: 'terminal',
+    at: '2026-10-09T12:00:00.000Z',
+  });
+
+  it('puts one heading where the terminal segment starts', () => {
+    const feed = toFeed([
+      event('a', 'Did the work', { kind: 'note' }),
+      terminal('b', 'Fix it', { kind: 'note', role: 'user' }),
+      terminal('c', 'On it', { kind: 'note' }),
+    ]);
+
+    expect(feed.map((item) => item.type)).toEqual([
+      'step',
+      'terminal',
+      'step',
+      'step',
+    ]);
+  });
+
+  it('marks what the person wrote, and keeps terminal steps out of the stages', () => {
+    const steps = toSteps([
+      terminal('b', 'Fix it', { kind: 'note', role: 'user' }),
+    ]);
+
+    expect(steps[0]?.role).toBe('user');
+    expect(
+      stagesOf({ status: 'SUCCEEDED', executor: 'local' }, [
+        terminal('b', 'Fix it', { kind: 'note' }),
+      ]).every((stage) => stage.state === 'skipped'),
+    ).toBe(true);
+  });
+});

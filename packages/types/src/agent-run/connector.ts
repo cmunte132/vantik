@@ -102,6 +102,13 @@ export type ConnectorHelloAck =
        * Absent from an older server.
        */
       watchSessions?: string[];
+      /**
+       * The part of `watchSessions` that belongs to runs of the connector. A
+       * run streamed its own events up to now, so the connector reads such a
+       * session from its end, and a terminal session from its start. Absent
+       * from an older server.
+       */
+      runSessions?: string[];
     }
   | { ok: false; reason: string };
 
@@ -132,7 +139,22 @@ export interface ConnectorSessionDrivers {
  * once an hour). It carries no body.
  */
 export type ConnectorSessionsWatchAck =
-  { ok: true; sessions: string[] } | { ok: false; reason: string };
+  | { ok: true; sessions: string[]; runSessions?: string[] }
+  | { ok: false; reason: string };
+
+/**
+ * What happened in an omp session that a person drives in their own terminal
+ * (`sessions.activity`). `entries` are the omp session file's `message` and
+ * `model_change` entries, in file order, with the large provider fields taken
+ * out. Sent outside any run, so it carries no seq. The server accepts it for
+ * the person's own sessions only, and acknowledges with {@link ConnectorAck};
+ * the connector moves its read position on only after an `ok`.
+ */
+export interface ConnectorSessionActivity {
+  /** The omp session uuid. */
+  externalId: string;
+  entries: unknown[];
+}
 
 /** The longest a driver lease lives without a new report from the connector. */
 export const SESSION_DRIVER_LEASE_MS = 60_000;

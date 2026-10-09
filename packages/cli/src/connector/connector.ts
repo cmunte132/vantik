@@ -30,6 +30,7 @@ import {
   SessionDrivers,
   WATCH_REFRESH_MS,
 } from './session-drivers';
+import { ACTIVITY_POLL_MS, SessionTail } from './session-tail';
 import { vantikHome, worktreePathFor } from './worktree';
 
 export interface ConnectorOptions {
@@ -47,6 +48,10 @@ export interface ConnectorOptions {
   createRun?(dispatch: ConnectorRunDispatch, deps: RunDeps): ActiveRun;
   /** Replaces the lock check, for tests. */
   drivers?: SessionDrivers;
+  /** Where the read positions of session files are kept. */
+  offsetsFile?: string;
+  /** Replaces the reader of session files, for tests. */
+  tail?: SessionTail;
 }
 
 /** What the connector needs from a run. */
@@ -160,11 +165,23 @@ export class Connector {
   private modelTimer: ReturnType<typeof setInterval> | undefined;
   private driverTimer: ReturnType<typeof setInterval> | undefined;
   private watchTimer: ReturnType<typeof setInterval> | undefined;
+  private activityTimer: ReturnType<typeof setInterval> | undefined;
   private checkingDrivers = false;
+  private tailing = false;
   private readonly drivers: SessionDrivers;
+  private readonly tail: SessionTail;
 
   constructor(private readonly options: ConnectorOptions) {
     this.drivers = options.drivers ?? new SessionDrivers({ log: options.log });
+    this.tail =
+      options.tail ??
+      new SessionTail({
+        agentDir: () => ompAgentDirPath(),
+        stateFile:
+          options.offsetsFile ??
+          path.join(vantikHome(), 'session-offsets.json'),
+        log: options.log,
+      });
   }
 
   /** Connects and stays connected. Resolves when `stop` finishes. */
@@ -224,7 +241,7 @@ export class Connector {
           for (const run of this.runs.values()) {
             run.queue.resume();
           }
-          this.watchSessions(ack.watchSessions ?? []);
+          this.watchSessions(ack.watchSessions ?? [], ack.runSessions ?? []);
         });
       });
 
@@ -338,8 +355,8 @@ export class Connector {
    * sessions replaces the old one, and the first check after a connect reports
    * every session again, because the server may have missed a report.
    */
-  private watchSessions(sessions: string[]) {
-    this.drivers.setWatched(sessions);
+  private watchSessions(sessions: string[], runSessions: string[]) {
+    this.drivers.setWatched(sessions, runSessions);
     this.drivers.resetReported();
     void this.checkDrivers();
 
@@ -349,6 +366,13 @@ export class Connector {
         DRIVER_POLL_MS,
       );
       this.driverTimer.unref();
+    }
+    if (!this.activityTimer) {
+      this.activityTimer = setInterval(
+        () => void this.tailSessions(),
+        ACTIVITY_POLL_MS,
+      );
+      this.activityTimer.unref();
     }
     if (!this.watchTimer) {
       this.watchTimer = setInterval(
@@ -369,7 +393,7 @@ export class Connector {
       {},
       (ack: ConnectorSessionsWatchAck | undefined) => {
         if (ack?.ok && Array.isArray(ack.sessions)) {
-          this.drivers.setWatched(ack.sessions);
+          this.drivers.setWatched(ack.sessions, ack.runSessions ?? []);
         }
       },
     );
@@ -410,6 +434,71 @@ export class Connector {
     } finally {
       this.checkingDrivers = false;
     }
+  }
+
+  /**
+   * Sends what a person did in their terminal to a session since the last
+   * look. A session that a run of this connector drives is skipped to its end,
+   * because the run reports that work itself. The position moves on only when
+   * the server acknowledges the entries.
+   */
+  async tailSessions(): Promise<void> {
+    if (this.tailing || !this.socket?.connected) {
+      return;
+    }
+    this.tailing = true;
+    try {
+      const driving = new Set(
+        [...this.runs.values()].map((run) => run.ompSessionId),
+      );
+      for (const id of this.drivers.sessionIds()) {
+        if (driving.has(id) || this.drivers.driverOf(id) === 'VANTIK') {
+          this.tail.skipToEnd(id);
+          continue;
+        }
+        const fromEnd = this.drivers.isRunSession(id);
+        // A long session goes out in batches; a tick sends a few of them.
+        for (let sent = 0; sent < 20; sent += 1) {
+          const batch = this.tail.next(id, fromEnd);
+          if (!batch) {
+            break;
+          }
+          if (batch.entries.length > 0 && !(await this.sendActivity(batch))) {
+            break;
+          }
+          this.tail.commit(batch);
+          if (!batch.more) {
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      this.options.log(`Could not read your omp sessions: ${String(error)}`);
+    } finally {
+      this.tailing = false;
+    }
+  }
+
+  private sendActivity(batch: {
+    externalId: string;
+    entries: unknown[];
+  }): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = this.socket;
+      if (!socket?.connected) {
+        resolve(false);
+        return;
+      }
+      const timer = setTimeout(() => resolve(false), 15_000);
+      socket.emit(
+        'sessions.activity',
+        { externalId: batch.externalId, entries: batch.entries },
+        (ack: { ok?: boolean } | undefined) => {
+          clearTimeout(timer);
+          resolve(Boolean(ack?.ok));
+        },
+      );
+    });
   }
 
   private dispatch(
@@ -457,7 +546,13 @@ export class Connector {
         'omp is not installed, so the run will fail. Install it from https://github.com/can1357/oh-my-pi.',
       );
     }
-    void run.start().finally(() => this.runs.delete(dispatch.runId));
+    void run.start().finally(() => {
+      // The run reported its own work; what it wrote last is not the terminal's.
+      if (run.ompSessionId) {
+        this.tail.skipToEnd(run.ompSessionId);
+      }
+      this.runs.delete(dispatch.runId);
+    });
   }
 
   /**
@@ -525,6 +620,7 @@ export class Connector {
     clearInterval(this.modelTimer);
     clearInterval(this.driverTimer);
     clearInterval(this.watchTimer);
+    clearInterval(this.activityTimer);
     for (const run of this.runs.values()) {
       run.cancel();
     }

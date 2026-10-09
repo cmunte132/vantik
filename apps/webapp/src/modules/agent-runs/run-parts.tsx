@@ -87,7 +87,9 @@ export const NowCard = ({ item, now }: { item: FeedItem; now: number }) => {
   const title =
     item.type === 'setup'
       ? (item.lines[item.lines.length - 1] ?? 'Setting up')
-      : doing(item.step);
+      : item.type === 'terminal'
+        ? 'Working in your terminal'
+        : doing(item.step);
   const command =
     step && (step.kind === 'bash' || step.kind === 'test')
       ? step.command

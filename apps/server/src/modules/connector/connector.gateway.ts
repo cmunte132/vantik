@@ -32,6 +32,7 @@ import {
   ConnectorSocket,
   sanitizeModels,
 } from './connector.registry';
+import { SessionActivityService } from './session-activity.service';
 import { SessionDriversService } from './session-drivers.service';
 
 /** What the handshake proves, kept on the socket. */
@@ -61,6 +62,7 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
     private prisma: PrismaService,
     private registry: ConnectorRegistry,
     private drivers: SessionDriversService,
+    private activity: SessionActivityService,
   ) {}
 
   afterInit(namespace: Namespace) {
@@ -126,11 +128,15 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
     // The watch list is a convenience: a failed read leaves the connector with
     // the sessions of its own runs only.
     const data = socket.data as ConnectorSocketData;
-    const watchSessions = await this.drivers
-      .watchList(data.peer)
-      .catch((): string[] => []);
+    const watch = await this.drivers
+      .watch(data.peer)
+      .catch((): undefined => undefined);
 
-    return { ...ack, watchSessions };
+    return {
+      ...ack,
+      watchSessions: watch?.sessions ?? [],
+      runSessions: watch?.runSessions ?? [],
+    };
   }
 
   accept(socket: ConnectorSocketLike, body: ConnectorHello): ConnectorHelloAck {
@@ -231,7 +237,7 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
     }
 
     try {
-      return { ok: true, sessions: await this.drivers.watchList(peer) };
+      return { ok: true, ...(await this.drivers.watch(peer)) };
     } catch {
       return { ok: false, reason: 'The server could not list the sessions.' };
     }
@@ -262,6 +268,31 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
       });
 
       return { ok: false, reason: 'The server could not record the drivers.' };
+    }
+  }
+
+  /** What a person did in their own terminal in a watched session. */
+  @SubscribeMessage('sessions.activity')
+  async sessionActivity(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<ConnectorAck> {
+    const peer = this.onlinePeer(socket);
+
+    if (!peer) {
+      return { ok: false, reason: 'Say hello before sending activity.' };
+    }
+
+    try {
+      return await this.activity.apply(peer, body);
+    } catch (error) {
+      this.logger.error({
+        message: `Recording session activity failed: ${error}`,
+        where: 'ConnectorGateway.sessionActivity',
+        error: error instanceof Error ? error : undefined,
+      });
+
+      return { ok: false, reason: 'The server could not record the activity.' };
     }
   }
 

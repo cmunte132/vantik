@@ -39,6 +39,8 @@ export interface Step {
   edited?: boolean;
   /** A question to a person: the record that holds the question and answer. */
   agentQuestionId?: string;
+  /** A note the person wrote in their own terminal, as opposed to the agent. */
+  role?: string;
 }
 
 /** The kinds where four in a row are one fact, not four. */
@@ -59,7 +61,11 @@ interface StepData {
   removed?: number;
   diff?: string;
   agentQuestionId?: string;
+  role?: string;
 }
+
+/** The phase of the steps that a person did in their own terminal. */
+export const TERMINAL_PHASE = 'terminal';
 
 /**
  * Events into steps.
@@ -130,6 +136,7 @@ export function toSteps(events: any[]): Step[] {
       ...(data?.exit != null ? { exit: data.exit } : {}),
       ...(data?.passed != null ? { passed: data.passed } : {}),
       ...(data?.kind === 'note' ? { text: data.text ?? event.message } : {}),
+      ...(data?.role ? { role: data.role } : {}),
       ...(data?.added != null ? { added: data.added } : {}),
       ...(data?.removed != null ? { removed: data.removed } : {}),
       ...(data?.diff ? { diff: data.diff } : {}),
@@ -241,10 +248,13 @@ export type FeedItem =
       lines: string[];
       failed: boolean;
     }
-  | { type: 'step'; id: string; at?: string; step: Step };
+  | { type: 'step'; id: string; at?: string; step: Step }
+  /** Where a person went on in their own terminal; the rows after it are theirs. */
+  | { type: 'terminal'; id: string; at?: string };
 
 export function toFeed(events: any[]): FeedItem[] {
   const feed: FeedItem[] = [];
+  let inTerminal = false;
 
   for (const step of toSteps(events)) {
     const previous = feed[feed.length - 1];
@@ -264,6 +274,14 @@ export function toFeed(events: any[]): FeedItem[] {
       }
       continue;
     }
+
+    // One heading where the person's terminal work starts. The work is in the
+    // same feed as the run's own, in the order it happened.
+    const fromTerminal = step.phase === TERMINAL_PHASE;
+    if (fromTerminal && !inTerminal) {
+      feed.push({ type: 'terminal', id: `terminal-${step.id}`, at: step.at });
+    }
+    inTerminal = fromTerminal;
 
     feed.push({ type: 'step', id: step.id, at: step.at, step });
   }

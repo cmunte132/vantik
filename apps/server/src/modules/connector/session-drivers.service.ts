@@ -11,7 +11,29 @@ const WATCH_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** The most sessions the server sends to one connector, or reads from one. */
 const MAX_SESSIONS = 500;
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * The omp sessions that belong to a person: the hooks write a row under their
+ * id, and a local run writes one under the personal agent, with the run
+ * recording who delegated it.
+ */
+export function ownedSessions(
+  peer: ConnectorPeer,
+): Prisma.AgentSessionWhereInput {
+  return {
+    workspaceId: peer.workspaceId,
+    deleted: null,
+    location: 'LOCAL',
+    harness: 'omp',
+    channel: { in: ['HOOKS', 'CONNECTOR'] },
+    OR: [
+      { actorUserId: peer.userId },
+      { agentRun: { createdById: peer.userId } },
+    ],
+  };
+}
 
 /**
  * Which omp sessions a person's connector watches, and what the connector
@@ -26,17 +48,7 @@ export class SessionDriversService {
   constructor(private readonly prisma: PrismaService) {}
 
   private owned(peer: ConnectorPeer): Prisma.AgentSessionWhereInput {
-    return {
-      workspaceId: peer.workspaceId,
-      deleted: null,
-      location: 'LOCAL',
-      harness: 'omp',
-      channel: { in: ['HOOKS', 'CONNECTOR'] },
-      OR: [
-        { actorUserId: peer.userId },
-        { agentRun: { createdById: peer.userId } },
-      ],
-    };
+    return ownedSessions(peer);
   }
 
   /** The omp session uuids the connector must check, active in the last day. */
@@ -44,6 +56,17 @@ export class SessionDriversService {
     peer: ConnectorPeer,
     now: Date = new Date(),
   ): Promise<string[]> {
+    return (await this.watch(peer, now)).sessions;
+  }
+
+  /**
+   * The same list, and the part of it that belongs to runs. The connector
+   * reads a run's session from its end, because the run reported the rest.
+   */
+  async watch(
+    peer: ConnectorPeer,
+    now: Date = new Date(),
+  ): Promise<{ sessions: string[]; runSessions: string[] }> {
     const rows = await this.prisma.agentSession.findMany({
       where: {
         ...this.owned(peer),
@@ -55,16 +78,21 @@ export class SessionDriversService {
     });
 
     const ids = new Set<string>();
+    const runIds = new Set<string>();
 
     for (const row of rows) {
       const id = ompResumeId({ ...row, location: 'LOCAL' });
 
       if (id) {
         ids.add(id);
+
+        if (row.agentRunId) {
+          runIds.add(id);
+        }
       }
     }
 
-    return [...ids];
+    return { sessions: [...ids], runSessions: [...runIds] };
   }
 
   /**
@@ -120,7 +148,9 @@ export class SessionDriversService {
           driverLeaseExpiresAt: driver ? lease : null,
           // A person can resume a session after its run ended. While the
           // terminal holds it, the session is live again.
-          ...(driver === 'TERMINAL' ? { endedAt: null, lastActiveAt: now } : {}),
+          ...(driver === 'TERMINAL'
+            ? { endedAt: null, lastActiveAt: now }
+            : {}),
         },
       });
     }

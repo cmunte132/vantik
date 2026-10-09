@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { ConnectorGateway } from './connector.gateway';
 import { ConnectorRegistry } from './connector.registry';
+import { SessionActivityService } from './session-activity.service';
 import { SessionDriversService } from './session-drivers.service';
 
 /**
@@ -11,7 +12,12 @@ import { SessionDriversService } from './session-drivers.service';
  * registry's handler.
  */
 @Module({
-  providers: [ConnectorRegistry, ConnectorGateway, SessionDriversService],
+  providers: [
+    ConnectorRegistry,
+    ConnectorGateway,
+    SessionDriversService,
+    SessionActivityService,
+  ],
   exports: [ConnectorRegistry],
 })
 export class ConnectorModule {}

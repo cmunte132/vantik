@@ -33,6 +33,9 @@ export async function saveAgentSessionData(
         startedAt: record.data.startedAt,
         lastActiveAt: record.data.lastActiveAt,
         endedAt: record.data.endedAt,
+
+        terminalTurns: record.data.terminalTurns,
+        terminalCostUsd: record.data.terminalCostUsd,
       };
 
       switch (record.action) {

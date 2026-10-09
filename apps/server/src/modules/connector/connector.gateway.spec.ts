@@ -6,6 +6,7 @@ import {
   ConnectorRegistry,
   type ConnectorRunHandler,
 } from './connector.registry';
+import { SessionActivityService } from './session-activity.service';
 import { SessionDriversService } from './session-drivers.service';
 
 /**
@@ -52,6 +53,7 @@ function gateway(
       prisma,
       registry,
       {} as SessionDriversService,
+      {} as SessionActivityService,
     ),
     registry,
   };

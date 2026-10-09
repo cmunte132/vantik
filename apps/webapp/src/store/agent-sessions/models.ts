@@ -34,6 +34,8 @@ export const AgentSession = types.model({
   /** What a person did in their own terminal, from the omp session file. */
   terminalTurns: types.optional(types.number, 0),
   terminalCostUsd: types.optional(types.number, 0),
+  /** When the newest of those turns happened. */
+  terminalSeenAt: types.union(types.string, types.null, types.undefined),
 });
 
 export const AgentSessionArray = types.array(AgentSession);

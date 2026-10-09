@@ -44,6 +44,7 @@ interface SessionLike {
   driverLeaseExpiresAt?: string | null;
   endedAt?: string | null;
   terminalTurns?: number | null;
+  terminalSeenAt?: string | null;
   lastActiveAt?: string | null;
 }
 
@@ -85,7 +86,8 @@ export function drivenBy(
 
 /**
  * What a person did in their own terminal in this session: the turns it took
- * and when it was last active. Null when nothing came from a terminal, so a
+ * and when the newest of them happened. That is not `lastActiveAt`, which also
+ * moves while a terminal merely holds the session open. Null when nothing came from a terminal, so a
  * session that was never resumed reads as before.
  */
 export function terminalActivity(
@@ -94,7 +96,10 @@ export function terminalActivity(
   const turns = session?.terminalTurns ?? 0;
 
   return session && turns > 0
-    ? { turns, lastActiveAt: session.lastActiveAt ?? null }
+    ? {
+        turns,
+        lastActiveAt: session.terminalSeenAt ?? session.lastActiveAt ?? null,
+      }
     : null;
 }
 

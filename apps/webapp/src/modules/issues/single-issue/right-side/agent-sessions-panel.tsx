@@ -108,7 +108,9 @@ export const AgentSessionsPanel = observer(() => {
                   <span>
                     · last active{' '}
                     <ReactTimeAgo
-                      date={new Date(session.lastActiveAt)}
+                      date={
+                        new Date(terminal.lastActiveAt ?? session.lastActiveAt)
+                      }
                       timeStyle="twitter"
                     />{' '}
                     ago

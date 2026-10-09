@@ -312,7 +312,7 @@ export async function seedWorkspace(
     labels: ['Bug'],
     inCycle: true,
   });
-  await issue('Customer reports a blank page after paying', {
+  const blankPage = await issue('Customer reports a blank page after paying', {
     state: 'Triage',
     labels: ['Bug'],
   });
@@ -464,7 +464,7 @@ export async function seedWorkspace(
   }
 
   // A personal agent beside Ada's token, as the API settings list them.
-  await ok(
+  const personalAgent = await ok<{ id: string }>(
     await api.post('/v1/users/agents', {
       data: { name: 'Claude Code on my laptop', ownership: 'personal' },
     }),
@@ -505,11 +505,14 @@ export async function seedWorkspace(
     owner,
     clockAt,
     modules: { web: web.id, payments: payments.id, catalog: catalog.id },
+    personalAgentId: personalAgent.id,
     issues: {
       running: webhooks,
       succeeded: addressForm,
       rejected: analytics,
       failed: stock,
+      local: giftCards,
+      asking: blankPage,
     },
   });
 

@@ -33,6 +33,13 @@ export interface SeededAgents {
   rejectedRunId: string;
   failedRunId: string;
   handedOverRunId: string;
+  /** A local omp run that finished and was continued in the person's terminal. */
+  localRunId: string;
+  /** A local omp run still working, with a question open for the person. */
+  askingRunId: string;
+  askingQuestionId: string;
+  /** The key of the issue the finished local run worked on, such as ENG-12. */
+  localIssueKey: string;
 }
 
 interface Input {
@@ -40,11 +47,17 @@ interface Input {
   /** The frozen clock the capture runs at, in ms. */
   clockAt: number;
   modules: { web: string; payments: string; catalog: string };
+  /** The delegating person's personal agent, which a local run works as. */
+  personalAgentId: string;
   issues: {
     running: Issue;
     succeeded: Issue;
     rejected: Issue;
     failed: Issue;
+    /** Worked by a local run that finished and was continued in a terminal. */
+    local: Issue;
+    /** Worked by a local run that is waiting on an answer. */
+    asking: Issue;
   };
 }
 
@@ -65,6 +78,13 @@ const CONFIG = {
   limits: { maxCostUsd: 5 },
 };
 
+/** What a local run is asked to use: a model of the person's own omp. */
+const LOCAL_CONFIG = {
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-5',
+  thinking: 'high',
+};
+
 type Level = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
 /** One line of a run's activity: seconds after it started, then what. */
@@ -79,7 +99,7 @@ type Line = [
 export async function seedAgents(
   api: APIRequestContext,
   db: Database,
-  { owner, clockAt, modules, issues }: Input,
+  { owner, clockAt, modules, personalAgentId, issues }: Input,
 ): Promise<SeededAgents> {
   const workspaceId = owner.workspaceId;
 
@@ -401,12 +421,295 @@ export async function seedAgents(
     ],
   );
 
+  const local = await seedLocalRuns(db, {
+    owner,
+    clockAt,
+    agentUserId: personalAgentId,
+    finishedIssue: issues.local,
+    askingIssue: issues.asking,
+  });
+
   return {
     runningRunId,
     succeededRunId,
     rejectedRunId,
     failedRunId,
     handedOverRunId,
+    ...local,
+  };
+}
+
+/**
+ * Two runs on the person's own machine, as the local executor records them
+ * (executors/local.executor.ts): the run is the `local` executor's, it works as
+ * the person's personal agent, and omp's own session id is in its result and
+ * on its session row. Its worktree is on the person's machine, so the path is
+ * made up.
+ *
+ * The first finished and left a branch. The person then resumed its omp
+ * session in a terminal and sent one more prompt, which the connector read
+ * from the session file (connector/session-activity.service.ts): those steps
+ * have the phase `terminal`, and the terminal turn and its cost are added to
+ * the run and counted on the session. A terminal holds the session now.
+ *
+ * The second is still working and has asked a person a question with the
+ * `ask_person` tool, so the question is open (source `tool`).
+ */
+async function seedLocalRuns(
+  db: Database,
+  {
+    owner,
+    clockAt,
+    agentUserId,
+    finishedIssue,
+    askingIssue,
+  }: {
+    owner: Account;
+    clockAt: number;
+    agentUserId: string;
+    finishedIssue: Issue;
+    askingIssue: Issue;
+  },
+) {
+  const workspaceId = owner.workspaceId;
+  const keyOf = (issue: Issue) => `${owner.teamIdentifier}-${issue.number}`;
+  const pathOf = (issue: Issue) =>
+    `/Users/ada/.vantik/worktrees/acme/storefront/${keyOf(issue).toLowerCase()}`;
+  const branchOf = (issue: Issue) => `agent/${keyOf(issue).toLowerCase()}`;
+
+  const localRun = async (
+    issue: Issue,
+    ompSessionId: string,
+    fields: Record<string, unknown> & { startedAt: number },
+    result: Record<string, unknown>,
+    lines: Line[],
+    session: Record<string, unknown>,
+  ) => {
+    const { startedAt, ...rest } = fields;
+    const worktreePath = pathOf(issue);
+    const branch = branchOf(issue);
+    const id = await db.insert('AgentRun', {
+      workspaceId,
+      issueId: issue.id,
+      agentUserId,
+      createdById: owner.userId,
+      executor: 'local',
+      attempt: 1,
+      config: LOCAL_CONFIG,
+      harnessVersion: 'omp 18.8.6',
+      createdAt: new Date(startedAt - 20_000),
+      claimedAt: new Date(startedAt - 5_000),
+      startedAt: new Date(startedAt),
+      result: { worktreePath, branch, ompSessionId, ...result },
+      ...rest,
+    });
+    // The session row the run was created with, after omp reported its own id.
+    const sessionId = await db.insert('AgentSession', {
+      workspaceId,
+      issueId: issue.id,
+      actorUserId: agentUserId,
+      externalId: ompSessionId,
+      harness: 'omp',
+      location: 'LOCAL',
+      channel: 'CONNECTOR',
+      agentRunId: id,
+      startedAt: new Date(startedAt - 5_000),
+      ...session,
+    });
+    // The first line the local executor writes once omp has started.
+    const events: Line[] = [
+      [
+        3,
+        'setup',
+        `omp started in ${worktreePath} on ${branch}`,
+        { kind: 'session', ompSessionId, worktreePath, branch },
+      ],
+      ...lines,
+    ];
+    for (const [seconds, phase, message, data, level] of events) {
+      await db.insert('AgentRunEvent', {
+        runId: id,
+        at: new Date(startedAt + seconds * 1000),
+        level: level ?? 'INFO',
+        phase,
+        message,
+        data: data ?? null,
+      }, { updatedAt: false });
+    }
+    return { id, sessionId };
+  };
+
+  // Finished: the work is on a local branch, and the person went on with it.
+  const doneStart = clockAt - 95 * MINUTE;
+  const doneEnd = doneStart + 11 * MINUTE + 20_000;
+  const promptAt = doneEnd + 40 * MINUTE;
+  const replyAt = promptAt + 95_000;
+  const secondsSince = (at: number) => (at - doneStart) / 1000;
+  const done = await localRun(
+    finishedIssue,
+    '0e6b2a4c-7d1f-4c58-9a3e-5b8f21c4d9a7',
+    {
+      status: 'SUCCEEDED',
+      startedAt: doneStart,
+      finishedAt: new Date(doneEnd),
+      modelId: LOCAL_CONFIG.model,
+      iterationCount: 19,
+      summary:
+        'Added gift card redemption to checkout. A card is checked when the code is entered, applied before the card payment, and the rest of the total is charged as usual. Added tests for a card that covers the whole order and one that covers part of it.',
+    },
+    // The run's own $0.83 and 19 turns, plus the terminal turn that followed.
+    {
+      delivery: 'local-branch',
+      headCommit: '3f9c1e2a64b7d08e5c1a9f2b7d3e6a40c8b15d97',
+      costUsd: 0.95,
+      turns: 20,
+    },
+    [
+      [9, 'implement', 'Read src/checkout/payment-methods.tsx', { kind: 'read', target: 'src/checkout/payment-methods.tsx' }],
+      [13, 'implement', 'Read src/payments/charge.ts', { kind: 'read', target: 'src/payments/charge.ts' }],
+      [21, 'implement', 'Searched for giftCard', { kind: 'search', target: 'giftCard' }],
+      [
+        64,
+        'implement',
+        'Note',
+        {
+          kind: 'note',
+          text: 'There is no gift card code in the repository yet. The charge takes one amount, so a card has to be taken off the total before the charge is made.',
+        },
+      ],
+      [190, 'implement', 'Created src/payments/gift-card.ts', { kind: 'write', ref: 'w1', target: 'src/payments/gift-card.ts' }],
+      [191, 'implement', 'Created src/payments/gift-card.ts', { ref: 'w1', ok: true, added: 58, removed: 0 }],
+      [300, 'implement', 'Edit src/checkout/payment-methods.tsx', { kind: 'write', ref: 'w2', target: 'src/checkout/payment-methods.tsx' }],
+      [301, 'implement', 'Edit src/checkout/payment-methods.tsx', { ref: 'w2', ok: true, added: 24, removed: 3 }],
+      [470, 'implement', 'bash: pnpm test src/payments', { kind: 'test', ref: 'a1', command: 'pnpm test src/payments' }],
+      [548, 'implement', 'Tests passed: 31', { kind: 'test', ref: 'a1', ok: true, passed: 31, failed: 0 }],
+      [
+        680,
+        'report',
+        `Left ${branchOf(finishedIssue)} at 3f9c1e2a in ${pathOf(finishedIssue)}`,
+      ],
+      // What the connector read from the session file after the run.
+      [
+        secondsSince(promptAt),
+        'terminal',
+        'Also show the remaining balance next to the gift card line in the order summary.',
+        {
+          kind: 'note',
+          role: 'user',
+          source: 'terminal',
+          text: 'Also show the remaining balance next to the gift card line in the order summary.',
+        },
+      ],
+      [
+        secondsSince(replyAt),
+        'terminal',
+        'The order summary now shows the gift card line with the balance left after the order.',
+        {
+          kind: 'note',
+          source: 'terminal',
+          text: 'The order summary now shows the gift card line with the balance left after the order, for example "Gift card ($12.50 left)". I added a test for a card that covers only part of the total.',
+        },
+      ],
+    ],
+    {
+      // A terminal holds the session. The connector renews the lease while it
+      // watches, so the lease runs past the capture's clock.
+      driver: 'TERMINAL',
+      driverLeaseExpiresAt: new Date(clockAt + 10 * MINUTE),
+      lastActiveAt: new Date(replyAt),
+      terminalTurns: 1,
+      terminalCostUsd: 0.12,
+      terminalSeenAt: new Date(replyAt),
+    },
+  );
+
+  // Working: Vantik drives it, and it waits on a person.
+  const askStart = clockAt - 9 * MINUTE;
+  const asking = await localRun(
+    askingIssue,
+    'b41d8e07-3a52-4f96-8c1d-6e9a07f3b2c5',
+    {
+      status: 'RUNNING',
+      startedAt: askStart,
+      iterationCount: 0,
+      modelId: null,
+    },
+    { costUsd: 0.38, turns: 11 },
+    [],
+    {
+      driver: 'VANTIK',
+      driverLeaseExpiresAt: new Date(clockAt + 10 * MINUTE),
+      lastActiveAt: new Date(askStart + 5 * MINUTE),
+    },
+  );
+  const questionId = await db.insert('AgentQuestion', {
+    workspaceId,
+    issueId: askingIssue.id,
+    agentRunId: asking.id,
+    agentSessionId: asking.sessionId,
+    externalId: 'redirect-scope',
+    source: 'tool',
+    questions: [
+      {
+        id: 'scope',
+        prompt:
+          'The blank page appears only after a 3-D Secure check. Should I fix that redirect only, or every redirect that follows a payment?',
+        options: [
+          {
+            label: '3-D Secure only',
+            description: 'The smallest change. The card-only path already works.',
+          },
+          {
+            label: 'Every redirect after payment',
+            description: 'Also changes the Apple Pay return, which has no test.',
+          },
+        ],
+        allowOther: true,
+      },
+    ],
+    status: 'OPEN',
+    createdAt: new Date(askStart + 5 * MINUTE),
+    // The server's clock is hours behind the capture's, so this stays open
+    // while the capture runs, and reads as 25 minutes left in the browser.
+    expiresAt: new Date(clockAt + 25 * MINUTE),
+    assigneeId: owner.userId,
+  });
+  const askLines: Line[] = [
+    [14, 'implement', 'Read web/src/checkout/return-url.ts', { kind: 'read', target: 'web/src/checkout/return-url.ts' }],
+    [19, 'implement', 'Read web/src/checkout/confirmation.tsx', { kind: 'read', target: 'web/src/checkout/confirmation.tsx' }],
+    [27, 'implement', 'Searched for threeDsReturn', { kind: 'search', target: 'threeDsReturn' }],
+    [
+      90,
+      'implement',
+      'Note',
+      {
+        kind: 'note',
+        text: 'After a 3-D Secure check the provider sends the customer back with the order id in the hash. The confirmation page reads it from the query string, finds nothing and renders nothing.',
+      },
+    ],
+    [
+      300,
+      'implement',
+      'Asked a person: The blank page appears only after a 3-D Secure check.',
+      { kind: 'question', agentQuestionId: questionId, status: 'OPEN' },
+    ],
+  ];
+  for (const [seconds, phase, message, data] of askLines) {
+    await db.insert('AgentRunEvent', {
+      runId: asking.id,
+      at: new Date(askStart + seconds * 1000),
+      level: 'INFO',
+      phase,
+      message,
+      data: data ?? null,
+    }, { updatedAt: false });
+  }
+
+  return {
+    localRunId: done.id,
+    askingRunId: asking.id,
+    askingQuestionId: questionId,
+    localIssueKey: keyOf(finishedIssue),
   };
 }
 

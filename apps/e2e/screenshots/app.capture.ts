@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { SIGNED_OUT, signInInBrowser } from '../src/browser';
 import { runTag } from '../src/env';
+import { connectConnector } from './connector';
 import { shot } from './frame';
 import { DOCS_BROWSER_STATE, loadDocsRun, type DocsRun } from './run';
 
@@ -210,6 +211,27 @@ test.describe('issues', () => {
     });
   });
 
+  // The choice of place appears only while the person's own connector is
+  // online, so one is connected for the shot, as `vantik connect` would be.
+  test('delegate to your machine', async ({ page }) => {
+    const connector = await connectConnector(run.owner.pat);
+    try {
+      await featuredIssue(page);
+      const trigger = page.getByRole('button', { name: 'Delegate to an agent' });
+      await trigger.click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByRole('combobox').first().click();
+      await page.getByRole('option', { name: 'Your machine (omp)' }).click();
+      await expect(dialog.getByText(/Your omp setup/)).toBeVisible();
+      await shot(page, 'agents/delegate-local', {
+        focus: [trigger, dialog],
+        highlight: dialog.getByRole('combobox').first(),
+      });
+    } finally {
+      connector.close();
+    }
+  });
+
   test('my issues', async ({ page }) => {
     await page.goto(`${workspace}/my-issues`);
     await expect(page.getByText(run.seeded.featuredIssueTitle).first()).toBeVisible();
@@ -405,6 +427,53 @@ test.describe('agent runs', () => {
       'Show stock levels on the product page',
     );
     await shot(page, 'agents/run-failed', { focus: content(page), padding: 0 });
+  });
+
+  // The runs of the local executor: omp on the person's own machine.
+  test.describe('on your machine', () => {
+    const localRun = async (page: Page) =>
+      runPage(page, run.seeded.agents.localRunId, 'Gift cards at checkout');
+
+    test('run', async ({ page }) => {
+      await localRun(page);
+      await shot(page, 'agents/run-local', { focus: content(page), padding: 0 });
+    });
+
+    // A terminal holds the session, so the rail says to open it there.
+    test('resume command', async ({ page }) => {
+      await localRun(page);
+      const card = page
+        .getByRole('heading', { name: 'Open in your terminal' })
+        .locator('xpath=../..');
+      await expect(card.getByText(/omp --resume/)).toBeVisible();
+      await shot(page, 'agents/run-resume', { focus: card, padding: 16 });
+    });
+
+    test('continued in your terminal', async ({ page }) => {
+      await localRun(page);
+      const heading = page.getByText('Continued in your terminal');
+      await expect(heading).toBeVisible();
+      await shot(page, 'agents/run-terminal', {
+        focus: [heading, page.getByText(/Gift card \(\$12\.50 left\)/)],
+        padding: 24,
+      });
+    });
+
+    test('sessions on the issue', async ({ page }) => {
+      await page.goto(`${workspace}/issue/${run.seeded.agents.localIssueKey}`);
+      const sessions = page.getByRole('group', { name: 'Sessions' });
+      await expect(sessions.getByText(/omp --resume/)).toBeVisible();
+      await shot(page, 'agents/sessions', { focus: sessions, padding: 16 });
+    });
+
+    // Open until a person answers, so it waits in Needs you. The page opens
+    // the first open question by itself.
+    test('question in needs you', async ({ page }) => {
+      await page.goto(`${workspace}/pages/needs-you`);
+      await expect(page.getByText(/3-D Secure check/).first()).toBeVisible();
+      await expect(page.getByText('Asked from omp on your machine')).toBeVisible();
+      await shot(page, 'agents/question', { focus: content(page), padding: 0 });
+    });
   });
 
   // The run handed to a person, so the dialog is the Reject one. A failed

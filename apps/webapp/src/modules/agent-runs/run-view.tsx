@@ -9,6 +9,7 @@ import React from 'react';
 import { AgentQuestionCard } from 'modules/agent-questions/agent-question-card';
 import {
   drivenBy,
+  driverLabel,
   harnessLabel,
   resumeCommand,
   terminalActivity,
@@ -165,6 +166,7 @@ export const RunView = withApplicationStore(
       ? resumeCommand(session, run.result?.worktreePath)
       : null;
     const driver = session ? drivenBy(session) : null;
+    const heldByTerminal = driver === driverLabel('TERMINAL');
     // What the person did in their own terminal after the run, if anything.
     const terminal = terminalActivity(session);
     const events = agentRunsStore.getEvents(run.id);
@@ -189,7 +191,9 @@ export const RunView = withApplicationStore(
       run.executor === LOCAL_EXECUTOR_KEY
         ? harnessLabel(session?.harness ?? 'omp')
         : undefined;
-    const runner = executorLabel(executors, run.executor);
+    const runner = harness
+      ? `${harness} on your machine`
+      : executorLabel(executors, run.executor);
     // Every attempt at one issue is the same agent, so its spend is the sum of
     // them. Shown only when there is more than this one run to add up.
     const attempts = agentRunsStore
@@ -271,20 +275,12 @@ export const RunView = withApplicationStore(
                 </span>
 
                 <div className="flex min-w-0 grow flex-col">
-                  <span className="truncate">
-                    <span className="font-semibold">{agentName}</span>
-                    {harness && (
-                      <span className="text-muted-foreground">
-                        {' '}
-                        through {harness} on your machine
-                      </span>
-                    )}
-                  </span>
+                  <span className="truncate font-semibold">{agentName}</span>
                   <span className="truncate text-muted-foreground">
                     {[
                       issueKey,
                       model,
-                      harness ? '' : runner,
+                      runner,
                       run.attempt > 1 ? `attempt ${run.attempt}` : '',
                     ]
                       .filter(Boolean)
@@ -361,9 +357,11 @@ export const RunView = withApplicationStore(
             {resume && (
               <RailCard
                 title={
-                  terminal
-                    ? 'Resumed in your terminal'
-                    : 'Continue in your terminal'
+                  heldByTerminal
+                    ? 'Open in your terminal'
+                    : terminal
+                      ? 'Resumed in your terminal'
+                      : 'Continue in your terminal'
                 }
               >
                 {terminal && (
@@ -373,9 +371,9 @@ export const RunView = withApplicationStore(
                   </span>
                 )}
                 <ResumeCommand command={resume} />
-                {/* The connector never writes to a session that a terminal
-                    holds, so this says who has it now. */}
-                {driver && (
+                {/* The connector never writes to a session that somebody else
+                    holds. The title already says when it is the terminal. */}
+                {driver && !heldByTerminal && (
                   <span className="text-muted-foreground">{driver}</span>
                 )}
               </RailCard>

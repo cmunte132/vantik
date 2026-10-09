@@ -9,7 +9,7 @@ import { effectiveDriver, ompResumeId } from '@vantikhq/types';
  */
 
 const HARNESS_LABEL: Record<string, string> = {
-  omp: 'OMP',
+  omp: 'omp',
   pi: 'Pi',
   'claude-code': 'Claude Code',
   codex: 'Codex',

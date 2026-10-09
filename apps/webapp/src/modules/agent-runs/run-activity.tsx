@@ -39,6 +39,12 @@ interface Props {
   /** The row still in flight on a live run, if any. */
   current: FeedItem | null;
   agentName?: string;
+  /**
+   * The harness that did the work, when it is the person's own (omp on their
+   * machine). Its replies carry its name rather than the agent's initials, so
+   * nobody mistakes them for a hosted agent's.
+   */
+  harness?: string;
   live: boolean;
   setupMs?: number;
   /**
@@ -58,7 +64,16 @@ interface Props {
  * cycle's own milestones show only under All.
  */
 export const RunActivity = observer(
-  ({ feed, start, current, agentName, live, setupMs, terminal }: Props) => {
+  ({
+    feed,
+    start,
+    current,
+    agentName,
+    harness,
+    live,
+    setupMs,
+    terminal,
+  }: Props) => {
     const [filter, setFilter] = React.useState<Filter>('All');
     const shown = feed.filter((item) => matches(item, filter));
     const initials = getInitials(agentName ?? 'Agent');
@@ -123,6 +138,7 @@ export const RunActivity = observer(
                 running={item === current}
                 last={index === shown.length - 1}
                 initials={initials}
+                harness={harness}
                 setupMs={setupMs}
                 terminal={terminal}
               />
@@ -140,6 +156,7 @@ const Row = ({
   running,
   last,
   initials,
+  harness,
   setupMs,
   terminal,
 }: {
@@ -148,6 +165,7 @@ const Row = ({
   running: boolean;
   last: boolean;
   initials: string;
+  harness?: string;
   setupMs?: number;
   terminal?: Props['terminal'];
 }) => {
@@ -164,7 +182,12 @@ const Row = ({
         {last && (
           <span className="absolute top-0 left-1/2 h-2 w-px -translate-x-1/2 bg-border" />
         )}
-        <Node item={item} running={running} initials={initials} />
+        <Node
+          item={item}
+          running={running}
+          initials={initials}
+          harness={harness}
+        />
       </span>
 
       <div className="flex min-w-0 flex-col gap-1.5 pt-2 pb-2.5">
@@ -194,10 +217,12 @@ const Node = ({
   item,
   running,
   initials,
+  harness,
 }: {
   item: FeedItem;
   running: boolean;
   initials: string;
+  harness?: string;
 }) => {
   const step = item.type === 'step' ? item.step : null;
   const failed = item.type === 'setup' ? item.failed : Boolean(step?.failed);
@@ -224,6 +249,19 @@ const Node = ({
         )}
       >
         You
+      </span>
+    );
+  }
+
+  if (step?.kind === 'note' && harness) {
+    return (
+      <span
+        className={cn(
+          base,
+          'border-border bg-background-3 text-[8.5px] font-semibold',
+        )}
+      >
+        {harness}
       </span>
     );
   }

@@ -9,6 +9,7 @@ import React from 'react';
 import { AgentQuestionCard } from 'modules/agent-questions/agent-question-card';
 import {
   drivenBy,
+  harnessLabel,
   resumeCommand,
   terminalActivity,
 } from 'modules/issues/single-issue/right-side/session-vocabulary';
@@ -182,6 +183,12 @@ export const RunView = withApplicationStore(
     const agent = users?.find((user: any) => user.id === run.agentUserId);
     const agentName = agent?.fullname ?? 'Agent';
     const model = run.modelId ?? run.config?.model;
+    // A run on the person's machine is their own harness at work, under the
+    // agent's Vantik identity. A hosted run is the agent itself.
+    const harness =
+      run.executor === LOCAL_EXECUTOR_KEY
+        ? harnessLabel(session?.harness ?? 'omp')
+        : undefined;
     const runner = executorLabel(executors, run.executor);
     // Every attempt at one issue is the same agent, so its spend is the sum of
     // them. Shown only when there is more than this one run to add up.
@@ -264,12 +271,20 @@ export const RunView = withApplicationStore(
                 </span>
 
                 <div className="flex min-w-0 grow flex-col">
-                  <span className="truncate font-semibold">{agentName}</span>
+                  <span className="truncate">
+                    <span className="font-semibold">{agentName}</span>
+                    {harness && (
+                      <span className="text-muted-foreground">
+                        {' '}
+                        through {harness} on your machine
+                      </span>
+                    )}
+                  </span>
                   <span className="truncate text-muted-foreground">
                     {[
                       issueKey,
                       model,
-                      runner,
+                      harness ? '' : runner,
                       run.attempt > 1 ? `attempt ${run.attempt}` : '',
                     ]
                       .filter(Boolean)
@@ -321,6 +336,7 @@ export const RunView = withApplicationStore(
               start={start}
               current={current}
               agentName={agentName}
+              harness={harness}
               live={live}
               setupMs={
                 (run.phaseTimings as Record<string, number> | null)?.setup

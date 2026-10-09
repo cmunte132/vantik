@@ -11,7 +11,11 @@ import { toFeed } from 'modules/agent-runs/run-feed';
 
 import { useSessionEvents } from 'services/agent-sessions';
 
-import { sessionTitle, terminalActivity } from './session-vocabulary';
+import {
+  harnessLabel,
+  sessionTitle,
+  terminalActivity,
+} from './session-vocabulary';
 
 interface Props {
   session: any;
@@ -49,6 +53,7 @@ export const SessionActivityDialog = ({ session, open, setOpen }: Props) => {
             start={first}
             current={null}
             live={false}
+            harness={harnessLabel(session?.harness)}
             terminal={terminalActivity(session) ?? undefined}
           />
         )}

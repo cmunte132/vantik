@@ -1,5 +1,9 @@
-import type { ConnectorHello } from '@vantikhq/types';
+import type { AgentRunsService } from '../agent-runs.service';
+import type { RunHandbackService } from '../run-handback.service';
+import type { RunOutboxService } from '../run-outbox';
+import type { RunTokensService } from '../run-tokens.service';
 import type { AgentRun } from '@prisma/client';
+import type { ConnectorHello } from '@vantikhq/types';
 import type { PrismaService } from 'nestjs-prisma';
 
 import { CONNECTOR_PROTOCOL_VERSION } from '@vantikhq/types';
@@ -8,10 +12,6 @@ import type { AgentQuestionsService } from 'modules/agent-questions/agent-questi
 import { ConnectorRegistry } from 'modules/connector/connector.registry';
 import type { GitSourcesService } from 'modules/git/git-sources.service';
 
-import type { AgentRunsService } from '../agent-runs.service';
-import type { RunHandbackService } from '../run-handback.service';
-import type { RunOutboxService } from '../run-outbox';
-import type { RunTokensService } from '../run-tokens.service';
 import { ExecutorRegistry } from './executor.registry';
 import { LocalExecutor, scrubDeep } from './local.executor';
 
@@ -729,6 +729,97 @@ describe('LocalExecutor connector loss', () => {
       'FAILED',
       expect.objectContaining({ failure: 'BUDGET_EXHAUSTED' }),
     );
+  });
+});
+
+describe('LocalExecutor spend limit', () => {
+  const started = {
+    runId: 'run-1',
+    seq: 0,
+    ompSessionId: 'omp-9',
+    sessionFile: '/home/me/.omp/agent/sessions/9.jsonl',
+    worktreePath: '/src/app-wt',
+    branch: 'agent/eng-5',
+    baseCommit: 'abc123',
+  };
+  const costing = (total: number) => ({
+    type: 'message_end',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'ok' }],
+      usage: { cost: { total } },
+    },
+  });
+
+  async function running(limits?: { maxCostUsd: number }) {
+    const made = build();
+    const peer = online(made.connectors, ME);
+    const base = makeRun();
+    await made.executor.dispatch(
+      limits
+        ? makeRun({
+            config: { ...(base.config as object), limits } as never,
+          })
+        : base,
+    );
+    await made.executor.handle(PERSON, 'run.started', started);
+    made.agentRuns.transition.mockClear();
+    peer.emitWithAck.mockClear();
+    return { ...made, peer };
+  }
+
+  const failures = (m: { agentRuns: { transition: jest.Mock } }) =>
+    m.agentRuns.transition.mock.calls.filter(([, to]) => to === 'FAILED');
+
+  it('does nothing below the limit', async () => {
+    const made = await running();
+    await made.executor.handle(PERSON, 'run.events', {
+      runId: 'run-1',
+      seq: 1,
+      events: [costing(4.99)],
+    });
+    expect(failures(made)).toHaveLength(0);
+    expect(made.peer.emitWithAck).not.toHaveBeenCalledWith(
+      'run.cancel',
+      expect.anything(),
+    );
+  });
+
+  it('stops the run at the default limit, once', async () => {
+    const made = await running();
+    await made.executor.handle(PERSON, 'run.events', {
+      runId: 'run-1',
+      seq: 1,
+      events: [costing(5.5)],
+    });
+    await made.executor.handle(PERSON, 'run.events', {
+      runId: 'run-1',
+      seq: 2,
+      events: [costing(1)],
+    });
+
+    expect(failures(made)).toHaveLength(1);
+    expect(failures(made)[0][2]).toEqual(
+      expect.objectContaining({
+        failure: 'BUDGET_EXHAUSTED',
+        error:
+          'The run reached its spend limit of $5.00, so the server stopped it.',
+      }),
+    );
+    expect(
+      made.peer.emitWithAck.mock.calls.filter(([e]) => e === 'run.cancel'),
+    ).toHaveLength(1);
+  });
+
+  it('honours a lower limit set on the run', async () => {
+    const made = await running({ maxCostUsd: 1 });
+    await made.executor.handle(PERSON, 'run.events', {
+      runId: 'run-1',
+      seq: 1,
+      events: [costing(1.2)],
+    });
+    expect(failures(made)).toHaveLength(1);
+    expect(failures(made)[0][2].error).toMatch(/limit of \$1\.00/);
   });
 });
 

@@ -53,10 +53,10 @@ import {
   RunOutboxService,
 } from '../run-outbox';
 import { RunTokensService } from '../run-tokens.service';
-import { answerMessage, refusalMessage } from './question-answer';
 import { ExecutorRegistry } from './executor.registry';
 import { describeOutbox, factScope, spentFields } from './hosted.executor';
 import { PiEventReader, type ParsedStep } from './pi-events';
+import { answerMessage, refusalMessage } from './question-answer';
 import { RunTelemetry, startRunTelemetry } from './run-telemetry';
 import { SpendMeter } from './spend-meter';
 import { scrubSecrets } from '../sandbox/scrub';
@@ -105,6 +105,10 @@ interface LocalRun {
   /** The run is RUNNING: `run.started` arrived, or `run.finished` forced it. */
   running: boolean;
   closed: boolean;
+  /** A failure is under way; a second one (deadline, spend) must not follow. */
+  ending: boolean;
+  /** The spend ceiling this run is held to, in US dollars. */
+  maxCostUsd: number;
   worktreePath: string | null;
   branch: string | null;
   ompSessionId: string | null;
@@ -137,7 +141,7 @@ export class LocalExecutor
   implements AgentExecutor, ConnectorRunHandler, OnModuleInit
 {
   readonly key = LOCAL_EXECUTOR_KEY;
-  readonly label = 'My machine (omp)';
+  readonly label = 'Your machine (omp)';
 
   private readonly logger = new LoggerService('LocalExecutor');
   private readonly runs = new Map<string, LocalRun>();
@@ -336,6 +340,8 @@ export class LocalExecutor
         chain: Promise.resolve(),
         running: false,
         closed: false,
+        ending: false,
+        maxCostUsd: limits.maxCostUsd,
         worktreePath: null,
         branch: null,
         ompSessionId: null,
@@ -713,6 +719,7 @@ export class LocalExecutor
     }
 
     local.meter.progress(local.reader.spent);
+    this.enforceSpend(local);
 
     // Recorded in order and never allowed to fail the message: the timeline is
     // the record of the work, not a part of it.
@@ -996,8 +1003,12 @@ export class LocalExecutor
     local?: LocalRun,
     summary?: string | null,
   ): Promise<void> {
-    if (local?.closed) {
+    if (local?.closed || local?.ending) {
       return;
+    }
+
+    if (local) {
+      local.ending = true;
     }
 
     // Text from the connector may echo the run token.
@@ -1074,6 +1085,29 @@ export class LocalExecutor
     // The terminal transition revokes the run's tokens; this covers a run
     // closed some other way.
     void this.tokens.revoke(local.run.id);
+  }
+
+  /**
+   * Stops the run once its spend reaches its ceiling. Only a run in flight is
+   * checked: spend added after it ended (terminal activity) never reaches here.
+   * `fail` tells the connector to stop and fails the run once.
+   */
+  private enforceSpend(local: LocalRun) {
+    if (local.closed || local.ending) {
+      return;
+    }
+
+    if (local.meter.total.costUsd < local.maxCostUsd) {
+      return;
+    }
+
+    void this.fail(
+      local.run,
+      'BUDGET_EXHAUSTED',
+      `The run reached its spend limit of $${local.maxCostUsd.toFixed(2)}, ` +
+        'so the server stopped it.',
+      local,
+    );
   }
 
   /** The deadline, and the lease that keeps the sweep away while it works. */

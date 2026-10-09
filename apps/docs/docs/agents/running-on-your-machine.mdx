@@ -167,10 +167,11 @@ the repository after the agent, and no second agent reviews the work. Read
 [The review cycle](/agents/review-cycle) for what the sandbox does. Review the
 branch yourself.
 
-The only limit that Vantik enforces is time. The default is 2 hours. When it
-passes, the server stops the run and fails it. Vantik records the cost and the
-turns of the run, and the page shows them. It does not stop a run for its
-cost.
+Vantik enforces two limits: time and spend. The default time limit is 2 hours.
+The default spend limit is $5.00, and the delegation can set a lower one. When
+the run reaches either limit, the server stops the run and fails it. Vantik
+records the cost and the turns of the run, and the page shows them. Cost that
+your terminal work adds after the run ended does not change the result.
 
 ### When the connector is not there
 

@@ -13,6 +13,20 @@ describe('resolveSocketUrl', () => {
     expect(url).toBe('http://api.test');
   });
 
+  it('reaches a loopback gateway at the host the server was reached on', async () => {
+    const url = await resolveSocketUrl('http://10.0.0.5:3100', async () => ({
+      socketHost: 'http://localhost:3011',
+    }));
+    expect(url).toBe('http://10.0.0.5:3011');
+  });
+
+  it('keeps a loopback gateway when the server is on this machine too', async () => {
+    const url = await resolveSocketUrl('http://localhost:3100', async () => ({
+      socketHost: 'http://localhost:3011',
+    }));
+    expect(url).toBe('http://localhost:3011');
+  });
+
   it('gives no answer while the server cannot be reached', async () => {
     const url = await resolveSocketUrl('http://app.test', async () => {
       throw new Error('ECONNREFUSED');

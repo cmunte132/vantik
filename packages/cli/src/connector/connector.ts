@@ -80,7 +80,7 @@ export async function resolveSocketUrl(
       const config = (await fetchJson(url)) as { socketHost?: unknown };
       answered = true;
       if (typeof config.socketHost === 'string' && config.socketHost) {
-        return config.socketHost.replace(/\/+$/, '');
+        return reachableSocketHost(config.socketHost, root);
       }
     } catch {
       // Try the next place.
@@ -90,6 +90,27 @@ export async function resolveSocketUrl(
   // that did not answer at all may still be starting, and guessing now would
   // pin the connector to the wrong origin for as long as it runs.
   return answered ? root : null;
+}
+
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+/**
+ * A server set up for its own machine announces a loopback gateway. Reached
+ * from another machine, that address is this machine instead, so the gateway
+ * is taken to be where the server was reached.
+ */
+function reachableSocketHost(socketHost: string, root: string): string {
+  const announced = socketHost.replace(/\/+$/, '');
+  try {
+    const gateway = new URL(announced);
+    const api = new URL(root);
+    if (LOOPBACK.has(gateway.hostname) && !LOOPBACK.has(api.hostname)) {
+      return `${api.protocol}//${api.hostname}${gateway.port ? `:${gateway.port}` : api.port ? `:${api.port}` : ''}`;
+    }
+  } catch {
+    // Not a URL: use it as announced.
+  }
+  return announced;
 }
 
 /** The gateway's origin, asking again until the server answers. */

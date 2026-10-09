@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   CreateProjectDto,
   CreateProjectMilestoneDto,
@@ -30,15 +35,30 @@ export class ProjectsService {
   }
 
   async createProject(createProjectDto: CreateProjectDto, workspaceId: string) {
-    return await this.prisma.project.create({
-      data: {
-        ...createProjectDto,
-        // The dialog always picks one, but an API caller need not, and a
-        // project with no status reads as a broken row everywhere downstream.
-        status: createProjectDto.status ?? DEFAULT_PROJECT_STATUS,
-        workspace: { connect: { id: workspaceId } },
-      },
-    });
+    try {
+      return await this.prisma.project.create({
+        data: {
+          ...createProjectDto,
+          // The dialog always picks one, but an API caller need not, and a
+          // project with no status reads as a broken row everywhere downstream.
+          status: createProjectDto.status ?? DEFAULT_PROJECT_STATUS,
+          workspace: { connect: { id: workspaceId } },
+        },
+      });
+    } catch (error) {
+      // A project name is unique within its workspace. Prisma's unique error
+      // surfaced as a 500 for what is the caller's mistake.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException({
+          message: `A project named "${createProjectDto.name}" already exists in this workspace`,
+        });
+      }
+
+      throw error;
+    }
   }
 
   /**

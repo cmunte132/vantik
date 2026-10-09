@@ -1,6 +1,10 @@
 import { setTimeout as sleep } from 'timers/promises';
 
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, Issue as PrismaIssue } from '@prisma/client';
 import {
   ActionTypesEnum,
@@ -87,12 +91,23 @@ export default class IssuesService {
   }
 
   async getIssueByNumber(issueNumber: string, teamId: string): Promise<Issue> {
-    const issue = await this.prisma.issue.findFirst({
-      where: { number: Number(issueNumber), teamId },
-      include: {
-        team: true,
-      },
-    });
+    const number = Number(issueNumber);
+
+    // Not a number is no issue either; Prisma would throw on NaN.
+    const issue = Number.isInteger(number)
+      ? await this.prisma.issue.findFirst({
+          where: { number, teamId, deleted: null },
+          include: {
+            team: true,
+          },
+        })
+      : null;
+
+    if (!issue) {
+      throw new NotFoundException({
+        message: `Issue ${issueNumber} not found`,
+      });
+    }
 
     const descriptionMarkdown = convertTiptapJsonToMarkdown(issue.description);
 

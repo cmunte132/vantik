@@ -8,12 +8,12 @@ import { PrismaService } from 'nestjs-prisma';
 import { EmbeddingsService } from 'modules/vector/embeddings.service';
 import { VectorService } from 'modules/vector/vector.service';
 
+import { SearchController } from './search.controller';
 import {
   DEFAULT_SEARCH_LIMIT,
   MAX_SEARCH_LIMIT,
   SimilarIssueData,
 } from './search.interface';
-import { SearchController } from './search.controller';
 import SearchService from './search.service';
 
 function controller() {

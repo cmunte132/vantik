@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   CreateTeamDto,
@@ -11,7 +15,10 @@ import {
 import { PrismaService } from 'nestjs-prisma';
 
 import { assertTeamsVisible, readableTeamIds } from 'common/team-access';
-import { assertWorkspaceAdmin } from 'common/workspace-access';
+import {
+  assertTeamInWorkspace,
+  assertWorkspaceAdmin,
+} from 'common/workspace-access';
 
 import { SyncGateway } from 'modules/sync/sync.gateway';
 import { UserIdParams } from 'modules/users/users.interface';
@@ -207,6 +214,9 @@ export default class TeamsService {
     workspaceId: string,
     userId: string,
   ): Promise<UsersOnWorkspaces> {
+    await assertTeamInWorkspace(this.prisma, teamId, workspaceId);
+    await this.assertMember(userId, workspaceId);
+
     // Appended by the database, and only when missing. The list used to be
     // read, added to and written back, so of two teams added to one person at
     // once, the second write dropped the first. Making two teams at once does
@@ -264,14 +274,15 @@ export default class TeamsService {
     workspaceId: string,
     teamMemberData: UserIdParams,
   ): Promise<UsersOnWorkspaces> {
-    const userOnWorkspace = await this.prisma.usersOnWorkspaces.findUnique({
-      where: {
-        userId_workspaceId: {
-          userId: teamMemberData.userId,
-          workspaceId,
-        },
-      },
-    });
+    await assertTeamInWorkspace(
+      this.prisma,
+      teamRequestParams.teamId,
+      workspaceId,
+    );
+    const userOnWorkspace = await this.assertMember(
+      teamMemberData.userId,
+      workspaceId,
+    );
 
     const issues = await this.prisma.issue.findMany({
       where: {
@@ -323,6 +334,22 @@ export default class TeamsService {
         AND ${teamId} = ANY("teamIds")
         ${where.userId ? Prisma.sql`AND "userId" = ${where.userId}` : Prisma.empty}
     `;
+  }
+
+  /**
+   * The membership of one person in this workspace. A person who is not in it
+   * is not found; the lookup used to throw Prisma's P2025, which is a 500.
+   */
+  private async assertMember(userId: string, workspaceId: string) {
+    const membership = await this.prisma.usersOnWorkspaces.findUnique({
+      where: { userId_workspaceId: { userId, workspaceId } },
+    });
+
+    if (!membership) {
+      throw new NotFoundException({ message: `User ${userId} not found` });
+    }
+
+    return membership;
   }
 
   /**

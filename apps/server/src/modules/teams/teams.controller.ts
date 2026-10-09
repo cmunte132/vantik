@@ -49,6 +49,11 @@ export class TeamsController {
     return await this.teamsService.createTeam(workspaceId, userId, teamData);
   }
 
+  /*
+    No WorkspaceResourceGuard on add-member and remove-member. It would also
+    demand that the caller sit in the team, and an admin who predates a team is
+    not in it. The service proves the team is in the workspace instead.
+  */
   @Post(':teamId/add-member')
   @UseGuards(AuthGuard, AdminGuard)
   async addTeamMember(

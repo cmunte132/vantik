@@ -24,6 +24,7 @@ function buildService() {
     },
     team: {
       findMany: jest.fn().mockResolvedValue([{ id: 'team-1' }]),
+      findFirst: jest.fn().mockResolvedValue({ id: 'team-1' }),
       update: jest.fn().mockResolvedValue({ id: 'team-1' }),
     },
     issue: { findMany: jest.fn().mockResolvedValue([]) },

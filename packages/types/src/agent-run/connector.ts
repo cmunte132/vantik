@@ -102,13 +102,6 @@ export type ConnectorHelloAck =
        * Absent from an older server.
        */
       watchSessions?: string[];
-      /**
-       * The part of `watchSessions` that belongs to runs of the connector. A
-       * run streamed its own events up to now, so the connector reads such a
-       * session from its end, and a terminal session from its start. Absent
-       * from an older server.
-       */
-      runSessions?: string[];
     }
   | { ok: false; reason: string };
 
@@ -139,7 +132,7 @@ export interface ConnectorSessionDrivers {
  * once an hour). It carries no body.
  */
 export type ConnectorSessionsWatchAck =
-  | { ok: true; sessions: string[]; runSessions?: string[] }
+  | { ok: true; sessions: string[] }
   | { ok: false; reason: string };
 
 /**

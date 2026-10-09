@@ -59,14 +59,28 @@ export class SessionActivityService {
         ...ownedSessions(peer),
         externalId: { in: [externalId, `omp:${externalId}`] },
       },
-      select: { id: true, agentRunId: true, terminalSeenAt: true },
+      select: {
+        id: true,
+        agentRunId: true,
+        terminalSeenAt: true,
+        agentRun: { select: { finishedAt: true } },
+      },
     });
 
     // Not the person's session, or one that Vantik does not know: nothing to
     // record, and nothing the connector can fix by sending it again.
     for (const session of sessions) {
+      // A run reports its own work while it runs, so only what came after it
+      // finished is the terminal's. A run that has not finished records nothing.
+      const finishedAt = session.agentRun?.finishedAt ?? null;
+      if (session.agentRunId && !finishedAt) {
+        continue;
+      }
       const fresh = entries.filter((entry) => {
         const at = entryAt(entry);
+        if (finishedAt && (!at || at <= finishedAt)) {
+          return false;
+        }
         return !session.terminalSeenAt || !at || at >= session.terminalSeenAt;
       });
       const parsed = parseSessionEntries(fresh);

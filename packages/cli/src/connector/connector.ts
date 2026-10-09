@@ -241,7 +241,7 @@ export class Connector {
           for (const run of this.runs.values()) {
             run.queue.resume();
           }
-          this.watchSessions(ack.watchSessions ?? [], ack.runSessions ?? []);
+          this.watchSessions(ack.watchSessions ?? []);
         });
       });
 
@@ -355,8 +355,8 @@ export class Connector {
    * sessions replaces the old one, and the first check after a connect reports
    * every session again, because the server may have missed a report.
    */
-  private watchSessions(sessions: string[], runSessions: string[]) {
-    this.drivers.setWatched(sessions, runSessions);
+  private watchSessions(sessions: string[]) {
+    this.drivers.setWatched(sessions);
     this.drivers.resetReported();
     void this.checkDrivers();
 
@@ -393,7 +393,7 @@ export class Connector {
       {},
       (ack: ConnectorSessionsWatchAck | undefined) => {
         if (ack?.ok && Array.isArray(ack.sessions)) {
-          this.drivers.setWatched(ack.sessions, ack.runSessions ?? []);
+          this.drivers.setWatched(ack.sessions);
         }
       },
     );
@@ -456,10 +456,9 @@ export class Connector {
           this.tail.skipToEnd(id);
           continue;
         }
-        const fromEnd = this.drivers.isRunSession(id);
         // A long session goes out in batches; a tick sends a few of them.
         for (let sent = 0; sent < 20; sent += 1) {
-          const batch = this.tail.next(id, fromEnd);
+          const batch = this.tail.next(id);
           if (!batch) {
             break;
           }

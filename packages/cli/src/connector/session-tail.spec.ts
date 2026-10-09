@@ -50,26 +50,21 @@ describe('SessionTail', () => {
 
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  it('starts a terminal session at its first line and a run session at its end', () => {
-    expect(build().next(ID, true)).toBeNull();
-    appendFileSync(file, user('second'));
-    expect(build().next(ID, true)?.entries).toHaveLength(1);
-
-    rmSync(path.join(dir, 'state'), { recursive: true, force: true });
-    expect(build().next(ID, false)?.entries).toHaveLength(2);
+  it('starts a session with no saved position at its first line', () => {
+    expect(build().next(ID)?.entries).toHaveLength(1);
   });
 
   it('moves on only when a batch is committed, and keeps its place across restarts', () => {
-    const first = tail.next(ID, false);
-    expect(tail.next(ID, false)?.nextOffset).toBe(first?.nextOffset);
+    const first = tail.next(ID);
+    expect(tail.next(ID)?.nextOffset).toBe(first?.nextOffset);
 
     if (first) {
       tail.commit(first);
     }
-    expect(tail.next(ID, false)).toBeNull();
+    expect(tail.next(ID)).toBeNull();
 
     appendFileSync(file, user('second'));
-    const restarted = build().next(ID, false);
+    const restarted = build().next(ID);
     expect(restarted?.entries).toHaveLength(1);
     expect(JSON.stringify(restarted?.entries)).toContain('second');
     expect(
@@ -78,37 +73,37 @@ describe('SessionTail', () => {
   });
 
   it('waits for the end of a line that is half written', () => {
-    const first = tail.next(ID, false);
+    const first = tail.next(ID);
     if (first) {
       tail.commit(first);
     }
     appendFileSync(file, '{"type":"message","message":{"role":"us');
-    expect(tail.next(ID, false)).toBeNull();
+    expect(tail.next(ID)).toBeNull();
 
     appendFileSync(file, 'er","content":"hi"}}\n');
-    expect(tail.next(ID, false)?.entries).toHaveLength(1);
+    expect(tail.next(ID)?.entries).toHaveLength(1);
   });
 
   it('cuts a long file into batches', () => {
     for (let i = 0; i < MAX_BATCH_ENTRIES + 5; i += 1) {
       appendFileSync(file, user(`m${i}`));
     }
-    const first = tail.next(ID, false);
+    const first = tail.next(ID);
     expect(first?.entries).toHaveLength(MAX_BATCH_ENTRIES);
     expect(first?.more).toBe(true);
     if (first) {
       tail.commit(first);
     }
-    expect(tail.next(ID, false)?.entries).toHaveLength(6);
+    expect(tail.next(ID)?.entries).toHaveLength(6);
   });
 
   it("skips a session to its end, so a run's own work is not sent again", () => {
     tail.skipToEnd(ID);
-    expect(tail.next(ID, false)).toBeNull();
+    expect(tail.next(ID)).toBeNull();
   });
 
   it('finds nothing for a session omp never wrote', () => {
-    expect(tail.next('02b2212b-ef89-7545-abb3-1339176a6b81', false)).toBeNull();
+    expect(tail.next('02b2212b-ef89-7545-abb3-1339176a6b81')).toBeNull();
   });
 });
 

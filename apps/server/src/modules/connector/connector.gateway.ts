@@ -128,15 +128,11 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
     // The watch list is a convenience: a failed read leaves the connector with
     // the sessions of its own runs only.
     const data = socket.data as ConnectorSocketData;
-    const watch = await this.drivers
-      .watch(data.peer)
-      .catch((): undefined => undefined);
+    const watchSessions = await this.drivers
+      .watchList(data.peer)
+      .catch((): string[] => []);
 
-    return {
-      ...ack,
-      watchSessions: watch?.sessions ?? [],
-      runSessions: watch?.runSessions ?? [],
-    };
+    return { ...ack, watchSessions };
   }
 
   accept(socket: ConnectorSocketLike, body: ConnectorHello): ConnectorHelloAck {
@@ -237,7 +233,7 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
     }
 
     try {
-      return { ok: true, ...(await this.drivers.watch(peer)) };
+      return { ok: true, sessions: await this.drivers.watchList(peer) };
     } catch {
       return { ok: false, reason: 'The server could not list the sessions.' };
     }

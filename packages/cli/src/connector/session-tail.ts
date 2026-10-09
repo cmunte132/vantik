@@ -177,10 +177,10 @@ export class SessionTail {
 
   /**
    * The next batch of entries for a session, or null when there is nothing new.
-   * `fromEnd` says where a session starts that has no saved position: the end
-   * of its file for a run's session, and the start for a terminal's.
+   * A session with no saved position starts at the first line of its file; the
+   * server drops what a run already reported.
    */
-  next(id: string, fromEnd: boolean): ActivityBatch | null {
+  next(id: string): ActivityBatch | null {
     this.load();
     const file = this.find(id);
     if (!file) {
@@ -197,7 +197,7 @@ export class SessionTail {
 
     let offset = this.offsets.get(id);
     if (offset === undefined) {
-      offset = fromEnd ? size : 0;
+      offset = 0;
       this.offsets.set(id, offset);
       this.save();
     }

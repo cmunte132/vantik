@@ -147,8 +147,6 @@ export class SessionDrivers {
   private readonly own = new Map<string, number>();
   private ownPids = new Set<number>();
   private watched = new Set<string>();
-  /** The watched sessions that belong to runs. */
-  private watchedRuns = new Set<string>();
   /** The last driver found for each session, by session id. */
   private readonly found = new Map<string, SessionDriverName>();
   /** The last driver the server acknowledged, by session id. */
@@ -174,19 +172,13 @@ export class SessionDrivers {
   }
 
   /** The sessions the server lists: the person's terminal sessions. */
-  setWatched(sessionIds: string[], runSessionIds: string[] = []): void {
+  setWatched(sessionIds: string[]): void {
     this.watched = new Set(sessionIds);
-    this.watchedRuns = new Set(runSessionIds);
   }
 
   /** Every session to look at: the watch list and this connector's own runs. */
   sessionIds(): string[] {
     return [...new Set([...this.own.keys(), ...this.watched])];
-  }
-
-  /** Whether a run of the connector, now or in the last day, has this session. */
-  isRunSession(sessionId: string): boolean {
-    return this.own.has(sessionId) || this.watchedRuns.has(sessionId);
   }
 
   /** The driver the last check found, or undefined before any check ran. */

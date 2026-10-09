@@ -100,7 +100,12 @@ describe('SessionActivityService', () => {
 
   it("writes a run's session to the run's events, and adds to its totals", async () => {
     const { service, prisma } = build([
-      { id: 's1', agentRunId: 'run-1', terminalSeenAt: null },
+      {
+        id: 's1',
+        agentRunId: 'run-1',
+        terminalSeenAt: null,
+        agentRun: { finishedAt: new Date('2026-10-09T09:00:00.000Z') },
+      },
     ]);
 
     await service.apply(peer, { externalId: ID, entries });
@@ -160,5 +165,37 @@ describe('SessionActivityService', () => {
 
     expect(prisma.agentSessionEvent.createMany).not.toHaveBeenCalled();
     expect(prisma.agentSession.update).not.toHaveBeenCalled();
+  });
+
+  it("drops entries at or before the run's finish, and records nothing for an unfinished run", async () => {
+    const finished = build([
+      {
+        id: 's1',
+        agentRunId: 'run-1',
+        terminalSeenAt: null,
+        agentRun: { finishedAt: new Date('2026-10-09T10:00:01.000Z') },
+      },
+    ]);
+
+    await finished.service.apply(peer, { externalId: ID, entries });
+
+    const data = (
+      finished.prisma.agentRunEvent.createMany.mock.calls as unknown as Array<
+        [{ data: Array<Record<string, unknown>> }]
+      >
+    )[0][0].data;
+    expect(data.map((row) => row.message)).toEqual(['On it.', 'read: a.ts']);
+
+    const running = build([
+      {
+        id: 's1',
+        agentRunId: 'run-1',
+        terminalSeenAt: null,
+        agentRun: { finishedAt: null },
+      },
+    ]);
+    await running.service.apply(peer, { externalId: ID, entries });
+    expect(running.prisma.agentRunEvent.createMany).not.toHaveBeenCalled();
+    expect(running.prisma.agentSession.update).not.toHaveBeenCalled();
   });
 });

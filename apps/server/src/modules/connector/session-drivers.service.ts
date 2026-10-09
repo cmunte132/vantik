@@ -56,17 +56,6 @@ export class SessionDriversService {
     peer: ConnectorPeer,
     now: Date = new Date(),
   ): Promise<string[]> {
-    return (await this.watch(peer, now)).sessions;
-  }
-
-  /**
-   * The same list, and the part of it that belongs to runs. The connector
-   * reads a run's session from its end, because the run reported the rest.
-   */
-  async watch(
-    peer: ConnectorPeer,
-    now: Date = new Date(),
-  ): Promise<{ sessions: string[]; runSessions: string[] }> {
     const rows = await this.prisma.agentSession.findMany({
       where: {
         ...this.owned(peer),
@@ -78,21 +67,16 @@ export class SessionDriversService {
     });
 
     const ids = new Set<string>();
-    const runIds = new Set<string>();
 
     for (const row of rows) {
       const id = ompResumeId({ ...row, location: 'LOCAL' });
 
       if (id) {
         ids.add(id);
-
-        if (row.agentRunId) {
-          runIds.add(id);
-        }
       }
     }
 
-    return { sessions: [...ids], runSessions: [...runIds] };
+    return [...ids];
   }
 
   /**

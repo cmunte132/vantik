@@ -14,7 +14,9 @@
 #   nothing removes them. One build on a new VM left 7.5 GB. This script prunes
 #   them when it exits, whether the build worked or not. It prunes only images
 #   that carry the label below, and only those older than a set age, so the
-#   same-day rebuilds still find their layers in the cache. The VM may hold
+#   same-day rebuilds still find their layers in the cache. When the VM has
+#   less free space than a build needs, it first removes all of them, of any
+#   age. The VM may hold
 #   images of other projects, and this script never touches those.
 # - A build writes several GB, and a full VM wedges. This script stops before it
 #   stops the stack when the VM has less free space than a build needs.
@@ -78,16 +80,6 @@ free_kib() {
   df -Pk "$root" 2>/dev/null | awk 'END { print $4 }'
 }
 
-if [ "$min_free_gb" -gt 0 ]; then
-  free=$(free_kib || true)
-  if [ -n "${free:-}" ] && [ "$free" -lt $((min_free_gb * 1024 * 1024)) ]; then
-    echo "The image store has $((free / 1024 / 1024)) GB free, and a build needs about $min_free_gb GB." >&2
-    echo "Nothing was stopped. Free space first (remove images you no longer use)," >&2
-    echo "or set VANTIK_MIN_FREE_GB=0 to build anyway." >&2
-    exit 1
-  fi
-fi
-
 # Removes unused layers of earlier Vantik builds once they are old enough.
 # Without -a this removes only untagged images, so no image that a container or
 # a tag still names is touched, and the label keeps it to this project.
@@ -96,6 +88,31 @@ prune_old_layers() {
     --filter "label=$build_label" \
     --filter "until=${prune_after_hours}h" >/dev/null 2>&1 || true
 }
+
+# Removes all unused layers of earlier Vantik builds, of any age. The next build
+# then has less in its cache and takes longer, so this runs only when space is
+# short. Each rebuild on one day leaves about 1.5 GB, and the age limit above
+# does not remove these until they are old.
+prune_all_layers() {
+  "$cli" image prune -f --filter "label=$build_label" >/dev/null 2>&1 || true
+}
+
+short_of_space() {
+  free=$(free_kib || true)
+  [ -n "${free:-}" ] && [ "$free" -lt $((min_free_gb * 1024 * 1024)) ]
+}
+
+if [ "$min_free_gb" -gt 0 ] && short_of_space; then
+  echo "==> The image store has $((free / 1024 / 1024)) GB free. Removing all unused Vantik build layers."
+  prune_all_layers
+  if short_of_space; then
+    echo "The image store has $((free / 1024 / 1024)) GB free, and a build needs about $min_free_gb GB." >&2
+    echo "Nothing was stopped. The unused Vantik build layers are already removed," >&2
+    echo "so the space is used by other images or volumes. Remove images you no longer" >&2
+    echo "use, or set VANTIK_MIN_FREE_GB=0 to build anyway." >&2
+    exit 1
+  fi
+fi
 
 stopped=0
 on_exit() {

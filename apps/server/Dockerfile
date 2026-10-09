@@ -5,6 +5,8 @@
 # A manifest, lockfile or patch change invalidates the install cache.
 
 FROM node:24-bookworm-slim AS base
+# The label scripts/rebuild-stack.sh prunes by. Later stages inherit it.
+LABEL org.vantik.build="true"
 RUN apt-get update && apt-get install -y --no-install-recommends openssl dumb-init ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
@@ -44,6 +46,19 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm install --prod --frozen-lockfile \
       --store-dir=/pnpm/store --filter=server...
 COPY apps/server/prisma/schema.prisma apps/server/prisma/schema.prisma
+# Removes what the runner never loads, about 300 MB of the image:
+#
+# - turbo: a root dependency, used only by the build.
+# - onnxruntime-node ships a native library for each platform. Only the one for
+#   this image's platform is loaded.
+# - onnxruntime-web is for browsers. The transformers.js build for node imports
+#   onnxruntime-node, not this package.
+RUN rm -rf node_modules/turbo node_modules/.bin/turbo node_modules/.pnpm/@turbo+* node_modules/.pnpm/turbo@* \
+        node_modules/.pnpm/onnxruntime-web@* \
+    && keep="$(node -p process.platform)/$(node -p process.arch)" \
+    && for d in node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v3/*/*; do \
+         case "$d" in */"$keep") ;; *) rm -rf "$d" ;; esac; \
+       done
 
 ## Builder. Extends dev-deps instead of copying its /app across: that copy moved
 ## the entire node_modules tree byte for byte, with a --chown that forced a
@@ -64,6 +79,7 @@ RUN --mount=type=cache,id=turbo,target=/app/.turbo,sharing=locked \
 # Runner. No pnpm: the entrypoint calls prisma and node directly, which drops a
 # 33MB layer from the runtime image.
 FROM node:24-bookworm-slim AS runner
+LABEL org.vantik.build="true"
 # The local-repo integration reads the files of a knowledge citation with git.
 # Without git, every code citation in a local repository stays unread.
 RUN apt-get update && apt-get install -y --no-install-recommends openssl dumb-init bash git ca-certificates \

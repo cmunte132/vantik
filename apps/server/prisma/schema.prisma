@@ -147,6 +147,8 @@ model AgentRun {
   /// The session row that lists this run beside the terminal sessions on the
   /// same issue.
   session           AgentSession?
+  /// The tokens minted for this run alone. Revoked when it ends.
+  tokens            PersonalAccessToken[]
 
   @@index([workspaceId, status])
   @@index([issueId])
@@ -792,6 +794,16 @@ model PersonalAccessToken {
   userId      String
   type        String @default("user")
   workspaceId String
+
+  /// When the token stops working. Null for a token that does not expire.
+  expiresAt DateTime?
+
+  /// Set on a token minted for one agent run (`type` is `agent-run`). It ends
+  /// with the run, and the server revokes it on every terminal transition.
+  agentRun   AgentRun? @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  agentRunId String?
+
+  @@index([agentRunId])
 }
 
 model Label {

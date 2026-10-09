@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
 import { ChecklistItemsModule } from 'modules/checklist-items/checklist-items.module';
+import { ConnectorModule } from 'modules/connector/connector.module';
 import { GitModule } from 'modules/git/git.module';
 import { IssueCommentsModule } from 'modules/issue-comments/issue-comments.module';
 import { IssuesModule } from 'modules/issues/issues.module';
@@ -20,10 +21,12 @@ import { CredentialsController } from './credentials/credentials.controller';
 import { CredentialsModule } from './credentials/credentials.module';
 import { ExecutorRegistry } from './executors/executor.registry';
 import { HostedExecutor } from './executors/hosted.executor';
+import { LocalExecutor } from './executors/local.executor';
 import { KnowledgeArmsService } from './knowledge-arms.service';
 import { RunCleanupService } from './run-cleanup.service';
 import { RunHandbackService } from './run-handback.service';
 import { RunOutboxService } from './run-outbox';
+import { RunTokensService } from './run-tokens.service';
 import { GitProxyService } from './sandbox/git-proxy.service';
 import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
 
@@ -41,6 +44,8 @@ import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
     CredentialsModule,
     // Where a run's code comes from and where its branch goes.
     GitModule,
+    // The sockets local connectors dial, and who is online.
+    ConnectorModule,
   ],
   controllers: [AgentRunsController, CredentialsController],
   providers: [
@@ -53,6 +58,8 @@ import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
     RunOutboxService,
     ExecutorRegistry,
     HostedExecutor,
+    LocalExecutor,
+    RunTokensService,
     RemoteSandboxRuntime,
     GitProxyService,
     AgentRunsScheduler,

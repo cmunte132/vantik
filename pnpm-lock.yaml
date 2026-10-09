@@ -816,6 +816,9 @@ importers:
       '@vantikhq/agent-core':
         specifier: workspace:*
         version: link:../agent-core
+      '@vantikhq/types':
+        specifier: workspace:*
+        version: link:../types
       axios:
         specifier: ^1.6.7
         version: 1.18.1
@@ -831,6 +834,9 @@ importers:
       esbuild:
         specifier: ^0.25.0
         version: 0.25.0
+      socket.io-client:
+        specifier: ^4.7.4
+        version: 4.8.3
       std-env:
         specifier: ^3.7.0
         version: 3.10.0

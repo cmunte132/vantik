@@ -15,10 +15,7 @@ import { AdminGuard } from 'modules/users/admin.guard';
 import { AuthGuard } from 'modules/auth/auth.guard';
 import { UserId, Workspace } from 'modules/auth/session.decorator';
 
-import {
-  CredentialsService,
-  type CredentialKind,
-} from './credentials.service';
+import { CredentialsService, type CredentialKind } from './credentials.service';
 
 const KINDS = ['MODEL_API_KEY', 'GIT_TOKEN'] as const;
 

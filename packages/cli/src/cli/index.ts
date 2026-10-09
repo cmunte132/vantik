@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 
+import { configureConnectCommand } from '../commands/connect';
 import { configureKnowledgeCommands } from '../commands/knowledge';
 import { configureLoginCommand } from '../commands/login';
 import { configureLogoutCommand } from '../commands/logout';
@@ -17,6 +18,7 @@ program
   .version(getVersion(), '-v, --version', 'Display the version number');
 
 configureLoginCommand(program);
+configureConnectCommand(program);
 configureLogoutCommand(program);
 configureTaskCommands(program);
 configureProductAxisCommands(program);

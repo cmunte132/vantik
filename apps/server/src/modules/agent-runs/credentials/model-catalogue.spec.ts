@@ -36,10 +36,12 @@ describe('the provider table', () => {
 
 describe('reading a provider model list', () => {
   it('reads the OpenAI shape most providers copy', () => {
-    expect(parseModels({ data: [{ id: 'gpt-5' }, { id: 'gpt-4.1' }] })).toEqual([
-      { id: 'gpt-4.1', label: 'gpt-4.1' },
-      { id: 'gpt-5', label: 'gpt-5' },
-    ]);
+    expect(parseModels({ data: [{ id: 'gpt-5' }, { id: 'gpt-4.1' }] })).toEqual(
+      [
+        { id: 'gpt-4.1', label: 'gpt-4.1' },
+        { id: 'gpt-5', label: 'gpt-5' },
+      ],
+    );
   });
 
   it('prefers a display name when the provider sends one', () => {
@@ -52,9 +54,9 @@ describe('reading a provider model list', () => {
 
   it('strips the prefix Google puts on a model name', () => {
     // Google answers `models/gemini-2.5-pro`; the id Pi wants is the tail.
-    expect(parseModels({ models: [{ name: 'models/gemini-2.5-pro' }] })).toEqual(
-      [{ id: 'gemini-2.5-pro', label: 'gemini-2.5-pro' }],
-    );
+    expect(
+      parseModels({ models: [{ name: 'models/gemini-2.5-pro' }] }),
+    ).toEqual([{ id: 'gemini-2.5-pro', label: 'gemini-2.5-pro' }]);
   });
 
   it('drops duplicates and anything with no id', () => {
@@ -75,7 +77,9 @@ describe('checking a key against its provider', () => {
 
   function reply(status: number, body: unknown = {}): typeof fetch {
     return (async () =>
-      new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+      new Response(JSON.stringify(body), {
+        status,
+      })) as unknown as typeof fetch;
   }
 
   it('reports what the key reaches when the provider answers', async () => {
@@ -150,7 +154,12 @@ describe('checking a key against its provider', () => {
 
     const openai = providerById('openai')!;
 
-    await fetchCatalogue(openai, 'sk-oai', ' https://proxy.acme.dev// ', record);
+    await fetchCatalogue(
+      openai,
+      'sk-oai',
+      ' https://proxy.acme.dev// ',
+      record,
+    );
     // The provider's own host is replaced, and its path is kept.
     expect(seen[0]).toBe('https://proxy.acme.dev/v1/models');
 
@@ -212,7 +221,10 @@ describe('checking a key against its provider', () => {
 
     await expect(
       fetchCatalogue(openrouter, 'sk-or-right', null, answer),
-    ).resolves.toEqual({ outcome: 'ok', models: [{ id: 'x/y', label: 'x/y' }] });
+    ).resolves.toEqual({
+      outcome: 'ok',
+      models: [{ id: 'x/y', label: 'x/y' }],
+    });
   });
 
   it('treats a bad key as bad even when the provider says 400', async () => {

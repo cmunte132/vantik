@@ -1,5 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/react';
+import type { ConnectorModel } from '@vantikhq/types';
+
+import {
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+  RiCloudLine,
+  RiComputerLine,
+} from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
 import {
   Popover,
@@ -50,8 +57,10 @@ const LIVE = ['QUEUED', 'CLAIMED', 'RUNNING'];
  * that is the order they constrain each other: the workspace's keys decide the
  * providers, the provider decides the models, and only some models do anything
  * with a reasoning level. There is no agent picker — a hosted run is given an
- * identity of its own that nobody has to provision or maintain — and no
- * executor picker, because work runs in the sandbox.
+ * identity of its own that nobody has to provision or maintain. Where the run
+ * happens is always stated at the top, and becomes a choice only for a person
+ * who has more than one place to run: the sandbox, and their own machine while
+ * `vantik connect` is running on it.
  */
 export const DelegateControl = observer(() => {
   const issue = useIssueData();
@@ -63,7 +72,12 @@ export const DelegateControl = observer(() => {
   const [provider, setProvider] = React.useState<string>();
   const [modelId, setModelId] = React.useState<string>();
   const [thinking, setThinking] = React.useState<string>(DEFAULT);
+  // A local run picks from the models of the person's own omp, not from the
+  // workspace's providers, so it keeps its own choice.
+  const [localProvider, setLocalProvider] = React.useState<string>(DEFAULT);
+  const [localModelId, setLocalModelId] = React.useState<string>();
   const [showWhere, setShowWhere] = React.useState(false);
+  const [chosenExecutor, setChosenExecutor] = React.useState<string>();
   const [error, setError] = React.useState<string>();
 
   const { data: executors } = useExecutors();
@@ -97,6 +111,61 @@ export const DelegateControl = observer(() => {
     [executors],
   );
 
+  // What this person can run on right now. The server answers per person: the
+  // local executor is available only while their own connector is online.
+  const usable = React.useMemo(
+    () =>
+      ((executors as any[]) ?? []).filter(
+        (entry: any) => entry.available !== false,
+      ),
+    [executors],
+  );
+
+  // The hosted sandbox unless the person picked another, or it cannot be used
+  // and something else can. A stale choice (the connector went offline) falls
+  // back rather than blocking.
+  const executor: string =
+    usable.find((entry: any) => entry.key === chosenExecutor)?.key ??
+    usable.find((entry: any) => entry.key === HOSTED)?.key ??
+    usable[0]?.key ??
+    HOSTED;
+  const local = executor === LOCAL;
+
+  // What the person's omp offers. A connector that sent no models leaves the
+  // pickers out and omp on its own default.
+  const localEntry = usable.find((entry: any) => entry.key === LOCAL);
+  const localModels: ConnectorModel[] = React.useMemo(
+    () => (localEntry?.models as ConnectorModel[] | undefined) ?? [],
+    [localEntry?.models],
+  );
+  const localDefault: string | null = localEntry?.defaultModel ?? null;
+  const localChoice = local && localModels.length > 0;
+
+  const localProviders = React.useMemo(
+    () => [...new Set(localModels.map((model) => model.provider))],
+    [localModels],
+  );
+  const localOptions: ModelChoiceOption[] = React.useMemo(
+    () =>
+      localModels
+        .filter((model) => model.provider === localProvider)
+        .map((model) => ({
+          provider: model.provider,
+          id: model.id,
+          label: model.name,
+        })),
+    [localModels, localProvider],
+  );
+  const localModel = localModels.find(
+    (model) => model.provider === localProvider && model.id === localModelId,
+  );
+
+  // The levels the chosen model takes, or the standard list when omp did not
+  // say (or no model is chosen and omp's default applies).
+  const levels = localChoice
+    ? (localModel?.thinkingLevels ?? THINKING)
+    : THINKING;
+
   const current = agentRunsStore.getCurrentRunForIssue(issue?.id);
   const liveRun =
     current && LIVE.includes(current.status) ? current : undefined;
@@ -111,6 +180,13 @@ export const DelegateControl = observer(() => {
     setModelId(undefined);
   }, [provider]);
 
+  // A level the new model does not take is dropped rather than sent.
+  React.useEffect(() => {
+    if (thinking !== DEFAULT && !levels.includes(thinking)) {
+      setThinking(DEFAULT);
+    }
+  }, [levels, thinking]);
+
   const blocked = React.useMemo(() => {
     if ((issue?.description ?? '').length < MIN_DESCRIPTION_LENGTH) {
       return 'This issue is too thin to delegate. An agent given a one-line issue invents the requirements it was not given — say what the problem is and what done looks like first.';
@@ -118,16 +194,16 @@ export const DelegateControl = observer(() => {
     if (liveRun) {
       return 'An agent is already working on this issue. Stop that run before starting another, or two branches nobody asked for come back.';
     }
-    if (hosted && hosted.available === false) {
+    if (!local && hosted && hosted.available === false) {
       // The server's own words. "No model key configured" is a settings page,
       // "no sandbox runtime" is an install, and a generic sentence is neither.
       return hosted.reason;
     }
-    if (providers.length === 0 && catalogue) {
+    if (!local && providers.length === 0 && catalogue) {
       return 'This workspace has no model key yet. Add one in Settings → Agents, and the provider and model become choices here.';
     }
     return undefined;
-  }, [issue?.description, liveRun, hosted, providers.length, catalogue]);
+  }, [issue?.description, liveRun, hosted, local, providers.length, catalogue]);
 
   const start = () => {
     if (blocked || isPending) {
@@ -136,16 +212,26 @@ export const DelegateControl = observer(() => {
 
     delegate({
       issueId: issue.id,
-      // Named explicitly rather than left to the server's fallback: this
-      // control is the sandbox's control, and it should keep meaning that if
-      // a second backend is ever registered beside it.
-      executor: HOSTED,
+      // Named explicitly rather than left to the server's fallback, so a
+      // backend registered later never changes what this control starts.
+      executor,
       ...(guidance.trim() ? { guidance: guidance.trim() } : {}),
-      ...(provider || modelId || thinking !== DEFAULT
+      ...((!local && (provider || modelId)) ||
+      (localChoice && localProvider !== DEFAULT) ||
+      thinking !== DEFAULT
         ? {
             config: {
-              ...(provider ? { provider } : {}),
-              ...(modelId ? { model: modelId } : {}),
+              // A local run uses the models the person is signed in to in
+              // omp, so the workspace's providers do not apply to it. Nothing
+              // chosen sends nothing, and omp's own default applies.
+              ...(!local && provider ? { provider } : {}),
+              ...(!local && modelId ? { model: modelId } : {}),
+              ...(localChoice && localProvider !== DEFAULT
+                ? { provider: localProvider }
+                : {}),
+              ...(localChoice && localProvider !== DEFAULT && localModelId
+                ? { model: localModelId }
+                : {}),
               ...(thinking !== DEFAULT ? { thinking } : {}),
             },
           }
@@ -184,6 +270,42 @@ export const DelegateControl = observer(() => {
             <p className="text-muted-foreground">{blocked}</p>
           ) : (
             <>
+              {/* Where the run happens leads, because it decides everything
+                  under it: whose models, whose machine, what comes back. With
+                  one place to run it is stated, not offered — but always
+                  stated, so nobody starts a run without knowing where. */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-muted-foreground">Runs on</label>
+                {usable.length > 1 ? (
+                  <Select value={executor} onValueChange={setChosenExecutor}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {usable.map((entry: any) => (
+                        <SelectItem key={entry.key} value={entry.key}>
+                          {placeName(entry.key, entry.label)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-md bg-grayAlpha-100 px-2 py-1.5">
+                    {local ? (
+                      <RiComputerLine size={14} />
+                    ) : (
+                      <RiCloudLine size={14} />
+                    )}
+                    <span>{placeName(executor)}</span>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {local
+                    ? 'Your omp setup, with the models you are signed in to there. The work stays in a git worktree on your machine.'
+                    : "A Vantik sandbox, with the workspace's model keys."}
+                </p>
+              </div>
+
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-muted-foreground">
                   Anything the issue does not already say
@@ -197,7 +319,52 @@ export const DelegateControl = observer(() => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              {localChoice && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">
+                      Provider
+                    </label>
+                    <Select
+                      value={localProvider}
+                      onValueChange={(value) => {
+                        setLocalProvider(value);
+                        setLocalModelId(undefined);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={DEFAULT}>
+                          {localDefault
+                            ? `omp default (${localDefault})`
+                            : 'omp default'}
+                        </SelectItem>
+                        {localProviders.map((key) => (
+                          <SelectItem key={key} value={key}>
+                            {key}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">
+                      Model
+                    </label>
+                    <ModelPicker
+                      models={localOptions}
+                      value={localModelId}
+                      noneLabel="omp default"
+                      onChange={setLocalModelId}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className={local ? 'hidden' : 'grid grid-cols-2 gap-2'}>
                 <div className="flex flex-col gap-1">
                   <label className="text-xs text-muted-foreground">
                     Provider
@@ -243,7 +410,7 @@ export const DelegateControl = observer(() => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={DEFAULT}>Model default</SelectItem>
-                    {THINKING.map((level) => (
+                    {levels.map((level) => (
                       <SelectItem key={level} value={level}>
                         {level}
                       </SelectItem>
@@ -263,8 +430,7 @@ export const DelegateControl = observer(() => {
                   <RiArrowRightSLine size={12} />
                 )}
                 <span className="truncate">
-                  Where it runs — a Vantik sandbox
-                  {plan?.repository ? `, ${plan.repository}` : ''}
+                  Repository — {plan?.repository ?? 'not resolved'}
                   {plan?.baseBranch ? `, from ${plan.baseBranch}` : ''}
                 </span>
               </button>
@@ -282,11 +448,15 @@ export const DelegateControl = observer(() => {
 
         <div className="flex items-center justify-between gap-3 border-t border-border bg-grayAlpha-100 px-3 py-2">
           <span className="text-xs text-muted-foreground">
-            {plan
-              ? `Stops at ${plan.limits.maxIterations} turns or $${plan.limits.maxCostUsd.toFixed(2)}.`
-              : 'Runs against a ceiling.'}
+            {local
+              ? 'Stops if it runs past its deadline.'
+              : plan
+                ? `Stops at ${plan.limits.maxIterations} turns or $${plan.limits.maxCostUsd.toFixed(2)}.`
+                : 'Runs against a ceiling.'}
             <br />
-            {outcome(plan)}
+            {local
+              ? 'Leaves a branch in a worktree on your machine.'
+              : outcome(plan)}
           </span>
 
           <Button
@@ -308,8 +478,22 @@ const DEFAULT = 'default';
 /** Work runs in the sandbox. Matches `HOSTED_EXECUTOR_KEY` on the server. */
 const HOSTED = 'hosted';
 
+/** Work runs on the person's machine. Matches `LOCAL_EXECUTOR_KEY`. */
+const LOCAL = 'local';
+
 /** Pi's `--thinking`, which the server already carries as `ModelChoice`. */
 const THINKING = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+/** The place a run happens, in the words a person would use for it. */
+function placeName(key: string, fallback?: string): string {
+  if (key === LOCAL) {
+    return 'Your machine (omp)';
+  }
+  if (key === HOSTED) {
+    return 'Vantik sandbox';
+  }
+  return fallback ?? key;
+}
 
 /** What will exist when it finishes, which is what a reader is agreeing to. */
 function outcome(plan?: { delivery: string | null }): string {

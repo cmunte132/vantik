@@ -1,4 +1,8 @@
-import type { AgentExecutor, ExecutorAvailability } from './executor.interface';
+import type {
+  AgentExecutor,
+  ExecutorAvailability,
+  ExecutorRequester,
+} from './executor.interface';
 import type { ContextPack } from '../context-pack.service';
 import type {
   CycleLimits,
@@ -422,7 +426,9 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
    * Both halves are gates the user can act on: a missing runtime is an
    * install problem, missing credentials are a settings page.
    */
-  async availability(workspaceId: string): Promise<ExecutorAvailability> {
+  async availability({
+    workspaceId,
+  }: ExecutorRequester): Promise<ExecutorAvailability> {
     const runtime = await this.runtime.availability();
 
     if (!runtime.available) {
@@ -1972,7 +1978,10 @@ function pullRequestBody(cycle: {
  * A run's spend as fields of its result. A run that spent nothing — it failed
  * before the model was called — records nothing rather than a zero.
  */
-function spentFields(spent: Spend): { costUsd?: number; turns?: number } {
+export function spentFields(spent: Spend): {
+  costUsd?: number;
+  turns?: number;
+} {
   return {
     ...(spent.costUsd ? { costUsd: spent.costUsd } : {}),
     ...(spent.turns ? { turns: spent.turns } : {}),
@@ -1980,7 +1989,7 @@ function spentFields(spent: Spend): { costUsd?: number; turns?: number } {
 }
 
 /** Where an agent's facts are scoped when they name no page. */
-function factScope(pack: ContextPack): string {
+export function factScope(pack: ContextPack): string {
   return pack.repo?.pathPrefixes?.[0] ?? pack.repo?.location ?? 'repository';
 }
 

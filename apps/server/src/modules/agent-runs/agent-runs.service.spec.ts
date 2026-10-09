@@ -184,6 +184,9 @@ function buildService(initial: FakeRun[] = [makeRun()]) {
     agentRunIteration: {
       upsert: jest.fn(({ create }) => Promise.resolve(create)),
     },
+    personalAccessToken: {
+      updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
+    },
     agentRunEvent: {
       create: jest.fn(({ data }) => {
         events.push(data);
@@ -850,6 +853,76 @@ describe('AgentRunsService sessions', () => {
 
     await expect(service.transition(RUN, 'SUCCEEDED')).resolves.toMatchObject({
       status: 'SUCCEEDED',
+    });
+  });
+});
+
+describe('run-scoped tokens and local sessions', () => {
+  it('revokes the tokens of a run on every terminal transition', async () => {
+    const { service, prisma } = buildService([makeRun({ status: 'RUNNING' })]);
+
+    await service.transition(RUN, 'FAILED', {}, scope);
+
+    expect(prisma.personalAccessToken.updateMany).toHaveBeenCalledWith({
+      where: { agentRunId: RUN, deleted: null },
+      data: { deleted: expect.any(Date) },
+    });
+  });
+
+  it('leaves the tokens of a run that is still going', async () => {
+    const { service, prisma } = buildService([makeRun({ status: 'QUEUED' })]);
+
+    await service.transition(RUN, 'CLAIMED', {}, scope);
+
+    expect(prisma.personalAccessToken.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('still ends the run when revoking its tokens fails', async () => {
+    const { service, prisma, rows } = buildService([
+      makeRun({ status: 'RUNNING' }),
+    ]);
+    (prisma.personalAccessToken.updateMany as jest.Mock).mockRejectedValueOnce(
+      new Error('db down'),
+    );
+
+    await service.transition(RUN, 'CANCELED', {}, scope);
+
+    expect(rows.get(RUN)?.status).toBe('CANCELED');
+  });
+
+  it('lists a local run as a local connector session', async () => {
+    const { service, sessions } = buildService([]);
+
+    const run = await service.createRun({
+      workspaceId: WORKSPACE,
+      issueId: 'issue-1',
+      agentUserId: 'agent-1',
+      createdById: 'user-1',
+      executor: 'local',
+    });
+
+    expect(sessions.get(run.id)).toMatchObject({
+      harness: 'omp',
+      location: 'LOCAL',
+      channel: 'CONNECTOR',
+    });
+  });
+
+  it('keeps a hosted run a hosted session', async () => {
+    const { service, sessions } = buildService([]);
+
+    const run = await service.createRun({
+      workspaceId: WORKSPACE,
+      issueId: 'issue-1',
+      agentUserId: 'agent-1',
+      createdById: 'user-1',
+      executor: 'hosted',
+    });
+
+    expect(sessions.get(run.id)).toMatchObject({
+      harness: 'pi',
+      location: 'HOSTED',
+      channel: 'HOSTED',
     });
   });
 });

@@ -315,6 +315,11 @@ export interface PiTool {
   label: string;
   description: string;
   promptSnippet?: string;
+  /**
+   * omp (oh-my-pi) shows the model only the tools an extension marks
+   * `essential`; Pi ignores the field. Set for every tool by `vantik` below.
+   */
+  loadMode?: 'essential';
   /** JSON Schema. Pi validates plain JSON Schema as well as TypeBox. */
   parameters: Record<string, unknown>;
   execute(
@@ -363,7 +368,22 @@ function readPolicy(): GuardrailPolicy | null {
   }
 }
 
-export default function vantik(pi: PiApi) {
+export default function vantik(host: PiApi) {
+  // Without `loadMode: 'essential'` omp keeps extension tools away from the
+  // model. Pi 0.82 ignores unknown fields on a tool, so one registration works
+  // for both harnesses.
+  const pi: PiApi = {
+    ...host,
+    on: host.on.bind(host),
+    sendUserMessage: host.sendUserMessage.bind(host),
+    appendEntry: host.appendEntry.bind(host),
+    ...(host.registerTool
+      ? {
+          registerTool: (tool: PiTool) =>
+            host.registerTool?.({ ...tool, loadMode: 'essential' }),
+        }
+      : {}),
+  };
   capModelCalls(pi);
   reportModelCalls(pi);
   enforceGuardrails(pi);

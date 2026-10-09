@@ -282,6 +282,44 @@ describe('AgentDelegationService routing', () => {
     expect(created[0]).toMatchObject({ executor: 'elsewhere' });
   });
 
+  it('does not force the workspace default model onto a local run', async () => {
+    const { service, created } = build({
+      executors: [fakeExecutor('hosted'), fakeExecutor('local')],
+      preferences: {
+        agentRuns: {
+          defaultExecutor: 'hosted',
+          model: { provider: 'openai', model: 'gpt-5' },
+        },
+      },
+    });
+
+    await service.delegate({
+      ...delegateInput,
+      executor: 'local',
+      config: { thinking: 'high' },
+    });
+
+    const config = (created[0] as { config: Record<string, unknown> }).config;
+    expect(config.model).toBeUndefined();
+    expect(config.provider).toBeUndefined();
+    expect(config.thinking).toBe('high');
+  });
+
+  it('still applies the workspace default model to a hosted run', async () => {
+    const { service, created } = build({
+      executors: [fakeExecutor('hosted'), fakeExecutor('local')],
+      preferences: {
+        agentRuns: { model: { provider: 'openai', model: 'gpt-5' } },
+      },
+    });
+
+    await service.delegate({ ...delegateInput, executor: 'hosted' });
+
+    expect(
+      (created[0] as { config: Record<string, unknown> }).config,
+    ).toMatchObject({ provider: 'openai', model: 'gpt-5' });
+  });
+
   it('uses the only executor there is rather than demanding a choice', async () => {
     // The case every delegation in this build actually takes: one adapter is
     // registered, so nobody has to name it and nobody has to configure it.
@@ -294,7 +332,7 @@ describe('AgentDelegationService routing', () => {
 
   it('asks which one when several are registered and none is configured', async () => {
     const { service } = build({
-      executors: [fakeExecutor('hosted'), fakeExecutor('elsewhere')],
+      executors: [fakeExecutor('one'), fakeExecutor('elsewhere')],
     });
 
     await expect(service.delegate(delegateInput)).rejects.toThrow(/name one/);

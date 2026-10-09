@@ -554,7 +554,15 @@ export class UsersService {
      * one is `disabledAt` on the identity.
      */
     const isActive = (membership: (typeof memberships)[number]) => {
-      const { ownership, disabledAt } = agentSettings(membership.settings);
+      const { ownership, disabledAt, connector } = agentSettings(
+        membership.settings,
+      );
+
+      // A connector agent holds no standing token by design; revoking it
+      // writes `disabledAt`, which is what retires it.
+      if (connector) {
+        return !disabledAt;
+      }
 
       return ownership === 'personal'
         ? activeTokenUserIds.has(membership.userId)

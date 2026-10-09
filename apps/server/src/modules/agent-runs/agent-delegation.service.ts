@@ -7,6 +7,7 @@ import {
   AgentRunConfig,
   AgentRunFailure,
   AgentRunStatus,
+  LOCAL_EXECUTOR_KEY,
   type ModelChoice,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
@@ -96,10 +97,20 @@ export class AgentDelegationService {
 
     const executor = await this.resolveExecutor(defaults, input);
 
-    const availability = await executor.availability(input.workspaceId);
+    const requester = {
+      workspaceId: input.workspaceId,
+      userId: input.createdById,
+    };
+    const availability = await executor.availability(requester);
     if (availability.available === false) {
       throw new BadRequestException({ message: availability.reason });
     }
+
+    // An executor may attribute its runs to an identity of its own: the local
+    // executor works as the delegating person's personal agent, because that
+    // is the only account its run token can be for.
+    const agentUserId =
+      (await executor.runIdentity?.(requester)) ?? input.agentUserId;
 
     // The run's id is chosen here rather than by the database, because the
     // pack is built before the row exists and whether it carries knowledge
@@ -124,7 +135,7 @@ export class AgentDelegationService {
     // workspace default cannot rewrite what a finished run was asked to do.
     const config: AgentRunConfig = {
       ...contextPack.repo,
-      ...this.resolveModel(defaults, input),
+      ...this.resolveModel(defaults, input, executor.key),
       ...this.resolveCycle(defaults, input),
     };
 
@@ -132,7 +143,7 @@ export class AgentDelegationService {
       id: runId,
       workspaceId: input.workspaceId,
       issueId: input.issueId,
-      agentUserId: input.agentUserId,
+      agentUserId,
       createdById: input.createdById,
       executor: executor.key,
       config,
@@ -324,9 +335,13 @@ export class AgentDelegationService {
   private resolveModel(
     defaults: WorkspaceAgentDefaults,
     input: DelegateInput,
+    executorKey: string,
   ): ModelChoice {
+    // A local run uses the models the person is signed in to in omp. The
+    // workspace default names a hosted provider and model, so it never applies
+    // there; only what this request chose does.
     return {
-      ...defaults.model,
+      ...(executorKey === LOCAL_EXECUTOR_KEY ? {} : defaults.model),
       ...stripUndefined({
         provider: input.config?.provider,
         model: input.config?.model,

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { env } from 'std-env';
 import xdgAppPaths from 'xdg-app-paths';
 import { z } from 'zod';
 
@@ -8,7 +9,9 @@ import { readJSONFileSync } from './fileSystem.js';
 import { logger } from './logger.js';
 
 function getGlobalConfigFolderPath() {
-  const configDir = xdgAppPaths('vantik').config();
+  // `vantik connect` points a run at an empty directory, so the run holds only
+  // its own token and not the stored login.
+  const configDir = env.VANTIK_CONFIG_DIR || xdgAppPaths('vantik').config();
 
   return configDir;
 }

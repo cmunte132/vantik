@@ -1,4 +1,5 @@
 import type { AgentRun } from '@prisma/client';
+import type { ConnectorModel } from '@vantikhq/types';
 
 /**
  * Why an executor cannot be used, when it cannot.
@@ -9,8 +10,21 @@ import type { AgentRun } from '@prisma/client';
  * configured" is a settings page.
  */
 export type ExecutorAvailability =
-  | { available: true }
+  | { available: true; models?: ConnectorModel[]; defaultModel?: string | null }
   | { available: false; reason: string };
+
+/**
+ * Who is asking, when an executor is checked or chosen.
+ *
+ * Most executors belong to the workspace, so only `workspaceId` matters to
+ * them. The local executor belongs to a person: it runs on that person's own
+ * machine, so whether it is usable depends on who is asking.
+ */
+export interface ExecutorRequester {
+  workspaceId: string;
+  /** The member delegating or looking at the delegate control. */
+  userId?: string | null;
+}
 
 /**
  * A backend that can run an agent.
@@ -39,7 +53,18 @@ export interface AgentExecutor {
    * so an unusable executor is a clear refusal instead of a run that sits
    * QUEUED for ever with nobody coming for it.
    */
-  availability(workspaceId: string): Promise<ExecutorAvailability>;
+  availability(requester: ExecutorRequester): Promise<ExecutorAvailability>;
+
+  /**
+   * The agent account a run on this executor is attributed to, when the
+   * executor decides that itself. Absent for an executor that works as
+   * whichever agent the delegation chose.
+   *
+   * The local executor uses it: the run's only Vantik credential is a token
+   * for the delegating person's personal agent, so the run must be attributed
+   * to that same account.
+   */
+  runIdentity?(requester: ExecutorRequester): Promise<string | null>;
 
   /**
    * Called once, after the run row exists.

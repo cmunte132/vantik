@@ -74,9 +74,7 @@ describe('CredentialsService model access', () => {
   }
 
   /** A store holding the given credential rows, and nothing else. */
-  async function serviceWith(
-    rows: Array<{ kind: string; provider?: string }>,
-  ) {
+  async function serviceWith(rows: Array<{ kind: string; provider?: string }>) {
     const crypto = await sealed();
 
     const prisma = {
@@ -86,16 +84,11 @@ describe('CredentialsService model access', () => {
           return row ? { id: 'cred-1', ...row } : null;
         }),
         findMany: jest.fn(
-          async ({
-            where,
-          }: {
-            where: { kind: string; provider?: string };
-          }) =>
+          async ({ where }: { where: { kind: string; provider?: string } }) =>
             rows
               .filter((entry) => entry.kind === where.kind)
               .filter(
-                (entry) =>
-                  !where.provider || entry.provider === where.provider,
+                (entry) => !where.provider || entry.provider === where.provider,
               )
               .map((entry) => ({
                 id: 'cred-1',
@@ -248,7 +241,10 @@ describe('CredentialsService model access', () => {
           // The shape a stored catalogue actually has: id and label, nothing
           // else. Checked against a real row in the dev database.
           models: [
-            { id: '~anthropic/claude-fable-latest', label: '~anthropic/claude-fable-latest' },
+            {
+              id: '~anthropic/claude-fable-latest',
+              label: '~anthropic/claude-fable-latest',
+            },
             { id: 'google/gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
           ],
         },

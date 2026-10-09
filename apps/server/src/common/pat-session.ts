@@ -53,7 +53,13 @@ export async function resolvePatPrincipal(
   const tokenHash = createHash('sha256').update(token).digest('hex');
 
   const pat = await prisma.personalAccessToken.findFirst({
-    where: { tokenHash, deleted: null },
+    // A run-scoped token carries an expiry; a token with none does not expire.
+    // Enforced in the query so no caller can resolve an expired token.
+    where: {
+      tokenHash,
+      deleted: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
     select: {
       id: true,
       userId: true,

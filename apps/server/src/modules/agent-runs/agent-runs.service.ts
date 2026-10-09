@@ -15,6 +15,7 @@ import {
   AppendAgentRunEventDto,
   canTransitionAgentRun,
   isTerminalAgentRunStatus,
+  LOCAL_EXECUTOR_KEY,
   RETRYABLE_AGENT_RUN_STATUSES,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
@@ -231,11 +232,21 @@ export class AgentRunsService {
             workspaceId: input.workspaceId,
             issueId: input.issueId,
             actorUserId: input.agentUserId,
-            // The run id is the harness session id of a hosted run.
+            // The run id is the harness session id of a hosted run. A local
+            // run starts with it too, and takes omp's own session id when the
+            // connector reports one (`run.started`).
             externalId: id,
-            harness: 'pi',
-            location: 'HOSTED',
-            channel: 'HOSTED',
+            ...(input.executor === LOCAL_EXECUTOR_KEY
+              ? {
+                  harness: 'omp',
+                  location: 'LOCAL' as const,
+                  channel: 'CONNECTOR' as const,
+                }
+              : {
+                  harness: 'pi',
+                  location: 'HOSTED' as const,
+                  channel: 'HOSTED' as const,
+                }),
             driver: 'VANTIK',
             parentSessionId: parent?.id,
             startedAt: now,
@@ -319,6 +330,10 @@ export class AgentRunsService {
 
     await this.touchSession(runId, to);
 
+    if (isTerminalAgentRunStatus(to)) {
+      await this.revokeRunTokens(runId);
+    }
+
     // A failed run said why only in its own row. Logging it here, the one
     // place every executor's failure passes through, puts the reason in the
     // server log beside everything else that happened at that moment.
@@ -366,6 +381,50 @@ export class AgentRunsService {
       this.logger.error({
         message: `The session of agent run ${runId} was not updated: ${error}`,
         where: 'AgentRunsService.touchSession',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
+  }
+
+  /**
+   * Records the harness's own session id on the run's session, once the
+   * connector reports it. Bookkeeping: never refuses a run.
+   */
+  async recordExternalSession(
+    runId: string,
+    externalId: string,
+  ): Promise<void> {
+    try {
+      await this.prisma.agentSession.updateMany({
+        where: { agentRunId: runId },
+        data: { externalId, lastActiveAt: new Date() },
+      });
+    } catch (error) {
+      this.logger.error({
+        message: `The session of agent run ${runId} did not take external id ${externalId}: ${error}`,
+        where: 'AgentRunsService.recordExternalSession',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
+  }
+
+  /**
+   * Ends every token minted for the run, whichever path ended it: an executor,
+   * a cancel from the UI, or the lease sweep. Done here, in the one place all
+   * of them pass through, so no terminal state can leave a credential behind.
+   * Bookkeeping that must not be skipped silently: a failure is logged, and
+   * the token's own `expiresAt` is the backstop.
+   */
+  private async revokeRunTokens(runId: string): Promise<void> {
+    try {
+      await this.prisma.personalAccessToken.updateMany({
+        where: { agentRunId: runId, deleted: null },
+        data: { deleted: new Date() },
+      });
+    } catch (error) {
+      this.logger.error({
+        message: `The tokens of agent run ${runId} were not revoked: ${error}`,
+        where: 'AgentRunsService.revokeRunTokens',
         error: error instanceof Error ? error : undefined,
       });
     }

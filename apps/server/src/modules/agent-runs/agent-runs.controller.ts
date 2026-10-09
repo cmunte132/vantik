@@ -149,12 +149,16 @@ export class AgentRunsController {
   /** What this deployment can run work on, and whether each is usable here. */
   @Get('meta/executors')
   @UseGuards(AuthGuard)
-  async listExecutors(@Workspace() workspace: string) {
+  async listExecutors(
+    @Workspace() workspace: string,
+    @UserId() userId: string,
+  ) {
+    // Per person: the local executor is the asking member's own machine.
     return Promise.all(
       this.registry.list().map(async (executor) => ({
         key: executor.key,
         label: executor.label,
-        ...(await executor.availability(workspace)),
+        ...(await executor.availability({ workspaceId: workspace, userId })),
       })),
     );
   }

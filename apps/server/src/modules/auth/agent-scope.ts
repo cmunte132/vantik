@@ -116,6 +116,12 @@ export function agentSettings(settings: unknown): {
    * needed and did not have.
    */
   ephemeral: boolean;
+  /**
+   * Whether the account was made for the local connector. It works on run
+   * tokens and holds no standing one, so a missing standing token does not
+   * mean it was revoked.
+   */
+  connector: boolean;
 } {
   const agent = (
     settings as {
@@ -126,6 +132,7 @@ export function agentSettings(settings: unknown): {
         hiddenAt?: string | null;
         disabledAt?: string | null;
         ephemeral?: boolean;
+        connector?: boolean;
       };
     } | null
   )?.agent;
@@ -137,5 +144,6 @@ export function agentSettings(settings: unknown): {
     hiddenAt: agent?.hiddenAt ?? null,
     disabledAt: agent?.disabledAt ?? null,
     ephemeral: agent?.ephemeral === true,
+    connector: agent?.connector === true,
   };
 }

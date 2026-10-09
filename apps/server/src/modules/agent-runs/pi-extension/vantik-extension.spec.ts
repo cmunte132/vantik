@@ -391,6 +391,15 @@ describe('the Vantik tools', () => {
     ]);
   });
 
+  it('marks every tool essential, so omp shows it to the model', () => {
+    const { tools } = loadTools();
+
+    expect(Object.values(tools).length).toBeGreaterThan(0);
+    for (const tool of Object.values(tools)) {
+      expect(tool.loadMode).toBe('essential');
+    }
+  });
+
   it('reads the issue and the knowledge from the pack', async () => {
     const { tools } = loadTools();
 

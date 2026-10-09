@@ -376,6 +376,28 @@ describe('stagesOf', () => {
     expect(stages[1].ms).toBe(1500);
   });
 
+  it('shows a local run as set up, work and hand back only', () => {
+    const live = stagesOf(
+      { status: 'RUNNING', executor: 'local' },
+      [on('setup', 0), on('implement', 1)],
+      Date.parse(at(10)),
+    );
+
+    expect(live.map((stage) => [stage.label, stage.state])).toEqual([
+      ['Set up', 'done'],
+      ['Work', 'now'],
+      ['Hand back', 'todo'],
+    ]);
+
+    const finished = stagesOf({ status: 'SUCCEEDED', executor: 'local' }, [
+      on('setup', 0),
+      on('implement', 1),
+      on('report', 2),
+    ]);
+
+    expect(finished.every((stage) => stage.state === 'done')).toBe(true);
+  });
+
   it('shows a skipped review on a finished run as skipped', () => {
     const stages = stagesOf({ status: 'SUCCEEDED' }, [
       on('setup', 0),

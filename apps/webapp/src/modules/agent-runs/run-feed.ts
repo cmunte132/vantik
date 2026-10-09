@@ -399,7 +399,16 @@ export function stagesOf(run: any, events: any[], now = Date.now()): Stage[] {
     ms[current] = Math.max(0, now - Date.parse(currentSince));
   }
 
-  return STAGE_LABELS.map((label, index) => {
+  // A run on the person's own machine has no host-side check pass and no
+  // reviewer: the agent runs the checks in its own turn. Showing those stages
+  // would only ever show them waiting.
+  const shown = (index: number) =>
+    !(run.executor === 'local' && (index === 2 || index === 3));
+
+  return STAGE_LABELS.flatMap((label, index): Stage[] => {
+    if (!shown(index)) {
+      return [];
+    }
     let state: StageState;
 
     if (live) {
@@ -415,11 +424,13 @@ export function stagesOf(run: any, events: any[], now = Date.now()): Stage[] {
       state = 'todo';
     }
 
-    return {
-      label,
-      state,
-      ...(ms[index] ? { ms: ms[index] } : {}),
-    };
+    return [
+      {
+        label,
+        state,
+        ...(ms[index] ? { ms: ms[index] } : {}),
+      },
+    ];
   });
 }
 

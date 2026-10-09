@@ -1,4 +1,7 @@
-import { agentBoundExecutor, workspaceAgentDefaults } from './agent-run-settings';
+import {
+  agentBoundExecutor,
+  workspaceAgentDefaults,
+} from './agent-run-settings';
 
 /**
  * `Workspace.preferences` is free-form JSON that an operator or an older build
@@ -182,7 +185,9 @@ describe('workspaceAgentDefaults', () => {
 
 describe('agentBoundExecutor', () => {
   it('names the executor an agent is bound to', () => {
-    expect(agentBoundExecutor({ agent: { executor: 'github' } })).toBe('github');
+    expect(agentBoundExecutor({ agent: { executor: 'github' } })).toBe(
+      'github',
+    );
   });
 
   it('is null when the agent names no executor, or names one badly', () => {

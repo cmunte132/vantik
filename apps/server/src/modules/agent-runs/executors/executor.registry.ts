@@ -39,7 +39,11 @@ export class ExecutorRegistry {
       throw new BadRequestException({
         message:
           `No executor "${key}". Available: ` +
-          `${this.list().map((entry) => entry.key).join(', ') || 'none'}.`,
+          `${
+            this.list()
+              .map((entry) => entry.key)
+              .join(', ') || 'none'
+          }.`,
       });
     }
 
@@ -75,6 +79,13 @@ export class ExecutorRegistry {
           'No agent executors are registered in this deployment, so there ' +
           'is nothing to run the work.',
       });
+    }
+
+    // Several executors and nobody named one: the hosted sandbox is the
+    // workspace's own and always the default, ahead of a person's machine.
+    const hosted = registered.find((entry) => entry.key === 'hosted');
+    if (registered.length > 1 && hosted) {
+      return hosted;
     }
 
     if (registered.length > 1) {

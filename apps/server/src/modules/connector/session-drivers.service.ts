@@ -98,15 +98,29 @@ export class SessionDriversService {
         continue;
       }
 
+      const where = {
+        ...this.owned(peer),
+        // The hooks write `omp:<uuid>`; the connector writes the bare uuid.
+        externalId: { in: [id, `omp:${id}`] },
+      };
+
+      if (driver === null) {
+        // The terminal let go of a session it had opened again, so the
+        // session ends again. A Vantik run ends its session itself.
+        await this.prisma.agentSession.updateMany({
+          where: { ...where, driver: 'TERMINAL', endedAt: null },
+          data: { endedAt: now },
+        });
+      }
+
       await this.prisma.agentSession.updateMany({
-        where: {
-          ...this.owned(peer),
-          // The hooks write `omp:<uuid>`; the connector writes the bare uuid.
-          externalId: { in: [id, `omp:${id}`] },
-        },
+        where,
         data: {
           driver,
           driverLeaseExpiresAt: driver ? lease : null,
+          // A person can resume a session after its run ended. While the
+          // terminal holds it, the session is live again.
+          ...(driver === 'TERMINAL' ? { endedAt: null, lastActiveAt: now } : {}),
         },
       });
     }

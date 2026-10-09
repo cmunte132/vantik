@@ -62,20 +62,43 @@ describe('SessionDriversService', () => {
 
     const calls = prisma.agentSession.updateMany.mock
       .calls as unknown as Call[];
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
     expect(calls[0][0].where).toMatchObject({
       workspaceId: 'ws-1',
       OR: [{ actorUserId: 'user-1' }, { agentRun: { createdById: 'user-1' } }],
       externalId: { in: [ID, `omp:${ID}`] },
     });
+    // A terminal that holds a session opens it again, even after its run.
     expect(calls[0][0].data).toEqual({
       driver: 'TERMINAL',
       driverLeaseExpiresAt: new Date('2026-10-09T10:01:00Z'),
+      endedAt: null,
+      lastActiveAt: now,
     });
-    expect(calls[1][0].data).toEqual({
+    // When the terminal lets go, a session it held ends again first.
+    expect(calls[1][0].where).toMatchObject({
+      driver: 'TERMINAL',
+      endedAt: null,
+    });
+    expect(calls[1][0].data).toEqual({ endedAt: now });
+    expect(calls[2][0].data).toEqual({
       driver: null,
       driverLeaseExpiresAt: null,
     });
+  });
+
+  it('leaves the end of a session that Vantik drives to its run', async () => {
+    const { service, prisma } = build();
+
+    await service.applyDrivers(peer, [{ externalId: ID, driver: 'VANTIK' }]);
+
+    const calls = prisma.agentSession.updateMany.mock
+      .calls as unknown as Call[];
+    expect(calls).toHaveLength(1);
+    expect(Object.keys(calls[0][0].data).sort()).toEqual([
+      'driver',
+      'driverLeaseExpiresAt',
+    ]);
   });
 
   it('ignores a malformed entry and refuses a body that is not a list', async () => {

@@ -88,6 +88,7 @@ export default class SearchService {
     userId: string,
     requestedWorkspaceId: string | undefined,
     issueId: string,
+    limit?: number,
   ) {
     const workspaceId = await resolveWorkspaceId(
       this.prisma,
@@ -100,6 +101,7 @@ export default class SearchService {
       workspaceId,
       issueId,
       await visibleTeamIds(this.prisma, userId, workspaceId),
+      limit,
     );
 
     return similarIssues;

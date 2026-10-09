@@ -54,6 +54,7 @@ export class SearchController {
       userId,
       similarIssueData.workspaceId,
       similarIssueData.issueId,
+      parseSearchLimit(similarIssueData.limit),
     );
   }
 }

@@ -1,6 +1,8 @@
 import { KnowledgeProof, PageEntryStatusEnum } from '@vantikhq/types';
 
 export const KNOWLEDGE_GROUP_LIMIT = 3;
+// How many similar issues a caller gets when it names no limit.
+export const SIMILAR_ISSUE_DEFAULT_LIMIT = 10;
 // These cosine limits use the local MiniLM model. Hosted models can need different limits.
 export const KNOWLEDGE_NEAR_MATCH_DISTANCE = 0.5;
 export const SIMILAR_ISSUE_DISTANCE_THRESHOLD = 0.55;

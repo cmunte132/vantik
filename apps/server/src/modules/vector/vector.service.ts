@@ -30,6 +30,7 @@ import {
   KnowledgeSearchResult,
   RESOLUTION_SNIPPET_LENGTH,
   SERVED_STATUSES,
+  SIMILAR_ISSUE_DEFAULT_LIMIT,
   SIMILAR_ISSUE_DISTANCE_THRESHOLD,
 } from './vector.interface';
 
@@ -108,6 +109,7 @@ export class VectorService {
     workspaceId: string,
     issueId: string,
     visibleTeamIds?: string[],
+    limit = SIMILAR_ISSUE_DEFAULT_LIMIT,
   ): Promise<IssueSearchHit[]> {
     validateId(workspaceId, 'workspaceId');
     const visibility = teamVisibility(visibleTeamIds);
@@ -145,7 +147,7 @@ export class VectorService {
     return this.issueSearch(
       workspaceId,
       vector ? '*' : source.title,
-      10,
+      limit,
       SIMILAR_ISSUE_DISTANCE_THRESHOLD,
       [],
       {},

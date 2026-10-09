@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -183,7 +183,14 @@ export class AgentRunFilterDto {
   @IsString()
   agentUserId?: string;
 
+  // A query string with one `status=FAILED` parses to a string, and only a
+  // repeated key parses to an array, so a single value is wrapped here.
   @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null || Array.isArray(value)
+      ? value
+      : [value],
+  )
   @IsArray()
   @IsIn(AGENT_RUN_STATUSES, { each: true })
   status?: AgentRunStatus[];

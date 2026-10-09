@@ -185,6 +185,30 @@ describe('the global validation pipe', () => {
         run(AgentRunFilterDto, { page: '2', perPage: '25' }, 'query'),
       ).resolves.toMatchObject({ page: 2, perPage: 25 });
     });
+
+    it('as a list, for a single agent run status in the query', async () => {
+      await expect(
+        run(AgentRunFilterDto, { status: 'FAILED' }, 'query'),
+      ).resolves.toMatchObject({ status: ['FAILED'] });
+    });
+
+    it('as a list, for a repeated agent run status in the query', async () => {
+      await expect(
+        run(AgentRunFilterDto, { status: ['FAILED', 'QUEUED'] }, 'query'),
+      ).resolves.toMatchObject({ status: ['FAILED', 'QUEUED'] });
+    });
+
+    it('still refuses an agent run status that does not exist', async () => {
+      await expect(
+        run(AgentRunFilterDto, { status: 'NOPE' }, 'query'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('without a status key when the query names none', async () => {
+      const dto = await run(AgentRunFilterDto, { page: '1' }, 'query');
+
+      expect('status' in (dto as object)).toBe(false);
+    });
   });
 
   /**

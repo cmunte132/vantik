@@ -168,11 +168,12 @@ describe('SessionActivityService', () => {
   });
 
   it("drops entries at or before the run's finish, and records nothing for an unfinished run", async () => {
+    // The prompt was recorded before; what follows the finish is kept.
     const finished = build([
       {
         id: 's1',
         agentRunId: 'run-1',
-        terminalSeenAt: null,
+        terminalSeenAt: new Date('2026-10-09T10:00:00.500Z'),
         agentRun: { finishedAt: new Date('2026-10-09T10:00:01.000Z') },
       },
     ]);
@@ -197,5 +198,22 @@ describe('SessionActivityService', () => {
     await running.service.apply(peer, { externalId: ID, entries });
     expect(running.prisma.agentRunEvent.createMany).not.toHaveBeenCalled();
     expect(running.prisma.agentSession.update).not.toHaveBeenCalled();
+  });
+
+  it('ignores what omp writes while it shuts down after the run, until the person sends a prompt', async () => {
+    // The run finished a moment before omp wrote its last reply.
+    const { service, prisma } = build([
+      {
+        id: 's1',
+        agentRunId: 'run-1',
+        terminalSeenAt: null,
+        agentRun: { finishedAt: new Date('2026-10-09T10:00:01.500Z') },
+      },
+    ]);
+
+    await service.apply(peer, { externalId: ID, entries });
+
+    expect(prisma.agentRunEvent.createMany).not.toHaveBeenCalled();
+    expect(prisma.agentSession.update).not.toHaveBeenCalled();
   });
 });

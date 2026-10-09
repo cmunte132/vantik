@@ -76,13 +76,20 @@ export class SessionActivityService {
       if (session.agentRunId && !finishedAt) {
         continue;
       }
-      const fresh = entries.filter((entry) => {
+      let fresh = entries.filter((entry) => {
         const at = entryAt(entry);
         if (finishedAt && (!at || at <= finishedAt)) {
           return false;
         }
         return !session.terminalSeenAt || !at || at >= session.terminalSeenAt;
       });
+      // omp writes its last entries while it shuts down, a few milliseconds
+      // after the run is marked finished. Terminal work starts with a prompt
+      // the person sends, so until one has been recorded, skip to it.
+      if (finishedAt && !session.terminalSeenAt) {
+        const start = fresh.findIndex(isUserPrompt);
+        fresh = start === -1 ? [] : fresh.slice(start);
+      }
       const parsed = parseSessionEntries(fresh);
 
       if (!parsed.lastAt) {
@@ -192,6 +199,12 @@ function entryAt(entry: unknown): Date | null {
   const stamp = (entry as { timestamp?: unknown } | null)?.timestamp;
   const at = typeof stamp === 'string' ? new Date(stamp) : null;
   return at && !Number.isNaN(at.getTime()) ? at : null;
+}
+
+/** A message the person typed, as opposed to a tool result or a reply. */
+function isUserPrompt(entry: unknown): boolean {
+  const value = entry as { type?: unknown; message?: { role?: unknown } };
+  return value?.type === 'message' && value.message?.role === 'user';
 }
 
 function toRow(step: SessionStep) {

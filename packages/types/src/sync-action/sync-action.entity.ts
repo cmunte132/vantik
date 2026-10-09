@@ -1,6 +1,7 @@
 import { Workspace } from '../workspace';
 
 export enum ModelNameEnum {
+  AgentQuestion = 'AgentQuestion',
   AgentRun = 'AgentRun',
   AgentRunEvent = 'AgentRunEvent',
   AgentRunIteration = 'AgentRunIteration',
@@ -49,6 +50,7 @@ export enum ModelNameEnum {
 }
 
 export const ModelName = {
+  AgentQuestion: 'AgentQuestion',
   AgentRun: 'AgentRun',
   AgentRunEvent: 'AgentRunEvent',
   AgentRunIteration: 'AgentRunIteration',

@@ -29,6 +29,9 @@ import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
+import { AgentQuestionCard } from 'modules/agent-questions/agent-question-card';
+import { placeOf } from 'modules/agent-questions/agent-question-text';
+import { useOpenQuestions } from 'modules/agent-questions/use-open-questions';
 import { useNewIssue } from 'modules/issues/new-issue/new-issue-provider';
 
 import { AppLayout } from 'common/layouts/app-layout';
@@ -130,11 +133,22 @@ const NeedsYouView = observer(() => {
     subject,
     page,
     view: viewParam,
+    question: questionParam,
   } = router.query as Record<string, string | undefined>;
   const view = (VIEWS.find((candidate) => candidate.view === viewParam)?.view ??
     'open') as KnowledgeInboxView;
   const { pagesStore } = useContextStore();
   const { members, nameOf } = useMembers();
+
+  const openQuestions = useOpenQuestions();
+  // Agent questions are not knowledge decisions, so the knowledge-only views
+  // and the page filter leave them out.
+  const questions =
+    page || view === 'unassigned' || view === 'done'
+      ? []
+      : view === 'mine'
+        ? openQuestions.mine
+        : openQuestions.all;
 
   const { data: list } = useKnowledgeInbox(view, page);
   const { data: done } = useKnowledgeInbox('done', page);
@@ -147,6 +161,11 @@ const NeedsYouView = observer(() => {
   const go = React.useCallback(
     (query: Record<string, string | undefined>) => {
       const next = { ...router.query, ...query };
+
+      // Opening a knowledge item closes the open question.
+      if ('item' in query && !('question' in query)) {
+        next.question = undefined;
+      }
 
       for (const key of Object.keys(next)) {
         if (next[key] === undefined) {
@@ -170,17 +189,30 @@ const NeedsYouView = observer(() => {
     : undefined;
   const selectedId = itemParam ?? named?.id;
 
+  const firstQuestionId: string | undefined = questions[0]?.id;
+
   // On a wide screen the first item opens, so the right side is never empty
   // while something waits.
   React.useEffect(() => {
     if (
       !selectedId &&
-      items.length > 0 &&
+      !questionParam &&
       window.matchMedia('(min-width: 768px)').matches
     ) {
-      go({ item: items[0].id, subject: undefined });
+      if (firstQuestionId) {
+        go({ question: firstQuestionId, item: undefined });
+      } else if (items.length > 0) {
+        go({ item: items[0].id, subject: undefined });
+      }
     }
-  }, [selectedId, items, go]);
+  }, [selectedId, questionParam, firstQuestionId, items, go]);
+
+  const selectedQuestion = questionParam
+    ? (openQuestions.all.find((question) => question.id === questionParam) ??
+        // A question that was answered stays on screen until the person leaves.
+        { id: questionParam })
+    : undefined;
+  const hasSelection = Boolean(selectedId || selectedQuestion);
 
   const pageTitle = page
     ? pagesStore.getPageWithId(page)?.title || 'Untitled page'
@@ -192,7 +224,7 @@ const NeedsYouView = observer(() => {
         <section
           className={cn(
             'w-full md:w-[400px] shrink-0 flex flex-col min-h-0 bg-background-3 border-r border-border',
-            selectedId && 'hidden md:flex',
+            hasSelection && 'hidden md:flex',
           )}
         >
           <header className="h-[46px] shrink-0 px-3.5 flex items-center gap-2 border-b border-border">
@@ -229,7 +261,16 @@ const NeedsYouView = observer(() => {
                 {label}
                 {candidate !== 'done' &&
                   list &&
-                  ` ${list.counts[candidate as Exclude<KnowledgeInboxView, 'done'>]}`}
+                  ` ${
+                    list.counts[
+                      candidate as Exclude<KnowledgeInboxView, 'done'>
+                    ] +
+                    (candidate === 'open'
+                      ? openQuestions.all.length
+                      : candidate === 'mine'
+                        ? openQuestions.mine.length
+                        : 0)
+                  }`}
               </button>
             ))}
             <Link
@@ -259,7 +300,26 @@ const NeedsYouView = observer(() => {
           )}
 
           <div className="flex flex-col overflow-y-auto min-h-0">
-            {list && items.length === 0 && (
+            {questions.length > 0 && (
+              <>
+                <div className="px-3.5 pt-2.5 pb-1.5 text-xs font-semibold text-foreground/70">
+                  Agent questions
+                </div>
+                {questions.map((question) => (
+                  <QuestionRow
+                    key={question.id}
+                    question={question}
+                    selected={question.id === questionParam}
+                    nameOf={nameOf}
+                    onSelect={() =>
+                      go({ question: question.id, item: undefined })
+                    }
+                  />
+                ))}
+              </>
+            )}
+
+            {list && items.length === 0 && questions.length === 0 && (
               <div className="px-3.5 py-6 text-muted-foreground">
                 {view === 'done'
                   ? 'Nothing decided in the last 30 days.'
@@ -299,10 +359,30 @@ const NeedsYouView = observer(() => {
         <section
           className={cn(
             'grow min-w-0 flex flex-col min-h-0',
-            !selectedId && 'hidden md:flex',
+            !hasSelection && 'hidden md:flex',
           )}
         >
-          {selectedId ? (
+          {selectedQuestion ? (
+            <div className="flex flex-col min-h-0 overflow-y-auto">
+              <header className="h-[46px] shrink-0 px-3.5 flex items-center gap-2 border-b border-border md:hidden">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => go({ question: undefined })}
+                >
+                  <RiArrowLeftLine size={14} />
+                  Back
+                </Button>
+              </header>
+              <div className="p-4 max-w-[720px]">
+                <AgentQuestionCard
+                  key={selectedQuestion.id}
+                  questionId={selectedQuestion.id}
+                />
+              </div>
+            </div>
+          ) : selectedId ? (
             <Detail
               key={selectedId}
               id={selectedId}
@@ -318,7 +398,9 @@ const NeedsYouView = observer(() => {
             />
           ) : (
             <div className="m-auto text-muted-foreground">
-              {list && items.length === 0 ? 'Nothing waits on a person.' : null}
+              {list && items.length === 0 && questions.length === 0
+                ? 'Nothing waits on a person.'
+                : null}
             </div>
           )}
         </section>
@@ -326,6 +408,82 @@ const NeedsYouView = observer(() => {
     </MainLayout>
   );
 });
+
+/** One open agent question in the list. */
+const QuestionRow = observer(
+  ({
+    question,
+    selected,
+    nameOf,
+    onSelect,
+  }: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    question: any;
+    selected: boolean;
+    nameOf: (userId: string | null) => string | null;
+    onSelect: () => void;
+  }) => {
+    const { agentRunsStore, agentSessionsStore, issuesStore, teamsStore } =
+      useContextStore();
+    const run = question.agentRunId
+      ? agentRunsStore.getRunById(question.agentRunId)
+      : undefined;
+    const session = question.agentSessionId
+      ? agentSessionsStore.getSessionById(question.agentSessionId)
+      : undefined;
+    const issue = issuesStore.getIssueById(question.issueId);
+    const team = issue && teamsStore.getTeamWithId(issue.teamId);
+    const key = team && issue ? `${team.identifier}-${issue.number}` : '';
+    const name = nameOf(question.assigneeId);
+    const prompts = question.questions as Array<{ prompt: string }>;
+
+    return (
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          'flex gap-2.5 px-3.5 py-[11px] border-b border-grayAlpha-100 text-left',
+          selected ? 'bg-[oklch(60%_0.13_240/0.09)]' : 'hover:bg-grayAlpha-50',
+        )}
+      >
+        <span className="w-[7px] h-[7px] rounded-full shrink-0 mt-1.5 bg-[oklch(58%_0.19_45)]" />
+        <span className="flex flex-col gap-1 min-w-0 grow">
+          <span className="leading-snug line-clamp-2 break-words font-semibold">
+            {prompts?.[0]?.prompt ?? 'An agent has a question'}
+          </span>
+          <span className="flex items-center gap-1.5 flex-wrap">
+            <span
+              className={cn(
+                'text-[11.5px] font-medium px-[7px] py-px rounded-full',
+                CHIP_TONE.needYou,
+              )}
+            >
+              Agent question
+            </span>
+            <span className="text-xs text-muted-foreground truncate">
+              {[
+                key,
+                placeOf(
+                  run?.executor ??
+                    (session?.location === 'local' ? 'local' : undefined),
+                  session?.harness ?? run?.config?.harness,
+                ),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
+          </span>
+        </span>
+        <span className="shrink-0 flex flex-col items-end gap-1.5">
+          <span className="text-xs text-muted-foreground">
+            {age(question.createdAt)}
+          </span>
+          {name && <Initial name={name} />}
+        </span>
+      </button>
+    );
+  },
+);
 
 /** One item in the list. */
 function Row({

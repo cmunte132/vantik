@@ -23,7 +23,9 @@
  * server's tests exercise exactly what the guest runs.
  */
 /* eslint-disable turbo/no-undeclared-env-vars -- VANTIK_POLICY is set in the guest by the host, not read by the server. */
+import { randomBytes } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { registerCodeTools } from './vantik-lsp';
 
@@ -43,6 +45,8 @@ export interface GuardrailPolicy {
   outboxPath?: string;
   /** The most output tokens one model call may ask for. */
   maxOutputTokens?: number;
+  /** How long `ask_person` waits for a person, in milliseconds. */
+  questionWaitMs?: number;
 }
 
 /**
@@ -56,6 +60,14 @@ export interface GuardrailPolicy {
  */
 export type OutboxItem =
   | { v: 1; type: 'note'; body: string }
+  | {
+      v: 1;
+      type: 'question';
+      id: string;
+      questions: AskedQuestion[];
+      /** When the tool stops waiting. The host never waits longer. */
+      expiresAt?: string;
+    }
   | { v: 1; type: 'criterion'; id: string; evidence: string }
   | {
       v: 1;
@@ -64,6 +76,15 @@ export type OutboxItem =
       kind?: 'FACT' | 'DECISION' | 'CONVENTION' | 'GOTCHA';
       citations?: Array<{ path: string; lines?: string }>;
     };
+
+/** One question of the `ask_person` tool. The server checks the same limits. */
+export interface AskedQuestion {
+  id: string;
+  prompt: string;
+  options?: Array<{ label: string; description?: string }>;
+  multiple?: boolean;
+  allowOther?: boolean;
+}
 
 export interface Verdict {
   rule: 'no-git' | 'egress' | 'scope' | 'ci' | 'destructive';
@@ -325,6 +346,7 @@ export interface PiTool {
   execute(
     toolCallId: string,
     params: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<{
     content: Array<{ type: 'text'; text: string }>;
     details: unknown;
@@ -361,6 +383,11 @@ function readPolicy(): GuardrailPolicy | null {
       Number.isInteger(parsed.maxOutputTokens) &&
       parsed.maxOutputTokens > 0
         ? { maxOutputTokens: parsed.maxOutputTokens }
+        : {}),
+      ...(typeof parsed.questionWaitMs === 'number' &&
+      Number.isInteger(parsed.questionWaitMs) &&
+      parsed.questionWaitMs > 0
+        ? { questionWaitMs: parsed.questionWaitMs }
         : {}),
     };
   } catch {
@@ -706,6 +733,213 @@ export function findKnowledge(pack: PackView, query: string): string {
     .join('\n');
 }
 
+// --------------------------------------------------------------- ask_person
+
+/** How long the tool waits for a person when the policy says nothing. */
+export const ASK_WAIT_MS = 30 * 60 * 1000;
+/** How often the tool looks for the answer file. */
+export const ASK_POLL_MS = 2000;
+/** The bounds the server holds a question to, so a bad one fails at once. */
+export const ASK_LIMITS = {
+  questions: 4,
+  perRun: 5,
+  prompt: 500,
+  options: 6,
+  label: 120,
+  description: 300,
+};
+
+/** What the tool tells the agent when nobody answers. */
+export function noAnswerText(waitMs: number): string {
+  const minutes = Math.max(1, Math.round(waitMs / 60_000));
+  return (
+    `No answer from a person within ${minutes} minutes. ` +
+    'Use your best judgement, continue, and say what you assumed in the handback.'
+  );
+}
+
+/**
+ * The questions of one call, checked. Throws a message that tells the agent
+ * what to fix. A question without an id gets one.
+ */
+export function parseAsked(params: Record<string, unknown>): AskedQuestion[] {
+  const raw = params.questions;
+
+  if (
+    !Array.isArray(raw) ||
+    raw.length === 0 ||
+    raw.length > ASK_LIMITS.questions
+  ) {
+    throw new Error(`Ask 1 to ${ASK_LIMITS.questions} questions.`);
+  }
+
+  const seen = new Set<string>();
+
+  return raw.map((entry, index): AskedQuestion => {
+    const item = (entry ?? {}) as Record<string, unknown>;
+    const prompt = typeof item.prompt === 'string' ? item.prompt.trim() : '';
+    const id =
+      typeof item.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(item.id)
+        ? item.id
+        : `q${index + 1}`;
+
+    if (!prompt || prompt.length > ASK_LIMITS.prompt) {
+      throw new Error(
+        `Each prompt needs 1 to ${ASK_LIMITS.prompt} characters. Make it shorter.`,
+      );
+    }
+    if (seen.has(id)) {
+      throw new Error(`Two questions have the id ${id}.`);
+    }
+    seen.add(id);
+
+    const question: AskedQuestion = { id, prompt };
+
+    if (item.options !== undefined && item.options !== null) {
+      if (
+        !Array.isArray(item.options) ||
+        item.options.length === 0 ||
+        item.options.length > ASK_LIMITS.options
+      ) {
+        throw new Error(
+          `A question has 1 to ${ASK_LIMITS.options} options, or none for a free answer.`,
+        );
+      }
+
+      question.options = item.options.map((option) => {
+        const label =
+          typeof option?.label === 'string' ? option.label.trim() : '';
+        if (!label || label.length > ASK_LIMITS.label) {
+          throw new Error(
+            `Each option needs a label of 1 to ${ASK_LIMITS.label} characters.`,
+          );
+        }
+        const description =
+          typeof option.description === 'string'
+            ? option.description.trim().slice(0, ASK_LIMITS.description)
+            : '';
+        return { label, ...(description ? { description } : {}) };
+      });
+
+      // The host refuses two options with one label, so the tool does first.
+      if (
+        new Set(question.options.map((o) => o.label.toLowerCase())).size !==
+        question.options.length
+      ) {
+        throw new Error('Each option needs a different label.');
+      }
+    }
+
+    if (item.multiple === true) {
+      question.multiple = true;
+    }
+    if (item.allowOther === true) {
+      question.allowOther = true;
+    }
+
+    return question;
+  });
+}
+
+/** What the host writes for the agent when a question ends. */
+interface AnswerFile {
+  status?: unknown;
+  text?: unknown;
+  /** Why the host refused the question, when it did. */
+  reason?: unknown;
+}
+
+/** How long past its own deadline the tool still takes an answer. The host
+ * expires questions on a sweep, so one answered in the last seconds counts. */
+export const ASK_GRACE_MS = 90_000;
+
+export interface AskOptions {
+  /** Appends a line to the outbox. */
+  queue(item: OutboxItem): void;
+  /** The text of the answer file for a question, or null when there is none. */
+  readAnswer(id: string): string | null;
+  waitMs: number;
+  pollMs: number;
+  /** Rejects when the signal aborts. */
+  sleep(ms: number, signal?: AbortSignal): Promise<void>;
+  now(): number;
+  newId(): string;
+}
+
+/**
+ * Asks a person and waits. The question goes to the outbox. The host reads it,
+ * shows it to a person, and writes `answers/<id>.json` when a person answers.
+ * The wait ends at the answer, at the limit, or when the signal aborts, so a
+ * run with nobody around never hangs.
+ */
+export async function askPerson(
+  questions: AskedQuestion[],
+  options: AskOptions,
+  signal?: AbortSignal,
+): Promise<string> {
+  const id = options.newId();
+  const until = options.now() + options.waitMs;
+  const lastRead = until + ASK_GRACE_MS;
+
+  options.queue({
+    v: 1,
+    type: 'question',
+    id,
+    questions,
+    expiresAt: new Date(until).toISOString(),
+  });
+
+  for (;;) {
+    const raw = options.readAnswer(id);
+    let answer: AnswerFile | null = null;
+
+    if (raw !== null) {
+      try {
+        answer = JSON.parse(raw) as AnswerFile;
+      } catch {
+        // The file is still being written. Read it again at the next poll.
+      }
+    }
+
+    if (answer?.status === 'answered' && typeof answer.text === 'string') {
+      return `A person answered:\n\n${answer.text}`;
+    }
+    if (answer?.status === 'cancelled') {
+      return typeof answer.reason === 'string' && answer.reason
+        ? `Vantik refused the question: ${answer.reason}. Continue on your own judgement.`
+        : 'The question was withdrawn. Use your best judgement and continue.';
+    }
+    if (answer?.status === 'expired' || options.now() >= lastRead) {
+      return noAnswerText(options.waitMs);
+    }
+
+    await options.sleep(
+      Math.min(options.pollMs, Math.max(lastRead - options.now(), 1)),
+      signal,
+    );
+  }
+}
+
+/** A sleep that ends early, with a rejection, when the signal aborts. */
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('The question was aborted.'));
+      return;
+    }
+
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new Error('The question was aborted.'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 function registerVantikTools(pi: PiApi) {
   const policy = readPolicy();
   const { contextPath, outboxPath } = policy ?? {};
@@ -728,6 +962,100 @@ function registerVantikTools(pi: PiApi) {
     }
     return value.trim();
   };
+
+  let asked = 0;
+
+  pi.registerTool({
+    name: 'ask_person',
+    label: 'Ask a person',
+    description:
+      'Ask the person who started this run a question and wait for the answer. ' +
+      'Use it only when you are blocked on a decision that a person must make, such as a choice between designs or a requirement that the issue leaves open. ' +
+      'Never ask what you can find out yourself from the code, the issue, the knowledge or the tests. ' +
+      `Give 1 to ${ASK_LIMITS.questions} questions in one call, each with a short prompt, and options when the answer is a choice. ` +
+      'A person can take minutes. If nobody answers in time, the tool says so, and you continue on your own judgement and state what you assumed in your handback.',
+    promptSnippet:
+      'ask_person: ask a person a question when you are blocked on a decision only they can make',
+    parameters: {
+      type: 'object',
+      properties: {
+        questions: {
+          type: 'array',
+          minItems: 1,
+          maxItems: ASK_LIMITS.questions,
+          items: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                description: 'A short id for the question. Optional.',
+              },
+              prompt: { type: 'string', description: 'The question.' },
+              options: {
+                type: 'array',
+                maxItems: ASK_LIMITS.options,
+                description: 'The choices. Leave out for a free-text answer.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: { type: 'string' },
+                    description: { type: 'string' },
+                  },
+                  required: ['label'],
+                },
+              },
+              multiple: {
+                type: 'boolean',
+                description: 'The person may pick more than one option.',
+              },
+              allowOther: {
+                type: 'boolean',
+                description:
+                  'The person may type an answer that is not an option.',
+              },
+            },
+            required: ['prompt'],
+          },
+        },
+      },
+      required: ['questions'],
+      additionalProperties: false,
+    },
+    execute: async (_id, params, signal) => {
+      const questions = parseAsked(params);
+
+      if (asked >= ASK_LIMITS.perRun) {
+        return text(
+          'You have asked enough questions in this run. Use your best judgement and continue.',
+        );
+      }
+      asked += 1;
+
+      const answers = join(dirname(outboxPath), 'answers');
+
+      return text(
+        await askPerson(
+          questions,
+          {
+            queue,
+            readAnswer: (id) => {
+              try {
+                return readFileSync(join(answers, `${id}.json`), 'utf8');
+              } catch {
+                return null;
+              }
+            },
+            waitMs: policy?.questionWaitMs ?? ASK_WAIT_MS,
+            pollMs: ASK_POLL_MS,
+            sleep: abortableSleep,
+            now: Date.now,
+            newId: () => `ask-${randomBytes(6).toString('hex')}`,
+          },
+          signal,
+        ),
+      );
+    },
+  });
 
   pi.registerTool({
     name: 'vantik_issue',

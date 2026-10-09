@@ -331,6 +331,10 @@ describe('the git token never enters the guest', () => {
           failed: [] as string[],
         }),
       } as never,
+      {
+        undelivered: async (): Promise<unknown[]> => [],
+        markDelivered: async (): Promise<void> => undefined,
+      } as never,
     );
 
     await (

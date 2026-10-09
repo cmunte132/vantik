@@ -14,6 +14,7 @@ import {
   type ConnectorHello,
   type ConnectorHelloAck,
   type ConnectorModels,
+  type ConnectorRunAnswer,
   type ConnectorRunCancel,
   type ConnectorRunDispatch,
 } from '@vantikhq/types';
@@ -47,7 +48,7 @@ export interface ConnectorOptions {
 /** What the connector needs from a run. */
 export type ActiveRun = Pick<
   LocalRun,
-  'runId' | 'branch' | 'worktreePath' | 'queue' | 'start' | 'cancel'
+  'runId' | 'branch' | 'worktreePath' | 'queue' | 'start' | 'cancel' | 'answer'
 >;
 
 const defaultCreateRun = (dispatch: ConnectorRunDispatch, deps: RunDeps) =>
@@ -261,6 +262,18 @@ export class Connector {
         (cancel: ConnectorRunCancel, ack?: (response: unknown) => void) => {
           this.runs.get(cancel.runId)?.cancel();
           ack?.({ ok: true });
+        },
+      );
+
+      socket.on(
+        'run.answer',
+        (answer: ConnectorRunAnswer, ack?: (response: unknown) => void) => {
+          const run = this.runs.get(answer?.runId);
+          ack?.(
+            run
+              ? run.answer(answer)
+              : { ok: false, reason: 'This connector has no such run.' },
+          );
         },
       );
 

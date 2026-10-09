@@ -1,4 +1,4 @@
-import type { AgentRun } from '@prisma/client';
+import type { AgentQuestion, AgentRun } from '@prisma/client';
 import type { ConnectorModel } from '@vantikhq/types';
 
 /**
@@ -85,4 +85,14 @@ export interface AgentExecutor {
    * A backend that polls for its own cancellation has nothing to do here.
    */
   cancel(run: AgentRun): Promise<void>;
+
+  /**
+   * Hands the end of a question to the agent: the answer a person gave, or the
+   * news that nobody answered. Optional, because only an executor that can
+   * reach the agent's machine can do it.
+   *
+   * Returns true when it got there. False leaves `deliveredAt` empty, and the
+   * executor is asked again, for a local run when its connector comes back.
+   */
+  deliverAnswer?(run: AgentRun, question: AgentQuestion): Promise<boolean>;
 }

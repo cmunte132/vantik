@@ -3,6 +3,7 @@ import 'reflect-metadata';
 export * from './common';
 export * from './integration-account';
 export * from './integration-definition';
+export * from './agent-question';
 export * from './agent-run';
 export * from './agent-session';
 export * from './ai-request';

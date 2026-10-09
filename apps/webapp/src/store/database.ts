@@ -51,6 +51,8 @@ export class VantikDatabase extends Dexie {
   agentRunEvents: Dexie.Table<any, string>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   agentSessions: Dexie.Table<any, string>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  agentQuestions: Dexie.Table<any, string>;
   pages: Dexie.Table<PageType, string>;
   pageEntries: Dexie.Table<PageEntryType, string>;
   usersOnWorkspaces: Dexie.Table<UsersOnWorkspaceType, string>;
@@ -100,6 +102,9 @@ export class VantikDatabase extends Dexie {
       // Read as "the sessions of this issue", and as the session of a run.
       [MODELS.AgentSession]:
         'id,createdAt,updatedAt,workspaceId,issueId,actorUserId,externalId,harness,location,channel,driver,parentSessionId,agentRunId,startedAt,lastActiveAt',
+      // Read as "the open questions" and as "the questions of this issue".
+      [MODELS.AgentQuestion]:
+        'id,createdAt,updatedAt,workspaceId,issueId,agentRunId,agentSessionId,externalId,status,assigneeId,expiresAt',
       [MODELS.IntegrationAccount]:
         'id,createdAt,updatedAt,accountId,settings,personal,integratedById,integrationDefinitionId,workspaceId',
       [MODELS.LinkedIssue]:
@@ -157,6 +162,7 @@ export class VantikDatabase extends Dexie {
     this.agentRuns = this.table(MODELS.AgentRun);
     this.agentRunEvents = this.table(MODELS.AgentRunEvent);
     this.agentSessions = this.table(MODELS.AgentSession);
+    this.agentQuestions = this.table(MODELS.AgentQuestion);
     this.integrationAccounts = this.table(MODELS.IntegrationAccount);
     this.linkedIssues = this.table(MODELS.LinkedIssue);
     this.issueRelations = this.table(MODELS.IssueRelation);

@@ -11,11 +11,12 @@ import type {
   ReviewFinding,
 } from '../review-cycle';
 import type { VerificationOutcome } from '../review-prompt';
-import type { AgentRun } from '@prisma/client';
+import type { AgentQuestion, AgentRun } from '@prisma/client';
 import type { MeteredModelCall, SandboxHandle } from '@vantikhq/types';
 
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
+  AGENT_QUESTION_EXTERNAL_ID_PATTERN,
   type AgentRunRepoSource,
   PI_LAUNCHER,
   PI_REQUIRED_FLAGS,
@@ -24,6 +25,7 @@ import {
   providerById,
 } from '@vantikhq/types';
 
+import { AgentQuestionsService } from 'modules/agent-questions/agent-questions.service';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import { AGENT_RUN_LEASE_MS } from '../agent-runs.interface';
@@ -56,6 +58,7 @@ import {
 } from '../review-cycle';
 import { buildReviewPrompt, buildRevisionPrompt } from '../review-prompt';
 import { PROVIDE_PACKAGE_MANAGER } from './package-manager';
+import { answerMessage, refusalMessage } from './question-answer';
 import { PiEventReader, type ParsedStep, type RunFailure } from './pi-events';
 import { RunTelemetry, startRunTelemetry } from './run-telemetry';
 import { type Spend, SpendMeter } from './spend-meter';
@@ -66,6 +69,7 @@ import {
   OutboxBatch,
   OutboxResult,
   OutboxState,
+  questionWaitMs,
   readOutbox,
   RunOutboxService,
 } from '../run-outbox';
@@ -82,6 +86,12 @@ import {
 } from '../sandbox/tree-tools';
 
 export const HOSTED_EXECUTOR_KEY = 'hosted';
+
+/** How often the outbox is read while a harness command runs. */
+export const OUTBOX_POLL_MS = 5000;
+
+/** Where answers to the agent's questions go, relative to `/workspace`. */
+const ANSWERS_DIR = 'answers';
 
 /**
  * Hosts a run may reach. Everything else is refused and counted.
@@ -377,6 +387,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     private handback: RunHandbackService,
     private agentRuns: AgentRunsService,
     private outbox: RunOutboxService,
+    private questions: AgentQuestionsService,
   ) {}
 
   async onModuleInit() {
@@ -469,6 +480,29 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         error: error instanceof Error ? error : undefined,
       });
     });
+  }
+
+  /**
+   * Writes the end of a question into the guest, where the `ask_person` tool
+   * is waiting for it. False when the sandbox is gone: nobody is waiting then.
+   */
+  async deliverAnswer(
+    run: AgentRun,
+    question: AgentQuestion,
+  ): Promise<boolean> {
+    const sandbox = this.running.get(run.id);
+
+    // The id became a file name in the guest, and the agent chose it.
+    if (!sandbox || !AGENT_QUESTION_EXTERNAL_ID_PATTERN.test(question.externalId)) {
+      return false;
+    }
+
+    await sandbox.writeFile(
+      `${ANSWERS_DIR}/${question.externalId}.json`,
+      JSON.stringify(answerMessage(question)),
+    );
+
+    return true;
   }
 
   /** Cancel has to kill the machine, not just mark the row. */
@@ -696,7 +730,11 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
           ...(reviewing ? { [TREE_TOOLS_PATH]: TREE_TOOLS_SCRIPT } : {}),
           // The Vantik extension and what it is told about this run. Outside
           // the checkout, so it is never part of the work and never pushed.
-          ...extensionFiles(pack, config.egressHosts),
+          ...extensionFiles(
+            pack,
+            config.egressHosts,
+            questionWaitMs(config),
+          ),
         },
         env: {
           VANTIK_POLICY: `/workspace/${POLICY_PATH}`,
@@ -1319,6 +1357,28 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
   }
 
   /**
+   * Reads the outbox every few seconds while a harness command runs. Returns
+   * the function that stops it and waits for a read in flight. One read runs
+   * at a time, and `drainOutbox` is incremental, so no line is applied twice.
+   */
+  private pollOutbox(cx: CycleContext, phase: string): () => Promise<void> {
+    let inFlight: Promise<void> | null = null;
+    const timer = setInterval(() => {
+      if (!inFlight) {
+        inFlight = this.drainOutbox(cx, phase).finally(() => {
+          inFlight = null;
+        });
+      }
+    }, OUTBOX_POLL_MS);
+    timer.unref?.();
+
+    return async () => {
+      clearInterval(timer);
+      await inFlight;
+    };
+  }
+
+  /**
    * Reads the outbox lines the agent added since the last pass, and applies
    * what passes the checks in run-outbox.ts. Never throws: Vantik writes are
    * a courtesy to the people tracking the issue, not part of the work.
@@ -1346,8 +1406,37 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
       if (message) {
         await cx.note(message, phase);
       }
+
+      // The tool waits for an answer file, so a refusal has to reach it.
+      for (const refused of applied.refusedQuestions ?? []) {
+        try {
+          await cx.sandbox.writeFile(
+            `${ANSWERS_DIR}/${refused.id}.json`,
+            JSON.stringify(
+              refusalMessage(cx.run.id, refused.id, refused.reason),
+            ),
+          );
+        } catch {
+          // The tool gives up at its own deadline.
+        }
+      }
     } catch {
       // Reported nowhere on purpose: a missing outbox is the normal case.
+    }
+
+    await this.redeliverAnswers(cx);
+  }
+
+  /** Writes again the answers whose file did not reach the guest. */
+  private async redeliverAnswers(cx: CycleContext): Promise<void> {
+    try {
+      for (const question of await this.questions.undelivered(cx.run.id)) {
+        if (await this.deliverAnswer(cx.run, question)) {
+          await this.questions.markDelivered(question.id);
+        }
+      }
+    } catch {
+      // Tried again at the next poll.
     }
   }
 
@@ -1449,6 +1538,9 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
     // is a crashed run, and on any later one it is a reason to stop and deliver
     // what the earlier passes built.
     let result;
+    // The agent can ask a person while it works, so what it queued is read
+    // as the pass runs and not only after it.
+    const stopPolling = this.pollOutbox(cx, options.phase);
 
     try {
       result = await cx.sandbox.exec(
@@ -1462,6 +1554,7 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         },
       );
     } catch (error) {
+      await stopPolling();
       // The steps it reported before it was stopped are on the timeline
       // already; only a last line without an LF is still to record.
       record(reader.flush());
@@ -1490,6 +1583,8 @@ export class HostedExecutor implements AgentExecutor, OnModuleInit {
         egressDenied: 0,
       };
     }
+
+    await stopPolling();
 
     // A runtime that does not stream gives the output only with the result.
     // Read then, before the exit code is judged, because a harness that died

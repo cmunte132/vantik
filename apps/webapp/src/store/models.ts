@@ -14,6 +14,7 @@ export enum MODELS {
   AgentRun = 'AgentRun',
   AgentRunEvent = 'AgentRunEvent',
   AgentSession = 'AgentSession',
+  AgentQuestion = 'AgentQuestion',
   IntegrationDefinition = 'IntegrationDefinition',
   IntegrationAccount = 'IntegrationAccount',
   LinkedIssue = 'LinkedIssue',

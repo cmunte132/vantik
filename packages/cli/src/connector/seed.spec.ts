@@ -78,6 +78,7 @@ describe('seeding a run directory', () => {
           checks: null,
           reachableHosts: [],
           maxOutputTokens: null,
+          questionWaitMs: null,
         },
       },
       { repoRoot: '/r', contextPath: '/c', outboxPath: '/o' },

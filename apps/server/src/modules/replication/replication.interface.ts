@@ -17,6 +17,8 @@ export const tablesToSendMessagesFor = new Map([
   [ModelNameEnum.AgentRunIteration, true],
   // Every harness's session on an issue, so the issue page lists them live.
   [ModelNameEnum.AgentSession, true],
+  // Questions that agents ask, so a person sees them the moment they open.
+  [ModelNameEnum.AgentQuestion, true],
   [ModelNameEnum.IssueHistory, true],
   [ModelNameEnum.UsersOnWorkspaces, true],
   [ModelNameEnum.IntegrationAccount, true],

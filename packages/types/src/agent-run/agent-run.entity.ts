@@ -323,6 +323,11 @@ export interface AgentRunLimits {
    * reasons about before delegating.
    */
   maxCycles?: number;
+  /**
+   * How long a question to a person waits for an answer, in milliseconds.
+   * Past it, the agent goes on alone. Thirty minutes when absent.
+   */
+  questionWaitMs?: number;
 }
 
 /**

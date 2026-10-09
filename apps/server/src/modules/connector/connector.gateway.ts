@@ -222,6 +222,11 @@ export class ConnectorGateway implements OnGatewayInit, OnGatewayDisconnect {
     return this.forward(socket, 'run.outbox', body);
   }
 
+  @SubscribeMessage('run.question')
+  question(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown) {
+    return this.forward(socket, 'run.question', body);
+  }
+
   @SubscribeMessage('run.finished')
   finished(@ConnectedSocket() socket: Socket, @MessageBody() body: unknown) {
     return this.forward(socket, 'run.finished', body);

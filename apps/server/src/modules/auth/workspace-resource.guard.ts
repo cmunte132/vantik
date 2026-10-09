@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 
 import {
+  assertAgentQuestionsVisible,
   assertChecklistItemsVisible,
   assertCyclesVisible,
   assertIssueCommentsVisible,
@@ -11,6 +12,7 @@ import {
   visibleTeamIds,
 } from 'common/team-access';
 import {
+  assertAgentQuestionInWorkspace,
   assertAgentRunInWorkspace,
   assertCapabilityInWorkspace,
   assertChecklistItemInWorkspace,
@@ -63,6 +65,7 @@ export class WorkspaceResourceGuard implements CanActivate {
       moduleRepoId,
       capabilityId,
       agentRunId,
+      agentQuestionId,
       labelId,
       viewId,
       workflowId,
@@ -117,6 +120,14 @@ export class WorkspaceResourceGuard implements CanActivate {
 
     if (agentRunId) {
       await assertAgentRunInWorkspace(this.prisma, agentRunId, workspaceId);
+    }
+
+    if (agentQuestionId) {
+      await assertAgentQuestionInWorkspace(
+        this.prisma,
+        agentQuestionId,
+        workspaceId,
+      );
     }
 
     const pageIds = unique([request.params?.pageId, request.query?.pageId]);
@@ -232,6 +243,11 @@ export class WorkspaceResourceGuard implements CanActivate {
     await assertChecklistItemsVisible(
       this.prisma,
       checklistItemId ? [checklistItemId] : [],
+      teamIds,
+    );
+    await assertAgentQuestionsVisible(
+      this.prisma,
+      agentQuestionId ? [agentQuestionId] : [],
       teamIds,
     );
     await assertCyclesVisible(this.prisma, cycleIds, teamIds);

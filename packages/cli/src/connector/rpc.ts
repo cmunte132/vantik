@@ -128,6 +128,7 @@ export class OmpDriver {
   private readonly splitter = new LineSplitter();
   private readonly pending = new Map<string, Pending>();
   private readonly listeners: Array<(event: OmpEvent) => void> = [];
+  private readonly uiListeners: Array<(request: OmpEvent) => void> = [];
   private readonly agentEndWaiters: Array<{
     resolve(): void;
     reject(error: Error): void;
@@ -195,6 +196,24 @@ export class OmpDriver {
     this.listeners.push(listener);
   }
 
+  /**
+   * Called with every `extension_ui_request`. These are not run events and
+   * are not passed to `onEvent`: the dialogs among them wait for a reply.
+   */
+  onUiRequest(listener: (request: OmpEvent) => void) {
+    this.uiListeners.push(listener);
+  }
+
+  /** Replies to a dialog: an `extension_ui_response` with the dialog's id. */
+  respondUi(id: string, body: Record<string, unknown>) {
+    if (this.done) {
+      return;
+    }
+    this.child.stdin.write(
+      `${JSON.stringify({ ...body, type: 'extension_ui_response', id })}\n`,
+    );
+  }
+
   get hasExited() {
     return this.done !== null;
   }
@@ -233,6 +252,11 @@ export class OmpDriver {
       this.running = false;
     }
     this.trackAssistant(event);
+    if (event.type === 'extension_ui_request') {
+      for (const listener of this.uiListeners) {
+        listener(event);
+      }
+    }
     if (!NOISE_EVENTS.has(event.type)) {
       for (const listener of this.listeners) {
         listener(event);

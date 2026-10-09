@@ -4,6 +4,7 @@ import type { PrismaService } from 'nestjs-prisma';
 
 import { CONNECTOR_PROTOCOL_VERSION } from '@vantikhq/types';
 
+import type { AgentQuestionsService } from 'modules/agent-questions/agent-questions.service';
 import { ConnectorRegistry } from 'modules/connector/connector.registry';
 import type { GitSourcesService } from 'modules/git/git-sources.service';
 
@@ -139,6 +140,11 @@ function build(
     },
     agentRun: { findFirst: jest.fn().mockResolvedValue(null) },
   };
+  const questions = {
+    create: jest.fn().mockResolvedValue({}),
+    undelivered: jest.fn().mockResolvedValue([]),
+    markDelivered: jest.fn().mockResolvedValue(undefined),
+  };
 
   const executor = new LocalExecutor(
     new ExecutorRegistry(),
@@ -149,10 +155,13 @@ function build(
     outbox as unknown as RunOutboxService,
     tokens as unknown as RunTokensService,
     prisma as unknown as PrismaService,
+    questions as unknown as AgentQuestionsService,
   );
 
   return {
     executor,
+    questions,
+    outbox,
     connectors,
     agentRuns,
     tokens,
@@ -437,11 +446,12 @@ describe('LocalExecutor message idempotency', () => {
 
   async function running() {
     const made = build();
-    online(made.connectors, ME);
+    const peer = online(made.connectors, ME);
     await made.executor.dispatch(makeRun());
     made.agentRuns.transition.mockClear();
     made.agentRuns.appendEvent.mockClear();
-    return made;
+    peer.emitWithAck.mockClear();
+    return { ...made, peer };
   }
 
   it('records run.started once however often it is sent', async () => {
@@ -480,6 +490,35 @@ describe('LocalExecutor message idempotency', () => {
     await executor.handle(PERSON, 'run.events', { ...batch, seq: 0 });
 
     expect(agentRuns.appendEvent.mock.calls).toHaveLength(first);
+  });
+
+  it('answers a refused question as cancelled, so the tool stops waiting', async () => {
+    const { executor, outbox, peer } = await running();
+    outbox.apply.mockResolvedValue({
+      applied: [],
+      failed: [],
+      refusedQuestions: [{ id: 'ask-1', reason: 'A run may ask 5 questions.' }],
+    });
+
+    await executor.handle(PERSON, 'run.started', started);
+    peer.emitWithAck.mockClear();
+    await executor.handle(PERSON, 'run.outbox', {
+      runId: 'run-1',
+      seq: 1,
+      lines: ['{"v":1,"type":"note","body":"x"}'],
+    });
+
+    expect(peer.emitWithAck).toHaveBeenCalledWith(
+      'run.answer',
+      expect.objectContaining({
+        runId: 'run-1',
+        questionId: 'ask-1',
+        source: 'tool',
+        status: 'cancelled',
+        reason: 'A run may ask 5 questions.',
+      }),
+      expect.anything(),
+    );
   });
 
   it('handles messages sent together in the order they were sent', async () => {

@@ -2,6 +2,7 @@ import { runInAction } from 'mobx';
 
 import type { SyncActionRecord } from 'common/types';
 
+import { saveAgentQuestionData } from 'store/agent-questions';
 import { saveAgentRunData, saveAgentRunEventData } from 'store/agent-runs';
 import { saveAgentSessionData } from 'store/agent-sessions';
 import { saveCapabilityData } from 'store/capabilities';
@@ -54,6 +55,7 @@ export const SAVE_HANDLERS: Record<string, Function> = {
   [MODELS.AgentRun]: saveAgentRunData,
   [MODELS.AgentRunEvent]: saveAgentRunEventData,
   [MODELS.AgentSession]: saveAgentSessionData,
+  [MODELS.AgentQuestion]: saveAgentQuestionData,
   [MODELS.Page]: savePageData,
   [MODELS.PageEntry]: savePageEntryData,
   [MODELS.IntegrationAccount]: saveIntegrationAccountData,
@@ -95,6 +97,7 @@ export function modelStoreMap(stores: StoreContextInstanceType) {
     [MODELS.AgentRun]: stores.agentRunsStore,
     [MODELS.AgentRunEvent]: stores.agentRunsStore,
     [MODELS.AgentSession]: stores.agentSessionsStore,
+    [MODELS.AgentQuestion]: stores.agentQuestionsStore,
     [MODELS.Page]: stores.pagesStore,
     [MODELS.PageEntry]: stores.pageEntriesStore,
     [MODELS.IntegrationAccount]: stores.integrationAccountsStore,

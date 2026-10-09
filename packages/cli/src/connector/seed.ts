@@ -40,6 +40,9 @@ export function buildPolicy(
     ...(typeof policy.maxOutputTokens === 'number'
       ? { maxOutputTokens: policy.maxOutputTokens }
       : {}),
+    ...(typeof policy.questionWaitMs === 'number'
+      ? { questionWaitMs: policy.questionWaitMs }
+      : {}),
   };
 }
 

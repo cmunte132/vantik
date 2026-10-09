@@ -118,11 +118,74 @@ describe('reading an agent’s outbox', () => {
   });
 });
 
+describe('reading the questions in an outbox', () => {
+  const ask = (over: Record<string, unknown> = {}) => ({
+    v: 1,
+    type: 'question',
+    id: 'ask-1',
+    questions: [{ id: 'q', prompt: 'Which?' }],
+    ...over,
+  });
+
+  it('reads a question with its deadline', () => {
+    const batch = readOutbox(
+      lines(ask({ expiresAt: '2026-10-09T10:00:00.000Z' })),
+      PACK,
+      newOutboxState(),
+    );
+
+    expect(batch.questions).toHaveLength(1);
+    expect(batch.questions[0].expiresAt?.toISOString()).toBe(
+      '2026-10-09T10:00:00.000Z',
+    );
+    expect(batch.refusedQuestions).toEqual([]);
+  });
+
+  it('collects the id of a refused question, so the agent can be told', () => {
+    const batch = readOutbox(
+      lines(
+        ask({
+          questions: [
+            {
+              id: 'q',
+              prompt: 'Which?',
+              options: [{ label: 'A' }, { label: 'A' }],
+            },
+          ],
+        }),
+        ask({ id: '../bad' }),
+      ),
+      PACK,
+      newOutboxState(),
+    );
+
+    expect(batch.questions).toEqual([]);
+    expect(batch.refusedQuestions.map((r) => r.id)).toEqual(['ask-1']);
+    expect(batch.rejected).toHaveLength(2);
+  });
+
+  it('refuses a sixth question of a run', () => {
+    const state = newOutboxState();
+    const batch = readOutbox(
+      lines(
+        ...[1, 2, 3, 4, 5, 6].map((n) => ask({ id: `ask-${n}` })),
+      ),
+      PACK,
+      state,
+    );
+
+    expect(batch.questions).toHaveLength(5);
+    expect(batch.refusedQuestions.map((r) => r.id)).toEqual(['ask-6']);
+  });
+});
+
 describe('applying an agent’s outbox', () => {
   const batch = {
     notes: [{ body: 'Found the cause.' }],
     facts: [{ content: 'Rows are paged by 500.', kind: 'FACT', citations: [] }],
     criteria: [],
+    questions: [],
+    refusedQuestions: [],
     rejected: [],
   } as never;
 
@@ -130,14 +193,95 @@ describe('applying an agent’s outbox', () => {
     const comments = { createIssueComment: jest.fn(async () => ({})) };
     const entries = { createEntry: jest.fn(async () => ({})) };
     const checklist = { updateChecklistItem: jest.fn(async () => ({})) };
+    const questions = { create: jest.fn(async () => ({})) };
     const outbox = new RunOutboxService(
       comments as never,
       entries as never,
       checklist as never,
+      questions as never,
     );
 
-    return { outbox, comments, entries, checklist };
+    return { outbox, comments, entries, checklist, questions };
   }
+
+  const run = {
+    id: 'run-1',
+    issueId: 'issue-1',
+    workspaceId: 'ws-1',
+    agentUserId: 'agent-1',
+    createdById: 'person-1',
+  };
+  const empty = {
+    notes: [] as unknown[],
+    facts: [] as unknown[],
+    criteria: [] as unknown[],
+    refusedQuestions: [] as unknown[],
+    rejected: [] as unknown[],
+  };
+  const asked = {
+    id: 'ask-1',
+    questions: [
+      {
+        id: 'q',
+        prompt: 'Use key sk-secret?',
+        options: [{ label: 'sk-secret', description: 'the sk-secret key' }],
+      },
+    ],
+  };
+
+  it('removes secrets from a question before it is stored', async () => {
+    const { outbox, questions } = build();
+
+    await outbox.apply(
+      run,
+      { ...empty, questions: [asked] } as never,
+      'scope',
+      (text) => text.replace(/sk-secret/g, '[secret]'),
+    );
+
+    expect(questions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assigneeId: 'person-1',
+        questions: [
+          {
+            id: 'q',
+            prompt: 'Use key [secret]?',
+            options: [{ label: '[secret]', description: 'the [secret] key' }],
+          },
+        ],
+      }),
+    );
+  });
+
+  it('reports a question that could not be stored', async () => {
+    const { outbox, questions } = build();
+    questions.create.mockRejectedValue(new Error('connection lost'));
+
+    const result = await outbox.apply(
+      run,
+      { ...empty, questions: [asked] } as never,
+      'scope',
+      (text) => text,
+    );
+
+    expect(result.refusedQuestions).toEqual([
+      { id: 'ask-1', reason: 'Vantik could not store it' },
+    ]);
+  });
+
+  it('refuses a question of a run nobody started', async () => {
+    const { outbox, questions } = build();
+
+    const result = await outbox.apply(
+      { ...run, createdById: null },
+      { ...empty, questions: [asked] } as never,
+      'scope',
+      (text) => text,
+    );
+
+    expect(questions.create).not.toHaveBeenCalled();
+    expect(result.refusedQuestions?.[0]?.reason).toMatch(/no person/);
+  });
 
   it('writes as the run’s agent and names the run, as before sessions', async () => {
     const { outbox, comments, entries } = build();

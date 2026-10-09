@@ -3,6 +3,7 @@ import type {
   ConnectorHello,
   ConnectorModel,
   ConnectorModels,
+  ConnectorRunAnswer,
   ConnectorRunDispatch,
 } from '@vantikhq/types';
 
@@ -16,12 +17,18 @@ export interface ConnectorPeer {
 
 /** The messages a connector sends about a run, by their wire name. */
 export type ConnectorRunEvent =
-  'run.started' | 'run.events' | 'run.entries' | 'run.outbox' | 'run.finished';
+  | 'run.started'
+  | 'run.events'
+  | 'run.entries'
+  | 'run.outbox'
+  | 'run.question'
+  | 'run.finished';
 
 /** The messages the server sends to a connector. */
 export interface ConnectorOutbound {
   'run.dispatch': ConnectorRunDispatch;
   'run.cancel': { runId: string };
+  'run.answer': ConnectorRunAnswer;
 }
 
 /** The part of a socket the registry needs, so a test needs no network. */

@@ -32,7 +32,11 @@ export type NotificationPreferences = Partial<
   Record<NotificationCategory, NotificationCategoryPreference>
 >;
 
-const CATEGORY_BY_TYPE: Record<NotificationActionType, NotificationCategory> = {
+// A type with no category is always delivered: an agent that waits on a
+// person is not a thing to mute.
+const CATEGORY_BY_TYPE: Partial<
+  Record<NotificationActionType, NotificationCategory>
+> = {
   [NotificationActionType.IssueAssigned]: 'assignments',
   [NotificationActionType.IssueUnAssigned]: 'assignments',
   [NotificationActionType.IssueNewComment]: 'comments',

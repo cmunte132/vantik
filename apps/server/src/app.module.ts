@@ -11,6 +11,7 @@ import { ErrorReportingInterceptor } from 'common/interceptors/error-reporting.i
 import { smtpFrom, smtpTransportOptions } from 'common/smtp';
 
 import { AgentHooksModule } from 'modules/agent-hooks/agent-hooks.module';
+import { AgentQuestionsModule } from 'modules/agent-questions/agent-questions.module';
 import { AgentRunsModule } from 'modules/agent-runs/agent-runs.module';
 import { AgentSessionsModule } from 'modules/agent-sessions/agent-sessions.module';
 import { AgentSkillModule } from 'modules/agent-skill/agent-skill.module';
@@ -105,6 +106,7 @@ import { AppService } from './app.service';
     ChecklistItemsModule,
     AgentRunsModule,
     AgentSessionsModule,
+    AgentQuestionsModule,
     IssueHistoryModule,
     LinkedIssueModule,
     IssueRelationModule,

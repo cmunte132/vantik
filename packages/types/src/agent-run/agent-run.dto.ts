@@ -46,6 +46,11 @@ export class AgentRunLimitsDto {
   @IsInt()
   @Min(1)
   maxCycles?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  questionWaitMs?: number;
 }
 
 export class AgentRunPhasesDto implements AgentRunPhases {

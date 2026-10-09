@@ -64,6 +64,12 @@ describe('getNotificationText', () => {
     );
   });
 
+  it('names the agent that asked a question', () => {
+    expect(
+      getNotificationText('Bot', NotificationTypeEnum.AgentQuestionAsked),
+    ).toBe('Question from Bot');
+  });
+
   it('capitalises the priority sentence like every other one', () => {
     expect(
       getNotificationText('Ada', NotificationTypeEnum.IssuePriorityChanged),

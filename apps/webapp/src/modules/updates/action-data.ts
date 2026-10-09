@@ -19,6 +19,8 @@ export interface NotificationActionData {
   userId?: string;
   /** IssueBlocks: the relation that says what blocks this issue. */
   issueRelationId?: string;
+  /** AgentQuestionAsked: the question that waits for an answer. */
+  agentQuestionId?: string;
 }
 
 /**
@@ -78,6 +80,10 @@ export function getNotificationText(
 
     case NotificationTypeEnum.IssueBlocks: {
       return `Marked as blocked by ${userName}`;
+    }
+
+    case NotificationTypeEnum.AgentQuestionAsked: {
+      return `Question from ${userName}`;
     }
   }
 

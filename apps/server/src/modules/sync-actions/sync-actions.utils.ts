@@ -124,6 +124,13 @@ export async function getWorkspaceId(
       });
       return agentSession.workspaceId;
 
+    // A question carries its own workspaceId, like a run.
+    case ModelName.AgentQuestion:
+      const agentQuestion = await prisma.agentQuestion.findUnique({
+        where: { id: modelId },
+      });
+      return agentQuestion.workspaceId;
+
     case ModelName.AgentRunEvent:
       const agentRunEvent = await prisma.agentRunEvent.findUnique({
         where: { id: modelId },
@@ -377,6 +384,16 @@ export async function getTeamId(
         })
       )?.issue?.teamId;
 
+    // A question is asked about one issue, and quotes its work, so it takes
+    // that issue's team. Anyone who can see the issue may answer it.
+    case ModelName.AgentQuestion:
+      return (
+        await prisma.agentQuestion.findUnique({
+          where: { id: modelId },
+          select: { issue: { select: { teamId: true } } },
+        })
+      )?.issue?.teamId;
+
     case ModelName.AgentRunEvent:
       return (
         await prisma.agentRunEvent.findUnique({
@@ -444,6 +461,7 @@ export async function getModelData(
     AgentRunEvent: prisma.agentRunEvent,
     AgentRunIteration: prisma.agentRunIteration,
     AgentSession: prisma.agentSession,
+    AgentQuestion: prisma.agentQuestion,
     Conversation: {
       findUnique: () => {
         if (userId) {

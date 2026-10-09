@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  FILTERS,
   type Step,
   changesOf,
   diffLines,
+  matches,
   phrase,
   stagesOf,
   toFeed,
@@ -446,5 +448,52 @@ describe('pullNumber', () => {
     expect(pullNumber('https://forgejo.example/o/r/pulls/12')).toBe('12');
     expect(pullNumber('https://gitlab.com/g/r/-/merge_requests/3')).toBe('3');
     expect(pullNumber(undefined)).toBeNull();
+  });
+});
+
+describe('questions to a person', () => {
+  const at = (s: number) =>
+    new Date(Date.UTC(2026, 0, 1, 0, 0, s)).toISOString();
+  const ask = (phase: string | undefined) => ({
+    id: 'q1',
+    phase,
+    at: at(50),
+    level: 'INFO',
+    message: 'Asked a person: Which one?',
+    data: { kind: 'question', agentQuestionId: 'aq1', status: 'OPEN' },
+  });
+
+  it('carries the question record on its step', () => {
+    const [step] = toSteps([ask('implement')]);
+
+    expect(step.kind).toBe('question');
+    expect(step.agentQuestionId).toBe('aq1');
+    expect(phrase(step)).toBe('Asked a person: Which one?');
+  });
+
+  it('keeps the question in the stage the run is in', () => {
+    const before = [
+      { id: 's', phase: 'setup', at: at(0), message: '' },
+      { id: 'w', phase: 'implement', at: at(10), message: '' },
+    ];
+    const states = (events: unknown[]) =>
+      stagesOf(
+        { status: 'RUNNING' },
+        events as never[],
+        Date.parse(at(60)),
+      ).map((stage) => stage.state);
+    const expected = ['done', 'now', 'todo', 'todo', 'todo'];
+
+    expect(states([...before, ask('implement')])).toEqual(expected);
+    // A question that names no phase must not move the run to another one.
+    expect(states([...before, ask(undefined)])).toEqual(expected);
+  });
+
+  it('shows under every filter, because it blocks the run', () => {
+    const [item] = toFeed([ask('implement')]);
+
+    for (const filter of FILTERS) {
+      expect(matches(item, filter)).toBe(true);
+    }
   });
 });

@@ -14,6 +14,10 @@ import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
+import { AgentQuestionCard } from 'modules/agent-questions/agent-question-card';
+
+import { useContextStore } from 'store/global-context-provider';
+
 import {
   FILTERS,
   type FeedItem,
@@ -285,9 +289,31 @@ const Title = ({
   </div>
 );
 
+/**
+ * A question to a person. While it is open the run view pins its form above
+ * the feed, so the row only says it was asked. Once it has an answer, or has
+ * expired, the card shows here, at the point in the work where it happened.
+ */
+const QuestionBody = observer(({ step }: { step: Step }) => {
+  const { agentQuestionsStore } = useContextStore();
+  const question = agentQuestionsStore.getQuestionById(step.agentQuestionId);
+
+  if (!question || question.status === 'OPEN') {
+    return <Title title={step.message} />;
+  }
+
+  return (
+    <AgentQuestionCard questionId={question.id} hideIssue className="my-0.5" />
+  );
+});
+
 const StepBody = ({ step, running }: { step: Step; running: boolean }) => {
   if (step.kind === 'note') {
     return <Note text={step.text ?? step.message} />;
+  }
+
+  if (step.kind === 'question' && step.agentQuestionId) {
+    return <QuestionBody step={step} />;
   }
 
   const many = step.count > 1;

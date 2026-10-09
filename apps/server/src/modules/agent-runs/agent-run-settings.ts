@@ -79,6 +79,7 @@ const INTEGER_LIMIT_NAMES = [
   'maxTokens',
   'maxIterations',
   'maxCycles',
+  'questionWaitMs',
 ] as const;
 
 /**

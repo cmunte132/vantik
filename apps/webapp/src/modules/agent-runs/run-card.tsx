@@ -4,6 +4,8 @@ import { observer } from 'mobx-react-lite';
 import React from 'react';
 import ReactTimeAgo from 'react-time-ago';
 
+import { AgentQuestionCard } from 'modules/agent-questions/agent-question-card';
+
 import { useRouter } from 'common/router';
 import type { User } from 'common/types';
 import { getUserIcon } from 'common/user-util';
@@ -43,7 +45,7 @@ interface Props {
  */
 export const RunCard = observer(({ run, user }: Props) => {
   const router = useRouter();
-  const { agentRunsStore } = useContextStore();
+  const { agentRunsStore, agentQuestionsStore } = useContextStore();
 
   const { mutate: cancelRun } = useCancelRunMutation();
   // A retry is a new run with its own page; go there, or the button looks
@@ -85,6 +87,9 @@ export const RunCard = observer(({ run, user }: Props) => {
 
   const events = live ? agentRunsStore.getEvents(run.id) : [];
   const latest = events[events.length - 1];
+  const openQuestions = (agentQuestionsStore.openQuestions as any[]).filter(
+    (question) => question.agentRunId === run.id,
+  );
 
   return (
     <div className="flex w-full flex-col gap-2 rounded-md bg-grayAlpha-100 p-3">
@@ -113,6 +118,15 @@ export const RunCard = observer(({ run, user }: Props) => {
           )}
         </div>
       )}
+
+      {/* A question blocks the run, so it is answered here, on the issue. */}
+      {openQuestions.map((question: any) => (
+        <AgentQuestionCard
+          key={question.id}
+          questionId={question.id}
+          hideIssue
+        />
+      ))}
 
       {/* A failed run gets the same room as a successful one. It is the case
           everybody skips and the only one where somebody has to do something

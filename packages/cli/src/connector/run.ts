@@ -6,10 +6,23 @@
  * The worktree stays after the run, so the person can resume in it.
  */
 import type {
+  ConnectorAck,
+  ConnectorRunAnswer,
   ConnectorRunDispatch,
   ConnectorRunOutcome,
 } from '@vantikhq/types';
 
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
+import { AGENT_QUESTION_EXTERNAL_ID_PATTERN } from '@vantikhq/types';
+
+import {
+  dialogResponse,
+  dialogToQuestion,
+  type OmpUiRequest,
+  type PendingDialog,
+} from './dialogs';
 import { FileTail, ompArgs, ompEnv, spawnOmp } from './omp';
 import { AckedQueue, type QueueTransport } from './queue';
 import { OmpDriver, type OmpChildLike, type OmpEvent } from './rpc';
@@ -60,6 +73,9 @@ export class LocalRun {
   private deadlineHit = false;
   private abortNow: (() => void) | undefined;
   private finished: Promise<void> | undefined;
+  private activeDriver: OmpDriver | undefined;
+  /** Dialogs of omp that wait for a person, by the id of their question. */
+  private readonly dialogs = new Map<string, PendingDialog>();
 
   constructor(
     private readonly dispatch: ConnectorRunDispatch,
@@ -96,6 +112,75 @@ export class LocalRun {
       this.deps.log(`Run ${this.runId} broke: ${String(error)}`);
     });
     return this.finished;
+  }
+
+  /**
+   * What became of a question for a person. For the `ask_person` tool, it
+   * writes `answers/<id>.json` in the run directory, next to the outbox, where
+   * the tool is waiting. For an omp dialog, it replies to the dialog. The file
+   * is written under another name and renamed, so the tool never reads half
+   * of it.
+   */
+  answer(message: ConnectorRunAnswer): ConnectorAck {
+    const id = String(message.questionId);
+
+    // The id became a file name, and the agent chose it.
+    if (!AGENT_QUESTION_EXTERNAL_ID_PATTERN.test(id)) {
+      return { ok: false, reason: 'The question id is not a plain token.' };
+    }
+
+    if (message.source === 'omp_dialog') {
+      const dialog = this.dialogs.get(id);
+
+      // Already answered, or omp is gone: nothing is waiting.
+      if (dialog) {
+        this.dialogs.delete(id);
+        this.activeDriver?.respondUi(
+          dialog.requestId,
+          dialogResponse(dialog, message),
+        );
+      }
+      return { ok: true };
+    }
+
+    try {
+      const directory = path.join(
+        runDirFor(this.deps.home ?? vantikHome(), this.runId),
+        'answers',
+      );
+      mkdirSync(directory, { recursive: true });
+      const target = path.join(directory, `${id}.json`);
+      const temporary = `${target}.tmp`;
+      writeFileSync(
+        temporary,
+        JSON.stringify({
+          status: message.status,
+          text: message.text,
+          answers: message.answers,
+          ...(message.reason ? { reason: message.reason } : {}),
+        }),
+      );
+      renameSync(temporary, target);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, reason: `Could not write the answer: ${String(error)}` };
+    }
+  }
+
+  /** A dialog of omp that waits for a person becomes a question. */
+  private onDialog(request: OmpUiRequest) {
+    const question = dialogToQuestion(request);
+
+    // `notify`, `setStatus` and the like show something and wait for nobody.
+    if (!question) {
+      return;
+    }
+
+    this.dialogs.set(question.questionId, question.dialog);
+    this.queue.send('run.question', {
+      id: question.questionId,
+      questions: question.items,
+    });
   }
 
   cancel() {
@@ -157,6 +242,8 @@ export class LocalRun {
       );
       driver = new OmpDriver(child);
       const omp = driver;
+      this.activeDriver = omp;
+      omp.onUiRequest((request) => this.onDialog(request as unknown as OmpUiRequest));
 
       // Batched events.
       let events: unknown[] = [];

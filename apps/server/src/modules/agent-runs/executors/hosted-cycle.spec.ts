@@ -321,6 +321,11 @@ function build(
     facts: [] as string[],
     ticks: [] as string[],
   };
+  const questions = {
+    create: jest.fn(async (): Promise<unknown> => ({})),
+    undelivered: jest.fn(async (): Promise<unknown[]> => []),
+    markDelivered: jest.fn(async (): Promise<void> => undefined),
+  };
   const outbox = new RunOutboxService(
     {
       createIssueComment: jest.fn(
@@ -343,6 +348,7 @@ function build(
         },
       ),
     } as never,
+    questions as never,
   );
 
   const pushWorkTree = jest.fn(async (request: { summary: string }) => {
@@ -388,9 +394,11 @@ function build(
     } as never,
     agentRuns as never,
     outbox as never,
+    questions as never,
   );
 
   const run = {
+    createdById: 'person-1',
     id: RUN,
     workspaceId: WORKSPACE,
     issueId: 'issue-1',
@@ -436,6 +444,7 @@ function build(
     handbacks,
     spends,
     vantikWrites,
+    questions,
     final: () => transitions[transitions.length - 1],
   };
 }
@@ -1300,5 +1309,74 @@ describe('what the agent writes to Vantik from the sandbox', () => {
     expect(harness.final().status).toBe('NEEDS_REVIEW');
     expect(harness.vantikWrites.ticks).toEqual([]);
     expect(harness.vantikWrites.notes).toHaveLength(1);
+  });
+});
+
+describe('questions to a person from the sandbox', () => {
+  const ask = (id: string, questions: unknown) =>
+    `${JSON.stringify({ v: 1, type: 'question', id, questions })}\n`;
+  const ITEMS = [{ id: 'q', prompt: 'Which?' }];
+
+  it('opens the question for the person who started the run', async () => {
+    const harness = build({
+      verdicts: { 1: ACCEPTED },
+      outbox: { 1: ask('ask-1', ITEMS) },
+    });
+
+    await harness.execute();
+
+    expect(harness.questions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ externalId: 'ask-1', assigneeId: 'person-1' }),
+    );
+  });
+
+  it('tells the tool when Vantik refuses a question, so it stops waiting', async () => {
+    const harness = build({
+      verdicts: { 1: ACCEPTED },
+      outbox: { 1: ask('ask-1', ITEMS) },
+    });
+    harness.questions.create.mockRejectedValue(
+      new RangeError('A run may ask 5 questions.'),
+    );
+
+    await harness.execute();
+
+    const file = JSON.parse(harness.guest.files.get('answers/ask-1.json')!);
+    expect(file).toMatchObject({
+      status: 'cancelled',
+      reason: 'A run may ask 5 questions.',
+    });
+  });
+
+  it('tells the tool about a line that failed the checks', async () => {
+    const harness = build({
+      verdicts: { 1: ACCEPTED },
+      outbox: { 1: ask('ask-2', [{ id: 'q' }]) },
+    });
+
+    await harness.execute();
+
+    expect(harness.questions.create).not.toHaveBeenCalled();
+    expect(harness.guest.files.get('answers/ask-2.json')).toContain('cancelled');
+  });
+
+  it('writes an answer again when its file did not reach the guest', async () => {
+    const harness = build({ verdicts: { 1: ACCEPTED }, outbox: { 1: ask('ask-3', ITEMS) } });
+    harness.questions.undelivered.mockResolvedValue([
+      {
+        id: 'aq3',
+        agentRunId: RUN,
+        externalId: 'ask-3',
+        source: 'tool',
+        status: 'ANSWERED',
+        questions: ITEMS,
+        answers: [{ id: 'q', selected: [], other: 'B' }],
+      },
+    ]);
+
+    await harness.execute();
+
+    expect(harness.guest.files.get('answers/ask-3.json')).toContain('answered');
+    expect(harness.questions.markDelivered).toHaveBeenCalledWith('aq3');
   });
 });

@@ -54,6 +54,7 @@ export function extensionSources(): Array<{ name: string; source: string }> {
 export function guardrailPolicy(
   pack: ContextPack,
   egressHosts: string[] = [],
+  questionWaitMs?: number,
 ): GuardrailPolicy {
   return {
     repoRoot: '/workspace/repo',
@@ -63,6 +64,7 @@ export function guardrailPolicy(
     contextPath: `/workspace/${CONTEXT_PATH}`,
     outboxPath: `/workspace/${OUTBOX_PATH}`,
     maxOutputTokens: AGENT_MAX_OUTPUT_TOKENS,
+    ...(questionWaitMs ? { questionWaitMs } : {}),
   };
 }
 
@@ -70,12 +72,17 @@ export function guardrailPolicy(
 export function extensionFiles(
   pack: ContextPack,
   egressHosts: string[] = [],
+  questionWaitMs?: number,
 ): Record<string, string> {
   return {
     ...Object.fromEntries(
       extensionSources().map(({ name, source }) => [name, source]),
     ),
-    [POLICY_PATH]: JSON.stringify(guardrailPolicy(pack, egressHosts), null, 2),
+    [POLICY_PATH]: JSON.stringify(
+      guardrailPolicy(pack, egressHosts, questionWaitMs),
+      null,
+      2,
+    ),
   };
 }
 

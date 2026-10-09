@@ -2,8 +2,17 @@ import type { ContextPack } from './context-pack.service';
 import type { OutboxItem } from './pi-extension/vantik-extension';
 
 import { Injectable, Logger } from '@nestjs/common';
-import { PageEntryKindEnum } from '@vantikhq/types';
+import {
+  AGENT_QUESTION_DEFAULT_WAIT_MS,
+  AGENT_QUESTION_EXTERNAL_ID_PATTERN,
+  AGENT_QUESTION_LIMITS,
+  AGENT_QUESTION_MAX_WAIT_MS,
+  type AgentQuestionItem,
+  PageEntryKindEnum,
+  parseAgentQuestions,
+} from '@vantikhq/types';
 
+import { AgentQuestionsService } from 'modules/agent-questions/agent-questions.service';
 import ChecklistItemsService from 'modules/checklist-items/checklist-items.service';
 import IssueCommentsService from 'modules/issue-comments/issue-comments.service';
 import PageEntriesService from 'modules/pages/page-entries.service';
@@ -23,7 +32,10 @@ import PageEntriesService from 'modules/pages/page-entries.service';
  * - a note becomes a comment on the run's issue, and only that issue;
  * - a fact becomes a PROPOSED entry, which triage still has to accept;
  * - a criterion is ticked only when the run succeeds, because "met" is a claim
- *   the run's checks and reviewer have to stand behind.
+ *   the run's checks and reviewer have to stand behind;
+ * - a question becomes an open question for the person who started the run.
+ *   The agent waits for the answer, so it is applied at once and not at the
+ *   end of the pass.
  */
 
 export const OUTBOX_LIMITS = {
@@ -36,6 +48,8 @@ export const OUTBOX_LIMITS = {
   citations: 5,
   /** Lines read in one run, valid or not. */
   lines: 200,
+  /** Questions one run may ask a person. */
+  questions: AGENT_QUESTION_LIMITS.perRun,
 };
 
 export interface OutboxRejection {
@@ -51,6 +65,14 @@ export interface OutboxBatch {
     citations: Array<{ path: string; lines?: string }>;
   }>;
   criteria: Array<{ id: string; evidence: string }>;
+  questions: Array<{
+    id: string;
+    questions: AgentQuestionItem[];
+    /** The latest moment the agent still waits, from its own clock. */
+    expiresAt?: Date;
+  }>;
+  /** Question lines that were refused, by the id the agent gave. */
+  refusedQuestions: Array<{ id: string; reason: string }>;
   rejected: OutboxRejection[];
 }
 
@@ -60,6 +82,7 @@ export interface OutboxState {
   lines: number;
   notes: number;
   facts: number;
+  questions: number;
   /** Criteria claimed met, by id, applied when the run succeeds. */
   criteria: Map<string, string>;
 }
@@ -68,6 +91,7 @@ export const newOutboxState = (): OutboxState => ({
   lines: 0,
   notes: 0,
   facts: 0,
+  questions: 0,
   criteria: new Map(),
 });
 
@@ -86,6 +110,8 @@ export function readOutbox(
     notes: [],
     facts: [],
     criteria: [],
+    questions: [],
+    refusedQuestions: [],
     rejected: [],
   };
   // The piece after the last newline is either empty or a line still being
@@ -164,6 +190,40 @@ export function readOutbox(
       continue;
     }
 
+    if (item.type === 'question') {
+      const id = typeof item.id === 'string' ? item.id.trim() : '';
+      const questions = parseAgentQuestions(item.questions);
+
+      const usable = AGENT_QUESTION_EXTERNAL_ID_PATTERN.test(id);
+      // The agent waits on a usable id, so it is told when the line is refused.
+      const refuse = (reason: string, detail = reason) => {
+        batch.rejected.push({ line, reason });
+        if (usable) {
+          batch.refusedQuestions.push({ id, reason: detail });
+        }
+      };
+      const deadline =
+        typeof item.expiresAt === 'string' ? new Date(item.expiresAt) : null;
+
+      if (!usable) {
+        refuse('question without a usable id');
+      } else if (typeof questions === 'string') {
+        refuse('malformed question', questions);
+      } else if (state.questions >= OUTBOX_LIMITS.questions) {
+        refuse('too many questions', 'a run may ask only a few questions');
+      } else {
+        state.questions += 1;
+        batch.questions.push({
+          id,
+          questions,
+          ...(deadline && !Number.isNaN(deadline.getTime())
+            ? { expiresAt: deadline }
+            : {}),
+        });
+      }
+      continue;
+    }
+
     batch.rejected.push({ line, reason: 'unknown record' });
   }
 
@@ -211,6 +271,10 @@ export interface OutboxSession {
   actorUserId: string;
   /** Set when the session is a hosted run. */
   runId?: string;
+  /** The person a question is for. */
+  requesterId?: string | null;
+  /** How long a question waits for a person. */
+  questionWaitMs?: number;
 }
 
 /** The run an outbox belongs to, as far as applying it is concerned. */
@@ -219,6 +283,23 @@ export interface OutboxRun {
   issueId: string;
   workspaceId: string;
   agentUserId: string;
+  /** The member who started the run. A question is for this person. */
+  createdById?: string | null;
+  /** The run's config, which can set how long a question waits. */
+  config?: unknown;
+}
+
+/**
+ * How long the run's questions wait for a person. A run sets it with
+ * `limits.questionWaitMs`; thirty minutes when it does not.
+ */
+export function questionWaitMs(config: unknown): number {
+  const ms = (config as { limits?: { questionWaitMs?: unknown } } | null)
+    ?.limits?.questionWaitMs;
+
+  return typeof ms === 'number' && Number.isInteger(ms) && ms > 0
+    ? Math.min(ms, AGENT_QUESTION_MAX_WAIT_MS)
+    : AGENT_QUESTION_DEFAULT_WAIT_MS;
 }
 
 /** A hosted run as an outbox session. */
@@ -227,7 +308,31 @@ export const sessionOfRun = (run: OutboxRun): OutboxSession => ({
   workspaceId: run.workspaceId,
   actorUserId: run.agentUserId,
   runId: run.id,
+  requesterId: run.createdById ?? null,
+  questionWaitMs: questionWaitMs(run.config),
 });
+
+/** The text of a question, without the secrets the guest could have seen. */
+function scrubQuestions(
+  questions: AgentQuestionItem[],
+  scrub: (text: string) => string,
+): AgentQuestionItem[] {
+  return questions.map((item) => ({
+    ...item,
+    prompt: scrub(item.prompt),
+    ...(item.options
+      ? {
+          options: item.options.map((option) => ({
+            ...option,
+            label: scrub(option.label),
+            ...(option.description !== undefined
+              ? { description: scrub(option.description) }
+              : {}),
+          })),
+        }
+      : {}),
+  }));
+}
 
 const isRun = (who: OutboxRun | OutboxSession): who is OutboxRun =>
   'agentUserId' in who;
@@ -235,6 +340,8 @@ const isRun = (who: OutboxRun | OutboxSession): who is OutboxRun =>
 export interface OutboxResult {
   applied: string[];
   failed: string[];
+  /** Questions that no person will see: the agent has to be told. */
+  refusedQuestions?: Array<{ id: string; reason: string }>;
 }
 
 @Injectable()
@@ -245,11 +352,12 @@ export class RunOutboxService {
     private comments: IssueCommentsService,
     private entries: PageEntriesService,
     private checklist: ChecklistItemsService,
+    private questions: AgentQuestionsService,
   ) {}
 
   /**
-   * Posts the notes and proposes the facts of one batch. Criteria wait for
-   * `tickCriteria`. Never throws: one write that fails is reported, and the
+   * Posts the notes, proposes the facts and opens the questions of one batch.
+   * Criteria wait for `tickCriteria`. Never throws: one write that fails is reported, and the
    * rest still go.
    *
    * `scrub` removes secrets the guest could have seen from anything posted.
@@ -261,7 +369,11 @@ export class RunOutboxService {
     scrub: (text: string) => string,
   ): Promise<OutboxResult> {
     const session = isRun(who) ? sessionOfRun(who) : who;
-    const result: OutboxResult = { applied: [], failed: [] };
+    const result: OutboxResult = {
+      applied: [],
+      failed: [],
+      refusedQuestions: [...batch.refusedQuestions],
+    };
 
     for (const note of batch.notes) {
       await this.attempt(result, 'note', () =>
@@ -298,6 +410,40 @@ export class RunOutboxService {
           session.workspaceId,
         ),
       );
+    }
+
+    for (const asked of batch.questions) {
+      await this.attempt(result, 'question', async () => {
+        try {
+          if (!session.requesterId) {
+            // Not the issue's assignee: the question is for whoever started
+            // the run, and a run nobody started has nobody to ask.
+            throw new RangeError('The run has no person to ask.');
+          }
+
+          await this.questions.create({
+          workspaceId: session.workspaceId,
+          issueId: session.issueId,
+          agentRunId: session.runId ?? null,
+          agentSessionId: session.sessionId ?? null,
+          externalId: asked.id,
+          source: 'tool',
+          questions: scrubQuestions(asked.questions, scrub),
+          assigneeId: session.requesterId,
+          waitMs: session.questionWaitMs,
+          ...(asked.expiresAt ? { agentDeadline: asked.expiresAt } : {}),
+        });
+        } catch (error) {
+          result.refusedQuestions?.push({
+            id: asked.id,
+            reason:
+              error instanceof RangeError
+                ? error.message
+                : 'Vantik could not store it',
+          });
+          throw error;
+        }
+      });
     }
 
     return result;

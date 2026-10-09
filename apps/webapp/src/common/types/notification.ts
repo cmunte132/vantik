@@ -5,6 +5,7 @@ export enum NotificationTypeEnum {
   IssuePriorityChanged = 'IssuePriorityChanged',
   IssueNewComment = 'IssueNewComment',
   IssueBlocks = 'IssueBlocks',
+  AgentQuestionAsked = 'AgentQuestionAsked',
 }
 
 export interface NotificationType {

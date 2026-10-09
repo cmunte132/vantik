@@ -5,6 +5,7 @@ export enum NotificationActionTypeEnum {
   IssuePriorityChanged = 'IssuePriorityChanged',
   IssueNewComment = 'IssueNewComment',
   IssueBlocks = 'IssueBlocks',
+  AgentQuestionAsked = 'AgentQuestionAsked',
 }
 
 export const NotificationActionType = {
@@ -14,6 +15,7 @@ export const NotificationActionType = {
   IssuePriorityChanged: 'IssuePriorityChanged',
   IssueNewComment: 'IssueNewComment',
   IssueBlocks: 'IssueBlocks',
+  AgentQuestionAsked: 'AgentQuestionAsked',
 };
 
 export type NotificationActionType =

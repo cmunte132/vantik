@@ -236,6 +236,33 @@ export async function assertChecklistItemsVisible(
   }
 }
 
+/**
+ * This function proves that each agent question was asked on an issue in a
+ * team the caller can see.
+ */
+export async function assertAgentQuestionsVisible(
+  prisma: PrismaService,
+  questionIds: string[],
+  teamIds: string[],
+): Promise<void> {
+  if (questionIds.length === 0) {
+    return;
+  }
+
+  const visible = await prisma.agentQuestion.findMany({
+    where: { id: { in: questionIds }, issue: { teamId: { in: teamIds } } },
+    select: { id: true },
+  });
+  const found = new Set(visible.map((question) => question.id));
+  const missing = questionIds.find((id) => !found.has(id));
+
+  if (missing) {
+    throw new NotFoundException({
+      message: `Agent question ${missing} not found`,
+    });
+  }
+}
+
 /** This function proves that each cycle sits in a team the caller can see. */
 export async function assertCyclesVisible(
   prisma: PrismaService,

@@ -246,6 +246,30 @@ export async function assertAgentRunInWorkspace(
   }
 }
 
+/**
+ * Proves an agent question belongs to the given workspace.
+ *
+ * The answer route addresses the row by its own id and carries no issue, so
+ * without this a caller could answer a question that was asked in someone
+ * else's workspace.
+ */
+export async function assertAgentQuestionInWorkspace(
+  prisma: PrismaService,
+  agentQuestionId: string,
+  workspaceId: string,
+): Promise<void> {
+  const question = await prisma.agentQuestion.findFirst({
+    where: { id: agentQuestionId, deleted: null, workspaceId },
+    select: { id: true },
+  });
+
+  if (!question) {
+    throw new NotFoundException({
+      message: `Agent question ${agentQuestionId} not found`,
+    });
+  }
+}
+
 /** Proves a page belongs to the given workspace. */
 export async function assertPageInWorkspace(
   prisma: PrismaService,

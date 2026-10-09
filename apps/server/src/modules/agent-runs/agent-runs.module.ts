@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 
+import { AgentQuestionsModule } from 'modules/agent-questions/agent-questions.module';
 import { ChecklistItemsModule } from 'modules/checklist-items/checklist-items.module';
 import { ConnectorModule } from 'modules/connector/connector.module';
 import { GitModule } from 'modules/git/git.module';
@@ -12,6 +13,7 @@ import { PagesModule } from 'modules/pages/pages.module';
 import { UsersService } from 'modules/users/users.service';
 
 import { AgentDelegationService } from './agent-delegation.service';
+import { AgentQuestionBridge } from './agent-question.bridge';
 import { AgentRunsController } from './agent-runs.controller';
 import { AGENT_RUNS_QUEUE } from './agent-runs.interface';
 import { AgentRunsProcessor, AgentRunsScheduler } from './agent-runs.processor';
@@ -46,6 +48,8 @@ import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
     GitModule,
     // The sockets local connectors dial, and who is online.
     ConnectorModule,
+    // Questions that agents ask people, and where their answers go.
+    AgentQuestionsModule,
   ],
   controllers: [AgentRunsController, CredentialsController],
   providers: [
@@ -56,6 +60,7 @@ import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
     RunHandbackService,
     RunCleanupService,
     RunOutboxService,
+    AgentQuestionBridge,
     ExecutorRegistry,
     HostedExecutor,
     LocalExecutor,

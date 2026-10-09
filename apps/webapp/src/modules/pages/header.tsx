@@ -8,6 +8,8 @@ import { Button } from '@vantikhq/ui/components/button';
 import { observer } from 'mobx-react-lite';
 import * as React from 'react';
 
+import { useOpenQuestions } from 'modules/agent-questions/use-open-questions';
+
 import { HeaderLayout } from 'common/header-layout';
 import { Link, toHref, useRouter } from 'common/router';
 
@@ -125,7 +127,8 @@ export const NeedsYou = observer(() => {
   const currentUser = React.useContext(UserContext);
   const { users } = useAllUsers(false);
   const { data } = useKnowledgeInbox('open');
-  const count = data?.counts.open ?? 0;
+  const questions = useOpenQuestions();
+  const count = (data?.counts.open ?? 0) + questions.count;
   const top = data?.assignees[0];
   const topName = top
     ? top.userId === currentUser?.id

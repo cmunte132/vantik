@@ -12,6 +12,7 @@ export const Notification = types.model({
     'IssuePriorityChanged',
     'IssueNewComment',
     'IssueBlocks',
+    'AgentQuestionAsked',
   ]),
   userId: types.string,
   issueId: types.union(types.string, types.null),

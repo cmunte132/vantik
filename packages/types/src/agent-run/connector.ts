@@ -16,6 +16,8 @@
  * message as idempotent per (runId, seq).
  */
 
+import type { AgentQuestionAnswer, AgentQuestionItem } from '../agent-question';
+
 /** The socket.io namespace the connector connects to. */
 export const CONNECTOR_NAMESPACE = '/connector';
 
@@ -136,6 +138,20 @@ export interface ConnectorRunOutbox {
   lines: string[];
 }
 
+/**
+ * A question for a person that omp opened itself: a select, a confirmation or
+ * an input dialog. The server stores it as an agent question with the source
+ * `omp_dialog`, and answers it with `run.answer` when a person has answered.
+ * The questions that the extension tool asks come through the outbox instead.
+ */
+export interface ConnectorRunQuestion {
+  runId: string;
+  seq: number;
+  /** The connector's id for the dialog. Unique per run. */
+  id: string;
+  questions: AgentQuestionItem[];
+}
+
 export type ConnectorRunOutcome = 'succeeded' | 'failed' | 'cancelled';
 
 export interface ConnectorRunFinished {
@@ -185,6 +201,8 @@ export interface ConnectorRunDispatch {
     checks: unknown;
     reachableHosts: string[];
     maxOutputTokens: number | null;
+    /** How long `ask_person` waits for a person. Null for the default. */
+    questionWaitMs: number | null;
   };
   /**
    * The model the person chose at dispatch. Each field is null to leave omp's
@@ -206,4 +224,26 @@ export interface ConnectorRunDispatch {
 
 export interface ConnectorRunCancel {
   runId: string;
+}
+
+/**
+ * What became of a question for a person, for the connector to hand to the
+ * agent. It carries a run and no seq: the connector acknowledges it, and the
+ * server sends it again after a reconnect until it is acknowledged.
+ *
+ * For a question from the tool, the connector writes `answers/<questionId>.json`
+ * in the run directory, next to the outbox. For an omp dialog, it replies to
+ * the dialog. `expired` and `cancelled` mean that nobody answered.
+ */
+export interface ConnectorRunAnswer {
+  runId: string;
+  /** The `id` of the question, as the connector or the extension gave it. */
+  questionId: string;
+  source: 'tool' | 'omp_dialog';
+  status: 'answered' | 'expired' | 'cancelled';
+  answers: AgentQuestionAnswer[];
+  /** The answers as text, as the tool returns them to the agent. */
+  text: string;
+  /** Why Vantik refused the question, when it did. Set with `cancelled`. */
+  reason?: string;
 }

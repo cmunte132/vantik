@@ -4,7 +4,7 @@ import type {
   ExecutorRequester,
 } from './executor.interface';
 import type { ContextPack } from '../context-pack.service';
-import type { AgentRun } from '@prisma/client';
+import type { AgentQuestion, AgentRun } from '@prisma/client';
 import type {
   ConnectorAck,
   ConnectorHello,
@@ -13,11 +13,13 @@ import type {
   ConnectorRunEvents,
   ConnectorRunFinished,
   ConnectorRunOutbox,
+  ConnectorRunQuestion,
   ConnectorRunStarted,
 } from '@vantikhq/types';
 
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
+  AGENT_QUESTION_EXTERNAL_ID_PATTERN,
   type AgentRunFailure,
   isSafeModelId,
   LOCAL_EXECUTOR_KEY,
@@ -26,6 +28,7 @@ import {
 import { LOCAL_REPO_SLUG } from 'integrations/local-repo/repositories';
 import { PrismaService } from 'nestjs-prisma';
 
+import { AgentQuestionsService } from 'modules/agent-questions/agent-questions.service';
 import { agentSettings } from 'modules/auth/agent-scope';
 import { ConnectorRegistry } from 'modules/connector/connector.registry';
 import type {
@@ -45,10 +48,12 @@ import { RunHandbackService } from '../run-handback.service';
 import {
   newOutboxState,
   OutboxState,
+  questionWaitMs,
   readOutbox,
   RunOutboxService,
 } from '../run-outbox';
 import { RunTokensService } from '../run-tokens.service';
+import { answerMessage, refusalMessage } from './question-answer';
 import { ExecutorRegistry } from './executor.registry';
 import { describeOutbox, factScope, spentFields } from './hosted.executor';
 import { PiEventReader, type ParsedStep } from './pi-events';
@@ -71,6 +76,9 @@ export const CONNECTOR_GRACE_MS = 2 * 60 * 1000;
 
 /** How long the connector has to acknowledge `run.dispatch`. */
 const DISPATCH_ACK_MS = 30 * 1000;
+
+/** How long the connector has to acknowledge `run.answer`. */
+const ANSWER_ACK_MS = 10 * 1000;
 
 /** Most events, entries or lines one message may carry. */
 const MAX_BATCH = 5000;
@@ -143,6 +151,7 @@ export class LocalExecutor
     private outbox: RunOutboxService,
     private tokens: RunTokensService,
     private prisma: PrismaService,
+    private questions: AgentQuestionsService,
   ) {}
 
   onModuleInit() {
@@ -346,7 +355,7 @@ export class LocalExecutor
         branch: `agent/${String(pack.issue?.key ?? run.issueId).toLowerCase()}`,
         prompt: buildAgentPrompt(pack),
         context: pack,
-        policy: policyFor(pack, config.egressHosts),
+        policy: policyFor(pack, config.egressHosts, config),
         model: modelOf(config),
         token: {
           value: token.value,
@@ -388,6 +397,49 @@ export class LocalExecutor
     }
   }
 
+  /**
+   * Hands the end of a question to the connector. The connector writes the
+   * answer file for the tool, or replies to the omp dialog. Returns false
+   * when the connector is away or does not acknowledge; the question is then
+   * sent again when it comes back.
+   */
+  async deliverAnswer(
+    run: AgentRun,
+    question: AgentQuestion,
+  ): Promise<boolean> {
+    const peer = this.runs.get(run.id)?.peer ?? (await this.personOf(run));
+
+    if (!peer) {
+      return false;
+    }
+
+    const ack = await this.connectors.send(
+      peer,
+      'run.answer',
+      answerMessage(question),
+      ANSWER_ACK_MS,
+    );
+
+    return ack.ok;
+  }
+
+  /** Sends again every answer of a run that the connector has not taken. */
+  private async redeliver(local: LocalRun): Promise<void> {
+    try {
+      for (const question of await this.questions.undelivered(local.run.id)) {
+        if (await this.deliverAnswer(local.run, question)) {
+          await this.questions.markDelivered(question.id);
+        }
+      }
+    } catch (error) {
+      this.logger.error({
+        message: `Run ${local.run.id}: could not resend answers: ${error}`,
+        where: 'LocalExecutor.redeliver',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
+  }
+
   /** Tells the connector to stop, and lets go of the run. */
   async cancel(run: AgentRun): Promise<void> {
     const local = this.runs.get(run.id);
@@ -426,6 +478,9 @@ export class LocalExecutor
         local.graceTimer = undefined;
         void this.note(local, 'Your connector is back', 'run');
       }
+
+      // An answer that came while the connector was away goes now.
+      void this.redeliver(local);
     }
   }
 
@@ -569,6 +624,8 @@ export class LocalExecutor
         return this.onEntries(local, (payload as ConnectorRunEntries).entries);
       case 'run.outbox':
         return this.onOutbox(local, (payload as ConnectorRunOutbox).lines);
+      case 'run.question':
+        return this.onQuestion(local, payload as ConnectorRunQuestion);
       case 'run.finished':
         return this.onFinished(local, payload as ConnectorRunFinished);
     }
@@ -707,6 +764,71 @@ export class LocalExecutor
 
     if (message) {
       await this.note(local, message, 'implement');
+    }
+
+    // The tool waits for an answer file, so a refusal has to reach it.
+    for (const refused of applied.refusedQuestions ?? []) {
+      void this.connectors.send(
+        local.peer,
+        'run.answer',
+        refusalMessage(local.run.id, refused.id, refused.reason),
+        ANSWER_ACK_MS,
+      );
+    }
+  }
+
+  /**
+   * A dialog that omp opened for the person, as a question. It becomes the
+   * same record as a question from the tool, with the source `omp_dialog`. A
+   * dialog that cannot be stored is answered as cancelled, so omp does not
+   * wait for ever.
+   */
+  private async onQuestion(
+    local: LocalRun,
+    message: ConnectorRunQuestion,
+  ): Promise<void> {
+    const requester = local.run.createdById;
+    let refusal: string | null = null;
+
+    if (!requester) {
+      refusal = 'The run has no person to ask.';
+    } else if (!AGENT_QUESTION_EXTERNAL_ID_PATTERN.test(String(message.id))) {
+      refusal = 'The dialog id is not a plain token.';
+    } else {
+      try {
+        await this.questions.create({
+          workspaceId: local.run.workspaceId,
+          issueId: local.run.issueId,
+          agentRunId: local.run.id,
+          externalId: message.id,
+          source: 'omp_dialog',
+          questions: scrubDeep(message.questions, local.secrets),
+          assigneeId: requester,
+          waitMs: questionWaitMs(local.run.config),
+        });
+      } catch (error) {
+        if (!(error instanceof RangeError)) {
+          throw error;
+        }
+        refusal = error.message;
+      }
+    }
+
+    if (refusal) {
+      await this.note(local, `Could not ask a person: ${refusal}`, 'implement');
+      void this.connectors.send(
+        local.peer,
+        'run.answer',
+        {
+          runId: local.run.id,
+          questionId: String(message.id).slice(0, 64),
+          source: 'omp_dialog',
+          status: 'cancelled',
+          answers: [],
+          text: '',
+        },
+        ANSWER_ACK_MS,
+      );
     }
   }
 
@@ -1071,6 +1193,7 @@ export class LocalExecutor
 function policyFor(
   pack: ContextPack,
   egressHosts?: string[],
+  config?: unknown,
 ): ConnectorRunDispatch['policy'] {
   const policy = guardrailPolicy(pack, egressHosts);
 
@@ -1079,6 +1202,7 @@ function policyFor(
     checks: policy.checks,
     reachableHosts: policy.reachableHosts,
     maxOutputTokens: policy.maxOutputTokens ?? null,
+    questionWaitMs: questionWaitMs(config),
   };
 }
 

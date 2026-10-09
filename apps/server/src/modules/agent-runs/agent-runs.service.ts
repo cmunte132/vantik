@@ -332,6 +332,7 @@ export class AgentRunsService {
 
     if (isTerminalAgentRunStatus(to)) {
       await this.revokeRunTokens(runId);
+      await this.cancelQuestions(runId);
     }
 
     // A failed run said why only in its own row. Logging it here, the one
@@ -359,6 +360,26 @@ export class AgentRunsService {
     }
 
     return moved;
+  }
+
+  /**
+   * Cancels the questions a run left open. Nobody is waiting for the answer
+   * once the run is over. Bookkeeping: a move of the run is never refused
+   * because this failed.
+   */
+  private async cancelQuestions(runId: string): Promise<void> {
+    try {
+      await this.prisma.agentQuestion.updateMany({
+        where: { agentRunId: runId, status: 'OPEN' },
+        data: { status: 'CANCELLED' },
+      });
+    } catch (error) {
+      this.logger.error({
+        message: `The open questions of agent run ${runId} were not cancelled: ${error}`,
+        where: 'AgentRunsService.cancelQuestions',
+        error: error instanceof Error ? error : undefined,
+      });
+    }
   }
 
   /**

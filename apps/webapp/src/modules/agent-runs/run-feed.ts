@@ -37,6 +37,8 @@ export interface Step {
   diff?: string;
   /** True for an edit of an existing file, as opposed to a whole new one. */
   edited?: boolean;
+  /** A question to a person: the record that holds the question and answer. */
+  agentQuestionId?: string;
 }
 
 /** The kinds where four in a row are one fact, not four. */
@@ -56,6 +58,7 @@ interface StepData {
   added?: number;
   removed?: number;
   diff?: string;
+  agentQuestionId?: string;
 }
 
 /**
@@ -130,6 +133,9 @@ export function toSteps(events: any[]): Step[] {
       ...(data?.added != null ? { added: data.added } : {}),
       ...(data?.removed != null ? { removed: data.removed } : {}),
       ...(data?.diff ? { diff: data.diff } : {}),
+      ...(data?.kind === 'question' && data.agentQuestionId
+        ? { agentQuestionId: data.agentQuestionId }
+        : {}),
       ...(data?.kind === 'write' && /^edit\b/i.test(event.message ?? '')
         ? { edited: true }
         : {}),
@@ -209,6 +215,8 @@ export function doing(step: Step): string {
       return 'Running a command';
     case 'note':
       return 'Deciding what to do next';
+    case 'question':
+      return 'Waiting for a person to answer';
     default:
       return step.message;
   }
@@ -276,6 +284,11 @@ export function matches(item: FeedItem, filter: Filter): boolean {
   }
 
   const { kind } = item.step;
+
+  // A question to a person blocks the run, so no filter hides it.
+  if (kind === 'question') {
+    return true;
+  }
 
   switch (filter) {
     case 'Edits':

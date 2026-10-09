@@ -38,6 +38,7 @@ describe('the runs a hello reports', () => {
         ),
         queue: new AckedQueue(dispatch.runId, transport),
         cancel: () => undefined,
+        answer: () => ({ ok: true }),
         start: () =>
           new Promise<void>((resolve) => finish.set(dispatch.runId, resolve)),
       }),

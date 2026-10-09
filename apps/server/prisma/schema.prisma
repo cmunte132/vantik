@@ -147,6 +147,8 @@ model AgentRun {
   /// The session row that lists this run beside the terminal sessions on the
   /// same issue.
   session           AgentSession?
+  /// The questions this run asked a person.
+  questions         AgentQuestion[]
   /// The tokens minted for this run alone. Revoked when it ends.
   tokens            PersonalAccessToken[]
 
@@ -216,9 +218,10 @@ model AgentSession {
   driverLeaseExpiresAt DateTime?
 
   /// The session this one forked from.
-  parent          AgentSession?  @relation("AgentSessionParent", fields: [parentSessionId], references: [id])
+  parent          AgentSession?   @relation("AgentSessionParent", fields: [parentSessionId], references: [id])
   parentSessionId String?
-  children        AgentSession[] @relation("AgentSessionParent")
+  children        AgentSession[]  @relation("AgentSessionParent")
+  questions       AgentQuestion[]
 
   agentRun   AgentRun? @relation(fields: [agentRunId], references: [id])
   agentRunId String?   @unique
@@ -231,6 +234,70 @@ model AgentSession {
   @@index([issueId])
   @@index([workspaceId, actorUserId, externalId])
   @@index([parentSessionId])
+}
+
+/// A question that an agent asks a person during a run.
+///
+/// One row serves every harness: a hosted Pi run and a local omp run write the
+/// same record, and a person answers it the same way. The row belongs to one
+/// issue, so it is team-owned through that issue, and it syncs in real time.
+/// The person who started the run is the assignee; anyone who can see the
+/// issue may answer. A question that nobody answers in time is EXPIRED, and
+/// the agent goes on alone.
+model AgentQuestion {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+
+  issue   Issue  @relation(fields: [issueId], references: [id])
+  issueId String
+
+  /// Null for a question that does not come from a hosted or local run.
+  agentRun   AgentRun? @relation(fields: [agentRunId], references: [id])
+  agentRunId String?
+
+  agentSession   AgentSession? @relation(fields: [agentSessionId], references: [id])
+  agentSessionId String?
+
+  /// The id that the guest gave the question. Unique per run.
+  externalId String
+  /// `tool` (the ask_person tool) or `omp_dialog` (a dialog omp opened).
+  source     String @default("tool")
+
+  /// `AgentQuestionItem[]`, checked on the server before it is stored.
+  questions Json
+  status    AgentQuestionStatus @default(OPEN)
+  /// `AgentQuestionAnswer[]`, once answered.
+  answers   Json?
+
+  answeredBy   User?     @relation("AgentQuestionAnsweredBy", fields: [answeredById], references: [id])
+  answeredById String?
+  answeredAt   DateTime?
+
+  /// Past this time an open question is EXPIRED.
+  expiresAt   DateTime
+  /// When the answer, or the expiry, reached the agent's machine.
+  deliveredAt DateTime?
+
+  /// The person who started the run. The question shows in their Needs you.
+  assignee   User   @relation("AgentQuestionAssignee", fields: [assigneeId], references: [id])
+  assigneeId String
+
+  @@unique([agentRunId, externalId])
+  @@index([issueId])
+  @@index([assigneeId, status])
+  @@index([status, expiresAt])
+}
+
+enum AgentQuestionStatus {
+  OPEN
+  ANSWERED
+  EXPIRED
+  CANCELLED
 }
 
 /// An append-only progress line on a run.
@@ -636,6 +703,7 @@ model Issue {
   checklistItems ChecklistItem[]
   agentRuns      AgentRun[]
   agentSessions  AgentSession[]
+  agentQuestions AgentQuestion[]
   history        IssueHistory[]
   linkedIssue    LinkedIssue[]
   issueRelations IssueRelation[]
@@ -2139,16 +2207,18 @@ model User {
 
   image String?
 
-  usersOnWorkspaces   UsersOnWorkspaces[]
-  template            Template[]
-  integrationAccount  IntegrationAccount[]
-  attachment          Attachment[]
-  personalAccessToken PersonalAccessToken[]
-  sessions            Session[]
-  passkeys            PasskeyCredential[]
-  Conversation        Conversation[]
-  ConversationHistory ConversationHistory[]
-  agentSessions       AgentSession[]
+  usersOnWorkspaces      UsersOnWorkspaces[]
+  template               Template[]
+  integrationAccount     IntegrationAccount[]
+  attachment             Attachment[]
+  personalAccessToken    PersonalAccessToken[]
+  sessions               Session[]
+  passkeys               PasskeyCredential[]
+  Conversation           Conversation[]
+  ConversationHistory    ConversationHistory[]
+  agentSessions          AgentSession[]
+  agentQuestionsAsked    AgentQuestion[]       @relation("AgentQuestionAssignee")
+  agentQuestionsAnswered AgentQuestion[]       @relation("AgentQuestionAnsweredBy")
 }
 
 /// A live session for an authenticated user or agent.
@@ -2332,6 +2402,7 @@ model Workspace {
   knowledgeInboxItems   KnowledgeInboxItem[]
   agentRuns             AgentRun[]
   agentSessions         AgentSession[]
+  agentQuestions        AgentQuestion[]
   credentials           WorkspaceCredential[]
   webhookSubscription   WebhookSubscription[]
 
@@ -2474,6 +2545,7 @@ enum AgentRunEventLevel {
 /// and the whole sync log then fails, and not only the rows of that one model.
 /// So a new model's value is added to this enum before any row can carry it.
 enum ModelName {
+  AgentQuestion
   AgentRun
   AgentSession
   AgentRunEvent
@@ -2912,6 +2984,7 @@ enum NotificationActionType {
   IssuePriorityChanged
   IssueNewComment
   IssueBlocks
+  AgentQuestionAsked
 }
 
 enum AttachmentStatus {

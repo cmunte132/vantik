@@ -6,6 +6,8 @@ import { cn } from '@vantikhq/ui/lib/utils';
 import { observer } from 'mobx-react-lite';
 import React from 'react';
 
+import { AgentQuestionCard } from 'modules/agent-questions/agent-question-card';
+
 import { MainLayout } from 'common/layouts/main-layout';
 import { Link as RouterLink, useRouter } from 'common/router';
 import { SCOPES } from 'common/scopes';
@@ -68,8 +70,13 @@ export const RunView = withApplicationStore(
     const router = useRouter();
     const { workspaceSlug, runId } = router.query;
 
-    const { agentRunsStore, issuesStore, teamsStore, checklistItemsStore } =
-      useContextStore();
+    const {
+      agentRunsStore,
+      agentQuestionsStore,
+      issuesStore,
+      teamsStore,
+      checklistItemsStore,
+    } = useContextStore();
     const { users } = useUsersData(false);
 
     const { data: executors } = useExecutors();
@@ -135,6 +142,9 @@ export const RunView = withApplicationStore(
     const issue = issuesStore?.getIssueById?.(run.issueId);
     const team = issue && teamsStore?.getTeamWithId?.(issue.teamId);
     const issueKey = team && issue ? `${team.identifier}-${issue.number}` : '';
+    const openQuestions = (agentQuestionsStore.openQuestions as any[]).filter(
+      (question) => question.agentRunId === run.id,
+    );
     const events = agentRunsStore.getEvents(run.id);
     const feed = toFeed(events);
     const current = inFlight(run, feed);
@@ -274,6 +284,16 @@ export const RunView = withApplicationStore(
                 }
               />
             )}
+
+            {/* An open question blocks the run, so its form sits above the
+                feed instead of in it. The feed shows the answered card. */}
+            {openQuestions.map((question: any) => (
+              <AgentQuestionCard
+                key={question.id}
+                questionId={question.id}
+                hideIssue
+              />
+            ))}
 
             <RunActivity
               feed={feed}

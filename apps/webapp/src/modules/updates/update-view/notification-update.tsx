@@ -2,6 +2,7 @@ import { observer } from 'mobx-react-lite';
 import React from 'react';
 import ReactTimeAgo from 'react-time-ago';
 
+import { AgentQuestionCard } from 'modules/agent-questions/agent-question-card';
 import { CommentActivity } from 'modules/issues/single-issue/left-side/activity/comments-activity/comment-activity';
 
 import { getPriorities } from 'common/priority';
@@ -49,6 +50,16 @@ export const NotificationUpdate = observer(
       );
     }
 
+    if (notification.type === NotificationTypeEnum.AgentQuestionAsked) {
+      return (
+        <QuestionUpdate
+          notification={notification}
+          issue={issue}
+          getUserData={getUserData}
+        />
+      );
+    }
+
     return (
       <PropertyUpdate
         notification={notification}
@@ -56,6 +67,33 @@ export const NotificationUpdate = observer(
         getUserData={getUserData}
       />
     );
+  },
+);
+
+/**
+ * A question that an agent asked, drawn as the card that answers it, so the
+ * person need not leave the inbox. The question may not have reached this
+ * client yet, and then the row says only that it was asked.
+ */
+const QuestionUpdate = observer(
+  ({ notification, issue, getUserData }: NotificationUpdateProps) => {
+    const { agentQuestionsStore } = useContextStore();
+    const { agentQuestionId } = getActionData(notification);
+
+    if (
+      !agentQuestionId ||
+      !agentQuestionsStore.getQuestionById(agentQuestionId)
+    ) {
+      return (
+        <PropertyUpdate
+          notification={notification}
+          issue={issue}
+          getUserData={getUserData}
+        />
+      );
+    }
+
+    return <AgentQuestionCard questionId={agentQuestionId} hideIssue />;
   },
 );
 
@@ -205,6 +243,10 @@ function useUpdateDescription(
       ) : (
         <span>changed the priority</span>
       );
+    }
+
+    case NotificationTypeEnum.AgentQuestionAsked: {
+      return <span>asked you a question</span>;
     }
 
     case NotificationTypeEnum.IssueAssigned: {

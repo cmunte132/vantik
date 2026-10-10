@@ -1,6 +1,6 @@
 {
   "name": "sandbox-host",
-  "version": "2026.10.3",
+  "version": "2026.10.4",
   "private": true,
   "description": "Runs the microVMs that Vantik's hosted agent runs work in, apart from the server",
   "type": "module",

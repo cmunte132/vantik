@@ -5,8 +5,8 @@ knowledge bank from the terminal. The help text calls the program
 `vantik-cli`, but the command that you type is `vantik`.
 
 The full reference, with each command and flag, is the
-[CLI reference](https://docs.vantik.dev/api-reference/cli). In this
-repository, it is `apps/docs/docs/api-reference/cli.mdx`.
+[CLI reference](https://docs.vantik.dev/developers/cli). In this
+repository, it is `apps/docs/docs/developers/cli.mdx`.
 
 ## How to sign in
 

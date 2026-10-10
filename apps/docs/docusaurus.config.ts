@@ -45,6 +45,9 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           editUrl: 'https://github.com/cmunte132/vantik/tree/main/apps/docs/',
           routeBasePath: '/',
+          // The API pages need the Redux provider of this component. Without
+          // it, each API page crashes. Other pages render as before.
+          docItemComponent: '@theme/ApiItem',
         },
         blog: false,
         theme: {
@@ -71,9 +74,33 @@ const config: Config = {
         },
       },
     ],
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {from: '/api-reference/connect-mcp', to: '/developers/connect-mcp'},
+          {from: '/api-reference/agents', to: '/developers/agents'},
+          {from: '/api-reference/cli', to: '/developers/cli'},
+        ],
+      },
+    ],
   ],
 
-  themes: ['docusaurus-theme-openapi-docs', '@docusaurus/theme-mermaid'],
+  themes: [
+    'docusaurus-theme-openapi-docs',
+    '@docusaurus/theme-mermaid',
+    [
+      // The build makes the search index. The site needs no search service.
+      '@easyops-cn/docusaurus-search-local',
+      {
+        hashed: true,
+        docsRouteBasePath: '/',
+        indexBlog: false,
+        highlightSearchTermsOnTargetPage: true,
+        explicitSearchResultPath: true,
+      },
+    ],
+  ],
 
   themeConfig: {
     colorMode: {

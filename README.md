@@ -109,7 +109,7 @@ Or install them from this repository with `npx skills add cmunte132/vantik`.
 The same page gives optional hooks for each agent. At the start of a session,
 they tell the agent which issues it has in progress. Before the agent stops, they
 hold it once if one of those issues has had no update from it for 20 minutes.
-Read [How to connect an MCP client](apps/docs/docs/api-reference/connect-mcp.mdx)
+Read [How to connect an MCP client](apps/docs/docs/developers/connect-mcp.mdx)
 for the details.
 
 ### How agent work gets checked

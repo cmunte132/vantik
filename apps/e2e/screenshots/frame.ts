@@ -52,10 +52,15 @@ function list(locators?: Locator | Locator[]) {
 }
 
 async function boxes(locators: Locator[]) {
-  const found = [];
+  // Scroll to each locator first and read the boxes after the last scroll. A
+  // box read before a later scroll is out of date, so a crop around two
+  // locators would cut off the first one.
   for (const locator of locators) {
     await expect(locator).toBeVisible();
     await locator.scrollIntoViewIfNeeded();
+  }
+  const found = [];
+  for (const locator of locators) {
     const box = await locator.boundingBox();
     if (!box) throw new Error(`${locator} has no box on the page`);
     found.push(box);
@@ -104,9 +109,11 @@ export async function shot(page: Page, name: string, frame: Frame = {}) {
   await page.waitForLoadState('networkidle');
   await hidePerRunAddresses(page);
 
-  const focus = await boxes(list(frame.focus));
-  // Boxes are read after every scroll, so they agree with one another.
-  const highlight = await boxes(list(frame.highlight));
+  // One read for both, so the rings and the crop agree after every scroll.
+  const focusLocators = list(frame.focus);
+  const all = await boxes([...focusLocators, ...list(frame.highlight)]);
+  const focus = all.slice(0, focusLocators.length);
+  const highlight = all.slice(focusLocators.length);
   if (highlight.length) await drawHighlights(page, highlight);
 
   const viewport = page.viewportSize()!;

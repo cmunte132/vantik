@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { ModelNameEnum } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
@@ -29,15 +29,25 @@ import {
 const REPLICATION_SLOT_PLUGIN = 'pgoutput';
 const PUBLICATION_NAME = 'vantik_publication';
 
+const RECONNECT_BASE_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 30_000;
+
+const ignoreError = (): void => undefined;
+
 const tracer = trace.getTracer('vantik-replication');
 
 @Injectable()
-export default class ReplicationService {
+export default class ReplicationService implements OnModuleDestroy {
   client: Client;
   private readonly logger: LoggerService = new LoggerService(
     'ReplicationService',
   );
   private replicationSlotName = `vantik_replication_slot_${uuidv4().replace(/-/g, '')}`;
+  private service: LogicalReplicationService | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private reconnectAttempt = 0;
+  private reconnecting = false;
+  private shuttingDown = false;
 
   constructor(
     private syncGateway: SyncGateway,
@@ -46,13 +56,37 @@ export default class ReplicationService {
     private prisma: PrismaService,
     private syncRepair: SyncRepairService,
   ) {
-    this.client = new Client({
+    this.client = this.createClient();
+  }
+
+  private createClient() {
+    const client = new Client({
       user: process.env.POSTGRES_USER,
       host: process.env.DB_HOST,
       database: process.env.POSTGRES_DB,
       password: process.env.POSTGRES_PASSWORD,
       port: Number(process.env.DB_PORT) || 5432,
     });
+    // Without a handler, a dropped connection is an unhandled 'error' event
+    // and it kills the process.
+    client.on('error', (error) =>
+      this.logger.error({
+        message: `Replication control connection failed: ${error}`,
+        where: 'ReplicationService.createClient',
+        error,
+      }),
+    );
+    return client;
+  }
+
+  async onModuleDestroy() {
+    this.shuttingDown = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    await this.service?.destroy().catch(ignoreError);
+    this.service = null;
   }
 
   async init() {
@@ -71,10 +105,14 @@ export default class ReplicationService {
     //
     // Deliberately not awaited into startup: a slow reconcile should delay
     // clients catching up, not the server accepting requests.
+    this.repairSyncLog();
+  }
+
+  private repairSyncLog() {
     this.syncRepair.reconcile().catch((error) =>
       this.logger.error({
         message: `Could not repair the sync log after downtime: ${error}`,
-        where: 'ReplicationService.init',
+        where: 'ReplicationService.repairSyncLog',
         error: error instanceof Error ? error : undefined,
       }),
     );
@@ -210,6 +248,94 @@ export default class ReplicationService {
     }
   }
 
+  // Retry with capped exponential backoff. Calls from a stream that was
+  // already replaced, or while a retry is queued or running, do nothing.
+  private scheduleReconnect(from: LogicalReplicationService) {
+    if (
+      this.shuttingDown ||
+      from !== this.service ||
+      this.reconnectTimer ||
+      this.reconnecting
+    ) {
+      return;
+    }
+
+    const delay = Math.min(
+      RECONNECT_BASE_DELAY_MS * 2 ** this.reconnectAttempt,
+      RECONNECT_MAX_DELAY_MS,
+    );
+    this.reconnectAttempt += 1;
+    this.logger.info({
+      message: `Reconnecting replication in ${delay}ms`,
+      where: 'ReplicationService.scheduleReconnect',
+    });
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.reconnect();
+    }, delay);
+  }
+
+  async reconnect() {
+    if (this.shuttingDown) {
+      return;
+    }
+    this.reconnecting = true;
+    const old = this.service;
+    try {
+      // destroy() ends the old client and removes our listeners, so the old
+      // stream cannot report a second failure or deliver duplicate changes.
+      await old?.destroy().catch(ignoreError);
+      const recreated = await this.ensureSlotExists();
+      if (this.shuttingDown) {
+        return;
+      }
+      this.setupReplication();
+      // A new slot starts at the current log position, so changes made while
+      // the old slot was gone need the same repair as after a restart.
+      if (recreated) {
+        this.repairSyncLog();
+      }
+    } catch (error) {
+      this.logger.error({
+        message: `Could not reconnect replication: ${error}`,
+        where: 'ReplicationService.reconnect',
+        error: error instanceof Error ? error : undefined,
+      });
+      this.reconnecting = false;
+      if (old) {
+        this.scheduleReconnect(old);
+      }
+    } finally {
+      this.reconnecting = false;
+    }
+  }
+
+  // Keeps the existing slot when it is still there. Returns true when it had
+  // to create a new one, the same way startup does.
+  private async ensureSlotExists() {
+    this.client = this.createClient();
+    await this.client.connect();
+    try {
+      await this.ensurePublication();
+      const existing = await this.client.query(
+        `SELECT 1 FROM pg_replication_slots WHERE slot_name = '${this.replicationSlotName}'`,
+      );
+      if (existing.rows.length > 0) {
+        return false;
+      }
+      await this.client.query(
+        `SELECT * FROM pg_create_logical_replication_slot('${this.replicationSlotName}', '${REPLICATION_SLOT_PLUGIN}')`,
+      );
+      this.logger.info({
+        message: 'Replication slot recreated',
+        where: 'ReplicationService.ensureSlotExists',
+      });
+      return true;
+    } finally {
+      await this.client.end().catch(ignoreError);
+    }
+  }
+
   getChangedData(log: Pgoutput.MessageInsert | Pgoutput.MessageUpdate) {
     // eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style, @typescript-eslint/no-explicit-any
     const changedData: { [key: string]: any } = {};
@@ -243,22 +369,52 @@ export default class ReplicationService {
       password: process.env.POSTGRES_PASSWORD,
       port: Number(process.env.DB_PORT) || 5432,
     };
+    this.startStream(clientConfig, dbSchema);
+  }
+
+  private startStream(
+    clientConfig: {
+      host?: string;
+      database?: string;
+      user?: string;
+      password?: string;
+      port: number;
+    },
+    dbSchema: string | undefined,
+  ) {
     const service = new LogicalReplicationService(clientConfig);
+    this.service = service;
     const plugin = new PgoutputPlugin({
       protoVersion: 1,
       publicationNames: [PUBLICATION_NAME],
     });
+
+    // The library re-emits connection errors here. Log them and reconnect.
+    service.on('error', (error: Error) => {
+      this.logger.error({
+        message: `Replication stream failed: ${error}`,
+        where: 'ReplicationService.startStream',
+        error,
+      });
+      this.scheduleReconnect(service);
+    });
+
+    service.on('start', () => {
+      this.reconnectAttempt = 0;
+      this.logger.info({
+        message: 'Replication server connected',
+        where: `ReplicationService.startStream`,
+      });
+    });
+
+    // subscribe() settles only when the stream ends, so a settled promise
+    // while we are still running means the connection dropped.
     service
       .subscribe(plugin, this.replicationSlotName)
       .catch((e) => {
         this.logger.error(e);
       })
-      .then(() => {
-        this.logger.info({
-          message: 'Replication server connected',
-          where: `ReplicationService.setupReplication`,
-        });
-      });
+      .then(() => this.scheduleReconnect(service));
 
     service.on('data', async (_lsn: string, log: Pgoutput.Message) => {
       // pgoutput emits one event per message (begin/commit/relation/DML).

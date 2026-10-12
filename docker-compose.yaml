@@ -180,6 +180,11 @@ services:
     container_name: vantik-postgres
     image: pgvector/pgvector:pg18
     restart: unless-stopped
+    # An init process is PID 1, not postgres. Without it, postgres adopts
+    # each orphan process from `podman exec`. When such a process dies on a
+    # signal (for example psql piped to head), postgres resets all
+    # connections, and the server crashes on its replication connection.
+    init: true
     # The sync engine uses pgoutput and needs wal_level=logical.
     command: ["postgres", "-c", "wal_level=logical"]
     environment:

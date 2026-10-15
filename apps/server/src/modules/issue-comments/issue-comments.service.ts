@@ -10,7 +10,6 @@ import {
   UpdateIssueCommentDto,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
-import { NotificationsQueue } from 'modules/notifications/notifications.queue';
 
 import {
   convertMarkdownToTiptapJson,
@@ -18,6 +17,11 @@ import {
 } from 'common/utils/tiptap.utils';
 
 import IssuesService from 'modules/issues/issues.service';
+import { NotificationsQueue } from 'modules/notifications/notifications.queue';
+import {
+  noteActivity,
+  TeamActivityService,
+} from 'modules/team-dashboard/activity/team-activity.service';
 
 @Injectable()
 export default class IssueCommentsService {
@@ -25,6 +29,7 @@ export default class IssueCommentsService {
     private prisma: PrismaService,
     private issuesService: IssuesService,
     private notificationsQueue: NotificationsQueue,
+    private teamActivity: TeamActivityService,
   ) {}
 
   async getIssueComment(issueCommentParams: IssueCommentRequestParamsDto) {
@@ -96,6 +101,8 @@ export default class IssueCommentsService {
         parent: true,
       },
     });
+    noteActivity(this.teamActivity, issueComment.issue.teamId);
+
     const mentionedUserIds = extractMentionedUserIds(updatedBody);
     const subscribersToAdd = [...new Set([userId, ...mentionedUserIds])];
 

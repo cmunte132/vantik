@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
 import {
   StateThreshold,
-  StuckIssue,
+  StuckIssuesResponse,
   TeamDashboardMetrics,
   UpdateThresholdOverridesDto,
 } from '@vantikhq/types';
@@ -46,7 +46,9 @@ export class TeamDashboardController {
   }
 
   @Get('stuck')
-  async getStuck(@Param('teamId') teamId: string): Promise<StuckIssue[]> {
-    return await this.dashboard.getStuck(teamId);
+  async getStuck(
+    @Param('teamId') teamId: string,
+  ): Promise<StuckIssuesResponse> {
+    return await this.dashboard.getStuckWithFindings(teamId);
   }
 }

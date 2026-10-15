@@ -749,6 +749,8 @@ model Issue {
   IssueSuggestion   IssueSuggestion? @relation(fields: [issueSuggestionId], references: [id])
   issueSuggestionId String?          @unique
 
+  stuckFinding StuckIssueFinding?
+
   @@unique([teamId, number])
   @@index([teamId, stateId, stateEnteredAt])
 }
@@ -2188,6 +2190,7 @@ model Team {
   View        View[]
 
   dashboardSettings TeamDashboardSettings?
+  stuckFindings     StuckIssueFinding[]
 
   /// The modules that this team owns. A team owns a Module that holds internal
   /// tools. A Module that goes to the customers belongs to a product instead.
@@ -2211,6 +2214,39 @@ model TeamDashboardSettings {
   /// Map of stateId to { hours, sampleCount }, written by the nightly job.
   learnedThresholds  Json      @default("{}")
   learnedAt          DateTime?
+
+  /// When an issue of the team last changed in a way that can leave it stuck.
+  lastActivityAt DateTime?
+  /// When the stuck-issue analysis last started for the team.
+  lastAnalysisAt DateTime?
+  /// When the next analysis is due. Null means none is scheduled.
+  nextAnalysisAt DateTime?
+}
+
+/// The model's reading of one stuck issue. Not a synced model: only the server
+/// writes it, and only the dashboard reads it. One current row per issue.
+model StuckIssueFinding {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  issueId String @unique
+  team    Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId  String
+
+  /// A hash of what the model saw. The same hash means nothing changed.
+  fingerprint    String
+  stateId        String
+  stateEnteredAt DateTime
+
+  cause       String
+  category    String
+  suggestions Json
+  confidence  Float?
+  model       String?
+
+  @@index([teamId])
 }
 
 model Template {

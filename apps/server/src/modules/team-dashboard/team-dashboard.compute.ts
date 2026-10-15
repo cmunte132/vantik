@@ -569,6 +569,7 @@ export function selectStuck(
       title: issue.title,
       assigneeId: issue.assigneeId,
       stateId: issue.stateId,
+      stateEnteredAt: issue.stateEnteredAt.toISOString(),
       hoursInState: round1(hoursInState),
       thresholdHours: threshold.hours,
       thresholdSource: threshold.source,

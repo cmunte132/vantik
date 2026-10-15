@@ -73,10 +73,48 @@ export interface StuckIssue {
   title: string;
   assigneeId: string | null;
   stateId: string;
+  /** When the issue entered its state, as an ISO timestamp. */
+  stateEnteredAt: string;
   hoursInState: number;
   thresholdHours: number;
   thresholdSource: ThresholdSource;
   overageHours: number;
+}
+
+export const STUCK_CATEGORIES = [
+  'waiting-on-review',
+  'blocked-by-dependency',
+  'unclear-scope',
+  'too-large',
+  'no-owner',
+  'inactive',
+  'other',
+] as const;
+
+export type StuckCategory = (typeof STUCK_CATEGORIES)[number];
+
+/** The model's reading of one stuck issue. */
+export interface StuckFinding {
+  cause: string;
+  category: StuckCategory;
+  suggestions: string[];
+  confidence: number | null;
+  /** When the finding was written, as an ISO timestamp. */
+  analyzedAt: string;
+}
+
+export interface StuckIssueWithFinding extends StuckIssue {
+  /** Null while the analysis of the issue's current state is pending. */
+  finding: StuckFinding | null;
+}
+
+/** The answer of GET /v1/teams/:teamId/dashboard/stuck. */
+export interface StuckIssuesResponse {
+  items: StuckIssueWithFinding[];
+  analysis: {
+    lastAnalysisAt: string | null;
+    nextAnalysisAt: string | null;
+  };
 }
 
 export class UpdateThresholdOverridesDto {

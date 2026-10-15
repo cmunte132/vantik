@@ -3,6 +3,7 @@
 import {
   RiAddLine,
   RiArrowRightSLine,
+  RiDashboardLine,
   RiRefreshLine,
   RiStackLine,
 } from '@remixicon/react';
@@ -87,6 +88,11 @@ export const TeamList = observer(() => {
               title: 'Views',
               icon: RiStackLine,
               href: `/${workspace.slug}/team/${teamItem.identifier}/views`,
+            },
+            {
+              title: 'Dashboard',
+              icon: RiDashboardLine,
+              href: `/${workspace.slug}/team/${teamItem.identifier}/dashboard`,
             },
           ];
 

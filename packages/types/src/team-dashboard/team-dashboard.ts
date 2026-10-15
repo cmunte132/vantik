@@ -62,6 +62,8 @@ export interface StateThreshold {
   name: string;
   hours: number;
   source: ThresholdSource;
+  /** The name-based default, shown when there is nothing learned. */
+  defaultHours: number;
   learnedHours: number | null;
   sampleCount: number;
   overrideHours: number | null;

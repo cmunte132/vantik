@@ -5,6 +5,7 @@ import type {
 
 import type { WorkflowType } from 'common/types';
 
+import { TeamDashboardThresholdsQuery } from 'services/team-dashboard';
 import {
   ajaxPost,
   type MutationCallbacks,
@@ -45,5 +46,7 @@ export function useUpdateWorkflowMutation(
     }
   };
 
-  return useApiMutation(update, callbacks);
+  return useApiMutation(update, callbacks, {
+    invalidates: [TeamDashboardThresholdsQuery],
+  });
 }

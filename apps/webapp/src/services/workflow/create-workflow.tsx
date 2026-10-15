@@ -5,6 +5,7 @@ import type {
 
 import type { WorkflowType } from 'common/types';
 
+import { TeamDashboardThresholdsQuery } from 'services/team-dashboard';
 import { ajaxPost, mutationHook } from 'services/utils';
 
 export interface CreateWorkflowInput
@@ -17,4 +18,6 @@ export function createWorkflow({
   return ajaxPost({ url: `/api/v1/${teamId}/workflows`, data });
 }
 
-export const useCreateWorkflowMutation = mutationHook(createWorkflow);
+export const useCreateWorkflowMutation = mutationHook(createWorkflow, {
+  invalidates: [TeamDashboardThresholdsQuery],
+});

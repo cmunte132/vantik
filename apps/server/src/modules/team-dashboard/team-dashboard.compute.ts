@@ -521,7 +521,8 @@ export function resolveThresholds(
       const learnedHours = learnedEntry?.hours ?? null;
       const overrideHours = overrides[state.id] ?? null;
       let source: ThresholdSource = 'default';
-      let hours = defaultThresholdHours(state.name);
+      const defaultHours = defaultThresholdHours(state.name);
+      let hours = defaultHours;
       if (overrideHours !== null) {
         source = 'override';
         hours = overrideHours;
@@ -534,6 +535,7 @@ export function resolveThresholds(
         name: state.name,
         hours,
         source,
+        defaultHours,
         learnedHours,
         sampleCount: learnedEntry?.sampleCount ?? 0,
         overrideHours,

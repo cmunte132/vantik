@@ -404,13 +404,18 @@ describe('thresholds', () => {
     const result = resolveThresholds(STATES, learned, { prog: 10, rev: 30 });
     const byId = Object.fromEntries(result.map((r) => [r.stateId, r]));
     expect(byId.prog).toMatchObject({
+      defaultHours: 120,
       hours: 10,
       source: 'override',
       learnedHours: 200,
       overrideHours: 10,
       sampleCount: 20,
     });
-    expect(byId.rev).toMatchObject({ hours: 30, source: 'override' });
+    expect(byId.rev).toMatchObject({
+      hours: 30,
+      source: 'override',
+      defaultHours: 48,
+    });
 
     const learnedOnly = resolveThresholds(STATES, learned, {});
     expect(learnedOnly[0]).toMatchObject({ hours: 200, source: 'learned' });

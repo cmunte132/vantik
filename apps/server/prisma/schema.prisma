@@ -721,14 +721,17 @@ model Issue {
   createdById String?
   updatedById String?
 
-  subscriberIds String[]
-  assigneeId    String?
-  labelIds      String[]
-  stateId       String
-  parent        Issue?   @relation("Report", fields: [parentId], references: [id])
-  parentId      String?
-  subIssue      Issue[]  @relation("Report")
-  attachments   String[]
+  subscriberIds  String[]
+  assigneeId     String?
+  labelIds       String[]
+  stateId        String
+  /// When the issue last entered its current state. Set on create and on every
+  /// change of stateId; the team dashboard reads it to find stuck issues.
+  stateEnteredAt DateTime @default(now())
+  parent         Issue?   @relation("Report", fields: [parentId], references: [id])
+  parentId       String?
+  subIssue       Issue[]  @relation("Report")
+  attachments    String[]
 
   comments       IssueComment[]
   checklistItems ChecklistItem[]
@@ -747,6 +750,7 @@ model Issue {
   issueSuggestionId String?          @unique
 
   @@unique([teamId, number])
+  @@index([teamId, stateId, stateEnteredAt])
 }
 
 // One criterion on an issue's Definition of Done. Its own table (rather than a
@@ -2183,11 +2187,30 @@ model Team {
   preferences Json       @default("{}")
   View        View[]
 
+  dashboardSettings TeamDashboardSettings?
+
   /// The modules that this team owns. A team owns a Module that holds internal
   /// tools. A Module that goes to the customers belongs to a product instead.
   ownedModules Module[] @relation("ModuleOwner")
 
   @@unique([name, identifier, workspaceId])
+}
+
+/// Per-team settings for the dashboard. Not a synced model: only the server
+/// reads and writes it.
+model TeamDashboardSettings {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team   Team   @relation(fields: [teamId], references: [id])
+  teamId String @unique
+
+  /// Map of stateId to hours, set by a person.
+  thresholdOverrides Json      @default("{}")
+  /// Map of stateId to { hours, sampleCount }, written by the nightly job.
+  learnedThresholds  Json      @default("{}")
+  learnedAt          DateTime?
 }
 
 model Template {

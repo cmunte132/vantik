@@ -3,6 +3,16 @@ import { Injectable } from '@nestjs/common';
 import { IssueHistory, IssueHistoryData } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
 
+/** True when a change moves the issue from one state to another. */
+function changesState(change: {
+  fromStateId?: string | null;
+  toStateId?: string | null;
+}): boolean {
+  const from = change.fromStateId ?? null;
+  const to = change.toStateId ?? null;
+  return from !== to;
+}
+
 @Injectable()
 export default class IssuesHistoryService {
   constructor(private prisma: PrismaService) {}
@@ -19,7 +29,14 @@ export default class IssuesHistoryService {
     });
 
     const { removedLabelIds, addedLabelIds, ...otherData } = issueData;
-    if (lastIssueHistory && lastIssueHistory.userId === userId) {
+    // A state change keeps its own row. Merging it into an older row would
+    // move the time of the transition, and the dashboard reads those times.
+    if (
+      lastIssueHistory &&
+      lastIssueHistory.userId === userId &&
+      !changesState(lastIssueHistory) &&
+      !changesState(otherData)
+    ) {
       let updatedLabels = lastIssueHistory.addedLabelIds || [];
       let removedUpdatedLabels = lastIssueHistory.removedLabelIds || [];
       if (removedLabelIds) {

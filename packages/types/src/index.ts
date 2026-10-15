@@ -27,6 +27,7 @@ export * from './prompt';
 export * from './reaction';
 export * from './sync-action';
 export * from './team';
+export * from './team-dashboard';
 export * from './template';
 export * from './user';
 export * from './users-on-workspaces';

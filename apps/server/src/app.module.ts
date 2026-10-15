@@ -51,6 +51,7 @@ import { SearchModule } from 'modules/search/search.module';
 import { SupportModule } from 'modules/support/support.module';
 import { SyncModule } from 'modules/sync/sync.module';
 import { SyncActionsModule } from 'modules/sync-actions/sync-actions.module';
+import { TeamDashboardModule } from 'modules/team-dashboard/team-dashboard.module';
 import { TeamsModule } from 'modules/teams/teams.module';
 import { TelemetryModule } from 'modules/telemetry/telemetry.module';
 import { TemplatesModule } from 'modules/templates/templates.module';
@@ -127,6 +128,7 @@ import { AppService } from './app.service';
     CapabilitiesModule,
     PagesModule,
     CyclesModule,
+    TeamDashboardModule,
 
     WebhookModule,
 

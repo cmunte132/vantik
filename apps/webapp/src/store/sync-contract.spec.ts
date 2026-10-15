@@ -48,6 +48,7 @@ const NOT_KEPT: Record<string, Record<string, string>> = {
     updatedById: NOT_READ,
     attachments: NOT_READ,
     issueSuggestionId: NOT_READ,
+    stateEnteredAt: 'the team dashboard reads it through its own endpoint',
   },
   IssueHistory: {
     fromTeamId: NOT_READ,

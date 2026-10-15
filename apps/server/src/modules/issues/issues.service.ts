@@ -30,6 +30,7 @@ import {
 import { createObjectCsvStringifier } from 'csv-writer';
 import { PrismaService } from 'nestjs-prisma';
 
+import { cycleChangeRows } from 'common/cycle-history';
 import { visibleTeamIds } from 'common/team-access';
 import {
   convertMarkdownToTiptapJson,
@@ -157,12 +158,13 @@ export default class IssuesService {
               data: Prisma.IssueCreateInput,
             ): Promise<Issue> => {
               lastNumber++;
-              return prisma.issue.create({
+              const created = await prisma.issue.create({
                 data: {
                   ...data,
                   ...createdByInfo,
                   title: data.title,
                   number: lastNumber,
+                  stateEnteredAt: new Date(),
                   team: { connect: { id: issueData.teamId } },
                   ...(linkIssueData && {
                     linkedIssue: {
@@ -173,6 +175,13 @@ export default class IssuesService {
                 },
                 include: { team: true },
               });
+              // An issue created inside a cycle joins that cycle's history.
+              if (created.cycleId) {
+                await prisma.cycleHistory.createMany({
+                  data: cycleChangeRows(created, null, created.cycleId, userId),
+                });
+              }
+              return created;
             };
 
             // Create one list with both issue data and respective subissues
@@ -359,6 +368,11 @@ export default class IssuesService {
       ),
       updatedById: userId,
       ...otherIssueData,
+      // A change of state restarts the clock the dashboard reads.
+      ...(otherIssueData.stateId &&
+      otherIssueData.stateId !== currentIssue.stateId
+        ? { stateEnteredAt: new Date() }
+        : {}),
       // Each relation below changes only when the request names it: null
       // disconnects, an id connects, and absent leaves it alone. "Absent" is
       // `undefined`, not a missing key. The global pipe now drops the fields a
@@ -434,6 +448,16 @@ export default class IssuesService {
         team: true,
       },
     });
+
+    const cycleRows = cycleChangeRows(
+      updatedIssue,
+      currentIssue.cycleId,
+      updatedIssue.cycleId,
+      userId,
+    );
+    if (cycleRows.length > 0) {
+      await this.prisma.cycleHistory.createMany({ data: cycleRows });
+    }
 
     this.logger.info({
       message: `Issue with ID ${issueParams.issueId} updated successfully`,
@@ -849,6 +873,7 @@ export default class IssuesService {
       data: {
         labelIds: updatedLabelIds,
         stateId: workflowIds[currentIssue.stateId],
+        stateEnteredAt: new Date(),
         number: issueNumber + 1,
         teamId,
         assigneeId,

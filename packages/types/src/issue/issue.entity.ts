@@ -37,6 +37,8 @@ export class Issue {
   /** What the issue makes the software do. One capability, or none. */
   capabilityId: string | null;
   stateId: string;
+  /** When the issue last entered its current state. */
+  stateEnteredAt: Date;
   parent?: Issue | null;
   parentId: string | null;
   subIssue?: Issue[];

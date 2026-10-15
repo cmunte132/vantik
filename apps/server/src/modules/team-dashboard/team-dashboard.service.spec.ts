@@ -69,3 +69,72 @@ describe('UpdateThresholdOverridesDto', () => {
     expect(Object.keys(dto)).toEqual(['overrides']);
   });
 });
+
+describe('TeamDashboardService.getStuckWithFindings', () => {
+  const entered = new Date('2026-10-10T00:00:00Z');
+
+  function build(findingEntered: Date) {
+    const prisma = {
+      workflow: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 's1', name: 'In Progress', category: 'STARTED' },
+          ]),
+      },
+      teamDashboardSettings: {
+        findUnique: jest.fn().mockResolvedValue({
+          thresholdOverrides: { s1: 1 },
+          learnedThresholds: {},
+          learnedAt: new Date(),
+          lastAnalysisAt: new Date('2026-10-14T00:00:00Z'),
+          nextAnalysisAt: null,
+        }),
+      },
+      issue: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'i1',
+            number: 1,
+            title: 'A',
+            assigneeId: null,
+            createdAt: entered,
+            estimate: null,
+            stateId: 's1',
+            stateEnteredAt: entered,
+            cycleId: null,
+          },
+        ]),
+      },
+      stuckIssueFinding: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            issueId: 'i1',
+            stateId: 's1',
+            stateEnteredAt: findingEntered,
+            cause: 'c',
+            category: 'other',
+            suggestions: ['s'],
+            confidence: 0.5,
+            updatedAt: new Date('2026-10-14T01:00:00Z'),
+          },
+        ]),
+      },
+    };
+    return new TeamDashboardService(prisma as never);
+  }
+
+  it('shows a finding that matches the current state entry', async () => {
+    const result = await build(entered).getStuckWithFindings('t1');
+    expect(result.items[0].finding).toMatchObject({ cause: 'c' });
+    expect(result.analysis.lastAnalysisAt).toBe('2026-10-14T00:00:00.000Z');
+    expect(result.analysis.nextAnalysisAt).toBeNull();
+  });
+
+  it('hides a finding from an earlier entry into the state', async () => {
+    const result = await build(
+      new Date('2026-10-01T00:00:00Z'),
+    ).getStuckWithFindings('t1');
+    expect(result.items[0].finding).toBeNull();
+  });
+});

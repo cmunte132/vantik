@@ -20,6 +20,7 @@ function buildService(found: unknown) {
     null,
     null,
     null,
+    null,
   );
 
   return { service, findFirst };

@@ -2,7 +2,9 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   StateThreshold,
+  StuckCategory,
   StuckIssue,
+  StuckIssuesResponse,
   TeamDashboardMetrics,
 } from '@vantikhq/types';
 import { PrismaService } from 'nestjs-prisma';
@@ -345,5 +347,48 @@ export class TeamDashboardService {
       },
     });
     return selectStuck(issues, thresholds, new Date());
+  }
+
+  /**
+   * The stuck issues with the model's reading of each. A finding shows only
+   * while it matches the issue's current state and entry time. Otherwise the
+   * issue still waits for its analysis.
+   */
+  async getStuckWithFindings(teamId: string): Promise<StuckIssuesResponse> {
+    const [stuck, findings, settings] = await Promise.all([
+      this.getStuck(teamId),
+      this.prisma.stuckIssueFinding.findMany({ where: { teamId } }),
+      this.prisma.teamDashboardSettings.findUnique({
+        where: { teamId },
+        select: { lastAnalysisAt: true, nextAnalysisAt: true },
+      }),
+    ]);
+    const byIssue = new Map(findings.map((row) => [row.issueId, row]));
+
+    return {
+      items: stuck.map((issue) => {
+        const row = byIssue.get(issue.id);
+        const current =
+          row &&
+          row.stateId === issue.stateId &&
+          row.stateEnteredAt.toISOString() === issue.stateEnteredAt;
+        return {
+          ...issue,
+          finding: current
+            ? {
+                cause: row.cause,
+                category: row.category as StuckCategory,
+                suggestions: row.suggestions as string[],
+                confidence: row.confidence,
+                analyzedAt: row.updatedAt.toISOString(),
+              }
+            : null,
+        };
+      }),
+      analysis: {
+        lastAnalysisAt: settings?.lastAnalysisAt?.toISOString() ?? null,
+        nextAnalysisAt: settings?.nextAnalysisAt?.toISOString() ?? null,
+      },
+    };
   }
 }

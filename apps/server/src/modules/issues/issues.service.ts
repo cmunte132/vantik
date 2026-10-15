@@ -46,6 +46,10 @@ import LinkedIssueService from 'modules/linked-issue/linked-issue.service';
 import { LoggerService } from 'modules/logger/logger.service';
 import { NotificationsQueue } from 'modules/notifications/notifications.queue';
 import SupportService from 'modules/support/support.service';
+import {
+  noteActivity,
+  TeamActivityService,
+} from 'modules/team-dashboard/activity/team-activity.service';
 
 import { SubscribeType } from './issues.interface';
 import { IssuesQueue } from './issues.queue';
@@ -76,6 +80,7 @@ export default class IssuesService {
     private aiRequestsService: AIRequestsService,
     private linkedIssueService: LinkedIssueService,
     private supportService: SupportService,
+    private teamActivity: TeamActivityService,
   ) {}
 
   async getIssueById(issueParams: IssueRequestParamsDto): Promise<Issue> {
@@ -279,6 +284,8 @@ export default class IssuesService {
             supportData,
           );
         }
+
+        noteActivity(this.teamActivity, teamId);
 
         // Return the main created issue
         return { ...issues[0], descriptionMarkdown };
@@ -511,6 +518,8 @@ export default class IssuesService {
         isDeleted,
       );
     }
+
+    noteActivity(this.teamActivity, updatedIssue.teamId);
 
     const finalDescriptionMarkdown = convertTiptapJsonToMarkdown(
       updatedIssue.description,
@@ -885,6 +894,9 @@ export default class IssuesService {
         await this.moveIssue(userId, subIssue.id, teamId);
       }
     }
+
+    noteActivity(this.teamActivity, currentIssue.teamId);
+    noteActivity(this.teamActivity, teamId);
 
     const issueDiff = await getIssueDiff(updatedIssue, currentIssue);
 

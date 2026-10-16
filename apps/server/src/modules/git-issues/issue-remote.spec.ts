@@ -162,6 +162,36 @@ describe('gitIssueRemote', () => {
     expect(git(source, 'for-each-ref', INBOX_PREFIX)).toBe('');
   });
 
+  it('deletes a batch of inbox refs in one call, and keeps the one that moved', async () => {
+    const head = git(source, 'rev-parse', 'HEAD');
+    const later = git(
+      source,
+      'commit-tree',
+      '-p',
+      head,
+      '-m',
+      'later',
+      'HEAD^{tree}',
+    );
+
+    for (const name of ['a', 'b', 'c']) {
+      git(source, 'update-ref', `${INBOX_PREFIX}${name}`, head);
+    }
+
+    git(source, 'update-ref', `${INBOX_PREFIX}b`, later);
+
+    await remote().deleteInboxes(
+      ['a', 'b', 'c'].map((name) => ({
+        ref: `${INBOX_PREFIX}${name}`,
+        sha: head,
+      })),
+    );
+
+    expect(
+      git(source, 'for-each-ref', '--format=%(refname)', INBOX_PREFIX),
+    ).toBe(`${INBOX_PREFIX}b`);
+  });
+
   describe('when the host refuses refs/vantik by its own rule', () => {
     beforeEach(() => {
       // A host that hides a ref namespace refuses each update to it. This is

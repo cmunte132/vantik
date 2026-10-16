@@ -250,6 +250,13 @@ function readCommentFile(
  * or removes an earlier line is refused, because the earlier lines were read
  * already and Vantik does not read a line twice.
  */
+/**
+ * The most lines of one outbox file that a pass reads. It is the same number as
+ * `OUTBOX_LIMITS.lines`; a test checks that. This file does not import it,
+ * because the module of that constant pulls in the knowledge store.
+ */
+export const OUTBOX_LINES_READ = 200;
+
 function readOutboxFile(
   file: InboxFile,
   key: string,
@@ -279,10 +286,24 @@ function readOutboxFile(
 
   // The reader of an outbox takes only complete lines. An editor can leave
   // out the last newline, so Vantik adds it.
-  const text = added.endsWith('\n') ? added : `${added}\n`;
-
   if (!added.trim()) {
     return;
+  }
+
+  // The reader gives one refusal for each line past its limit. A file of
+  // 256 KiB can hold 130,000 lines, and each refusal goes into the reply that
+  // Vantik writes into the repository. So cut the text here, at a whole
+  // line, and say it once.
+  const lines = added.endsWith('\n')
+    ? added.slice(0, -1).split('\n')
+    : added.split('\n');
+  let text = added.endsWith('\n') ? added : `${added}\n`;
+
+  if (lines.length > OUTBOX_LINES_READ) {
+    text = `${lines.slice(0, OUTBOX_LINES_READ).join('\n')}\n`;
+    refuse(
+      `${lines.length - OUTBOX_LINES_READ} lines past the limit of ${OUTBOX_LINES_READ} were not read. Add them in a later hand-off.`,
+    );
   }
 
   proposals.push({ kind: 'outbox', path: file.path, key, text });

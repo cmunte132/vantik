@@ -8,6 +8,7 @@ import { RepoMirrorService } from 'modules/git/repo-mirror.service';
 import { LocalDirectorySource } from 'modules/git/sources/local-directory.source';
 
 import { GitIssuesService } from './git-issues.service';
+import { OUTBOX_LINES_READ } from './inbox';
 import { type MirroredRepository } from './mirror-targets';
 import { CLOSED_ISSUE_DAYS } from './snapshot';
 import { INBOX_PREFIX, SNAPSHOT_REF } from './sync';
@@ -930,5 +931,9 @@ describe('GitIssuesService', () => {
       }
       expect(prisma.agentRun.create).not.toHaveBeenCalled();
     });
+  });
+
+  it('cuts an outbox file at the line limit of the outbox reader', () => {
+    expect(OUTBOX_LINES_READ).toBe(OUTBOX_LIMITS.lines);
   });
 });

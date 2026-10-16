@@ -8,13 +8,15 @@ import { anonymousRemote } from 'modules/git/git-command';
 
 import { type Lookups, type Outcome, planCreate, planUpdate } from './apply';
 import { GitRepository } from './git';
-import { type InboxReading } from './inbox';
-import { gitIssueRemote } from './issue-remote';
+import { type InboxReading, OUTBOX_LINES_READ } from './inbox';
+import { gitIssueRemote, HostRefusedPushError } from './issue-remote';
 import { type Snapshot, type SnapshotIssue } from './snapshot';
 import {
   type HandOffSource,
   INBOX_PREFIX,
   MAX_FILE_BYTES,
+  MAX_INBOXES_PER_PASS,
+  snapshotMessage,
   type MirrorStore,
   SNAPSHOT_REF,
   syncRepository,
@@ -184,6 +186,7 @@ async function checkout(): Promise<string> {
 }
 
 const mirrors = new Map<string, string>();
+let refuseDeletes = false;
 
 /** One pass over `repository`, in a bare mirror that it keeps between passes. */
 async function pass(
@@ -201,9 +204,29 @@ async function pass(
 
   const remote = anonymousRemote(repository);
 
+  const real = gitIssueRemote(path, { fetch: remote, push: remote }, (work) =>
+    work(),
+  );
+
+  // Git enforces `receive.denyDeletes` only for branches, so a host that
+  // refuses to delete refs/vantik/* is played here: the push is refused
+  // before it reaches the source, as a protected-ref rule does.
+  const refuse = () => {
+    throw new HostRefusedPushError(
+      `${INBOX_PREFIX}*`,
+      '! [remote rejected] (deletion prohibited)',
+    );
+  };
+
   return await syncRepository(
     new GitRepository(path),
-    gitIssueRemote(path, { fetch: remote, push: remote }, (work) => work()),
+    {
+      ...real,
+      deleteInbox: async (ref, sha) =>
+        refuseDeletes ? refuse() : real.deleteInbox(ref, sha),
+      deleteInboxes: async (entries) =>
+        refuseDeletes ? refuse() : real.deleteInboxes(entries),
+    },
     store,
     options,
   );
@@ -228,6 +251,10 @@ async function handOff(
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'vantik-git-issues-'));
+});
+
+afterEach(() => {
+  refuseDeletes = false;
 });
 
 afterAll(async () => {
@@ -874,5 +901,199 @@ describe('syncRepository', () => {
     await pass(repository, store);
 
     expect(store.outboxes).toEqual([first, second]);
+  });
+  it('writes no commit for an inbox that the snapshot has absorbed and the host will not delete', async () => {
+    const repository = await checkout();
+    const store = new MemoryStore();
+    await pass(repository, store);
+    refuseDeletes = true;
+
+    await handOff(repository, 'stuck', async (worktree) => {
+      await mkdir(join(worktree, 'issues/ENG-1/comments'), { recursive: true });
+      await writeFile(
+        join(worktree, 'issues/ENG-1/comments/note.md'),
+        'Applied once.\n',
+      );
+    });
+
+    const errors: unknown[] = [];
+    const options = {
+      onInboxError: (_: string, error: unknown) => errors.push(error),
+    };
+    const first = await pass(repository, store, options);
+
+    expect(first.wrote).toBe(true);
+    expect(errors).toHaveLength(1);
+    // The host kept the ref.
+    expect(git(repository, 'for-each-ref', INBOX_PREFIX)).toContain('stuck');
+
+    const tip = git(repository, 'rev-parse', SNAPSHOT_REF);
+
+    for (let again = 0; again < 3; again += 1) {
+      const result = await pass(repository, store, options);
+
+      expect(result.wrote).toBe(false);
+      expect(result.handOffs).toEqual([]);
+      expect(git(repository, 'rev-parse', SNAPSHOT_REF)).toBe(tip);
+    }
+
+    // One report for each pass, not one for each ref and not a loop.
+    expect(errors).toHaveLength(4);
+    expect(store.issues[0].comments).toHaveLength(1);
+    expect(
+      git(
+        repository,
+        'log',
+        '-1',
+        '--format=%B',
+        '--grep=^Vantik-Inbox: stuck$',
+        SNAPSHOT_REF,
+      ),
+    ).toContain('- applied: comment added');
+  });
+
+  it('still deletes an absorbed inbox when the pass writes nothing', async () => {
+    const repository = await checkout();
+    const store = new MemoryStore();
+    await pass(repository, store);
+
+    await handOff(repository, 'again', async (worktree) => {
+      await mkdir(join(worktree, 'issues/ENG-1/comments'), { recursive: true });
+      await writeFile(join(worktree, 'issues/ENG-1/comments/n.md'), 'Once.\n');
+    });
+
+    // The host refuses the delete once, then allows it.
+    refuseDeletes = true;
+    await pass(repository, store, { onInboxError: () => undefined });
+    refuseDeletes = false;
+
+    const tip = git(repository, 'rev-parse', SNAPSHOT_REF);
+    const result = await pass(repository, store);
+
+    expect(result.wrote).toBe(false);
+    expect(git(repository, 'rev-parse', SNAPSHOT_REF)).toBe(tip);
+    expect(git(repository, 'for-each-ref', INBOX_PREFIX)).toBe('');
+  });
+
+  it('reads at most one limit of hand-offs in a pass, and the rest in the next', async () => {
+    const repository = await checkout();
+    const store = new MemoryStore();
+    await pass(repository, store);
+
+    const total = MAX_INBOXES_PER_PASS + 10;
+    const worktree = join(root, 'worktree-many');
+    git(
+      repository,
+      'worktree',
+      'add',
+      '-q',
+      '--detach',
+      worktree,
+      SNAPSHOT_REF,
+    );
+
+    for (let index = 0; index < total; index += 1) {
+      git(worktree, 'checkout', '-q', '--detach', SNAPSHOT_REF);
+      await mkdir(join(worktree, 'issues/ENG-1/comments'), { recursive: true });
+      await writeFile(
+        join(worktree, `issues/ENG-1/comments/c${index}.md`),
+        `Comment ${index}.\n`,
+      );
+      git(worktree, 'add', '-A');
+      git(worktree, 'commit', '-q', '-m', `c${index}`);
+      git(
+        worktree,
+        'update-ref',
+        `${INBOX_PREFIX}n${String(index).padStart(3, '0')}`,
+        'HEAD',
+      );
+    }
+
+    git(repository, 'worktree', 'remove', '--force', worktree);
+
+    const first = await pass(repository, store);
+
+    expect(first.handOffs).toHaveLength(MAX_INBOXES_PER_PASS);
+    expect(
+      git(repository, 'for-each-ref', INBOX_PREFIX).split('\n').filter(Boolean),
+    ).toHaveLength(10);
+
+    const second = await pass(repository, store);
+
+    expect(second.handOffs).toHaveLength(10);
+    expect(git(repository, 'for-each-ref', INBOX_PREFIX)).toBe('');
+    expect(store.issues[0].comments).toHaveLength(total);
+  });
+
+  it('reads 200 lines of an outbox file and says once that the rest was not read', async () => {
+    const repository = await checkout();
+    const store = new MemoryStore();
+    await pass(repository, store);
+
+    await handOff(repository, 'flood', async (worktree) => {
+      await mkdir(join(worktree, 'issues/ENG-1'), { recursive: true });
+      await writeFile(
+        join(worktree, 'issues/ENG-1/outbox.jsonl'),
+        '1\n'.repeat(5000),
+      );
+    });
+
+    await pass(repository, store);
+
+    const reply = git(
+      repository,
+      'log',
+      '-1',
+      '--format=%B',
+      '--grep=^Vantik-Inbox: flood$',
+      SNAPSHOT_REF,
+    );
+
+    expect(store.outboxes[0].split('\n').filter(Boolean)).toHaveLength(
+      OUTBOX_LINES_READ,
+    );
+    expect(reply).toContain(
+      `4800 lines past the limit of ${OUTBOX_LINES_READ} were not read`,
+    );
+    expect(reply.length).toBeLessThan(2000);
+  });
+
+  it('caps the reply of one hand-off in lines and in bytes', () => {
+    const many = Array.from({ length: 1000 }, (_, index) => `reason ${index}`);
+    const heavy: string[] = Array.from({ length: 40 }, () => 'x'.repeat(400));
+    const message = snapshotMessage(
+      [],
+      [
+        {
+          name: 'big',
+          commit: null,
+          object: 'a'.repeat(40),
+          outcomes: [
+            { path: 'a', applied: [], refused: many },
+            ...heavy.map((line, index) => ({
+              path: `f${index}`,
+              applied: [] as string[],
+              refused: [
+                line,
+                line,
+                line,
+                line,
+                line,
+                line,
+                line,
+                line,
+                line,
+                line,
+              ],
+            })),
+          ],
+        },
+      ],
+      false,
+    );
+
+    expect(message).toContain('- ... and 950 more');
+    expect(message).toContain('more lines');
+    expect(Buffer.byteLength(message)).toBeLessThan(17 * 1024);
   });
 });

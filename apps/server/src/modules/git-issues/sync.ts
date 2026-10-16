@@ -8,12 +8,7 @@ import {
   type GitRepository,
 } from './git';
 import { type InboxFile, type InboxReading, readInbox } from './inbox';
-import {
-  HostRefusedPushError,
-  INBOX_PREFIX,
-  type IssueRemote,
-  SNAPSHOT_REF,
-} from './issue-remote';
+import { INBOX_PREFIX, type IssueRemote, SNAPSHOT_REF } from './issue-remote';
 import { renderSnapshot, type Snapshot } from './snapshot';
 
 export { INBOX_PREFIX, SNAPSHOT_REF };
@@ -144,13 +139,38 @@ export async function syncRepository(
     }
   }
 
+  /**
+   * Inbox refs whose commit is already in the history of the snapshot. An
+   * earlier pass applied them, but the source still has the ref: the host
+   * refused the delete, the delete failed, or the push timed out after the
+   * host took it. Reading one again would write an empty reply each pass. They
+   * are only deleted.
+   */
+  const stale: Array<{ ref: string; sha: string; name: string }> = [];
+  let examined = 0;
+
   for (const inbox of await mirror.refs(INBOX_PREFIX)) {
+    // Refs that wait for a delete must not keep a new hand-off out, so they do
+    // not count against the limit of hand-offs. Looking at them has its own
+    // limit.
+    if (
+      handled.length >= MAX_INBOXES_PER_PASS ||
+      examined >= MAX_INBOXES_EXAMINED
+    ) {
+      break;
+    }
+
+    examined += 1;
+
     const name = inbox.ref.slice(INBOX_PREFIX.length);
     const found = await locateInbox(mirror, inbox.sha, tip);
     let outcomes: Outcome[];
 
     if ('refusal' in found) {
       outcomes = [{ path: '', applied: [], refused: [found.refusal] }];
+    } else if (found.base === inbox.sha) {
+      stale.push({ ...inbox, name });
+      continue;
     } else {
       try {
         outcomes = await applyRange(mirror, store, found.base, inbox.sha, {
@@ -171,6 +191,12 @@ export async function syncRepository(
       outcomes,
     });
     handled.push({ ...inbox, name });
+  }
+
+  if (stale.length > 0) {
+    await remote.exclusive(() =>
+      deleteInboxes(mirror, remote, stale, options.onInboxError),
+    );
   }
 
   if (
@@ -228,24 +254,39 @@ export async function syncRepository(
     // Only now, and only if the ref has not moved. An agent that reused the
     // name while this pass ran has a newer commit there, which the next pass
     // reads.
-    for (const inbox of handled) {
-      try {
-        await remote.deleteInbox(inbox.ref, inbox.sha);
-      } catch (error) {
-        options.onInboxError?.(inbox.name, error);
-
-        // The host refuses each delete for the same reason. One report is
-        // enough, and the next pass tries again.
-        if (error instanceof HostRefusedPushError) {
-          break;
-        }
-      }
-
-      await mirror.deleteRef(inbox.ref, inbox.sha);
-    }
+    await deleteInboxes(mirror, remote, handled, options.onInboxError);
 
     return { tip: commit, wrote: true, handOffs };
   });
+}
+
+/** One pass reads this many hand-offs. The rest wait for the next pass. */
+export const MAX_INBOXES_PER_PASS = 50;
+
+/** One pass looks at this many inbox refs, including the ones it only deletes. */
+const MAX_INBOXES_EXAMINED = 500;
+
+/**
+ * Deletes inbox refs at the source in one push, then in the mirror. A host
+ * that refuses gets one report for the batch, because it refuses each ref for
+ * the same reason, and the next pass tries again. The mirror ref goes in any
+ * case: if the source kept the ref, the next fetch brings it back.
+ */
+async function deleteInboxes(
+  mirror: GitRepository,
+  remote: IssueRemote,
+  refs: Array<{ ref: string; sha: string; name: string }>,
+  onError?: (name: string, error: unknown) => void,
+): Promise<void> {
+  try {
+    await remote.deleteInboxes(refs);
+  } catch (error) {
+    onError?.(refs[0].name, error);
+  }
+
+  for (const inbox of refs) {
+    await mirror.deleteRef(inbox.ref, inbox.sha);
+  }
 }
 
 /**
@@ -448,6 +489,43 @@ function unreadReason(
   return null;
 }
 
+/** The reply goes into the history of the user's repository, so it has a size. */
+const REPLY_LINES_PER_FILE = 50;
+const REPLY_BYTES_PER_HAND_OFF = 16 * 1024;
+const REPLY_LINE_LENGTH = 500;
+
+function capLines(lines: string[], max: number): string[] {
+  const kept = lines.slice(0, max).map(shorten);
+
+  return lines.length > max
+    ? [...kept, `- ... and ${lines.length - max} more`]
+    : kept;
+}
+
+function shorten(line: string): string {
+  return line.length > REPLY_LINE_LENGTH
+    ? `${line.slice(0, REPLY_LINE_LENGTH)}...`
+    : line;
+}
+
+/** Keeps the lines of one hand-off inside the byte limit of its reply. */
+function capReply(lines: string[]): string[] {
+  let bytes = 0;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    bytes += Buffer.byteLength(lines[index]) + 1;
+
+    if (bytes > REPLY_BYTES_PER_HAND_OFF) {
+      return [
+        ...lines.slice(0, index),
+        `- ... and ${lines.length - index} more lines`,
+      ];
+    }
+  }
+
+  return lines;
+}
+
 /**
  * The commit message, which doubles as the reply to every hand-off.
  *
@@ -489,10 +567,17 @@ export function snapshotMessage(
       const where = outcome.path ? `${outcome.path}: ` : '';
 
       lines.push(
-        ...outcome.applied.map((line) => `- applied: ${line}`),
-        ...outcome.refused.map((line) => `- refused: ${where}${line}`),
+        ...capLines(
+          [
+            ...outcome.applied.map((line) => `- applied: ${line}`),
+            ...outcome.refused.map((line) => `- refused: ${where}${line}`),
+          ],
+          REPLY_LINES_PER_FILE,
+        ),
       );
     }
+
+    lines.splice(0, lines.length, ...capReply(lines));
 
     if (lines.length === 1) {
       lines.push('- nothing to apply');

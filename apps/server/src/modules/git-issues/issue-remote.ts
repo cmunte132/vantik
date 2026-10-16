@@ -41,6 +41,14 @@ export interface IssueRemote {
    * This method returns false if the ref moved.
    */
   deleteInbox(ref: string, expected: string): Promise<boolean>;
+
+  /**
+   * Deletes several inbox refs in one push, each only if it is still at its
+   * expected commit. A ref that moved stays. If git rejects only some of the
+   * refs, this method tries each one alone, so one moved ref does not keep the
+   * rest. A host refusal throws and stops the work.
+   */
+  deleteInboxes(entries: Array<{ ref: string; sha: string }>): Promise<void>;
 }
 
 export const SNAPSHOT_REF = 'refs/vantik/issues';
@@ -128,8 +136,8 @@ export function gitIssueRemote(
 
     async pushSnapshot(sha, expected) {
       return await push(
-        `--force-with-lease=${SNAPSHOT_REF}:${expected ?? ''}`,
-        `${sha}:${SNAPSHOT_REF}`,
+        [`--force-with-lease=${SNAPSHOT_REF}:${expected ?? ''}`],
+        [`${sha}:${SNAPSHOT_REF}`],
         mirrorPath,
         remotes.push,
       );
@@ -137,18 +145,39 @@ export function gitIssueRemote(
 
     async deleteInbox(ref, expected) {
       return await push(
-        `--force-with-lease=${ref}:${expected}`,
-        `:${ref}`,
+        [`--force-with-lease=${ref}:${expected}`],
+        [`:${ref}`],
         mirrorPath,
         remotes.push,
       );
+    },
+
+    async deleteInboxes(entries) {
+      if (entries.length === 0) {
+        return;
+      }
+
+      const all = await push(
+        entries.map((entry) => `--force-with-lease=${entry.ref}:${entry.sha}`),
+        entries.map((entry) => `:${entry.ref}`),
+        mirrorPath,
+        remotes.push,
+      );
+
+      if (all) {
+        return;
+      }
+
+      for (const entry of entries) {
+        await this.deleteInbox(entry.ref, entry.sha);
+      }
     },
   };
 }
 
 async function push(
-  lease: string,
-  refspec: string,
+  leases: string[],
+  refspecs: string[],
   mirrorPath: string,
   remote: GitRemote,
 ): Promise<boolean> {
@@ -159,9 +188,9 @@ async function push(
         '--quiet',
         '--no-verify',
         ...localTransportArgs(remote.url, 'receive-pack'),
-        lease,
+        ...leases,
         remote.url,
-        refspec,
+        ...refspecs,
       ],
       { cwd: mirrorPath, remote },
     );
@@ -175,7 +204,7 @@ async function push(
 
       if (HOST_REFUSED.test(error.stderr)) {
         throw new HostRefusedPushError(
-          refspec.slice(refspec.lastIndexOf(':') + 1),
+          refspecs[0].slice(refspecs[0].lastIndexOf(':') + 1),
           refusalLine(error.stderr),
         );
       }

@@ -159,7 +159,29 @@ export interface GitOptions {
   timeoutMs?: number;
   /** The largest output accepted, in bytes. More fails the command. */
   maxBuffer?: number;
+  /** Bytes for the standard input of the command. */
+  input?: string | Buffer;
+  /** Extra environment, for example `GIT_INDEX_FILE`. It wins over the rest. */
+  env?: Record<string, string>;
+  /** Exit codes that are an answer and not a failure. */
+  okCodes?: number[];
 }
+
+/**
+ * Variables that a parent git process sets for its children. A server that a
+ * hook started would otherwise aim every command at the repository of that
+ * hook.
+ */
+const INHERITED_GIT_VARIABLES = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_INDEX_FILE',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_COMMON_DIR',
+  'GIT_NAMESPACE',
+  'GIT_PREFIX',
+];
 
 /**
  * Runs one git command and returns its standard output.
@@ -167,19 +189,43 @@ export interface GitOptions {
  * Nothing here reads the caller's global git configuration for credentials,
  * and nothing waits on a prompt: a command that would ask for a password fails
  * at once instead of hanging a request.
+ *
+ * Hooks and `core.fsmonitor` are off for every command. A repository on this
+ * server can be one that another person owns, and a hook or an fsmonitor
+ * command in it is code that the server would run as itself.
  */
 export async function git(
   args: string[],
   options: GitOptions = {},
 ): Promise<string> {
-  const remoteEnv = options.remote?.env ?? {};
+  const { stdout } = await run(args, options, 'utf8');
+
+  return stdout;
+}
+
+/** As `git`, with the output as bytes and the exit code that was accepted. */
+export async function gitBytes(
+  args: string[],
+  options: GitOptions = {},
+): Promise<{ stdout: Buffer; code: number }> {
+  return await run(args, options, 'buffer');
+}
+
+async function run<E extends 'utf8' | 'buffer'>(
+  args: string[],
+  options: GitOptions,
+  encoding: E,
+): Promise<{ stdout: E extends 'buffer' ? Buffer : string; code: number }> {
+  const remoteEnv = { ...options.remote?.env, ...options.env };
   const baseConfig = configEnv({
     'safe.directory': '*',
     'credential.helper': '',
     'core.askPass': '',
+    'core.hooksPath': '/dev/null',
+    'core.fsmonitor': 'false',
   });
 
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     GIT_TERMINAL_PROMPT: '0',
     GIT_EDITOR: 'true',
@@ -189,19 +235,76 @@ export async function git(
     ...mergeConfigEnv(baseConfig, remoteEnv),
   };
 
-  try {
-    const { stdout } = await exec('git', args, {
-      cwd: options.cwd,
-      env,
-      maxBuffer: options.maxBuffer ?? MAX_BUFFER,
-      timeout: options.timeoutMs ?? GIT_TIMEOUT_MS,
-      encoding: 'utf8',
-    });
+  for (const name of INHERITED_GIT_VARIABLES) {
+    if (!remoteEnv[name]) {
+      delete env[name];
+    }
+  }
 
-    return stdout;
+  const child = exec('git', args, {
+    cwd: options.cwd,
+    env,
+    maxBuffer: options.maxBuffer ?? MAX_BUFFER,
+    timeout: options.timeoutMs ?? GIT_TIMEOUT_MS,
+    encoding,
+  });
+
+  if (options.input !== undefined) {
+    // A command that exits before it reads all of its input closes the pipe.
+    // The exit code reports the fault, so this error would only repeat it.
+    child.child.stdin?.on('error', () => undefined);
+    child.child.stdin?.end(options.input);
+  }
+
+  try {
+    const { stdout } = await child;
+
+    return { stdout: stdout as never, code: 0 };
   } catch (error) {
+    const code = (error as { code?: unknown }).code;
+
+    if (typeof code === 'number' && options.okCodes?.includes(code)) {
+      return {
+        stdout: (error as { stdout: unknown }).stdout as never,
+        code,
+      };
+    }
+
     throw new GitCommandError(args, error, options.remote?.secrets ?? []);
   }
+}
+
+/**
+ * Arguments that stop the other end of a local transport from a run of its
+ * hooks.
+ *
+ * Git removes `GIT_CONFIG_*` from the environment of a local `upload-pack` or
+ * `receive-pack`, so the base configuration above does not reach it. A
+ * checkout with a `pre-receive`, `post-receive` or `reference-transaction`
+ * hook would then run that hook as the server. The command line of the helper
+ * is the one place that can carry the setting. A remote that is not a local
+ * path needs nothing, and gets no arguments.
+ */
+export function localTransportArgs(
+  url: string,
+  command: 'upload-pack' | 'receive-pack',
+): string[] {
+  if (!url.startsWith('/') && !url.startsWith('file://')) {
+    return [];
+  }
+
+  const helper = [
+    'git',
+    '-c',
+    'core.hooksPath=/dev/null',
+    '-c',
+    'core.fsmonitor=false',
+    '-c',
+    "'safe.directory=*'",
+    command,
+  ].join(' ');
+
+  return [`--${command}=${helper}`];
 }
 
 /** A failed git command, with any credential removed from its message. */

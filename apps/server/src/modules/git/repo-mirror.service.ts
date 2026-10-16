@@ -83,12 +83,18 @@ export interface Checkout {
  *
  * One fetch at a time for each mirror. Two callers that ask together share
  * the one fetch rather than race on the same refs.
+ *
+ * One writer at a time for each mirror. A fetch and the work of the issue
+ * mirror (`exclusive`) wait for each other, so two git processes never write
+ * the refs of the same bare repository together.
  */
 @Injectable()
 export class RepoMirrorService {
   private readonly inFlight = new Map<string, Promise<Mirror>>();
   private readonly fetchedAt = new Map<string, number>();
   private readonly forcedAt = new Map<string, number>();
+  /** The last queued job of each mirror. A new job waits for it. */
+  private readonly tails = new Map<string, Promise<unknown>>();
 
   /** The directory that holds every mirror. */
   root(): string {
@@ -114,6 +120,43 @@ export class RepoMirrorService {
   }
 
   /**
+   * Runs `work` on the mirror of a repository while no fetch and no other
+   * `exclusive` job runs on it, and gives it the path of the bare repository.
+   * The mirror exists when `work` starts.
+   *
+   * `work` must not call `sync`, because `sync` waits for this lock and the
+   * two would wait for each other.
+   */
+  async exclusive<T>(
+    resolved: ResolvedRepo,
+    work: (path: string) => Promise<T>,
+  ): Promise<T> {
+    const path = this.pathOf(resolved);
+
+    return await this.queue(path, async () => {
+      await ensureBare(path);
+
+      return await work(path);
+    });
+  }
+
+  /** Puts `job` behind the jobs that are queued on `path`, and returns its result. */
+  private queue<T>(path: string, job: () => Promise<T>): Promise<T> {
+    const result = (this.tails.get(path) ?? Promise.resolve()).then(job, job);
+    const tail = result.catch((): undefined => undefined);
+
+    this.tails.set(path, tail);
+    void tail.then(() => {
+      // The map must not keep a mirror that nothing uses.
+      if (this.tails.get(path) === tail) {
+        this.tails.delete(path);
+      }
+    });
+
+    return result;
+  }
+
+  /**
    * The mirror, fetched from the source when the last fetch is older than
    * `maxAgeMs`.
    */
@@ -131,9 +174,11 @@ export class RepoMirrorService {
       return { path, defaultBranch: await defaultBranchOf(path) };
     }
 
-    const work = this.fetch(resolved, path).finally(() => {
-      this.inFlight.delete(path);
-    });
+    const work = this.queue(path, () => this.fetch(resolved, path)).finally(
+      () => {
+        this.inFlight.delete(path);
+      },
+    );
 
     this.inFlight.set(path, work);
 

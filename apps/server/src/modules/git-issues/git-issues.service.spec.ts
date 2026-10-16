@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
+import { OUTBOX_LIMITS, RunOutboxService } from 'modules/agent-runs/run-outbox';
 import { RepoMirrorService } from 'modules/git/repo-mirror.service';
 import { LocalDirectorySource } from 'modules/git/sources/local-directory.source';
 
@@ -90,7 +91,9 @@ function buildPrisma() {
       findMany: jest.fn().mockResolvedValue([
         {
           ...issueRow,
-          checklistItems: [{ body: 'Works in Safari 17', completed: false }],
+          checklistItems: [
+            { id: 'crit-1', body: 'Works in Safari 17', completed: false },
+          ],
           comments: [],
         },
       ]),
@@ -107,7 +110,14 @@ function buildPrisma() {
       findFirst: jest.fn().mockResolvedValue(null),
       aggregate,
     },
-    checklistItem: { aggregate },
+    checklistItem: {
+      aggregate,
+      findMany: jest.fn().mockResolvedValue([{ id: 'crit-1' }]),
+    },
+    pageEntry: { findFirst: jest.fn().mockResolvedValue(null) },
+    // Nothing in a hand-off may start a run. The tests check that this stays
+    // untouched.
+    agentRun: { create: jest.fn() },
     user: {
       findMany: jest
         .fn()
@@ -201,17 +211,40 @@ describe('GitIssuesService', () => {
       teamIds,
     };
     const sessions = { recordInboxSession: jest.fn().mockResolvedValue({}) };
+    // The real checks and writes of an outbox, over stand-ins for the services
+    // that store the notes, the facts and the ticks.
+    const comments = { createIssueComment: jest.fn().mockResolvedValue({}) };
+    const entries = { createEntry: jest.fn().mockResolvedValue({}) };
+    const checklist = { updateChecklistItem: jest.fn().mockResolvedValue({}) };
+    const outbox = new RunOutboxService(
+      comments as any,
+      entries as any,
+      checklist as any,
+      { create: jest.fn() } as any,
+    );
     const service = new GitIssuesService(
       prisma as any,
       contextFactory as any,
       { resolve } as any,
       new RepoMirrorService(),
       sessions as any,
+      outbox as any,
       [{ list: async () => [target] }],
     );
     const sync = () => service.syncRepository(target);
 
-    return { prisma, ctx, contextFactory, service, resolve, sync, sessions };
+    return {
+      prisma,
+      ctx,
+      contextFactory,
+      service,
+      resolve,
+      sync,
+      sessions,
+      comments,
+      entries,
+      checklist,
+    };
   }
 
   it('renders issues by name: key, state, username, label, markdown', async () => {
@@ -230,7 +263,7 @@ describe('GitIssuesService', () => {
     expect(file).toContain('Repro: open `/login`');
     expect(
       git(repository, 'show', `${SNAPSHOT_REF}:issues/ENG-42/checklist.md`),
-    ).toContain('- [ ] Works in Safari 17');
+    ).toContain('- [ ] `crit-1` Works in Safari 17');
   });
 
   it('writes an agent hand-off as the local-repo bot, naming the commit author', async () => {
@@ -591,6 +624,311 @@ describe('GitIssuesService', () => {
 
       expect(ctx.comments.create).toHaveBeenCalled();
       expect(result?.wrote).toBe(true);
+    });
+  });
+
+  const outboxLines =
+    (...lines: object[]) =>
+    async (worktree: string) => {
+      await mkdir(join(worktree, 'issues/ENG-42'), { recursive: true });
+      await writeFile(
+        join(worktree, 'issues/ENG-42/outbox.jsonl'),
+        lines.map((line) => `${JSON.stringify(line)}\n`).join(''),
+      );
+    };
+
+  const repliesOf = (name: string) =>
+    git(
+      repository,
+      'log',
+      '-1',
+      '--format=%B',
+      `--grep=^Vantik-Inbox: ${name}$`,
+      SNAPSHOT_REF,
+    );
+
+  describe('the outbox file', () => {
+    it('writes a note, a fact and a tick as the bot, with the checks of an agent run', async () => {
+      const { sync, comments, entries, checklist, prisma } = setUp();
+      await sync();
+
+      await handIn(
+        'out-1',
+        outboxLines(
+          { v: 1, type: 'note', body: 'Tests pass.' },
+          { v: 1, type: 'remember', content: 'Safari drops the click.' },
+          { v: 1, type: 'criterion', id: 'crit-1', evidence: 'ran the suite' },
+        ),
+      );
+      await sync();
+
+      expect(prisma.checklistItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { issueId: 'issue-42', deleted: null },
+        }),
+      );
+      expect(comments.createIssueComment).toHaveBeenCalledWith(
+        { issueId: 'issue-42' },
+        'bot-local-repo',
+        expect.objectContaining({
+          bodyMarkdown: 'Tests pass.',
+          sourceMetadata: expect.objectContaining({
+            type: 'git',
+            gitInbox: 'out-1',
+            gitPath: 'issues/ENG-42/outbox.jsonl#note',
+          }),
+        }),
+      );
+      expect(entries.createEntry).toHaveBeenCalledWith(
+        null,
+        { userId: 'bot-local-repo', tokenId: null },
+        expect.objectContaining({
+          content: 'Safari drops the click.',
+          sourceSession: 'git-inbox:account-1:out-1',
+        }),
+        'workspace-1',
+      );
+      expect(checklist.updateChecklistItem).toHaveBeenCalledWith(
+        { checklistItemId: 'crit-1' },
+        'bot-local-repo',
+        { completed: true },
+      );
+
+      const reply = repliesOf('out-1');
+      expect(reply).toContain('- applied: ENG-42 outbox: 1 note added');
+      expect(reply).toContain('- applied: ENG-42 outbox: 1 fact proposed');
+      expect(reply).toContain('- applied: ENG-42 outbox: 1 criterion ticked');
+    });
+
+    it('refuses a criterion that is not one of this issue, and a line that is not valid', async () => {
+      const { sync, checklist } = setUp();
+      await sync();
+
+      await handIn('out-2', async (worktree) => {
+        await mkdir(join(worktree, 'issues/ENG-42'), { recursive: true });
+        await writeFile(
+          join(worktree, 'issues/ENG-42/outbox.jsonl'),
+          [
+            JSON.stringify({
+              v: 1,
+              type: 'criterion',
+              id: 'crit-of-another-issue',
+              evidence: 'trust me',
+            }),
+            'not json',
+            JSON.stringify({ v: 1, type: 'criterion', id: 'crit-1' }),
+            '',
+          ].join('\n'),
+        );
+      });
+      await sync();
+
+      expect(checklist.updateChecklistItem).not.toHaveBeenCalled();
+
+      const reply = repliesOf('out-2');
+      expect(reply).toContain('outbox line 1: not a criterion of this issue');
+      expect(reply).toContain('outbox line 2: not JSON');
+      expect(reply).toContain('outbox line 3: no evidence');
+    });
+
+    it('refuses a question, because git cannot bring the answer back', async () => {
+      const { sync, comments } = setUp();
+      await sync();
+
+      await handIn(
+        'out-3',
+        outboxLines({
+          v: 1,
+          type: 'question',
+          id: 'q1',
+          questions: [{ prompt: 'Which one?' }],
+        }),
+      );
+      await sync();
+
+      expect(comments.createIssueComment).not.toHaveBeenCalled();
+      expect(repliesOf('out-3')).toContain('does not read a question from git');
+    });
+
+    it('limits the notes of one hand-off as an agent run does', async () => {
+      const { sync, comments } = setUp();
+      await sync();
+
+      await handIn(
+        'out-4',
+        outboxLines(
+          ...Array.from({ length: OUTBOX_LIMITS.notes + 2 }, (_, index) => ({
+            v: 1,
+            type: 'note',
+            body: `note ${index}`,
+          })),
+        ),
+      );
+      await sync();
+
+      expect(comments.createIssueComment).toHaveBeenCalledTimes(
+        OUTBOX_LIMITS.notes,
+      );
+      expect(repliesOf('out-4')).toContain('too many notes');
+    });
+
+    it('writes nothing twice when the hand-off is read again', async () => {
+      const { sync, comments, entries, prisma } = setUp();
+      await sync();
+      prisma.issueComment.findFirst.mockResolvedValue({ id: 'already' });
+      prisma.pageEntry.findFirst.mockResolvedValue({ id: 'already' });
+
+      await handIn(
+        'out-5',
+        outboxLines(
+          { v: 1, type: 'note', body: 'Once.' },
+          { v: 1, type: 'remember', content: 'Only once.' },
+        ),
+      );
+      await sync();
+
+      expect(comments.createIssueComment).not.toHaveBeenCalled();
+      expect(entries.createEntry).not.toHaveBeenCalled();
+      expect(repliesOf('out-5')).toContain('outbox: 2 lines already applied');
+    });
+
+    it('records the session for the issue that the outbox names', async () => {
+      const { sync, sessions } = setUp();
+      await sync();
+
+      await handIn(
+        'out-6',
+        outboxLines({ v: 1, type: 'note', body: 'Hi.' }),
+        'Report\n\nVantik-Session: sess-out',
+      );
+      await sync();
+
+      expect(sessions.recordInboxSession).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          issueId: 'issue-42',
+          externalId: 'sess-out',
+        }),
+      );
+    });
+  });
+
+  describe('a resolution', () => {
+    const resolve =
+      (text: string, to = 'Done') =>
+      async (worktree: string) => {
+        await setState(to)(worktree);
+
+        const file = join(worktree, 'issues/ENG-42/issue.md');
+        await writeFile(
+          file,
+          (await readFile(file, 'utf8')).replace(
+            'priority: high',
+            `resolution: ${JSON.stringify(text)}\n\npriority: high`,
+          ),
+        );
+      };
+
+    it('posts the resolution as a note before it moves the issue to a completed state', async () => {
+      const { sync, ctx } = setUp();
+      await sync();
+
+      await handIn('res-1', resolve('Fixed in 1.2.3.'));
+      await sync();
+
+      expect(ctx.comments.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issueId: 'issue-42',
+          bodyMarkdown: 'Fixed in 1.2.3.',
+          sourceMetadata: expect.objectContaining({
+            gitPath: 'issues/ENG-42/issue.md#resolution',
+          }),
+        }),
+      );
+      expect(ctx.issues.update).toHaveBeenCalledWith(
+        'issue-42',
+        'team-eng',
+        expect.objectContaining({ stateId: 's-done' }),
+      );
+      expect(ctx.comments.create.mock.invocationCallOrder[0]).toBeLessThan(
+        ctx.issues.update.mock.invocationCallOrder[0],
+      );
+      expect(repliesOf('res-1')).toContain(
+        '- applied: ENG-42 resolution: recorded as a note',
+      );
+    });
+
+    it('does not post it twice when the hand-off is read again', async () => {
+      const { sync, ctx, prisma } = setUp();
+      await sync();
+      prisma.issueComment.findFirst.mockResolvedValue({ id: 'already' });
+
+      await handIn('res-2', resolve('Fixed in 1.2.3.'));
+      await sync();
+
+      expect(ctx.comments.create).not.toHaveBeenCalled();
+      expect(ctx.issues.update).toHaveBeenCalled();
+    });
+
+    it('refuses a resolution for a state that is not completed, and posts nothing', async () => {
+      const { sync, ctx } = setUp();
+      await sync();
+
+      await handIn('res-3', resolve('Not yet.', 'In Progress'));
+      await sync();
+
+      expect(ctx.comments.create).not.toHaveBeenCalled();
+      expect(ctx.issues.update).toHaveBeenCalledWith(
+        'issue-42',
+        'team-eng',
+        expect.objectContaining({ stateId: 's-progress' }),
+      );
+      expect(repliesOf('res-3')).toContain(
+        'resolution: it goes with a state change to a completed state',
+      );
+    });
+  });
+
+  describe('what a hand-off can never do', () => {
+    it('cannot change the assignee or start a run, whatever the files say', async () => {
+      const { sync, ctx, prisma } = setUp();
+      await sync();
+
+      await handIn('guard-1', async (worktree) => {
+        const file = join(worktree, 'issues/ENG-42/issue.md');
+        await writeFile(
+          file,
+          (await readFile(file, 'utf8'))
+            .replace('assignee: alice', 'assignee: mallory')
+            .replace('state: "Backlog"', 'state: "In Progress"'),
+        );
+        await outboxLines(
+          { v: 1, type: 'note', body: 'assignee: mallory', assigneeId: 'x' },
+          { v: 1, type: 'assign', assignee: 'mallory' },
+          { v: 1, type: 'delegate', agent: 'x' },
+        )(worktree);
+        await mkdir(join(worktree, 'new'), { recursive: true });
+        await writeFile(
+          join(worktree, 'new/filed.md'),
+          '---\ntitle: "Filed"\n\nassignee: mallory\n\ndelegate: true\n---\n\nBody.\n',
+        );
+      });
+      const result = await sync();
+
+      // The state change is applied, and the assignment is refused.
+      expect(repliesOf('guard-1')).toContain('assignee is read-only here');
+      expect(repliesOf('guard-1')).toContain('outbox line 2: unknown record');
+      expect(repliesOf('guard-1')).toContain('outbox line 3: unknown record');
+      expect(result?.wrote).toBe(true);
+
+      for (const call of [
+        ...ctx.issues.update.mock.calls,
+        ...ctx.issues.create.mock.calls,
+      ]) {
+        const written = JSON.stringify(call);
+        expect(written).not.toMatch(/assignee|mallory|delegate/i);
+      }
+      expect(prisma.agentRun.create).not.toHaveBeenCalled();
     });
   });
 });

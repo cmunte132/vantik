@@ -169,3 +169,90 @@ describe('readInbox', () => {
     ]);
   });
 });
+
+describe('readInbox: the outbox file', () => {
+  const path = 'issues/ENG-42/outbox.jsonl';
+  const note = '{"v":1,"type":"note","body":"Found it."}\n';
+  const second = '{"v":1,"type":"note","body":"And more."}\n';
+
+  it('reads the lines of a new file', () => {
+    const { proposals, refusals } = readInbox([
+      { path, before: null, after: note },
+    ]);
+
+    expect(refusals).toEqual([]);
+    expect(proposals).toEqual([
+      { kind: 'outbox', path, key: 'ENG-42', text: note },
+    ]);
+  });
+
+  it('reads only the lines that were added after the earlier text', () => {
+    const { proposals } = readInbox([
+      { path, before: note, after: note + second },
+    ]);
+
+    expect(proposals).toEqual([
+      { kind: 'outbox', path, key: 'ENG-42', text: second },
+    ]);
+  });
+
+  it('adds the newline that an editor left out', () => {
+    const { proposals } = readInbox([
+      { path, before: null, after: note.trimEnd() },
+    ]);
+
+    expect(proposals).toEqual([
+      { kind: 'outbox', path, key: 'ENG-42', text: note },
+    ]);
+  });
+
+  it('refuses a change to an earlier line', () => {
+    const { proposals, refusals } = readInbox([
+      { path, before: note, after: second + second },
+    ]);
+
+    expect(proposals).toEqual([]);
+    expect(refusals[0].reason).toMatch(/append-only/);
+  });
+
+  it('reads nothing when the file did not grow, or when it was removed', () => {
+    expect(readInbox([{ path, before: note, after: note }]).proposals).toEqual(
+      [],
+    );
+    expect(readInbox([{ path, before: note, after: null }]).refusals).toEqual(
+      [],
+    );
+  });
+});
+
+describe('readInbox: the resolution field', () => {
+  const path = 'issues/ENG-42/issue.md';
+
+  it('reads a resolution that the agent added, with the state change', () => {
+    const after = before
+      .replace('state: "Backlog"', 'state: "Done"')
+      .replace(
+        'priority: high',
+        'resolution: "Fixed in 1.2.3\\nSee the PR."\n\npriority: high',
+      );
+
+    const { proposals, refusals } = readInbox([{ path, before, after }]);
+
+    expect(refusals).toEqual([]);
+    expect(proposals).toEqual([
+      expect.objectContaining({
+        changes: {
+          state: { from: 'Backlog', to: 'Done' },
+          resolution: { from: '', to: 'Fixed in 1.2.3\nSee the PR.' },
+        },
+      }),
+    ]);
+  });
+
+  it('still refuses a field that is read-only', () => {
+    const after = before.replace('assignee: alice', 'assignee: bob');
+    const { refusals } = readInbox([{ path, before, after }]);
+
+    expect(refusals[0].reason).toMatch(/assignee is read-only/);
+  });
+});

@@ -14,6 +14,7 @@ import { UserId, Workspace } from 'modules/auth/session.decorator';
 import {
   AddLocalRepositoryDto,
   LocalRepositoryIdDto,
+  SetGitIssuesDto,
 } from './local-repo.interface';
 import { LocalRepoService } from './local-repo.service';
 
@@ -49,6 +50,26 @@ export class LocalRepoController {
     @Body() body: AddLocalRepositoryDto,
   ) {
     return await this.localRepo.add(workspaceId, userId, body.path);
+  }
+
+  /**
+   * The teams whose issues this repository mirrors for agents, under
+   * `refs/vantik/issues`. An empty list turns the mirror off.
+   */
+  @Post(':repositoryId/git_issues')
+  @UseGuards(AuthGuard)
+  async setGitIssues(
+    @Workspace() workspaceId: string,
+    @UserId() userId: string,
+    @Param() params: LocalRepositoryIdDto,
+    @Body() body: SetGitIssuesDto,
+  ) {
+    return await this.localRepo.setGitIssues(
+      workspaceId,
+      userId,
+      params.repositoryId,
+      body.teamIds,
+    );
   }
 
   @Delete(':repositoryId')

@@ -16,6 +16,13 @@ export class LocalRepository {
   path: string;
 
   addedAt: string;
+
+  /**
+   * The teams whose issues Vantik mirrors into this repository under
+   * `refs/vantik/issues`, for agents that can reach the repository and not
+   * Vantik. Absent when the mirror is off.
+   */
+  gitIssues?: { teamIds: string[] };
 }
 
 /**

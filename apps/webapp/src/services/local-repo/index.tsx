@@ -37,6 +37,23 @@ export function removeLocalRepository({
   return ajaxDelete({ url: `/api/v1/local_repo/${repositoryId}` });
 }
 
+/**
+ * The teams whose issues one repository mirrors for agents, under
+ * `refs/vantik/issues`. An empty list turns the mirror off.
+ */
+export function setLocalRepositoryGitIssues({
+  repositoryId,
+  teamIds,
+}: {
+  repositoryId: string;
+  teamIds: string[];
+}): Promise<LocalRepository> {
+  return ajaxPost({
+    url: `/api/v1/local_repo/${repositoryId}/git_issues`,
+    data: { teamIds },
+  });
+}
+
 export const GetLocalRepositories = 'getLocalRepositories';
 
 export function useGetLocalRepositories(): UseQueryResult<
@@ -57,4 +74,9 @@ export const useAddLocalRepositoryMutation = mutationHook(addLocalRepository, {
 
 export const useRemoveLocalRepositoryMutation = mutationHook(
   removeLocalRepository,
+);
+
+export const useSetLocalRepositoryGitIssuesMutation = mutationHook(
+  setLocalRepositoryGitIssues,
+  { fallback: 'The server refused this change, and it gave no reason.' },
 );

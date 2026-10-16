@@ -285,6 +285,7 @@ log. To see if a job runs, read
 | Knowledge gap issues | `0 4 * * 1` (Monday 04:00) | `KNOWLEDGE_GAP_ISSUES_CRON` | This job opens one issue for each question that agents asked the knowledge often and that it did not answer. It opens the issue on the team that owns the module of the question. It never opens a second issue for the same question. |
 | Generated page refresh | `23 * * * *` (hourly) | `KNOWLEDGE_PAGE_REFRESH_CRON` | This job builds a generated page again when the entries in its scope changed. It waits at least `KNOWLEDGE_PAGE_REFRESH_MIN_INTERVAL` after the last build. Read [Generated pages](/fundamentals/knowledge/gardener#generated-pages). |
 | Agent run lease sweep | `* * * * *` (each minute) | `AGENT_RUN_LEASE_SWEEP_CRON` | This job expires each agent run that did not renew its lease in time. It starts the next attempt if the run has attempts left. It also fails each run that stayed queued for longer than one lease. |
+| Git issue mirror | every minute | `GIT_ISSUES_CRON` | This job applies to a repository that mirrors issues for agents. It fetches what agents handed in under `refs/vantik/inbox/*`, and it applies that. It then pushes a new `refs/vantik/issues`. A pass that finds nothing new writes nothing. |
 
 To stop a job, set its variable to `off`.
 

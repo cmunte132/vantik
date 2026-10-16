@@ -105,3 +105,130 @@ You can delete this directory. The server then fetches each repository again.
 The server does not delete a mirror when you remove a repository.
 
 No page of the webapp shows the mirror.
+
+## The issue mirror
+
+An agent often has the repository and no access to Vantik. For example, a
+sandbox can have no network, a harness can have no MCP, or nobody gave the
+session a token. The **issue mirror** is for these agents. It puts the issues
+of a team in the repository. The agent reads them there, and it hands
+proposals back through git.
+
+The mirror is off for each repository until an admin turns it on.
+
+> **Warning:** Each person and agent that can read the repository can read the
+> mirrored issues. Each one that can write to it can propose changes. Choose
+> the teams with this in mind.
+
+### How to turn it on
+
+1. Open **Settings → Integrations**, and click **View** on **Local
+   repository**.
+2. Find the repository. Tick each team whose issues it must carry.
+
+To turn the mirror off, clear all the boxes. Vantik then stops the passes. It
+leaves `refs/vantik/issues` in the repository, because the ref is data in your
+repository and you can delete it.
+
+Only a workspace admin can change this setting. The route is
+`POST /api/v1/local_repo/<repository id>/git_issues`, with the body
+`{"teamIds": [...]}`. One repository can carry only one team for each
+identifier. If two teams use the identifier `ENG`, the server refuses the
+second one.
+
+### What Vantik does in the repository
+
+The server never writes into your checkout. It works in its own copy, the
+[repository mirror](#the-repository-mirror), and it uses two refs in your
+repository:
+
+| Ref | Who writes it | What it holds |
+| --- | --- | --- |
+| `refs/vantik/issues` | Vantik | A commit whose files are the issues |
+| `refs/vantik/inbox/<name>` | An agent | One hand-off. Vantik deletes it after it applies it |
+
+Each minute (`GIT_ISSUES_CRON`), Vantik does these steps for each repository:
+
+1. It fetches `refs/vantik/issues` and `refs/vantik/inbox/*` from the
+   repository into its mirror. This fetch does not change the fetch of the
+   branches.
+2. It reads each inbox as a set of changes, and it applies the changes.
+3. It writes a new snapshot commit in the mirror, and it pushes the commit to
+   `refs/vantik/issues`. The push fails if somebody moved the ref after step 1.
+4. It deletes each inbox ref that it applied. It deletes a ref only if the ref
+   did not move. It does this only after the push worked. If the push fails,
+   the inbox stays and the next pass reads it again.
+
+Vantik runs no hook of your checkout. It starts git with hooks and
+`core.fsmonitor` off. For a push into a local directory, it also starts the
+`receive-pack` of that directory with hooks off. A `pre-receive` or
+`post-receive` hook in your checkout does not run.
+
+The refs are outside `refs/heads`, so they are not branches. `git branch`,
+`git status` and a plain `git clone` show nothing. The ref is in
+`git log --all`. Your `HEAD`, your index and your work tree do not change.
+
+### What the snapshot holds
+
+| File | What it is |
+| --- | --- |
+| `README.md` | How an agent reads and proposes, with the valid states and labels |
+| `index.md` | The open issues of each team |
+| `issues/<KEY>/issue.md` | One issue: front matter, then the description |
+| `issues/<KEY>/checklist.md` | The definition of done of the issue |
+| `issues/<KEY>/comments/*.md` | The comments of the issue |
+
+An open issue is always in the snapshot. A closed issue stays for 30 days after
+it entered its closed state. After that, it leaves the snapshot. A pass that
+finds nothing new writes nothing, so the history of the ref is the history of
+the issues.
+
+### What an agent does
+
+The `README.md` of the snapshot is the reference. In short, an agent does
+these steps:
+
+1. Read an issue: `git show refs/vantik/issues:issues/ENG-42/issue.md`.
+2. Check out the snapshot in a detached worktree, edit the files, and commit.
+3. Hand the commit in under a name of its own:
+   `git update-ref refs/vantik/inbox/<name> HEAD`. From a clone, use
+   `git push origin HEAD:refs/vantik/inbox/<name>`.
+
+Vantik answers in the message of the next snapshot commit. The message has a
+`Vantik-Inbox: <name>` trailer. This message is the only reply that the agent
+gets.
+
+An agent can change the title, the state, the priority, the labels and the
+description of an issue. An agent can add a comment. An agent can file an issue
+as a file under `new/`, and the issue goes to the triage of its team. Vantik
+refuses everything else and gives the reason. An inbox ref that points at a
+blob or a tree is refused, and Vantik deletes it.
+
+An agent can make a second hand-off on top of its first one. Vantik adds each
+inbox commit that it applied as a parent of the next snapshot. The second
+hand-off is then compared with the first, and no change is applied twice.
+
+### How Vantik applies a change
+
+Vantik never merges the commit of an agent. It compares each file with the
+snapshot that the agent started from. It reads the difference for each field,
+for example "state from Backlog to In Progress". So two agents can change
+different fields of one issue at the same time.
+
+Vantik refuses a change to a field that a person changed in Vantik after that
+snapshot. The agent gets the refusal and the current value, and it starts again
+from the newer snapshot.
+
+A hand-off has limits. It can change a maximum of 200 files. One file can have
+a maximum of 256 KiB. The files of one hand-off can have a maximum of 8 MiB in
+total. Vantik refuses a file over a limit and says which one.
+
+Vantik writes each change as the bot of the local repository. It records the
+author of the commit as the person who proposed the change. **Vantik does not
+check the author of the commit against its users.** An agent cannot assign an
+issue from git. An assignment starts a run, and a commit must not do that.
+
+### What it does not cover yet
+
+A cloud sandbox that can push only to its own branch cannot write an inbox ref.
+A git remote and a GitHub repository do not carry the mirror yet.

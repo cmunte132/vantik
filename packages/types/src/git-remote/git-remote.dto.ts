@@ -1,4 +1,10 @@
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsArray,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 import { GIT_REMOTE_KINDS, type GitRemoteKind } from './git-remote.entity';
 
@@ -50,4 +56,11 @@ export class GitRemoteRepositoryIdDto {
 
   @IsString()
   repositoryId: string;
+}
+
+export class SetGitRemoteGitIssuesDto {
+  /** The teams whose issues the repository carries. Empty turns it off. */
+  @IsArray()
+  @IsString({ each: true })
+  teamIds: string[];
 }

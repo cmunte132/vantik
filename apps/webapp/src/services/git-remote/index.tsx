@@ -75,6 +75,25 @@ export function removeGitRemoteRepository({
   });
 }
 
+/**
+ * The teams whose issues one repository carries under `refs/vantik/issues`.
+ * An empty list turns the mirror off. Only an admin can set it.
+ */
+export function setGitRemoteGitIssues({
+  connectionId,
+  repositoryId,
+  teamIds,
+}: {
+  connectionId: string;
+  repositoryId: string;
+  teamIds: string[];
+}): Promise<GitRemoteRepository> {
+  return ajaxPost({
+    url: `/api/v1/git_remote/${connectionId}/repositories/${encodeURIComponent(repositoryId)}/git_issues`,
+    data: { teamIds },
+  });
+}
+
 export const GetGitRemotes = 'getGitRemotes';
 export const GetAvailableGitRemoteRepositories =
   'getAvailableGitRemoteRepositories';
@@ -125,4 +144,12 @@ export const useAddGitRemoteRepositoryMutation = mutationHook(
 export const useRemoveGitRemoteRepositoryMutation = mutationHook(
   removeGitRemoteRepository,
   { invalidates: [GetGitRemotes, GetAvailableGitRemoteRepositories] },
+);
+
+export const useSetGitRemoteGitIssuesMutation = mutationHook(
+  setGitRemoteGitIssues,
+  {
+    invalidates: [GetGitRemotes],
+    fallback: 'The server refused this change, and it gave no reason.',
+  },
 );

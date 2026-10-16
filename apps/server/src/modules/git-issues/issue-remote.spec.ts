@@ -5,7 +5,12 @@ import { join } from 'node:path';
 
 import { anonymousRemote } from 'modules/git/git-command';
 
-import { gitIssueRemote, INBOX_PREFIX, SNAPSHOT_REF } from './issue-remote';
+import {
+  gitIssueRemote,
+  HostRefusedPushError,
+  INBOX_PREFIX,
+  SNAPSHOT_REF,
+} from './issue-remote';
 
 /**
  * The traffic between the mirror and its source, with two real repositories.
@@ -155,5 +160,36 @@ describe('gitIssueRemote', () => {
 
     expect(await remote().deleteInbox(`${INBOX_PREFIX}one`, later)).toBe(true);
     expect(git(source, 'for-each-ref', INBOX_PREFIX)).toBe('');
+  });
+
+  describe('when the host refuses refs/vantik by its own rule', () => {
+    beforeEach(() => {
+      // A host that hides a ref namespace refuses each update to it. This is
+      // the same answer as a protected ref or a token that cannot write.
+      git(source, 'config', 'receive.hideRefs', 'refs/vantik');
+    });
+
+    it('says so, and does not report a lost race', async () => {
+      const head = git(source, 'rev-parse', 'HEAD');
+
+      await remote().fetchRefs();
+      git(mirror, 'fetch', '-q', source, '+refs/heads/main:refs/heads/main');
+
+      const refused = remote().pushSnapshot(head, null);
+
+      await expect(refused).rejects.toBeInstanceOf(HostRefusedPushError);
+      await expect(refused).rejects.toThrow(/refs\/vantik\/issues/);
+      expect(git(source, 'for-each-ref', 'refs/vantik')).toBe('');
+    });
+
+    it('does not put the address of the host in the message', async () => {
+      const head = git(source, 'rev-parse', 'HEAD');
+
+      git(mirror, 'fetch', '-q', source, '+refs/heads/main:refs/heads/main');
+
+      await expect(remote().pushSnapshot(head, null)).rejects.not.toThrow(
+        source,
+      );
+    });
   });
 });

@@ -2,13 +2,8 @@ import type { LocalRepository } from '@vantikhq/types';
 
 import { RiDeleteBinLine } from '@remixicon/react';
 import { Button } from '@vantikhq/ui/components/button';
-import { Checkbox } from '@vantikhq/ui/components/checkbox';
 import { Input } from '@vantikhq/ui/components/input';
 import * as React from 'react';
-
-import type { TeamType } from 'common/types';
-
-import { useAllTeams } from 'hooks/teams';
 
 import {
   useAddLocalRepositoryMutation,
@@ -16,6 +11,8 @@ import {
   useRemoveLocalRepositoryMutation,
   useSetLocalRepositoryGitIssuesMutation,
 } from 'services/local-repo';
+
+import { IssueMirror } from './issue-mirror';
 
 /**
  * The directories that this workspace treats as repositories.
@@ -75,7 +72,7 @@ export function LocalRepositories({ instruction }: { instruction?: string }) {
               <div className="truncate font-mono text-muted-foreground">
                 {repository.path}
               </div>
-              <IssueMirror repository={repository} onChange={refetch} />
+              <LocalIssueMirror repository={repository} onChange={refetch} />
             </div>
             <Button
               variant="ghost"
@@ -118,23 +115,14 @@ export function LocalRepositories({ instruction }: { instruction?: string }) {
   );
 }
 
-/**
- * The teams whose issues this repository carries for agents.
- *
- * Off until someone ticks a team, because the mirror is readable by anyone who
- * can read the repository, and that is a decision about the repository as much
- * as about the team. The server refuses it for a member who is not an admin,
- * and its reason appears below the boxes.
- */
-function IssueMirror({
+/** The issue mirror of one local repository. */
+function LocalIssueMirror({
   repository,
   onChange,
 }: {
   repository: LocalRepository;
   onChange: () => void;
 }) {
-  const teams: TeamType[] = useAllTeams();
-  const selected = repository.gitIssues?.teamIds ?? [];
   const [error, setError] = React.useState('');
 
   const { mutate: setTeams, isPending } =
@@ -146,35 +134,12 @@ function IssueMirror({
       onError: setError,
     });
 
-  const toggle = (teamId: string, on: boolean) =>
-    setTeams({
-      repositoryId: repository.id,
-      teamIds: on
-        ? [...selected, teamId]
-        : selected.filter((id) => id !== teamId),
-    });
-
   return (
-    <div className="flex flex-col gap-1 pt-2">
-      <div className="text-muted-foreground">
-        Mirror these teams&apos; issues into{' '}
-        <span className="font-mono">refs/vantik/issues</span>, for agents that
-        can reach this repository but not Vantik. Anyone who can read the
-        repository can read them.
-      </div>
-      <div className="flex flex-wrap gap-3">
-        {teams.map((team) => (
-          <label key={team.id} className="flex items-center gap-1.5">
-            <Checkbox
-              checked={selected.includes(team.id)}
-              disabled={isPending}
-              onCheckedChange={(checked) => toggle(team.id, checked === true)}
-            />
-            {team.name}
-          </label>
-        ))}
-      </div>
-      {error && <p className="text-destructive">{error}</p>}
-    </div>
+    <IssueMirror
+      selected={repository.gitIssues?.teamIds ?? []}
+      isPending={isPending}
+      error={error}
+      onChange={(teamIds) => setTeams({ repositoryId: repository.id, teamIds })}
+    />
   );
 }

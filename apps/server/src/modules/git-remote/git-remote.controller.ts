@@ -12,6 +12,7 @@ import {
   ConnectGitRemoteDto,
   GitRemoteConnectionIdDto,
   GitRemoteRepositoryIdDto,
+  SetGitRemoteGitIssuesDto,
 } from '@vantikhq/types';
 
 import { AuthGuard } from 'modules/auth/auth.guard';
@@ -98,6 +99,27 @@ export class GitRemoteController {
       userId,
       params.connectionId,
       params.repositoryId,
+    );
+  }
+
+  /**
+   * The teams whose issues this repository carries, under
+   * `refs/vantik/issues`. An empty list turns the mirror off.
+   */
+  @Post(':connectionId/repositories/:repositoryId/git_issues')
+  @UseGuards(AuthGuard)
+  async setGitIssues(
+    @Workspace() workspaceId: string,
+    @UserId() userId: string,
+    @Param() params: GitRemoteRepositoryIdDto,
+    @Body() body: SetGitRemoteGitIssuesDto,
+  ) {
+    return await this.gitRemote.setGitIssues(
+      workspaceId,
+      userId,
+      params.connectionId,
+      params.repositoryId,
+      body.teamIds,
     );
   }
 }

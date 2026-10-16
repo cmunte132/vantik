@@ -1,4 +1,8 @@
-import type { GitRemoteConnection, GitRemoteKind } from '@vantikhq/types';
+import type {
+  GitRemoteConnection,
+  GitRemoteKind,
+  GitRemoteRepository,
+} from '@vantikhq/types';
 
 import { RiAddLine, RiDeleteBinLine } from '@remixicon/react';
 import { Badge } from '@vantikhq/ui/components/badge';
@@ -35,8 +39,11 @@ import {
   useGetAvailableGitRemoteRepositories,
   useGetGitRemotes,
   useRemoveGitRemoteRepositoryMutation,
+  useSetGitRemoteGitIssuesMutation,
 } from 'services/git-remote';
 import { errorMessage } from 'services/utils/mutation';
+
+import { IssueMirror } from './issue-mirror';
 
 const KIND_LABELS: Record<GitRemoteKind, string> = {
   forgejo: 'Forgejo',
@@ -132,6 +139,10 @@ function Connection({ connection }: { connection: GitRemoteConnection }) {
                 ? `Default branch ${repository.defaultBranch}`
                 : repository.cloneUrl}
             </div>
+            <RemoteIssueMirror
+              connection={connection}
+              repository={repository}
+            />
           </div>
           <Button
             variant="ghost"
@@ -158,6 +169,41 @@ function Connection({ connection }: { connection: GitRemoteConnection }) {
         {error && <p className="mt-1 text-destructive">{error}</p>}
       </div>
     </div>
+  );
+}
+
+/**
+ * The issue mirror of one repository on a host. The server writes the refs
+ * with the token of the connection, so a host that refuses those refs shows
+ * its reason in the server log and not here.
+ */
+function RemoteIssueMirror({
+  connection,
+  repository,
+}: {
+  connection: GitRemoteConnection;
+  repository: GitRemoteRepository;
+}) {
+  const [error, setError] = React.useState('');
+
+  const { mutate: setTeams, isPending } = useSetGitRemoteGitIssuesMutation({
+    onSuccess: () => setError(''),
+    onError: setError,
+  });
+
+  return (
+    <IssueMirror
+      selected={repository.gitIssues?.teamIds ?? []}
+      isPending={isPending}
+      error={error}
+      onChange={(teamIds) =>
+        setTeams({
+          connectionId: connection.id,
+          repositoryId: repository.id,
+          teamIds,
+        })
+      }
+    />
   );
 }
 

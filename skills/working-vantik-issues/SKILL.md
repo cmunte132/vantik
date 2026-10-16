@@ -127,6 +127,9 @@ That README is the reference. The short form:
 | `get_task` | `git show refs/vantik/issues:issues/ENG-42/issue.md`, and its `checklist.md` and `comments/` |
 | `update_task`, and the state half of `pick_up_task` | edit `state:`, `priority:`, `labels:`, the title or the description in `issue.md` |
 | `add_note` | a new file under `issues/ENG-42/comments/` |
+| `update_criteria` | a line `{"v":1,"type":"criterion","id":"<id>","evidence":"..."}` appended to `issues/ENG-42/outbox.jsonl`; the ids are in `checklist.md` |
+| `remember` | a line `{"v":1,"type":"remember","content":"...","kind":"FACT"}` in the same file |
+| `close_task` | `state:` to a completed state, plus `resolution: "..."` in `issue.md` |
 | `create_task` | a new file under `new/` |
 
 Commit on top of the snapshot, and hand the commit in under a name nobody else
@@ -147,11 +150,18 @@ after a `git fetch` in a clone. **Read the refusals.** A field that somebody
 changed after your snapshot is refused rather than overwritten. Start again
 from the current snapshot.
 
-Git cannot assign an issue, tick the Definition of Done, or close with a
-resolution. So set the state and say in a comment that you are on it. When you
-finish, move it to a completed state and put the resolution in a comment. The
-obligations above hold unchanged: the write is a commit instead of a tool call,
-and "never end a session with the issue out of date" still applies.
+End the commit message with `Vantik-Session: <your session id>`, and
+optionally `Vantik-Harness: <name>`. Vantik then shows your session on each
+issue that the commit changes. Without the trailer, it shows none.
+
+The outbox file is append-only: add lines at the end, never edit old ones. A
+hand-off can hold 10 notes, 10 facts and 200 lines for each issue. Questions
+cannot go through git. When you finish, move the issue to a completed state and
+add `resolution: "..."` in the same commit. Vantik posts it as a note and then
+changes the state, as `close_task` does. Git still cannot assign an issue, and
+a commit never starts an agent run. The obligations above hold unchanged: the
+write is a commit instead of a tool call, and "never end a session with the
+issue out of date" still applies.
 
 ## Put the work on the map
 

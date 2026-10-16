@@ -50,7 +50,8 @@ export interface SnapshotIssue {
   createdAt: Date;
   /** Markdown. */
   description: string;
-  checklist: Array<{ body: string; completed: boolean }>;
+  /** The criteria of the definition of done. The id is what an outbox names. */
+  checklist: Array<{ id: string; body: string; completed: boolean }>;
   comments: SnapshotComment[];
 }
 
@@ -134,13 +135,14 @@ function renderComment(comment: SnapshotComment): string {
 function renderChecklist(issue: SnapshotIssue): string {
   const items = issue.checklist.map(
     (item) =>
-      `- [${item.completed ? 'x' : ' '}] ${item.body.replace(/\s*\n\s*/g, ' ')}`,
+      `- [${item.completed ? 'x' : ' '}] \`${item.id}\` ${item.body.replace(/\s*\n\s*/g, ' ')}`,
   );
 
   return [
     `# ${issue.key}: definition of done`,
     '',
-    'Read-only here. Tick items in Vantik.',
+    'Read-only here. To tick an item, name its id in the outbox of the issue.',
+    'README.md says how.',
     '',
     ...items,
     '',
@@ -239,6 +241,7 @@ function renderReadme(snapshot: Snapshot): string {
     '- `index.md`: the open issues of each team.',
     '- `issues/<KEY>/issue.md`: one issue. Front matter, then the description.',
     '- `issues/<KEY>/checklist.md`: its definition of done, when it has one.',
+    '  Each criterion has an id in backticks. Use the id in an outbox line.',
     '- `issues/<KEY>/comments/`: its comments, oldest first.',
     '',
     `A closed issue stays here for ${CLOSED_ISSUE_DAYS} days after it was closed.`,
@@ -266,6 +269,9 @@ function renderReadme(snapshot: Snapshot): string {
     '   your session id. Use a new name for every hand-off.',
     '   - In the repository Vantik writes to: `git update-ref refs/vantik/inbox/<name> HEAD`',
     '   - From a clone of it: `git push origin HEAD:refs/vantik/inbox/<name>`',
+    '   To make a session visible on the issue, end the commit message with a',
+    '   trailer: `Vantik-Session: <your session id>`. `Vantik-Harness: <name>`',
+    '   is optional. A commit without `Vantik-Session` makes no session.',
     '4. On its next pass Vantik applies what it can, deletes the inbox ref, and',
     '   records the outcome in the message of the next snapshot commit:',
     "   `git log refs/vantik/issues -1 --grep='^Vantik-Inbox: <name>$'`",
@@ -276,6 +282,20 @@ function renderReadme(snapshot: Snapshot): string {
     '  description after the front matter.',
     '- A new comment: add a file under `issues/<KEY>/comments/`, with any name',
     '  ending in `.md`. Its content is the comment, in Markdown.',
+    '- A resolution: when you move an issue to a state of the completed kind,',
+    '  add `resolution: "how it was resolved"` to its front matter, in the',
+    '  same commit. Vantik posts it as a note on the issue before it changes',
+    '  the state. Without a state change to a completed state, it is refused.',
+    '- A note, a tick of a criterion, or a fact: append lines to',
+    '  `issues/<KEY>/outbox.jsonl`, one JSON object on each line, and only',
+    '  add lines at the end. The line types are:',
+    '  - `{"v":1,"type":"note","body":"..."}` is a comment on the issue.',
+    '  - `{"v":1,"type":"criterion","id":"<criterion id>","evidence":"..."}`',
+    '    ticks one criterion of this issue. Evidence is required.',
+    '  - `{"v":1,"type":"remember","content":"...","kind":"FACT"}` proposes a',
+    '    fact. A person or the triage must accept it.',
+    '  Vantik does not read a question from git. Limits: 10 notes, 10 facts and',
+    '  200 lines for each issue in one hand-off.',
     '- A new issue: add a file under `new/`, such as `new/login-timeout.md`.',
     `  Front matter needs \`title\`${multipleTeams ? ' and `team`' : ''}; \`state\`, \`priority\``,
     '  and `labels` are optional. The description goes after it. New issues',
@@ -283,7 +303,8 @@ function renderReadme(snapshot: Snapshot): string {
     '',
     'Vantik refuses, and says why in the outcome:',
     '',
-    '- any other field (`id`, `key`, `team`, `assignee`, `parent`, `created`);',
+    '- any other field (`id`, `key`, `team`, `assignee`, `parent`, `created`).',
+    '  An assignment starts an agent run, so a commit can never assign an issue.',
     '- editing or deleting a comment, deleting an issue, and any other path;',
     '- a change to a field that somebody changed in Vantik after the snapshot',
     '  you started from. Start again from the current snapshot.',

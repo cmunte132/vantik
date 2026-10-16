@@ -275,6 +275,14 @@ export interface OutboxSession {
   requesterId?: string | null;
   /** How long a question waits for a person. */
   questionWaitMs?: number;
+  /**
+   * What a note records about where it came from. It replaces the default,
+   * which names a run or a session row. A hand-off through git has no row
+   * to name, so it says which inbox and which file the note came from.
+   */
+  noteSource?: Record<string, unknown>;
+  /** Names the writer of a fact. It replaces the default. */
+  factSource?: string;
 }
 
 /** The run an outbox belongs to, as far as applying it is concerned. */
@@ -382,12 +390,14 @@ export class RunOutboxService {
           session.actorUserId,
           {
             bodyMarkdown: scrub(note.body),
-            sourceMetadata: session.runId
-              ? { source: 'agent-run-note', agentRunId: session.runId }
-              : {
-                  source: 'agent-session-note',
-                  agentSessionId: session.sessionId,
-                },
+            sourceMetadata:
+              session.noteSource ??
+              (session.runId
+                ? { source: 'agent-run-note', agentRunId: session.runId }
+                : {
+                    source: 'agent-session-note',
+                    agentSessionId: session.sessionId,
+                  }),
           },
         ),
       );
@@ -402,9 +412,11 @@ export class RunOutboxService {
             content: scrub(fact.content),
             kind: fact.kind,
             scope,
-            sourceSession: session.runId
-              ? `agent-run:${session.runId}`
-              : `agent-session:${session.sessionId}`,
+            sourceSession:
+              session.factSource ??
+              (session.runId
+                ? `agent-run:${session.runId}`
+                : `agent-session:${session.sessionId}`),
             ...(fact.citations.length ? { citations: fact.citations } : {}),
           },
           session.workspaceId,
@@ -422,17 +434,17 @@ export class RunOutboxService {
           }
 
           await this.questions.create({
-          workspaceId: session.workspaceId,
-          issueId: session.issueId,
-          agentRunId: session.runId ?? null,
-          agentSessionId: session.sessionId ?? null,
-          externalId: asked.id,
-          source: 'tool',
-          questions: scrubQuestions(asked.questions, scrub),
-          assigneeId: session.requesterId,
-          waitMs: session.questionWaitMs,
-          ...(asked.expiresAt ? { agentDeadline: asked.expiresAt } : {}),
-        });
+            workspaceId: session.workspaceId,
+            issueId: session.issueId,
+            agentRunId: session.runId ?? null,
+            agentSessionId: session.sessionId ?? null,
+            externalId: asked.id,
+            source: 'tool',
+            questions: scrubQuestions(asked.questions, scrub),
+            assigneeId: session.requesterId,
+            waitMs: session.questionWaitMs,
+            ...(asked.expiresAt ? { agentDeadline: asked.expiresAt } : {}),
+          });
         } catch (error) {
           result.refusedQuestions?.push({
             id: asked.id,

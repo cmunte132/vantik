@@ -49,6 +49,12 @@ export interface UpdatePlan {
     labelIds?: string[];
     descriptionMarkdown?: string;
   } | null;
+  /**
+   * How the issue was resolved. It is set only when the same plan moves the
+   * issue to a completed state. The caller posts it as a note before the
+   * state changes, the way `close_task` does.
+   */
+  resolution?: string;
   outcome: Outcome;
 }
 
@@ -103,6 +109,34 @@ export function planUpdate(
     } else {
       input.stateId = target.id;
       outcome.applied.push(`${key} state: ${current.state} → ${target.name}`);
+    }
+  }
+
+  let resolution: string | undefined;
+
+  if (changes.resolution) {
+    const text = changes.resolution.to.trim();
+    const target = changes.state
+      ? findState(team, changes.state.to)
+      : undefined;
+
+    if (!text) {
+      // The agent removed a resolution that Vantik never wrote. Nothing to do.
+    } else if (target?.category !== 'COMPLETED') {
+      outcome.refused.push(
+        `${key} resolution: it goes with a state change to a completed state, and this change has none`,
+      );
+    } else if (input.stateId) {
+      resolution = text;
+      outcome.applied.push(`${key} resolution: recorded as a note`);
+    } else if (same(current.state, target.name)) {
+      outcome.applied.push(
+        `${key} resolution: the issue is already ${target.name}`,
+      );
+    } else {
+      outcome.refused.push(
+        `${key} resolution: not recorded, because the state change was not applied`,
+      );
     }
   }
 
@@ -161,6 +195,7 @@ export function planUpdate(
 
   return {
     input: Object.keys(input).length > 0 ? input : null,
+    ...(resolution ? { resolution } : {}),
     outcome,
   };
 }

@@ -6,6 +6,12 @@ import { PluginContextFactory } from 'plugins/plugin-context.factory';
 
 import { convertTiptapJsonToMarkdown } from 'common/utils/tiptap.utils';
 
+import {
+  newOutboxState,
+  readOutbox,
+  type OutboxBatch,
+  RunOutboxService,
+} from 'modules/agent-runs/run-outbox';
 import { AgentSessionsService } from 'modules/agent-sessions/agent-sessions.service';
 import { GitSourcesService } from 'modules/git/git-sources.service';
 import { RepoMirrorService } from 'modules/git/repo-mirror.service';
@@ -14,7 +20,7 @@ import { LoggerService } from 'modules/logger/logger.service';
 
 import { type Lookups, type Outcome, planCreate, planUpdate } from './apply';
 import { GitRepository } from './git';
-import { type InboxReading } from './inbox';
+import { type InboxReading, type OutboxProposal } from './inbox';
 import { gitIssueRemote, HostRefusedPushError } from './issue-remote';
 import {
   GIT_ISSUES_TARGETS,
@@ -30,6 +36,9 @@ import {
 import { type HandOffSource, type PassResult, syncRepository } from './sync';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Where a fact from git applies when it names no page. */
+const REPOSITORY_SCOPE = 'repository';
 
 /**
  * The issue mirror for repositories.
@@ -63,7 +72,7 @@ interface IssueRow {
   parentId: string | null;
   teamId: string;
   createdAt: Date;
-  checklistItems?: Array<{ body: string; completed: boolean }>;
+  checklistItems?: Array<{ id: string; body: string; completed: boolean }>;
   comments?: Array<{
     id: string;
     body: string;
@@ -109,6 +118,7 @@ export class GitIssuesService {
     private sources: GitSourcesService,
     private mirrors: RepoMirrorService,
     private sessions: AgentSessionsService,
+    private outbox: RunOutboxService,
     @Inject(GIT_ISSUES_TARGETS) private targets: MirrorTargets[],
   ) {}
 
@@ -390,7 +400,7 @@ export class GitIssuesService {
         checklistItems: {
           where: { deleted: null },
           orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-          select: { body: true, completed: true },
+          select: { id: true, body: true, completed: true },
         },
         comments: {
           where: { deleted: null },
@@ -582,6 +592,18 @@ export class GitIssuesService {
         );
         const plan = planUpdate(current, proposal, lookups);
 
+        // `close_task` posts the resolution as a note before the state
+        // changes, so a later search finds the note as the resolution.
+        if (plan.resolution && plan.input?.stateId) {
+          await this.postNote(
+            ctx,
+            row.id,
+            plan.resolution,
+            `${proposal.path}#resolution`,
+            sourceMetadata,
+          );
+        }
+
         if (plan.input) {
           await ctx.issues.update(row.id, row.teamId, {
             ...plan.input,
@@ -591,6 +613,22 @@ export class GitIssuesService {
 
         touched.add(row.id);
         outcomes.push(plan.outcome);
+        continue;
+      }
+
+      if (proposal.kind === 'outbox') {
+        outcomes.push(
+          await this.applyOutbox({
+            workspaceId,
+            accountId,
+            botId,
+            proposal,
+            lookups,
+            sourceMetadata,
+            source,
+            touched,
+          }),
+        );
         continue;
       }
 
@@ -730,6 +768,232 @@ export class GitIssuesService {
         });
       }
     }
+  }
+
+  /**
+   * Posts a note unless an earlier pass posted it. A file and a hash of its
+   * content say whether a note came from it already, in the same way as for a
+   * comment file.
+   */
+  private async postNote(
+    ctx: ReturnType<PluginContextFactory['build']>,
+    issueId: string,
+    body: string,
+    gitPath: string,
+    sourceMetadata: Record<string, unknown>,
+  ): Promise<boolean> {
+    if (await this.noteExists(issueId, gitPath, body)) {
+      return false;
+    }
+
+    await ctx.comments.create({
+      issueId,
+      bodyMarkdown: body,
+      sourceMetadata: {
+        ...sourceMetadata,
+        gitPath,
+        gitContentHash: contentHash(body),
+      },
+    });
+
+    return true;
+  }
+
+  /** Whether an earlier pass posted this text as a note from this file. */
+  private async noteExists(
+    issueId: string,
+    gitPath: string,
+    body: string,
+  ): Promise<boolean> {
+    const existing = await this.prisma.issueComment.findFirst({
+      where: {
+        issueId,
+        AND: [
+          { sourceMetadata: { path: ['gitPath'], equals: gitPath } },
+          {
+            sourceMetadata: {
+              path: ['gitContentHash'],
+              equals: contentHash(body),
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+
+    return Boolean(existing);
+  }
+
+  /**
+   * The notes, the criteria ticks and the facts that an agent appended to the
+   * outbox file of an issue.
+   *
+   * The checks and the writes are those of an agent run: `readOutbox` bounds
+   * and validates each line, and `RunOutboxService` writes as the bot. A
+   * criterion must be one of this issue. A question is refused, because a
+   * question waits for an answer and git has no way to bring one back.
+   * Each note and each fact is written once, so a hand-off that a pass reads
+   * again adds nothing.
+   */
+  private async applyOutbox(input: {
+    workspaceId: string;
+    accountId: string;
+    botId: string;
+    proposal: OutboxProposal;
+    lookups: Lookups;
+    sourceMetadata: Record<string, unknown>;
+    source: HandOffSource;
+    touched: Set<string>;
+  }): Promise<Outcome> {
+    const { proposal, sourceMetadata, source } = input;
+    const outcome: Outcome = { path: proposal.path, applied: [], refused: [] };
+    const issue = await this.issueByKey(proposal.key, input.lookups);
+
+    if (!issue) {
+      outcome.refused.push(`${proposal.key} is not an issue in this mirror`);
+      return outcome;
+    }
+
+    const criteria = await this.prisma.checklistItem.findMany({
+      where: { issueId: issue.id, deleted: null },
+      select: { id: true },
+    });
+    const state = newOutboxState();
+    const batch = readOutbox(
+      proposal.text,
+      {
+        definitionOfDone: criteria.map((criterion) => ({
+          id: criterion.id,
+          body: '',
+          completed: false,
+        })),
+      },
+      state,
+    );
+
+    for (const rejected of batch.rejected) {
+      outcome.refused.push(
+        `${proposal.key} outbox line ${rejected.line}: ${rejected.reason}`,
+      );
+    }
+
+    if (batch.questions.length > 0 || batch.refusedQuestions.length > 0) {
+      outcome.refused.push(
+        `${proposal.key} outbox: Vantik does not read a question from git, because it cannot send the answer back. Ask in a note`,
+      );
+    }
+
+    const bot = {
+      issueId: issue.id,
+      workspaceId: input.workspaceId,
+      actorUserId: input.botId,
+      requesterId: null as string | null,
+    };
+    const scrub = (text: string) => text;
+    const empty: OutboxBatch = {
+      notes: [],
+      facts: [],
+      criteria: [],
+      questions: [],
+      refusedQuestions: [],
+      rejected: [],
+    };
+    const failures: string[] = [];
+    let notes = 0;
+    let repeated = 0;
+
+    for (const note of batch.notes) {
+      const gitPath = `${proposal.path}#note`;
+
+      if (await this.noteExists(issue.id, gitPath, note.body)) {
+        repeated += 1;
+        continue;
+      }
+
+      const written = await this.outbox.apply(
+        {
+          ...bot,
+          noteSource: {
+            ...sourceMetadata,
+            gitPath,
+            gitContentHash: contentHash(note.body),
+          },
+        },
+        { ...empty, notes: [note] },
+        REPOSITORY_SCOPE,
+        scrub,
+      );
+
+      notes += written.applied.length;
+      failures.push(...written.failed);
+    }
+
+    const factSource = `git-inbox:${input.accountId}:${source.name}`;
+    const facts: OutboxBatch['facts'] = [];
+
+    for (const fact of batch.facts) {
+      if (
+        await this.prisma.pageEntry.findFirst({
+          where: {
+            sourceSession: factSource,
+            content: fact.content,
+            deleted: null,
+          },
+          select: { id: true },
+        })
+      ) {
+        repeated += 1;
+      } else {
+        facts.push(fact);
+      }
+    }
+
+    const proposed = facts.length
+      ? await this.outbox.apply(
+          { ...bot, factSource },
+          { ...empty, facts },
+          REPOSITORY_SCOPE,
+          scrub,
+        )
+      : { applied: [], failed: [] as string[] };
+    const ticked = batch.criteria.length
+      ? await this.outbox.tickCriteria(bot, state)
+      : { applied: [], failed: [] as string[] };
+
+    failures.push(...proposed.failed, ...ticked.failed);
+
+    const count = (n: number, one: string, many = `${one}s`) =>
+      `${n} ${n === 1 ? one : many}`;
+
+    if (notes) {
+      outcome.applied.push(
+        `${proposal.key} outbox: ${count(notes, 'note')} added`,
+      );
+    }
+    if (proposed.applied.length) {
+      outcome.applied.push(
+        `${proposal.key} outbox: ${count(proposed.applied.length, 'fact')} proposed`,
+      );
+    }
+    if (ticked.applied.length) {
+      outcome.applied.push(
+        `${proposal.key} outbox: ${count(ticked.applied.length, 'criterion', 'criteria')} ticked`,
+      );
+    }
+    if (repeated) {
+      outcome.applied.push(
+        `${proposal.key} outbox: ${count(repeated, 'line')} already applied`,
+      );
+    }
+    for (const failure of failures) {
+      outcome.refused.push(
+        `${proposal.key} outbox: could not apply ${failure}`,
+      );
+    }
+
+    input.touched.add(issue.id);
+
+    return outcome;
   }
 
   /**

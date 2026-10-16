@@ -36,6 +36,11 @@ export interface IssueFieldChanges {
   priority?: FieldChange<string>;
   labels?: FieldChange<string[]>;
   description?: FieldChange<string>;
+  /**
+   * How the issue was resolved, for a change to a completed state. It is a
+   * front matter field that the snapshot never writes, so the agent adds it.
+   */
+  resolution?: FieldChange<string>;
 }
 
 export interface IssueUpdateProposal {
@@ -64,7 +69,20 @@ export interface CreateProposal {
   description: string;
 }
 
-export type Proposal = IssueUpdateProposal | CommentProposal | CreateProposal;
+/**
+ * The lines that an agent added to `issues/<KEY>/outbox.jsonl`: notes,
+ * criteria ticks and facts. The text holds whole lines, each ending in a
+ * newline. The outbox reader of the agent runs checks every line.
+ */
+export interface OutboxProposal {
+  kind: 'outbox';
+  path: string;
+  key: string;
+  text: string;
+}
+
+export type Proposal =
+  IssueUpdateProposal | CommentProposal | CreateProposal | OutboxProposal;
 
 export interface Refusal {
   path: string;
@@ -82,6 +100,7 @@ const EDITABLE_FIELDS = ['title', 'state', 'priority', 'labels'] as const;
 const ISSUE_FILE = /^issues\/([^/]+)\/issue\.md$/;
 const COMMENT_FILE = /^issues\/([^/]+)\/comments\/[^/]+\.md$/;
 const NEW_ISSUE_FILE = /^new\/[^/]+\.md$/;
+const OUTBOX_FILE = /^issues\/([^/]+)\/outbox\.jsonl$/;
 
 export function readInbox(files: InboxFile[]): InboxReading {
   const proposals: Proposal[] = [];
@@ -92,11 +111,14 @@ export function readInbox(files: InboxFile[]): InboxReading {
       refusals.push({ path: file.path, reason });
     const issueFile = ISSUE_FILE.exec(file.path);
     const commentFile = COMMENT_FILE.exec(file.path);
+    const outboxFile = OUTBOX_FILE.exec(file.path);
 
     if (issueFile) {
       readIssueFile(file, issueFile[1], proposals, refuse);
     } else if (commentFile) {
       readCommentFile(file, commentFile[1], proposals, refuse);
+    } else if (outboxFile) {
+      readOutboxFile(file, outboxFile[1], proposals, refuse);
     } else if (NEW_ISSUE_FILE.test(file.path)) {
       readNewIssueFile(file, proposals, refuse);
     } else if (file.before !== null && file.after !== file.before) {
@@ -167,11 +189,19 @@ function readIssueFile(
     changes.description = { from: before.body, to: after.body };
   }
 
+  const resolutionFrom = readString(before.fields.resolution) ?? '';
+  const resolutionTo = readString(after.fields.resolution) ?? '';
+
+  if (resolutionFrom !== resolutionTo) {
+    changes.resolution = { from: resolutionFrom, to: resolutionTo };
+  }
+
   const readOnly = [
     ...new Set([...Object.keys(before.fields), ...Object.keys(after.fields)]),
   ].filter(
     (field) =>
       !(EDITABLE_FIELDS as readonly string[]).includes(field) &&
+      field !== 'resolution' &&
       before.fields[field] !== after.fields[field],
   );
 
@@ -212,6 +242,50 @@ function readCommentFile(
   }
 
   proposals.push({ kind: 'comment', path: file.path, key, body });
+}
+
+/**
+ * The outbox is append-only. The lines that the agent added are the lines
+ * after the text that the snapshot it started from had. An agent that changes
+ * or removes an earlier line is refused, because the earlier lines were read
+ * already and Vantik does not read a line twice.
+ */
+function readOutboxFile(
+  file: InboxFile,
+  key: string,
+  proposals: Proposal[],
+  refuse: (reason: string) => void,
+) {
+  if (file.after === null) {
+    // Removing the file takes back nothing that was applied.
+    return;
+  }
+
+  const before = file.before ?? '';
+
+  if (before && !before.endsWith('\n')) {
+    refuse('The lines of this file in the snapshot do not end in a newline.');
+    return;
+  }
+
+  if (!file.after.startsWith(before)) {
+    refuse(
+      'The outbox is append-only. Add new lines at the end of the file, and do not change the lines before them.',
+    );
+    return;
+  }
+
+  const added = file.after.slice(before.length);
+
+  // The reader of an outbox takes only complete lines. An editor can leave
+  // out the last newline, so Vantik adds it.
+  const text = added.endsWith('\n') ? added : `${added}\n`;
+
+  if (!added.trim()) {
+    return;
+  }
+
+  proposals.push({ kind: 'outbox', path: file.path, key, text });
 }
 
 function readNewIssueFile(

@@ -51,3 +51,32 @@ describe('the index table', () => {
     expect(cells[1]).toBe(' Windows path C:\\\\ ');
   });
 });
+
+describe('the checklist file', () => {
+  it('names each criterion by its id, so an outbox can tick it', () => {
+    const files = renderSnapshot({
+      ...snapshot('x'),
+      issues: [
+        {
+          ...issue('x'),
+          checklist: [
+            { id: 'crit-1', body: 'Works in Safari', completed: false },
+            { id: 'crit-2', body: 'Has a test', completed: true },
+          ],
+        },
+      ],
+    });
+    const checklist = files.get('issues/ENG-1/checklist.md') ?? '';
+
+    expect(checklist).toContain('- [ ] `crit-1` Works in Safari');
+    expect(checklist).toContain('- [x] `crit-2` Has a test');
+  });
+
+  it('tells the agent how to use the outbox, the resolution and the trailers', () => {
+    const readme = renderSnapshot(snapshot('x')).get('README.md') ?? '';
+
+    expect(readme).toContain('issues/<KEY>/outbox.jsonl');
+    expect(readme).toContain('resolution: "how it was resolved"');
+    expect(readme).toContain('Vantik-Session');
+  });
+});

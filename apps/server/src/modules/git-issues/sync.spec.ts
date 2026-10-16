@@ -85,6 +85,9 @@ class MemoryStore implements MirrorStore {
     };
   }
 
+  /** The text of each outbox that a hand-off added lines to. */
+  outboxes: string[] = [];
+
   /** The source of each hand-off that had proposals to apply. */
   sources: HandOffSource[] = [];
 
@@ -125,6 +128,11 @@ class MemoryStore implements MirrorStore {
           body: proposal.body,
         });
         return { path: proposal.path, applied: ['comment added'], refused: [] };
+      }
+
+      if (proposal.kind === 'outbox') {
+        this.outboxes.push(proposal.text);
+        return { path: proposal.path, applied: ['outbox read'], refused: [] };
       }
 
       const plan = planCreate(proposal, lookups);
@@ -829,5 +837,42 @@ describe('syncRepository', () => {
 
       expect(store.sources[0].session).toEqual({ id: 'new', harness: null });
     });
+  });
+
+  it('reads the lines that a follow-up hand-off appended to the outbox, and no others', async () => {
+    const repository = await checkout();
+    const store = new MemoryStore();
+    await pass(repository, store);
+
+    const worktree = join(root, 'worktree-outbox-follow-up');
+    git(
+      repository,
+      'worktree',
+      'add',
+      '-q',
+      '--detach',
+      worktree,
+      SNAPSHOT_REF,
+    );
+
+    const outbox = join(worktree, 'issues/ENG-1/outbox.jsonl');
+    const first = '{"v":1,"type":"note","body":"first"}\n';
+    const second = '{"v":1,"type":"note","body":"second"}\n';
+
+    await writeFile(outbox, first);
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-q', '-m', 'first');
+    git(worktree, 'update-ref', `${INBOX_PREFIX}one`, 'HEAD');
+    await pass(repository, store);
+
+    // Built on the first hand-off, as an agent does that never fetched the
+    // snapshot that answered it.
+    await writeFile(outbox, first + second);
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-q', '-m', 'second');
+    git(worktree, 'update-ref', `${INBOX_PREFIX}two`, 'HEAD');
+    await pass(repository, store);
+
+    expect(store.outboxes).toEqual([first, second]);
   });
 });

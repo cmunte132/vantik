@@ -78,6 +78,8 @@ import { RemoteSandboxRuntime } from './sandbox/remote.runtime';
     AgentDelegationService,
     ExecutorRegistry,
     CredentialsModule,
+    // The checks and the writes for what an agent hands in, for any channel.
+    RunOutboxService,
   ],
 })
 export class AgentRunsModule {}

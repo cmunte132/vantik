@@ -191,3 +191,119 @@ describe('planCreate', () => {
     );
   });
 });
+
+describe('planUpdate: the resolution', () => {
+  const toDone = {
+    state: { from: 'Backlog', to: 'Done' },
+    resolution: { from: '', to: 'Fixed in 1.2.3.' },
+  };
+
+  it('keeps the resolution for a move to a completed state', () => {
+    const plan = planUpdate(current, proposal(toDone), lookups);
+
+    expect(plan.input?.stateId).toBe('s-done');
+    expect(plan.resolution).toBe('Fixed in 1.2.3.');
+    expect(plan.outcome.applied).toContain(
+      'ENG-42 resolution: recorded as a note',
+    );
+  });
+
+  it('refuses a resolution that goes with no change to a completed state', () => {
+    const plan = planUpdate(
+      current,
+      proposal({
+        state: { from: 'Backlog', to: 'In Progress' },
+        resolution: { from: '', to: 'Fixed.' },
+      }),
+      lookups,
+    );
+
+    expect(plan.resolution).toBeUndefined();
+    expect(plan.outcome.refused[0]).toMatch(/completed state/);
+  });
+
+  it('refuses a resolution with no state change at all', () => {
+    const plan = planUpdate(
+      current,
+      proposal({ resolution: { from: '', to: 'Fixed.' } }),
+      lookups,
+    );
+
+    expect(plan.resolution).toBeUndefined();
+    expect(plan.outcome.refused[0]).toMatch(/completed state/);
+  });
+
+  it('does not record a resolution when the state change was refused', () => {
+    const plan = planUpdate(
+      { ...current, state: 'In Progress' },
+      proposal(toDone),
+      lookups,
+    );
+
+    expect(plan.resolution).toBeUndefined();
+    expect(plan.outcome.refused.join('\n')).toMatch(/resolution: not recorded/);
+  });
+
+  it('leaves a retried close alone', () => {
+    const plan = planUpdate(
+      { ...current, state: 'Done' },
+      proposal(toDone),
+      lookups,
+    );
+
+    expect(plan.resolution).toBeUndefined();
+    expect(plan.outcome.refused).toEqual([]);
+  });
+
+  it('ignores an empty resolution', () => {
+    const plan = planUpdate(
+      current,
+      proposal({
+        state: toDone.state,
+        resolution: { from: 'old', to: '  ' },
+      }),
+      lookups,
+    );
+
+    expect(plan.resolution).toBeUndefined();
+    expect(plan.outcome.refused).toEqual([]);
+  });
+});
+
+describe('planUpdate: what it can write', () => {
+  it('never writes an assignee, whatever the proposal carries', () => {
+    const smuggled = proposal({
+      title: { from: 'Login broken', to: 'Login fixed' },
+      assignee: { from: '', to: 'mallory' },
+      assigneeId: { from: '', to: 'user-1' },
+      delegate: { from: '', to: 'agent' },
+    } as never);
+
+    const plan = planUpdate(current, smuggled, lookups);
+
+    expect(Object.keys(plan.input ?? {})).toEqual(['title']);
+  });
+
+  it('writes only the fields that a plan for an update names', () => {
+    const plan = planUpdate(
+      current,
+      proposal({
+        title: { from: 'Login broken', to: 'Login fixed' },
+        state: { from: 'Backlog', to: 'In Progress' },
+        priority: { from: 'high', to: 'low' },
+        labels: { from: ['bug'], to: ['bug', 'Safari'] },
+        description: { from: 'Repro steps.', to: 'New steps.' },
+        resolution: { from: '', to: 'ignored for a started state' },
+      }),
+      lookups,
+    );
+
+    expect(Object.keys(plan.input ?? {}).sort()).toEqual([
+      'descriptionMarkdown',
+      'labelIds',
+      'priority',
+      'stateId',
+      'title',
+    ]);
+  });
+});

@@ -3,7 +3,12 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
+import { RepoMirrorService } from 'modules/git/repo-mirror.service';
+import { LocalDirectorySource } from 'modules/git/sources/local-directory.source';
+
 import { GitIssuesService } from './git-issues.service';
+import { type MirroredRepository } from './mirror-targets';
+import { CLOSED_ISSUE_DAYS } from './snapshot';
 import { INBOX_PREFIX, SNAPSHOT_REF } from './sync';
 
 /**
@@ -66,6 +71,13 @@ function buildPrisma() {
           name: 'In Progress',
           category: 'STARTED',
           position: 1,
+        },
+        {
+          id: 's-done',
+          teamId: 'team-eng',
+          name: 'Done',
+          category: 'COMPLETED',
+          position: 2,
         },
       ]),
       aggregate,
@@ -137,12 +149,15 @@ function git(cwd: string, ...args: string[]): string {
     },
   }).trim();
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// A pass starts many git processes.
+jest.setTimeout(60_000);
 
 describe('GitIssuesService', () => {
   let root: string;
   let repository: string;
   const originalRoot = process.env.LOCAL_REPO_ROOT;
+  const originalMirrorRoot = process.env.REPO_MIRROR_ROOT;
 
   beforeEach(async () => {
     root = resolve(await mkdtemp(join(tmpdir(), 'vantik-git-issues-service-')));
@@ -153,29 +168,48 @@ describe('GitIssuesService', () => {
     git(repository, 'add', '.');
     git(repository, 'commit', '-q', '-m', 'code');
     process.env.LOCAL_REPO_ROOT = root;
+    process.env.REPO_MIRROR_ROOT = join(root, 'mirrors');
   });
 
   afterEach(async () => {
     process.env.LOCAL_REPO_ROOT = originalRoot;
+    process.env.REPO_MIRROR_ROOT = originalMirrorRoot;
     await rm(root, { recursive: true, force: true });
   });
 
-  function setUp() {
+  function setUp(teamIds = ['team-eng']) {
     const prisma = buildPrisma();
     const ctx = buildContext();
     const contextFactory = { build: jest.fn().mockReturnValue(ctx) };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const service = new GitIssuesService(prisma as any, contextFactory as any);
-    const sync = () =>
-      service.syncLocalRepository('workspace-1', 'account-1', {
-        id: 'repo-1',
+    const resolve = jest.fn().mockImplementation(async () => ({
+      source: new LocalDirectorySource(),
+      repo: {
+        workspaceId: 'workspace-1',
+        integrationAccountId: 'account-1',
+        accountId: '',
+        externalRepoId: 'repo-1',
         fullName: 'checkout',
-        path: repository,
-        addedAt: '2026-09-26T00:00:00Z',
-        gitIssues: { teamIds: ['team-eng'] },
-      });
+        listing: { id: 'repo-1', path: repository },
+        config: {},
+      },
+    }));
+    const target: MirroredRepository = {
+      workspaceId: 'workspace-1',
+      integrationAccountId: 'account-1',
+      externalRepoId: 'repo-1',
+      label: repository,
+      teamIds,
+    };
+    const service = new GitIssuesService(
+      prisma as any,
+      contextFactory as any,
+      { resolve } as any,
+      new RepoMirrorService(),
+      [{ list: async () => [target] }],
+    );
+    const sync = () => service.syncRepository(target);
 
-    return { prisma, ctx, contextFactory, sync };
+    return { prisma, ctx, contextFactory, service, resolve, sync };
   }
 
   it('renders issues by name: key, state, username, label, markdown', async () => {
@@ -302,5 +336,144 @@ describe('GitIssuesService', () => {
 
     // Once for the first render; the second pass stops at the marker.
     expect(prisma.issue.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  /** What an agent does: a commit on the snapshot and an inbox ref. */
+  async function handOff(
+    name: string,
+    edit: (worktree: string) => Promise<void>,
+  ) {
+    const worktree = join(root, `agent-${name}`);
+
+    git(
+      repository,
+      'worktree',
+      'add',
+      '-q',
+      '--detach',
+      worktree,
+      SNAPSHOT_REF,
+    );
+    await edit(worktree);
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-q', '-m', 'proposal');
+    git(worktree, 'update-ref', `${INBOX_PREFIX}${name}`, 'HEAD');
+  }
+
+  it('finds an earlier comment by its path and content, not by its commit', async () => {
+    const { prisma, ctx, sync } = setUp();
+    await sync();
+
+    await handOff('again', async (worktree) => {
+      await mkdir(join(worktree, 'issues/ENG-42/comments'), {
+        recursive: true,
+      });
+      await writeFile(
+        join(worktree, 'issues/ENG-42/comments/note.md'),
+        'Once.\n',
+      );
+    });
+
+    await sync();
+
+    const { where } = prisma.issueComment.findFirst.mock.calls[0][0];
+    const keys = where.AND.map(
+      (condition: any) => condition.sourceMetadata.path[0],
+    );
+
+    expect(where.issueId).toBe('issue-42');
+    expect(keys).toEqual(['gitPath', 'gitContentHash']);
+    expect(JSON.stringify(where)).not.toContain('gitCommit');
+    expect(ctx.comments.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceMetadata: expect.objectContaining({
+          gitPath: 'issues/ENG-42/comments/note.md',
+          gitContentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+        }),
+      }),
+    );
+  });
+
+  it('clears a description that an agent emptied', async () => {
+    const { ctx, sync } = setUp();
+    await sync();
+
+    await handOff('clear', async (worktree) => {
+      const file = join(worktree, 'issues/ENG-42/issue.md');
+      const text = await readFile(file, 'utf8');
+      const body = text.indexOf('Repro: open');
+
+      await writeFile(file, text.slice(0, body));
+    });
+
+    const result = await sync();
+
+    expect(ctx.issues.update).toHaveBeenCalledWith(
+      'issue-42',
+      'team-eng',
+      expect.objectContaining({ descriptionMarkdown: '' }),
+    );
+    expect(
+      result?.handOffs[0].outcomes.flatMap((outcome) => outcome.applied),
+    ).toEqual(['ENG-42 description: updated']);
+  });
+
+  it('leaves closed issues older than the limit out of the snapshot', async () => {
+    const { prisma, sync } = setUp();
+    const before = Date.now();
+
+    await sync();
+
+    const { where } = prisma.issue.findMany.mock.calls[0][0];
+    const [open, recent] = where.OR;
+
+    expect(open).toEqual({ stateId: { notIn: ['s-done'] } });
+    const expected = before - CLOSED_ISSUE_DAYS * 24 * 60 * 60 * 1000;
+
+    expect(
+      Math.abs(recent.stateEnteredAt.gte.getTime() - expected),
+    ).toBeLessThan(60_000);
+  });
+
+  it('refuses two teams that share an identifier', async () => {
+    const { prisma, sync } = setUp(['team-eng', 'team-eng-2']);
+    prisma.team.findMany.mockResolvedValue([
+      { id: 'team-eng', identifier: 'ENG', name: 'Engineering' },
+      { id: 'team-eng-2', identifier: 'ENG', name: 'Engineering two' },
+    ]);
+
+    await expect(sync()).rejects.toThrow(/more than one mirrored team.*ENG/);
+  });
+
+  it('stops when the source no longer offers the repository', async () => {
+    const { resolve, sync } = setUp();
+    resolve.mockResolvedValue({ unresolved: 'the repository is gone' });
+
+    await expect(sync()).rejects.toThrow('the repository is gone');
+  });
+
+  it('runs every repository that a tier lists, and survives one that fails', async () => {
+    const { service, resolve, prisma } = setUp();
+    const good = {
+      workspaceId: 'workspace-1',
+      integrationAccountId: 'account-1',
+      externalRepoId: 'repo-1',
+      label: 'good',
+      teamIds: ['team-eng'],
+    };
+    const bad = { ...good, externalRepoId: 'repo-2', label: 'bad' };
+    const resolveGood = resolve.getMockImplementation()!;
+
+    resolve.mockImplementation(async (ref: { externalRepoId: string }) =>
+      ref.externalRepoId === 'repo-2'
+        ? { unresolved: 'gone' }
+        : await resolveGood(),
+    );
+    (service as any).targets = [{ list: async () => [bad, good] }];
+
+    const totals = await service.runPass();
+
+    expect(totals).toEqual({ repositories: 2, wrote: 1, handOffs: 0 });
+    expect(prisma.team.findMany).toHaveBeenCalledTimes(1);
   });
 });

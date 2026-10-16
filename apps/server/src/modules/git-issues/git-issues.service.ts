@@ -1,26 +1,37 @@
-import { Injectable } from '@nestjs/common';
-import {
-  inspectPath,
-  LOCAL_REPO_SLUG,
-  type LocalRepository,
-  readRepositories,
-} from 'integrations/local-repo/repositories';
+import { createHash } from 'node:crypto';
+
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
 import { PluginContextFactory } from 'plugins/plugin-context.factory';
 
 import { convertTiptapJsonToMarkdown } from 'common/utils/tiptap.utils';
 
+import { GitSourcesService } from 'modules/git/git-sources.service';
+import { RepoMirrorService } from 'modules/git/repo-mirror.service';
 import { ensureIntegrationBot } from 'modules/integration-events/integration-bot';
 import { LoggerService } from 'modules/logger/logger.service';
 
 import { type Lookups, type Outcome, planCreate, planUpdate } from './apply';
 import { GitRepository } from './git';
 import { type InboxReading } from './inbox';
-import { type Snapshot, type SnapshotIssue } from './snapshot';
+import { gitIssueRemote } from './issue-remote';
+import {
+  GIT_ISSUES_TARGETS,
+  type MirroredRepository,
+  type MirrorTargets,
+} from './mirror-targets';
+import {
+  CLOSED_CATEGORIES,
+  CLOSED_ISSUE_DAYS,
+  type Snapshot,
+  type SnapshotIssue,
+} from './snapshot';
 import { type HandOffSource, type PassResult, syncRepository } from './sync';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
- * The issue mirror for local repositories.
+ * The issue mirror for repositories.
  *
  * An agent that works in a checkout on this machine, or in a clone of one,
  * often cannot reach Vantik: a sandbox with no network, a harness with no MCP,
@@ -28,6 +39,10 @@ import { type HandOffSource, type PassResult, syncRepository } from './sync';
  * repository that an admin opts in carries its teams' issues under
  * `refs/vantik/issues`, and takes proposals back under `refs/vantik/inbox/*`.
  * `sync.ts` holds the git side of that; this is the Vantik side.
+ *
+ * The server never writes into the checkout of a person. It works in its own
+ * bare mirror of the repository (`RepoMirrorService`), fetches the issue refs
+ * from the source, and pushes the snapshot back with a compare-and-set.
  *
  * Writes go through the plugin context as the local-repo integration's bot,
  * the way every other integration writes, so history, notifications and the
@@ -90,38 +105,38 @@ export class GitIssuesService {
   constructor(
     private prisma: PrismaService,
     private contextFactory: PluginContextFactory,
+    private sources: GitSourcesService,
+    private mirrors: RepoMirrorService,
+    @Inject(GIT_ISSUES_TARGETS) private targets: MirrorTargets[],
   ) {}
 
-  /** Every opted-in local repository of every workspace, one at a time. */
+  /** Every opted-in repository of every workspace, one at a time. */
   async runPass(): Promise<{
     repositories: number;
     wrote: number;
     handOffs: number;
   }> {
-    const accounts = await this.prisma.integrationAccount.findMany({
-      where: {
-        deleted: null,
-        integrationDefinition: { slug: LOCAL_REPO_SLUG },
-      },
-      select: { id: true, workspaceId: true, settings: true },
-    });
-
     const totals = { repositories: 0, wrote: 0, handOffs: 0 };
 
-    for (const account of accounts) {
-      for (const repository of readRepositories(account.settings)) {
-        if (!repository.gitIssues?.teamIds?.length) {
-          continue;
-        }
+    for (const tier of this.targets) {
+      let repositories: MirroredRepository[];
 
+      try {
+        repositories = await tier.list();
+      } catch (error) {
+        this.logger.error({
+          message: `Could not list the repositories of an issue mirror tier: ${error}`,
+          where: 'GitIssuesService.runPass',
+          error: error instanceof Error ? error : undefined,
+        });
+        continue;
+      }
+
+      for (const repository of repositories) {
         totals.repositories++;
 
         try {
-          const result = await this.syncLocalRepository(
-            account.workspaceId,
-            account.id,
-            repository,
-          );
+          const result = await this.syncRepository(repository);
 
           if (result?.wrote) {
             totals.wrote++;
@@ -129,7 +144,7 @@ export class GitIssuesService {
           totals.handOffs += result?.handOffs.length ?? 0;
         } catch (error) {
           this.logger.error({
-            message: `Could not sync the issue mirror of ${repository.path}: ${error}`,
+            message: `Could not sync the issue mirror of ${repository.label}: ${error}`,
             where: 'GitIssuesService.runPass',
             error: error instanceof Error ? error : undefined,
           });
@@ -140,18 +155,25 @@ export class GitIssuesService {
     return totals;
   }
 
-  async syncLocalRepository(
-    workspaceId: string,
-    accountId: string,
-    repository: LocalRepository,
-  ): Promise<PassResult | null> {
-    // The fence is checked again on every pass: LOCAL_REPO_ROOT can have
-    // narrowed since the path was added, and the path can have gone.
-    const path = await inspectPath(repository.path);
+  async syncRepository(target: MirroredRepository): Promise<PassResult | null> {
+    const { workspaceId, integrationAccountId } = target;
+
+    // The source checks every time that the account is in the workspace, that
+    // it is not deleted and that it still lists the repository. A local path
+    // is checked against the fence again too.
+    const resolved = await this.sources.resolve({
+      workspaceId,
+      integrationAccountId,
+      externalRepoId: target.externalRepoId,
+    });
+
+    if ('unresolved' in resolved) {
+      throw new Error(resolved.unresolved);
+    }
 
     const teams = await this.prisma.team.findMany({
       where: {
-        id: { in: repository.gitIssues?.teamIds ?? [] },
+        id: { in: target.teamIds },
         workspaceId,
         deleted: null,
       },
@@ -177,39 +199,61 @@ export class GitIssuesService {
     }
 
     const teamIds = teams.map((team) => team.id);
-    const cacheKey = `${workspaceId}:${repository.id}:${teamIds.join(',')}`;
+    const cacheKey = `${workspaceId}:${integrationAccountId}:${target.externalRepoId}:${teamIds.join(',')}`;
     // Taken before anything is read, so a change that lands during the pass
     // makes the next pass render again rather than being missed.
     const marker = await this.marker(workspaceId, teamIds);
     const lookups = await this.lookups(workspaceId, teams);
 
-    const result = await syncRepository(
-      new GitRepository(path),
-      {
-        load: () => this.loadSnapshot(workspaceId, lookups),
-        apply: (reading, source) =>
-          this.apply(workspaceId, accountId, lookups, reading, source),
-      },
-      {
-        upToDate: async (tip) => {
-          const last = this.fresh.get(cacheKey);
-          return Boolean(last && last.tip === tip && last.marker === marker);
+    const mirrorPath = this.mirrors.pathOf(resolved);
+    const fetchRemote = await resolved.source.fetchRemote(resolved.repo);
+    const pushRemote = await resolved.source.pushRemote(resolved.repo);
+
+    let result: PassResult;
+
+    try {
+      result = await syncRepository(
+        new GitRepository(mirrorPath),
+        gitIssueRemote(
+          mirrorPath,
+          { fetch: fetchRemote, push: pushRemote },
+          (work) => this.mirrors.exclusive(resolved, () => work()),
+        ),
+        {
+          load: () => this.loadSnapshot(workspaceId, lookups),
+          apply: (reading, source) =>
+            this.apply(
+              workspaceId,
+              integrationAccountId,
+              resolved.source.slug,
+              lookups,
+              reading,
+              source,
+            ),
         },
-        onInboxError: (name, error) =>
-          this.logger.error({
-            message: `Could not apply inbox ${name} in ${path}; it stays for the next pass: ${error}`,
-            where: 'GitIssuesService.syncLocalRepository',
-            error: error instanceof Error ? error : undefined,
-          }),
-      },
-    );
+        {
+          upToDate: async (tip) => {
+            const last = this.fresh.get(cacheKey);
+            return Boolean(last && last.tip === tip && last.marker === marker);
+          },
+          onInboxError: (name, error) =>
+            this.logger.error({
+              message: `Could not finish inbox ${name} in ${target.label}; it stays for the next pass: ${error}`,
+              where: 'GitIssuesService.syncRepository',
+              error: error instanceof Error ? error : undefined,
+            }),
+        },
+      );
+    } finally {
+      await Promise.all([fetchRemote.dispose(), pushRemote.dispose()]);
+    }
 
     this.fresh.set(cacheKey, { tip: result.tip, marker });
 
     if (result.wrote || result.handOffs.length > 0) {
       this.logger.info({
-        message: `Issue mirror of ${path}: ${result.handOffs.length} hand-off(s) read, snapshot ${result.wrote ? `now ${result.tip?.slice(0, 12)}` : 'unchanged'}`,
-        where: 'GitIssuesService.syncLocalRepository',
+        message: `Issue mirror of ${target.label}: ${result.handOffs.length} hand-off(s) read, snapshot ${result.wrote ? `now ${result.tip?.slice(0, 12)}` : 'unchanged'}`,
+        where: 'GitIssuesService.syncRepository',
       });
     }
 
@@ -264,7 +308,9 @@ export class GitIssuesService {
       }),
     ]);
 
-    return JSON.stringify(results);
+    // The day is in the marker because a closed issue leaves the snapshot when
+    // it gets old, and nothing in the database changes at that moment.
+    return JSON.stringify([Math.floor(Date.now() / DAY_MS), ...results]);
   }
 
   private async lookups(
@@ -309,10 +355,27 @@ export class GitIssuesService {
     workspaceId: string,
     lookups: Lookups,
   ): Promise<Snapshot> {
+    const closedStateIds = lookups.teams.flatMap((team) =>
+      team.states
+        .filter((state) => CLOSED_CATEGORIES.includes(state.category))
+        .map((state) => state.id),
+    );
+    const cutoff = new Date(Date.now() - CLOSED_ISSUE_DAYS * DAY_MS);
+
     const rows: IssueRow[] = await this.prisma.issue.findMany({
       where: {
         teamId: { in: lookups.teams.map((team) => team.id) },
         deleted: null,
+        // An open issue is always here. A closed one stays for a while, so
+        // that an agent can still read how it ended.
+        ...(closedStateIds.length > 0
+          ? {
+              OR: [
+                { stateId: { notIn: closedStateIds } },
+                { stateEnteredAt: { gte: cutoff } },
+              ],
+            }
+          : {}),
       },
       orderBy: [{ teamId: 'asc' }, { number: 'asc' }],
       select: {
@@ -450,6 +513,7 @@ export class GitIssuesService {
   private async apply(
     workspaceId: string,
     accountId: string,
+    slug: string,
     lookups: Lookups,
     reading: InboxReading,
     source: HandOffSource,
@@ -459,14 +523,14 @@ export class GitIssuesService {
     }
 
     const definition = await this.prisma.integrationDefinitionV2.findFirst({
-      where: { slug: LOCAL_REPO_SLUG, deleted: null },
+      where: { slug, deleted: null },
     });
     const botId = await ensureIntegrationBot(this.prisma, workspaceId, {
-      slug: LOCAL_REPO_SLUG,
-      name: definition?.name ?? 'Local repository',
-      icon: definition?.icon ?? LOCAL_REPO_SLUG,
+      slug,
+      name: definition?.name ?? 'Repository',
+      icon: definition?.icon ?? slug,
     });
-    const ctx = this.contextFactory.build(LOCAL_REPO_SLUG, workspaceId, botId);
+    const ctx = this.contextFactory.build(slug, workspaceId, botId);
 
     // The commit author is whatever the agent's git config said. It is shown
     // as who proposed the change, never matched to a Vantik user.
@@ -520,11 +584,19 @@ export class GitIssuesService {
         continue;
       }
 
-      // A retried hand-off has the same commit, so the commit and the path
-      // together say whether this file was already turned into a record.
-      const origin = [
-        { sourceMetadata: { path: ['gitCommit'], equals: source.commit.sha } },
+      // A hand-off that is read again has the same files with the same
+      // content, so the path and a hash of the content say whether a file was
+      // already turned into a record. The commit is no part of the test: the
+      // follow-up commit of an agent can carry a file that an earlier commit
+      // already carried.
+      const origin = (content: string) => [
         { sourceMetadata: { path: ['gitPath'], equals: proposal.path } },
+        {
+          sourceMetadata: {
+            path: ['gitContentHash'],
+            equals: contentHash(content),
+          },
+        },
       ];
 
       if (proposal.kind === 'comment') {
@@ -540,7 +612,7 @@ export class GitIssuesService {
         }
 
         const existing = await this.prisma.issueComment.findFirst({
-          where: { issueId: issue.id, AND: origin },
+          where: { issueId: issue.id, AND: origin(proposal.body) },
           select: { id: true },
         });
 
@@ -548,7 +620,11 @@ export class GitIssuesService {
           await ctx.comments.create({
             issueId: issue.id,
             bodyMarkdown: proposal.body,
-            sourceMetadata: { ...sourceMetadata, gitPath: proposal.path },
+            sourceMetadata: {
+              ...sourceMetadata,
+              gitPath: proposal.path,
+              gitContentHash: contentHash(proposal.body),
+            },
           });
         }
 
@@ -569,8 +645,9 @@ export class GitIssuesService {
         continue;
       }
 
+      const createdFrom = JSON.stringify(plan.input);
       const existing = await this.prisma.issue.findFirst({
-        where: { teamId: plan.teamId, AND: origin },
+        where: { teamId: plan.teamId, AND: origin(createdFrom) },
         select: { number: true },
       });
       const team = lookups.teams.find(
@@ -584,7 +661,11 @@ export class GitIssuesService {
       } else {
         const created = await ctx.issues.create(plan.teamId, {
           ...plan.input,
-          sourceMetadata: { ...sourceMetadata, gitPath: proposal.path },
+          sourceMetadata: {
+            ...sourceMetadata,
+            gitPath: proposal.path,
+            gitContentHash: contentHash(createdFrom),
+          },
         });
 
         plan.outcome.applied.push(
@@ -618,6 +699,10 @@ export class GitIssuesService {
       select: { id: true },
     });
   }
+}
+
+function contentHash(content: string): string {
+  return createHash('sha256').update(content).digest('hex');
 }
 
 function commentAuthor(

@@ -1,11 +1,23 @@
 import { type Outcome } from './apply';
-import { type CommitInfo, type GitIdentity, type GitRepository } from './git';
+import {
+  type CommitInfo,
+  type FileReading,
+  type GitIdentity,
+  type GitRepository,
+} from './git';
 import { type InboxFile, type InboxReading, readInbox } from './inbox';
+import { INBOX_PREFIX, type IssueRemote, SNAPSHOT_REF } from './issue-remote';
 import { renderSnapshot, type Snapshot } from './snapshot';
+
+export { INBOX_PREFIX, SNAPSHOT_REF };
 
 /**
  * One pass over one repository: read what agents handed in, apply it, and
  * write the snapshot they read.
+ *
+ * All git work happens in the server's bare mirror of the repository. The
+ * pass fetches the issue refs of the source into the mirror, and when it is
+ * done it pushes the new snapshot back. See `IssueRemote` for the two pushes.
  *
  * The refs:
  *
@@ -21,10 +33,17 @@ import { renderSnapshot, type Snapshot } from './snapshot';
  * follows a hand-off already shows its effect, and its commit message carries
  * the outcome. That message is the only reply an agent gets: it has no other
  * way to hear from a Vantik it cannot reach.
+ *
+ * The snapshot names each inbox commit that it absorbed as an extra parent.
+ * An agent that commits again on top of its first hand-off is then compared
+ * with that first commit and not with the first snapshot, so one change is
+ * never applied twice.
+ *
+ * The pass deletes an inbox ref only after the push of the snapshot worked.
+ * If the push fails, the ref stays, and the next pass applies the hand-off
+ * again. That is safe, because every proposal is checked against the current
+ * state of the issue and against what an earlier pass already wrote.
  */
-
-export const SNAPSHOT_REF = 'refs/vantik/issues';
-export const INBOX_PREFIX = 'refs/vantik/inbox/';
 
 export const VANTIK_IDENTITY: GitIdentity = {
   name: 'Vantik',
@@ -34,6 +53,8 @@ export const VANTIK_IDENTITY: GitIdentity = {
 /** More than this in one hand-off is a mistake, not a proposal. */
 export const MAX_INBOX_FILES = 200;
 export const MAX_FILE_BYTES = 256 * 1024;
+/** The most content that one hand-off can make the server read. */
+export const MAX_INBOX_BYTES = 8 * 1024 * 1024;
 
 export interface HandOffSource {
   /** The inbox name, or `direct` for commits made on the snapshot ref itself. */
@@ -50,7 +71,10 @@ export interface MirrorStore {
 
 export interface HandOff {
   name: string;
-  commit: CommitInfo;
+  /** The commit that was read, or null when the ref did not point at one. */
+  commit: CommitInfo | null;
+  /** The object that the ref pointed at. */
+  object: string;
   outcomes: Outcome[];
 }
 
@@ -63,7 +87,8 @@ export interface PassResult {
 }
 
 export async function syncRepository(
-  git: GitRepository,
+  mirror: GitRepository,
+  remote: IssueRemote,
   store: MirrorStore,
   options: {
     /**
@@ -73,55 +98,67 @@ export async function syncRepository(
      */
     upToDate?: (tip: string | null) => Promise<boolean>;
     /**
-     * An inbox that could not be applied, because the store failed rather
-     * than because the proposal was wrong. Its ref stays, so the next pass
-     * tries again, and it gets no reply yet: a reply every minute saying "not
-     * yet" would be a commit every minute for as long as the fault lasts.
+     * A fault that stops one inbox but not the pass. Either the store failed
+     * rather than the proposal being wrong, or the inbox could not be deleted
+     * at the source. The ref stays, so the next pass tries again. A store
+     * failure gets no reply yet: a reply every minute that says "not yet" would
+     * be a commit every minute for as long as the fault lasts.
      */
     onInboxError?: (name: string, error: unknown) => void;
     now?: Date;
   } = {},
 ): Promise<PassResult> {
-  const tip = await git.resolve(SNAPSHOT_REF);
+  await remote.exclusive(() => remote.fetchRefs());
+
+  const tip = await mirror.resolve(SNAPSHOT_REF);
+
+  if (!tip && (await mirror.rawRef(SNAPSHOT_REF))) {
+    throw new Error(
+      `${SNAPSHOT_REF} in ${mirror.path} is not a commit. Something else owns that ref; not touching it`,
+    );
+  }
+
   const handOffs: HandOff[] = [];
+  /** The inbox refs that were read, and that the pass deletes when it is done. */
+  const handled: Array<{ ref: string; sha: string; name: string }> = [];
+  /** The inbox commits that the next snapshot takes as extra parents. */
+  const absorbed: string[] = [];
 
   if (tip) {
-    const direct = await readDirectCommits(git, store, tip);
+    const direct = await readDirectCommits(mirror, store, tip);
 
     if (direct) {
       handOffs.push(direct);
     }
   }
 
-  for (const inbox of await git.refs(INBOX_PREFIX)) {
+  for (const inbox of await mirror.refs(INBOX_PREFIX)) {
     const name = inbox.ref.slice(INBOX_PREFIX.length);
-    const commit = await git.commit(inbox.sha);
-    const base = tip ? await git.mergeBase(inbox.sha, tip) : null;
-
+    const found = await locateInbox(mirror, inbox.sha, tip);
     let outcomes: Outcome[];
 
-    try {
-      outcomes = base
-        ? await applyRange(git, store, base, inbox.sha, { name, commit })
-        : [
-            {
-              path: '',
-              applied: [],
-              refused: [
-                `this commit is not built on ${SNAPSHOT_REF}. Check that ref out and commit on top of it`,
-              ],
-            },
-          ];
-    } catch (error) {
-      options.onInboxError?.(name, error);
-      continue;
+    if ('refusal' in found) {
+      outcomes = [{ path: '', applied: [], refused: [found.refusal] }];
+    } else {
+      try {
+        outcomes = await applyRange(mirror, store, found.base, inbox.sha, {
+          name,
+          commit: found.commit,
+        });
+        absorbed.push(inbox.sha);
+      } catch (error) {
+        options.onInboxError?.(name, error);
+        continue;
+      }
     }
 
-    handOffs.push({ name, commit, outcomes });
-
-    // Only if it has not moved. An agent that reused the name while this pass
-    // ran has a newer commit there, which the next pass reads.
-    await git.deleteRef(inbox.ref, inbox.sha);
+    handOffs.push({
+      name,
+      commit: found.commit,
+      object: inbox.sha,
+      outcomes,
+    });
+    handled.push({ ...inbox, name });
   }
 
   if (
@@ -133,26 +170,110 @@ export async function syncRepository(
   }
 
   const files = renderSnapshot(await store.load());
-  const commit = await git.writeSnapshot({
-    files,
-    parent: tip,
-    message: (changed) => snapshotMessage(changed, handOffs, tip === null),
-    identity: VANTIK_IDENTITY,
-    allowEmpty: handOffs.length > 0,
-    date: options.now,
+
+  return await remote.exclusive(async () => {
+    const commit = await mirror.writeSnapshot({
+      files,
+      parent: tip,
+      extraParents: absorbed.filter((sha) => sha !== tip),
+      message: (changed) => snapshotMessage(changed, handOffs, tip === null),
+      identity: VANTIK_IDENTITY,
+      allowEmpty: handOffs.length > 0,
+      date: options.now,
+    });
+
+    if (!commit) {
+      return { tip, wrote: false, handOffs };
+    }
+
+    // Compare-and-swap, in the mirror and then at the source. If either ref
+    // moved under this pass, somebody committed to it directly; the next pass
+    // reads their commits and writes on top.
+    if (!(await mirror.updateRef(SNAPSHOT_REF, commit, tip))) {
+      return { tip, wrote: false, handOffs };
+    }
+
+    let pushed = false;
+
+    try {
+      pushed = await remote.pushSnapshot(commit, tip);
+    } finally {
+      if (!pushed) {
+        // The source has no such commit, so the mirror must not say that it
+        // does. The next fetch would force the same result.
+        if (tip) {
+          await mirror.updateRef(SNAPSHOT_REF, tip, commit);
+        } else {
+          await mirror.deleteRef(SNAPSHOT_REF, commit);
+        }
+      }
+    }
+
+    if (!pushed) {
+      return { tip, wrote: false, handOffs };
+    }
+
+    // Only now, and only if the ref has not moved. An agent that reused the
+    // name while this pass ran has a newer commit there, which the next pass
+    // reads.
+    for (const inbox of handled) {
+      try {
+        await remote.deleteInbox(inbox.ref, inbox.sha);
+      } catch (error) {
+        options.onInboxError?.(inbox.name, error);
+      }
+
+      await mirror.deleteRef(inbox.ref, inbox.sha);
+    }
+
+    return { tip: commit, wrote: true, handOffs };
   });
+}
 
-  if (!commit) {
-    return { tip, wrote: false, handOffs };
+/**
+ * Finds the commit of an inbox ref and the point where it left the snapshot.
+ * It gives a reason instead when the ref cannot be a hand-off: it points at a
+ * blob or a tree, the mirror has not got the object, or the commit is not
+ * built on the snapshot.
+ */
+async function locateInbox(
+  mirror: GitRepository,
+  sha: string,
+  tip: string | null,
+): Promise<
+  | { commit: CommitInfo; base: string }
+  | { commit: CommitInfo | null; base: null; refusal: string }
+> {
+  let commit: CommitInfo | null = null;
+
+  try {
+    const type = await mirror.objectType(sha);
+
+    if (type !== 'commit') {
+      return {
+        commit,
+        base: null,
+        refusal: `this ref points at ${type ? `a ${type}` : 'an object that is not there'}, not at a commit. Commit your changes, and point the ref at that commit`,
+      };
+    }
+
+    commit = await mirror.commit(sha);
+    const base = tip ? await mirror.mergeBase(sha, tip) : null;
+
+    return base
+      ? { commit, base }
+      : {
+          commit,
+          base: null,
+          refusal: `this commit is not built on ${SNAPSHOT_REF}. Check that ref out and commit on top of it`,
+        };
+  } catch (error) {
+    return {
+      commit,
+      base: null,
+      refusal: `this ref could not be read as a commit: ${String(error).slice(0, 200)}`,
+    };
   }
-
-  // Compare-and-swap. If the ref moved under this pass, somebody committed to
-  // it directly; the next pass reads their commits and writes on top.
-  const moved = await git.updateRef(SNAPSHOT_REF, commit, tip);
-
-  return moved
-    ? { tip: commit, wrote: true, handOffs }
-    : { tip, wrote: false, handOffs };
 }
 
 /**
@@ -188,6 +309,7 @@ async function readDirectCommits(
 
   return {
     ...source,
+    object: chain[0].sha,
     outcomes: await applyRange(git, store, base.sha, tip, source),
   };
 }
@@ -218,27 +340,29 @@ async function applyRange(
   }
 
   const paths = changes.map((change) => change.path);
-  const [before, after] = await Promise.all([
-    git.readFiles(base, paths),
-    git.readFiles(head, paths),
-  ]);
+  const limits = {
+    maxFileBytes: MAX_FILE_BYTES,
+    maxTotalBytes: MAX_INBOX_BYTES,
+  };
+  const after = await git.readFiles(head, paths, limits);
+  const before = await git.readFiles(base, paths, limits);
 
   const files: InboxFile[] = [];
-  const tooLarge: Outcome[] = [];
+  const unread: Outcome[] = [];
 
   for (const path of paths) {
-    const content = after.get(path) ?? null;
+    const reason = unreadReason(path, after, before);
 
-    if (content !== null && Buffer.byteLength(content) > MAX_FILE_BYTES) {
-      tooLarge.push({
-        path,
-        applied: [],
-        refused: [`larger than ${MAX_FILE_BYTES / 1024} KiB`],
-      });
+    if (reason) {
+      unread.push({ path, applied: [], refused: [reason] });
       continue;
     }
 
-    files.push({ path, before: before.get(path) ?? null, after: content });
+    files.push({
+      path,
+      before: before.files.get(path) ?? null,
+      after: after.files.get(path) ?? null,
+    });
   }
 
   const reading = readInbox(files);
@@ -248,7 +372,28 @@ async function applyRange(
     refused: [refusal.reason],
   }));
 
-  return [...tooLarge, ...refusals, ...(await store.apply(reading, source))];
+  return [...unread, ...refusals, ...(await store.apply(reading, source))];
+}
+
+/** Why a file was not read, or null when it was. */
+function unreadReason(
+  path: string,
+  after: FileReading,
+  before: FileReading,
+): string | null {
+  if (after.tooLarge.has(path)) {
+    return `larger than ${MAX_FILE_BYTES / 1024} KiB`;
+  }
+
+  if (before.tooLarge.has(path)) {
+    return `the file in the snapshot is larger than ${MAX_FILE_BYTES / 1024} KiB, so it cannot be compared`;
+  }
+
+  if (after.overBudget.has(path) || before.overBudget.has(path)) {
+    return `this hand-off holds more than ${MAX_INBOX_BYTES / 1024 / 1024} MiB of files in total. Send it in smaller parts`;
+  }
+
+  return null;
 }
 
 /**
@@ -283,7 +428,9 @@ export function snapshotMessage(
 
   for (const handOff of handOffs) {
     const lines = [
-      `Inbox ${handOff.name}, commit ${handOff.commit.sha.slice(0, 12)} by ${handOff.commit.authorName} <${handOff.commit.authorEmail}>:`,
+      handOff.commit
+        ? `Inbox ${handOff.name}, commit ${handOff.commit.sha.slice(0, 12)} by ${handOff.commit.authorName} <${handOff.commit.authorEmail}>:`
+        : `Inbox ${handOff.name}, object ${handOff.object.slice(0, 12)}:`,
     ];
 
     for (const outcome of handOff.outcomes) {

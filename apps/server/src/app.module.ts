@@ -26,6 +26,7 @@ import { CapabilitiesModule } from 'modules/capabilities/capabilities.module';
 import { ChecklistItemsModule } from 'modules/checklist-items/checklist-items.module';
 import { ClientConfigModule } from 'modules/client-config/client-config.module';
 import { CyclesModule } from 'modules/cycles/cycles.module';
+import { GitIssuesModule } from 'modules/git-issues/git-issues.module';
 import { GitRemoteModule } from 'modules/git-remote/git-remote.module';
 import { HealthModule } from 'modules/health/health.module';
 import { IntegrationAccountModule } from 'modules/integration-account/integration-account.module';
@@ -144,6 +145,7 @@ import { AppService } from './app.service';
     IntegrationAccountModule,
     IntegrationsModule,
     LocalRepoModule,
+    GitIssuesModule,
     GitRemoteModule,
 
     BullConfigModule,

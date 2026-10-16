@@ -1,3 +1,5 @@
+import { AGENT_SESSION_EXTERNAL_ID_MAX } from '@vantikhq/types';
+
 import { type Outcome } from './apply';
 import {
   type CommitInfo,
@@ -65,6 +67,11 @@ export interface HandOffSource {
   /** The inbox name, or `direct` for commits made on the snapshot ref itself. */
   name: string;
   commit: CommitInfo;
+  /**
+   * The session that the commits name in a `Vantik-Session` trailer, and its
+   * harness from `Vantik-Harness`. Null when the commits name none.
+   */
+  session?: { id: string; harness: string | null } | null;
 }
 
 /** What the pass needs from Vantik for one repository. */
@@ -350,6 +357,11 @@ async function applyRange(
     ];
   }
 
+  const trailers = await git.trailers(base, head, [
+    SESSION_TRAILER,
+    HARNESS_TRAILER,
+  ]);
+  const session = sessionOf(trailers);
   const paths = changes.map((change) => change.path);
   const limits = {
     maxFileBytes: MAX_FILE_BYTES,
@@ -383,7 +395,36 @@ async function applyRange(
     refused: [refusal.reason],
   }));
 
-  return [...unread, ...refusals, ...(await store.apply(reading, source))];
+  return [
+    ...unread,
+    ...refusals,
+    ...(await store.apply(reading, { ...source, session })),
+  ];
+}
+
+export const SESSION_TRAILER = 'Vantik-Session';
+export const HARNESS_TRAILER = 'Vantik-Harness';
+
+/**
+ * The session of a hand-off, from the trailers of its commits. An id that is
+ * empty, too long, or has a control character is no id. The text is stored
+ * and shown, never run, but a limit keeps one line of a commit message from
+ * filling a column.
+ */
+function sessionOf(
+  trailers: Record<string, string | null>,
+): HandOffSource['session'] {
+  const id = trailers[SESSION_TRAILER]?.trim();
+
+  if (
+    !id ||
+    id.length > AGENT_SESSION_EXTERNAL_ID_MAX ||
+    /[\u0000-\u001f\u007f]/.test(id)
+  ) {
+    return null;
+  }
+
+  return { id, harness: trailers[HARNESS_TRAILER]?.trim() || null };
 }
 
 /** Why a file was not read, or null when it was. */

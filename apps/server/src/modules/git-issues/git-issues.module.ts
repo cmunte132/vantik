@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 import { PluginsModule } from 'plugins/plugins.module';
 
+import { AgentSessionsModule } from 'modules/agent-sessions/agent-sessions.module';
 import { GitModule } from 'modules/git/git.module';
 
 import { GIT_ISSUES_QUEUE } from './git-issues.interface';
@@ -18,6 +19,8 @@ import { GIT_ISSUES_TARGETS } from './mirror-targets';
   imports: [
     PluginsModule,
     GitModule,
+    // The session that a hand-off names is recorded on the issue.
+    AgentSessionsModule,
     BullModule.registerQueue({ name: GIT_ISSUES_QUEUE }),
   ],
   providers: [

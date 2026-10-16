@@ -200,16 +200,18 @@ describe('GitIssuesService', () => {
       label: repository,
       teamIds,
     };
+    const sessions = { recordInboxSession: jest.fn().mockResolvedValue({}) };
     const service = new GitIssuesService(
       prisma as any,
       contextFactory as any,
       { resolve } as any,
       new RepoMirrorService(),
+      sessions as any,
       [{ list: async () => [target] }],
     );
     const sync = () => service.syncRepository(target);
 
-    return { prisma, ctx, contextFactory, service, resolve, sync };
+    return { prisma, ctx, contextFactory, service, resolve, sync, sessions };
   }
 
   it('renders issues by name: key, state, username, label, markdown', async () => {
@@ -475,5 +477,120 @@ describe('GitIssuesService', () => {
 
     expect(totals).toEqual({ repositories: 2, wrote: 1, handOffs: 0 });
     expect(prisma.team.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  /** What an agent does: edit the snapshot, commit, and name an inbox. */
+  async function handIn(
+    name: string,
+    edit: (worktree: string) => Promise<void>,
+    message = `proposal ${name}`,
+  ) {
+    const worktree = join(root, `agent-${name}`);
+
+    git(
+      repository,
+      'worktree',
+      'add',
+      '-q',
+      '--detach',
+      worktree,
+      SNAPSHOT_REF,
+    );
+    await edit(worktree);
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-q', '-m', message);
+    git(worktree, 'update-ref', `${INBOX_PREFIX}${name}`, 'HEAD');
+    git(repository, 'worktree', 'remove', '--force', worktree);
+  }
+
+  const addComment =
+    (text = 'Found it.\n') =>
+    async (worktree: string) => {
+      await mkdir(join(worktree, 'issues/ENG-42/comments'), {
+        recursive: true,
+      });
+      await writeFile(join(worktree, 'issues/ENG-42/comments/note.md'), text);
+    };
+
+  const setState = (to: string) => async (worktree: string) => {
+    const file = join(worktree, 'issues/ENG-42/issue.md');
+
+    await writeFile(
+      file,
+      (await readFile(file, 'utf8')).replace(
+        'state: "Backlog"',
+        `state: "${to}"`,
+      ),
+    );
+  };
+
+  describe('sessions', () => {
+    it('records the session that the trailers name, as the bot, for the issue it touched', async () => {
+      const { sync, sessions } = setUp();
+      await sync();
+
+      await handIn(
+        'run-1',
+        addComment(),
+        'Report\n\nVantik-Session: sess-9\nVantik-Harness: pi',
+      );
+      await sync();
+
+      expect(sessions.recordInboxSession).toHaveBeenCalledTimes(1);
+      expect(sessions.recordInboxSession).toHaveBeenCalledWith(
+        { workspaceId: 'workspace-1', userId: 'bot-local-repo' },
+        { issueId: 'issue-42', externalId: 'sess-9', harness: 'pi' },
+      );
+    });
+
+    it('records one session for an issue that the hand-off changed twice', async () => {
+      const { sync, sessions } = setUp();
+      await sync();
+
+      await handIn(
+        'run-2',
+        async (worktree) => {
+          await addComment()(worktree);
+          await setState('In Progress')(worktree);
+        },
+        'Report\n\nVantik-Session: sess-9',
+      );
+      await sync();
+
+      expect(sessions.recordInboxSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('makes no session when the commits have no trailer', async () => {
+      const { sync, sessions } = setUp();
+      await sync();
+
+      await handIn('run-3', addComment());
+      await sync();
+
+      expect(sessions.recordInboxSession).not.toHaveBeenCalled();
+    });
+
+    it('makes no session when the session names no issue that the hand-off touched', async () => {
+      const { sync, sessions, prisma } = setUp();
+      await sync();
+      prisma.issue.findFirst.mockResolvedValue(null);
+
+      await handIn('run-4', addComment(), 'Report\n\nVantik-Session: sess-9');
+      await sync();
+
+      expect(sessions.recordInboxSession).not.toHaveBeenCalled();
+    });
+
+    it('still applies the hand-off when the session cannot be recorded', async () => {
+      const { sync, sessions, ctx } = setUp();
+      await sync();
+      sessions.recordInboxSession.mockRejectedValue(new Error('database down'));
+
+      await handIn('run-5', addComment(), 'Report\n\nVantik-Session: sess-9');
+      const result = await sync();
+
+      expect(ctx.comments.create).toHaveBeenCalled();
+      expect(result?.wrote).toBe(true);
+    });
   });
 });

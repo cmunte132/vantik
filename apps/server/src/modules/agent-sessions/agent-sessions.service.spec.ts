@@ -219,3 +219,82 @@ describe('AgentSessionsService touching hooks sessions', () => {
     expect(prisma.agentSession.updateMany).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('AgentSessionsService recording an inbox session', () => {
+  const record = (
+    over: { externalId?: string; harness?: string | null } = {},
+  ) => ({
+    issueId: 'issue-1',
+    externalId: 'sess-git',
+    ...over,
+  });
+
+  it('creates a session on the git inbox channel, with an unknown location', async () => {
+    const { service } = build();
+
+    const session = await service.recordInboxSession(
+      actor,
+      record({ harness: 'pi' }),
+    );
+
+    expect(session).toMatchObject({
+      workspaceId: 'ws-1',
+      issueId: 'issue-1',
+      actorUserId: 'agent-1',
+      externalId: 'sess-git',
+      harness: 'pi',
+      location: 'UNKNOWN',
+      channel: 'GIT_INBOX',
+    });
+    expect(session.driver).toBeUndefined();
+  });
+
+  it('keeps one row for one session, and raises lastActiveAt on a repeat', async () => {
+    const { service, rows } = build();
+
+    const first = await service.recordInboxSession(actor, record());
+    first.lastActiveAt = new Date('2026-01-01T00:00:00Z');
+    const second = await service.recordInboxSession(actor, record());
+
+    expect(rows.size).toBe(1);
+    expect(second.id).toBe(first.id);
+    expect(second.lastActiveAt.getTime()).toBeGreaterThan(
+      new Date('2026-01-01T00:00:00Z').getTime(),
+    );
+  });
+
+  it('keeps the same session id on the hooks channel apart from the inbox', async () => {
+    const { service, rows } = build();
+
+    await service.linkHookSession(actor, link({ externalId: 'sess-git' }));
+    await service.recordInboxSession(actor, record());
+
+    expect(rows.size).toBe(2);
+  });
+
+  it('refuses an issue in another workspace as if it did not exist', async () => {
+    const { service, prisma } = build();
+
+    await expect(
+      service.recordInboxSession(
+        { ...actor, workspaceId: 'ws-other' },
+        record(),
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.agentSession.upsert).not.toHaveBeenCalled();
+  });
+
+  it('refuses a session id that is empty or too long', async () => {
+    const { service } = build();
+
+    await expect(
+      service.recordInboxSession(actor, record({ externalId: ' ' })),
+    ).rejects.toBeInstanceOf(RangeError);
+    await expect(
+      service.recordInboxSession(
+        actor,
+        record({ externalId: 'x'.repeat(201) }),
+      ),
+    ).rejects.toBeInstanceOf(RangeError);
+  });
+});

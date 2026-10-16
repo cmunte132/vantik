@@ -135,6 +135,49 @@ export class GitRepository {
     return { sha: full, authorName, authorEmail, committerEmail };
   }
 
+  /**
+   * The trailers that a range of commits carries, for each key in `keys`: the
+   * value of the newest commit that has the key, and null when none has it.
+   * `base` null reads every commit that `head` reaches.
+   *
+   * A trailer is the last paragraph of a commit message, lines of
+   * `Key: value`. Git does the parsing, so a line in the middle of the
+   * message is not a trailer.
+   */
+  async trailers(
+    base: string | null,
+    head: string,
+    keys: string[],
+  ): Promise<Record<string, string | null>> {
+    const output = await this.text([
+      'log',
+      '-n200',
+      '--no-show-signature',
+      `--format=%x01${keys
+        .map((key) => `%(trailers:key=${key},valueonly,unfold)`)
+        .join('%x00')}`,
+      base ? `${base}..${head}` : head,
+      '--',
+    ]);
+    const found: Record<string, string | null> = {};
+
+    for (const key of keys) {
+      found[key] = null;
+    }
+
+    for (const record of output.split('\x01').slice(1)) {
+      record.split('\0').forEach((value, index) => {
+        const text = value.trim().split('\n')[0]?.trim();
+
+        if (found[keys[index]] === null && text) {
+          found[keys[index]] = text;
+        }
+      });
+    }
+
+    return found;
+  }
+
   /** Commits reachable along first parents, newest first. */
   async firstParents(sha: string, limit: number): Promise<CommitInfo[]> {
     const output = await this.text([

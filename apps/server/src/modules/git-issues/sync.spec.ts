@@ -4,13 +4,17 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
+import { anonymousRemote } from 'modules/git/git-command';
+
 import { type Lookups, type Outcome, planCreate, planUpdate } from './apply';
 import { GitRepository } from './git';
 import { type InboxReading } from './inbox';
+import { gitIssueRemote } from './issue-remote';
 import { type Snapshot, type SnapshotIssue } from './snapshot';
 import {
   type HandOffSource,
   INBOX_PREFIX,
+  MAX_FILE_BYTES,
   type MirrorStore,
   SNAPSHOT_REF,
   syncRepository,
@@ -19,8 +23,10 @@ import {
 /**
  * The mirror against real repositories, because what is being tested is what
  * git does: which refs move, what a plain clone sees, whether a checkout is
- * disturbed. The store is an in-memory stand-in for the database that applies
- * proposals with the same planning rules the service uses.
+ * disturbed, whether a hook runs. The source is a checkout in a temporary
+ * directory. The pass works in a bare mirror of it, as the server does. The
+ * store is an in-memory stand-in for the database that applies proposals with
+ * the same planning rules the service uses.
  */
 
 const lookups: Lookups = {
@@ -133,6 +139,9 @@ class MemoryStore implements MirrorStore {
   }
 }
 
+// A pass starts many git processes, and a test makes several passes.
+jest.setTimeout(60_000);
+
 let root: string;
 
 function git(cwd: string, ...args: string[]): string {
@@ -158,6 +167,32 @@ async function checkout(): Promise<string> {
   git(path, 'commit', '-q', '-m', 'code');
 
   return path;
+}
+
+const mirrors = new Map<string, string>();
+
+/** One pass over `repository`, in a bare mirror that it keeps between passes. */
+async function pass(
+  repository: string,
+  store: MirrorStore,
+  options: Parameters<typeof syncRepository>[3] = {},
+) {
+  let path = mirrors.get(repository);
+
+  if (!path) {
+    path = await mkdtemp(join(root, 'mirror-'));
+    git(path, 'init', '-q', '--bare');
+    mirrors.set(repository, path);
+  }
+
+  const remote = anonymousRemote(repository);
+
+  return await syncRepository(
+    new GitRepository(path),
+    gitIssueRemote(path, { fetch: remote, push: remote }, (work) => work()),
+    store,
+    options,
+  );
 }
 
 /** What an agent does, with plain git and nothing else. */
@@ -195,10 +230,7 @@ describe('syncRepository', () => {
     git(repository, 'add', 'staged.js');
     const status = git(repository, 'status', '--porcelain');
 
-    const result = await syncRepository(
-      new GitRepository(repository),
-      new MemoryStore(),
-    );
+    const result = await pass(repository, new MemoryStore());
 
     expect(result.wrote).toBe(true);
     expect(git(repository, 'rev-parse', 'HEAD')).toBe(head);
@@ -215,8 +247,8 @@ describe('syncRepository', () => {
   it('writes no commit when nothing changed', async () => {
     const repository = await checkout();
     const store = new MemoryStore();
-    const first = await syncRepository(new GitRepository(repository), store);
-    const second = await syncRepository(new GitRepository(repository), store);
+    const first = await pass(repository, store);
+    const second = await pass(repository, store);
 
     expect(second.wrote).toBe(false);
     expect(second.tip).toBe(first.tip);
@@ -225,7 +257,7 @@ describe('syncRepository', () => {
   it('applies an inbox, deletes it, and answers in the next snapshot', async () => {
     const repository = await checkout();
     const store = new MemoryStore();
-    await syncRepository(new GitRepository(repository), store);
+    await pass(repository, store);
 
     await handOff(repository, 'session-1', async (worktree) => {
       const file = join(worktree, 'issues/ENG-1/issue.md');
@@ -241,7 +273,7 @@ describe('syncRepository', () => {
       );
     });
 
-    const result = await syncRepository(new GitRepository(repository), store);
+    const result = await pass(repository, store);
 
     expect(result.handOffs.map((handOff) => handOff.name)).toEqual([
       'session-1',
@@ -275,7 +307,7 @@ describe('syncRepository', () => {
   it('applies two agents working on the same issue at once', async () => {
     const repository = await checkout();
     const store = new MemoryStore();
-    await syncRepository(new GitRepository(repository), store);
+    await pass(repository, store);
 
     const edit = (from: string, to: string) => async (worktree: string) => {
       const file = join(worktree, 'issues/ENG-1/issue.md');
@@ -289,7 +321,7 @@ describe('syncRepository', () => {
     );
     await handOff(repository, 'b', edit('priority: high', 'priority: urgent'));
 
-    await syncRepository(new GitRepository(repository), store);
+    await pass(repository, store);
 
     expect(store.issues[0]).toMatchObject({
       state: 'In Progress',
@@ -299,13 +331,10 @@ describe('syncRepository', () => {
 
   it('refuses an inbox that is not built on the snapshot', async () => {
     const repository = await checkout();
-    await syncRepository(new GitRepository(repository), new MemoryStore());
+    await pass(repository, new MemoryStore());
     git(repository, 'update-ref', `${INBOX_PREFIX}stray`, 'HEAD');
 
-    const result = await syncRepository(
-      new GitRepository(repository),
-      new MemoryStore(),
-    );
+    const result = await pass(repository, new MemoryStore());
 
     expect(result.handOffs[0].outcomes[0].refused[0]).toMatch(
       /not built on refs\/vantik\/issues/,
@@ -316,7 +345,7 @@ describe('syncRepository', () => {
   it('files a new issue from new/', async () => {
     const repository = await checkout();
     const store = new MemoryStore();
-    await syncRepository(new GitRepository(repository), store);
+    await pass(repository, store);
 
     await handOff(repository, 'filing', async (worktree) => {
       await mkdir(join(worktree, 'new'));
@@ -326,7 +355,7 @@ describe('syncRepository', () => {
       );
     });
 
-    await syncRepository(new GitRepository(repository), store);
+    await pass(repository, store);
 
     expect(git(repository, 'show', `${SNAPSHOT_REF}:index.md`)).toContain(
       'Dark mode resets on reload',
@@ -339,7 +368,7 @@ describe('syncRepository', () => {
   it('reads commits made on the snapshot ref itself, and keeps them in history', async () => {
     const repository = await checkout();
     const store = new MemoryStore();
-    await syncRepository(new GitRepository(repository), store);
+    await pass(repository, store);
 
     const worktree = join(root, 'direct');
     git(
@@ -360,27 +389,83 @@ describe('syncRepository', () => {
     const direct = git(worktree, 'rev-parse', 'HEAD');
     git(worktree, 'update-ref', SNAPSHOT_REF, 'HEAD');
 
-    const result = await syncRepository(new GitRepository(repository), store);
+    const result = await pass(repository, store);
 
     expect(result.handOffs.map((handOff) => handOff.name)).toEqual(['direct']);
     expect(store.issues[0].priority).toBe(4);
     expect(git(repository, 'rev-parse', `${SNAPSHOT_REF}^`)).toBe(direct);
   });
 
-  it('never runs a hook from the checkout', async () => {
+  it('never runs a hook of the checkout, on either side of a push', async () => {
     const repository = await checkout();
     const marker = join(root, 'hook-ran');
-    const hook = join(repository, '.git/hooks/reference-transaction');
+    const store = new MemoryStore();
 
-    await writeFile(hook, `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
-    await syncRepository(new GitRepository(repository), new MemoryStore());
+    // Every hook that a fetch, a push or a ref change in the checkout can run.
+    for (const name of [
+      'reference-transaction',
+      'pre-receive',
+      'update',
+      'post-receive',
+      'post-update',
+      'push-to-checkout',
+      'pre-push',
+    ]) {
+      await writeFile(
+        join(repository, '.git/hooks', name),
+        `#!/bin/sh\necho ${name} >> ${marker}\n`,
+        { mode: 0o755 },
+      );
+    }
+
+    // The first pass pushes the snapshot. The second reads an inbox and then
+    // deletes its ref at the source, which is a second kind of push.
+    const first = await pass(repository, store);
+    expect(first.wrote).toBe(true);
+
+    await handOff(repository, 'hooked', async (worktree) => {
+      const file = join(worktree, 'issues/ENG-1/issue.md');
+      await writeFile(
+        file,
+        (await readFile(file, 'utf8')).replace(
+          'priority: high',
+          'priority: low',
+        ),
+      );
+    });
+    // The hand-off made its commit and its ref through hooks of its own, which
+    // is not under test. Start from a clean marker.
+    await rm(marker, { force: true });
+
+    const second = await pass(repository, store);
+
+    expect(second.wrote).toBe(true);
+    expect(git(repository, 'for-each-ref', INBOX_PREFIX)).toBe('');
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it('never runs a hook of the mirror', async () => {
+    const repository = await checkout();
+    const marker = join(root, 'mirror-hook-ran');
+
+    await pass(repository, new MemoryStore());
+
+    const mirror = mirrors.get(repository)!;
+    await writeFile(
+      join(mirror, 'hooks/reference-transaction'),
+      `#!/bin/sh\necho x >> ${marker}\n`,
+      { mode: 0o755 },
+    );
+    const store = new MemoryStore();
+    store.issues[0].title = 'Renamed';
+    await pass(repository, store);
 
     expect(existsSync(marker)).toBe(false);
   });
 
   it('is invisible to a plain clone', async () => {
     const repository = await checkout();
-    await syncRepository(new GitRepository(repository), new MemoryStore());
+    await pass(repository, new MemoryStore());
 
     const clone = join(root, 'plain-clone');
     git(root, 'clone', '-q', repository, clone);
@@ -392,9 +477,10 @@ describe('syncRepository', () => {
   it('leaves the ref alone when somebody moves it during the pass', async () => {
     const repository = await checkout();
     const store = new MemoryStore();
-    await syncRepository(new GitRepository(repository), store);
+    await pass(repository, store);
 
     const elsewhere = git(repository, 'rev-parse', 'HEAD');
+    const tip = git(repository, 'rev-parse', SNAPSHOT_REF);
     store.issues[0].title = 'Renamed in Vantik';
     const load = store.load.bind(store);
     store.load = async () => {
@@ -402,16 +488,227 @@ describe('syncRepository', () => {
       return await load();
     };
 
-    const result = await syncRepository(new GitRepository(repository), store);
+    const result = await pass(repository, store);
 
     expect(result.wrote).toBe(false);
+    // The lease held the source back, and the mirror went back to the tip
+    // that the pass started from.
     expect(git(repository, 'rev-parse', SNAPSHOT_REF)).toBe(elsewhere);
+    expect(git(mirrors.get(repository)!, 'rev-parse', SNAPSHOT_REF)).toBe(tip);
+  });
+
+  it('keeps the inbox ref until the snapshot is pushed, then deletes it', async () => {
+    const repository = await checkout();
+    const store = new MemoryStore();
+    await pass(repository, store);
+
+    await handOff(repository, 'late', async (worktree) => {
+      const file = join(worktree, 'issues/ENG-1/issue.md');
+      await writeFile(
+        file,
+        (await readFile(file, 'utf8')).replace(
+          'state: "Backlog"',
+          'state: "In Progress"',
+        ),
+      );
+    });
+
+    // A lock file makes git refuse any update of the ref at the source.
+    const lock = join(repository, '.git/refs/vantik/issues.lock');
+    const load = store.load.bind(store);
+    store.load = async () => {
+      await writeFile(lock, '');
+      return await load();
+    };
+
+    const failed = await pass(repository, store);
+
+    expect(failed.wrote).toBe(false);
+    expect(
+      git(repository, 'for-each-ref', '--format=%(refname)', INBOX_PREFIX),
+    ).toBe(`${INBOX_PREFIX}late`);
+
+    await rm(lock);
+    store.load = load;
+    const retried = await pass(repository, store);
+
+    expect(retried.wrote).toBe(true);
+    expect(git(repository, 'for-each-ref', INBOX_PREFIX)).toBe('');
+    expect(git(repository, 'log', '-1', '--format=%B', SNAPSHOT_REF)).toContain(
+      'Vantik-Inbox: late',
+    );
+    expect(store.issues[0].state).toBe('In Progress');
+  });
+
+  it('does not apply a follow-up hand-off on top of an earlier one twice', async () => {
+    const repository = await checkout();
+    const store = new MemoryStore();
+    await pass(repository, store);
+
+    const worktree = join(root, 'worktree-follow-up');
+    git(
+      repository,
+      'worktree',
+      'add',
+      '-q',
+      '--detach',
+      worktree,
+      SNAPSHOT_REF,
+    );
+
+    // The first hand-off: a comment, a new issue and a new priority.
+    await mkdir(join(worktree, 'issues/ENG-1/comments'), { recursive: true });
+    await writeFile(
+      join(worktree, 'issues/ENG-1/comments/note.md'),
+      'The submit handler never fires.\n',
+    );
+    await mkdir(join(worktree, 'new'));
+    await writeFile(
+      join(worktree, 'new/dark-mode.md'),
+      '---\ntitle: Dark mode resets on reload\n---\n\nToggle, reload.\n',
+    );
+    const issueFile = join(worktree, 'issues/ENG-1/issue.md');
+    await writeFile(
+      issueFile,
+      (await readFile(issueFile, 'utf8')).replace(
+        'priority: high',
+        'priority: low',
+      ),
+    );
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-q', '-m', 'first');
+    git(worktree, 'update-ref', `${INBOX_PREFIX}one`, 'HEAD');
+
+    await pass(repository, store);
+
+    expect(store.issues).toHaveLength(2);
+    expect(store.issues[0].comments).toHaveLength(1);
+
+    // The second hand-off is built on the first, not on the new snapshot. The
+    // agent never fetched the snapshot that answered the first.
+    await writeFile(
+      issueFile,
+      (await readFile(issueFile, 'utf8')).replace(
+        'state: "Backlog"',
+        'state: "In Progress"',
+      ),
+    );
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-q', '-m', 'second');
+    git(worktree, 'update-ref', `${INBOX_PREFIX}two`, 'HEAD');
+
+    const result = await pass(repository, store);
+
+    expect(store.issues).toHaveLength(2);
+    expect(store.issues[0].comments).toHaveLength(1);
+    expect(store.issues[0].state).toBe('In Progress');
+    expect(result.handOffs.flatMap((handOff) => handOff.outcomes)).toEqual([
+      expect.objectContaining({
+        refused: [],
+        applied: ['ENG-1 state: Backlog → In Progress'],
+      }),
+    ]);
+    // The first hand-off is a parent of the snapshot that answered it.
+    const parents = git(
+      repository,
+      'rev-list',
+      '--parents',
+      '-n1',
+      `${SNAPSHOT_REF}~1`,
+    )
+      .split(' ')
+      .slice(1);
+    expect(parents).toHaveLength(2);
+  });
+
+  it('refuses an inbox ref that points at a blob or a tree, and deletes it', async () => {
+    const repository = await checkout();
+    const store = new MemoryStore();
+    await pass(repository, store);
+
+    git(
+      repository,
+      'update-ref',
+      `${INBOX_PREFIX}blob`,
+      git(repository, 'rev-parse', 'HEAD:app.js'),
+    );
+    git(
+      repository,
+      'update-ref',
+      `${INBOX_PREFIX}tree`,
+      git(repository, 'rev-parse', 'HEAD^{tree}'),
+    );
+    await handOff(repository, 'fine', async (worktree) => {
+      const file = join(worktree, 'issues/ENG-1/issue.md');
+      await writeFile(
+        file,
+        (await readFile(file, 'utf8')).replace(
+          'priority: high',
+          'priority: low',
+        ),
+      );
+    });
+
+    const result = await pass(repository, store);
+
+    expect(git(repository, 'for-each-ref', INBOX_PREFIX)).toBe('');
+    const byName = Object.fromEntries(
+      result.handOffs.map((handOff) => [handOff.name, handOff]),
+    );
+    expect(byName.blob.outcomes[0].refused[0]).toMatch(/points at a blob/);
+    expect(byName.tree.outcomes[0].refused[0]).toMatch(/points at a tree/);
+    expect(byName.fine.outcomes[0].applied).toHaveLength(1);
+    expect(store.issues[0].priority).toBe(4);
+    expect(git(repository, 'log', '-1', '--format=%B', SNAPSHOT_REF)).toContain(
+      'Vantik-Inbox: blob',
+    );
+
+    // Nothing is left to wedge the next pass.
+    const next = await pass(repository, store);
+    expect(next.handOffs).toEqual([]);
+  });
+
+  it('refuses a file over the size limit, and a hand-off over the total limit', async () => {
+    const repository = await checkout();
+    const store = new MemoryStore();
+    await pass(repository, store);
+
+    await handOff(repository, 'big', async (worktree) => {
+      const comments = join(worktree, 'issues/ENG-1/comments');
+      await mkdir(comments, { recursive: true });
+      await writeFile(
+        join(comments, 'huge.md'),
+        'x'.repeat(MAX_FILE_BYTES + 1),
+      );
+
+      // Each file fits, and together they are over the total limit.
+      for (let index = 0; index < 45; index++) {
+        await writeFile(
+          join(comments, `part-${String(index).padStart(2, '0')}.md`),
+          `${index} `.padEnd(200_000, 'y'),
+        );
+      }
+    });
+
+    const result = await pass(repository, store);
+    const refused = result.handOffs[0].outcomes.flatMap((outcome) =>
+      outcome.refused.map((reason) => `${outcome.path}: ${reason}`),
+    );
+
+    expect(refused).toContainEqual(
+      'issues/ENG-1/comments/huge.md: larger than 256 KiB',
+    );
+    expect(
+      refused.filter((line) => /MiB of files in total/.test(line)).length,
+    ).toBeGreaterThan(0);
+    expect(store.issues[0].comments.length).toBeGreaterThan(0);
+    expect(store.issues[0].comments.length).toBeLessThan(45);
   });
 
   it('keeps an inbox the store failed on, and still applies the others', async () => {
     const repository = await checkout();
     const store = new MemoryStore();
-    await syncRepository(new GitRepository(repository), store);
+    await pass(repository, store);
 
     const edit = (from: string, to: string) => async (worktree: string) => {
       const file = join(worktree, 'issues/ENG-1/issue.md');
@@ -434,7 +731,7 @@ describe('syncRepository', () => {
     };
 
     const failed: string[] = [];
-    const result = await syncRepository(new GitRepository(repository), store, {
+    const result = await pass(repository, store, {
       onInboxError: (name) => failed.push(name),
     });
 

@@ -364,9 +364,20 @@ export default class IssuesService {
       );
     }
 
+    // A markdown text that is empty clears the description. Without this the
+    // request answered "updated" and kept the old text.
+    const clearsDescription =
+      !updatedDescription &&
+      typeof descriptionMarkdown === 'string' &&
+      descriptionMarkdown.trim() === '';
+
     // Prepare the updated issue data
     const updatedIssueData = {
-      ...(updatedDescription ? { description: updatedDescription } : {}),
+      ...(updatedDescription
+        ? { description: updatedDescription }
+        : clearsDescription
+          ? { description: null }
+          : {}),
       subscriberIds: getSubscriberIds(
         userId,
         issueData.assigneeId,

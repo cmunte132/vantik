@@ -1,23 +1,24 @@
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { git, gitBytes, type GitOptions } from 'modules/git/git-command';
+
 /**
- * The git plumbing the issue mirror needs, and nothing else.
+ * The git plumbing that the issue mirror needs, and nothing else.
  *
- * The repository is somebody's working checkout. Everything here is chosen so
- * that the mirror can live inside it without that person ever noticing: no
- * command reads or writes `HEAD`, the index or the working tree. Commits are
- * built from a scratch index in a temporary directory and land on one ref
- * outside `refs/heads`, so `git status`, `git branch` and every checkout are
- * exactly what they were.
+ * The repository is the bare mirror that the server keeps of a source. A
+ * source can be somebody's working checkout, but the mirror is never that
+ * checkout: this code reads and writes only the mirror. Commits come from a
+ * scratch index in a temporary directory and land on refs outside
+ * `refs/heads`, so a branch fetch and a read of code are exactly what they
+ * were.
  *
- * It is also a repository the server did not write, running as the server's
- * account. Hooks are switched off on every call, because a hook in that
- * checkout is code the server would otherwise execute, and nothing that runs a
- * filter or an external diff is used at all.
+ * Every command goes through `modules/git/git-command`, which turns off hooks
+ * and `core.fsmonitor`. The content of the mirror came from a repository that
+ * the server did not write, so no command here can run a filter or an
+ * external diff.
  */
 
 export interface GitIdentity {
@@ -32,115 +33,33 @@ export interface CommitInfo {
   committerEmail: string;
 }
 
+/** What `readFiles` found, with the paths that it refused to read. */
+export interface FileReading {
+  files: Map<string, string | null>;
+  /** Paths over the size limit for one file, with their sizes. */
+  tooLarge: Map<string, number>;
+  /** Paths left unread because the total limit was reached. */
+  overBudget: Set<string>;
+}
+
 export interface TreeChange {
   status: 'A' | 'M' | 'D' | 'T';
   path: string;
 }
-
-class GitCommandError extends Error {
-  constructor(
-    readonly args: string[],
-    readonly code: number | null,
-    readonly stderr: string,
-  ) {
-    super(`git ${args[0]} exited with ${code}: ${stderr.trim()}`);
-  }
-}
-
-// Variables a parent git process sets for its children. A server started from
-// a hook, or a test run from one, would otherwise aim every command here at
-// that other repository.
-const INHERITED_GIT_VARIABLES = [
-  'GIT_DIR',
-  'GIT_WORK_TREE',
-  'GIT_INDEX_FILE',
-  'GIT_OBJECT_DIRECTORY',
-  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
-  'GIT_COMMON_DIR',
-  'GIT_NAMESPACE',
-  'GIT_PREFIX',
-];
 
 export class GitRepository {
   private format: Promise<'sha1' | 'sha256'> | null = null;
 
   constructor(readonly path: string) {}
 
-  /**
-   * One git command, with its output as bytes.
-   *
-   * `safe.directory` names this one path. An admin registered it, and the
-   * server's account is often not the account that owns the checkout, which
-   * git would otherwise refuse to open. It is safe to allow here because the
-   * two things that make a foreign repository dangerous, hooks and an fsmonitor
-   * command, are off for every call.
-   */
-  async run(
-    args: string[],
-    options: {
-      input?: string | Buffer;
-      env?: Record<string, string>;
-      okCodes?: number[];
-    } = {},
-  ): Promise<{ stdout: Buffer; code: number }> {
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      GIT_TERMINAL_PROMPT: '0',
-      GIT_OPTIONAL_LOCKS: '0',
-      ...options.env,
-    };
-
-    for (const name of INHERITED_GIT_VARIABLES) {
-      if (!options.env?.[name]) {
-        delete env[name];
-      }
-    }
-
-    const fullArgs = [
-      '-c',
-      'core.hooksPath=/dev/null',
-      '-c',
-      'core.fsmonitor=false',
-      '-c',
-      `safe.directory=${this.path}`,
-      '-C',
-      this.path,
-      ...args,
-    ];
-
-    return await new Promise((resolve, reject) => {
-      const child = spawn('git', fullArgs, { env });
-      const stdout: Buffer[] = [];
-      const stderr: Buffer[] = [];
-
-      child.stdout.on('data', (chunk) => stdout.push(chunk));
-      child.stderr.on('data', (chunk) => stderr.push(chunk));
-      child.on('error', reject);
-      child.on('close', (code) => {
-        if (code === 0 || options.okCodes?.includes(code ?? -1)) {
-          resolve({ stdout: Buffer.concat(stdout), code: code ?? 0 });
-          return;
-        }
-
-        reject(
-          new GitCommandError(args, code, Buffer.concat(stderr).toString()),
-        );
-      });
-
-      child.stdin.on('error', () => {
-        // A command that exits before reading all of its input closes the
-        // pipe. The exit code reports what went wrong, and this would only
-        // report it a second time as an unhandled error.
-      });
-      child.stdin.end(options.input ?? '');
-    });
+  /** One git command in the mirror, with its output and its exit code. */
+  private async run(args: string[], options: GitOptions = {}) {
+    return await gitBytes(args, { cwd: this.path, ...options });
   }
 
-  private async text(
-    args: string[],
-    options?: Parameters<GitRepository['run']>[1],
-  ) {
-    return (await this.run(args, options)).stdout.toString('utf8');
+  /** One git command in the mirror, with its output as text. */
+  private async text(args: string[], options: GitOptions = {}) {
+    return await git(args, { cwd: this.path, ...options });
   }
 
   /** `sha1` for nearly every repository, and `sha256` for the rest. */
@@ -160,6 +79,28 @@ export class GitRepository {
     );
 
     return code === 0 ? stdout.toString().trim() : null;
+  }
+
+  /**
+   * The object a ref points at, with no check of its type, or null when
+   * there is no such ref.
+   */
+  async rawRef(ref: string): Promise<string | null> {
+    const { stdout, code } = await this.run(
+      ['rev-parse', '--verify', '--quiet', ref],
+      { okCodes: [1] },
+    );
+
+    return code === 0 ? stdout.toString().trim() : null;
+  }
+
+  /** `commit`, `tree`, `blob` or `tag`, or null when the mirror lacks the object. */
+  async objectType(sha: string): Promise<string | null> {
+    try {
+      return (await this.text(['cat-file', '-t', sha])).trim();
+    } catch {
+      return null;
+    }
   }
 
   async refs(prefix: string): Promise<Array<{ ref: string; sha: string }>> {
@@ -279,34 +220,81 @@ export class GitRepository {
   }
 
   /**
-   * The content of `<commit>:<path>` for each spec, or null where there is no
-   * such file.
+   * The content of `<commit>:<path>` for each path, or null where there is no
+   * such file or the path is not a file.
    *
-   * One `cat-file --batch` for the lot. Its input is one spec per line, so a
-   * path with a newline in it cannot be asked for, and comes back as null.
+   * The sizes come first, from `cat-file --batch-check`, which prints one
+   * short line for each path and never the content. A blob over
+   * `maxFileBytes` is not read. A blob that would take the total over
+   * `maxTotalBytes` is not read either. So the buffer that holds the content
+   * has a known maximum, whatever an agent committed.
+   *
+   * The input of `cat-file` is one spec for each line, so a path with a
+   * newline in it cannot be asked for, and comes back as null.
    */
   async readFiles(
     commit: string,
     paths: string[],
-  ): Promise<Map<string, string | null>> {
-    const result = new Map<string, string | null>();
+    limits: { maxFileBytes: number; maxTotalBytes: number },
+  ): Promise<FileReading> {
+    const files = new Map<string, string | null>();
+    const tooLarge = new Map<string, number>();
+    const overBudget = new Set<string>();
     const askable = paths.filter((path) => !path.includes('\n'));
 
     for (const path of paths) {
-      result.set(path, null);
+      files.set(path, null);
     }
 
     if (askable.length === 0) {
-      return result;
+      return { files, tooLarge, overBudget };
+    }
+
+    const specs = (list: string[]) =>
+      `${list.map((path) => `${commit}:${path}`).join('\n')}\n`;
+
+    const sizes = (
+      await this.text(['cat-file', '--batch-check'], { input: specs(askable) })
+    )
+      .split('\n')
+      .filter(Boolean);
+
+    const wanted: string[] = [];
+    let total = 0;
+
+    askable.forEach((path, index) => {
+      // `<id> <type> <size>`. A missing path gives `<spec> missing`, which
+      // does not match, and a spec can hold spaces, so the line is not split.
+      const found = /^[0-9a-f]+ (\w+) (\d+)$/.exec(sizes[index] ?? '');
+
+      if (found?.[1] !== 'blob') {
+        return;
+      }
+
+      const length = Number(found[2]);
+
+      if (length > limits.maxFileBytes) {
+        tooLarge.set(path, length);
+      } else if (total + length > limits.maxTotalBytes) {
+        overBudget.add(path);
+      } else {
+        total += length;
+        wanted.push(path);
+      }
+    });
+
+    if (wanted.length === 0) {
+      return { files, tooLarge, overBudget };
     }
 
     const { stdout } = await this.run(['cat-file', '--batch'], {
-      input: `${askable.map((path) => `${commit}:${path}`).join('\n')}\n`,
+      input: specs(wanted),
+      maxBuffer: total + wanted.length * 256,
     });
 
     let offset = 0;
 
-    for (const path of askable) {
+    for (const path of wanted) {
       const newline = stdout.indexOf(0x0a, offset);
       const header = stdout.subarray(offset, newline).toString();
       offset = newline + 1;
@@ -315,18 +303,16 @@ export class GitRepository {
         continue;
       }
 
-      const [, type, size] = header.split(' ');
-      const length = Number(size);
-      const content = stdout.subarray(offset, offset + length);
+      const length = Number(header.split(' ')[2]);
       // The content, then one newline that is not part of it.
+      files.set(
+        path,
+        stdout.subarray(offset, offset + length).toString('utf8'),
+      );
       offset += length + 1;
-
-      if (type === 'blob') {
-        result.set(path, content.toString('utf8'));
-      }
     }
 
-    return result;
+    return { files, tooLarge, overBudget };
   }
 
   /**
@@ -341,7 +327,17 @@ export class GitRepository {
    */
   async writeSnapshot(parameters: {
     files: Map<string, string>;
+    /**
+     * The commit whose tree is the starting point, and the first parent of
+     * the new commit.
+     */
     parent: string | null;
+    /**
+     * More parents, after the first. The snapshot names each hand-off that it
+     * applied here, so that the next hand-off of the same agent is compared
+     * with the work of that agent and not with the first snapshot.
+     */
+    extraParents?: string[];
     /** Given the paths that differ from `parent`: added, changed or removed. */
     message: (changed: string[]) => string;
     identity: GitIdentity;
@@ -403,10 +399,18 @@ export class GitRepository {
       }
 
       const when = `${Math.floor((parameters.date ?? new Date()).getTime() / 1000)} +0000`;
-      const args = ['commit-tree', tree, '-F', '-'];
+      // `--no-gpg-sign` because `commit.gpgsign` in a global configuration
+      // would make `commit-tree` ask for a key that the server does not have.
+      const args = ['commit-tree', '--no-gpg-sign', tree, '-F', '-'];
+      const parents = [
+        ...new Set([
+          ...(parameters.parent ? [parameters.parent] : []),
+          ...(parameters.extraParents ?? []),
+        ]),
+      ];
 
-      if (parameters.parent) {
-        args.push('-p', parameters.parent);
+      for (const parent of parents) {
+        args.push('-p', parent);
       }
 
       return (

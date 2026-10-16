@@ -62,6 +62,13 @@ export interface Snapshot {
 
 export const CLOSED_CATEGORIES = ['COMPLETED', 'CANCELED'];
 
+/**
+ * A closed issue leaves the snapshot this many days after it entered its
+ * closed state. Without a limit, every change in a team would render every
+ * issue that the team ever closed, for as long as the repository lives.
+ */
+export const CLOSED_ISSUE_DAYS = 30;
+
 const OPEN_CATEGORY_ORDER = ['STARTED', 'UNSTARTED', 'BACKLOG', 'TRIAGE'];
 
 export function issueDirectory(key: string): string {
@@ -175,7 +182,7 @@ function renderIndex(snapshot: Snapshot): string {
     if (closed > 0) {
       lines.push(
         '',
-        `${closed} closed ${closed === 1 ? 'issue is' : 'issues are'} not listed, and ${closed === 1 ? 'is' : 'are'} still under issues/.`,
+        `${closed} closed ${closed === 1 ? 'issue is' : 'issues are'} not listed, and ${closed === 1 ? 'is' : 'are'} still under issues/ for ${CLOSED_ISSUE_DAYS} days after they closed.`,
       );
     }
   }
@@ -233,6 +240,8 @@ function renderReadme(snapshot: Snapshot): string {
     '- `issues/<KEY>/issue.md`: one issue. Front matter, then the description.',
     '- `issues/<KEY>/checklist.md`: its definition of done, when it has one.',
     '- `issues/<KEY>/comments/`: its comments, oldest first.',
+    '',
+    `A closed issue stays here for ${CLOSED_ISSUE_DAYS} days after it was closed.`,
     '',
     'Without checking anything out:',
     '',

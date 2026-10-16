@@ -114,4 +114,8 @@ Commit your edits on top of it in a detached worktree, and hand the commit in
 under a fresh name: `git update-ref refs/vantik/inbox/<name> HEAD`, or
 `git push origin HEAD:refs/vantik/inbox/<name>` from a clone. Vantik answers in
 the next snapshot's commit message, under `Vantik-Inbox: <name>`. Read its
-refusals.
+refusals. End your commit message with `Vantik-Session: <session id>` so the
+issue shows your session. Tick a criterion, add a note, or propose a fact by
+appending a JSON line to `issues/<KEY>/outbox.jsonl` (types `criterion` with an
+`id` from `checklist.md` and `evidence`, `note`, `remember`). To close, set
+`state:` to a completed state and add `resolution: "..."` to `issue.md`.

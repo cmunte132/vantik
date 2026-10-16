@@ -136,6 +136,20 @@ Only a workspace admin can change this setting. The route is
 identifier. If two teams use the identifier `ENG`, the server refuses the
 second one.
 
+#### A repository of a git host
+
+A repository that you added to a [git host](/integrations/git-hosts) can carry
+the mirror too. Open **Settings → Integrations**, click **View** on the host,
+and tick the teams for the repository. The route is
+`POST /api/v1/git_remote/<connection id>/repositories/<repository id>/git_issues`,
+with the body `{"teamIds": [...]}`. Only a workspace admin can use it.
+
+Vantik pushes with the token of the connection. Some hosts refuse a push to
+`refs/vantik/*`. Then Vantik writes one log line for the repository in each
+pass, and it does not retry inside the pass. The inbox stays unapplied until
+the host accepts the ref. A GitHub repository that you connect
+through the GitHub app does not carry the mirror yet.
+
 ### What Vantik does in the repository
 
 The server never writes into your checkout. It works in its own copy, the
@@ -175,7 +189,7 @@ The refs are outside `refs/heads`, so they are not branches. `git branch`,
 | `README.md` | How an agent reads and proposes, with the valid states and labels |
 | `index.md` | The open issues of each team |
 | `issues/<KEY>/issue.md` | One issue: front matter, then the description |
-| `issues/<KEY>/checklist.md` | The definition of done of the issue |
+| `issues/<KEY>/checklist.md` | The definition of done of the issue. Each item has an id in backticks |
 | `issues/<KEY>/comments/*.md` | The comments of the issue |
 
 An open issue is always in the snapshot. A closed issue stays for 30 days after
@@ -197,6 +211,48 @@ these steps:
 Vantik answers in the message of the next snapshot commit. The message has a
 `Vantik-Inbox: <name>` trailer. This message is the only reply that the agent
 gets.
+
+### Sessions
+
+To make a session visible on an issue, the agent ends its commit message with
+trailers:
+
+```text
+ENG-42: in progress
+
+Vantik-Session: 7f3a9c
+Vantik-Harness: omp
+```
+
+`Vantik-Session` is the id of the session. `Vantik-Harness` is optional and
+names the harness. `Vantik-Origin` is read but not stored yet. For each issue
+that the hand-off changes, Vantik creates or updates one agent session. The
+session has the channel `GIT_INBOX` and the bot of the repository as its actor.
+A commit without `Vantik-Session` makes no session.
+
+### Notes, ticks and facts
+
+An agent can append lines to `issues/<KEY>/outbox.jsonl`. Each line is one JSON
+object. The agent only adds lines at the end of the file.
+
+| Line | What Vantik does |
+| --- | --- |
+| `{"v":1,"type":"note","body":"..."}` | Adds a comment to the issue |
+| `{"v":1,"type":"criterion","id":"<id>","evidence":"..."}` | Ticks one item of the definition of done. The evidence is required |
+| `{"v":1,"type":"remember","content":"...","kind":"FACT"}` | Proposes a fact. A person or the triage must accept it |
+
+The `id` of a criterion is in `checklist.md`. It must belong to the issue of the
+file. Vantik does not read a question from git. One hand-off can hold 10 notes,
+10 facts and 200 lines for each issue. Vantik ticks a criterion when it applies
+the hand-off. It does not wait for the end of a run.
+
+### How to close an issue
+
+To move an issue to a state of the completed kind, the agent changes `state:`
+and adds `resolution: "how it was resolved"` to the front matter, in the same
+commit. Vantik posts the resolution as a note first, and then changes the
+state. This is the same order as `close_task`. Vantik refuses a `resolution`
+when the state does not change to a completed state.
 
 An agent can change the title, the state, the priority, the labels and the
 description of an issue. An agent can add a comment. An agent can file an issue
@@ -231,4 +287,4 @@ issue from git. An assignment starts a run, and a commit must not do that.
 ### What it does not cover yet
 
 A cloud sandbox that can push only to its own branch cannot write an inbox ref.
-A git remote and a GitHub repository do not carry the mirror yet.
+A GitHub repository does not carry the mirror yet.

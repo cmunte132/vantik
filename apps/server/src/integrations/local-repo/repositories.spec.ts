@@ -3,8 +3,17 @@ import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
 import { BadRequestException } from '@nestjs/common';
+import { createIntegrationAccount } from 'integrations/utils';
 
-import { inspectPath, repositoryRoot } from './repositories';
+import {
+  inspectPath,
+  repositoryRoot,
+  setRepositoryGitIssues,
+} from './repositories';
+
+jest.mock('integrations/utils', () => ({
+  createIntegrationAccount: jest.fn().mockResolvedValue({}),
+}));
 
 /**
  * A path names a directory on the machine that runs the server, so the check on
@@ -146,5 +155,94 @@ describe('repositoryRoot', () => {
 
     expect(fallback).not.toBe('/');
     expect(fallback.length).toBeGreaterThan(1);
+  });
+});
+
+describe('setRepositoryGitIssues', () => {
+  const written = createIntegrationAccount as jest.Mock;
+
+  function context(repositories: object[]) {
+    return {
+      definitions: { get: jest.fn().mockResolvedValue({ id: 'definition-1' }) },
+      account: {
+        byDefinition: jest
+          .fn()
+          .mockResolvedValue({ settings: { repositories } }),
+      },
+      workspace: {
+        teams: jest.fn().mockResolvedValue([
+          { id: 'team-a', identifier: 'ENG', deleted: null },
+          { id: 'team-b', identifier: 'OPS', deleted: null },
+          { id: 'team-c', identifier: 'ENG', deleted: null },
+          { id: 'team-gone', identifier: 'OLD', deleted: new Date() },
+        ]),
+      },
+    } as never;
+  }
+
+  const repository = {
+    id: 'repo-1',
+    fullName: 'app',
+    path: '/home/app',
+    addedAt: '2026-10-01T00:00:00Z',
+  };
+  const parameters = (teamIds: string[]) => ({
+    workspaceId: 'workspace-1',
+    userId: 'user-1',
+    repositoryId: 'repo-1',
+    teamIds,
+  });
+
+  beforeEach(() => written.mockClear());
+
+  it('stores the teams in the entry of that repository only', async () => {
+    const other = { ...repository, id: 'repo-2' };
+    const result = await setRepositoryGitIssues(
+      context([repository, other]),
+      parameters(['team-a', 'team-b', 'team-a']),
+    );
+
+    expect(result.gitIssues).toEqual({ teamIds: ['team-a', 'team-b'] });
+    expect(written.mock.calls[0][1].settings.repositories).toEqual([
+      { ...repository, gitIssues: { teamIds: ['team-a', 'team-b'] } },
+      other,
+    ]);
+  });
+
+  it('turns the mirror off with an empty list', async () => {
+    const result = await setRepositoryGitIssues(
+      context([{ ...repository, gitIssues: { teamIds: ['team-a'] } }]),
+      parameters([]),
+    );
+
+    expect(result).not.toHaveProperty('gitIssues');
+    expect(
+      written.mock.calls[0][1].settings.repositories[0],
+    ).not.toHaveProperty('gitIssues');
+  });
+
+  it('refuses two teams that share an identifier', async () => {
+    await expect(
+      setRepositoryGitIssues(
+        context([repository]),
+        parameters(['team-a', 'team-c']),
+      ),
+    ).rejects.toThrow(/identifier ENG/);
+    expect(written).not.toHaveBeenCalled();
+  });
+
+  it('refuses a team that is not in the workspace, or was deleted', async () => {
+    await expect(
+      setRepositoryGitIssues(context([repository]), parameters(['nobody'])),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      setRepositoryGitIssues(context([repository]), parameters(['team-gone'])),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('refuses a repository that the workspace does not have', async () => {
+    await expect(
+      setRepositoryGitIssues(context([]), parameters(['team-a'])),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

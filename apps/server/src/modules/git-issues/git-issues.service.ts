@@ -14,7 +14,7 @@ import { LoggerService } from 'modules/logger/logger.service';
 import { type Lookups, type Outcome, planCreate, planUpdate } from './apply';
 import { GitRepository } from './git';
 import { type InboxReading } from './inbox';
-import { gitIssueRemote } from './issue-remote';
+import { gitIssueRemote, HostRefusedPushError } from './issue-remote';
 import {
   GIT_ISSUES_TARGETS,
   type MirroredRepository,
@@ -143,8 +143,13 @@ export class GitIssuesService {
           }
           totals.handOffs += result?.handOffs.length ?? 0;
         } catch (error) {
+          // A refusal by the host is one clear line for each pass. The pass
+          // does not retry, and the other repositories go on.
           this.logger.error({
-            message: `Could not sync the issue mirror of ${repository.label}: ${error}`,
+            message:
+              error instanceof HostRefusedPushError
+                ? `Issue mirror of ${repository.label}: ${error.message}`
+                : `Could not sync the issue mirror of ${repository.label}: ${error}`,
             where: 'GitIssuesService.runPass',
             error: error instanceof Error ? error : undefined,
           });

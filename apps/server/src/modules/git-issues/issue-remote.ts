@@ -47,11 +47,33 @@ export const SNAPSHOT_REF = 'refs/vantik/issues';
 export const INBOX_PREFIX = 'refs/vantik/inbox/';
 
 /**
- * How git rejects a compare-and-set push: the lease is stale, the ref is
- * missing where the lease expected one, or the remote refused the update.
+ * How git reports a lost race: the lease is stale, or the ref moved while the
+ * push ran. A later pass can try again.
  */
-const LEASE_FAILED =
-  /stale info|\[rejected\]|\[remote rejected\]|failed to push some refs|cannot lock ref/i;
+const RACE = /stale info|cannot lock ref/i;
+
+/**
+ * How a host refuses a push by its own rule: a protected ref, a hook, or a
+ * token without the right to write. This is not a race. The same push fails
+ * on each pass until somebody changes the host.
+ */
+const HOST_REFUSED = /remote rejected|denied|not allowed|forbidden|\b403\b/i;
+
+/**
+ * The host of the source refused a push of a `refs/vantik/*` ref. The message
+ * says what the host answered, so the log shows the cause once for each pass.
+ */
+export class HostRefusedPushError extends Error {
+  constructor(
+    readonly ref: string,
+    readonly reason: string,
+  ) {
+    super(
+      `The host refused the push of ${ref}: ${reason}. The issue mirror needs a token that can write refs/vantik/* in this repository, and a host rule that allows those refs`,
+    );
+    this.name = 'HostRefusedPushError';
+  }
+}
 
 /**
  * The source, reached through the mirror at `mirrorPath`. A source can use one
@@ -146,10 +168,42 @@ async function push(
 
     return true;
   } catch (error) {
-    if (error instanceof GitCommandError && LEASE_FAILED.test(error.stderr)) {
-      return false;
+    if (error instanceof GitCommandError) {
+      if (RACE.test(error.stderr)) {
+        return false;
+      }
+
+      if (HOST_REFUSED.test(error.stderr)) {
+        throw new HostRefusedPushError(
+          refspec.slice(refspec.lastIndexOf(':') + 1),
+          refusalLine(error.stderr),
+        );
+      }
+
+      // Plain `[rejected]`: the ref is not where the lease expected it.
+      if (/\[rejected\]|failed to push some refs/i.test(error.stderr)) {
+        return false;
+      }
     }
 
     throw error;
   }
+}
+
+/** The line of the git output that says why, without credentials or URLs. */
+function refusalLine(stderr: string): string {
+  const line =
+    stderr
+      .split('\n')
+      .find((candidate) =>
+        /rejected|denied|not allowed|forbidden|403/i.test(candidate),
+      ) ??
+    stderr.trim().split('\n')[0] ??
+    'no reason given';
+
+  return line
+    .replace(/https?:\/\/\S+/g, '<url>')
+    .replace(/^\s*!\s*/, '')
+    .trim()
+    .slice(0, 300);
 }

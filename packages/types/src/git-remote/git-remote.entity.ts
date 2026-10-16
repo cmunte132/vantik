@@ -40,6 +40,12 @@ export class GitRemoteRepository {
   /** The default branch that the host gave when the repository was added. */
   defaultBranch?: string;
 
+  /**
+   * The issue mirror of this repository. Without it, the repository carries
+   * no issues. An admin sets it; see `refs/vantik/issues`.
+   */
+  gitIssues?: { teamIds: string[] };
+
   addedAt: string;
 }
 

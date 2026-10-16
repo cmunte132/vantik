@@ -311,6 +311,75 @@ export class GitRemoteService {
     return repository;
   }
 
+  /**
+   * This method sets the teams whose issues one repository carries under
+   * `refs/vantik/issues`. An empty list turns the mirror off.
+   *
+   * Only an admin can call it. Each person and agent that can read the
+   * repository can read what is mirrored into it. One repository can mirror
+   * only one team for each identifier, because a key names a file.
+   */
+  async setGitIssues(
+    workspaceId: string,
+    userId: string,
+    connectionId: string,
+    repositoryId: string,
+    teamIds: string[],
+  ): Promise<GitRemoteRepository> {
+    const target = await resolveAdminWorkspaceId(
+      this.prisma,
+      userId,
+      workspaceId,
+    );
+    const account = await this.account(target, connectionId);
+    const repositories = repositoriesOf(account);
+    const repository = repositories.find((repo) => repo.id === repositoryId);
+
+    if (!repository) {
+      throw new NotFoundException('This connection has no such repository.');
+    }
+
+    const wanted = [...new Set(teamIds)];
+    const teams = await this.prisma.team.findMany({
+      where: { id: { in: wanted }, workspaceId: target, deleted: null },
+      select: { id: true, identifier: true },
+    });
+    const unknown = wanted.filter(
+      (id) => !teams.some((team) => team.id === id),
+    );
+
+    if (unknown.length > 0) {
+      throw new BadRequestException(
+        `This workspace has no team with the id ${unknown.join(', ')}.`,
+      );
+    }
+
+    const repeated = teams
+      .map((team) => team.identifier)
+      .find((identifier, index, all) => all.indexOf(identifier) !== index);
+
+    if (repeated) {
+      throw new BadRequestException(
+        `Two of these teams use the identifier ${repeated}, and one repository can mirror only one of them.`,
+      );
+    }
+
+    const updated: GitRemoteRepository = { ...repository };
+
+    if (wanted.length > 0) {
+      updated.gitIssues = { teamIds: wanted };
+    } else {
+      delete updated.gitIssues;
+    }
+
+    await this.writeRepositories(
+      account.id,
+      repositories.map((repo) => (repo.id === repositoryId ? updated : repo)),
+    );
+
+    return updated;
+  }
+
   private async hostEntry(
     host: RemoteHost,
     token: string | null,

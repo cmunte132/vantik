@@ -6,7 +6,12 @@ import {
   type GitRepository,
 } from './git';
 import { type InboxFile, type InboxReading, readInbox } from './inbox';
-import { INBOX_PREFIX, type IssueRemote, SNAPSHOT_REF } from './issue-remote';
+import {
+  HostRefusedPushError,
+  INBOX_PREFIX,
+  type IssueRemote,
+  SNAPSHOT_REF,
+} from './issue-remote';
 import { renderSnapshot, type Snapshot } from './snapshot';
 
 export { INBOX_PREFIX, SNAPSHOT_REF };
@@ -221,6 +226,12 @@ export async function syncRepository(
         await remote.deleteInbox(inbox.ref, inbox.sha);
       } catch (error) {
         options.onInboxError?.(inbox.name, error);
+
+        // The host refuses each delete for the same reason. One report is
+        // enough, and the next pass tries again.
+        if (error instanceof HostRefusedPushError) {
+          break;
+        }
       }
 
       await mirror.deleteRef(inbox.ref, inbox.sha);

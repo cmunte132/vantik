@@ -7,6 +7,7 @@ import { GitModule } from 'modules/git/git.module';
 import { GIT_ISSUES_QUEUE } from './git-issues.interface';
 import { GitIssuesProcessor, GitIssuesScheduler } from './git-issues.processor';
 import { GitIssuesService } from './git-issues.service';
+import { GitRemoteRepositoryTargets } from './git-remote-repository-targets';
 import { LocalRepositoryTargets } from './local-repository-targets';
 import { GIT_ISSUES_TARGETS } from './mirror-targets';
 
@@ -24,12 +25,16 @@ import { GIT_ISSUES_TARGETS } from './mirror-targets';
     GitIssuesScheduler,
     GitIssuesProcessor,
     LocalRepositoryTargets,
+    GitRemoteRepositoryTargets,
     // One list for each tier of source that can carry the mirror. A tier
     // joins when you add its `MirrorTargets` here.
     {
       provide: GIT_ISSUES_TARGETS,
-      useFactory: (local: LocalRepositoryTargets) => [local],
-      inject: [LocalRepositoryTargets],
+      useFactory: (
+        local: LocalRepositoryTargets,
+        remote: GitRemoteRepositoryTargets,
+      ) => [local, remote],
+      inject: [LocalRepositoryTargets, GitRemoteRepositoryTargets],
     },
   ],
   exports: [GitIssuesService],

@@ -82,6 +82,10 @@ afterEach(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
+// Each test starts real git processes. A busy machine can need more than the
+// default 5 seconds.
+jest.setTimeout(60_000);
+
 describe('RepoMirrorService', () => {
   it('mirrors every branch into a bare repository the server owns', async () => {
     commit({ 'README.md': 'hello' });
@@ -323,5 +327,64 @@ describe('RepoMirrorService', () => {
       run(work, 'rev-parse', 'HEAD'),
     );
     expect(run(origin, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('main');
+  });
+
+  it('runs exclusive work one job at a time, and a fetch waits behind it', async () => {
+    commit({ 'README.md': 'hello' });
+    const order: string[] = [];
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+
+    const first = service.exclusive(local(), async () => {
+      order.push('first start');
+      await held;
+      order.push('first end');
+    });
+    const second = service.exclusive(local(), async () => {
+      order.push('second');
+    });
+    // `sync` is a fetch, and it takes the same lock.
+    const fetched = service.sync(local()).then(() => order.push('fetched'));
+
+    const pause = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
+
+    // The first job starts after the mirror is made, which takes a process.
+    while (order.length === 0) {
+      await pause(20);
+    }
+    await pause(300);
+    expect(order).toEqual(['first start']);
+
+    release();
+    await Promise.all([first, second, fetched]);
+
+    expect(order).toEqual(['first start', 'first end', 'second', 'fetched']);
+  });
+
+  it('keeps going after an exclusive job fails', async () => {
+    await expect(
+      service.exclusive(local(), async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
+
+    await expect(service.exclusive(local(), async () => 'ok')).resolves.toBe(
+      'ok',
+    );
+  });
+
+  it('leaves the refs of the issue mirror alone when it fetches branches', async () => {
+    const sha = commit({ 'README.md': 'hello' });
+    const mirror = await service.sync(local());
+
+    run(mirror.path, 'update-ref', 'refs/vantik/issues', sha);
+    run(mirror.path, 'update-ref', 'refs/vantik/inbox/a', sha);
+
+    await service.sync(local(), 0);
+
+    expect(
+      run(mirror.path, 'for-each-ref', '--format=%(refname)', 'refs/vantik'),
+    ).toBe('refs/vantik/inbox/a\nrefs/vantik/issues');
   });
 });

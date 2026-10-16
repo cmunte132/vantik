@@ -85,11 +85,17 @@ class MemoryStore implements MirrorStore {
     };
   }
 
+  /** The source of each hand-off that had proposals to apply. */
+  sources: HandOffSource[] = [];
+
   async apply(
     reading: InboxReading,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _source?: HandOffSource,
+    source?: HandOffSource,
   ): Promise<Outcome[]> {
+    if (source && reading.proposals.length > 0) {
+      this.sources.push(source);
+    }
+
     return reading.proposals.map((proposal) => {
       if (proposal.kind === 'update') {
         const issue = this.issues.find((item) => item.id === proposal.issueId)!;
@@ -200,13 +206,14 @@ async function handOff(
   repository: string,
   name: string,
   edit: (worktree: string) => Promise<void>,
+  message = `proposal ${name}`,
 ) {
   const worktree = join(root, `worktree-${name}`);
 
   git(repository, 'worktree', 'add', '-q', '--detach', worktree, SNAPSHOT_REF);
   await edit(worktree);
   git(worktree, 'add', '-A');
-  git(worktree, 'commit', '-q', '-m', `proposal ${name}`);
+  git(worktree, 'commit', '-q', '-m', message);
   git(worktree, 'update-ref', `${INBOX_PREFIX}${name}`, 'HEAD');
   git(repository, 'worktree', 'remove', '--force', worktree);
 }
@@ -741,5 +748,86 @@ describe('syncRepository', () => {
       git(repository, 'for-each-ref', '--format=%(refname)', INBOX_PREFIX),
     ).toBe(`${INBOX_PREFIX}fails`);
     expect(store.issues[0].state).toBe('In Progress');
+  });
+
+  describe('the session trailers of a hand-off', () => {
+    const comment =
+      (text = 'Found it.\n') =>
+      async (worktree: string) => {
+        await mkdir(join(worktree, 'issues/ENG-1/comments'), {
+          recursive: true,
+        });
+        await writeFile(join(worktree, 'issues/ENG-1/comments/note.md'), text);
+      };
+
+    async function sessionOf(message: string) {
+      const repository = await checkout();
+      const store = new MemoryStore();
+      await pass(repository, store);
+      await handOff(repository, 'trailers', comment(), message);
+      await pass(repository, store);
+
+      return store.sources[0].session;
+    }
+
+    it('names the session and the harness from the trailers', async () => {
+      expect(
+        await sessionOf(
+          'Report\n\nVantik-Session: sess-9\nVantik-Harness: pi\nVantik-Origin: laptop',
+        ),
+      ).toEqual({ id: 'sess-9', harness: 'pi' });
+    });
+
+    it('has no session when no commit has the trailer', async () => {
+      expect(await sessionOf('Report')).toBeNull();
+    });
+
+    it('reads a harness only with a session', async () => {
+      expect(await sessionOf('Report\n\nVantik-Harness: pi')).toBeNull();
+    });
+
+    it('does not read a line that is not in the trailer block', async () => {
+      expect(
+        await sessionOf('Report\n\nVantik-Session: sess-mid\n\nMore text.'),
+      ).toBeNull();
+    });
+
+    it('refuses an id that is too long', async () => {
+      expect(
+        await sessionOf(`Report\n\nVantik-Session: ${'x'.repeat(201)}`),
+      ).toBeNull();
+    });
+
+    it('takes the newest commit that has the trailer', async () => {
+      const repository = await checkout();
+      const store = new MemoryStore();
+      await pass(repository, store);
+
+      const worktree = join(root, 'worktree-two-commits');
+      git(
+        repository,
+        'worktree',
+        'add',
+        '-q',
+        '--detach',
+        worktree,
+        SNAPSHOT_REF,
+      );
+      await comment('First.\n')(worktree);
+      git(worktree, 'add', '-A');
+      git(worktree, 'commit', '-q', '-m', 'one\n\nVantik-Session: old');
+      await writeFile(
+        join(worktree, 'issues/ENG-1/comments/two.md'),
+        'Second.\n',
+      );
+      git(worktree, 'add', '-A');
+      git(worktree, 'commit', '-q', '-m', 'two\n\nVantik-Session: new');
+      git(worktree, 'update-ref', `${INBOX_PREFIX}two-commits`, 'HEAD');
+      git(repository, 'worktree', 'remove', '--force', worktree);
+
+      await pass(repository, store);
+
+      expect(store.sources[0].session).toEqual({ id: 'new', harness: null });
+    });
   });
 });

@@ -6,6 +6,7 @@ import { PluginContextFactory } from 'plugins/plugin-context.factory';
 
 import { convertTiptapJsonToMarkdown } from 'common/utils/tiptap.utils';
 
+import { AgentSessionsService } from 'modules/agent-sessions/agent-sessions.service';
 import { GitSourcesService } from 'modules/git/git-sources.service';
 import { RepoMirrorService } from 'modules/git/repo-mirror.service';
 import { ensureIntegrationBot } from 'modules/integration-events/integration-bot';
@@ -107,6 +108,7 @@ export class GitIssuesService {
     private contextFactory: PluginContextFactory,
     private sources: GitSourcesService,
     private mirrors: RepoMirrorService,
+    private sessions: AgentSessionsService,
     @Inject(GIT_ISSUES_TARGETS) private targets: MirrorTargets[],
   ) {}
 
@@ -550,6 +552,8 @@ export class GitIssuesService {
 
     const teamIds = lookups.teams.map((team) => team.id);
     const outcomes: Outcome[] = [];
+    /** The issues that this hand-off changed or wrote to. */
+    const touched = new Set<string>();
 
     for (const proposal of reading.proposals) {
       if (proposal.kind === 'update') {
@@ -585,6 +589,7 @@ export class GitIssuesService {
           });
         }
 
+        touched.add(row.id);
         outcomes.push(plan.outcome);
         continue;
       }
@@ -633,6 +638,7 @@ export class GitIssuesService {
           });
         }
 
+        touched.add(issue.id);
         outcomes.push({
           path: proposal.path,
           applied: [
@@ -653,13 +659,14 @@ export class GitIssuesService {
       const createdFrom = JSON.stringify(plan.input);
       const existing = await this.prisma.issue.findFirst({
         where: { teamId: plan.teamId, AND: origin(createdFrom) },
-        select: { number: true },
+        select: { id: true, number: true },
       });
       const team = lookups.teams.find(
         (candidate) => candidate.id === plan.teamId,
       );
 
       if (existing) {
+        touched.add(existing.id);
         plan.outcome.applied.push(
           `${team?.identifier}-${existing.number} already created from this file`,
         );
@@ -673,6 +680,10 @@ export class GitIssuesService {
           },
         });
 
+        if (created?.id) {
+          touched.add(created.id);
+        }
+
         plan.outcome.applied.push(
           `created ${team?.identifier}-${created?.number}: ${JSON.stringify(plan.input.title)}`,
         );
@@ -681,7 +692,44 @@ export class GitIssuesService {
       outcomes.push(plan.outcome);
     }
 
+    await this.recordSession(workspaceId, botId, source, touched);
+
     return outcomes;
+  }
+
+  /**
+   * Links the session that a hand-off names to each issue that the hand-off
+   * touched. A commit without a `Vantik-Session` trailer makes no session. A
+   * fault here never fails the hand-off: the session is a record about the
+   * work, and the work is done.
+   */
+  private async recordSession(
+    workspaceId: string,
+    actorUserId: string,
+    source: HandOffSource,
+    issueIds: Set<string>,
+  ) {
+    if (!source.session) {
+      return;
+    }
+
+    for (const issueId of issueIds) {
+      try {
+        await this.sessions.recordInboxSession(
+          { workspaceId, userId: actorUserId },
+          {
+            issueId,
+            externalId: source.session.id,
+            harness: source.session.harness,
+          },
+        );
+      } catch (error) {
+        this.logger.warn({
+          message: `Could not record session ${source.session.id} on an issue from inbox ${source.name}: ${error}`,
+          where: 'GitIssuesService.recordSession',
+        });
+      }
+    }
   }
 
   /**

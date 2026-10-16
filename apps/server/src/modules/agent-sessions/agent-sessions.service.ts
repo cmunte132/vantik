@@ -130,6 +130,62 @@ export class AgentSessionsService {
   }
 
   /**
+   * Records that an agent session handed work in through a git inbox, for one
+   * issue. It creates the row or brings the existing one up to date, and it
+   * raises `lastActiveAt` when the same session hands in again.
+   *
+   * The inbox is the channel, and nobody says where the agent runs, so the
+   * location stays unknown and the driver stays empty. The session acts as
+   * `actor`, the integration bot that writes the hand-off. The caller has
+   * already limited the issue to the teams that the repository mirrors, so
+   * this method checks the workspace only.
+   */
+  async recordInboxSession(
+    actor: SessionActor,
+    input: { issueId: string; externalId: string; harness?: string | null },
+  ) {
+    const externalId = input.externalId.trim();
+
+    if (!externalId || externalId.length > AGENT_SESSION_EXTERNAL_ID_MAX) {
+      throw new RangeError('The session id is empty or too long.');
+    }
+
+    await assertIssueInWorkspace(this.prisma, input.issueId, actor.workspaceId);
+
+    const harness = harnessOf(externalId, input.harness);
+    const now = new Date();
+
+    return this.prisma.agentSession.upsert({
+      where: {
+        workspaceId_actorUserId_channel_externalId_issueId: {
+          workspaceId: actor.workspaceId,
+          actorUserId: actor.userId,
+          channel: 'GIT_INBOX',
+          externalId,
+          issueId: input.issueId,
+        },
+      },
+      create: {
+        workspaceId: actor.workspaceId,
+        actorUserId: actor.userId,
+        issueId: input.issueId,
+        externalId,
+        harness,
+        location: 'UNKNOWN',
+        channel: 'GIT_INBOX',
+        startedAt: now,
+        lastActiveAt: now,
+      },
+      update: {
+        ...(harness ? { harness } : {}),
+        lastActiveAt: now,
+        endedAt: null,
+        deleted: null,
+      },
+    });
+  }
+
+  /**
    * Marks the hooks sessions of one harness session as active now. A hook
    * knows the session id and the caller, and does not know the issue, so this
    * touches every row the caller has under that id. A known harness name fills

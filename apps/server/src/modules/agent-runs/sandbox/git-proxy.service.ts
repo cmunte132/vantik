@@ -12,7 +12,11 @@ import { promisify } from 'node:util';
 
 import { Injectable } from '@nestjs/common';
 
-import { git, type GitRemote } from 'modules/git/git-command';
+import {
+  git,
+  localTransportArgs,
+  type GitRemote,
+} from 'modules/git/git-command';
 import {
   type CommitIdentity,
   deliversPullRequest,
@@ -242,10 +246,16 @@ export class GitProxyService {
         await git(['rev-parse', 'HEAD'], { cwd: workdir })
       ).trim();
 
-      await git(['push', '--quiet', remote.url, `HEAD:refs/heads/${branch}`], {
-        cwd: workdir,
-        remote,
-      });
+      await git(
+        [
+          'push',
+          '--quiet',
+          ...localTransportArgs(remote.url, 'receive-pack'),
+          remote.url,
+          `HEAD:refs/heads/${branch}`,
+        ],
+        { cwd: workdir, remote },
+      );
 
       // A source with no pull requests, such as a directory on this machine,
       // hands back the branch itself.
@@ -349,10 +359,19 @@ export class GitProxyService {
       await git(['init', '--quiet'], { cwd: scratch });
 
       const ref = `refs/heads/${branch}`;
-      const listed = await git(['ls-remote', '--heads', remote.url, ref], {
-        cwd: scratch,
-        remote,
-      });
+      const listed = await git(
+        [
+          'ls-remote',
+          ...localTransportArgs(remote.url, 'upload-pack'),
+          '--heads',
+          remote.url,
+          ref,
+        ],
+        {
+          cwd: scratch,
+          remote,
+        },
+      );
       const current = listed.trim().split(/\s+/)[0];
 
       if (!current) {
@@ -371,6 +390,7 @@ export class GitProxyService {
         [
           'push',
           '--quiet',
+          ...localTransportArgs(remote.url, 'receive-pack'),
           `--force-with-lease=${ref}:${headCommit}`,
           remote.url,
           `:${ref}`,

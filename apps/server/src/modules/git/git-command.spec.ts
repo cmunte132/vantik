@@ -92,6 +92,10 @@ describe('localTransportArgs', () => {
       expect(argument).toMatch(/^--receive-pack=git /);
       expect(argument).toContain('core.hooksPath=/dev/null');
       expect(argument).toContain('core.fsmonitor=false');
+      expect(argument).toContain('core.alternateRefsCommand=true');
+      expect(argument).toContain('receive.autogc=false');
+      expect(argument).toContain('gc.auto=0');
+      expect(argument).toContain('maintenance.auto=false');
       expect(argument.endsWith(' receive-pack')).toBe(true);
     }
 

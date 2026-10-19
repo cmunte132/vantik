@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -190,6 +190,36 @@ describe('gitIssueRemote', () => {
     expect(
       git(source, 'for-each-ref', '--format=%(refname)', INBOX_PREFIX),
     ).toBe(`${INBOX_PREFIX}b`);
+  });
+
+  describe('when the source config names a command for its alternates', () => {
+    let marker: string;
+
+    beforeEach(async () => {
+      marker = join(root, 'marker');
+      // Git runs this command through the shell while receive-pack lists the
+      // refs of each alternate. The helper must stop it.
+      const alternate = join(root, 'alternate-objects');
+
+      await mkdir(alternate);
+      await mkdir(join(source, '.git/objects/info'), { recursive: true });
+      await writeFile(join(source, '.git/objects/info/alternates'), alternate);
+      git(
+        source,
+        'config',
+        'core.alternateRefsCommand',
+        `touch ${marker}; true`,
+      );
+    });
+
+    it('does not run it when the mirror pushes', async () => {
+      const head = git(source, 'rev-parse', 'HEAD');
+
+      git(mirror, 'fetch', '-q', source, '+refs/heads/main:refs/heads/main');
+
+      expect(await remote().pushSnapshot(head, null)).toBe(true);
+      await expect(access(marker)).rejects.toThrow();
+    });
   });
 
   describe('when the host refuses refs/vantik by its own rule', () => {

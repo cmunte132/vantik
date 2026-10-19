@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 
 import { resolveAdminWorkspaceId } from 'common/workspace-access';
 
@@ -15,6 +19,12 @@ describe('GitRemoteService.setGitIssues', () => {
   function setUp(
     teams: Array<{ id: string; identifier: string; deleted?: Date | null }>,
     repository: Record<string, unknown> = entry,
+    // The accounts that the mirror pass lists, in every workspace.
+    listed: Array<{
+      id: string;
+      workspaceId: string;
+      repositories: object[];
+    }> = [],
   ) {
     const update = jest.fn().mockResolvedValue({});
     const prisma = {
@@ -23,6 +33,13 @@ describe('GitRemoteService.setGitIssues', () => {
           id: 'account-1',
           settings: { repositories: [repository] },
         }),
+        findMany: jest.fn().mockResolvedValue(
+          listed.map(({ id, workspaceId, repositories }) => ({
+            id,
+            workspaceId,
+            settings: { repositories },
+          })),
+        ),
         update,
       },
       team: { findMany: jest.fn().mockResolvedValue(teams) },
@@ -110,6 +127,56 @@ describe('GitRemoteService.setGitIssues', () => {
     expect(written()).toEqual([
       { ...entry, gitIssues: { teamIds: ['team-a'] } },
     ]);
+  });
+
+  describe('when another connection mirrors the same repository', () => {
+    // The same address, written as another connection could hold it.
+    const other = {
+      id: '9',
+      fullName: 'Owner/Project',
+      cloneUrl: 'HTTPS://Git.Example/owner/project.git/',
+      gitIssues: { teamIds: ['team-z'] },
+    };
+    const mine = { ...entry, cloneUrl: 'https://git.example/owner/project' };
+    const elsewhere = {
+      id: 'account-2',
+      workspaceId: 'workspace-2',
+      repositories: [other],
+    };
+    const teams = [{ id: 'team-a', identifier: 'ENG' }];
+
+    it('refuses to turn the mirror on', async () => {
+      const { service, update } = setUp(teams, mine, [elsewhere]);
+
+      await expect(
+        service.setGitIssues('workspace-1', 'user-1', 'account-1', '7', [
+          'team-a',
+        ]),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('lets the first target change its teams and turn off', async () => {
+      const first = {
+        ...mine,
+        gitIssues: { teamIds: ['team-z'] },
+      };
+      const { service, update } = setUp(teams, first, [
+        {
+          id: 'account-1',
+          workspaceId: 'workspace-1',
+          repositories: [first],
+        },
+        elsewhere,
+      ]);
+
+      await service.setGitIssues('workspace-1', 'user-1', 'account-1', '7', [
+        'team-a',
+      ]);
+      await service.setGitIssues('workspace-1', 'user-1', 'account-1', '7', []);
+
+      expect(update).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('refuses two teams that share an identifier', async () => {

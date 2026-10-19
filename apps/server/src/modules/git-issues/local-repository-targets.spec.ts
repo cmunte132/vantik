@@ -49,6 +49,7 @@ describe('LocalRepositoryTargets', () => {
         integrationAccountId: 'account-0',
         externalRepoId: 'on',
         label: '/home/on',
+        sourceKey: 'local:/home/on',
         teamIds: ['team-a', 'team-b'],
       },
       {
@@ -56,6 +57,7 @@ describe('LocalRepositoryTargets', () => {
         integrationAccountId: 'account-1',
         externalRepoId: 'other',
         label: '/home/other',
+        sourceKey: 'local:/home/other',
         teamIds: ['team-c'],
       },
     ]);

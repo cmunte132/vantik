@@ -209,6 +209,7 @@ describe('GitIssuesService', () => {
       integrationAccountId: 'account-1',
       externalRepoId: 'repo-1',
       label: repository,
+      sourceKey: `local:${repository}`,
       teamIds,
     };
     const sessions = { recordInboxSession: jest.fn().mockResolvedValue({}) };
@@ -495,9 +496,15 @@ describe('GitIssuesService', () => {
       integrationAccountId: 'account-1',
       externalRepoId: 'repo-1',
       label: 'good',
+      sourceKey: 'local:/good',
       teamIds: ['team-eng'],
     };
-    const bad = { ...good, externalRepoId: 'repo-2', label: 'bad' };
+    const bad = {
+      ...good,
+      externalRepoId: 'repo-2',
+      label: 'bad',
+      sourceKey: 'local:/bad',
+    };
     const resolveGood = resolve.getMockImplementation()!;
 
     resolve.mockImplementation(async (ref: { externalRepoId: string }) =>
@@ -510,6 +517,31 @@ describe('GitIssuesService', () => {
     const totals = await service.runPass();
 
     expect(totals).toEqual({ repositories: 2, wrote: 1, handOffs: 0 });
+    expect(prisma.team.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips a repository whose source an earlier target already mirrors', async () => {
+    const { service, prisma } = setUp();
+    const first = {
+      workspaceId: 'workspace-1',
+      integrationAccountId: 'account-1',
+      externalRepoId: 'repo-1',
+      label: 'first',
+      sourceKey: 'local:/shared',
+      teamIds: ['team-eng'],
+    };
+    const second = {
+      ...first,
+      workspaceId: 'workspace-2',
+      integrationAccountId: 'account-2',
+      label: 'second',
+    };
+
+    (service as any).targets = [{ list: async () => [first, second] }];
+
+    const totals = await service.runPass();
+
+    expect(totals.repositories).toBe(1);
     expect(prisma.team.findMany).toHaveBeenCalledTimes(1);
   });
 
@@ -796,7 +828,7 @@ describe('GitIssuesService', () => {
     it('proposes a fact once when two inboxes carry it', async () => {
       const { sync, entries, prisma } = setUp();
       await sync();
-      const stored: { sourceSession: string; content: string }[] = [];
+      const stored: Array<{ sourceSession: string; content: string }> = [];
 
       entries.createEntry.mockImplementation(
         async (_a: unknown, _b: unknown, data: (typeof stored)[number]) => {

@@ -15,6 +15,11 @@ export interface MirroredRepository {
   externalRepoId: string;
   /** What the log calls the repository. Never a secret. */
   label: string;
+  /**
+   * Which repository the mirror writes into. Two targets with one key share a
+   * source, and must not both mirror into it.
+   */
+  sourceKey: string;
   /** The teams whose issues the repository carries. */
   teamIds: string[];
 }

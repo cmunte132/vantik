@@ -3,6 +3,7 @@ import { PrismaService } from 'nestjs-prisma';
 
 import { GIT_REMOTE_SLUG } from 'modules/git/sources/git-remote.source';
 
+import { remoteSourceKey } from './mirror-source';
 import { type MirroredRepository, type MirrorTargets } from './mirror-targets';
 
 /**
@@ -24,6 +25,8 @@ export class GitRemoteRepositoryTargets implements MirrorTargets {
         integrationDefinition: { slug: GIT_REMOTE_SLUG },
       },
       select: { id: true, workspaceId: true, settings: true },
+      // The oldest account comes first, so it keeps a source that two claim.
+      orderBy: { createdAt: 'asc' },
     });
 
     return accounts.flatMap((account) =>
@@ -34,6 +37,10 @@ export class GitRemoteRepositoryTargets implements MirrorTargets {
           integrationAccountId: account.id,
           externalRepoId: entry.id,
           label: entry.fullName,
+          // An entry without an address shares its source with no other.
+          sourceKey: entry.cloneUrl
+            ? remoteSourceKey(entry.cloneUrl)
+            : `remote:unaddressed:${account.id}:${entry.id}`,
           teamIds: entry.teamIds,
         })),
     );
@@ -43,6 +50,7 @@ export class GitRemoteRepositoryTargets implements MirrorTargets {
 interface Entry {
   id: string;
   fullName: string;
+  cloneUrl: string | null;
   teamIds: string[];
 }
 
@@ -69,6 +77,7 @@ function entriesOf(settings: unknown): Entry[] {
     const entry = raw as {
       id?: unknown;
       fullName?: unknown;
+      cloneUrl?: unknown;
       gitIssues?: { teamIds?: unknown };
     } | null;
     const teamIds = Array.isArray(entry?.gitIssues?.teamIds)
@@ -83,6 +92,8 @@ function entriesOf(settings: unknown): Entry[] {
             id: entry.id,
             fullName:
               typeof entry.fullName === 'string' ? entry.fullName : entry.id,
+            cloneUrl:
+              typeof entry.cloneUrl === 'string' ? entry.cloneUrl : null,
             teamIds,
           },
         ]

@@ -37,6 +37,11 @@ import {
   hostOf,
 } from 'modules/git/sources/git-remote.source';
 import { assertHostAllowed } from 'modules/git/sources/host-address-guard';
+import { GitRemoteRepositoryTargets } from 'modules/git-issues/git-remote-repository-targets';
+import {
+  assertSourceUnclaimed,
+  remoteSourceKey,
+} from 'modules/git-issues/mirror-source';
 
 /** How long the check of a new repository can take. */
 const CHECK_TIMEOUT_MS = 30_000;
@@ -366,6 +371,16 @@ export class GitRemoteService {
     if (repeated) {
       throw new BadRequestException(
         `Two of these teams use the identifier ${repeated}, and one repository can mirror only one of them.`,
+      );
+    }
+
+    // Turning the mirror on claims the source. A mirror that is on already may
+    // change its teams or go off, whatever else has claimed the source since.
+    if (wanted.length > 0 && !repository.gitIssues?.teamIds?.length) {
+      await assertSourceUnclaimed(
+        new GitRemoteRepositoryTargets(this.prisma),
+        remoteSourceKey(repository.cloneUrl),
+        { integrationAccountId: account.id, externalRepoId: repository.id },
       );
     }
 

@@ -129,6 +129,9 @@ export class GitIssuesService {
     handOffs: number;
   }> {
     const totals = { repositories: 0, wrote: 0, handOffs: 0 };
+    // Two targets of one source would write over each other and apply each
+    // other's hand-offs. The first one listed keeps the source.
+    const claimed = new Map<string, string>();
 
     for (const tier of this.targets) {
       let repositories: MirroredRepository[];
@@ -145,6 +148,17 @@ export class GitIssuesService {
       }
 
       for (const repository of repositories) {
+        const owner = claimed.get(repository.sourceKey);
+
+        if (owner) {
+          this.logger.warn({
+            message: `Issue mirror of ${repository.label} skipped: ${owner} already mirrors into the same repository.`,
+            where: 'GitIssuesService.runPass',
+          });
+          continue;
+        }
+
+        claimed.set(repository.sourceKey, repository.label);
         totals.repositories++;
 
         try {

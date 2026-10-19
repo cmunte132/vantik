@@ -11,6 +11,12 @@ import { PluginContextFactory } from 'plugins/plugin-context.factory';
 
 import { resolveAdminWorkspaceId } from 'common/workspace-access';
 
+import { LocalRepositoryTargets } from 'modules/git-issues/local-repository-targets';
+import {
+  assertSourceUnclaimed,
+  localSourceKey,
+} from 'modules/git-issues/mirror-source';
+
 /**
  * The repositories that a workspace has on the disk of this machine.
  *
@@ -107,6 +113,28 @@ export class LocalRepoService {
       userId,
       workspaceId,
     );
+
+    // Turning the mirror on claims the source. A mirror that is on already may
+    // change its teams or go off, whatever else has claimed the source since.
+    if (teamIds.length > 0) {
+      const ctx = this.ctx(target, userId);
+      const repository = (await listRepositories(ctx, target)).find(
+        (candidate) => candidate.id === repositoryId,
+      );
+
+      if (repository && !repository.gitIssues?.teamIds?.length) {
+        const account = await ctx.account.byDefinition('local-repo', target);
+
+        await assertSourceUnclaimed(
+          new LocalRepositoryTargets(this.prisma),
+          await localSourceKey(repository.path),
+          {
+            integrationAccountId: account?.id ?? '',
+            externalRepoId: repository.id,
+          },
+        );
+      }
+    }
 
     return await setRepositoryGitIssues(this.ctx(target, userId), {
       workspaceId: target,

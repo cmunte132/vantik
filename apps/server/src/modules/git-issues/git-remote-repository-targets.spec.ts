@@ -43,6 +43,7 @@ describe('GitRemoteRepositoryTargets', () => {
         integrationAccountId: 'account-0',
         externalRepoId: 'on',
         label: 'owner/on',
+        sourceKey: 'remote:host.example/owner/on',
         teamIds: ['team-a', 'team-b'],
       },
       {
@@ -50,6 +51,7 @@ describe('GitRemoteRepositoryTargets', () => {
         integrationAccountId: 'account-1',
         externalRepoId: 'other',
         label: 'owner/other',
+        sourceKey: 'remote:host.example/owner/other',
         teamIds: ['team-c'],
       },
     ]);

@@ -25,10 +25,12 @@ export function IssueMirror({
 }) {
   const teams: TeamType[] = useAllTeams();
 
+  // A team that was deleted can stay in the stored list. The server drops it,
+  // so the page leaves it out of the list that it sends and shows.
+  const known = selected.filter((id) => teams.some((team) => team.id === id));
+
   const toggle = (teamId: string, on: boolean) =>
-    onChange(
-      on ? [...selected, teamId] : selected.filter((id) => id !== teamId),
-    );
+    onChange(on ? [...known, teamId] : known.filter((id) => id !== teamId));
 
   return (
     <div className="flex flex-col gap-1 pt-2">
@@ -42,7 +44,7 @@ export function IssueMirror({
         {teams.map((team) => (
           <label key={team.id} className="flex items-center gap-1.5">
             <Checkbox
-              checked={selected.includes(team.id)}
+              checked={known.includes(team.id)}
               disabled={isPending}
               onCheckedChange={(checked) => toggle(team.id, checked === true)}
             />

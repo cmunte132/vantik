@@ -339,13 +339,13 @@ export class GitRemoteService {
       throw new NotFoundException('This connection has no such repository.');
     }
 
-    const wanted = [...new Set(teamIds)];
-    const teams = await this.prisma.team.findMany({
-      where: { id: { in: wanted }, workspaceId: target, deleted: null },
-      select: { id: true, identifier: true },
+    const asked = [...new Set(teamIds)];
+    const inWorkspace = await this.prisma.team.findMany({
+      where: { id: { in: asked }, workspaceId: target },
+      select: { id: true, identifier: true, deleted: true },
     });
-    const unknown = wanted.filter(
-      (id) => !teams.some((team) => team.id === id),
+    const unknown = asked.filter(
+      (id) => !inWorkspace.some((team) => team.id === id),
     );
 
     if (unknown.length > 0) {
@@ -353,6 +353,11 @@ export class GitRemoteService {
         `This workspace has no team with the id ${unknown.join(', ')}.`,
       );
     }
+
+    // A deleted team of this workspace may still be in the stored list, and
+    // the settings page sends that list back. It is dropped, not refused.
+    const teams = inWorkspace.filter((team) => !team.deleted);
+    const wanted = asked.filter((id) => teams.some((team) => team.id === id));
 
     const repeated = teams
       .map((team) => team.identifier)

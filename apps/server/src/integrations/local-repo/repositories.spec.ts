@@ -231,13 +231,27 @@ describe('setRepositoryGitIssues', () => {
     expect(written).not.toHaveBeenCalled();
   });
 
-  it('refuses a team that is not in the workspace, or was deleted', async () => {
+  it('refuses a team that is not in the workspace', async () => {
     await expect(
       setRepositoryGitIssues(context([repository]), parameters(['nobody'])),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
-      setRepositoryGitIssues(context([repository]), parameters(['team-gone'])),
+      setRepositoryGitIssues(
+        context([repository]),
+        parameters(['team-a', 'nobody']),
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('drops a deleted team of the workspace and keeps the rest', async () => {
+    const result = await setRepositoryGitIssues(
+      context([
+        { ...repository, gitIssues: { teamIds: ['team-a', 'team-gone'] } },
+      ]),
+      parameters(['team-a', 'team-gone', 'team-b']),
+    );
+
+    expect(result.gitIssues).toEqual({ teamIds: ['team-a', 'team-b'] });
   });
 
   it('refuses a repository that the workspace does not have', async () => {

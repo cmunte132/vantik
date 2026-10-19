@@ -171,18 +171,18 @@ export async function setRepositoryGitIssues(
     );
   }
 
+  const allTeams = (await ctx.workspace.teams()) as Array<{
+    id: string;
+    identifier: string;
+    deleted: Date | null;
+  }>;
   const workspaceTeams = new Map(
-    (
-      (await ctx.workspace.teams()) as Array<{
-        id: string;
-        identifier: string;
-        deleted: Date | null;
-      }>
-    )
+    allTeams
       .filter((team) => !team.deleted)
       .map((team) => [team.id, team.identifier]),
   );
-  const unknown = parameters.teamIds.filter((id) => !workspaceTeams.has(id));
+  const known = new Set(allTeams.map((team) => team.id));
+  const unknown = parameters.teamIds.filter((id) => !known.has(id));
 
   if (unknown.length > 0) {
     throw new BadRequestException(
@@ -190,7 +190,11 @@ export async function setRepositoryGitIssues(
     );
   }
 
-  const teamIds = [...new Set(parameters.teamIds)];
+  // A deleted team of this workspace may still be in the stored list, and the
+  // settings page sends that list back. It is dropped, not refused.
+  const teamIds = [
+    ...new Set(parameters.teamIds.filter((id) => workspaceTeams.has(id))),
+  ];
 
   // An issue's file is named by its key, the identifier and the number, so
   // two teams with one identifier would write over each other's issues.

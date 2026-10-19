@@ -276,13 +276,16 @@ async function run<E extends 'utf8' | 'buffer'>(
 
 /**
  * Arguments that stop the other end of a local transport from a run of its
- * hooks.
+ * hooks and from a run of the commands in its config.
  *
  * Git removes `GIT_CONFIG_*` from the environment of a local `upload-pack` or
  * `receive-pack`, so the base configuration above does not reach it. A
  * checkout with a `pre-receive`, `post-receive` or `reference-transaction`
- * hook would then run that hook as the server. The command line of the helper
- * is the one place that can carry the setting. A remote that is not a local
+ * hook would then run that hook as the server. So would
+ * `core.alternateRefsCommand` of its config, which git runs through the shell
+ * when `objects/info/alternates` exists, and `gc.recentObjectsHook`, which a
+ * `gc --auto` after a push can run. The command line of the helper is the one
+ * place that can carry the settings. A remote that is not a local
  * path needs nothing, and gets no arguments.
  */
 export function localTransportArgs(
@@ -301,6 +304,16 @@ export function localTransportArgs(
     'core.fsmonitor=false',
     '-c',
     "'safe.directory=*'",
+    // The helper reads the source's own config. These stop that config from
+    // running a command through the shell, or through a gc after a push.
+    '-c',
+    'core.alternateRefsCommand=true',
+    '-c',
+    'receive.autogc=false',
+    '-c',
+    'gc.auto=0',
+    '-c',
+    'maintenance.auto=false',
     command,
   ].join(' ');
 

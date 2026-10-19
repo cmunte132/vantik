@@ -13,7 +13,7 @@ describe('GitRemoteService.setGitIssues', () => {
   const entry = { id: '7', fullName: 'owner/project', cloneUrl: 'x' };
 
   function setUp(
-    teams: Array<{ id: string; identifier: string }>,
+    teams: Array<{ id: string; identifier: string; deleted?: Date | null }>,
     repository: Record<string, unknown> = entry,
   ) {
     const update = jest.fn().mockResolvedValue({});
@@ -90,6 +90,26 @@ describe('GitRemoteService.setGitIssues', () => {
       ]),
     ).rejects.toThrow(/no team with the id team-x/);
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('drops a deleted team of the workspace and keeps the rest', async () => {
+    const { service, written } = setUp([
+      { id: 'team-a', identifier: 'ENG', deleted: null },
+      { id: 'team-gone', identifier: 'OLD', deleted: new Date() },
+    ]);
+
+    const updated = await service.setGitIssues(
+      'workspace-1',
+      'user-1',
+      'account-1',
+      '7',
+      ['team-a', 'team-gone'],
+    );
+
+    expect(updated.gitIssues).toEqual({ teamIds: ['team-a'] });
+    expect(written()).toEqual([
+      { ...entry, gitIssues: { teamIds: ['team-a'] } },
+    ]);
   });
 
   it('refuses two teams that share an identifier', async () => {

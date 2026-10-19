@@ -929,13 +929,17 @@ export class GitIssuesService {
     }
 
     const factSource = `git-inbox:${input.accountId}:${source.name}`;
+    // An agent names each hand-off anew and builds on its own head, so a
+    // follow-up can carry a fact that an earlier inbox already did. The
+    // check spans every inbox of this account; the stored name stays.
+    const factSources = `git-inbox:${input.accountId}:`;
     const facts: OutboxBatch['facts'] = [];
 
     for (const fact of batch.facts) {
       if (
         await this.prisma.pageEntry.findFirst({
           where: {
-            sourceSession: factSource,
+            sourceSession: { startsWith: factSources },
             content: fact.content,
             deleted: null,
           },

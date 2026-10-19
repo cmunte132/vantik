@@ -793,6 +793,40 @@ describe('GitIssuesService', () => {
       expect(repliesOf('out-5')).toContain('outbox: 2 lines already applied');
     });
 
+    it('proposes a fact once when two inboxes carry it', async () => {
+      const { sync, entries, prisma } = setUp();
+      await sync();
+      const stored: { sourceSession: string; content: string }[] = [];
+
+      entries.createEntry.mockImplementation(
+        async (_a: unknown, _b: unknown, data: (typeof stored)[number]) => {
+          stored.push(data);
+          return { id: `entry-${stored.length}` };
+        },
+      );
+      prisma.pageEntry.findFirst.mockImplementation(
+        async ({ where }: { where: any }) =>
+          stored.some(
+            (entry) =>
+              entry.sourceSession.startsWith(where.sourceSession.startsWith) &&
+              entry.content === where.content,
+          )
+            ? { id: 'already' }
+            : null,
+      );
+
+      for (const name of ['out-7', 'out-8']) {
+        await handIn(
+          name,
+          outboxLines({ v: 1, type: 'remember', content: 'Same fact.' }),
+        );
+      }
+      await sync();
+
+      expect(stored).toHaveLength(1);
+      expect(stored[0].sourceSession).toMatch(/^git-inbox:account-1:out-[78]$/);
+    });
+
     it('records the session for the issue that the outbox names', async () => {
       const { sync, sessions } = setUp();
       await sync();

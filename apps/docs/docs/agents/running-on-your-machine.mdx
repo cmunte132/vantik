@@ -284,6 +284,73 @@ the same way. The row shows the number of turns in your terminal and the time
 of the last one. Click the row to open **omp · Local: activity**, which shows
 the steps in the same form as the page of a run.
 
+## Use a Claude subscription worker from omp
+
+The optional `claude_delegate` extension runs the unmodified Claude Code CLI as
+an external worker. It is not an Anthropic model provider or a hosted Vantik
+executor. Claude Code handles its own subscription login and usage limits;
+the extension does not extract OAuth credentials or fall back to API keys.
+
+Install Claude Code and sign in with your own subscription:
+
+```bash
+claude auth login --claudeai
+```
+
+From a Vantik source checkout, build and install the self-contained extension:
+
+```bash
+pnpm --filter @vantikhq/cli run build:main
+mkdir -p ~/.omp/agent/extensions
+cp packages/cli/dist/pi-extension/claude-delegate-extension.js \
+  ~/.omp/agent/extensions/vantik-claude-delegate.js
+```
+
+Start a new omp session. These commands check the setup:
+
+```text
+/claude-status
+/claude-smoke
+/routing-status
+```
+
+`/claude-status` checks the native login without inference. `/claude-smoke`
+makes a small, tool-free Haiku request using the same execution path as the
+delegation tool. A status reporting a login does not prove its token is still
+valid; a revoked token requires signing in again through Claude Code.
+
+The primary agent can call `claude_delegate` with an assignment, an `intent`
+(`execution`, `reasoning`, or `review`), a working directory, and a tool
+profile. The default model is `claude-haiku-5-5`; an explicit model overrides
+that default. Profiles are `none`, `read` (the default), and `edit`. The edit
+profile adds file editing and writing, not shell commands or further agent
+spawning. The primary agent remains responsible for running verification.
+
+Workers use Claude's safe and restricted modes with no inherited hooks, MCP
+servers, skills, or project instructions. Include the relevant instructions
+and acceptance criteria in each assignment. File tools are confined by
+Claude's restricted-mode rules to the selected working directory.
+
+To continue a worker, pass its `claudeSessionId` as `resumeSessionId`. A local
+metadata-only checkpoint is required: resumed results report a cumulative
+conversation total, so the extension attributes only its growth. Repeated
+invocations fail before inference rather than repeat completed work. The
+checkpoints contain session identifiers and cost totals, not prompts or
+credentials.
+
+The extension also supplies advisory routing context from omp's cached Codex
+quota history. It does not poll providers before each task or infer quota from
+dollars. Missing, stale, and reset-window observations remain unknown. Model
+choices named explicitly are not replaced. Provider-error fallback is distinct
+from escalating work that failed verification. After checking a delegation,
+the primary can record `verified`, `needs_rework`, `failed`, or `escalated`
+with `delegation_outcome`; completion alone is not verification.
+
+Claude's `total_cost_usd` and per-model `costBasis: list` are API-equivalent
+estimates, not cash charges or subscription quota. Account-level paid extra
+usage, if enabled in Claude, remains governed by the account's settings; this
+extension does not change those settings.
+
 ## Limits
 
 - A run on your machine needs the connector, and the connector needs your

@@ -9,8 +9,10 @@ import {
 import { RunActivity } from 'modules/agent-runs/run-activity';
 import { toFeed } from 'modules/agent-runs/run-feed';
 
-import { useSessionEvents } from 'services/agent-sessions';
+import { useSessionEvents, useSessionUsage } from 'services/agent-sessions';
 
+import { type SessionUsage } from './session-usage';
+import { SessionUsageSummary } from './session-usage-summary';
 import {
   harnessLabel,
   sessionTitle,
@@ -30,6 +32,8 @@ interface Props {
  */
 export const SessionActivityDialog = ({ session, open, setOpen }: Props) => {
   const { data, isPending, isError } = useSessionEvents(session.id, open);
+  // Read only while the view is open, one session at a time.
+  const usage = useSessionUsage(session.id, open);
   const events: any[] = Array.isArray(data) ? data : [];
   const feed = toFeed(events);
   const first = events[0]?.at ? Date.parse(events[0].at) : Date.now();
@@ -40,6 +44,12 @@ export const SessionActivityDialog = ({ session, open, setOpen }: Props) => {
         <DialogHeader>
           <DialogTitle>{sessionTitle(session)}: activity</DialogTitle>
         </DialogHeader>
+
+        <SessionUsageSummary
+          usage={usage.data as SessionUsage | undefined}
+          isPending={usage.isPending}
+          isError={usage.isError}
+        />
 
         {isPending ? (
           <p className="py-4 text-muted-foreground">Loading.</p>

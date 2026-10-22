@@ -259,10 +259,11 @@ These rules apply:
 
 - The work counts from the first prompt that you send after the run ended.
   What omp wrote while it shut down is not counted.
-- The turns and the cost of your terminal work add to the totals of the run.
-- The connector sends the messages of the session, the tool results and the
-  model changes. It does not send the request to the model provider or the
-  context of the session. A text longer than 16 KB is cut.
+- The turns and recorded cost estimates of terminal work add to the run's
+  totals. Subscription estimates are API-equivalent valuations, not bills.
+- The connector sends slim messages, tool results, model changes, auxiliary
+  usage, and native child-session usage. It does not send provider request
+  payloads or session context. A text longer than 16 KB is cut.
 - Vantik keeps the newest 2000 steps of terminal work for a run.
 - **Vantik mirrors terminal work only while `vantik connect` runs.** When you
   start the connector again, it sends what you did in the meantime. It keeps
@@ -283,6 +284,30 @@ While `vantik connect` runs, the connector mirrors the work of this session in
 the same way. The row shows the number of turns in your terminal and the time
 of the last one. Click the row to open **omp · Local: activity**, which shows
 the steps in the same form as the page of a run.
+
+### Usage attribution
+
+The session activity dialog separates subscription API-equivalent estimates
+from metered-route estimates. Calls without a known amount are counted but
+excluded from monetary totals. Neither figure is an invoice or a measurement
+of subscription quota.
+
+One root session has one canonical usage record, even when it works on
+several issues. A pickup or a write to another linked issue changes the
+assignment; reading an issue does not. A child's usage stays with the issue
+active when that child started. Native child files and auxiliary requests
+are included once; external Claude results contribute only their incremental
+estimate, not the cumulative conversation total again.
+
+Replay and reconnect do not add the same calls or visible steps twice.
+Whole-session amounts are private to the session owner; issue-visible
+collaborators see only that issue's ledger. Work without a resolved issue
+assignment remains separate.
+
+Amounts recorded before canonical tracking are explicitly **unverified** and
+kept apart from the new ledger. Installing this feature does not reprice or
+repair historical totals. Hosted sandbox provider-metered reconciliation is
+a separate accounting path.
 
 ## Use a Claude subscription worker from omp
 
@@ -337,6 +362,11 @@ conversation total, so the extension attributes only its growth. Repeated
 invocations fail before inference rather than repeat completed work. The
 checkpoints contain session identifiers and cost totals, not prompts or
 credentials.
+
+Checkpoints live under `~/.omp/agent/claude-delegation`. An abruptly stopped
+process can leave a session lock. The extension refuses a held lock rather
+than risk concurrent work; remove a stale lock only after confirming that no
+Claude worker for that session is still running.
 
 The extension also supplies advisory routing context from omp's cached Codex
 quota history. It does not poll providers before each task or infer quota from

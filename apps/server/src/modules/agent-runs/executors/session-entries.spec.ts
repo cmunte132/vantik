@@ -152,4 +152,327 @@ describe('parseSessionEntries', () => {
     expect(parsed.steps).toEqual([]);
     expect(parsed.turns).toBe(0);
   });
+
+  it('deduplicates mirrored auxiliary usage and counts delegate deltas, not cumulative totals', () => {
+    const parsed = parseSessionEntries([
+      {
+        type: 'message',
+        id: 'assistant-1',
+        message: {
+          role: 'assistant',
+          responseId: 'response-1',
+          model: 'claude-haiku-5-5',
+          usage: { cost: { total: 0.03 }, input: 10, output: 4 },
+        },
+      },
+      {
+        type: 'model_usage',
+        id: 'usage-1',
+        responseId: 'response-1',
+        model: 'claude-haiku-5-5',
+        usage: { cost: { total: 0.03 }, input: 10, output: 4 },
+      },
+      {
+        type: 'message',
+        id: 'delegate-1',
+        message: {
+          role: 'toolResult',
+          details: {
+            kind: 'claude-delegate',
+            invocationId: 'call-1',
+            billing: {
+              mode: 'subscription',
+              costBasis: 'list',
+              apiEquivalentUsd: 0.09,
+              deltaApiEquivalentUsd: 0.02,
+              cumulative: true,
+            },
+          },
+        },
+      },
+      {
+        type: 'message',
+        id: 'unknown-1',
+        message: { role: 'assistant', model: 'unknown-model' },
+      },
+    ]);
+
+    expect(parsed.calls).toHaveLength(3);
+    expect(parsed.calls.map((call) => call.costUsd)).toEqual([
+      0.03,
+      0.02,
+      null,
+    ]);
+    expect(parsed.calls[1]).toMatchObject({
+      id: 'delegate:call-1',
+      purpose: 'claude_delegate',
+      billingMode: 'subscription',
+      costBasis: 'list',
+    });
+    expect(parsed.costUsd).toBeCloseTo(0.05);
+  });
+
+  it('names a call the same way wherever it sits in a batch, so a replay names the same call', () => {
+    // No id and no response id: only the entry's time and usage name it.
+    const bare = {
+      type: 'message',
+      timestamp: at(7),
+      message: {
+        role: 'assistant',
+        model: 'm',
+        usage: { input: 5, output: 2, cost: { total: 0.01 } },
+      },
+    };
+
+    const alone = parseSessionEntries([bare]).calls.map((call) => call.id);
+    const shifted = parseSessionEntries([user(1, 'hi'), bare]).calls.map(
+      (call) => call.id,
+    );
+
+    expect(alone).toHaveLength(1);
+    expect(shifted).toEqual(alone);
+  });
+
+  it('keeps the provider, api and response of an auxiliary request, and adds no reasoning to its output', () => {
+    const parsed = parseSessionEntries([
+      {
+        type: 'model_usage',
+        id: 'usage-9',
+        timestamp: at(3),
+        provider: 'vercel',
+        api: 'anthropic-messages',
+        model: 'm-1',
+        purpose: 'title',
+        responseId: 'resp-9',
+        usage: {
+          input: 100,
+          output: 20,
+          cacheRead: 7,
+          cacheWrite: 3,
+          reasoning: 50,
+          cost: { total: 0.004 },
+        },
+      },
+    ]);
+
+    expect(parsed.calls).toHaveLength(1);
+    expect(parsed.calls[0]).toMatchObject({
+      id: 'response:resp-9',
+      purpose: 'auxiliary',
+      modelId: 'm-1',
+      billingMode: 'metered',
+      costBasis: 'harness_estimate',
+      costUsd: 0.004,
+      inputTokens: 100,
+      outputTokens: 20,
+      cacheReadTokens: 7,
+      cacheWriteTokens: 3,
+      provenance: {
+        provider: 'vercel',
+        api: 'anthropic-messages',
+        responseId: 'resp-9',
+        auxPurpose: 'title',
+      },
+    });
+    expect(parsed.calls[0].provenance).not.toHaveProperty('reasoning');
+  });
+
+  it('reads the pickups and writes of a task, direct and through the write wrapper, and never a read', () => {
+    const parsed = parseSessionEntries([
+      {
+        type: 'message',
+        id: 'p1',
+        timestamp: at(1),
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'toolCall',
+              id: 'c1',
+              name: 'mcp__vantik_pick_up_task',
+              arguments: { task: 'ENG-42' },
+            },
+            {
+              type: 'toolCall',
+              id: 'c2',
+              name: 'mcp__vantik_get_task',
+              arguments: { task: 'ENG-42' },
+            },
+            {
+              type: 'toolCall',
+              id: 'c3',
+              name: 'functions.write',
+              arguments: {
+                path: 'xd://mcp__vantik_update_task',
+                content: JSON.stringify({ task: 'ENG-7', state: 'done' }),
+              },
+            },
+            {
+              type: 'toolCall',
+              id: 'c4',
+              name: 'write',
+              arguments: { path: 'notes.md', content: '{"task":"ENG-9"}' },
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(parsed.tasks).toEqual([
+      {
+        key: 'entry:p1#0',
+        at: new Date(at(1)),
+        tool: 'pickup',
+        taskRef: 'ENG-42',
+      },
+      {
+        key: 'entry:p1#2',
+        at: new Date(at(1)),
+        tool: 'write',
+        taskRef: 'ENG-7',
+      },
+    ]);
+  });
+
+  it('leaves a delegate result with no known amount unknown, not zero', () => {
+    const parsed = parseSessionEntries([
+      {
+        type: 'message',
+        id: 'd9',
+        timestamp: at(1),
+        message: {
+          role: 'toolResult',
+          details: {
+            kind: 'claude-delegate',
+            invocationId: 'inv-9',
+            status: 'failed',
+            billing: {
+              mode: 'subscription',
+              costBasis: 'list',
+              apiEquivalentUsd: null,
+              deltaApiEquivalentUsd: null,
+              cumulative: true,
+            },
+          },
+        },
+      },
+    ]);
+
+    expect(parsed.calls).toEqual([
+      expect.objectContaining({
+        id: 'delegate:inv-9',
+        costUsd: null,
+        costBasis: 'unknown',
+        billingMode: 'subscription',
+      }),
+    ]);
+    expect(parsed.costUsd).toBe(0);
+  });
+
+  it('keeps an external result identity and its cumulative totals, and counts only its delta', () => {
+    const parsed = parseSessionEntries([
+      {
+        type: 'message',
+        id: 'd3',
+        timestamp: at(4),
+        message: {
+          role: 'toolResult',
+          toolName: 'claude_delegate',
+          toolCallId: 'inv-3',
+          details: {
+            kind: 'claude-delegate',
+            invocationId: 'inv-3',
+            ompSessionId: 'omp-1',
+            claudeSessionId: 'claude-1',
+            intent: 'Check the parser',
+            requestedModel: 'haiku',
+            canonicalModel: 'claude-haiku-5-5',
+            actualModels: ['claude-haiku-5-5'],
+            status: 'completed',
+            resumed: true,
+            // Never kept: the result, the permissions and the environment.
+            result: { text: 'secret answer' },
+            permissions: { write: true },
+            env: { TOKEN: 'x' },
+            usage: { input: 900, output: 80, cacheRead: 500 },
+            modelUsage: {
+              'claude-haiku-5-5': {
+                provider: 'firstParty',
+                costBasis: 'list',
+                canonicalModel: 'claude-haiku-5-5',
+                inputTokens: 900,
+                costUSD: 0.09,
+              },
+            },
+            billing: {
+              mode: 'subscription',
+              costBasis: 'list',
+              apiEquivalentUsd: 0.09,
+              deltaApiEquivalentUsd: 0.02,
+              cumulative: true,
+            },
+          },
+        },
+      },
+    ]);
+
+    const call = parsed.calls[0];
+    expect(call).toMatchObject({
+      id: 'delegate:inv-3',
+      modelId: 'claude-haiku-5-5',
+      purpose: 'claude_delegate',
+      costUsd: 0.02,
+      costBasis: 'list',
+      billingMode: 'subscription',
+    });
+    expect(call.provenance.delegate).toMatchObject({
+      ompSessionId: 'omp-1',
+      claudeSessionId: 'claude-1',
+      intent: 'Check the parser',
+      requestedModel: 'haiku',
+      actualModels: ['claude-haiku-5-5'],
+      resumed: true,
+      billing: { deltaApiEquivalentUsd: 0.02 },
+      cumulativeTotals: {
+        apiEquivalentUsd: 0.09,
+        usage: { input: 900 },
+        modelUsage: { 'claude-haiku-5-5': { inputTokens: 900, costUSD: 0.09 } },
+      },
+    });
+    expect(JSON.stringify(call.provenance)).not.toMatch(
+      /secret answer|permissions|TOKEN/,
+    );
+    // The cumulative totals are not this call's tokens or spend.
+    expect(call.inputTokens).toBeUndefined();
+    expect(parsed.costUsd).toBeCloseTo(0.02);
+  });
+
+  it('keeps a result with no attributable delta unknown, even with an API-equivalent total', () => {
+    const parsed = parseSessionEntries([
+      {
+        type: 'message',
+        id: 'd4',
+        timestamp: at(5),
+        message: {
+          role: 'toolResult',
+          details: {
+            kind: 'claude-delegate',
+            invocationId: 'inv-4',
+            billing: {
+              mode: 'subscription',
+              costBasis: 'list',
+              apiEquivalentUsd: 0.09,
+              cumulative: true,
+            },
+          },
+        },
+      },
+    ]);
+
+    expect(parsed.calls[0]).toMatchObject({
+      costUsd: null,
+      costBasis: 'unknown',
+    });
+    expect(parsed.costUsd).toBe(0);
+  });
 });

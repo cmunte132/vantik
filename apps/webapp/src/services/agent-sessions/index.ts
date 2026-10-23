@@ -16,3 +16,17 @@ export function useSessionEvents(sessionId: string, enabled = true) {
     refetchInterval: 10_000,
   });
 }
+
+/**
+ * What the session's usage cost, as the person's own record counts it. It is
+ * read only while the activity view is open, one session at a time, so a list
+ * of sessions does not ask for one usage record per row.
+ */
+export function useSessionUsage(sessionId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['agent-session-usage', sessionId],
+    queryFn: () =>
+      ajaxGet({ url: `/api/v1/agent_sessions/${sessionId}/usage` }),
+    enabled,
+  });
+}

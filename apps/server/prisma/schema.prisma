@@ -235,6 +235,8 @@ model AgentSession {
   /// run and is not counted here.
   terminalTurns   Int                 @default(0)
   terminalCostUsd Float               @default(0)
+  /// Calls of this issue's share that have no known amount. Counted, never $0.
+  terminalUnknownCalls Int            @default(0)
   /// The time of the newest entry applied, so a batch that arrives twice is
   /// not stored twice.
   terminalSeenAt  DateTime?
@@ -246,6 +248,79 @@ model AgentSession {
   @@index([issueId])
   @@index([workspaceId, actorUserId, externalId])
   @@index([parentSessionId])
+}
+
+/// The person's canonical usage record for one root omp session, keyed by the
+/// workspace, the person, the harness and the root session id. Its totals are
+/// the sum of its claimed calls. The AgentSession rows of each issue carry only
+/// the share that the issue received, so the totals are never repeated.
+model AgentTranscript {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+
+  actor       User   @relation(fields: [actorUserId], references: [id])
+  actorUserId String
+
+  harness    String
+  externalId String
+
+  startedAt DateTime?
+  lastAt    DateTime?
+
+  /// The captured amounts of every claimed call, in USD. Never repriced.
+  knownCostUsd        Float @default(0)
+  /// The part of knownCostUsd that no issue received.
+  unattributedCostUsd Float @default(0)
+  /// Calls with no known amount. They are counted here and add no cost.
+  unknownCallCount    Int   @default(0)
+  /// Known amounts and call counts, keyed by `billingMode/costBasis`.
+  billingSummary      Json  @default("{}")
+  /// Per source, `main` or `child:<sourceSessionId>`: the issue of a child, when
+  /// it started, its counts and its newest entry. Totals from before this
+  /// record existed are marked `legacyTotals`.
+  sources             Json  @default("{}")
+
+  calls AgentTranscriptCall[]
+
+  @@unique([workspaceId, actorUserId, harness, externalId])
+  @@index([workspaceId, actorUserId, lastAt])
+}
+
+/// One claimed entry of a transcript: a model call or an external Claude
+/// result (`kind: call`), or a pickup or issue write that moved the work to
+/// another issue (`kind: task`). The unique callId is the idempotency claim, so
+/// a batch that arrives twice, or twice at once, is recorded once.
+model AgentTranscriptCall {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  transcript   AgentTranscript @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+  transcriptId String
+
+  /// `call` or `task`.
+  kind String
+  /// A stable name: `main:<entry>` or `child:<sourceSessionId>:<entry>`.
+  callId String
+  /// The child's native id. Null for the root session's own entries.
+  sourceSessionId String?
+  at              DateTime?
+  /// The issue that the call's cost belongs to, at the time it was written.
+  issueId         String?
+  /// The captured amount in USD. Null when the call has no known amount.
+  costUsd         Float?
+  billingMode     String
+  costBasis       String
+  /// The provenance of the call: purpose, provider, api, response id, tokens,
+  /// and for an external Claude result its delegate facts. No prompts or payloads.
+  data            Json
+
+  @@unique([transcriptId, callId])
+  @@index([transcriptId, kind, at])
+  @@index([transcriptId, issueId])
 }
 
 /// A question that an agent asks a person during a run.
@@ -333,7 +408,12 @@ model AgentRunEvent {
   run   AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
   runId String
 
+  /// The native entry and step this row came from. Null for rows written
+  /// before steps had keys. One row per (run, key), so a replay adds none.
+  sourceKey String?
+
   @@index([runId, at])
+  @@unique([runId, sourceKey])
 }
 
 /// One step of what happened in a session that has no run: a terminal session
@@ -352,7 +432,12 @@ model AgentSessionEvent {
   session   AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
 
+  /// The native entry and step this row came from. Null for rows written
+  /// before steps had keys. One row per (session, key), so a replay adds none.
+  sourceKey String?
+
   @@index([sessionId, at])
+  @@unique([sessionId, sourceKey])
 }
 
 /// One pass of the ENG-62 implement/score loop.
@@ -2307,6 +2392,7 @@ model User {
   Conversation           Conversation[]
   ConversationHistory    ConversationHistory[]
   agentSessions          AgentSession[]
+  agentTranscripts       AgentTranscript[]
   agentQuestionsAsked    AgentQuestion[]       @relation("AgentQuestionAssignee")
   agentQuestionsAnswered AgentQuestion[]       @relation("AgentQuestionAnsweredBy")
 }
@@ -2493,6 +2579,7 @@ model Workspace {
   agentRuns             AgentRun[]
   agentSessions         AgentSession[]
   agentQuestions        AgentQuestion[]
+  agentTranscripts      AgentTranscript[]
   credentials           WorkspaceCredential[]
   webhookSubscription   WebhookSubscription[]
 

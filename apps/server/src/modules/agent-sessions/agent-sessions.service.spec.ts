@@ -10,7 +10,17 @@ const actor = { userId: 'agent-1', workspaceId: 'ws-1' };
  * Only the rows the service reads: the issue, the caller's teams, and the
  * session table. The issue lives in team-a of workspace ws-1.
  */
-function build({ teamIds = ['team-a'] }: { teamIds?: string[] } = {}) {
+function build({
+  teamIds = ['team-a'],
+  session = null,
+  transcript = null,
+  calls = [],
+}: {
+  teamIds?: string[];
+  session?: Record<string, unknown> | null;
+  transcript?: Record<string, unknown> | null;
+  calls?: Array<Record<string, unknown>>;
+} = {}) {
   const issues = [{ id: 'issue-1', teamId: 'team-a', workspaceId: 'ws-1' }];
   const rows = new Map<string, Record<string, unknown>>();
 
@@ -42,6 +52,7 @@ function build({ teamIds = ['team-a'] }: { teamIds?: string[] } = {}) {
       ),
     },
     agentSession: {
+      findFirst: jest.fn(async () => session),
       upsert: jest.fn(async ({ where, create, update }) => {
         const key = JSON.stringify(
           where.workspaceId_actorUserId_channel_externalId_issueId,
@@ -61,6 +72,12 @@ function build({ teamIds = ['team-a'] }: { teamIds?: string[] } = {}) {
             (where.harness === null ? row.harness == null : true),
         ).length,
       })),
+    },
+    agentTranscript: {
+      findFirst: jest.fn(async () => transcript),
+    },
+    agentTranscriptCall: {
+      findMany: jest.fn(async () => calls),
     },
   } as unknown as PrismaService;
 
@@ -217,6 +234,157 @@ describe('AgentSessionsService touching hooks sessions', () => {
     await service.touchHookSession(actor, 'sess-abc', 'something-new');
 
     expect(prisma.agentSession.updateMany).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AgentSessionsService usage summary', () => {
+  const session: Record<string, unknown> = {
+    issueId: 'issue-1',
+    externalId: 'omp:01a1212b-ef89-7545-abb3-1339176a6b81',
+    actorUserId: 'agent-1',
+    terminalCostUsd: 0.7,
+    terminalTurns: 3,
+    terminalUnknownCalls: 1,
+    agentRun: null,
+  };
+  const transcript = {
+    id: 'tx-1',
+    knownCostUsd: 0.9,
+    unattributedCostUsd: 0.2,
+    unknownCallCount: 1,
+    billingSummary: {
+      'subscription/list': { costUsd: 0.02, pricedCalls: 1, unpricedCalls: 0 },
+    },
+    sources: { main: { calls: 4 }, 'child:agent-1': { calls: 2 } },
+  };
+  // The issue's own calls: one priced at a harness estimate, one with no amount.
+  const calls = [
+    {
+      costUsd: 0.5,
+      billingMode: 'unknown',
+      costBasis: 'harness_estimate',
+      data: { purpose: 'assistant' },
+    },
+    {
+      costUsd: null,
+      billingMode: 'unknown',
+      costBasis: 'unknown',
+      data: { purpose: 'assistant' },
+    },
+  ];
+
+  it("returns the share this issue received, and the root's totals with their basis apart", async () => {
+    const { service } = build({ session, transcript, calls });
+
+    const summary = await service.usageSummary(actor, 'session-1');
+
+    // The ledger is what the claimed calls of this issue cost, and nothing else.
+    // The row's own terminal total (0.7) is not reported as a ledger amount.
+    expect(summary.issue).toEqual({
+      ledger: {
+        costUsd: 0.5,
+        turns: 2,
+        unknownCalls: 1,
+        byBilling: {
+          'unknown/harness_estimate': {
+            costUsd: 0.5,
+            pricedCalls: 1,
+            unpricedCalls: 0,
+          },
+          'unknown/unknown': { costUsd: 0, pricedCalls: 0, unpricedCalls: 1 },
+        },
+      },
+      legacy: null,
+    });
+    expect(summary.canonical).toEqual({
+      knownCostUsd: 0.9,
+      unattributedCostUsd: 0.2,
+      unknownCallCount: 1,
+      byBilling: transcript.billingSummary,
+      coverage: { mainCalls: 4, childSessions: 1, childCalls: 2 },
+      legacyUnverified: false,
+    });
+  });
+
+  it('keeps the totals recorded before the record apart, as unverified, and out of the ledger', async () => {
+    const { service } = build({
+      session,
+      transcript: {
+        ...transcript,
+        sources: {
+          main: {
+            calls: 0,
+            legacyTotals: true,
+            legacyBaseline: {
+              'issue-1': { costUsd: 0.4, turns: 2, unknownCalls: 0 },
+            },
+          },
+        },
+      },
+      calls,
+    });
+
+    const summary = await service.usageSummary(actor, 'session-1');
+
+    expect(summary.issue.legacy).toEqual({
+      costUsd: 0.4,
+      turns: 2,
+      unknownCalls: 0,
+      unverified: true,
+    });
+    expect(summary.issue.ledger.costUsd).toBe(0.5);
+    expect(summary.canonical).toMatchObject({ legacyUnverified: true });
+  });
+
+  it('gives a session with no record its legacy row totals, unverified', async () => {
+    const { service } = build({ session, transcript: null, calls: [] });
+
+    await expect(
+      service.usageSummary(actor, 'session-1'),
+    ).resolves.toMatchObject({
+      issue: {
+        ledger: { costUsd: 0, turns: 0, unknownCalls: 0 },
+        legacy: { costUsd: 0.7, turns: 3, unknownCalls: 1, unverified: true },
+      },
+      canonical: null,
+    });
+  });
+
+  it("keeps the owner's session-wide and unattributed totals from a collaborator who can see the issue", async () => {
+    // The collaborator is in the issue's team, so the issue's ledger is theirs.
+    // Session-wide totals include the owner's private, unassigned work.
+    const { service } = build({ session, transcript, calls });
+    const collaborator = { userId: 'agent-2', workspaceId: 'ws-1' };
+
+    const summary = await service.usageSummary(collaborator, 'session-1');
+
+    expect(summary.canonical).toBeNull();
+    expect(summary.issue.ledger.costUsd).toBe(0.5);
+    expect(JSON.stringify(summary)).not.toContain('unattributedCostUsd');
+    expect(JSON.stringify(summary)).not.toContain('knownCostUsd');
+  });
+
+  it('gives the owner the whole session, unattributed work included', async () => {
+    const { service } = build({ session, transcript, calls });
+
+    await expect(
+      service.usageSummary(actor, 'session-1'),
+    ).resolves.toMatchObject({
+      canonical: { knownCostUsd: 0.9, unattributedCostUsd: 0.2 },
+    });
+  });
+
+  it('refuses a session on an issue in a team the caller cannot see', async () => {
+    const { service } = build({
+      teamIds: ['team-b'],
+      session,
+      transcript,
+      calls,
+    });
+
+    await expect(
+      service.usageSummary(actor, 'session-1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 

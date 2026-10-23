@@ -137,15 +137,30 @@ export type ConnectorSessionsWatchAck =
 
 /**
  * What happened in an omp session that a person drives in their own terminal
- * (`sessions.activity`). `entries` are the omp session file's `message` and
- * `model_change` entries, in file order, with the large provider fields taken
- * out. Sent outside any run, so it carries no seq. The server accepts it for
- * the person's own sessions only, and acknowledges with {@link ConnectorAck};
- * the connector moves its read position on only after an `ok`.
+ * (`sessions.activity`). `entries` are the omp session file's `message`,
+ * `model_change` and `model_usage` entries, in file order, with the large
+ * provider fields taken out. Sent outside any run, so it carries no seq. The
+ * server accepts it for the person's own sessions only, and acknowledges with
+ * {@link ConnectorAck}; the connector moves its read position on only after an
+ * `ok`.
+ *
+ * `externalId` is always the watched root session. A batch from a child session
+ * file (a session that the root spawned) names the child in `sourceSessionId`,
+ * and omits it for the root file itself.
  */
 export interface ConnectorSessionActivity {
-  /** The omp session uuid. */
+  /** The omp session uuid of the watched root session. */
   externalId: string;
+  /**
+   * The native id of a child session file: its header id, or a
+   * root-relative file identity when the header has none. Omitted for the root.
+   */
+  sourceSessionId?: string;
+  /**
+   * When the child session started, from its header. Omitted for the root, and
+   * when the child's header has no timestamp.
+   */
+  sourceStartedAt?: string;
   entries: unknown[];
 }
 

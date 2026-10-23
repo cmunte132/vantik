@@ -39,6 +39,10 @@ export default defineConfig([
     entry: {
       'pi-extension/vantik-extension':
         '../../apps/server/src/modules/agent-runs/pi-extension/vantik-extension.ts',
+      // The Claude Code delegation tool. It runs the official `claude` CLI, so
+      // it is shipped with the CLI only and not loaded into hosted runs.
+      'pi-extension/claude-delegate-extension':
+        '../../apps/server/src/modules/agent-runs/pi-extension/claude-delegate-extension.ts',
     },
     format: ['esm'],
     platform: 'node',

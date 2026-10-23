@@ -21,6 +21,94 @@ function harnessOf(externalId: string, harness?: string | null) {
     : normalizeAgentSessionHarness(harness);
 }
 
+/**
+ * The known amounts of calls, kept apart by billing mode and cost basis, and
+ * the calls that have no known amount counted apart. Never priced at $0.
+ */
+function byBilling(
+  calls: Array<{
+    costUsd: number | null;
+    billingMode: string;
+    costBasis: string;
+  }>,
+) {
+  const buckets: Record<
+    string,
+    { costUsd: number; pricedCalls: number; unpricedCalls: number }
+  > = {};
+  for (const call of calls) {
+    const key = `${call.billingMode}/${call.costBasis}`;
+    const bucket = buckets[key] ?? {
+      costUsd: 0,
+      pricedCalls: 0,
+      unpricedCalls: 0,
+    };
+    if (call.costUsd === null) {
+      bucket.unpricedCalls += 1;
+    } else {
+      bucket.costUsd += call.costUsd;
+      bucket.pricedCalls += 1;
+    }
+    buckets[key] = bucket;
+  }
+  return buckets;
+}
+
+/** The part of `AgentTranscript.sources` that the summary reads. */
+interface SourceSummary {
+  calls?: number;
+  legacyTotals?: boolean;
+  legacyBaseline?: Record<
+    string,
+    { costUsd: number; turns: number; unknownCalls: number }
+  >;
+}
+
+const NO_TOTALS = { costUsd: 0, turns: 0, unknownCalls: 0 };
+
+/**
+ * What the claimed calls of one issue cost. Only the known amounts add up;
+ * the unknown ones are counted, and the turns are the assistant's requests.
+ */
+function ledgerOf(
+  calls: Array<{
+    costUsd: number | null;
+    billingMode: string;
+    costBasis: string;
+    data: unknown;
+  }>,
+) {
+  let costUsd = 0;
+  let turns = 0;
+  let unknownCalls = 0;
+  for (const call of calls) {
+    if (call.costUsd === null) {
+      unknownCalls += 1;
+    } else {
+      costUsd += call.costUsd;
+    }
+    if ((call.data as { purpose?: unknown } | null)?.purpose === 'assistant') {
+      turns += 1;
+    }
+  }
+  return { costUsd, turns, unknownCalls, byBilling: byBilling(calls) };
+}
+
+/** How much of the root session the record has seen: its own calls and its children's. */
+function coverageOf(sources: Record<string, SourceSummary>) {
+  const children = Object.entries(sources).filter(([key]) =>
+    key.startsWith('child:'),
+  );
+  return {
+    mainCalls: sources.main?.calls ?? 0,
+    childSessions: children.length,
+    childCalls: children.reduce(
+      (sum, [, source]) => sum + (source.calls ?? 0),
+      0,
+    ),
+  };
+}
+
 /** The most steps one read returns; a session keeps no more than this. */
 const SESSION_EVENT_LIMIT = 2000;
 
@@ -71,6 +159,114 @@ export class AgentSessionsService {
     });
 
     return events.reverse();
+  }
+
+  /**
+   * What the person's own usage record says about a session.
+   *
+   * `issue.ledger` is what the claimed calls of this issue cost. Its unknown
+   * calls are counted apart and add no cost. `issue.legacy` is what the issue's
+   * rows held before the record existed. It is unverified, and it is never added
+   * to the ledger. `canonical` is the whole root session, counted once. It
+   * includes work that no issue received, which is the owner's private work, so
+   * only the owner reads it. Any other viewer gets this issue's ledger and
+   * nothing of the session.
+   */
+  async usageSummary(actor: SessionActor, sessionId: string) {
+    const session = await this.prisma.agentSession.findFirst({
+      where: { id: sessionId, workspaceId: actor.workspaceId, deleted: null },
+      select: {
+        issueId: true,
+        externalId: true,
+        actorUserId: true,
+        terminalCostUsd: true,
+        terminalTurns: true,
+        terminalUnknownCalls: true,
+        agentRun: { select: { createdById: true } },
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('No such session.');
+    }
+
+    await assertIssuesVisible(
+      this.prisma,
+      [session.issueId],
+      await visibleTeamIds(this.prisma, actor.userId, actor.workspaceId),
+    );
+
+    // The record belongs to the person who runs the session.
+    const owner = session.agentRun?.createdById ?? session.actorUserId;
+    const rootId = session.externalId.replace(/^omp:/, '');
+    const transcript = await this.prisma.agentTranscript.findFirst({
+      where: {
+        workspaceId: actor.workspaceId,
+        actorUserId: owner,
+        harness: 'omp',
+        externalId: rootId,
+      },
+      select: {
+        id: true,
+        knownCostUsd: true,
+        unattributedCostUsd: true,
+        unknownCallCount: true,
+        billingSummary: true,
+        sources: true,
+      },
+    });
+
+    const sources = (transcript?.sources ?? {}) as Record<
+      string,
+      SourceSummary
+    >;
+    const legacy = transcript
+      ? sources.main?.legacyTotals
+        ? (sources.main.legacyBaseline?.[session.issueId] ?? NO_TOTALS)
+        : null
+      : session.terminalCostUsd > 0 ||
+          session.terminalTurns > 0 ||
+          session.terminalUnknownCalls > 0
+        ? {
+            costUsd: session.terminalCostUsd,
+            turns: session.terminalTurns,
+            unknownCalls: session.terminalUnknownCalls,
+          }
+        : null;
+
+    const calls = transcript
+      ? await this.prisma.agentTranscriptCall.findMany({
+          where: {
+            transcriptId: transcript.id,
+            kind: 'call',
+            issueId: session.issueId,
+          },
+          select: {
+            costUsd: true,
+            billingMode: true,
+            costBasis: true,
+            data: true,
+          },
+        })
+      : [];
+
+    return {
+      issue: {
+        ledger: ledgerOf(calls),
+        legacy: legacy ? { ...legacy, unverified: true } : null,
+      },
+      canonical:
+        transcript && owner === actor.userId
+          ? {
+              knownCostUsd: transcript.knownCostUsd,
+              unattributedCostUsd: transcript.unattributedCostUsd,
+              unknownCallCount: transcript.unknownCallCount,
+              byBilling: transcript.billingSummary,
+              coverage: coverageOf(sources),
+              legacyUnverified: sources.main?.legacyTotals === true,
+            }
+          : null,
+    };
   }
 
   /**

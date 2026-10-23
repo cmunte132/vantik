@@ -56,6 +56,7 @@ export const AgentRunEvent = types.model({
   // what it recognises and renders the message for the rest.
   data: types.frozen(),
   runId: types.string,
+  sourceKey: types.union(types.string, types.null, types.undefined),
 });
 
 export const AgentRunEventArray = types.array(AgentRunEvent);

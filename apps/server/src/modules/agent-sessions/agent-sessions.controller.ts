@@ -43,6 +43,21 @@ export class AgentSessionsController {
     return this.sessions.listEvents({ userId, workspaceId }, sessionId);
   }
 
+  /**
+   * The usage a session's issue received, and the usage of the whole root
+   * session. Known amounts are kept apart by billing mode and cost basis, so
+   * a harness estimate is never read as cash.
+   */
+  @Get(':sessionId/usage')
+  @UseGuards(AuthGuard)
+  async usage(
+    @Workspace() workspaceId: string,
+    @UserId() userId: string,
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.sessions.usageSummary({ userId, workspaceId }, sessionId);
+  }
+
   @Post()
   @UseGuards(AuthGuard, WorkspaceResourceGuard)
   async link(

@@ -16,6 +16,7 @@ import {
   type ConnectorRunAnswer,
   type ConnectorRunCancel,
   type ConnectorRunDispatch,
+  type ConnectorSessionActivity,
   type ConnectorSessionsWatchAck,
 } from '@vantikhq/types';
 import { io } from 'socket.io-client';
@@ -30,7 +31,11 @@ import {
   SessionDrivers,
   WATCH_REFRESH_MS,
 } from './session-drivers';
-import { ACTIVITY_POLL_MS, SessionTail } from './session-tail';
+import {
+  ACTIVITY_POLL_MS,
+  type ActivityBatch,
+  SessionTail,
+} from './session-tail';
 import { vantikHome, worktreePathFor } from './worktree';
 
 export interface ConnectorOptions {
@@ -459,9 +464,10 @@ export class Connector {
 
   /**
    * Sends what a person did in their terminal to a session since the last
-   * look. A session that a run of this connector drives is skipped to its end,
-   * because the run reports that work itself. The position moves on only when
-   * the server acknowledges the entries.
+   * look, and what its child sessions did. A session that a run of this
+   * connector drives is skipped to its end, because the run reports that work
+   * itself; its children are not, because the run does not report them. The
+   * position of each file moves on only when the server acknowledges its entries.
    */
   async tailSessions(): Promise<void> {
     if (this.tailing || !this.socket?.connected) {
@@ -475,21 +481,11 @@ export class Connector {
       for (const id of this.drivers.sessionIds()) {
         if (driving.has(id) || this.drivers.driverOf(id) === 'VANTIK') {
           this.tail.skipToEnd(id);
+        } else if (!(await this.drain(() => this.tail.next(id)))) {
           continue;
         }
-        // A long session goes out in batches; a tick sends a few of them.
-        for (let sent = 0; sent < 20; sent += 1) {
-          const batch = this.tail.next(id);
-          if (!batch) {
-            break;
-          }
-          if (batch.entries.length > 0 && !(await this.sendActivity(batch))) {
-            break;
-          }
-          this.tail.commit(batch);
-          if (!batch.more) {
-            break;
-          }
+        for (const child of this.tail.children(id)) {
+          await this.drain(() => this.tail.nextFrom(id, child));
         }
       }
     } catch (error) {
@@ -499,20 +495,48 @@ export class Connector {
     }
   }
 
-  private sendActivity(batch: {
-    externalId: string;
-    entries: unknown[];
-  }): Promise<boolean> {
+  /**
+   * Sends the batches of one file, a few per tick. Returns false when the server
+   * refused a batch or a backlog remains, so children wait for the root first.
+   */
+  private async drain(next: () => ActivityBatch | null): Promise<boolean> {
+    for (let sent = 0; sent < 20; sent += 1) {
+      const batch = next();
+      if (!batch) {
+        return true;
+      }
+      if (batch.entries.length > 0 && !(await this.sendActivity(batch))) {
+        return false;
+      }
+      this.tail.commit(batch);
+      if (!batch.more) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private sendActivity(batch: ActivityBatch): Promise<boolean> {
     return new Promise((resolve) => {
       const socket = this.socket;
       if (!socket?.connected) {
         resolve(false);
         return;
       }
+      const payload: ConnectorSessionActivity = {
+        externalId: batch.externalId,
+        entries: batch.entries,
+      };
+      if (batch.sourceSessionId !== undefined) {
+        payload.sourceSessionId = batch.sourceSessionId;
+        if (batch.sourceStartedAt !== undefined) {
+          payload.sourceStartedAt = batch.sourceStartedAt;
+        }
+      }
       const timer = setTimeout(() => resolve(false), 15_000);
       socket.emit(
         'sessions.activity',
-        { externalId: batch.externalId, entries: batch.entries },
+        payload,
         (ack: { ok?: boolean } | undefined) => {
           clearTimeout(timer);
           resolve(Boolean(ack?.ok));

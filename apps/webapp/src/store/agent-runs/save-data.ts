@@ -78,6 +78,7 @@ export async function saveAgentRunEventData(
         // draw from and every step looks the same as every other one.
         data: record.data.data ?? null,
         runId: record.data.runId,
+        sourceKey: record.data.sourceKey ?? null,
       };
 
       switch (record.action) {

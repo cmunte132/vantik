@@ -36,6 +36,7 @@ export async function saveAgentSessionData(
 
         terminalTurns: record.data.terminalTurns,
         terminalCostUsd: record.data.terminalCostUsd,
+        terminalUnknownCalls: record.data.terminalUnknownCalls ?? 0,
         terminalSeenAt: record.data.terminalSeenAt,
       };
 

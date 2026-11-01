@@ -103,7 +103,7 @@
     "@vantikhq/types": "workspace:*",
     "ai": "^7.0.31",
     "axios": "^1.20.0",
-    "body-parser": "^1.20.3",
+    "body-parser": "^1.20.9",
     "bull": "^4.12.2",
     "cache-manager": "^7.0.0",
     "class-transformer": "0.5.1",
